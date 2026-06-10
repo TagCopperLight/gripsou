@@ -28,8 +28,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     ports:
-      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
