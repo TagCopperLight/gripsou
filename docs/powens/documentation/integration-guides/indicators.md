@@ -1,0 +1,311 @@
+# Indicators
+
+### User indicator
+
+We provide a specific endpoint to allow you to access indicators metrics computed on end users’ banking data:&#x20;
+
+```
+GET /users/me/indicators
+```
+
+<pre class="language-json"><code class="lang-json"><strong>{
+</strong>   "id_user":3,
+   "indicators":{
+      "avg_current_month":{
+         "incoming":3573,
+         "outgoing":-594,
+         "net_cash_flow":2979,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.0,
+            "outcome_total_amount":0
+         },
+         "loans":{
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0.0,
+            "total_amount":0
+         }
+      },
+      "total_current_month":{
+         "incoming":3573,
+         "outgoing":-594,
+         "net_cash_flow":2979,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":0,
+            "outcome_total_amount":0
+         },
+         "loans":{
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0,
+            "total_amount":0
+         }
+      },
+      "avg_last_30days":{
+         "incoming":511,
+         "outgoing":-480,
+         "net_cash_flow":32,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.4,
+            "outcome_total_amount":-31
+         },
+         "loans":{
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0.0,
+            "total_amount":0
+         }
+      },
+      "total_last_30days":{
+         "incoming":15342,
+         "outgoing":-14388,
+         "net_cash_flow":954,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":12,
+            "outcome_total_amount":-942
+         },
+         "loans":{
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0,
+            "total_amount":0
+         }
+      },
+      "avg_last_60days":{
+         "incoming":256,
+         "outgoing":-240,
+         "net_cash_flow":16,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.2,
+            "outcome_total_amount":-16
+         },
+         "loans":{
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0.0,
+            "total_amount":0
+         }
+      },
+      "total_last_60days":{
+         "incoming":15342,
+         "outgoing":-14409,
+         "net_cash_flow":933,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":12,
+            "outcome_total_amount":-942
+         },
+         "loans":{
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0,
+            "total_amount":0
+         }
+      },
+      "avg_last_90days":{
+         "incoming":170,
+         "outgoing":-160,
+         "net_cash_flow":10,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0.0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.133,
+            "outcome_total_amount":-10
+         },
+         "loans":{
+            "income_num_statements":0.0,
+            "income_total_amount":0,
+            "outcome_num_statements":0.0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0.0,
+            "total_amount":0
+         }
+      },
+      "total_last_90days":{
+         "incoming":15342,
+         "outgoing":-14409,
+         "net_cash_flow":933,
+         "leverage_ratio":null,
+         "recurrent_income":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "recurrent_outcome":{
+            "num_statements":0,
+            "total_amount":0,
+            "details":null
+         },
+         "gambling":{
+            "gambling_ratio":null,
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":12,
+            "outcome_total_amount":-942
+         },
+         "loans":{
+            "income_num_statements":0,
+            "income_total_amount":0,
+            "outcome_num_statements":0,
+            "outcome_total_amount":0,
+            "details":null
+         },
+         "return_debit":{
+            "num_statements":0,
+            "total_amount":0
+         }
+      }
+   }
+}
+</code></pre>
+
+### Steps
+
+1. Ask your Account Manager to activate the Indicators plugin.
+2. [Add a first user and connection](https://docs.powens.com/documentation/integration-guides/quick-start/add-a-first-user-and-connection) or [synchronize an existing connection after Indicators plugin activation](https://docs.powens.com/documentation/integration-guides/sca-and-connection-states).
+3. Call the endpoint.
+
+{% hint style="info" %}
+Synchronizations
+
+The Indicators metrics are computed asynchronously after every user synchronization. As such, the indicators metrics may not be available for one minute after a user first synchronization; if so the route will return the following output:
+
+```json
+{
+  "id_user": 701,
+  "indicators": None,
+}
+```
+
+We would then suggest that you query it again after a few seconds, after which the complete JSON response should appear.
+{% endhint %}
+
+
