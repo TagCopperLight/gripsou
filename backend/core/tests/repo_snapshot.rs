@@ -21,9 +21,25 @@ async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
     let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
 
     let day = NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
-    stamp_snapshot(&mut conn, holding_id, day, Decimal::new(100, 0), Decimal::new(100, 0), Decimal::new(100, 0)).await?;
+    stamp_snapshot(
+        &mut conn,
+        holding_id,
+        day,
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+    )
+    .await?;
     // Same day, new values -> overwrite, not a second row.
-    stamp_snapshot(&mut conn, holding_id, day, Decimal::new(150, 0), Decimal::new(150, 0), Decimal::new(150, 0)).await?;
+    stamp_snapshot(
+        &mut conn,
+        holding_id,
+        day,
+        Decimal::new(150, 0),
+        Decimal::new(150, 0),
+        Decimal::new(150, 0),
+    )
+    .await?;
 
     let count: i64 = sqlx::query_scalar(
         "select count(*) from holding_snapshot where holding_id = $1 and as_of = $2",

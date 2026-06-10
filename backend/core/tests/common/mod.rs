@@ -6,21 +6,17 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use gripsou_core::dto::{
-    CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef,
-};
+use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
 
 /// Insert a user + connection, returning the connection id.
 pub async fn seed_connection(pool: &PgPool) -> Uuid {
     let user_id = Uuid::new_v4();
-    sqlx::query(
-        "insert into users (id, email, name, password_hash) values ($1, $2, 'Test', 'x')",
-    )
-    .bind(user_id)
-    .bind(format!("u-{user_id}@test.local"))
-    .execute(pool)
-    .await
-    .unwrap();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Test', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(pool)
+        .await
+        .unwrap();
 
     let conn_id = Uuid::new_v4();
     sqlx::query(
@@ -84,7 +80,11 @@ pub fn equity_holding(
     }
 }
 
-pub fn deposit_txn(account_external_id: &str, external_id: &str, amount: Decimal) -> CanonicalTransaction {
+pub fn deposit_txn(
+    account_external_id: &str,
+    external_id: &str,
+    amount: Decimal,
+) -> CanonicalTransaction {
     CanonicalTransaction {
         account_external_id: account_external_id.to_string(),
         external_id: external_id.to_string(),

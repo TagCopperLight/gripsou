@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into instrument (kind, symbol, isin, name, currency)\n            values ('cash', null, null, $1, $2)\n            on conflict (currency) where kind = 'cash'\n            do update set name = excluded.name\n            returning id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "286c7c40bb2eedccce1806164aee79492e0d11404d7add83965341c04fea6cf8"
+}

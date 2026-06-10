@@ -20,11 +20,10 @@ async fn inserts_once_and_dedups(pool: PgPool) -> anyhow::Result<()> {
     assert!(first, "first insert reports inserted");
     assert!(!second, "duplicate external_id is skipped");
 
-    let count: i64 =
-        sqlx::query_scalar("select count(*) from transaction where account_id = $1")
-            .bind(account_id)
-            .fetch_one(&pool)
-            .await?;
+    let count: i64 = sqlx::query_scalar("select count(*) from transaction where account_id = $1")
+        .bind(account_id)
+        .fetch_one(&pool)
+        .await?;
     assert_eq!(count, 1);
     Ok(())
 }

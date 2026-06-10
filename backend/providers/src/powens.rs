@@ -16,10 +16,7 @@ impl AccountProvider for PowensProvider {
         Err(ProviderError::NotImplemented)
     }
 
-    async fn complete_connect(
-        &self,
-        _callback: &str,
-    ) -> Result<serde_json::Value, ProviderError> {
+    async fn complete_connect(&self, _callback: &str) -> Result<serde_json::Value, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
 

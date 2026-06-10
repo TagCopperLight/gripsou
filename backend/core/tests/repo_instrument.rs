@@ -17,7 +17,10 @@ async fn resolves_cash_idempotently(pool: PgPool) -> anyhow::Result<()> {
     let mut conn = pool.acquire().await?;
     let id1 = resolve_instrument(&mut conn, &eur).await?;
     let id2 = resolve_instrument(&mut conn, &eur).await?;
-    assert_eq!(id1, id2, "same currency must resolve to one cash instrument");
+    assert_eq!(
+        id1, id2,
+        "same currency must resolve to one cash instrument"
+    );
     Ok(())
 }
 

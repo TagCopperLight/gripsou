@@ -14,11 +14,10 @@ async fn upserts_account_idempotently(pool: PgPool) -> anyhow::Result<()> {
     let id2 = upsert_account(&mut conn, conn_id, &acct).await?;
     assert_eq!(id1, id2, "same (connection, external_id) is one account");
 
-    let count: i64 =
-        sqlx::query_scalar("select count(*) from account where connection_id = $1")
-            .bind(conn_id)
-            .fetch_one(&pool)
-            .await?;
+    let count: i64 = sqlx::query_scalar("select count(*) from account where connection_id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
     assert_eq!(count, 1);
     Ok(())
 }
@@ -44,7 +43,10 @@ async fn upsert_preserves_user_renamed_name(pool: PgPool) -> anyhow::Result<()> 
         .bind(id)
         .fetch_one(&pool)
         .await?;
-    assert_eq!(name, "My nickname", "re-sync must not clobber a user rename");
+    assert_eq!(
+        name, "My nickname",
+        "re-sync must not clobber a user rename"
+    );
     Ok(())
 }
 
