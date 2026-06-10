@@ -38,13 +38,12 @@ pub async fn resolve_instrument(
         let id = sqlx::query_scalar!(
             r#"
             insert into instrument (kind, symbol, isin, name, currency)
-            values ($1, $2, $3, $4, $5)
+            values ($1, null, $2, $3, $4)
             on conflict (isin) where isin is not null
             do update set name = excluded.name
             returning id
             "#,
             ins.kind,
-            ins.symbol,
             isin,
             ins.name,
             ins.currency,
