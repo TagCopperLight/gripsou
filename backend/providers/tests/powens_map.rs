@@ -1,0 +1,49 @@
+use gripsou_providers::powens::model::{BankAccount, Investment};
+use rust_decimal::Decimal;
+use serde::Deserialize;
+
+#[derive(Deserialize, Default)]
+struct Fixture {
+    #[serde(default)]
+    accounts: Vec<BankAccount>,
+    #[serde(default)]
+    investments: Vec<Investment>,
+}
+
+fn load(name: &str) -> Fixture {
+    let path = format!("{}/tests/fixtures/powens/{name}", env!("CARGO_MANIFEST_DIR"));
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"))
+}
+
+fn dec(s: &str) -> Decimal {
+    s.parse().unwrap()
+}
+
+fn account(fx: &Fixture, id: i64) -> &BankAccount {
+    fx.accounts.iter().find(|a| a.id == id).expect("account in fixture")
+}
+
+fn investment(fx: &Fixture, id: i64) -> &Investment {
+    fx.investments.iter().find(|i| i.id == id).expect("investment in fixture")
+}
+
+#[test]
+fn parses_bank_account_decimals_exactly() {
+    let fx = load("accounts.json");
+    let acct = account(&fx, 1001);
+    assert_eq!(acct.balance, Some(dec("1234.56")));
+    assert_eq!(acct.currency.as_ref().unwrap().id, "EUR");
+    assert_eq!(acct.r#type.as_ref().unwrap().name.as_deref(), Some("checking"));
+    assert!(!acct.r#type.as_ref().unwrap().is_invest);
+}
+
+#[test]
+fn parses_investment_decimals_exactly() {
+    let fx = load("investments.json");
+    let inv = investment(&fx, 2001);
+    assert_eq!(inv.quantity, Some(dec("10")));
+    assert_eq!(inv.unitprice, Some(dec("150.00")));
+    assert_eq!(inv.valuation, Some(dec("1600.00")));
+    assert_eq!(inv.code_type.as_deref(), Some("ISIN"));
+}
