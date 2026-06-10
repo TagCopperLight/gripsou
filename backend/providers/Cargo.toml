@@ -7,4 +7,6 @@ license.workspace = true
 [dependencies]
 gripsou-core = { path = "../core" }
 async-trait.workspace = true
-serde_json.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["arbitrary_precision"] }
+rust_decimal = { workspace = true }

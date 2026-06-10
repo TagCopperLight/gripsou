@@ -15,7 +15,7 @@ sqlx = { version = "0.9.0", default-features = false, features = [
     "runtime-tokio", "postgres", "macros", "migrate",
     "uuid", "chrono", "rust_decimal", "json",
 ] }
-rust_decimal = { version = "1.42.0", features = ["serde-with-str"] }
+rust_decimal = { version = "1.42.0", features = ["serde-with-str", "serde-arbitrary-precision"] }
 uuid = { version = "1.23.3", features = ["v4", "serde"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
