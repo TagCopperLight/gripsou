@@ -6,6 +6,13 @@ use uuid::Uuid;
 use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 
+/// On conflict, the provider-supplied `name` is written (provider-authoritative;
+/// instrument names are not user-editable, unlike `account.name`).
+///
+/// Known limitation (deferred): the same real security reported with an ISIN in
+/// one sync and symbol-only in another resolves via two different natural keys
+/// and can produce two `instrument` rows. Cross-key dedup is intentionally left
+/// for when real provider payloads inform the rule.
 pub async fn resolve_instrument(
     conn: &mut sqlx::PgConnection,
     ins: &InstrumentRef,
