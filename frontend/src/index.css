@@ -1,0 +1,28 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e0f12;
+  --fg: #f5f5f5;
+  --muted: #9aa0a6;
+  --green: #3fb950;
+  --red: #f85149;
+
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app {
+  padding: 2rem;
+}
+
+.app p {
+  color: var(--muted);
+}
