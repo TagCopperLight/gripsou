@@ -28,6 +28,8 @@ pub struct InstrumentRef {
 /// A current position reported by a provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanonicalHolding {
+    /// `external_id` of the owning account (links to a `CanonicalAccount`).
+    pub account_external_id: String,
     pub instrument: InstrumentRef,
     pub quantity: Decimal,
     /// Total invested. When a provider only gives aggregate cost basis, this
@@ -40,6 +42,8 @@ pub struct CanonicalHolding {
 /// A statement line or investment buy/sell.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanonicalTransaction {
+    /// `external_id` of the owning account (links to a `CanonicalAccount`).
+    pub account_external_id: String,
     pub external_id: String,
     /// `deposit` | `withdrawal` | `buy` | `sell` | `dividend` | `fee` |
     /// `interest` | `transfer`

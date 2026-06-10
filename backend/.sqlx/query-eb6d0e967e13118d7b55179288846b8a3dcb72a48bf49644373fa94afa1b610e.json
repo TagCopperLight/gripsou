@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into holding (account_id, instrument_id, quantity, cost_basis, updated_at)\n        values ($1, $2, $3, $4, now())\n        on conflict (account_id, instrument_id)\n        do update set\n            quantity = excluded.quantity,\n            cost_basis = excluded.cost_basis,\n            updated_at = now()\n        returning id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "holding",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "eb6d0e967e13118d7b55179288846b8a3dcb72a48bf49644373fa94afa1b610e"
+}
