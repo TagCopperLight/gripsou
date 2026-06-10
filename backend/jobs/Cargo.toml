@@ -1,0 +1,11 @@
+[package]
+name = "gripsou-jobs"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+gripsou-core = { path = "../core" }
+gripsou-providers = { path = "../providers" }
+tokio.workspace = true
+tracing.workspace = true

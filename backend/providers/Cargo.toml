@@ -1,0 +1,10 @@
+[package]
+name = "gripsou-providers"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+gripsou-core = { path = "../core" }
+async-trait.workspace = true
+serde_json.workspace = true

@@ -1,5 +1,6 @@
 .vscode/
 .superpowers/
+superpowers/
 node_modules/
 target/
 dist/
