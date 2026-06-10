@@ -30,5 +30,12 @@ async fn upserts_holding_and_updates_quantity(pool: PgPool) -> anyhow::Result<()
             .fetch_one(&pool)
             .await?;
     assert_eq!(qty, Decimal::new(250, 0), "quantity updated in place");
+
+    let cost_basis: Decimal =
+        sqlx::query_scalar("select cost_basis from holding where id = $1")
+            .bind(hid1)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(cost_basis, Decimal::new(250, 0), "cost_basis updated in place");
     Ok(())
 }
