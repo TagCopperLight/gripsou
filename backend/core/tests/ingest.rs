@@ -37,6 +37,9 @@ async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> 
 
     let s2 = ingest(&pool, conn_id, &sync).await?;
     assert_eq!(s2.transactions_inserted, 0, "duplicate txn not re-inserted");
+    assert_eq!(s2.accounts, 1);
+    assert_eq!(s2.holdings, 2);
+    assert_eq!(s2.snapshots, 2);
 
     let accounts: i64 = sqlx::query_scalar("select count(*) from account")
         .fetch_one(&pool)
@@ -138,6 +141,51 @@ async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Resu
     let accounts: i64 = sqlx::query_scalar("select count(*) from account")
         .fetch_one(&pool)
         .await?;
+    assert_eq!(accounts, 0, "failed ingest rolls back entirely");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::Result<()> {
+    // `instrument` is global; the same EUR cash row must serve holdings under
+    // two different connections.
+    let conn_a = seed_connection(&pool).await;
+    let conn_b = seed_connection(&pool).await;
+
+    let sync_a = SyncResult {
+        accounts: vec![checking_account("a-1")],
+        holdings: vec![cash_holding("a-1", Decimal::new(100, 0))],
+        transactions: vec![],
+    };
+    let sync_b = SyncResult {
+        accounts: vec![checking_account("b-1")],
+        holdings: vec![cash_holding("b-1", Decimal::new(200, 0))],
+        transactions: vec![],
+    };
+    ingest(&pool, conn_a, &sync_a).await?;
+    ingest(&pool, conn_b, &sync_b).await?;
+
+    let cash_instruments: i64 =
+        sqlx::query_scalar("select count(*) from instrument where kind = 'cash'")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(cash_instruments, 1, "EUR cash instrument is shared across connections");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn unknown_account_ref_in_transaction_rolls_back(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let sync = SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![],
+        transactions: vec![deposit_txn("ghost", "txn-1", Decimal::new(100, 0))], // unknown account
+    };
+    let err = ingest(&pool, conn_id, &sync).await.unwrap_err();
+    assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
+
+    // The valid account must not have been committed (whole ingest rolls back).
+    let accounts: i64 = sqlx::query_scalar("select count(*) from account").fetch_one(&pool).await?;
     assert_eq!(accounts, 0, "failed ingest rolls back entirely");
     Ok(())
 }
