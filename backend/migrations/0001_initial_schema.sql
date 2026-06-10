@@ -146,3 +146,10 @@ create table transaction (
     external_id   text,
     provider_meta jsonb not null default '{}'::jsonb
 );
+
+-- Idempotent provider upserts: dedup accounts/transactions on external_id.
+-- Partial so future manual rows (null external_id) are unconstrained.
+create unique index account_conn_external_uq
+    on account (connection_id, external_id) where external_id is not null;
+create unique index txn_account_external_uq
+    on transaction (account_id, external_id) where external_id is not null;

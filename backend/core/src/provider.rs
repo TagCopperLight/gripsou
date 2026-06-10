@@ -23,8 +23,7 @@ pub trait AccountProvider: Send + Sync {
     async fn connect(&self) -> Result<ConnectInit, ProviderError>;
 
     /// Finish an external auth round-trip, yielding credentials to persist.
-    async fn complete_connect(&self, callback: &str)
-        -> Result<serde_json::Value, ProviderError>;
+    async fn complete_connect(&self, callback: &str) -> Result<serde_json::Value, ProviderError>;
 
     /// Pull canonical accounts / holdings / transactions for a connection.
     async fn sync(&self) -> Result<SyncResult, ProviderError>;
