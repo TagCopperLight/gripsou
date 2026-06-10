@@ -35,6 +35,11 @@ pub async fn resolve_instrument(
     }
 
     if let Some(isin) = &ins.isin {
+        // ISIN is the identity for this path, so `symbol` is deliberately stored
+        // as null. Ticker symbols are not globally unique (the same ticker maps to
+        // different ISINs across exchanges), so persisting it here would collide on
+        // the `(kind, symbol)` partial unique index. `symbol` is populated only on
+        // the symbol-only path below, where no ISIN is available to identify the row.
         let id = sqlx::query_scalar!(
             r#"
             insert into instrument (kind, symbol, isin, name, currency)
