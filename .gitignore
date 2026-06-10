@@ -1,1 +1,6 @@
+.vscode/
 .superpowers/
+node_modules/
+target/
+dist/
+.env
