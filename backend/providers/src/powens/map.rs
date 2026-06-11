@@ -1,6 +1,8 @@
 //! Pure mapping: Powens wire models -> gripsou canonical DTOs.
 
-use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
+use std::collections::HashMap;
+
+use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef, SyncResult};
 use rust_decimal::Decimal;
 use serde_json::json;
 
@@ -98,4 +100,87 @@ pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<Canoni
         cost_basis: quantity * unitprice,
         valuation: inv.valuation,
     })
+}
+
+/// Build the cash holding for an account, given the summed valuation of the
+/// security holdings booked against it. Non-invest accounts always yield a cash
+/// holding (including a zero balance or a negative overdraft). Invest accounts
+/// yield only the positive residual (`balance - invested`); a zero or negative
+/// residual is dropped, since that cash sleeve would be nonexistent or
+/// nonsensical.
+fn cash_holding(acct: &BankAccount, invested: Decimal) -> Option<CanonicalHolding> {
+    let balance = acct.balance.unwrap_or(Decimal::ZERO);
+    let is_invest = acct.r#type.as_ref().is_some_and(|t| t.is_invest);
+
+    let quantity = if is_invest {
+        let residual = balance - invested;
+        if residual <= Decimal::ZERO {
+            return None;
+        }
+        residual
+    } else {
+        balance
+    };
+
+    let currency = acct
+        .currency
+        .as_ref()
+        .map(|c| c.id.clone())
+        .unwrap_or_default();
+    let cash_name = acct
+        .currency
+        .as_ref()
+        .and_then(|c| c.name.clone())
+        .unwrap_or_else(|| currency.clone());
+
+    Some(CanonicalHolding {
+        account_external_id: acct.id.to_string(),
+        instrument: InstrumentRef {
+            kind: "cash".to_string(),
+            symbol: None,
+            isin: None,
+            name: cash_name,
+            currency,
+        },
+        quantity,
+        cost_basis: quantity,
+        valuation: Some(quantity),
+    })
+}
+
+/// Top-level mapping: Powens accounts + investments -> a canonical `SyncResult`.
+/// Deleted accounts (and their holdings) are skipped; each surviving account
+/// contributes its security holdings and a cash holding per `cash_holding`.
+pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncResult {
+    let mut by_account: HashMap<i64, Vec<&Investment>> = HashMap::new();
+    for inv in investments {
+        if inv.deleted.is_none() {
+            by_account.entry(inv.id_account).or_default().push(inv);
+        }
+    }
+
+    let mut result = SyncResult::default();
+    for acct in accounts {
+        if acct.deleted.is_some() {
+            continue;
+        }
+        result.accounts.push(map_account(acct));
+
+        let account_currency = acct.currency.as_ref().map(|c| c.id.as_str()).unwrap_or("");
+
+        let mut invested = Decimal::ZERO;
+        if let Some(invs) = by_account.get(&acct.id) {
+            for inv in invs {
+                if let Some(holding) = map_investment(inv, account_currency) {
+                    invested += holding.valuation.unwrap_or(Decimal::ZERO);
+                    result.holdings.push(holding);
+                }
+            }
+        }
+
+        if let Some(cash) = cash_holding(acct, invested) {
+            result.holdings.push(cash);
+        }
+    }
+    result
 }
