@@ -1,0 +1,89 @@
+{
+  "accounts": [],
+  "investments": [
+    {
+      "id": 2001,
+      "id_account": 1003,
+      "label": "Air Liquide",
+      "code": "FR0000120073",
+      "code_type": "ISIN",
+      "stock_symbol": "AI",
+      "quantity": 10,
+      "unitprice": 150.00,
+      "unitvalue": 160.00,
+      "valuation": 1600.00,
+      "original_currency": null,
+      "deleted": null
+    },
+    {
+      "id": 2002,
+      "id_account": 1003,
+      "label": "Fonds Euro",
+      "code": "990000123456",
+      "code_type": "AMF",
+      "stock_symbol": "FEUR",
+      "quantity": 100,
+      "unitprice": 10.00,
+      "unitvalue": 10.50,
+      "valuation": 1050.00,
+      "original_currency": null,
+      "deleted": null
+    },
+    {
+      "id": 2003,
+      "id_account": 1003,
+      "label": "Apple Inc",
+      "code": "US0378331005",
+      "code_type": "ISIN",
+      "stock_symbol": "AAPL",
+      "quantity": 5,
+      "unitprice": 100.00,
+      "unitvalue": 180.00,
+      "valuation": 900.00,
+      "original_currency": { "id": "USD", "name": "US Dollar" },
+      "deleted": null
+    },
+    {
+      "id": 2004,
+      "id_account": 1003,
+      "label": "Vieux Fonds",
+      "code": "FR0000000001",
+      "code_type": "ISIN",
+      "stock_symbol": null,
+      "quantity": 1,
+      "unitprice": 1.00,
+      "unitvalue": 0.00,
+      "valuation": 0.00,
+      "original_currency": null,
+      "deleted": "2026-01-15T00:00:00Z"
+    },
+    {
+      "id": 2005,
+      "id_account": 1003,
+      "label": "Mystere",
+      "code": null,
+      "code_type": null,
+      "stock_symbol": null,
+      "quantity": 3,
+      "unitprice": 5.00,
+      "unitvalue": 5.00,
+      "valuation": 15.00,
+      "original_currency": null,
+      "deleted": null
+    },
+    {
+      "id": 2006,
+      "id_account": 1003,
+      "label": "Fonds Sans Ticker",
+      "code": "990000999999",
+      "code_type": "AMF",
+      "stock_symbol": null,
+      "quantity": 2,
+      "unitprice": 7.00,
+      "unitvalue": 7.00,
+      "valuation": 14.00,
+      "original_currency": null,
+      "deleted": null
+    }
+  ]
+}

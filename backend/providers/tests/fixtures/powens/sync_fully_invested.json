@@ -1,0 +1,21 @@
+{
+  "accounts": [
+    {
+      "id": 3002, "original_name": "PEA Plein", "name": "PEA Plein", "balance": 9000.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "pea", "is_invest": true }, "deleted": null
+    }
+  ],
+  "investments": [
+    {
+      "id": 3201, "id_account": 3002, "label": "Air Liquide", "code": "FR0000120073",
+      "code_type": "ISIN", "stock_symbol": null, "quantity": 25, "unitprice": 160.00,
+      "unitvalue": 160.00, "valuation": 4000.00, "original_currency": null, "deleted": null
+    },
+    {
+      "id": 3202, "id_account": 3002, "label": "Total", "code": "FR0000120271",
+      "code_type": "ISIN", "stock_symbol": null, "quantity": 100, "unitprice": 50.00,
+      "unitvalue": 50.00, "valuation": 5000.00, "original_currency": null, "deleted": null
+    }
+  ]
+}

@@ -169,7 +169,10 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
         sqlx::query_scalar("select count(*) from instrument where kind = 'cash'")
             .fetch_one(&pool)
             .await?;
-    assert_eq!(cash_instruments, 1, "EUR cash instrument is shared across connections");
+    assert_eq!(
+        cash_instruments, 1,
+        "EUR cash instrument is shared across connections"
+    );
     Ok(())
 }
 
@@ -185,7 +188,9 @@ async fn unknown_account_ref_in_transaction_rolls_back(pool: PgPool) -> anyhow::
     assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
 
     // The valid account must not have been committed (whole ingest rolls back).
-    let accounts: i64 = sqlx::query_scalar("select count(*) from account").fetch_one(&pool).await?;
+    let accounts: i64 = sqlx::query_scalar("select count(*) from account")
+        .fetch_one(&pool)
+        .await?;
     assert_eq!(accounts, 0, "failed ingest rolls back entirely");
     Ok(())
 }
