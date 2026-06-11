@@ -91,3 +91,44 @@ fn falls_back_to_synthetic_name_when_unnamed() {
     let dto = map::map_account(account(&fx, 1004));
     assert_eq!(dto.name, "Account 1004");
 }
+
+#[test]
+fn maps_isin_investment_ignoring_symbol() {
+    let fx = load("investments.json");
+    let h = map::map_investment(investment(&fx, 2001), "EUR").expect("holding");
+    assert_eq!(h.account_external_id, "1003");
+    assert_eq!(h.instrument.kind, "equity");
+    assert_eq!(h.instrument.isin.as_deref(), Some("FR0000120073"));
+    assert_eq!(h.instrument.symbol, None); // ISIN path drops the ticker
+    assert_eq!(h.instrument.name, "Air Liquide");
+    assert_eq!(h.instrument.currency, "EUR");
+    assert_eq!(h.quantity, dec("10"));
+    assert_eq!(h.cost_basis, dec("1500.00")); // 10 * 150.00
+    assert_eq!(h.valuation, Some(dec("1600.00")));
+}
+
+#[test]
+fn maps_amf_investment_to_symbol_path() {
+    let fx = load("investments.json");
+    // Has a stock_symbol -> symbol comes from stock_symbol.
+    let h = map::map_investment(investment(&fx, 2002), "EUR").expect("holding");
+    assert_eq!(h.instrument.isin, None);
+    assert_eq!(h.instrument.symbol.as_deref(), Some("FEUR"));
+    // No stock_symbol -> symbol falls back to the code.
+    let h2 = map::map_investment(investment(&fx, 2006), "EUR").expect("holding");
+    assert_eq!(h2.instrument.symbol.as_deref(), Some("990000999999"));
+}
+
+#[test]
+fn investment_currency_follows_original_currency() {
+    let fx = load("investments.json");
+    let h = map::map_investment(investment(&fx, 2003), "EUR").expect("holding");
+    assert_eq!(h.instrument.currency, "USD");
+}
+
+#[test]
+fn skips_deleted_and_unidentifiable_investments() {
+    let fx = load("investments.json");
+    assert!(map::map_investment(investment(&fx, 2004), "EUR").is_none()); // deleted
+    assert!(map::map_investment(investment(&fx, 2005), "EUR").is_none()); // no identity
+}
