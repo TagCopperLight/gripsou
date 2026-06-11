@@ -1,3 +1,4 @@
+use gripsou_core::dto::CanonicalHolding;
 use gripsou_providers::powens::map;
 use gripsou_providers::powens::model::{BankAccount, Investment};
 use rust_decimal::Decimal;
@@ -131,4 +132,74 @@ fn skips_deleted_and_unidentifiable_investments() {
     let fx = load("investments.json");
     assert!(map::map_investment(investment(&fx, 2004), "EUR").is_none()); // deleted
     assert!(map::map_investment(investment(&fx, 2005), "EUR").is_none()); // no identity
+}
+
+fn cash_for<'a>(holdings: &'a [CanonicalHolding], account: &str) -> Option<&'a CanonicalHolding> {
+    holdings
+        .iter()
+        .find(|h| h.account_external_id == account && h.instrument.kind == "cash")
+}
+
+#[test]
+fn non_invest_account_yields_full_balance_cash() {
+    let fx = load("accounts.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    let cash = cash_for(&result.holdings, "1001").expect("cash holding");
+    assert_eq!(cash.quantity, dec("1234.56"));
+    assert_eq!(cash.instrument.currency, "EUR");
+    assert_eq!(cash.instrument.name, "Euro");
+    assert_eq!(cash.cost_basis, dec("1234.56")); // cash carried at par
+}
+
+#[test]
+fn invest_account_emits_positive_residual_cash() {
+    let fx = load("sync_pea_residual.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    // 2 securities + 1 residual cash holding.
+    assert_eq!(result.holdings.len(), 3);
+    let cash = cash_for(&result.holdings, "3001").expect("residual cash");
+    assert_eq!(cash.quantity, dec("1000.00")); // 10000 - (4000 + 5000)
+}
+
+#[test]
+fn fully_invested_account_has_no_cash() {
+    let fx = load("sync_fully_invested.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    assert_eq!(result.holdings.len(), 2); // securities only
+    assert!(cash_for(&result.holdings, "3002").is_none());
+}
+
+#[test]
+fn zero_and_overdraft_balances_still_emit_cash() {
+    let fx = load("sync_cash_variants.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    // Deleted account 4003 is skipped entirely.
+    assert_eq!(result.accounts.len(), 2);
+    assert!(!result.accounts.iter().any(|a| a.external_id == "4003"));
+    assert_eq!(cash_for(&result.holdings, "4001").unwrap().quantity, dec("0"));
+    assert_eq!(cash_for(&result.holdings, "4002").unwrap().quantity, dec("-50.00"));
+}
+
+#[test]
+fn map_sync_links_holdings_to_their_accounts() {
+    let fx = load("sync_multi.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    assert_eq!(result.accounts.len(), 2);
+    // checking cash (2000) + security (5000) + residual cash (1000) = 3 holdings.
+    assert_eq!(result.holdings.len(), 3);
+    // The security belongs to the brokerage account.
+    let security = result
+        .holdings
+        .iter()
+        .find(|h| h.instrument.kind == "equity")
+        .expect("security");
+    assert_eq!(security.account_external_id, "5002");
+    assert_eq!(cash_for(&result.holdings, "5001").unwrap().quantity, dec("2000.00"));
+    assert_eq!(cash_for(&result.holdings, "5002").unwrap().quantity, dec("1000.00"));
+    // Every holding references a real mapped account.
+    let ids: Vec<&str> = result.accounts.iter().map(|a| a.external_id.as_str()).collect();
+    assert!(result.holdings.iter().all(|h| ids.contains(&h.account_external_id.as_str())));
+    // market -> brokerage.
+    let brokerage = result.accounts.iter().find(|a| a.external_id == "5002").unwrap();
+    assert_eq!(brokerage.type_key, "brokerage");
 }
