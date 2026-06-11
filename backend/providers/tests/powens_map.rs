@@ -62,3 +62,32 @@ fn parses_investment_decimals_exactly() {
     assert_eq!(inv.valuation, Some(dec("1600.00")));
     assert_eq!(inv.code_type.as_deref(), Some("ISIN"));
 }
+
+#[test]
+fn maps_account_identity_and_meta() {
+    let fx = load("accounts.json");
+    let dto = map::map_account(account(&fx, 1001));
+    assert_eq!(dto.external_id, "1001");
+    assert_eq!(dto.name, "Compte Courant");
+    assert_eq!(dto.type_key, "checking");
+    assert_eq!(dto.currency, "EUR");
+    assert_eq!(dto.meta["powens_type"], "checking");
+    assert_eq!(dto.meta["is_invest"], false);
+    assert_eq!(dto.meta["iban"], "FR7612345678901234567890123");
+    assert_eq!(dto.meta["id_connection"], 42);
+}
+
+#[test]
+fn maps_invest_account_type_to_fallback() {
+    let fx = load("accounts.json");
+    let dto = map::map_account(account(&fx, 1003));
+    assert_eq!(dto.type_key, "brokerage");
+    assert_eq!(dto.meta["is_invest"], true);
+}
+
+#[test]
+fn falls_back_to_synthetic_name_when_unnamed() {
+    let fx = load("accounts.json");
+    let dto = map::map_account(account(&fx, 1004));
+    assert_eq!(dto.name, "Account 1004");
+}
