@@ -1,28 +1,37 @@
-:root {
-  color-scheme: dark;
-  --bg: #0e0f12;
-  --fg: #f5f5f5;
-  --muted: #9aa0a6;
-  --green: #3fb950;
-  --red: #f85149;
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/unbounded";
 
-  font-family: system-ui, -apple-system, sans-serif;
+@theme {
+  /* Surfaces */
+  --color-bg: #080706;
+  --color-surface: #13110f;
+  --color-surface-2: #1c1916;
+  --color-surface-3: #262321;
+  --color-hover: #181513;
+
+  /* Text */
+  --color-fg: #f4f1ef;
+  --color-fg-dim: #aeaaa7;
+  --color-fg-faint: #777471;
+
+  /* Accents */
+  --color-green: #3fb950;
+  --color-red: #f85149;
+
+  --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-wordmark: "Unbounded Variable", system-ui, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+:root {
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-}
-
-.app {
-  padding: 2rem;
-}
-
-.app p {
-  color: var(--muted);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
 }
