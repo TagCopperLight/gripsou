@@ -13,7 +13,10 @@ struct Fixture {
 }
 
 fn load(name: &str) -> Fixture {
-    let path = format!("{}/tests/fixtures/powens/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/tests/fixtures/powens/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
     serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {path}: {e}"))
 }
@@ -23,23 +26,40 @@ fn dec(s: &str) -> Decimal {
 }
 
 fn account(fx: &Fixture, id: i64) -> &BankAccount {
-    fx.accounts.iter().find(|a| a.id == id).expect("account in fixture")
+    fx.accounts
+        .iter()
+        .find(|a| a.id == id)
+        .expect("account in fixture")
 }
 
 fn investment(fx: &Fixture, id: i64) -> &Investment {
-    fx.investments.iter().find(|i| i.id == id).expect("investment in fixture")
+    fx.investments
+        .iter()
+        .find(|i| i.id == id)
+        .expect("investment in fixture")
 }
 
 #[test]
 fn maps_account_types_onto_seeded_keys() {
     assert_eq!(map::map_type_key("checking"), "checking");
-    for t in ["savings", "livret_a", "livret_b", "ldds", "cel", "csl", "cat", "pel", "deposit"] {
+    for t in [
+        "savings", "livret_a", "livret_b", "ldds", "cel", "csl", "cat", "pel", "deposit",
+    ] {
         assert_eq!(map::map_type_key(t), "savings", "{t}");
     }
     assert_eq!(map::map_type_key("pea"), "pea");
     assert_eq!(map::map_type_key("market"), "brokerage");
     // Everything else falls back to brokerage, including future/unknown values.
-    for t in ["lifeinsurance", "per", "perco", "perp", "pee", "loan", "unknown", "totally_new"] {
+    for t in [
+        "lifeinsurance",
+        "per",
+        "perco",
+        "perp",
+        "pee",
+        "loan",
+        "unknown",
+        "totally_new",
+    ] {
         assert_eq!(map::map_type_key(t), "brokerage", "{t}");
     }
 }
@@ -50,7 +70,10 @@ fn parses_bank_account_decimals_exactly() {
     let acct = account(&fx, 1001);
     assert_eq!(acct.balance, Some(dec("1234.56")));
     assert_eq!(acct.currency.as_ref().unwrap().id, "EUR");
-    assert_eq!(acct.r#type.as_ref().unwrap().name.as_deref(), Some("checking"));
+    assert_eq!(
+        acct.r#type.as_ref().unwrap().name.as_deref(),
+        Some("checking")
+    );
     assert!(!acct.r#type.as_ref().unwrap().is_invest);
 }
 
@@ -176,8 +199,14 @@ fn zero_and_overdraft_balances_still_emit_cash() {
     // Deleted account 4003 is skipped entirely.
     assert_eq!(result.accounts.len(), 2);
     assert!(!result.accounts.iter().any(|a| a.external_id == "4003"));
-    assert_eq!(cash_for(&result.holdings, "4001").unwrap().quantity, dec("0"));
-    assert_eq!(cash_for(&result.holdings, "4002").unwrap().quantity, dec("-50.00"));
+    assert_eq!(
+        cash_for(&result.holdings, "4001").unwrap().quantity,
+        dec("0")
+    );
+    assert_eq!(
+        cash_for(&result.holdings, "4002").unwrap().quantity,
+        dec("-50.00")
+    );
 }
 
 #[test]
@@ -194,12 +223,31 @@ fn map_sync_links_holdings_to_their_accounts() {
         .find(|h| h.instrument.kind == "equity")
         .expect("security");
     assert_eq!(security.account_external_id, "5002");
-    assert_eq!(cash_for(&result.holdings, "5001").unwrap().quantity, dec("2000.00"));
-    assert_eq!(cash_for(&result.holdings, "5002").unwrap().quantity, dec("1000.00"));
+    assert_eq!(
+        cash_for(&result.holdings, "5001").unwrap().quantity,
+        dec("2000.00")
+    );
+    assert_eq!(
+        cash_for(&result.holdings, "5002").unwrap().quantity,
+        dec("1000.00")
+    );
     // Every holding references a real mapped account.
-    let ids: Vec<&str> = result.accounts.iter().map(|a| a.external_id.as_str()).collect();
-    assert!(result.holdings.iter().all(|h| ids.contains(&h.account_external_id.as_str())));
+    let ids: Vec<&str> = result
+        .accounts
+        .iter()
+        .map(|a| a.external_id.as_str())
+        .collect();
+    assert!(
+        result
+            .holdings
+            .iter()
+            .all(|h| ids.contains(&h.account_external_id.as_str()))
+    );
     // market -> brokerage.
-    let brokerage = result.accounts.iter().find(|a| a.external_id == "5002").unwrap();
+    let brokerage = result
+        .accounts
+        .iter()
+        .find(|a| a.external_id == "5002")
+        .unwrap();
     assert_eq!(brokerage.type_key, "brokerage");
 }
