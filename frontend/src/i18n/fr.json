@@ -1,3 +1,8 @@
 {
-  "placeholder": "Tableau de bord de finances personnelles"
+  "placeholder": "Tableau de bord de finances personnelles",
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "accounts": "Comptes",
+    "transactions": "Transactions"
+  }
 }

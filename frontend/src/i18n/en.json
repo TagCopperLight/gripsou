@@ -1,3 +1,8 @@
 {
-  "placeholder": "Personal finance dashboard"
+  "placeholder": "Personal finance dashboard",
+  "nav": {
+    "dashboard": "Dashboard",
+    "accounts": "Accounts",
+    "transactions": "Transactions"
+  }
 }
