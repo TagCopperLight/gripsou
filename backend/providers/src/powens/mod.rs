@@ -1,4 +1,11 @@
-//! Powens account provider (banks, PEA, brokerage). Stub — wiring lands later.
+//! Powens account provider (banks, PEA, brokerage).
+//!
+//! This slice implements the pure mapping layer (`model` + `map`). The HTTP
+//! client, authentication, and the connect/webview flow land in a later slice,
+//! so the `AccountProvider` trait methods remain unimplemented for now.
+
+pub mod map;
+pub mod model;
 
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;

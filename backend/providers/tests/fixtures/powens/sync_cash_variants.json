@@ -1,0 +1,20 @@
+{
+  "accounts": [
+    {
+      "id": 4001, "original_name": "Vide", "name": "Vide", "balance": 0.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "checking", "is_invest": false }, "deleted": null
+    },
+    {
+      "id": 4002, "original_name": "Decouvert", "name": "Decouvert", "balance": -50.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "checking", "is_invest": false }, "deleted": null
+    },
+    {
+      "id": 4003, "original_name": "Supprime", "name": "Supprime", "balance": 999.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "checking", "is_invest": false }, "deleted": "2026-02-01T00:00:00Z"
+    }
+  ],
+  "investments": []
+}

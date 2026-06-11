@@ -1,0 +1,21 @@
+{
+  "accounts": [
+    {
+      "id": 5001, "original_name": "Courant", "name": "Courant", "balance": 2000.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "checking", "is_invest": false }, "deleted": null
+    },
+    {
+      "id": 5002, "original_name": "Compte Titres", "name": "Compte Titres", "balance": 6000.00,
+      "currency": { "id": "EUR", "name": "Euro" },
+      "type": { "name": "market", "is_invest": true }, "deleted": null
+    }
+  ],
+  "investments": [
+    {
+      "id": 5101, "id_account": 5002, "label": "Apple", "code": "US0378331005",
+      "code_type": "ISIN", "stock_symbol": "AAPL", "quantity": 10, "unitprice": 400.00,
+      "unitvalue": 500.00, "valuation": 5000.00, "original_currency": null, "deleted": null
+    }
+  ]
+}
