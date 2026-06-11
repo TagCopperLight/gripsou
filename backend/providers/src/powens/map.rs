@@ -1,9 +1,10 @@
 //! Pure mapping: Powens wire models -> gripsou canonical DTOs.
 
-use gripsou_core::dto::CanonicalAccount;
+use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
+use rust_decimal::Decimal;
 use serde_json::json;
 
-use crate::powens::model::BankAccount;
+use crate::powens::model::{BankAccount, Investment};
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
 /// `account_type` keys. Total: any unrecognized value falls back to `brokerage`.
@@ -51,4 +52,50 @@ pub fn map_account(acct: &BankAccount) -> CanonicalAccount {
             "id_connection": acct.id_connection,
         }),
     }
+}
+
+fn instrument_currency(inv: &Investment, account_currency: &str) -> String {
+    inv.original_currency
+        .as_ref()
+        .map(|c| c.id.clone())
+        .unwrap_or_else(|| account_currency.to_string())
+}
+
+/// Map a single Powens investment to a canonical security holding. Returns
+/// `None` when the investment is deleted or carries no usable instrument
+/// identity (no ISIN, ticker, or code). `kind` is a generic `equity` because
+/// Powens does not reliably distinguish equities from ETFs/funds; the core
+/// dedups securities by ISIN, so this is harmless on the common path.
+pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<CanonicalHolding> {
+    if inv.deleted.is_some() {
+        return None;
+    }
+
+    let (isin, symbol) = match (inv.code_type.as_deref(), inv.code.as_deref()) {
+        (Some("ISIN"), Some(code)) => (Some(code.to_string()), None),
+        _ => (None, inv.stock_symbol.clone().or_else(|| inv.code.clone())),
+    };
+    if isin.is_none() && symbol.is_none() {
+        return None;
+    }
+
+    let quantity = inv.quantity.unwrap_or(Decimal::ZERO);
+    let unitprice = inv.unitprice.unwrap_or(Decimal::ZERO);
+
+    Some(CanonicalHolding {
+        account_external_id: inv.id_account.to_string(),
+        instrument: InstrumentRef {
+            kind: "equity".to_string(),
+            symbol,
+            isin,
+            name: inv
+                .label
+                .clone()
+                .unwrap_or_else(|| format!("Investment {}", inv.id)),
+            currency: instrument_currency(inv, account_currency),
+        },
+        quantity,
+        cost_basis: quantity * unitprice,
+        valuation: inv.valuation,
+    })
 }
