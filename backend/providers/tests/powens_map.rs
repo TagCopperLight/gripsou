@@ -1,3 +1,4 @@
+use gripsou_providers::powens::map;
 use gripsou_providers::powens::model::{BankAccount, Investment};
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -26,6 +27,20 @@ fn account(fx: &Fixture, id: i64) -> &BankAccount {
 
 fn investment(fx: &Fixture, id: i64) -> &Investment {
     fx.investments.iter().find(|i| i.id == id).expect("investment in fixture")
+}
+
+#[test]
+fn maps_account_types_onto_seeded_keys() {
+    assert_eq!(map::map_type_key("checking"), "checking");
+    for t in ["savings", "livret_a", "livret_b", "ldds", "cel", "csl", "cat", "pel", "deposit"] {
+        assert_eq!(map::map_type_key(t), "savings", "{t}");
+    }
+    assert_eq!(map::map_type_key("pea"), "pea");
+    assert_eq!(map::map_type_key("market"), "brokerage");
+    // Everything else falls back to brokerage, including future/unknown values.
+    for t in ["lifeinsurance", "per", "perco", "perp", "pee", "loan", "unknown", "totally_new"] {
+        assert_eq!(map::map_type_key(t), "brokerage", "{t}");
+    }
 }
 
 #[test]
