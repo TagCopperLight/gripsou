@@ -1,7 +1,9 @@
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
-import { formatMoney } from "../lib/money";
+import { formatMoney, formatPercent } from "../lib/money";
 import { formatDate } from "../lib/date";
+
+export type ChartUnit = "value" | "percent";
 
 // A line series over a time axis. `area` adds a fading fill (matching
 // NetWorthChart); `dashed` renders the line dashed (e.g. invested capital).
@@ -46,6 +48,11 @@ type ValueChartProps = {
    * they read as cut-out. Defaults to surface-2; pass the host surface's color.
    */
   surfaceColor?: string;
+  /**
+   * "value" plots raw amounts (money axis); "percent" plots each series' change
+   * relative to its first point in the range (percent axis). Defaults to value.
+   */
+  unit?: ChartUnit;
 };
 
 // To draw cleanly on top, area/solid lines should come last; callers pass them
@@ -60,7 +67,25 @@ export function ValueChart({
   height = 320,
   className = "",
   surfaceColor = SURFACE_2,
+  unit = "value",
 }: ValueChartProps) {
+  const percent = unit === "percent";
+  const fmt = (v: number, opts?: { fractionDigits?: number; signed?: boolean }) =>
+    percent ? formatPercent(v, opts) : formatMoney(v, opts);
+
+  // In percent mode, rebase each series to its first point's relative change.
+  const plotted: ChartSeries[] = percent
+    ? series.map((s) => {
+        const base = s.data[0]?.[1] ?? 0;
+        return {
+          ...s,
+          data: s.data.map(
+            ([t, v]) => [t, base ? (v - base) / base : 0] as [number, number],
+          ),
+        };
+      })
+    : series;
+
   const option: EChartsOption = {
     backgroundColor: "transparent",
     animationDuration: 600,
@@ -83,7 +108,7 @@ export function ValueChart({
             tooltipRow(
               colorByName.get(it.seriesName) ?? it.color,
               it.seriesName,
-              formatMoney(it.value[1]),
+              fmt(it.value[1], percent ? { signed: true } : undefined),
             ),
           )
           .join("");
@@ -118,10 +143,10 @@ export function ValueChart({
         color: FAINT,
         fontFamily: MONO,
         fontSize: 11,
-        formatter: (v: number) => formatMoney(v, { fractionDigits: 0 }),
+        formatter: (v: number) => fmt(v, { fractionDigits: 0 }),
       },
     },
-    series: series.map((s, i) => ({
+    series: plotted.map((s, i) => ({
       name: s.name,
       type: "line",
       data: s.data,
