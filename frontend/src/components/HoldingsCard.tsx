@@ -5,6 +5,7 @@ import { Surface } from "./Surface";
 import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
+import { AssetModal } from "./AssetModal";
 import { formatQuantity } from "../lib/money";
 import {
   FAKE_HOLDINGS,
@@ -77,9 +78,15 @@ export function HoldingsCard({
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Holding | null>(null);
 
   const categories = useMemo(
     () => ["All", ...holdingCategories(holdings)],
+    [holdings],
+  );
+
+  const netWorth = useMemo(
+    () => holdings.reduce((sum, h) => sum + h.value, 0),
     [holdings],
   );
 
@@ -186,7 +193,8 @@ export function HoldingsCard({
               return (
                 <tr
                   key={`${h.accountId}-${h.ticker}`}
-                  className="hover:bg-hover transition-colors duration-140"
+                  onClick={() => setSelected(h)}
+                  className="cursor-pointer hover:bg-hover transition-colors duration-140"
                 >
                   {/* ASSET */}
                   <td className="py-3 px-3 border-t border-surface-2">
@@ -275,6 +283,14 @@ export function HoldingsCard({
           </tbody>
         </table>
       </div>
+
+      {selected && (
+        <AssetModal
+          holding={selected}
+          netWorth={netWorth}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </Surface>
   );
 }
