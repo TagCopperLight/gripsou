@@ -5,7 +5,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { ChartLegend } from "./ChartLegend";
-import { ValueChart, type ChartSeries } from "./ValueChart";
+import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { KIND_LABEL, type Holding } from "../lib/fakeHoldings";
@@ -23,6 +23,11 @@ type Mode = "asset" | "purchases";
 
 const RANGE_OPTIONS = RANGES.map((r) => ({ value: r.key, label: r.label }));
 
+const UNIT_OPTIONS = [
+  { value: "value", label: "Value" },
+  { value: "percent", label: "%" },
+];
+
 type AssetModalProps = {
   holding: Holding;
   /** Total net worth, for the "weight of net worth" stat. */
@@ -33,6 +38,7 @@ type AssetModalProps = {
 export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
   const [mode, setMode] = useState<Mode>("asset");
   const [range, setRange] = useState("1mo");
+  const [unit, setUnit] = useState<ChartUnit>("value");
 
   // Close on Escape; lock background scroll while open.
   useEffect(() => {
@@ -165,20 +171,6 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 pt-0 flex gap-4 items-start">
           {/* Left column */}
-          <div className="w-90 shrink-0 flex flex-col gap-4">
-            <StatsSurface
-              holding={holding}
-              meanPrice={meanPrice}
-              up={up}
-            />
-            {mode === "asset" ? (
-              <AboutSurface holding={holding} netWorth={netWorth} />
-            ) : (
-              <PurchaseHistorySurface purchases={purchases} />
-            )}
-          </div>
-
-          {/* Right column — chart */}
           <div className="flex-1 min-w-0 bg-surface-2 rounded-2xl p-5 flex flex-col">
             <div className="flex items-start justify-between">
               <div className="flex flex-col gap-1">
@@ -198,22 +190,34 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                     <ArrowDownRight className="size-4" />
                   )}
                   <Money value={gainAbs} signed />
-                  <span className="font-mono">
+                  <span className="font-mono ml-2">
                     (<Percent value={gainPct} signed />)
                   </span>
                 </div>
               </div>
-              {mode === "purchases" && (
-                <ChartLegend
-                  items={[
-                    { label: "Position value", color: GREEN },
-                    { label: "Invested", color: FAINT, dashed: true },
-                  ]}
+              <div className="flex flex-col items-end gap-3">
+                <SegmentedControl
+                  value={unit}
+                  onChange={(v) => setUnit(v as ChartUnit)}
+                  options={UNIT_OPTIONS}
                 />
-              )}
+                {mode === "purchases" && (
+                  <ChartLegend
+                    items={[
+                      { label: "Position value", color: GREEN },
+                      { label: "Invested", color: FAINT, dashed: true },
+                    ]}
+                  />
+                )}
+              </div>
             </div>
 
-            <ValueChart series={series} height={340} className="mt-4" />
+            <ValueChart
+              series={series}
+              unit={unit}
+              height={340}
+              className="mt-4"
+            />
 
             <div className="flex justify-center mt-3">
               <SegmentedControl
@@ -222,6 +226,20 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                 options={RANGE_OPTIONS}
               />
             </div>
+          </div>
+
+          {/* Right column */}
+          <div className="w-lg shrink-0 flex flex-col gap-4">
+            <StatsSurface
+              holding={holding}
+              meanPrice={meanPrice}
+              up={up}
+            />
+            {mode === "asset" ? (
+              <AboutSurface holding={holding} netWorth={netWorth} />
+            ) : (
+              <PurchaseHistorySurface purchases={purchases} />
+            )}
           </div>
         </div>
       </div>
@@ -233,7 +251,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-fg-faint text-xs">{label}</span>
-      <span className="text-fg font-mono text-sm">{value}</span>
+      <span className="text-fg font-mono font-semibold text-sm">{value}</span>
     </div>
   );
 }
@@ -256,7 +274,7 @@ function StatsSurface({
         <Stat label="Current value" value={formatMoney(holding.value)} />
       </div>
       <hr className="border-surface-3 my-4" />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-1">
         <span className="text-fg-faint text-xs">Total unrealized P/L</span>
         <div className="flex items-baseline gap-2">
           <Money
@@ -264,12 +282,9 @@ function StatsSurface({
             signed
             className={`text-base font-semibold ${up ? "text-green" : "text-red"}`}
           />
-          <Percent
-            value={holding.glPct}
-            signed
-            fractionDigits={1}
-            className={`text-sm ${up ? "text-green" : "text-red"}`}
-          />
+          <span className={`font-mono text-base ml-2 ${up ? "text-green" : "text-red"}`}>
+            (<Percent value={holding.glPct} signed />)
+          </span>
         </div>
       </div>
     </div>
@@ -300,7 +315,7 @@ function AboutSurface({
 }) {
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
-      <span className="text-fg-faint text-xs">About</span>
+      <span className="text-fg text-sm font-semibold">About</span>
       <div className="mt-1 divide-y divide-surface-3">
         <AboutRow label="Type">{KIND_LABEL[holding.kind]}</AboutRow>
         <AboutRow label="Account">

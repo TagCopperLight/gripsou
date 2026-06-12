@@ -30,7 +30,7 @@ const MONEY_DEFAULTS: Required<Pick<MoneyFormatOptions, "locale" | "currency">> 
 
 const PERCENT_DEFAULTS: Required<Omit<PercentFormatOptions, "signed">> = {
   locale: "fr-FR",
-  fractionDigits: 2,
+  fractionDigits: 1,
 };
 
 function formatWithSpaceGroups(
@@ -70,7 +70,7 @@ export function formatQuantity(
   value: string | number,
   options: { locale?: string; fractionDigits?: number } = {},
 ): string {
-  const { locale = "fr-FR", fractionDigits = 4 } = options;
+  const { locale = "fr-FR", fractionDigits = 2 } = options;
   return formatWithSpaceGroups(
     new Intl.NumberFormat(locale, {
       useGrouping: "always",

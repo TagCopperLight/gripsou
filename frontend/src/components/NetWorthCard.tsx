@@ -33,7 +33,7 @@ function NetWorthGain() {
       <div className="flex self-start items-center gap-1 py-1 px-2 rounded-lg bg-green-soft text-green text-sm">
         <ArrowUpRight className="size-4" />
         <Money value="22048.02" signed={true} />
-        <span className="font-mono">
+        <span className="font-mono ml-2">
           (<Percent value="0.134" signed={true} />)
         </span>
       </div>
