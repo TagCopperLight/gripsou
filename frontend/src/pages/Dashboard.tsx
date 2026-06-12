@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { Surface } from "../components/Surface";
+import { NetWorthCard } from "../components/NetWorthCard";
+import { DistributionCard } from "../components/DistributionCard";
+import { HoldingsCard } from "../components/HoldingsCard";
 
 export function Dashboard() {
   const { t } = useTranslation();
   return (
     <div>
-      <p className="text-fg-dim text-[13px] pb-1">
+      <p className="text-fg-dim text-sm pb-1">
         {new Date().toLocaleDateString("default", {
           weekday: "long",
           year: "numeric",
@@ -14,8 +16,9 @@ export function Dashboard() {
         })}
       </p>
       <h1 className="text-2xl font-bold">{t("nav.dashboard")}</h1>
-      <Surface className="h-40 w-full my-4">
-      </Surface>
+      <NetWorthCard className="my-4" />
+      <DistributionCard className="mb-4" />
+      <HoldingsCard className="mb-4" />
     </div>
   );
 }
