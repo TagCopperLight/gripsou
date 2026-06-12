@@ -129,15 +129,16 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
             >
               {holding.ticker.slice(0, 2)}
             </span>
-            <div className="flex flex-col justify-center gap-1">
+            <div className="h-12 flex flex-col justify-between py-0.5">
               <h2 className="text-xl font-semibold text-fg leading-none">
                 {holding.name}
               </h2>
               <div className="flex items-center gap-2 text-sm leading-none">
-                <span className="font-mono text-fg-faint">{holding.ticker}</span>
+                <span className="font-mono text-fg-faint">{holding.ticker} · </span>
                 <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
                   {holding.category}
                 </span>
+                <span className="font-mono text-fg-faint"> · </span>
                 <span className="flex items-center gap-1.5 text-fg-dim">
                   <span
                     className="size-2.5 rounded-sm"
