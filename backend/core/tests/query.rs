@@ -112,3 +112,48 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
     assert_eq!(r.spark, vec![Decimal::new(190, 0), Decimal::new(200, 0)], "ascending by time");
     Ok(())
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(&pool, conn_id, &SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![equity_holding("acct-1", "US0378331005", Decimal::new(3, 0), Decimal::new(450, 0), Some(Decimal::new(600, 0)))],
+        transactions: vec![],
+    }).await?;
+    let holding_id = holding_ids(&pool).await[0];
+    let instrument_id: uuid::Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'").fetch_one(&pool).await?;
+    let base = chrono::Utc::now();
+    insert_price_on(&pool, instrument_id, base - chrono::Duration::days(10), Decimal::new(150, 0)).await; // outside window
+    insert_price_on(&pool, instrument_id, base - chrono::Duration::days(1), Decimal::new(200, 0)).await;  // inside
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection").fetch_one(&pool).await?;
+    let from = base - chrono::Duration::days(3);
+    let prices = query::holding_prices(&pool, user_id, holding_id, from, base).await?;
+    assert_eq!(prices.len(), 1);
+    assert_eq!(prices[0].unit_price, Decimal::new(200, 0));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_transactions_returns_buy_lots(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(&pool, conn_id, &SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![equity_holding("acct-1", "US0378331005", Decimal::new(3, 0), Decimal::new(450, 0), Some(Decimal::new(600, 0)))],
+        transactions: vec![],
+    }).await?;
+    let account_id: uuid::Uuid = sqlx::query_scalar("select id from account").fetch_one(&pool).await?;
+    let instrument_id: uuid::Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'").fetch_one(&pool).await?;
+    // Seed a buy lot directly (the seed binary will do likewise, with instrument_id set).
+    sqlx::query("insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) values ($1, $2, now(), 'buy', 3, 150, 450)")
+        .bind(account_id).bind(instrument_id).execute(&pool).await?;
+    let holding_id = holding_ids(&pool).await[0];
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection").fetch_one(&pool).await?;
+    let txns = query::holding_transactions(&pool, user_id, holding_id).await?;
+    assert_eq!(txns.len(), 1);
+    assert_eq!(txns[0].quantity, Some(Decimal::new(3, 0)));
+    assert_eq!(txns[0].amount, Decimal::new(450, 0));
+    Ok(())
+}

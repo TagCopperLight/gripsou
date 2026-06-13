@@ -1,7 +1,7 @@
 //! Read-side aggregations for the dashboard, all scoped by user_id
 //! (joined via connection.user_id). Money stays Decimal end-to-end.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -142,6 +142,70 @@ pub async fn holdings(
         });
     }
     Ok(out)
+}
+
+pub struct PricePointRow {
+    pub ts: DateTime<Utc>,
+    pub unit_price: Decimal,
+}
+
+pub async fn holding_prices(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    holding_id: Uuid,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> Result<Vec<PricePointRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        PricePointRow,
+        r#"
+        select p.ts as "ts!", p.unit_price as "unit_price!"
+        from price p
+        join holding h    on h.instrument_id = p.instrument_id
+        join account a    on a.id = h.account_id
+        join connection c on c.id = a.connection_id
+        where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
+        order by p.ts
+        "#,
+        holding_id,
+        user_id,
+        from,
+        to,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct TxnRow {
+    pub ts: DateTime<Utc>,
+    pub quantity: Option<Decimal>,
+    pub unit_price: Option<Decimal>,
+    pub amount: Decimal,
+}
+
+pub async fn holding_transactions(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    holding_id: Uuid,
+) -> Result<Vec<TxnRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        TxnRow,
+        r#"
+        select t.ts as "ts!", t.quantity, t.unit_price, t.amount as "amount!"
+        from transaction t
+        join holding h    on h.account_id = t.account_id and h.instrument_id = t.instrument_id
+        join account a    on a.id = h.account_id
+        join connection c on c.id = a.connection_id
+        where h.id = $1 and c.user_id = $2 and t.type in ('buy', 'sell')
+        order by t.ts
+        "#,
+        holding_id,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 pub struct DistributionRow {
