@@ -88,7 +88,8 @@ export function ValueChart({
 
   const option: EChartsOption = {
     backgroundColor: "transparent",
-    animationDuration: 600,
+    animationDuration: 300,
+    animationEasing: "cubicOut",
     grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
     tooltip: {
       trigger: "axis",
@@ -177,8 +178,13 @@ export function ValueChart({
     })),
   };
 
+  const animationKey = `${unit}|${plotted
+    .map((s) => `${s.name}:${s.data.length}:${s.data[0]?.[0]}:${s.data.at(-1)?.[0]}`)
+    .join("|")}`;
+
   return (
     <ReactECharts
+      key={animationKey}
       option={option}
       notMerge
       className={className}
