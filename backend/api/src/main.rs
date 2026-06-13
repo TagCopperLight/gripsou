@@ -31,7 +31,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/dashboard/distribution", get(handlers::distribution))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
-        .route("/holdings/{id}/transactions", get(handlers::holding_transactions))
+        .route(
+            "/holdings/{id}/transactions",
+            get(handlers::holding_transactions),
+        )
         .with_state(db.clone());
 
     let app = Router::new()

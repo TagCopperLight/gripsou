@@ -60,10 +60,7 @@ pub struct HoldingRow {
     pub spark: Vec<Decimal>,
 }
 
-pub async fn holdings(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<Vec<HoldingRow>, CoreError> {
+pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
     struct Base {
         holding_id: Uuid,
         symbol: Option<String>,

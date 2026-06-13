@@ -100,7 +100,12 @@ pub fn deposit_txn(
 }
 
 /// Insert one price point for an instrument.
-pub async fn insert_price_on(pool: &PgPool, instrument_id: Uuid, ts: DateTime<Utc>, unit_price: Decimal) {
+pub async fn insert_price_on(
+    pool: &PgPool,
+    instrument_id: Uuid,
+    ts: DateTime<Utc>,
+    unit_price: Decimal,
+) {
     let mut conn = pool.acquire().await.unwrap();
     gripsou_core::repo::price::insert_price(&mut conn, instrument_id, ts, unit_price, "EUR")
         .await
@@ -108,7 +113,14 @@ pub async fn insert_price_on(pool: &PgPool, instrument_id: Uuid, ts: DateTime<Ut
 }
 
 /// Stamp a snapshot for a holding on a specific day.
-pub async fn stamp_on(pool: &PgPool, holding_id: Uuid, day: NaiveDate, qty: Decimal, value: Decimal, cost: Decimal) {
+pub async fn stamp_on(
+    pool: &PgPool,
+    holding_id: Uuid,
+    day: NaiveDate,
+    qty: Decimal,
+    value: Decimal,
+    cost: Decimal,
+) {
     let mut conn = pool.acquire().await.unwrap();
     gripsou_core::repo::snapshot::stamp_snapshot(&mut conn, holding_id, day, qty, value, cost)
         .await
@@ -117,8 +129,10 @@ pub async fn stamp_on(pool: &PgPool, holding_id: Uuid, day: NaiveDate, qty: Deci
 
 /// Fetch holding ids, in instrument-name order.
 pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
-    sqlx::query_scalar("select h.id from holding h join instrument i on i.id = h.instrument_id order by i.name")
-        .fetch_all(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "select h.id from holding h join instrument i on i.id = h.instrument_id order by i.name",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
 }
