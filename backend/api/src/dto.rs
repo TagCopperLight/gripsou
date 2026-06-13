@@ -49,7 +49,11 @@ impl NetWorthResponse {
             _ => (Decimal::ZERO, Decimal::ZERO),
         };
         let gain_abs = last - first;
-        let gain_pct = if first.is_zero() { Decimal::ZERO } else { (gain_abs / first).round_dp(4) };
+        let gain_pct = if first.is_zero() {
+            Decimal::ZERO
+        } else {
+            (gain_abs / first).round_dp(4)
+        };
         let invested = rows.last().map(|r| r.invested).unwrap_or(Decimal::ZERO);
 
         NetWorthResponse {
@@ -110,10 +114,20 @@ pub struct Holding {
 impl Holding {
     pub fn from_row(r: gripsou_core::repo::query::HoldingRow) -> Self {
         let is_cash = r.kind == "cash";
-        let price = r.price.unwrap_or(if is_cash { Decimal::ONE } else { Decimal::ZERO });
-        let value = if is_cash { r.quantity } else { r.quantity * price };
+        let price = r
+            .price
+            .unwrap_or(if is_cash { Decimal::ONE } else { Decimal::ZERO });
+        let value = if is_cash {
+            r.quantity
+        } else {
+            r.quantity * price
+        };
         let gl = value - r.cost_basis;
-        let gl_pct = if r.cost_basis.is_zero() { Decimal::ZERO } else { (gl / r.cost_basis).round_dp(4) };
+        let gl_pct = if r.cost_basis.is_zero() {
+            Decimal::ZERO
+        } else {
+            (gl / r.cost_basis).round_dp(4)
+        };
         let spark = if is_cash || r.spark.is_empty() {
             None
         } else {
@@ -126,7 +140,9 @@ impl Holding {
             name: r.instrument_name,
             kind: r.kind,
             logo: r.logo_url.unwrap_or_else(|| {
-                r.account_color.clone().unwrap_or_else(|| "#888888".to_string())
+                r.account_color
+                    .clone()
+                    .unwrap_or_else(|| "#888888".to_string())
             }),
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
@@ -152,7 +168,10 @@ pub struct PricePoint {
 
 impl PricePoint {
     pub fn from_row(r: gripsou_core::repo::query::PricePointRow) -> Self {
-        PricePoint { t: r.ts.timestamp_millis(), price: r.unit_price.to_string() }
+        PricePoint {
+            t: r.ts.timestamp_millis(),
+            price: r.unit_price.to_string(),
+        }
     }
 }
 
