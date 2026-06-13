@@ -6,29 +6,23 @@ import { Surface } from "./Surface";
 import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { desaturate } from "../lib/color";
-import {
-  FAKE_DISTRIBUTION,
-  distributionTotal,
-  type DistributionAccount,
-} from "../lib/fakeDistribution";
+import type { DistributionAccount } from "../api/types";
+import { useDistribution } from "../api/hooks";
 
 const SURFACE = "#13110f";
 
 type DistributionCardProps = {
-  accounts?: DistributionAccount[];
   className?: string;
 };
 
-export function DistributionCard({
-  accounts = FAKE_DISTRIBUTION,
-  className = "",
-}: DistributionCardProps) {
-  // The id of the hovered account, driven by both the legend and the donut, so
-  // the two stay in sync. null = nothing hovered.
+export function DistributionCard({ className = "" }: DistributionCardProps) {
+  const { data } = useDistribution();
+  const accounts = data ?? [];
+  // The id of the hovered account, driven by both the legend and the donut.
   const [activeId, setActiveId] = useState<string | null>(null);
-  const total = distributionTotal(accounts);
+  const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
   // Largest proportion first, in both the donut and the legend.
-  const ordered = [...accounts].sort((a, b) => b.value - a.value);
+  const ordered = [...accounts].sort((a, b) => Number(b.value) - Number(a.value));
 
   // When something is hovered, every *other* slice/marker is greyed out.
   const colorFor = (a: DistributionAccount) =>
@@ -49,7 +43,7 @@ export function DistributionCard({
         itemStyle: { borderColor: SURFACE, borderWidth: 2, borderRadius: 4 },
         data: ordered.map((a) => ({
           name: a.name,
-          value: a.value,
+          value: Number(a.value),
           itemStyle: { color: colorFor(a) },
         })),
       },
@@ -105,7 +99,7 @@ export function DistributionCard({
                     {a.category}
                   </span>
                   <Percent
-                    value={a.value / total}
+                    value={Number(a.value) / total}
                     fractionDigits={1}
                     className="ml-auto text-fg text-sm w-14 text-right"
                   />
