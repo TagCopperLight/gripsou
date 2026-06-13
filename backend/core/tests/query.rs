@@ -62,3 +62,28 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(rows[1].net_worth, Decimal::new(730, 0));
     Ok(())
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(&pool, conn_id, &SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+        transactions: vec![],
+    }).await?;
+    let ids = holding_ids(&pool).await;
+    let today = chrono::Utc::now().date_naive();
+    let yesterday = today - chrono::Days::new(1);
+    // stamp yesterday first (value 100), then overwrite today's ingest snapshot with value 120
+    stamp_on(&pool, ids[0], yesterday, Decimal::new(100, 0), Decimal::new(100, 0), Decimal::new(100, 0)).await;
+    stamp_on(&pool, ids[0], today, Decimal::new(120, 0), Decimal::new(120, 0), Decimal::new(100, 0)).await;
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection").fetch_one(&pool).await?;
+    let rows = query::distribution(&pool, user_id).await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, "Current account");
+    assert_eq!(rows[0].category, "Cash");
+    assert_eq!(rows[0].value, Decimal::new(120, 0), "uses the latest snapshot, not the first");
+    Ok(())
+}
