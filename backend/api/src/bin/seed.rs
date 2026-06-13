@@ -243,6 +243,7 @@ fn hash(s: &str) -> u32 {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
     let url = env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
     let pool = PgPool::connect(&url).await?;
     sqlx::migrate!("../migrations").run(&pool).await?;

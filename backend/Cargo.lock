@@ -626,8 +626,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "chrono",
+ "dotenvy",
  "gripsou-core",
  "gripsou-jobs",
+ "rust_decimal",
  "serde",
  "serde_json",
  "sqlx",
@@ -635,6 +638,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
