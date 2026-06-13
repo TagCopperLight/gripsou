@@ -2,6 +2,7 @@ mod common;
 
 use chrono::NaiveDate;
 use common::{cash_holding, checking_account, equity_holding, holding_ids, insert_price_on, seed_connection, stamp_on};
+use chrono;
 use gripsou_core::dto::SyncResult;
 use gripsou_core::ingest::ingest;
 use gripsou_core::repo::query;
@@ -85,5 +86,29 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
     assert_eq!(rows[0].name, "Current account");
     assert_eq!(rows[0].category, "Cash");
     assert_eq!(rows[0].value, Decimal::new(120, 0), "uses the latest snapshot, not the first");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(&pool, conn_id, &SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![equity_holding("acct-1", "US0378331005", Decimal::new(3, 0), Decimal::new(450, 0), Some(Decimal::new(600, 0)))],
+        transactions: vec![],
+    }).await?;
+    let instrument_id: uuid::Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'").fetch_one(&pool).await?;
+    let base = chrono::Utc::now();
+    insert_price_on(&pool, instrument_id, base - chrono::Duration::days(2), Decimal::new(190, 0)).await;
+    insert_price_on(&pool, instrument_id, base - chrono::Duration::days(1), Decimal::new(200, 0)).await;
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection").fetch_one(&pool).await?;
+    let rows = query::holdings(&pool, user_id).await?;
+
+    assert_eq!(rows.len(), 1);
+    let r = &rows[0];
+    assert_eq!(r.kind, "equity");
+    assert_eq!(r.price, Some(Decimal::new(200, 0)), "latest price wins");
+    assert_eq!(r.spark, vec![Decimal::new(190, 0), Decimal::new(200, 0)], "ascending by time");
     Ok(())
 }
