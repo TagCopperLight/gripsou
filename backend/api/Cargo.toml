@@ -3,6 +3,7 @@ name = "gripsou-api"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+default-run = "gripsou"
 
 [[bin]]
 name = "gripsou"
@@ -27,3 +28,4 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+dotenvy.workspace = true
