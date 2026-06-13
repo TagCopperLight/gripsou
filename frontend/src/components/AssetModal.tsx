@@ -8,13 +8,20 @@ import { ChartLegend } from "./ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
-import { KIND_LABEL, type Holding } from "../lib/fakeHoldings";
-import {
-  RANGES,
-  assetPriceSeries,
-  positionValueSeries,
-  purchaseHistory,
-} from "../lib/fakeAsset";
+import { KIND_LABEL, type Holding, type Purchase } from "../api/types";
+import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
+import { positionSeries } from "../lib/assetSeries";
+
+// Range buttons for the modal (canonical API keys).
+const RANGES = [
+  { key: "24h", label: "24h" },
+  { key: "7d", label: "7d" },
+  { key: "1mo", label: "1mo" },
+  { key: "6mo", label: "6mo" },
+  { key: "1y", label: "1y" },
+  { key: "ytd", label: "ytd" },
+  { key: "max", label: "max" },
+];
 
 const GREEN = "var(--color-green)";
 const FAINT = "var(--color-fg-faint)";
@@ -54,57 +61,52 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
     };
   }, [onClose]);
 
-  const purchases = useMemo(() => purchaseHistory(holding), [holding]);
-  const meanPrice = holding.qty ? holding.invested / holding.qty : 0;
-  const up = holding.gl >= 0;
+  const { data: priceData } = useHoldingPrices(holding.id, range);
+  const { data: txnData } = useHoldingTransactions(holding.id);
+  const prices = useMemo(() => priceData ?? [], [priceData]);
+  const purchases = useMemo(() => txnData ?? [], [txnData]);
+
+  const qtyNum = Number(holding.qty);
+  const investedNum = Number(holding.invested);
+  const meanPrice = qtyNum ? investedNum / qtyNum : 0;
+  const up = Number(holding.gl) >= 0;
 
   // Chart series + header figures depend on the mode and range.
   const { series, headerValue, gainAbs, gainPct, chartLabel } = useMemo(() => {
     if (mode === "asset") {
-      const pts = assetPriceSeries(holding, range);
-      const values = pts.map((p) => p.price);
-      const first = values[0];
-      const last = values[values.length - 1];
+      const values = prices.map((p) => Number(p.price));
+      const first = values[0] ?? 0;
+      const last = values[values.length - 1] ?? 0;
       return {
         series: [
           {
             name: "Unit price",
-            data: pts.map((p) => [p.t, p.price] as [number, number]),
+            data: prices.map((p) => [p.t, Number(p.price)] as [number, number]),
             color: holding.accountColor,
             area: true,
           },
         ] satisfies ChartSeries[],
-        headerValue: holding.price,
+        headerValue: Number(holding.price),
         gainAbs: last - first,
         gainPct: first ? (last - first) / first : 0,
         chartLabel: "Unit price",
       };
     }
-    const pts = positionValueSeries(holding, range);
+    const pts = positionSeries(prices, purchases, qtyNum, investedNum);
     const values = pts.map((p) => p.value);
-    const first = values[0];
-    const last = values[values.length - 1];
+    const first = values[0] ?? 0;
+    const last = values[values.length - 1] ?? 0;
     return {
       series: [
-        {
-          name: "Invested",
-          data: pts.map((p) => [p.t, p.invested] as [number, number]),
-          color: "#777471",
-          dashed: true,
-        },
-        {
-          name: "Position value",
-          data: pts.map((p) => [p.t, p.value] as [number, number]),
-          color: "#34d399",
-          area: true,
-        },
+        { name: "Invested", data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
+        { name: "Position value", data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
       ] satisfies ChartSeries[],
-      headerValue: holding.value,
+      headerValue: Number(holding.value),
       gainAbs: last - first,
       gainPct: first ? (last - first) / first : 0,
       chartLabel: "Position value",
     };
-  }, [holding, mode, range]);
+  }, [holding, mode, prices, purchases, qtyNum, investedNum]);
 
   const gainUp = gainAbs >= 0;
 
@@ -330,7 +332,7 @@ function AboutSurface({
         </AboutRow>
         <AboutRow label="Weight of net worth">
           <Percent
-            value={netWorth ? holding.value / netWorth : 0}
+            value={netWorth ? Number(holding.value) / netWorth : 0}
             fractionDigits={1}
             className="text-fg"
           />
@@ -340,11 +342,7 @@ function AboutSurface({
   );
 }
 
-function PurchaseHistorySurface({
-  purchases,
-}: {
-  purchases: ReturnType<typeof purchaseHistory>;
-}) {
+function PurchaseHistorySurface({ purchases }: { purchases: Purchase[] }) {
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
       <h3 className="text-fg font-semibold text-sm">Purchase history</h3>

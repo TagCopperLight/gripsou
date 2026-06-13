@@ -7,12 +7,8 @@ import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
 import { formatQuantity } from "../lib/money";
-import {
-  FAKE_HOLDINGS,
-  KIND_LABEL,
-  holdingCategories,
-  type Holding,
-} from "../lib/fakeHoldings";
+import { KIND_LABEL, type Holding } from "../api/types";
+import { useHoldings } from "../api/hooks";
 
 type SortKey = "asset" | "qty" | "value" | "pnl";
 type SortDir = "asc" | "desc";
@@ -39,11 +35,11 @@ const RED = "var(--color-red)";
 
 // Cash has no meaningful quantity or P/L; those rows always sort to the bottom.
 function qtyOf(h: Holding): number | null {
-  return h.kind === "cash" ? null : h.qty;
+  return h.kind === "cash" ? null : Number(h.qty);
 }
 
 function pnlOf(h: Holding): number | null {
-  return h.kind === "cash" ? null : h.gl;
+  return h.kind === "cash" ? null : Number(h.gl);
 }
 
 function compareNullable(a: number | null, b: number | null, mul: number): number {
@@ -60,33 +56,31 @@ function compare(a: Holding, b: Holding, sort: Sort): number {
     case "qty":
       return compareNullable(qtyOf(a), qtyOf(b), mul);
     case "value":
-      return (a.value - b.value) * mul;
+      return (Number(a.value) - Number(b.value)) * mul;
     case "pnl":
       return compareNullable(pnlOf(a), pnlOf(b), mul);
   }
 }
 
 type HoldingsCardProps = {
-  holdings?: Holding[];
   className?: string;
 };
 
-export function HoldingsCard({
-  holdings = FAKE_HOLDINGS,
-  className = "",
-}: HoldingsCardProps) {
+export function HoldingsCard({ className = "" }: HoldingsCardProps) {
+  const { data } = useHoldings();
+  const holdings = useMemo(() => data ?? [], [data]);
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
 
   const categories = useMemo(
-    () => ["All", ...holdingCategories(holdings)],
+    () => ["All", ...new Set(holdings.map((h) => h.category))],
     [holdings],
   );
 
   const netWorth = useMemo(
-    () => holdings.reduce((sum, h) => sum + h.value, 0),
+    () => holdings.reduce((sum, h) => sum + Number(h.value), 0),
     [holdings],
   );
 
@@ -188,11 +182,11 @@ export function HoldingsCard({
           </thead>
           <tbody>
             {rows.map((h) => {
-              const up = h.gl >= 0;
+              const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
               return (
                 <tr
-                  key={`${h.accountId}-${h.ticker}`}
+                  key={h.id}
                   onClick={() => setSelected(h)}
                   className="cursor-pointer hover:bg-hover transition-colors duration-140"
                 >
@@ -271,7 +265,7 @@ export function HoldingsCard({
                   <td className="py-3 px-3 border-t border-surface-2">
                     <div className="flex justify-end">
                       {h.spark ? (
-                        <Sparkline data={h.spark} color={up ? GREEN : RED} />
+                        <Sparkline data={h.spark.map(Number)} color={up ? GREEN : RED} />
                       ) : (
                         <span className="text-sm text-fg-faint">-</span>
                       )}
