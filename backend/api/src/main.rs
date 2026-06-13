@@ -1,4 +1,5 @@
 mod dto;
+mod handlers;
 mod user;
 
 use std::env;
@@ -24,7 +25,14 @@ async fn main() -> anyhow::Result<()> {
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
 
-    let api = Router::new().route("/health", get(health));
+    let api = Router::new()
+        .route("/health", get(health))
+        .route("/dashboard/net-worth", get(handlers::net_worth))
+        .route("/dashboard/distribution", get(handlers::distribution))
+        .route("/holdings", get(handlers::holdings))
+        .route("/holdings/{id}/prices", get(handlers::holding_prices))
+        .route("/holdings/{id}/transactions", get(handlers::holding_transactions))
+        .with_state(db.clone());
 
     let app = Router::new()
         .nest("/api", api)
