@@ -6,6 +6,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
+import { CardState } from "./CardState";
 import { formatQuantity } from "../lib/money";
 import { KIND_LABEL, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
@@ -67,7 +68,8 @@ type HoldingsCardProps = {
 };
 
 export function HoldingsCard({ className = "" }: HoldingsCardProps) {
-  const { data } = useHoldings();
+  const { data, isError, refetch } = useHoldings();
+  const ready = data !== undefined;
   const holdings = useMemo(() => data ?? [], [data]);
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
   const [category, setCategory] = useState("All");
@@ -109,9 +111,11 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         <div className="flex items-start justify-between">
           <h2 className="text-fg font-semibold text-sm">
             Holdings
-            <span className="text-fg-faint font-normal ml-3">
-              {holdings.length} assets
-            </span>
+            {ready && (
+              <span className="text-fg-faint font-normal ml-3">
+                {holdings.length} assets
+              </span>
+            )}
           </h2>
           <label className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 w-64">
             <Search className="size-4 text-fg-faint shrink-0" />
@@ -124,6 +128,14 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           </label>
         </div>
 
+        {!ready ? (
+          <CardState
+            variant={isError ? "error" : "loading"}
+            onRetry={() => refetch()}
+            className="mt-4 h-64"
+          />
+        ) : (
+        <>
         <div className="flex items-center gap-1.5 mt-4">
           {categories.map((c) => {
             const selected = c === category;
@@ -276,6 +288,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             })}
           </tbody>
         </table>
+        </>
+        )}
       </div>
 
       {selected && (
