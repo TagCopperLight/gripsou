@@ -240,7 +240,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               <CardState
                 variant={chartError ? "error" : "loading"}
                 onRetry={retryChart}
-                className="mt-4 h-[340px]"
+                className="mt-4 h-85"
               />
             )}
 

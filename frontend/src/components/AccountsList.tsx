@@ -14,7 +14,7 @@ export function AccountsList({ className = "" }: AccountsListProps) {
 
   return (
     <section className={className}>
-      <h2 className="text-fg font-semibold text-lg mb-3">All accounts</h2>
+      <h2 className="text-fg font-semibold text-sm mb-3">All accounts</h2>
       {!ready ? (
         <CardState
           variant={isError ? "error" : "loading"}

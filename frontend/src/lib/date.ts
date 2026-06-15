@@ -37,11 +37,11 @@ export function formatRelative(
   const HOUR = 60 * MIN;
   const DAY = 24 * HOUR;
   if (diff < MIN) return "just now";
-  if (diff < HOUR) return `${Math.floor(diff / MIN)}m ago`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
+  if (diff < HOUR) return `${Math.floor(diff / MIN)} min ago`;
+  if (diff < DAY) return `${Math.floor(diff / HOUR)} h ago`;
   const days = Math.floor(diff / DAY);
   if (days === 1) return "yesterday";
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return `${days} days ago`;
   if (days < 14) return "last week";
   return formatDate(value, options);
 }

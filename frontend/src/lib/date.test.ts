@@ -16,10 +16,10 @@ describe("formatRelative", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     expect(formatRelative(ago(30 * 1000))).toBe("just now");
-    expect(formatRelative(ago(5 * MIN))).toBe("5m ago");
-    expect(formatRelative(ago(3 * HOUR))).toBe("3h ago");
+    expect(formatRelative(ago(5 * MIN))).toBe("5 min ago");
+    expect(formatRelative(ago(3 * HOUR))).toBe("3 h ago");
     expect(formatRelative(ago(1 * DAY))).toBe("yesterday");
-    expect(formatRelative(ago(4 * DAY))).toBe("4d ago");
+    expect(formatRelative(ago(4 * DAY))).toBe("4 days ago");
     expect(formatRelative(ago(10 * DAY))).toBe("last week");
   });
 
