@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select p.ts as \"ts!\", p.unit_price as \"unit_price!\"\n        from price p\n        join holding h    on h.instrument_id = p.instrument_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4\n        order by p.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "60942411df9998d1027604a107a60de107017f9249ab903f372b3d66cb3166a2"
+}

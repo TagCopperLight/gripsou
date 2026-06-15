@@ -194,3 +194,83 @@ impl Purchase {
         }
     }
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub type_label: String,
+    pub value: String,
+    pub last_sync_at: Option<i64>,
+}
+
+impl Account {
+    pub fn from_row(r: gripsou_core::repo::query::AccountRow) -> Self {
+        Account {
+            id: r.account_id.to_string(),
+            name: r.name,
+            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            type_label: r.type_label,
+            value: r.value.to_string(),
+            last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeriesAccount {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+}
+
+#[derive(Serialize)]
+pub struct SeriesPoint {
+    pub t: i64,
+    /// account id -> value (decimal string).
+    pub values: std::collections::HashMap<String, String>,
+}
+
+#[derive(Serialize)]
+pub struct AccountSeriesResponse {
+    pub accounts: Vec<SeriesAccount>,
+    pub points: Vec<SeriesPoint>,
+}
+
+impl AccountSeriesResponse {
+    /// Pivot flat (account, day, value) rows into account list + per-day value maps.
+    /// Rows must be ordered by day (the query guarantees this).
+    pub fn from_rows(rows: Vec<gripsou_core::repo::query::AccountSeriesRow>) -> Self {
+        use std::collections::{HashMap, HashSet};
+        let mut accounts: Vec<SeriesAccount> = Vec::new();
+        let mut seen: HashSet<uuid::Uuid> = HashSet::new();
+        let mut points: Vec<SeriesPoint> = Vec::new();
+        let mut idx_by_t: HashMap<i64, usize> = HashMap::new();
+
+        for r in rows {
+            let id = r.account_id.to_string();
+            if seen.insert(r.account_id) {
+                accounts.push(SeriesAccount {
+                    id: id.clone(),
+                    name: r.name,
+                    color: r.color.unwrap_or_else(|| "#888888".to_string()),
+                });
+            }
+            let t = day_to_millis(r.as_of);
+            let pos = match idx_by_t.get(&t) {
+                Some(&p) => p,
+                None => {
+                    idx_by_t.insert(t, points.len());
+                    points.push(SeriesPoint { t, values: HashMap::new() });
+                    points.len() - 1
+                }
+            };
+            points[pos].values.insert(id, r.value.to_string());
+        }
+
+        AccountSeriesResponse { accounts, points }
+    }
+}

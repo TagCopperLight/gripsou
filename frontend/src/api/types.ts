@@ -48,3 +48,17 @@ export type Holding = {
 
 export type PricePoint = { t: number; price: string };
 export type Purchase = { t: number; qty: string; price: string; invested: string };
+
+export type Account = {
+  id: string;
+  name: string;
+  color: string;
+  typeLabel: string;
+  value: string;
+  lastSyncAt: number | null;
+};
+
+export type AccountSeries = {
+  accounts: { id: string; name: string; color: string }[];
+  points: { t: number; values: Record<string, string> }[];
+};

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select unit_price as \"unit_price!\" from price where instrument_id = $1 order by ts desc limit 30",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "75fe4a19c4c8202346bb08850587793058051ad5f7779ad07f0936641dc37856"
+}

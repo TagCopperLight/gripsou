@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.ts as \"ts!\", t.quantity, t.unit_price, t.amount as \"amount!\"\n        from transaction t\n        join holding h    on h.account_id = t.account_id and h.instrument_id = t.instrument_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1 and c.user_id = $2 and t.type in ('buy', 'sell')\n        order by t.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "quantity",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unit_price",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "unit_price"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "amount"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "2141ba9b1c916904282e591a87dcb1e2a36f2f94fcefa36926a7e60423ac5910"
+}

@@ -112,3 +112,30 @@ pub async fn holding_transactions(
         rows.into_iter().map(dto::Purchase::from_row).collect(),
     ))
 }
+
+pub async fn accounts(
+    State(pool): State<PgPool>,
+) -> Result<Json<Vec<dto::Account>>, (StatusCode, String)> {
+    let user_id = current_user(&pool).await.map_err(internal)?;
+    let rows = gripsou_core::repo::query::accounts(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(rows.into_iter().map(dto::Account::from_row).collect()))
+}
+
+pub async fn account_series(
+    State(pool): State<PgPool>,
+    Query(p): Query<RangeParams>,
+) -> Result<Json<dto::AccountSeriesResponse>, (StatusCode, String)> {
+    let user_id = current_user(&pool).await.map_err(internal)?;
+    let (from, to) = range_window(&p.range);
+    let rows = gripsou_core::repo::query::account_series(
+        &pool,
+        user_id,
+        from.date_naive(),
+        to.date_naive(),
+    )
+    .await
+    .map_err(internal)?;
+    Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
+}
