@@ -205,6 +205,91 @@ pub async fn holding_transactions(
     Ok(rows)
 }
 
+pub struct AccountRow {
+    pub account_id: Uuid,
+    pub name: String,
+    pub color: Option<String>,
+    pub type_label: String,
+    pub value: Decimal,
+    pub last_sync_at: Option<DateTime<Utc>>,
+}
+
+/// One row per account: latest snapshot value per holding, summed, with the
+/// account-type label and the connection's last sync time.
+pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        AccountRow,
+        r#"
+        with latest as (
+            select distinct on (hs.holding_id) hs.holding_id, hs.value
+            from holding_snapshot hs
+            join holding h    on h.id = hs.holding_id
+            join account a    on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            where c.user_id = $1
+            order by hs.holding_id, hs.as_of desc
+        )
+        select a.id    as "account_id!",
+               a.name  as "name!",
+               a.color,
+               t.label as "type_label!",
+               sum(l.value) as "value!",
+               c.last_sync_at
+        from latest l
+        join holding h      on h.id = l.holding_id
+        join account a      on a.id = h.account_id
+        join account_type t on t.key = a.type_key
+        join connection c   on c.id = a.connection_id
+        group by a.id, a.name, a.color, t.label, c.last_sync_at
+        order by sum(l.value) desc
+        "#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct AccountSeriesRow {
+    pub account_id: Uuid,
+    pub name: String,
+    pub color: Option<String>,
+    pub as_of: NaiveDate,
+    pub value: Decimal,
+}
+
+/// Stacked-area source: snapshot value summed per (account, day) over a window.
+pub async fn account_series(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<AccountSeriesRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        AccountSeriesRow,
+        r#"
+        select a.id   as "account_id!",
+               a.name as "name!",
+               a.color,
+               hs.as_of as "as_of!",
+               sum(hs.value) as "value!"
+        from holding_snapshot hs
+        join holding h    on h.id = hs.holding_id
+        join account a    on a.id = h.account_id
+        join connection c on c.id = a.connection_id
+        where c.user_id = $1 and hs.as_of between $2 and $3
+        group by a.id, a.name, a.color, hs.as_of
+        order by hs.as_of, a.id
+        "#,
+        user_id,
+        from,
+        to,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub struct DistributionRow {
     pub account_id: Uuid,
     pub name: String,

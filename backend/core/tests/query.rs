@@ -288,6 +288,86 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    let ids = holding_ids(&pool).await;
+    let today = chrono::Utc::now().date_naive();
+    stamp_on(
+        &pool,
+        ids[0],
+        today,
+        Decimal::new(150, 0),
+        Decimal::new(150, 0),
+        Decimal::new(100, 0),
+    )
+    .await;
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let rows = query::accounts(&pool, user_id).await?;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, "Current account");
+    assert_eq!(rows[0].type_label, "Checking");
+    assert_eq!(rows[0].value, Decimal::new(150, 0));
+    assert!(rows[0].last_sync_at.is_none(), "test connection never synced");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
+            holdings: vec![
+                cash_holding("acct-1", Decimal::new(100, 0)),
+                cash_holding("acct-2", Decimal::new(200, 0)),
+            ],
+            transactions: vec![],
+        },
+    )
+    .await?;
+
+    // Map each account's cash holding id via account.external_id.
+    let pairs: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+        "select h.id, a.external_id from holding h join account a on a.id = h.account_id",
+    )
+    .fetch_all(&pool)
+    .await?;
+    let day = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+    for (hid, ext) in &pairs {
+        let v = if ext == "acct-1" { 100 } else { 200 };
+        stamp_on(&pool, *hid, day, Decimal::new(v, 0), Decimal::new(v, 0), Decimal::new(v, 0)).await;
+    }
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let rows = query::account_series(&pool, user_id, day, day).await?;
+
+    assert_eq!(rows.len(), 2, "one row per (account, day)");
+    let total: Decimal = rows.iter().map(|r| r.value).sum();
+    assert_eq!(total, Decimal::new(300, 0));
+    let distinct: std::collections::HashSet<_> = rows.iter().map(|r| r.account_id).collect();
+    assert_eq!(distinct.len(), 2, "grouped per account");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn holding_transactions_returns_buy_lots(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(

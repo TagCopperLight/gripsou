@@ -259,7 +259,7 @@ async fn main() -> anyhow::Result<()> {
     sqlx::query("insert into provider (key, display_name, kind, enabled) values ('seed','Seed','account',true) on conflict (key) do nothing")
         .execute(&pool).await?;
     let conn_id = Uuid::new_v4();
-    sqlx::query("insert into connection (id, user_id, provider_key, display_name) values ($1,$2,'seed','Seed data')")
+    sqlx::query("insert into connection (id, user_id, provider_key, display_name, last_sync_at) values ($1,$2,'seed','Seed data', now() - interval '3 hours')")
         .bind(conn_id).bind(user_id).execute(&pool).await?;
 
     let base = Utc::now();

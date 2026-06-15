@@ -64,3 +64,9 @@ export function desaturate(hex: string, amount = 0.82, darken = 0.12): string {
     hslToRgb({ h: hsl.h, s: hsl.s * (1 - amount), l: hsl.l * (1 - darken) }),
   );
 }
+
+/** A hex colour as an `rgba(...)` string at the given alpha (0–1). */
+export function withAlpha(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

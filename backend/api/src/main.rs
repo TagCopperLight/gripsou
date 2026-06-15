@@ -30,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/dashboard/net-worth", get(handlers::net_worth))
         .route("/dashboard/distribution", get(handlers::distribution))
+        .route("/accounts", get(handlers::accounts))
+        .route("/accounts/series", get(handlers::account_series))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

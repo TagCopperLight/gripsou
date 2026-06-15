@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into price (instrument_id, ts, unit_price, currency)\n        values ($1, $2, $3, $4)\n        on conflict (instrument_id, ts)\n        do update set unit_price = excluded.unit_price, currency = excluded.currency\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Numeric",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "00e73e5a1de22d54ffe690e80e5f0ca37bdafe0bbc1df337c280146854c1e886"
+}

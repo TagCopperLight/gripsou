@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
 import type {
+  Account,
+  AccountSeries,
   DistributionAccount,
   Holding,
   NetWorthResponse,
@@ -40,5 +42,19 @@ export function useHoldingTransactions(id: string) {
   return useQuery({
     queryKey: ["holding-transactions", id],
     queryFn: () => getJson<Purchase[]>(`/holdings/${id}/transactions`),
+  });
+}
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => getJson<Account[]>(`/accounts`),
+  });
+}
+
+export function useAccountSeries(range: string) {
+  return useQuery({
+    queryKey: ["account-series", range],
+    queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
   });
 }

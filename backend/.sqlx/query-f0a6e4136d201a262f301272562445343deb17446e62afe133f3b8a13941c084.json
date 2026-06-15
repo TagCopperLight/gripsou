@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select a.id   as \"account_id!\",\n               a.name as \"name!\",\n               a.color,\n               hs.as_of as \"as_of!\",\n               sum(hs.value) as \"value!\"\n        from holding_snapshot hs\n        join holding h    on h.id = hs.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where c.user_id = $1 and hs.as_of between $2 and $3\n        group by a.id, a.name, a.color, hs.as_of\n        order by hs.as_of, a.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "as_of!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "holding_snapshot",
+            "name": "as_of"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "f0a6e4136d201a262f301272562445343deb17446e62afe133f3b8a13941c084"
+}
