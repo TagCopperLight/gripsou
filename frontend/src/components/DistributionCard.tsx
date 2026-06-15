@@ -5,6 +5,7 @@ import type { EChartsOption } from "echarts";
 import { Surface } from "./Surface";
 import { Money } from "./Money";
 import { Percent } from "./Percent";
+import { CardState } from "./CardState";
 import { desaturate } from "../lib/color";
 import type { DistributionAccount } from "../api/types";
 import { useDistribution } from "../api/hooks";
@@ -16,7 +17,8 @@ type DistributionCardProps = {
 };
 
 export function DistributionCard({ className = "" }: DistributionCardProps) {
-  const { data } = useDistribution();
+  const { data, isError, refetch } = useDistribution();
+  const ready = data !== undefined;
   const accounts = data ?? [];
   // The id of the hovered account, driven by both the legend and the donut.
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -60,6 +62,13 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-5">
         <p className="text-fg font-semibold text-sm">Account distribution</p>
+        {!ready ? (
+          <CardState
+            variant={isError ? "error" : "loading"}
+            onRetry={() => refetch()}
+            className="mt-2 h-55"
+          />
+        ) : (
         <div className="flex items-center gap-8 mt-2">
           <div className="relative size-55 shrink-0">
             <ReactECharts
@@ -112,6 +121,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
             })}
           </div>
         </div>
+        )}
       </div>
     </Surface>
   );

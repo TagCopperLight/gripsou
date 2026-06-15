@@ -7,6 +7,8 @@ import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { NetWorthChart } from "./NetWorthChart";
 import { ChartLegend } from "./ChartLegend";
+import { CardState } from "./CardState";
+import type { ChartUnit } from "./ValueChart";
 import { useNetWorth } from "../api/hooks";
 
 const RANGE_OPTIONS = [
@@ -35,7 +37,9 @@ const RANGE_LABEL: Record<string, string> = {
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const [range, setRange] = useState("6mo");
-  const { data, isLoading } = useNetWorth(range);
+  const [unit, setUnit] = useState<ChartUnit>("value");
+  const { data, isError, refetch } = useNetWorth(range);
+  const ready = data !== undefined;
 
   const points = (data?.points ?? []).map((p) => ({
     t: p.t,
@@ -51,28 +55,36 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
         <div className="flex justify-between">
           <div className="flex flex-col gap-1">
             <p className="text-fg font-semibold text-sm">Net Worth</p>
-            <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
-            <div className="flex items-center gap-4">
-              <div className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
-                {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
-                <Money value={summary?.gainAbs ?? "0"} signed />
-                <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
-              </div>
-              <p className="text-fg-faint text-sm">over {RANGE_LABEL[range]}</p>
-            </div>
+            {ready && (
+              <>
+                <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
+                <div className="flex items-center gap-4">
+                  <div className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
+                    {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
+                    <Money value={summary?.gainAbs ?? "0"} signed />
+                    <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
+                  </div>
+                  <p className="text-fg-faint text-sm">over {RANGE_LABEL[range]}</p>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex flex-col">
             <div>
               <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="mr-6" />
-              <SegmentedControl options={UNIT_OPTIONS} />
+              <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
             </div>
             <ChartLegend className="mt-3 self-end" items={LEGEND_ITEMS} />
           </div>
         </div>
-        {isLoading ? (
-          <div className="mt-4 h-80 flex items-center justify-center text-fg-faint text-sm">Loading…</div>
+        {ready ? (
+          <NetWorthChart className="mt-4" data={points} unit={unit} />
         ) : (
-          <NetWorthChart className="mt-4" data={points} />
+          <CardState
+            variant={isError ? "error" : "loading"}
+            onRetry={() => refetch()}
+            className="mt-4 h-80"
+          />
         )}
       </div>
     </Surface>

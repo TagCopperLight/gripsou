@@ -6,6 +6,7 @@ import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { ChartLegend } from "./ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
+import { CardState } from "./CardState";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { KIND_LABEL, type Holding, type Purchase } from "../api/types";
@@ -61,10 +62,23 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
     };
   }, [onClose]);
 
-  const { data: priceData } = useHoldingPrices(holding.id, range);
-  const { data: txnData } = useHoldingTransactions(holding.id);
+  const { data: priceData, isError: pricesError, refetch: refetchPrices } =
+    useHoldingPrices(holding.id, range);
+  const { data: txnData, isError: txnError, refetch: refetchTxn } =
+    useHoldingTransactions(holding.id);
   const prices = useMemo(() => priceData ?? [], [priceData]);
   const purchases = useMemo(() => txnData ?? [], [txnData]);
+
+  // The chart needs prices; in "purchases" mode it also folds in transactions.
+  const chartReady =
+    mode === "asset"
+      ? priceData !== undefined
+      : priceData !== undefined && txnData !== undefined;
+  const chartError = pricesError || (mode === "purchases" && txnError);
+  const retryChart = () => {
+    refetchPrices();
+    if (mode === "purchases") refetchTxn();
+  };
 
   const qtyNum = Number(holding.qty);
   const investedNum = Number(holding.invested);
@@ -215,12 +229,20 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               </div>
             </div>
 
-            <ValueChart
-              series={series}
-              unit={unit}
-              height={340}
-              className="mt-4"
-            />
+            {chartReady ? (
+              <ValueChart
+                series={series}
+                unit={unit}
+                height={340}
+                className="mt-4"
+              />
+            ) : (
+              <CardState
+                variant={chartError ? "error" : "loading"}
+                onRetry={retryChart}
+                className="mt-4 h-[340px]"
+              />
+            )}
 
             <div className="flex justify-center mt-3">
               <SegmentedControl
@@ -241,7 +263,12 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
             {mode === "asset" ? (
               <AboutSurface holding={holding} netWorth={netWorth} />
             ) : (
-              <PurchaseHistorySurface purchases={purchases} />
+              <PurchaseHistorySurface
+                purchases={purchases}
+                ready={txnData !== undefined}
+                isError={txnError}
+                onRetry={() => refetchTxn()}
+              />
             )}
           </div>
         </div>
@@ -342,11 +369,27 @@ function AboutSurface({
   );
 }
 
-function PurchaseHistorySurface({ purchases }: { purchases: Purchase[] }) {
+function PurchaseHistorySurface({
+  purchases,
+  ready,
+  isError,
+  onRetry,
+}: {
+  purchases: Purchase[];
+  ready: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
       <h3 className="text-fg font-semibold text-sm">Purchase history</h3>
-      {purchases.length === 0 ? (
+      {!ready ? (
+        <CardState
+          variant={isError ? "error" : "loading"}
+          onRetry={onRetry}
+          className="mt-4 h-32"
+        />
+      ) : purchases.length === 0 ? (
         <p className="text-fg-faint text-sm mt-4">No purchases.</p>
       ) : (
         <table className="w-full mt-3 border-separate border-spacing-0">
