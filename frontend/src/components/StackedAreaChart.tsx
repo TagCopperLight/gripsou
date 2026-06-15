@@ -114,7 +114,7 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
       lineStyle: { width: 1.5, color: s.color },
       itemStyle: { color: s.color },
       areaStyle: { color: rgba(s.color, 0.55) },
-      emphasis: { focus: "series" },
+      emphasis: { disabled: true },
     })),
   };
 

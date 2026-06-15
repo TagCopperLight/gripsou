@@ -63,9 +63,9 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
               </>
             )}
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col items-end">
             <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
-            <ChartLegend className="mt-3 self-end flex-wrap justify-end" items={legendItems} />
+            <ChartLegend className="mt-3 flex-wrap justify-end" items={legendItems} />
           </div>
         </div>
         {ready ? (
