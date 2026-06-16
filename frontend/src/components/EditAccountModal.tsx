@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, X } from "lucide-react";
 
 import { Select } from "./Select";
@@ -12,6 +13,7 @@ type EditAccountModalProps = {
 };
 
 export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(account.name);
   const [typeKey, setTypeKey] = useState(account.typeKey);
   const [color, setColor] = useState(account.color);
@@ -59,17 +61,17 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Edit account"
+        aria-label={t("editAccountModal.title")}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
-          <h2 className="text-xl font-semibold text-fg">Edit account</h2>
+          <h2 className="text-xl font-semibold text-fg">{t("editAccountModal.title")}</h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
           >
             <X className="size-5" />
@@ -78,7 +80,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
 
         {/* Body */}
         <div className="px-6 py-4 flex flex-col gap-5">
-          <Field label="Account name">
+          <Field label={t("editAccountModal.accountName")}>
             <input
               type="text"
               value={name}
@@ -87,17 +89,17 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             />
           </Field>
 
-          <Field label="Type">
+          <Field label={t("editAccountModal.type")}>
             <Select value={typeKey} onChange={setTypeKey} options={typeOptions} />
           </Field>
 
-          <Field label="Color">
+          <Field label={t("editAccountModal.color")}>
             <div className="flex flex-wrap gap-2">
               {ACCOUNT_PALETTE.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  aria-label={`Color ${c}`}
+                  aria-label={t("editAccountModal.colorLabel", { color: c })}
                   aria-pressed={c === color}
                   onClick={() => setColor(c)}
                   className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 ${
@@ -119,7 +121,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
                 style={{ background: color }}
               />
               <span className="text-fg font-semibold text-[15px] truncate">
-                {name.trim() || "Account name"}
+                {name.trim() || t("editAccountModal.accountName")}
               </span>
             </span>
             <span className="text-fg-faint text-sm shrink-0 mr-2">{typeLabel}</span>
@@ -127,7 +129,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
 
           {update.isError && (
             <p className="text-red text-sm">
-              Could not save changes. Please try again.
+              {t("editAccountModal.saveError")}
             </p>
           )}
         </div>
@@ -139,7 +141,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl text-fg-dim hover:text-fg font-medium cursor-pointer transition-colors duration-140"
           >
-            Cancel
+            {t("editAccountModal.cancel")}
           </button>
           <button
             type="button"
@@ -147,7 +149,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             disabled={!canSave}
             className="px-4 py-2.5 rounded-xl bg-green text-black font-semibold cursor-pointer transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {update.isPending ? "Saving…" : "Save changes"}
+            {update.isPending ? t("editAccountModal.saving") : t("editAccountModal.save")}
           </button>
         </div>
       </div>

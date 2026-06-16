@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowDownRight, ArrowUpRight, X } from "lucide-react";
 
 import { Money } from "./Money";
@@ -9,7 +10,7 @@ import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
-import { KIND_LABEL, type Holding, type Purchase } from "../api/types";
+import { KIND_LABEL_KEY, categoryLabel, type Holding, type Purchase } from "../api/types";
 import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
 
@@ -31,11 +32,6 @@ type Mode = "asset" | "purchases";
 
 const RANGE_OPTIONS = RANGES.map((r) => ({ value: r.key, label: r.label }));
 
-const UNIT_OPTIONS = [
-  { value: "value", label: "Value" },
-  { value: "percent", label: "%" },
-];
-
 type AssetModalProps = {
   holding: Holding;
   /** Total net worth, for the "weight of net worth" stat. */
@@ -44,9 +40,15 @@ type AssetModalProps = {
 };
 
 export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("asset");
   const [range, setRange] = useState("1mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
+
+  const UNIT_OPTIONS = [
+    { value: "value", label: t("common.value") },
+    { value: "percent", label: "%" },
+  ];
 
   // Close on Escape; lock background scroll while open.
   useEffect(() => {
@@ -94,7 +96,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
       return {
         series: [
           {
-            name: "Unit price",
+            name: t("assetModal.unitPrice"),
             data: prices.map((p) => [p.t, Number(p.price)] as [number, number]),
             color: holding.accountColor,
             area: true,
@@ -103,7 +105,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         headerValue: Number(holding.price),
         gainAbs: last - first,
         gainPct: first ? (last - first) / first : 0,
-        chartLabel: "Unit price",
+        chartLabel: t("assetModal.unitPrice"),
       };
     }
     const pts = positionSeries(prices, purchases, qtyNum, investedNum);
@@ -112,15 +114,15 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
     const last = values[values.length - 1] ?? 0;
     return {
       series: [
-        { name: "Invested", data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
-        { name: "Position value", data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
+        { name: t("assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
+        { name: t("assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
       ] satisfies ChartSeries[],
       headerValue: Number(holding.value),
       gainAbs: last - first,
       gainPct: first ? (last - first) / first : 0,
-      chartLabel: "Position value",
+      chartLabel: t("assetModal.positionValue"),
     };
-  }, [holding, mode, prices, purchases, qtyNum, investedNum]);
+  }, [holding, mode, prices, purchases, qtyNum, investedNum, t]);
 
   const gainUp = gainAbs >= 0;
 
@@ -152,7 +154,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               <div className="flex items-center gap-2 text-sm leading-none">
                 <span className="font-mono text-fg-faint">{holding.ticker} · </span>
                 <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                  {holding.category}
+                  {categoryLabel(t, holding.category, holding.categoryLabel)}
                 </span>
                 <span className="font-mono text-fg-faint"> · </span>
                 <span className="flex items-center gap-1.5 text-fg-dim">
@@ -170,14 +172,14 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               value={mode}
               onChange={(v) => setMode(v as Mode)}
               options={[
-                { value: "asset", label: "Asset" },
-                { value: "purchases", label: "Purchases" },
+                { value: "asset", label: t("assetModal.asset") },
+                { value: "purchases", label: t("assetModal.purchases") },
               ]}
             />
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
             >
               <X className="size-5" />
@@ -221,8 +223,8 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                 {mode === "purchases" && (
                   <ChartLegend
                     items={[
-                      { label: "Position value", color: GREEN },
-                      { label: "Invested", color: FAINT, dashed: true },
+                      { label: t("assetModal.positionValue"), color: GREEN },
+                      { label: t("assetModal.invested"), color: FAINT, dashed: true },
                     ]}
                   />
                 )}
@@ -295,17 +297,18 @@ function StatsSurface({
   meanPrice: number;
   up: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
       <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-        <Stat label="Quantity owned" value={formatQuantity(holding.qty)} />
-        <Stat label="Mean price / share" value={formatMoney(meanPrice)} />
-        <Stat label="Capital invested" value={formatMoney(holding.invested)} />
-        <Stat label="Current value" value={formatMoney(holding.value)} />
+        <Stat label={t("assetModal.quantityOwned")} value={formatQuantity(holding.qty)} />
+        <Stat label={t("assetModal.meanPricePerShare")} value={formatMoney(meanPrice)} />
+        <Stat label={t("assetModal.capitalInvested")} value={formatMoney(holding.invested)} />
+        <Stat label={t("assetModal.currentValue")} value={formatMoney(holding.value)} />
       </div>
       <hr className="border-surface-3 my-4" />
       <div className="flex flex-col items-start gap-1">
-        <span className="text-fg-faint text-xs">Total unrealized P/L</span>
+        <span className="text-fg-faint text-xs">{t("assetModal.totalUnrealizedPnl")}</span>
         <div className="flex items-baseline gap-2">
           <Money
             value={holding.gl}
@@ -343,12 +346,13 @@ function AboutSurface({
   holding: Holding;
   netWorth: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
-      <span className="text-fg text-sm font-semibold">About</span>
+      <span className="text-fg text-sm font-semibold">{t("assetModal.about")}</span>
       <div className="mt-1 divide-y divide-surface-3">
-        <AboutRow label="Type">{KIND_LABEL[holding.kind]}</AboutRow>
-        <AboutRow label="Account">
+        <AboutRow label={t("assetModal.type")}>{t(KIND_LABEL_KEY[holding.kind])}</AboutRow>
+        <AboutRow label={t("assetModal.account")}>
           <span className="flex items-center gap-2">
             <span
               className="size-2.5 rounded-sm"
@@ -357,7 +361,7 @@ function AboutSurface({
             {holding.accountName}
           </span>
         </AboutRow>
-        <AboutRow label="Weight of net worth">
+        <AboutRow label={t("assetModal.weightOfNetWorth")}>
           <Percent
             value={netWorth ? Number(holding.value) / netWorth : 0}
             fractionDigits={1}
@@ -380,9 +384,10 @@ function PurchaseHistorySurface({
   isError: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
-      <h3 className="text-fg font-semibold text-sm">Purchase history</h3>
+      <h3 className="text-fg font-semibold text-sm">{t("assetModal.purchaseHistory")}</h3>
       {!ready ? (
         <CardState
           variant={isError ? "error" : "loading"}
@@ -390,15 +395,15 @@ function PurchaseHistorySurface({
           className="mt-4 h-32"
         />
       ) : purchases.length === 0 ? (
-        <p className="text-fg-faint text-sm mt-4">No purchases.</p>
+        <p className="text-fg-faint text-sm mt-4">{t("assetModal.noPurchases")}</p>
       ) : (
         <table className="w-full mt-3 border-separate border-spacing-0">
           <thead>
             <tr className="text-[11px] font-mono text-fg-faint">
-              <th className="text-left font-medium pb-2">DATE</th>
-              <th className="text-right font-medium pb-2">QTY</th>
-              <th className="text-right font-medium pb-2">PRICE</th>
-              <th className="text-right font-medium pb-2">INVESTED</th>
+              <th className="text-left font-medium pb-2">{t("assetModal.columns.date")}</th>
+              <th className="text-right font-medium pb-2">{t("assetModal.columns.qty")}</th>
+              <th className="text-right font-medium pb-2">{t("assetModal.columns.price")}</th>
+              <th className="text-right font-medium pb-2">{t("assetModal.columns.invested")}</th>
             </tr>
           </thead>
           <tbody>

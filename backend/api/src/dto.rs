@@ -73,7 +73,10 @@ impl NetWorthResponse {
 pub struct DistributionAccount {
     pub id: String,
     pub name: String,
+    /// Stable category key; the frontend translates it via i18n.
     pub category: String,
+    /// English category label — i18n fallback when the key has no locale entry.
+    pub category_label: String,
     pub color: String,
     pub value: String,
 }
@@ -83,7 +86,8 @@ impl DistributionAccount {
         DistributionAccount {
             id: r.account_id.to_string(),
             name: r.name,
-            category: r.category,
+            category: r.category_key,
+            category_label: r.category_label,
             color: r.color.unwrap_or_else(|| "#888888".to_string()),
             value: r.value.to_string(),
         }
@@ -101,7 +105,10 @@ pub struct Holding {
     pub account_id: String,
     pub account_name: String,
     pub account_color: String,
+    /// Stable category key; the frontend translates it via i18n.
     pub category: String,
+    /// English category label — i18n fallback when the key has no locale entry.
+    pub category_label: String,
     pub qty: String,
     pub price: String,
     pub invested: String,
@@ -147,7 +154,8 @@ impl Holding {
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
             account_color: r.account_color.unwrap_or_else(|| "#888888".to_string()),
-            category: r.category,
+            category: r.category_key,
+            category_label: r.category_label,
             qty: r.quantity.to_string(),
             price: price.to_string(),
             invested: r.cost_basis.to_string(),
@@ -300,7 +308,10 @@ impl AccountSeriesResponse {
 pub struct AccountType {
     pub key: String,
     pub label: String,
+    /// Stable category key; the frontend translates it via i18n.
     pub category: String,
+    /// English category label — i18n fallback when the key has no locale entry.
+    pub category_label: String,
 }
 
 impl AccountType {
@@ -308,7 +319,8 @@ impl AccountType {
         AccountType {
             key: r.key,
             label: r.label,
-            category: r.category,
+            category: r.category_key,
+            category_label: r.category_label,
         }
     }
 }

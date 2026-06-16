@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 
@@ -7,7 +8,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { CardState } from "./CardState";
 import { desaturate } from "../lib/color";
-import type { DistributionAccount } from "../api/types";
+import { categoryLabel, type DistributionAccount } from "../api/types";
 import { useDistribution } from "../api/hooks";
 
 const SURFACE = "#13110f";
@@ -17,6 +18,7 @@ type DistributionCardProps = {
 };
 
 export function DistributionCard({ className = "" }: DistributionCardProps) {
+  const { t } = useTranslation();
   const { data, isError, refetch } = useDistribution();
   const ready = data !== undefined;
   const accounts = data ?? [];
@@ -61,7 +63,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-5">
-        <p className="text-fg font-semibold text-sm">Account distribution</p>
+        <p className="text-fg font-semibold text-sm">{t("distribution.title")}</p>
         {!ready ? (
           <CardState
             variant={isError ? "error" : "loading"}
@@ -77,7 +79,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
               style={{ height: "100%", width: "100%" }}
             />
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-fg-faint text-xs">Total</span>
+              <span className="text-fg-faint text-xs">{t("common.total")}</span>
               <Money
                 value={total}
                 fractionDigits={0}
@@ -105,7 +107,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                   />
                   <span className="text-sm text-fg">{a.name}</span>
                   <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                    {a.category}
+                    {categoryLabel(t, a.category, a.categoryLabel)}
                   </span>
                   <Percent
                     value={Number(a.value) / total}

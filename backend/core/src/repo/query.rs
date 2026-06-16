@@ -52,7 +52,11 @@ pub struct HoldingRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: Option<String>,
-    pub category: String,
+    /// Stable category key (`cash`, `pea`, …); the frontend translates it,
+    /// falling back to `category_label`.
+    pub category_key: String,
+    /// English category label from the reference table — the i18n fallback.
+    pub category_label: String,
     pub quantity: Decimal,
     pub cost_basis: Decimal,
     pub price: Option<Decimal>,
@@ -72,7 +76,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         account_id: Uuid,
         account_name: String,
         account_color: Option<String>,
-        category: String,
+        category_key: String,
+        category_label: String,
         quantity: Decimal,
         cost_basis: Decimal,
         price: Option<Decimal>,
@@ -91,7 +96,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                a.id            as "account_id!",
                a.name          as "account_name!",
                a.color         as "account_color",
-               cat.label       as "category!",
+               cat.key         as "category_key!",
+               cat.label       as "category_label!",
                h.quantity      as "quantity!",
                h.cost_basis    as "cost_basis!",
                (select p.unit_price from price p
@@ -131,7 +137,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             account_id: b.account_id,
             account_name: b.account_name,
             account_color: b.account_color,
-            category: b.category,
+            category_key: b.category_key,
+            category_label: b.category_label,
             quantity: b.quantity,
             cost_basis: b.cost_basis,
             price: b.price,
@@ -295,7 +302,8 @@ pub async fn account_series(
 pub struct AccountTypeRow {
     pub key: String,
     pub label: String,
-    pub category: String,
+    pub category_key: String,
+    pub category_label: String,
 }
 
 /// All account types from the reference table (joined to category), ordered by
@@ -307,7 +315,8 @@ pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, C
         r#"
         select t.key     as "key!",
                t.label   as "label!",
-               cat.label as "category!"
+               cat.key   as "category_key!",
+               cat.label as "category_label!"
         from account_type t
         join category cat on cat.key = t.category_key
         order by t.label
@@ -322,7 +331,8 @@ pub struct DistributionRow {
     pub account_id: Uuid,
     pub name: String,
     pub color: Option<String>,
-    pub category: String,
+    pub category_key: String,
+    pub category_label: String,
     pub value: Decimal,
 }
 
@@ -345,14 +355,15 @@ pub async fn distribution(
         select a.id   as "account_id!",
                a.name as "name!",
                a.color,
-               cat.label as "category!",
+               cat.key   as "category_key!",
+               cat.label as "category_label!",
                sum(l.value) as "value!"
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         join category cat   on cat.key = t.category_key
-        group by a.id, a.name, a.color, cat.label
+        group by a.id, a.name, a.color, cat.key, cat.label
         order by sum(l.value) desc
         "#,
         user_id,

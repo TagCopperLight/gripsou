@@ -4,5 +4,106 @@
     "accounts": "Comptes",
     "transactions": "Transactions",
     "settings": "Paramètres"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "retry": "Réessayer",
+    "cantReachServer": "Impossible de joindre le serveur",
+    "apiUnavailable": "L'API est indisponible pour le moment.",
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "select": "Sélectionner…",
+    "value": "Valeur",
+    "total": "Total"
+  },
+  "holdingKind": {
+    "cash": "Liquidités",
+    "etf": "ETF",
+    "equity": "Action",
+    "crypto": "Crypto"
+  },
+  "categories": {
+    "cash": "Liquidités",
+    "savings": "Épargne",
+    "pea": "PEA",
+    "brokerage": "Courtage",
+    "crypto": "Crypto"
+  },
+  "time": {
+    "justNow": "à l'instant",
+    "minAgo": "il y a {{count}} min",
+    "hAgo": "il y a {{count}} h",
+    "yesterday": "hier",
+    "daysAgo": "il y a {{count}} jours",
+    "lastWeek": "la semaine dernière",
+    "neverSynced": "Jamais synchronisé"
+  },
+  "account": {
+    "totalValue": "Valeur totale",
+    "ofNetWorth": "du patrimoine net",
+    "lastSync": "Dernière synchro",
+    "allAccounts": "Tous les comptes"
+  },
+  "editAccountModal": {
+    "title": "Modifier le compte",
+    "accountName": "Nom du compte",
+    "type": "Type",
+    "color": "Couleur",
+    "colorLabel": "Couleur {{color}}",
+    "saveError": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…"
+  },
+  "netWorth": {
+    "title": "Patrimoine net",
+    "over": "sur {{range}}",
+    "netWorth": "Patrimoine net",
+    "capitalInvested": "Capital investi"
+  },
+  "distribution": {
+    "title": "Répartition des comptes"
+  },
+  "holdings": {
+    "title": "Actifs",
+    "assetsCount": "{{count}} actifs",
+    "searchPlaceholder": "Rechercher un actif ...",
+    "all": "Tous",
+    "columns": {
+      "asset": "ACTIF",
+      "quantity": "QUANTITÉ",
+      "account": "COMPTE",
+      "category": "CATÉGORIE",
+      "value": "VALEUR",
+      "unrealizedPnl": "P/L LATENT",
+      "thirtyDays": "30J"
+    }
+  },
+  "assetModal": {
+    "asset": "Actif",
+    "purchases": "Achats",
+    "unitPrice": "Prix unitaire",
+    "positionValue": "Valeur de la position",
+    "invested": "Investi",
+    "quantityOwned": "Quantité détenue",
+    "meanPricePerShare": "Prix moyen / titre",
+    "capitalInvested": "Capital investi",
+    "currentValue": "Valeur actuelle",
+    "totalUnrealizedPnl": "P/L latent total",
+    "about": "À propos",
+    "type": "Type",
+    "account": "Compte",
+    "weightOfNetWorth": "Part du patrimoine net",
+    "purchaseHistory": "Historique des achats",
+    "noPurchases": "Aucun achat.",
+    "columns": {
+      "date": "DATE",
+      "qty": "QTÉ",
+      "price": "PRIX",
+      "invested": "INVESTI"
+    }
+  },
+  "sidebar": {
+    "administrator": "Administrateur"
   }
 }

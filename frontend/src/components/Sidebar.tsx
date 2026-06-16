@@ -51,7 +51,7 @@ export function Sidebar() {
         </span>
         <div className="flex flex-col justify-between h-8">
           <span className="text-[13px] font-semibold text-fg leading-none">Julien BOURDET</span>
-          <span className="text-xs text-fg-faint font-normal leading-none">Administrator</span>
+          <span className="text-xs text-fg-faint font-normal leading-none">{t("sidebar.administrator")}</span>
         </div>
       </Link>
     </aside>

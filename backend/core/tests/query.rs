@@ -171,7 +171,8 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
-    assert_eq!(rows[0].category, "Cash");
+    assert_eq!(rows[0].category_key, "cash");
+    assert_eq!(rows[0].category_label, "Cash");
     assert_eq!(
         rows[0].value,
         Decimal::new(120, 0),

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export type SelectOption = { value: string; label: string };
 
@@ -11,6 +12,7 @@ type SelectProps = {
 };
 
 export function Select({ value, onChange, options, className = "" }: SelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
@@ -32,7 +34,7 @@ export function Select({ value, onChange, options, className = "" }: SelectProps
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] cursor-pointer hover:bg-surface-3 transition-colors duration-140"
       >
-        <span>{selected?.label ?? "Select…"}</span>
+        <span>{selected?.label ?? t("common.select")}</span>
         <ChevronDown
           className={`size-4 text-fg-faint transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />

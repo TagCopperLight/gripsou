@@ -6,7 +6,7 @@ import { HoldingsCard } from "./HoldingsCard";
 const HOLDING = {
   id: "h1", ticker: "AAPL", name: "Apple Inc.", kind: "equity", logo: "#555",
   accountId: "a1", accountName: "Trade Republic", accountColor: "#f0b35b",
-  category: "Brokerage", qty: "60", price: "214.3", invested: "11000",
+  category: "brokerage", categoryLabel: "Brokerage", qty: "60", price: "214.3", invested: "11000",
   value: "12858", gl: "1858", glPct: "0.168", spark: ["200", "214.3"],
 };
 

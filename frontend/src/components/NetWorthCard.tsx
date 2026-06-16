@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
@@ -21,25 +22,26 @@ const RANGE_OPTIONS = [
   { value: "max", label: "max" },
 ];
 
-const UNIT_OPTIONS = [
-  { value: "value", label: "Value" },
-  { value: "percent", label: "%" },
-];
-
-const LEGEND_ITEMS = [
-  { label: "Net worth", color: "var(--color-green)" },
-  { label: "Capital invested", color: "var(--color-fg-faint)", dashed: true },
-];
-
 const RANGE_LABEL: Record<string, string> = {
   "24h": "24h", "7d": "7d", "1mo": "1mo", "6mo": "6mo", "1y": "1y", ytd: "ytd", max: "max",
 };
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
   const [range, setRange] = useState("6mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
   const ready = data !== undefined;
+
+  const UNIT_OPTIONS = [
+    { value: "value", label: t("common.value") },
+    { value: "percent", label: "%" },
+  ];
+
+  const LEGEND_ITEMS = [
+    { label: t("netWorth.netWorth"), color: "var(--color-green)" },
+    { label: t("netWorth.capitalInvested"), color: "var(--color-fg-faint)", dashed: true },
+  ];
 
   const points = (data?.points ?? []).map((p) => ({
     t: p.t,
@@ -54,7 +56,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
       <div className="flex flex-col p-5">
         <div className="flex justify-between">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">Net Worth</p>
+            <p className="text-fg font-semibold text-sm">{t("netWorth.title")}</p>
             {ready && (
               <>
                 <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
@@ -64,7 +66,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
-                  <p className="text-fg-faint text-sm">over {RANGE_LABEL[range]}</p>
+                  <p className="text-fg-faint text-sm">{t("netWorth.over", { range: RANGE_LABEL[range] })}</p>
                 </div>
               </>
             )}
