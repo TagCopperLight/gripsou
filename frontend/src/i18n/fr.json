@@ -105,5 +105,12 @@
   },
   "sidebar": {
     "administrator": "Administrateur"
+  },
+  "settings": {
+    "general": "Général",
+    "account": "Compte",
+    "users": "Utilisateurs",
+    "server": "Serveur",
+    "adminBadge": "Admin"
   }
 }
