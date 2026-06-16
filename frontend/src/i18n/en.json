@@ -127,6 +127,16 @@
     "symbolPosition": "Symbol position",
     "symbolBefore": "Before",
     "symbolAfter": "After",
-    "preview": "Preview"
+    "preview": "Preview",
+    "profile": "Profile",
+    "name": "Name",
+    "email": "Email",
+    "saveChanges": "Save changes",
+    "password": "Password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "updatePassword": "Update password",
+    "passwordsDoNotMatch": "Passwords don't match"
   }
 }
