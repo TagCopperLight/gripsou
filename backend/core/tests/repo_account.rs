@@ -1,8 +1,10 @@
 mod common;
 
 use common::{checking_account, seed_connection};
+use gripsou_core::repo::account::update_account;
 use gripsou_core::repo::account::upsert_account;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[sqlx::test(migrations = "../migrations")]
 async fn upserts_account_idempotently(pool: PgPool) -> anyhow::Result<()> {
@@ -73,5 +75,57 @@ async fn upsert_updates_provider_fields_on_conflict(pool: PgPool) -> anyhow::Res
         ("USD".to_string(), "savings".to_string()),
         "provider-derived fields are updated on re-sync"
     );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    let acct_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+
+    let updated = update_account(&pool, user_id, acct_id, "My Savings", "savings", "#4dd0b1")
+        .await?
+        .expect("account belongs to user");
+    assert_eq!(updated.name, "My Savings");
+    assert_eq!(updated.type_key, "savings");
+    assert_eq!(updated.type_label, "Savings account");
+    assert_eq!(updated.color.as_deref(), Some("#4dd0b1"));
+
+    let row: (String, String, Option<String>) =
+        sqlx::query_as("select name, type_key, color from account where id = $1")
+            .bind(acct_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(
+        row,
+        (
+            "My Savings".into(),
+            "savings".into(),
+            Some("#4dd0b1".into())
+        )
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn update_rejects_other_users_account(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let acct_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+
+    let stranger = Uuid::new_v4();
+    let result = update_account(&pool, stranger, acct_id, "Hacked", "savings", "#000000").await?;
+    assert!(result.is_none(), "another user cannot update this account");
+
+    let name: String = sqlx::query_scalar("select name from account where id = $1")
+        .bind(acct_id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(name, "Current account", "row unchanged");
     Ok(())
 }

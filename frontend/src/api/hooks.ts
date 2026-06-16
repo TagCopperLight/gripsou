@@ -1,8 +1,14 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { getJson } from "./client";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { getJson, patchJson } from "./client";
 import type {
   Account,
   AccountSeries,
+  AccountType,
   DistributionAccount,
   Holding,
   NetWorthResponse,
@@ -59,5 +65,34 @@ export function useAccountSeries(range: string) {
     queryKey: ["account-series", range],
     queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useAccountTypes() {
+  return useQuery({
+    queryKey: ["account-types"],
+    queryFn: () => getJson<AccountType[]>(`/account-types`),
+  });
+}
+
+export type UpdateAccountInput = {
+  id: string;
+  name: string;
+  typeKey: string;
+  color: string;
+};
+
+export function useUpdateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name, typeKey, color }: UpdateAccountInput) =>
+      patchJson(`/accounts/${id}`, { name, typeKey, color }),
+    onSuccess: () => {
+      // Color/type changes ripple into the list, the distribution pie, and the
+      // accounts stacked-area chart.
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["distribution"] });
+      qc.invalidateQueries({ queryKey: ["account-series"] });
+    },
   });
 }

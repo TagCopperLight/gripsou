@@ -34,3 +34,54 @@ pub async fn upsert_account(
     .await?;
     Ok(id)
 }
+
+/// User-editable fields returned after an edit-account save. `color` is
+/// nullable in the schema, so it stays `Option`.
+pub struct UpdatedAccount {
+    pub id: Uuid,
+    pub name: String,
+    pub color: Option<String>,
+    pub type_key: String,
+    pub type_label: String,
+}
+
+/// Update the user-editable fields of one account, scoped by `user_id` (via
+/// connection) so a user can only edit their own accounts. Returns `None` when
+/// the `(account_id, user_id)` pair matches no account (wrong owner / unknown
+/// id) or `type_key` is not a known account type — the join then yields no row.
+///
+/// Takes the pool (not a `&mut PgConnection` like the ingest helpers): this is a
+/// standalone, interactive mutation from the API, never part of a sync
+/// transaction.
+pub async fn update_account(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    account_id: Uuid,
+    name: &str,
+    type_key: &str,
+    color: &str,
+) -> Result<Option<UpdatedAccount>, CoreError> {
+    let row = sqlx::query_as!(
+        UpdatedAccount,
+        r#"
+        update account a
+           set name = $3, type_key = $4, color = $5
+          from connection c, account_type t
+         where a.id = $1 and a.connection_id = c.id and c.user_id = $2
+           and t.key = $4
+        returning a.id      as "id!",
+                  a.name    as "name!",
+                  a.color,
+                  a.type_key as "type_key!",
+                  t.label    as "type_label!"
+        "#,
+        account_id,
+        user_id,
+        name,
+        type_key,
+        color,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
