@@ -9,7 +9,7 @@ insert into category (key, label) values
 
 insert into account_type (key, label, category_key) values
     ('checking',  'Checking',        'cash'),
-    ('savings',   'Savings account', 'savings'),
+    ('savings',   'Savings',         'savings'),
     ('pea',       'PEA',             'pea'),
     ('brokerage', 'Brokerage',       'brokerage'),
     ('crypto',    'Crypto wallet',   'crypto');
