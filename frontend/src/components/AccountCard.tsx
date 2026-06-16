@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pencil, User } from "lucide-react";
 
 import { Surface } from "./Surface";
@@ -16,12 +17,13 @@ type AccountCardProps = {
 };
 
 export function AccountCard({ account, proportion }: AccountCardProps) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
     <Surface className="relative p-5">
       <button
         type="button"
-        aria-label="Edit account"
+        aria-label={t("editAccountModal.title")}
         onClick={() => setEditing(true)}
         className="absolute top-4 right-4 p-2 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
       >
@@ -39,15 +41,15 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
       </div>
 
       <div className="mt-5 flex items-baseline gap-1.5 flex-col">
-        <span className="text-fg-faint text-xs">Total value</span>
+        <span className="text-fg-faint text-xs">{t("account.totalValue")}</span>
         <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
         <span className="text-fg-faint text-xs">
-          <Percent value={proportion} fractionDigits={1} className="text-fg-faint text-xs mr-1.5" />of net worth
+          <Percent value={proportion} fractionDigits={1} className="text-fg-faint text-xs mr-1.5" />{t("account.ofNetWorth")}
         </span>
       </div>
 
       <div className="absolute bottom-4 right-5 flex flex-col text-fg-faint text-xs gap-1 items-end">
-        <p>Last sync</p>
+        <p>{t("account.lastSync")}</p>
         <p className="text-fg text-[13px]">{formatRelative(account.lastSyncAt)}</p>
       </div>
 

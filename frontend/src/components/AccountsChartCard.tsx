@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
@@ -25,6 +26,7 @@ const RANGE_LABEL: Record<string, string> = {
 };
 
 export function AccountsChartCard({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
   const [range, setRange] = useState("6mo");
   const nw = useNetWorth(range);
   const series = useAccountSeries(range);
@@ -48,7 +50,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
       <div className="flex flex-col p-5">
         <div className="flex justify-between">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">Net Worth</p>
+            <p className="text-fg font-semibold text-sm">{t("netWorth.title")}</p>
             {ready && (
               <>
                 <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
@@ -58,7 +60,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
-                  <p className="text-fg-faint text-sm">over {RANGE_LABEL[range]}</p>
+                  <p className="text-fg-faint text-sm">{t("netWorth.over", { range: RANGE_LABEL[range] })}</p>
                 </div>
               </>
             )}

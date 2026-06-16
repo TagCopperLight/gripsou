@@ -1,5 +1,6 @@
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
+import { useTranslation } from "react-i18next";
 import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/date";
 
@@ -45,6 +46,7 @@ type StackedAreaChartProps = {
 // Stacked area, one band per account (account colors). Y anchored at 0 — this is
 // a composition. Tooltip lists each account plus a Total row.
 export function StackedAreaChart({ series, height = 320, className = "" }: StackedAreaChartProps) {
+  const { t } = useTranslation();
   const colorByName = new Map(series.map((s) => [s.name, s.color]));
 
   const option: EChartsOption = {
@@ -69,7 +71,7 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
             return tooltipRow(colorByName.get(it.seriesName) ?? FAINT, it.seriesName, formatMoney(it.value[1]));
           })
           .join("");
-        const totalRow = tooltipRow("transparent", "Total", formatMoney(total), true);
+        const totalRow = tooltipRow("transparent", t("common.total"), formatMoney(total), true);
         return `
           <div style="min-width:200px;">
             <div style="color:${FAINT};font-size:11px;">${formatDate(items[0].axisValue)}</div>

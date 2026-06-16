@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 export type DateFormatOptions = {
   /** Token pattern. Supports YYYY, YY, MM, DD. */
   pattern?: string;
@@ -31,17 +33,17 @@ export function formatRelative(
   value: number | null,
   options: DateFormatOptions = {},
 ): string {
-  if (value === null) return "Never synced";
+  if (value === null) return i18n.t("time.neverSynced");
   const diff = Date.now() - value;
   const MIN = 60_000;
   const HOUR = 60 * MIN;
   const DAY = 24 * HOUR;
-  if (diff < MIN) return "just now";
-  if (diff < HOUR) return `${Math.floor(diff / MIN)} min ago`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)} h ago`;
+  if (diff < MIN) return i18n.t("time.justNow");
+  if (diff < HOUR) return i18n.t("time.minAgo", { count: Math.floor(diff / MIN) });
+  if (diff < DAY) return i18n.t("time.hAgo", { count: Math.floor(diff / HOUR) });
   const days = Math.floor(diff / DAY);
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return "last week";
+  if (days === 1) return i18n.t("time.yesterday");
+  if (days < 7) return i18n.t("time.daysAgo", { count: days });
+  if (days < 14) return i18n.t("time.lastWeek");
   return formatDate(value, options);
 }

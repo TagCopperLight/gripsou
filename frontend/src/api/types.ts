@@ -1,14 +1,24 @@
 // Response shapes from the read API. Money/quantities are decimal strings;
 // timestamps are epoch-ms. Components format strings; charts convert to number.
 
+import type { TFunction } from "i18next";
+
 export type HoldingKind = "cash" | "etf" | "equity" | "crypto";
 
-export const KIND_LABEL: Record<HoldingKind, string> = {
-  cash: "Cash",
-  etf: "ETF",
-  equity: "Stock",
-  crypto: "Crypto",
+export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
+  cash: "holdingKind.cash",
+  etf: "holdingKind.etf",
+  equity: "holdingKind.equity",
+  crypto: "holdingKind.crypto",
 };
+
+// Categories are data-driven: the backend sends a stable `key` plus an English
+// `label`. We translate `categories.<key>` and fall back to the backend label
+// when a key has no locale entry yet (e.g. a category added to the DB but not
+// the locale files).
+export function categoryLabel(t: TFunction, key: string, fallback: string): string {
+  return t(`categories.${key}`, { defaultValue: fallback });
+}
 
 export type NetWorthPoint = { t: number; netWorth: string; invested: string };
 export type NetWorthSummary = {
@@ -23,6 +33,7 @@ export type DistributionAccount = {
   id: string;
   name: string;
   category: string;
+  categoryLabel: string;
   color: string;
   value: string;
 };
@@ -37,6 +48,7 @@ export type Holding = {
   accountName: string;
   accountColor: string;
   category: string;
+  categoryLabel: string;
   qty: string;
   price: string;
   invested: string;
@@ -59,7 +71,12 @@ export type Account = {
   lastSyncAt: number | null;
 };
 
-export type AccountType = { key: string; label: string; category: string };
+export type AccountType = {
+  key: string;
+  label: string;
+  category: string;
+  categoryLabel: string;
+};
 
 export type AccountSeries = {
   accounts: { id: string; name: string; color: string }[];

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { Surface } from "./Surface";
@@ -8,7 +9,7 @@ import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
 import { CardState } from "./CardState";
 import { formatQuantity } from "../lib/money";
-import { KIND_LABEL, type Holding } from "../api/types";
+import { KIND_LABEL_KEY, categoryLabel, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
 
 type SortKey = "asset" | "qty" | "value" | "pnl";
@@ -16,19 +17,19 @@ type SortDir = "asc" | "desc";
 type Sort = { key: SortKey; dir: SortDir };
 
 type Column = {
-  label: string;
+  labelKey: string;
   align: "left" | "right";
   sort?: SortKey;
 };
 
 const COLUMNS: Column[] = [
-  { label: "ASSET", align: "left", sort: "asset" },
-  { label: "QUANTITY", align: "right", sort: "qty" },
-  { label: "ACCOUNT", align: "left" },
-  { label: "CATEGORY", align: "left" },
-  { label: "VALUE", align: "right", sort: "value" },
-  { label: "UNREALIZED P/L", align: "right", sort: "pnl" },
-  { label: "30D", align: "right" },
+  { labelKey: "holdings.columns.asset", align: "left", sort: "asset" },
+  { labelKey: "holdings.columns.quantity", align: "right", sort: "qty" },
+  { labelKey: "holdings.columns.account", align: "left" },
+  { labelKey: "holdings.columns.category", align: "left" },
+  { labelKey: "holdings.columns.value", align: "right", sort: "value" },
+  { labelKey: "holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
+  { labelKey: "holdings.columns.thirtyDays", align: "right" },
 ];
 
 const GREEN = "var(--color-green)";
@@ -68,6 +69,7 @@ type HoldingsCardProps = {
 };
 
 export function HoldingsCard({ className = "" }: HoldingsCardProps) {
+  const { t } = useTranslation();
   const { data, isError, refetch } = useHoldings();
   const ready = data !== undefined;
   const holdings = useMemo(() => data ?? [], [data]);
@@ -76,8 +78,14 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
 
+  // Filter by stable category key; keep the backend label around as the i18n
+  // fallback for each key.
   const categories = useMemo(
     () => ["All", ...new Set(holdings.map((h) => h.category))],
+    [holdings],
+  );
+  const categoryFallback = useMemo(
+    () => new Map(holdings.map((h) => [h.category, h.categoryLabel])),
     [holdings],
   );
 
@@ -110,10 +118,10 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
       <div className="flex flex-col p-5">
         <div className="flex items-start justify-between">
           <h2 className="text-fg font-semibold text-sm">
-            Holdings
+            {t("holdings.title")}
             {ready && (
               <span className="text-fg-faint font-normal ml-3">
-                {holdings.length} assets
+                {t("holdings.assetsCount", { count: holdings.length })}
               </span>
             )}
           </h2>
@@ -122,7 +130,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search assets ..."
+              placeholder={t("holdings.searchPlaceholder")}
               className="bg-transparent text-sm text-fg placeholder:text-fg-faint outline-none w-full"
             />
           </label>
@@ -150,7 +158,9 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     : "bg-surface-2 text-fg-dim hover:text-fg"
                 }`}
               >
-                {c}
+                {c === "All"
+                  ? t("holdings.all")
+                  : categoryLabel(t, c, categoryFallback.get(c) ?? c)}
               </button>
             );
           })}
@@ -163,7 +173,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 const active = col.sort && sort?.key === col.sort;
                 return (
                   <th
-                    key={col.label}
+                    key={col.labelKey}
                     className={`pb-2 px-3 text-[11px] font-medium tracking-wide font-mono ${
                       col.align === "right" ? "text-right" : "text-left"
                     }`}
@@ -176,7 +186,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           col.align === "right" ? "flex-row-reverse" : ""
                         } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
                       >
-                        {col.label}
+                        {t(col.labelKey)}
                         {active &&
                           (sort.dir === "asc" ? (
                             <ChevronUp className="size-3.5" />
@@ -185,7 +195,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           ))}
                       </button>
                     ) : (
-                      <span className="text-fg-faint">{col.label}</span>
+                      <span className="text-fg-faint">{t(col.labelKey)}</span>
                     )}
                   </th>
                 );
@@ -216,7 +226,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           {h.name}
                         </span>
                         <span className="text-xs text-fg-faint font-mono">
-                          {h.ticker} · {KIND_LABEL[h.kind]}
+                          {h.ticker} · {t(KIND_LABEL_KEY[h.kind])}
                         </span>
                       </div>
                     </div>
@@ -246,7 +256,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* CATEGORY */}
                   <td className="py-3 px-3 border-t border-surface-2">
                     <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                      {h.category}
+                      {categoryLabel(t, h.category, h.categoryLabel)}
                     </span>
                   </td>
                   {/* VALUE */}

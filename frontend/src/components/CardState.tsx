@@ -1,4 +1,5 @@
 import { CloudOff, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type CardStateProps = {
   /** "loading" while the query is in flight; "error" once it has failed. */
@@ -13,6 +14,7 @@ type CardStateProps = {
 // is still loading or unreachable, so the app degrades gracefully when the
 // backend is down instead of rendering empty cards.
 export function CardState({ variant, onRetry, className = "" }: CardStateProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex flex-col items-center justify-center gap-3 text-center ${className}`}
@@ -20,14 +22,14 @@ export function CardState({ variant, onRetry, className = "" }: CardStateProps) 
       {variant === "loading" ? (
         <>
           <Loader2 className="size-6 text-fg-faint animate-spin" />
-          <p className="text-fg-faint text-sm">Loading…</p>
+          <p className="text-fg-faint text-sm">{t("common.loading")}</p>
         </>
       ) : (
         <>
           <CloudOff className="size-6 text-fg-faint" />
           <div className="flex flex-col gap-0.5">
-            <p className="text-fg text-sm font-medium">Can't reach the server</p>
-            <p className="text-fg-faint text-xs">The API is unavailable right now.</p>
+            <p className="text-fg text-sm font-medium">{t("common.cantReachServer")}</p>
+            <p className="text-fg-faint text-xs">{t("common.apiUnavailable")}</p>
           </div>
           {onRetry && (
             <button
@@ -35,7 +37,7 @@ export function CardState({ variant, onRetry, className = "" }: CardStateProps) 
               onClick={onRetry}
               className="mt-1 rounded-lg bg-surface-2 px-3 py-1 text-xs font-medium text-fg-dim hover:text-fg transition-colors duration-140 cursor-pointer"
             >
-              Retry
+              {t("common.retry")}
             </button>
           )}
         </>

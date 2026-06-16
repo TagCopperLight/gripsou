@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with latest as (\n            select distinct on (hs.holding_id) hs.holding_id, hs.value\n            from holding_snapshot hs\n            join holding h    on h.id = hs.holding_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            where c.user_id = $1\n            order by hs.holding_id, hs.as_of desc\n        )\n        select a.id   as \"account_id!\",\n               a.name as \"name!\",\n               a.color,\n               cat.key   as \"category_key!\",\n               cat.label as \"category_label!\",\n               sum(l.value) as \"value!\"\n        from latest l\n        join holding h      on h.id = l.holding_id\n        join account a      on a.id = h.account_id\n        join account_type t on t.key = a.type_key\n        join category cat   on cat.key = t.category_key\n        group by a.id, a.name, a.color, cat.key, cat.label\n        order by sum(l.value) desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "category_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "category",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "category_label!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "category",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c38bbad69b7d8cc7de7084819ec06a4ef29cf72ec211eeb0ceb5112ec12b9fb3"
+}

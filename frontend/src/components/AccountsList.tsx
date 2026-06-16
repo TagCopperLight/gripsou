@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { AccountCard } from "./AccountCard";
 import { CardState } from "./CardState";
 import { useAccounts } from "../api/hooks";
@@ -7,6 +8,7 @@ type AccountsListProps = {
 };
 
 export function AccountsList({ className = "" }: AccountsListProps) {
+  const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
   const ready = data !== undefined;
   const accounts = data ?? [];
@@ -14,7 +16,7 @@ export function AccountsList({ className = "" }: AccountsListProps) {
 
   return (
     <section className={className}>
-      <h2 className="text-fg font-semibold text-sm mb-3">All accounts</h2>
+      <h2 className="text-fg font-semibold text-sm mb-3">{t("account.allAccounts")}</h2>
       {!ready ? (
         <CardState
           variant={isError ? "error" : "loading"}

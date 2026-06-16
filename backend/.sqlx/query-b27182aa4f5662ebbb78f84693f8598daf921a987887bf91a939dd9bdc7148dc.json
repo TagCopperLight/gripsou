@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select h.id            as \"holding_id!\",\n               i.symbol,\n               i.name          as \"instrument_name!\",\n               i.kind          as \"kind!\",\n               i.logo_url,\n               i.currency      as \"currency!\",\n               i.id            as \"instrument_id!\",\n               a.id            as \"account_id!\",\n               a.name          as \"account_name!\",\n               a.color         as \"account_color\",\n               cat.label       as \"category!\",\n               h.quantity      as \"quantity!\",\n               h.cost_basis    as \"cost_basis!\",\n               (select p.unit_price from price p\n                  where p.instrument_id = i.id order by p.ts desc limit 1) as \"price?\"\n        from holding h\n        join account a      on a.id = h.account_id\n        join connection c   on c.id = a.connection_id\n        join instrument i   on i.id = h.instrument_id\n        join account_type t on t.key = a.type_key\n        join category cat   on cat.key = t.category_key\n        where c.user_id = $1\n        order by h.id\n        ",
+  "query": "\n        select h.id            as \"holding_id!\",\n               i.symbol,\n               i.name          as \"instrument_name!\",\n               i.kind          as \"kind!\",\n               i.logo_url,\n               i.currency      as \"currency!\",\n               i.id            as \"instrument_id!\",\n               a.id            as \"account_id!\",\n               a.name          as \"account_name!\",\n               a.color         as \"account_color\",\n               cat.key         as \"category_key!\",\n               cat.label       as \"category_label!\",\n               h.quantity      as \"quantity!\",\n               h.cost_basis    as \"cost_basis!\",\n               (select p.unit_price from price p\n                  where p.instrument_id = i.id order by p.ts desc limit 1) as \"price?\"\n        from holding h\n        join account a      on a.id = h.account_id\n        join connection c   on c.id = a.connection_id\n        join instrument i   on i.id = h.instrument_id\n        join account_type t on t.key = a.type_key\n        join category cat   on cat.key = t.category_key\n        where c.user_id = $1\n        order by h.id\n        ",
   "describe": {
     "columns": [
       {
@@ -115,7 +115,18 @@
       },
       {
         "ordinal": 10,
-        "name": "category!",
+        "name": "category_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "category",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "category_label!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "quantity!",
         "type_info": "Numeric",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "cost_basis!",
         "type_info": "Numeric",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "price?",
         "type_info": "Numeric",
         "origin": "Expression"
@@ -172,8 +183,9 @@
       false,
       false,
       false,
+      false,
       null
     ]
   },
-  "hash": "ec322a0cd4806b648633266fa79d90ba9a8a9403c809ae40a0504fb1c2dd2dba"
+  "hash": "b27182aa4f5662ebbb78f84693f8598daf921a987887bf91a939dd9bdc7148dc"
 }

@@ -4,5 +4,106 @@
     "accounts": "Accounts",
     "transactions": "Transactions",
     "settings": "Settings"
+  },
+  "common": {
+    "loading": "Loading…",
+    "retry": "Retry",
+    "cantReachServer": "Can't reach the server",
+    "apiUnavailable": "The API is unavailable right now.",
+    "close": "Close",
+    "cancel": "Cancel",
+    "select": "Select…",
+    "value": "Value",
+    "total": "Total"
+  },
+  "holdingKind": {
+    "cash": "Cash",
+    "etf": "ETF",
+    "equity": "Stock",
+    "crypto": "Crypto"
+  },
+  "categories": {
+    "cash": "Cash",
+    "savings": "Savings",
+    "pea": "PEA",
+    "brokerage": "Brokerage",
+    "crypto": "Crypto"
+  },
+  "time": {
+    "justNow": "just now",
+    "minAgo": "{{count}} min ago",
+    "hAgo": "{{count}} h ago",
+    "yesterday": "yesterday",
+    "daysAgo": "{{count}} days ago",
+    "lastWeek": "last week",
+    "neverSynced": "Never synced"
+  },
+  "account": {
+    "totalValue": "Total value",
+    "ofNetWorth": "of net worth",
+    "lastSync": "Last sync",
+    "allAccounts": "All accounts"
+  },
+  "editAccountModal": {
+    "title": "Edit account",
+    "accountName": "Account name",
+    "type": "Type",
+    "color": "Color",
+    "colorLabel": "Color {{color}}",
+    "saveError": "Could not save changes. Please try again.",
+    "cancel": "Cancel",
+    "save": "Save changes",
+    "saving": "Saving…"
+  },
+  "netWorth": {
+    "title": "Net Worth",
+    "over": "over {{range}}",
+    "netWorth": "Net worth",
+    "capitalInvested": "Capital invested"
+  },
+  "distribution": {
+    "title": "Account distribution"
+  },
+  "holdings": {
+    "title": "Holdings",
+    "assetsCount": "{{count}} assets",
+    "searchPlaceholder": "Search assets ...",
+    "all": "All",
+    "columns": {
+      "asset": "ASSET",
+      "quantity": "QUANTITY",
+      "account": "ACCOUNT",
+      "category": "CATEGORY",
+      "value": "VALUE",
+      "unrealizedPnl": "UNREALIZED P/L",
+      "thirtyDays": "30D"
+    }
+  },
+  "assetModal": {
+    "asset": "Asset",
+    "purchases": "Purchases",
+    "unitPrice": "Unit price",
+    "positionValue": "Position value",
+    "invested": "Invested",
+    "quantityOwned": "Quantity owned",
+    "meanPricePerShare": "Mean price / share",
+    "capitalInvested": "Capital invested",
+    "currentValue": "Current value",
+    "totalUnrealizedPnl": "Total unrealized P/L",
+    "about": "About",
+    "type": "Type",
+    "account": "Account",
+    "weightOfNetWorth": "Weight of net worth",
+    "purchaseHistory": "Purchase history",
+    "noPurchases": "No purchases.",
+    "columns": {
+      "date": "DATE",
+      "qty": "QTY",
+      "price": "PRICE",
+      "invested": "INVESTED"
+    }
+  },
+  "sidebar": {
+    "administrator": "Administrator"
   }
 }
