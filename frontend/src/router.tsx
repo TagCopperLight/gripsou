@@ -7,6 +7,7 @@ import { RootLayout } from "./components/RootLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
 import { Transactions } from "./pages/Transactions";
+import { Settings } from "./pages/Settings";
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -30,10 +31,17 @@ const transactionsRoute = createRoute({
   component: Transactions,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: Settings,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   accountsRoute,
   transactionsRoute,
+  settingsRoute,
 ]);
 
 export const router = createRouter({ routeTree });
