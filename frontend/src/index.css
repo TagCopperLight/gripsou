@@ -39,3 +39,10 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
 }
+
+/* Geist's bullet glyph renders large; shrink masked password dots (box height
+   is set by padding, so it stays put). */
+input[type="password"] {
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+}

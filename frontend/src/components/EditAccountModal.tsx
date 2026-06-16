@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check, X } from "lucide-react";
 
 import { Select } from "./Select";
+import { Button } from "./Button";
 import { ACCOUNT_PALETTE } from "../lib/palette";
 import { useAccountTypes, useUpdateAccount } from "../api/hooks";
 import type { Account } from "../api/types";
@@ -136,21 +137,12 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-fg-dim hover:text-fg font-medium cursor-pointer transition-colors duration-140"
-          >
+          <Button variant="ghost" onClick={onClose}>
             {t("editAccountModal.cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={!canSave}
-            className="px-4 py-2.5 rounded-xl bg-green text-black font-semibold cursor-pointer transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
+          </Button>
+          <Button variant="primary" onClick={save} disabled={!canSave}>
             {update.isPending ? t("editAccountModal.saving") : t("editAccountModal.save")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

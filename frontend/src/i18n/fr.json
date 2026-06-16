@@ -127,6 +127,16 @@
     "symbolPosition": "Position du symbole",
     "symbolBefore": "Avant",
     "symbolAfter": "Après",
-    "preview": "Aperçu"
+    "preview": "Aperçu",
+    "profile": "Profil",
+    "name": "Nom",
+    "email": "E-mail",
+    "saveChanges": "Enregistrer",
+    "password": "Mot de passe",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirmer le nouveau mot de passe",
+    "updatePassword": "Mettre à jour le mot de passe",
+    "passwordsDoNotMatch": "Les mots de passe ne correspondent pas"
   }
 }

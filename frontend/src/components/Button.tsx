@@ -1,0 +1,28 @@
+import type { ComponentPropsWithoutRef } from "react";
+
+type ButtonVariant = "primary" | "ghost";
+
+const VARIANTS: Record<ButtonVariant, string> = {
+  primary:
+    "bg-green text-black font-semibold transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed",
+  ghost: "text-fg-dim hover:text-fg font-medium transition-colors duration-140",
+};
+
+type ButtonProps = ComponentPropsWithoutRef<"button"> & {
+  variant?: ButtonVariant;
+};
+
+export function Button({
+  variant = "primary",
+  type = "button",
+  className = "",
+  ...props
+}: ButtonProps) {
+  return (
+    <button
+      type={type}
+      className={`px-4 py-2.5 rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
+      {...props}
+    />
+  );
+}
