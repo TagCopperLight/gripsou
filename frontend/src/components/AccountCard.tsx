@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react";
+import { Pencil, User } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
@@ -19,16 +19,15 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
       <button
         type="button"
         aria-label="Edit account"
-        className="absolute top-4 right-4 p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
+        className="absolute top-4 right-4 p-2 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
       >
         <Pencil className="size-4" />
       </button>
 
       <div className="flex gap-3.5">
-        <span
-          className="size-8.5 rounded-xl shrink-0"
-          style={{ background: withAlpha(account.color, 0.7) }}
-        />
+        <span className="size-8.5 rounded-xl shrink-0 flex items-center justify-center" style={{ background: withAlpha(account.color, 0.3) }}>
+          <User className="size-4" style={{ color: account.color }} />
+        </span>
         <div className="flex flex-col justify-between h-8.5">
           <p className="text-fg font-semibold text-[15px] leading-none">{account.name}</p>
           <p className="text-fg-faint text-xs leading-none">{account.typeLabel}</p>

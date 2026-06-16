@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
 import type {
   Account,
@@ -14,6 +14,7 @@ export function useNetWorth(range: string) {
   return useQuery({
     queryKey: ["net-worth", range],
     queryFn: () => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -35,6 +36,7 @@ export function useHoldingPrices(id: string, range: string) {
   return useQuery({
     queryKey: ["holding-prices", id, range],
     queryFn: () => getJson<PricePoint[]>(`/holdings/${id}/prices?range=${range}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -56,5 +58,6 @@ export function useAccountSeries(range: string) {
   return useQuery({
     queryKey: ["account-series", range],
     queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
+    placeholderData: keepPreviousData,
   });
 }
