@@ -111,6 +111,22 @@
     "account": "Compte",
     "users": "Utilisateurs",
     "server": "Serveur",
-    "adminBadge": "Admin"
+    "adminBadge": "Admin",
+    "localization": "Localisation",
+    "language": "Langue",
+    "interfaceLanguage": "Langue de l'interface",
+    "dateFormat": "Format de date",
+    "today": "Aujourd'hui : {{date}}",
+    "numbersCurrency": "Nombres et devise",
+    "currency": "Devise",
+    "baseReportingCurrency": "Devise de référence",
+    "numberFormat": "Format des nombres",
+    "numberFormatHint": "Séparateurs de milliers et décimales, position du symbole",
+    "thousandsSeparator": "Milliers",
+    "decimalSeparator": "Décimale",
+    "symbolPosition": "Position du symbole",
+    "symbolBefore": "Avant",
+    "symbolAfter": "Après",
+    "preview": "Aperçu"
   }
 }
