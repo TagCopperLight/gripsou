@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Pencil, User } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
 import { Percent } from "./Percent";
+import { EditAccountModal } from "./EditAccountModal";
 import { withAlpha } from "../lib/color";
 import { formatRelative } from "../lib/date";
 import type { Account } from "../api/types";
@@ -14,11 +16,13 @@ type AccountCardProps = {
 };
 
 export function AccountCard({ account, proportion }: AccountCardProps) {
+  const [editing, setEditing] = useState(false);
   return (
     <Surface className="relative p-5">
       <button
         type="button"
         aria-label="Edit account"
+        onClick={() => setEditing(true)}
         className="absolute top-4 right-4 p-2 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
       >
         <Pencil className="size-4" />
@@ -46,6 +50,10 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
         <p>Last sync</p>
         <p className="text-fg text-[13px]">{formatRelative(account.lastSyncAt)}</p>
       </div>
+
+      {editing && (
+        <EditAccountModal account={account} onClose={() => setEditing(false)} />
+      )}
     </Surface>
   );
 }

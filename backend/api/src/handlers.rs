@@ -139,3 +139,34 @@ pub async fn account_series(
     .map_err(internal)?;
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
+
+pub async fn account_types(
+    State(pool): State<PgPool>,
+) -> Result<Json<Vec<dto::AccountType>>, (StatusCode, String)> {
+    let rows = gripsou_core::repo::query::account_types(&pool)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        rows.into_iter().map(dto::AccountType::from_row).collect(),
+    ))
+}
+
+pub async fn update_account(
+    State(pool): State<PgPool>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<dto::UpdateAccountReq>,
+) -> Result<Json<dto::UpdatedAccount>, (StatusCode, String)> {
+    let user_id = current_user(&pool).await.map_err(internal)?;
+    let updated = gripsou_core::repo::account::update_account(
+        &pool,
+        user_id,
+        id,
+        &body.name,
+        &body.type_key,
+        &body.color,
+    )
+    .await
+    .map_err(internal)?
+    .ok_or((StatusCode::NOT_FOUND, "account not found".to_string()))?;
+    Ok(Json(dto::UpdatedAccount::from_row(updated)))
+}

@@ -53,10 +53,13 @@ export type Account = {
   id: string;
   name: string;
   color: string;
+  typeKey: string;
   typeLabel: string;
   value: string;
   lastSyncAt: number | null;
 };
+
+export type AccountType = { key: string; label: string; category: string };
 
 export type AccountSeries = {
   accounts: { id: string; name: string; color: string }[];

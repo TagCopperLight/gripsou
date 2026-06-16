@@ -1,6 +1,5 @@
 mod common;
 
-use chrono;
 use chrono::NaiveDate;
 use common::{
     cash_holding, checking_account, equity_holding, holding_ids, insert_price_on, seed_connection,
@@ -321,7 +320,10 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
     assert_eq!(rows[0].name, "Current account");
     assert_eq!(rows[0].type_label, "Checking");
     assert_eq!(rows[0].value, Decimal::new(150, 0));
-    assert!(rows[0].last_sync_at.is_none(), "test connection never synced");
+    assert!(
+        rows[0].last_sync_at.is_none(),
+        "test connection never synced"
+    );
     Ok(())
 }
 
@@ -351,7 +353,15 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
     let day = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
     for (hid, ext) in &pairs {
         let v = if ext == "acct-1" { 100 } else { 200 };
-        stamp_on(&pool, *hid, day, Decimal::new(v, 0), Decimal::new(v, 0), Decimal::new(v, 0)).await;
+        stamp_on(
+            &pool,
+            *hid,
+            day,
+            Decimal::new(v, 0),
+            Decimal::new(v, 0),
+            Decimal::new(v, 0),
+        )
+        .await;
     }
 
     let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
@@ -405,5 +415,19 @@ async fn holding_transactions_returns_buy_lots(pool: PgPool) -> anyhow::Result<(
     assert_eq!(txns.len(), 1);
     assert_eq!(txns[0].quantity, Some(Decimal::new(3, 0)));
     assert_eq!(txns[0].amount, Decimal::new(450, 0));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<()> {
+    let types = query::account_types(&pool).await?;
+    let keys: Vec<&str> = types.iter().map(|t| t.key.as_str()).collect();
+    assert!(keys.contains(&"checking"));
+    assert!(keys.contains(&"brokerage"));
+    assert_eq!(
+        types.len(),
+        5,
+        "five types seeded in 0002_seed_reference.sql"
+    );
     Ok(())
 }

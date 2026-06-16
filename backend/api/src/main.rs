@@ -4,7 +4,10 @@ mod user;
 
 use std::env;
 
-use axum::{Json, Router, routing::get};
+use axum::{
+    Json, Router,
+    routing::{get, patch},
+};
 use serde_json::{Value, json};
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
@@ -32,6 +35,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/dashboard/distribution", get(handlers::distribution))
         .route("/accounts", get(handlers::accounts))
         .route("/accounts/series", get(handlers::account_series))
+        .route("/accounts/{id}", patch(handlers::update_account))
+        .route("/account-types", get(handlers::account_types))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

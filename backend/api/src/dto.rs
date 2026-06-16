@@ -3,7 +3,7 @@
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 fn day_to_millis(d: NaiveDate) -> i64 {
     d.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp_millis()
@@ -201,6 +201,7 @@ pub struct Account {
     pub id: String,
     pub name: String,
     pub color: String,
+    pub type_key: String,
     pub type_label: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
@@ -212,6 +213,7 @@ impl Account {
             id: r.account_id.to_string(),
             name: r.name,
             color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            type_key: r.type_key,
             type_label: r.type_label,
             value: r.value.to_string(),
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
@@ -264,7 +266,10 @@ impl AccountSeriesResponse {
                 Some(&p) => p,
                 None => {
                     idx_by_t.insert(t, points.len());
-                    points.push(SeriesPoint { t, values: HashMap::new() });
+                    points.push(SeriesPoint {
+                        t,
+                        values: HashMap::new(),
+                    });
                     points.len() - 1
                 }
             };
@@ -272,5 +277,53 @@ impl AccountSeriesResponse {
         }
 
         AccountSeriesResponse { accounts, points }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountType {
+    pub key: String,
+    pub label: String,
+    pub category: String,
+}
+
+impl AccountType {
+    pub fn from_row(r: gripsou_core::repo::query::AccountTypeRow) -> Self {
+        AccountType {
+            key: r.key,
+            label: r.label,
+            category: r.category,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAccountReq {
+    pub name: String,
+    pub type_key: String,
+    pub color: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatedAccount {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub type_key: String,
+    pub type_label: String,
+}
+
+impl UpdatedAccount {
+    pub fn from_row(r: gripsou_core::repo::account::UpdatedAccount) -> Self {
+        UpdatedAccount {
+            id: r.id.to_string(),
+            name: r.name,
+            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            type_key: r.type_key,
+            type_label: r.type_label,
+        }
     }
 }

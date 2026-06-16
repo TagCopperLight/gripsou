@@ -209,6 +209,7 @@ pub struct AccountRow {
     pub account_id: Uuid,
     pub name: String,
     pub color: Option<String>,
+    pub type_key: String,
     pub type_label: String,
     pub value: Decimal,
     pub last_sync_at: Option<DateTime<Utc>>,
@@ -232,6 +233,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         select a.id    as "account_id!",
                a.name  as "name!",
                a.color,
+               a.type_key as "type_key!",
                t.label as "type_label!",
                sum(l.value) as "value!",
                c.last_sync_at
@@ -240,7 +242,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
-        group by a.id, a.name, a.color, t.label, c.last_sync_at
+        group by a.id, a.name, a.color, a.type_key, t.label, c.last_sync_at
         order by sum(l.value) desc
         "#,
         user_id,
@@ -284,6 +286,32 @@ pub async fn account_series(
         user_id,
         from,
         to,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct AccountTypeRow {
+    pub key: String,
+    pub label: String,
+    pub category: String,
+}
+
+/// All account types from the reference table (joined to category), ordered by
+/// label. New types are data inserts here — no code change needed to surface
+/// them in the edit-account dropdown.
+pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        AccountTypeRow,
+        r#"
+        select t.key     as "key!",
+               t.label   as "label!",
+               cat.label as "category!"
+        from account_type t
+        join category cat on cat.key = t.category_key
+        order by t.label
+        "#,
     )
     .fetch_all(pool)
     .await?;
