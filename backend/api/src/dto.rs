@@ -244,13 +244,20 @@ pub struct AccountSeriesResponse {
 
 impl AccountSeriesResponse {
     /// Pivot flat (account, day, value) rows into account list + per-day value maps.
-    /// Rows must be ordered by day (the query guarantees this).
+    /// Rows must be ordered by day ascending (the query guarantees this).
+    ///
+    /// The `accounts` list is then sorted by each account's latest in-window value
+    /// descending, so the stacked chart draws the largest account on the stable
+    /// zero-baseline and matches the value-ranked order of the accounts grid.
     pub fn from_rows(rows: Vec<gripsou_core::repo::query::AccountSeriesRow>) -> Self {
         use std::collections::{HashMap, HashSet};
         let mut accounts: Vec<SeriesAccount> = Vec::new();
         let mut seen: HashSet<uuid::Uuid> = HashSet::new();
         let mut points: Vec<SeriesPoint> = Vec::new();
         let mut idx_by_t: HashMap<i64, usize> = HashMap::new();
+        // Rows arrive day-ascending, so the last value seen per account is its
+        // most recent value within the window.
+        let mut latest_value: HashMap<String, Decimal> = HashMap::new();
 
         for r in rows {
             let id = r.account_id.to_string();
@@ -261,6 +268,7 @@ impl AccountSeriesResponse {
                     color: r.color.unwrap_or_else(|| "#888888".to_string()),
                 });
             }
+            latest_value.insert(id.clone(), r.value);
             let t = day_to_millis(r.as_of);
             let pos = match idx_by_t.get(&t) {
                 Some(&p) => p,
@@ -275,6 +283,13 @@ impl AccountSeriesResponse {
             };
             points[pos].values.insert(id, r.value.to_string());
         }
+
+        // Largest latest value first; tie-break on id keeps the order stable.
+        accounts.sort_by(|a, b| {
+            let av = latest_value.get(&a.id).copied().unwrap_or_default();
+            let bv = latest_value.get(&b.id).copied().unwrap_or_default();
+            bv.cmp(&av).then_with(|| a.id.cmp(&b.id))
+        });
 
         AccountSeriesResponse { accounts, points }
     }
@@ -325,5 +340,36 @@ impl UpdatedAccount {
             type_key: r.type_key,
             type_label: r.type_label,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gripsou_core::repo::query::AccountSeriesRow;
+    use uuid::Uuid;
+
+    fn row(id: Uuid, day: u32, value: i64) -> AccountSeriesRow {
+        AccountSeriesRow {
+            account_id: id,
+            name: format!("acct-{day}"),
+            color: None,
+            as_of: NaiveDate::from_ymd_opt(2026, 1, day).unwrap(),
+            value: Decimal::from(value),
+        }
+    }
+
+    #[test]
+    fn accounts_ordered_by_latest_value_desc() {
+        let a = Uuid::from_u128(1);
+        let b = Uuid::from_u128(2);
+        // Day 1: b leads. Day 2 (latest): a overtakes. Order must follow the
+        // latest day, not first appearance.
+        let rows = vec![row(a, 1, 10), row(b, 1, 20), row(a, 2, 100), row(b, 2, 30)];
+
+        let resp = AccountSeriesResponse::from_rows(rows);
+
+        let order: Vec<String> = resp.accounts.iter().map(|x| x.id.clone()).collect();
+        assert_eq!(order, vec![a.to_string(), b.to_string()]);
     }
 }

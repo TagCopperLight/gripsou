@@ -83,7 +83,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-2 focus:ring-surface-3"
+              className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
             />
           </Field>
 
