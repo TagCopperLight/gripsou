@@ -32,7 +32,7 @@ describe("EditAccountModal", () => {
           return new Response(
             JSON.stringify([
               { key: "checking", label: "Checking", category: "Cash" },
-              { key: "savings", label: "Savings account", category: "Savings" },
+              { key: "savings", label: "Savings", category: "Savings" },
             ]),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );

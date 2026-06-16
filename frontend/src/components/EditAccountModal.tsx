@@ -61,7 +61,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
         aria-modal="true"
         aria-label="Edit account"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-[480px] max-w-[90vw] bg-surface rounded-3xl flex flex-col"
+        className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
@@ -100,7 +100,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
                   aria-label={`Color ${c}`}
                   aria-pressed={c === color}
                   onClick={() => setColor(c)}
-                  className={`size-11 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 ${
+                  className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 ${
                     c === color ? "ring-2 ring-fg" : "hover:scale-105"
                   }`}
                   style={{ background: c }}
@@ -115,14 +115,14 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
           <div className="flex items-center justify-between bg-surface-2 rounded-2xl px-4 py-3.5">
             <span className="flex items-center gap-3 min-w-0">
               <span
-                className="size-2.5 rounded-sm shrink-0"
+                className="size-3 rounded-sm shrink-0"
                 style={{ background: color }}
               />
               <span className="text-fg font-semibold text-[15px] truncate">
                 {name.trim() || "Account name"}
               </span>
             </span>
-            <span className="text-fg-faint text-sm shrink-0">{typeLabel}</span>
+            <span className="text-fg-faint text-sm shrink-0 mr-2">{typeLabel}</span>
           </div>
 
           {update.isError && (
