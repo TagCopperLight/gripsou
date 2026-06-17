@@ -37,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/accounts/series", get(handlers::account_series))
         .route("/accounts/{id}", patch(handlers::update_account))
         .route("/account-types", get(handlers::account_types))
+        .route("/users", get(handlers::users))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

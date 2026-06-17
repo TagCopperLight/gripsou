@@ -6,6 +6,8 @@ import {
   ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
+import { Avatar } from "./Avatar";
+import { useUsers } from "../api/hooks";
 
 type NavItem = {
   to: string;
@@ -24,6 +26,11 @@ const navLinkClassName =
 
 export function Sidebar() {
   const { t } = useTranslation();
+  const { data: users } = useUsers();
+  const self = users?.find((u) => u.isSelf);
+  const roleLabel = self
+    ? t(self.role === "admin" ? "sidebar.administrator" : "settings.roleMember")
+    : "";
 
   return (
     <aside className="flex h-full w-72 flex-col gap-6 bg-bg p-4">
@@ -46,12 +53,10 @@ export function Sidebar() {
       </nav>
 
       <Link to="/settings" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover">
-        <span className="size-8 rounded-full bg-blue-300 my-0.5 flex items-center justify-center">
-          <span className="font-semibold text-black text-sm leading-none">JB</span>
-        </span>
+        <Avatar name={self?.name ?? "?"} className="size-8 my-0.5" />
         <div className="flex flex-col justify-between h-8">
-          <span className="text-[13px] font-semibold text-fg leading-none">Julien BOURDET</span>
-          <span className="text-xs text-fg-faint font-normal leading-none">{t("sidebar.administrator")}</span>
+          <span className="text-[13px] font-semibold text-fg leading-none">{self?.name ?? ""}</span>
+          <span className="text-xs text-fg-faint font-normal leading-none">{roleLabel}</span>
         </div>
       </Link>
     </aside>

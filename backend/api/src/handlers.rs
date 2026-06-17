@@ -170,3 +170,17 @@ pub async fn update_account(
     .ok_or((StatusCode::NOT_FOUND, "account not found".to_string()))?;
     Ok(Json(dto::UpdatedAccount::from_row(updated)))
 }
+
+pub async fn users(
+    State(pool): State<PgPool>,
+) -> Result<Json<Vec<dto::User>>, (StatusCode, String)> {
+    let current_id = current_user(&pool).await.map_err(internal)?;
+    let rows = gripsou_core::repo::query::users(&pool)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| dto::User::from_row(r, current_id))
+            .collect(),
+    ))
+}

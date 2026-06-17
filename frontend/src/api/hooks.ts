@@ -14,6 +14,7 @@ import type {
   NetWorthResponse,
   PricePoint,
   Purchase,
+  User,
 } from "./types";
 
 export function useNetWorth(range: string) {
@@ -72,6 +73,13 @@ export function useAccountTypes() {
   return useQuery({
     queryKey: ["account-types"],
     queryFn: () => getJson<AccountType[]>(`/account-types`),
+  });
+}
+
+export function useUsers() {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => getJson<User[]>(`/users`),
   });
 }
 

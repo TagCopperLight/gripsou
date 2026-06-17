@@ -355,6 +355,30 @@ impl UpdatedAccount {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+    pub role: String,
+    pub joined_at: i64,
+    pub is_self: bool,
+}
+
+impl User {
+    pub fn from_row(r: gripsou_core::repo::query::UserRow, current_id: uuid::Uuid) -> Self {
+        User {
+            is_self: r.id == current_id,
+            id: r.id.to_string(),
+            name: r.name,
+            email: r.email,
+            role: r.role,
+            joined_at: r.created_at.timestamp_millis(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

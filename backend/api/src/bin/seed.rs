@@ -248,14 +248,45 @@ async fn main() -> anyhow::Result<()> {
     let pool = PgPool::connect(&url).await?;
     sqlx::migrate!("../migrations").run(&pool).await?;
 
-    // Idempotent reset: drop the dev user (cascades to connections/accounts/...).
-    sqlx::query("delete from users where email = 'dev@gripsou.local'")
+    // Idempotent reset: drop the dev users (the admin cascades to its data).
+    let seed_emails: [&str; 4] = [
+        "dev@gripsou.local",
+        "marie.laurent@gripsou.local",
+        "thomas.caron@gripsou.local",
+        "ines.moreau@gripsou.local",
+    ];
+    sqlx::query("delete from users where email = any($1)")
+        .bind(&seed_emails[..])
         .execute(&pool)
         .await?;
 
+    // The admin is the current user (resolved as the oldest user) and owns all
+    // the dashboard fixtures below.
     let user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash, role) values ($1,'dev@gripsou.local','Dev','x','user')")
-        .bind(user_id).execute(&pool).await?;
+    sqlx::query(
+        "insert into users (id, email, name, password_hash, role, created_at) \
+         values ($1,'dev@gripsou.local','Julien Bourdet','x','admin', now() - make_interval(months => 18))",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await?;
+
+    // Members with no financial data, joined at different times.
+    for (email, name, months_ago) in [
+        ("marie.laurent@gripsou.local", "Marie Laurent", 9_i32),
+        ("thomas.caron@gripsou.local", "Thomas Caron", 5_i32),
+        ("ines.moreau@gripsou.local", "Inès Moreau", 1_i32),
+    ] {
+        sqlx::query(
+            "insert into users (email, name, password_hash, role, created_at) \
+             values ($1, $2, 'x', 'user', now() - make_interval(months => $3))",
+        )
+        .bind(email)
+        .bind(name)
+        .bind(months_ago)
+        .execute(&pool)
+        .await?;
+    }
     sqlx::query("insert into provider (key, display_name, kind, enabled) values ('seed','Seed','account',true) on conflict (key) do nothing")
         .execute(&pool).await?;
     let conn_id = Uuid::new_v4();

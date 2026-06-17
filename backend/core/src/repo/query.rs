@@ -327,6 +327,30 @@ pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, C
     Ok(rows)
 }
 
+pub struct UserRow {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Every user on the server, oldest first (the seeded admin sorts first).
+/// Global, not user-scoped: the admin Users page lists everyone.
+pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        UserRow,
+        r#"
+        select id, name, email, role, created_at
+        from users
+        order by created_at
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub struct DistributionRow {
     pub account_id: Uuid,
     pub name: String,
