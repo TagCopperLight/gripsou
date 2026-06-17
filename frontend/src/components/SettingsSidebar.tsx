@@ -34,7 +34,7 @@ export function SettingsSidebar() {
           </Link>
         </Fragment>
       ))}
-      <div className="mt-auto border-t border-surface-2 pt-1">
+      <div className="py-1 border-t border-surface-2">
         <LogoutButton />
       </div>
     </nav>
