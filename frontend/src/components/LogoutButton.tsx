@@ -21,7 +21,7 @@ export function LogoutButton() {
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red transition-colors hover:bg-red-soft"
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red transition-colors hover:bg-red-soft"
       >
         <LogOut className="size-4.5" strokeWidth={2} />
         <span>{t("auth.logOut")}</span>
