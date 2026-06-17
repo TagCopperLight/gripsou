@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Login } from "./Login";
 import { AuthProvider } from "../auth/AuthProvider";
 import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 // Login itself doesn't navigate — the /login route guard redirects once auth
 // flips (see router.test.tsx for that end-to-end flow). Here we only assert it
@@ -21,9 +22,11 @@ function wrapWithMock(
     isAuthenticated: false,
     user: null,
     isBootstrapping: false,
+    prefs: DEFAULT_PREFS,
     login,
     logout: async () => {},
     updateUser: () => {},
+    updatePrefs: async () => {},
   };
   return (
     <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -34,7 +37,7 @@ describe("Login", () => {
   it("logs in with the entered credentials on success", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(
-        JSON.stringify({ token: "t", user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin" } }),
+        JSON.stringify({ token: "t", user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS } }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );

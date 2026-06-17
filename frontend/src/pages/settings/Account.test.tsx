@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { SettingsAccount } from "./Account";
 import { AuthContext, type AuthValue } from "../../auth/context";
+import { DEFAULT_PREFS } from "../../lib/prefs";
 
 // Module-level spies so they can be referenced in the hoisted vi.mock factory.
 const revokeSpy = vi.fn();
@@ -47,11 +48,13 @@ vi.mock("../../api/hooks", async (importOriginal) => {
 
 const authValue: AuthValue = {
   isAuthenticated: true,
-  user: { id: "u1", name: "Julien", email: "julien@gripsou.local", role: "admin" },
+  user: { id: "u1", name: "Julien", email: "julien@gripsou.local", role: "admin", prefs: DEFAULT_PREFS },
   isBootstrapping: false,
+  prefs: DEFAULT_PREFS,
   login: vi.fn(),
   logout: logoutSpy,
   updateUser: updateUserSpy,
+  updatePrefs: async () => {},
 };
 
 function withClient(children: ReactNode) {
@@ -103,7 +106,7 @@ describe("SettingsAccount profile", () => {
   });
 
   it("disables save until a field changes, then patches /auth/me", async () => {
-    const updated = { id: "u1", name: "Julien Renamed", email: "julien@gripsou.local", role: "admin" };
+    const updated = { id: "u1", name: "Julien Renamed", email: "julien@gripsou.local", role: "admin", prefs: DEFAULT_PREFS };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(updated), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     render(withClient(<SettingsAccount />));

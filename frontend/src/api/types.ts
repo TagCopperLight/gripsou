@@ -2,6 +2,7 @@
 // timestamps are epoch-ms. Components format strings; charts convert to number.
 
 import type { TFunction } from "i18next";
+import type { UserPrefs } from "../lib/prefs";
 
 export type HoldingKind = "cash" | "etf" | "equity" | "crypto";
 
@@ -98,6 +99,7 @@ export type SessionUser = {
   name: string;
   email: string;
   role: "admin" | "user";
+  prefs: UserPrefs;
 };
 
 // One active login session, from GET /api/auth/sessions.

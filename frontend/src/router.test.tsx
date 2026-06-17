@@ -11,6 +11,7 @@ import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 import { setAuthToken } from "./api/client";
 import type { AuthValue } from "./auth/context";
+import { DEFAULT_PREFS } from "./lib/prefs";
 
 // The dashboard mounts ECharts cards that don't render in jsdom; for routing
 // tests we only care that we *land* on it, so stub it to a sentinel.
@@ -39,9 +40,11 @@ const unauth: AuthValue = {
   isAuthenticated: false,
   user: null,
   isBootstrapping: false,
+  prefs: DEFAULT_PREFS,
   login: async () => {},
   logout: async () => {},
   updateUser: () => {},
+  updatePrefs: async () => {},
 };
 
 describe("route guard", () => {
@@ -70,7 +73,7 @@ describe("login redirect", () => {
           ? new Response(
               JSON.stringify({
                 token: "t",
-                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin" },
+                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS },
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )

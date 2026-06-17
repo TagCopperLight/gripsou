@@ -273,6 +273,18 @@ pub async fn me(
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
+pub async fn update_prefs(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(prefs): Json<gripsou_core::repo::prefs::UserPrefs>,
+) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+    let profile = gripsou_core::repo::user::update_prefs(&pool, user_id, &prefs)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    Ok(Json(dto::SessionUser::from_profile(&profile)))
+}
+
 pub async fn update_profile(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -927,6 +939,54 @@ mod auth_tests {
         .await
         .unwrap_err();
         assert_eq!(conflict.0, StatusCode::CONFLICT);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_prefs_persists_and_me_reflects_it(pool: PgPool) {
+        use gripsou_core::repo::prefs::UserPrefs;
+        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        let token = login_token(&pool, "a@t.local", "pw").await;
+        let session =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
+                .await
+                .unwrap()
+                .unwrap();
+        let principal = auth::AuthUser {
+            user_id: session.user_id,
+            session_id: session.id,
+        };
+
+        let next = UserPrefs {
+            ui_language: "fr".into(),
+            currency_symbol: "$".into(),
+            currency_position: "before".into(),
+            ..Default::default()
+        };
+
+        let updated = update_prefs(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(next),
+        )
+        .await
+        .expect("update prefs ok");
+        assert_eq!(updated.0.prefs.ui_language, "fr");
+        assert_eq!(updated.0.prefs.currency_symbol, "$");
+
+        // Persisted: a fresh /auth/me sees the new prefs.
+        let me_resp = me(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(me_resp.0.prefs.currency_position, "before");
     }
 
     #[sqlx::test(migrations = "../migrations")]

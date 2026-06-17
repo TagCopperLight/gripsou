@@ -4,6 +4,7 @@
 use uuid::Uuid;
 
 use crate::error::CoreError;
+use crate::repo::prefs::UserPrefs;
 
 /// Row needed to authenticate a login: the hash to verify plus the profile the
 /// client needs to render the session.
@@ -13,21 +14,29 @@ pub struct UserCredentials {
     pub name: String,
     pub email: String,
     pub role: String,
+    pub prefs: UserPrefs,
 }
 
 pub async fn credentials_by_email(
     pool: &sqlx::PgPool,
     email: &str,
 ) -> Result<Option<UserCredentials>, CoreError> {
-    let row = sqlx::query_as!(
-        UserCredentials,
-        r#"select id, password_hash, name, email, role
+    let row = sqlx::query!(
+        r#"select id, password_hash, name, email, role,
+                  prefs as "prefs!: sqlx::types::Json<UserPrefs>"
            from users where email = $1"#,
         email,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row)
+    Ok(row.map(|r| UserCredentials {
+        id: r.id,
+        password_hash: r.password_hash,
+        name: r.name,
+        email: r.email,
+        role: r.role,
+        prefs: r.prefs.0,
+    }))
 }
 
 pub async fn password_hash(
@@ -47,20 +56,28 @@ pub struct UserProfile {
     pub name: String,
     pub email: String,
     pub role: String,
+    pub prefs: UserPrefs,
 }
 
 pub async fn profile_by_id(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query_as!(
-        UserProfile,
-        r#"select id, name, email, role from users where id = $1"#,
+    let row = sqlx::query!(
+        r#"select id, name, email, role,
+                  prefs as "prefs!: sqlx::types::Json<UserPrefs>"
+           from users where id = $1"#,
         user_id,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row)
+    Ok(row.map(|r| UserProfile {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        role: r.role,
+        prefs: r.prefs.0,
+    }))
 }
 
 /// Number of users with the `admin` role. Used to refuse deleting the last
@@ -91,17 +108,48 @@ pub async fn update_profile(
     name: &str,
     email: &str,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query_as!(
-        UserProfile,
+    let row = sqlx::query!(
         r#"update users set name = $2, email = $3 where id = $1
-           returning id, name, email, role"#,
+           returning id, name, email, role,
+                     prefs as "prefs!: sqlx::types::Json<UserPrefs>""#,
         user_id,
         name,
         email,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row)
+    Ok(row.map(|r| UserProfile {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        role: r.role,
+        prefs: r.prefs.0,
+    }))
+}
+
+/// Replace the user's prefs blob, returning the refreshed profile (or `None`
+/// when the user no longer exists).
+pub async fn update_prefs(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    prefs: &UserPrefs,
+) -> Result<Option<UserProfile>, CoreError> {
+    let row = sqlx::query!(
+        r#"update users set prefs = $2 where id = $1
+           returning id, name, email, role,
+                     prefs as "prefs!: sqlx::types::Json<UserPrefs>""#,
+        user_id,
+        sqlx::types::Json(prefs) as _,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| UserProfile {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        role: r.role,
+        prefs: r.prefs.0,
+    }))
 }
 
 /// Returns true when a row was updated (the user exists).
@@ -150,6 +198,27 @@ mod tests {
         assert!(update_password(&pool, id, "hash-2").await?);
         assert_eq!(password_hash(&pool, id).await?.unwrap(), "hash-2");
         assert!(!update_password(&pool, Uuid::new_v4(), "x").await?);
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn profile_returns_default_prefs_for_empty_jsonb(pool: PgPool) -> anyhow::Result<()> {
+        let id = Uuid::new_v4();
+        // No prefs column set -> DB default '{}'.
+        sqlx::query(
+            "insert into users (id, email, name, password_hash, role) \
+             values ($1, 'p@t.local', 'Pia', 'hash', 'user')",
+        )
+        .bind(id)
+        .execute(&pool)
+        .await?;
+
+        let profile = profile_by_id(&pool, id).await?.unwrap();
+        assert_eq!(profile.prefs.ui_language, "en");
+        assert_eq!(profile.prefs.currency_symbol, "€");
+
+        let creds = credentials_by_email(&pool, "p@t.local").await?.unwrap();
+        assert_eq!(creds.prefs.number_decimal_sep, ",");
         Ok(())
     }
 

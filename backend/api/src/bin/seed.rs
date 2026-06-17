@@ -275,8 +275,10 @@ async fn main() -> anyhow::Result<()> {
     // the dashboard fixtures below.
     let user_id = Uuid::new_v4();
     sqlx::query(
-        "insert into users (id, email, name, password_hash, role, created_at) \
-         values ($1,'dev@gripsou.local','Julien Bourdet',$2,'admin', now() - make_interval(months => 18))",
+        "insert into users (id, email, name, password_hash, role, prefs, created_at) \
+         values ($1,'dev@gripsou.local','Julien Bourdet',$2,'admin', \
+                 '{\"uiLanguage\":\"fr\",\"currencySymbol\":\"$\",\"currencyPosition\":\"before\"}'::jsonb, \
+                 now() - make_interval(months => 18))",
     )
     .bind(user_id)
     .bind(seed_password_hash())

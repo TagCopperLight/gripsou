@@ -6,6 +6,7 @@ pub mod account;
 pub mod holding;
 pub mod instrument;
 pub mod price;
+pub mod prefs;
 pub mod query;
 pub mod session;
 pub mod snapshot;
