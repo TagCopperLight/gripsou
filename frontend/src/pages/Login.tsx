@@ -30,16 +30,24 @@ export function Login() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-bg">
-      <div className="flex flex-col items-center gap-6">
-        <div className="font-wordmark text-3xl font-semibold tracking-tight text-fg">
+      <div className="relative">
+        <div className="absolute bottom-full left-1/2 mb-15 -translate-x-1/2 whitespace-nowrap font-wordmark text-[75px] font-semibold tracking-tight text-fg">
           gripsou
         </div>
         <form
           onSubmit={submit}
-          className="flex w-80 max-w-[90vw] flex-col gap-4 rounded-3xl bg-surface p-6"
+          className="flex w-100 max-w-[90vw] flex-col gap-4 rounded-3xl bg-surface p-6"
         >
+          <div className="flex flex-col pb-1">
+            <div className="text-lg font-semibold text-fg">
+              {t("auth.welcomeBack")}
+            </div>
+            <div className="text-sm text-fg-faint">
+              {t("auth.signInToContinue")}
+            </div>
+          </div>
           <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-faint">{t("auth.email")}</span>
+            <span className="text-sm text-fg-dim">{t("auth.email")}</span>
             <input
               type="email"
               value={email}
@@ -48,12 +56,12 @@ export function Login() {
             />
           </label>
           <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-faint">{t("auth.password")}</span>
+            <span className="text-sm text-fg-dim">{t("auth.password")}</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
+              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green"
             />
           </label>
           {error && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
@@ -61,6 +69,11 @@ export function Login() {
             {t("auth.signIn")}
           </Button>
         </form>
+        <p className="absolute top-full left-1/2 mt-6 w-100 max-w-[90vw] -translate-x-1/2 px-2 text-center text-sm text-fg-faint">
+          {t("auth.inviteOnly1")}
+          <br />
+          {t("auth.inviteOnly2")}
+        </p>
       </div>
     </div>
   );
