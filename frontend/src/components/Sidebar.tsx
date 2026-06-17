@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "./Avatar";
-import { useUsers } from "../api/hooks";
+import { useAuth } from "../auth/context";
 
 type NavItem = {
   to: string;
@@ -26,8 +26,7 @@ const navLinkClassName =
 
 export function Sidebar() {
   const { t } = useTranslation();
-  const { data: users } = useUsers();
-  const self = users?.find((u) => u.isSelf);
+  const { user: self } = useAuth();
   const roleLabel = self
     ? t(self.role === "admin" ? "sidebar.administrator" : "settings.roleMember")
     : "";

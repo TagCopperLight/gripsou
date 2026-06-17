@@ -1,43 +1,67 @@
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   redirect,
+  Outlet,
 } from "@tanstack/react-router";
 import { RootLayout } from "./components/RootLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
 import { Transactions } from "./pages/Transactions";
+import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
 import { SettingsAccount } from "./pages/settings/Account";
 import { SettingsUsers } from "./pages/settings/Users";
 import { SettingsServer } from "./pages/settings/Server";
+import type { AuthValue } from "./auth/context";
 
-const rootRoute = createRootRoute({
+type RouterContext = { auth: AuthValue };
+
+const rootRoute = createRootRouteWithContext<RouterContext>()({
+  component: () => <Outlet />,
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: Login,
+});
+
+// Pathless layout: everything under it requires auth and renders inside the
+// app chrome (sidebar + content).
+const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "app",
+  beforeLoad: ({ context }) => {
+    if (!context.auth.isAuthenticated) {
+      throw redirect({ to: "/login" });
+    }
+  },
   component: RootLayout,
 });
 
 const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/",
   component: Dashboard,
 });
 
 const accountsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/accounts",
   component: Accounts,
 });
 
 const transactionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/transactions",
   component: Transactions,
 });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/settings",
   component: SettingsLayout,
 });
@@ -82,14 +106,20 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsServerRoute,
 ]);
 
-const routeTree = rootRoute.addChildren([
-  indexRoute,
-  accountsRoute,
-  transactionsRoute,
-  settingsRouteWithChildren,
+export const routeTree = rootRoute.addChildren([
+  loginRoute,
+  appRoute.addChildren([
+    indexRoute,
+    accountsRoute,
+    transactionsRoute,
+    settingsRouteWithChildren,
+  ]),
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  context: { auth: undefined! },
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

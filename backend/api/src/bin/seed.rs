@@ -6,6 +6,8 @@
 
 use std::env;
 
+use argon2::password_hash::{SaltString, rand_core::OsRng};
+use argon2::{Argon2, PasswordHasher};
 use chrono::{Duration, Utc};
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::{account, holding, instrument, price, snapshot};
@@ -13,6 +15,15 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// Dev password for all seeded users: "password".
+fn seed_password_hash() -> String {
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(b"password", &salt)
+        .unwrap()
+        .to_string()
+}
 
 const DAYS: i64 = 1095; // ~3 years of daily history
 
@@ -265,9 +276,10 @@ async fn main() -> anyhow::Result<()> {
     let user_id = Uuid::new_v4();
     sqlx::query(
         "insert into users (id, email, name, password_hash, role, created_at) \
-         values ($1,'dev@gripsou.local','Julien Bourdet','x','admin', now() - make_interval(months => 18))",
+         values ($1,'dev@gripsou.local','Julien Bourdet',$2,'admin', now() - make_interval(months => 18))",
     )
     .bind(user_id)
+    .bind(seed_password_hash())
     .execute(&pool)
     .await?;
 
@@ -279,10 +291,11 @@ async fn main() -> anyhow::Result<()> {
     ] {
         sqlx::query(
             "insert into users (email, name, password_hash, role, created_at) \
-             values ($1, $2, 'x', 'user', now() - make_interval(months => $3))",
+             values ($1, $2, $3, 'user', now() - make_interval(months => $4))",
         )
         .bind(email)
         .bind(name)
+        .bind(seed_password_hash())
         .bind(months_ago)
         .execute(&pool)
         .await?;

@@ -379,6 +379,47 @@ impl User {
     }
 }
 
+#[derive(Deserialize)]
+pub struct LoginReq {
+    pub email: String,
+    pub password: String,
+}
+
+/// The authenticated user's own profile (no `isSelf`/`joinedAt` — that's the
+/// admin user-list shape). Returned by login.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionUser {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+    pub role: String,
+}
+
+impl SessionUser {
+    pub fn from_credentials(c: &gripsou_core::repo::user::UserCredentials) -> Self {
+        SessionUser {
+            id: c.id.to_string(),
+            name: c.name.clone(),
+            email: c.email.clone(),
+            role: c.role.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub user: SessionUser,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePasswordReq {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

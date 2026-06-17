@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { settingsNavItems } from "./settingsNav";
+import { LogoutButton } from "./LogoutButton";
 
 const navLinkClassName =
   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-bold";
@@ -15,7 +16,7 @@ export function SettingsSidebar() {
   const firstAdminIndex = items.findIndex((item) => item.adminOnly);
 
   return (
-    <nav className="flex w-56 flex-col gap-1 pr-4">
+    <nav className="flex h-full w-56 flex-col gap-1 pr-4">
       <div className="px-3 pb-4 text-2xl font-bold text-fg">{t("nav.settings")}</div>
       {items.map(({ to, labelKey, icon: Icon, adminOnly }, index) => (
         <Fragment key={to}>
@@ -33,6 +34,9 @@ export function SettingsSidebar() {
           </Link>
         </Fragment>
       ))}
+      <div className="mt-auto border-t border-surface-2 pt-1">
+        <LogoutButton />
+      </div>
     </nav>
   );
 }

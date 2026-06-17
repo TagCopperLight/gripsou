@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
+import { useChangePassword } from "../../api/hooks";
 
 // Seeded locally until a profile API lands; fields don't persist yet.
 const INITIAL_PROFILE = {
@@ -26,6 +27,7 @@ export function SettingsAccount() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const changePassword = useChangePassword();
 
   const passwordsMismatch =
     confirmPassword !== "" && newPassword !== confirmPassword;
@@ -41,7 +43,16 @@ export function SettingsAccount() {
 
   const updatePassword = () => {
     if (!canUpdatePassword) return;
-    // TODO: wire to the password update API once it lands.
+    changePassword.mutate(
+      { currentPassword, newPassword },
+      {
+        onSuccess: () => {
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+        },
+      },
+    );
   };
 
   return (
@@ -77,6 +88,7 @@ export function SettingsAccount() {
               type="password"
               value={currentPassword}
               onChange={setCurrentPassword}
+              ariaLabel={t("settings.currentPassword")}
             />
           </Field>
           <Field label={t("settings.newPassword")}>
@@ -84,6 +96,7 @@ export function SettingsAccount() {
               type="password"
               value={newPassword}
               onChange={setNewPassword}
+              ariaLabel={t("settings.newPassword")}
             />
           </Field>
           <Field label={t("settings.confirmNewPassword")}>
@@ -91,13 +104,25 @@ export function SettingsAccount() {
               type="password"
               value={confirmPassword}
               onChange={setConfirmPassword}
+              ariaLabel={t("settings.confirmNewPassword")}
             />
           </Field>
           {passwordsMismatch && (
             <p className="text-sm text-red">{t("settings.passwordsDoNotMatch")}</p>
           )}
+          {changePassword.isSuccess && (
+            <p className="text-sm text-green">{t("settings.passwordUpdated")}</p>
+          )}
+          {changePassword.isError && (
+            <p className="text-sm text-red">
+              {t("settings.currentPasswordIncorrect")}
+            </p>
+          )}
           <div className="flex justify-end pt-1">
-            <Button onClick={updatePassword} disabled={!canUpdatePassword}>
+            <Button
+              onClick={updatePassword}
+              disabled={!canUpdatePassword || changePassword.isPending}
+            >
               {t("settings.updatePassword")}
             </Button>
           </div>
@@ -120,14 +145,17 @@ function TextInput({
   value,
   onChange,
   type = "text",
+  ariaLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   type?: "text" | "email" | "password";
+  ariaLabel?: string;
 }) {
   return (
     <input
       type={type}
+      aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
