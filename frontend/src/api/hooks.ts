@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { getJson, patchJson, postJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson } from "./client";
 import type {
   Account,
   AccountSeries,
@@ -14,6 +14,7 @@ import type {
   NetWorthResponse,
   PricePoint,
   Purchase,
+  Session,
   User,
 } from "./types";
 
@@ -111,8 +112,45 @@ export type ChangePasswordInput = {
 };
 
 export function useChangePassword() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ currentPassword, newPassword }: ChangePasswordInput) =>
       postJson<void>("/auth/change-password", { currentPassword, newPassword }),
+    onSuccess: () => {
+      // Changing the password revokes all other sessions server-side; refresh
+      // the sessions list so stale entries disappear immediately.
+      qc.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    // The email is re-typed by the user and verified server-side before the
+    // account (and all its data) is permanently deleted.
+    mutationFn: (email: string) => deleteJson<void>("/auth/account", { email }),
+  });
+}
+
+export function useSessions() {
+  return useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => getJson<Session[]>("/auth/sessions"),
+  });
+}
+
+export function useRevokeSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteJson<void>(`/auth/sessions/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
+
+export function useRevokeOtherSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteJson<void>("/auth/sessions"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
   });
 }

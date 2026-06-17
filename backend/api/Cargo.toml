@@ -19,7 +19,6 @@ gripsou-jobs = { path = "../jobs" }
 anyhow.workspace = true
 argon2 = { version = "0.5.3", features = ["std"] }
 axum.workspace = true
-jsonwebtoken = "9.3.1"
 chrono.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
@@ -31,3 +30,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 dotenvy.workspace = true
+sha2 = "0.10"
+base64 = "0.22"

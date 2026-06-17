@@ -26,6 +26,14 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  beforeLoad: ({ context }) => {
+    // Already signed in (e.g. just logged in, or revisiting /login): the guard
+    // re-runs when auth changes (App invalidates the router) and bounces to the
+    // dashboard, so the redirect doesn't depend on imperative navigation.
+    if (context.auth.isAuthenticated) {
+      throw redirect({ to: "/" });
+    }
+  },
   component: Login,
 });
 

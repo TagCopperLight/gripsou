@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update session set last_active_at = now() where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "821bba1127a478d1b412468b29b4ced08f7f518164e1f68dc3541b0218ae6d16"
+}

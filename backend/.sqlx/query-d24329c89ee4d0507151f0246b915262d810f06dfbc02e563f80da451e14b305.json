@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update session\n               set last_active_at = now(), expires_at = now() + interval '30 days'\n               where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d24329c89ee4d0507151f0246b915262d810f06dfbc02e563f80da451e14b305"
+}

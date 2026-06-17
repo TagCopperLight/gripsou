@@ -32,10 +32,11 @@ describe("SettingsUsers", () => {
     expect(screen.getByText(/3 members/)).toBeInTheDocument();
   });
 
-  it("shows delete only for other users, reset for all", async () => {
+  it("shows reset and delete only for other users, not the self row", async () => {
     render(withClient(<SettingsUsers />));
     await screen.findByText("Marie Laurent");
-    expect(screen.getAllByLabelText("Reset password")).toHaveLength(3);
+    // The self row has no actions: its password lives in the Account tab.
+    expect(screen.getAllByLabelText("Reset password")).toHaveLength(2);
     expect(screen.getAllByLabelText("Delete user")).toHaveLength(2);
   });
 

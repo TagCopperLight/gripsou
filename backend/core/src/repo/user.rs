@@ -40,6 +40,38 @@ pub async fn password_hash(
     Ok(row)
 }
 
+/// The current user's own profile, fetched by id for the /auth/me bootstrap.
+pub struct UserProfile {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub role: String,
+}
+
+pub async fn profile_by_id(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Option<UserProfile>, CoreError> {
+    let row = sqlx::query_as!(
+        UserProfile,
+        r#"select id, name, email, role from users where id = $1"#,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Permanently delete a user. FK `on delete cascade` removes their sessions,
+/// connections, accounts, holdings and snapshots. Returns true when a row was
+/// deleted (the user existed).
+pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
+    let res = sqlx::query!(r#"delete from users where id = $1"#, user_id)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() == 1)
+}
+
 /// Returns true when a row was updated (the user exists).
 pub async fn update_password(
     pool: &sqlx::PgPool,

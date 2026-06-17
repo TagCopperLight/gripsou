@@ -2,11 +2,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useHoldings, useUpdateAccount } from "./hooks";
+import { useChangePassword, useHoldings, useUpdateAccount } from "./hooks";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function makeWrapper() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+  return { client, wrapper: Wrapper };
 }
 
 describe("useHoldings", () => {
@@ -57,5 +67,26 @@ describe("useUpdateAccount", () => {
         color: "#4dd0b1",
       }),
     });
+  });
+});
+
+describe("useChangePassword", () => {
+  it("invalidates the sessions query on success so stale sessions disappear", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    const { client, wrapper: w } = makeWrapper();
+    // Pre-seed the sessions cache so there is a query to invalidate.
+    client.setQueryData(["sessions"], [{ id: "s1" }]);
+
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useChangePassword(), { wrapper: w });
+
+    result.current.mutate({ currentPassword: "old", newPassword: "new" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["sessions"] });
   });
 });

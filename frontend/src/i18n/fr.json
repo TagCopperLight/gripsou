@@ -117,7 +117,8 @@
     "invalidCredentials": "E-mail ou mot de passe invalide",
     "logOut": "Se déconnecter",
     "logOutConfirmTitle": "Se déconnecter ?",
-    "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord."
+    "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
+    "rememberMe": "Se souvenir de moi"
   },
   "settings": {
     "general": "Général",
@@ -167,6 +168,24 @@
     "roleMember": "Membre",
     "you": "Vous",
     "resetPassword": "Réinitialiser le mot de passe",
-    "deleteUser": "Supprimer l'utilisateur"
+    "deleteUser": "Supprimer l'utilisateur",
+    "sessions": "Sessions actives",
+    "sessionsDescription": "Appareils actuellement connectés à votre compte.",
+    "thisDevice": "Cet appareil",
+    "sessionRemembered": "Mémorisée · 30 jours",
+    "sessionSingle": "Session unique",
+    "signedInOn": "Connecté le {{date}}",
+    "lastActive": "Actif {{time}}",
+    "revokeSession": "Révoquer",
+    "logOutOtherSessions": "Déconnecter toutes les autres sessions",
+    "dangerZone": "Zone de danger",
+    "deleteAccount": "Supprimer le compte",
+    "deleteAccountDescription": "Supprimez définitivement votre compte et toutes ses données. Cette action est irréversible.",
+    "deleteAccountTitle": "Supprimer votre compte ?",
+    "deleteAccountBody": "Cela supprime définitivement votre compte, vos connexions et toutes les données synchronisées. Cette action est irréversible.",
+    "deleteAccountConfirmLabel": "Saisissez {{email}} pour confirmer",
+    "deleteAccountConfirm": "Supprimer mon compte",
+    "deleteAccountPending": "Suppression…",
+    "deleteAccountError": "Échec de la suppression de votre compte"
   }
 }

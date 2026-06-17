@@ -23,8 +23,8 @@
 ### Explicit non-goals for v1 (YAGNI)
 
 Designed _around_ but not _built_ now: multi-currency conversion, manual entry,
-the Transactions page UI, 2FA, persistent sessions, connected devices, ETF
-country/sector breakdowns. The model leaves room for each without rework.
+the Transactions page UI, 2FA, ETF country/sector breakdowns. The model leaves
+room for each without rework.
 
 ---
 
@@ -100,6 +100,11 @@ JSONB; `external_id` enables idempotent provider upserts.
 **invite_token**
 - `id`, `token` (random, unique), `type` (`invite` | `reset`)
 - `email` (nullable), `created_by` → users.id, `expires_at` (24h), `used_at`
+
+**session**
+- `id`, `user_id` → users.id (cascade), `token_hash` (sha256, unique)
+- `user_agent` (nullable), `ip` (nullable), `remembered`, `created_at`,
+  `last_active_at`, `expires_at`
 
 **app_settings** (singleton row)
 - `cors_origins` (text[]), `enabled_providers` (text[]),
@@ -284,10 +289,12 @@ The %/value toggle reshapes labels, not the axis.
 - **Remove user:** deletes the user and all their data (cascade through
   connections → accounts → holdings/snapshots/transactions). Confirmed by typing
   the user's email.
-- **Login (v1):** `POST /auth/login` → argon2 verify → short-lived signed bearer
-  token held in memory client-side. **No persistence; re-login on refresh.**
-  2FA, persistent sessions, and connected devices are future and slot into this
-  token approach without redesign.
+- **Login:** `POST /auth/login` → argon2 verify → opaque server-side session.
+  Mints a random token; stores only its SHA-256 hash in a `session` row. Client
+  persists the token in `localStorage` (remembered, sliding 30-day expiry) or
+  `sessionStorage` (not remembered, 1-day expiry). Every request validates by
+  hash; revoking deletes the row. Account page lists and revokes sessions;
+  changing password revokes all other sessions. 2FA is future.
 - **Authorization:** every data query scoped by `user_id` (via `connection`).
   Admin-only endpoints for user management, CORS origins, and provider enablement.
 
@@ -363,5 +370,6 @@ at compile time.
 | Transactions page | `transaction` table already generalist and populated |
 | New account types / categories | Insert into `account_type` / `category` reference tables |
 | ETF sector/country breakdown | `instrument.meta` JSONB |
-| 2FA / persistent sessions / devices | Extend the v1 token/auth path |
+| Persistent sessions / connected devices | ✓ Delivered via opaque `session` table (v1) |
+| 2FA | Future; slots into opaque session auth without redesign |
 | Scale (charts slow) | Promote `holding_snapshot` / `price` to TimescaleDB hypertables; add materialized rollups |

@@ -380,9 +380,12 @@ impl User {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginReq {
     pub email: String,
     pub password: String,
+    #[serde(default)]
+    pub remember: bool,
 }
 
 /// The authenticated user's own profile (no `isSelf`/`joinedAt` — that's the
@@ -405,6 +408,48 @@ impl SessionUser {
             role: c.role.clone(),
         }
     }
+
+    pub fn from_profile(p: &gripsou_core::repo::user::UserProfile) -> Self {
+        SessionUser {
+            id: p.id.to_string(),
+            name: p.name.clone(),
+            email: p.email.clone(),
+            role: p.role.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDto {
+    pub id: String,
+    /// Friendly device label parsed from the stored User-Agent.
+    pub device: String,
+    pub ip: Option<String>,
+    pub created_at: i64,
+    pub last_active_at: i64,
+    pub remembered: bool,
+    /// True for the session making this request (UI marks it "This device").
+    pub current: bool,
+}
+
+impl SessionDto {
+    pub fn from_row(s: gripsou_core::repo::session::Session, current_id: uuid::Uuid) -> Self {
+        use crate::auth;
+        SessionDto {
+            current: s.id == current_id,
+            id: s.id.to_string(),
+            device: s
+                .user_agent
+                .as_deref()
+                .map(auth::parse_user_agent)
+                .unwrap_or_else(|| "Unknown device".to_string()),
+            ip: s.ip,
+            created_at: s.created_at.timestamp_millis(),
+            last_active_at: s.last_active_at.timestamp_millis(),
+            remembered: s.remembered,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -418,6 +463,14 @@ pub struct LoginResponse {
 pub struct ChangePasswordReq {
     pub current_password: String,
     pub new_password: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAccountReq {
+    /// The user re-types their own email to confirm; verified server-side as a
+    /// guard against a mis-targeted request.
+    pub email: String,
 }
 
 #[cfg(test)]
