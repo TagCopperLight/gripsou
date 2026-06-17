@@ -194,6 +194,14 @@ pub async fn users(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::User>>, (StatusCode, String)> {
+    // Listing every account (names/emails/roles) is admin-only.
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    if profile.role != "admin" {
+        return Err((StatusCode::FORBIDDEN, "admin access required".to_string()));
+    }
     let rows = gripsou_core::repo::query::users(&pool)
         .await
         .map_err(internal)?;
@@ -263,6 +271,40 @@ pub async fn me(
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
     Ok(Json(dto::SessionUser::from_profile(&profile)))
+}
+
+pub async fn update_profile(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::UpdateProfileReq>,
+) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+    let name = body.name.trim();
+    let email = body.email.trim();
+    if name.is_empty() || email.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "name and email are required".to_string(),
+        ));
+    }
+    let profile = gripsou_core::repo::user::update_profile(&pool, user_id, name, email)
+        .await
+        .map_err(unique_or_internal("email is already in use"))?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    Ok(Json(dto::SessionUser::from_profile(&profile)))
+}
+
+/// Map a unique-constraint violation to 409 with `msg`; anything else to 500.
+fn unique_or_internal(
+    msg: &'static str,
+) -> impl Fn(gripsou_core::error::CoreError) -> (StatusCode, String) {
+    move |e| match &e {
+        gripsou_core::error::CoreError::Db(sqlx::Error::Database(db))
+            if db.is_unique_violation() =>
+        {
+            (StatusCode::CONFLICT, msg.to_string())
+        }
+        _ => internal(e),
+    }
 }
 
 pub async fn logout(
@@ -367,6 +409,19 @@ pub async fn delete_account(
             "email does not match account".to_string(),
         ));
     }
+    // Refuse to delete the last admin: doing so would lock everyone out of the
+    // admin-only settings (user management, server config) for good.
+    if profile.role == "admin"
+        && gripsou_core::repo::user::count_admins(&pool)
+            .await
+            .map_err(internal)?
+            <= 1
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            "cannot delete the last admin".to_string(),
+        ));
+    }
     gripsou_core::repo::user::delete_user(&pool, user_id)
         .await
         .map_err(internal)?;
@@ -380,20 +435,25 @@ mod auth_tests {
     use crate::dto::{ChangePasswordReq, LoginReq};
     use sqlx::PgPool;
 
-    async fn seed_user(pool: &PgPool, email: &str, password: &str) -> Uuid {
+    async fn seed_user_role(pool: &PgPool, email: &str, password: &str, role: &str) -> Uuid {
         let id = Uuid::new_v4();
         let hash = auth::hash_password(password).unwrap();
         sqlx::query(
             "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'Test', $3, 'admin')",
+             values ($1, $2, 'Test', $3, $4)",
         )
         .bind(id)
         .bind(email)
         .bind(hash)
+        .bind(role)
         .execute(pool)
         .await
         .unwrap();
         id
+    }
+
+    async fn seed_user(pool: &PgPool, email: &str, password: &str) -> Uuid {
+        seed_user_role(pool, email, password, "admin").await
     }
 
     async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
@@ -635,7 +695,8 @@ mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_requires_matching_email(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        // A non-admin user, so the last-admin guard is not in play here.
+        seed_user_role(&pool, "a@t.local", "hunter2", "user").await;
         let token = login_token(&pool, "a@t.local", "hunter2").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -694,6 +755,178 @@ mod auth_tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_account_refuses_last_admin(pool: PgPool) {
+        seed_user_role(&pool, "boss@t.local", "pw", "admin").await;
+        let token = login_token(&pool, "boss@t.local", "pw").await;
+        let session =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
+                .await
+                .unwrap()
+                .unwrap();
+        let principal = auth::AuthUser {
+            user_id: session.user_id,
+            session_id: session.id,
+        };
+
+        // Sole admin: deletion is refused even with the correct email.
+        let err = delete_account(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(dto::DeleteAccountReq {
+                email: "boss@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert!(
+            gripsou_core::repo::user::profile_by_id(&pool, principal.user_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // With a second admin present, the first admin can delete itself.
+        seed_user_role(&pool, "boss2@t.local", "pw", "admin").await;
+        delete_account(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(dto::DeleteAccountReq {
+                email: "boss@t.local".into(),
+            }),
+        )
+        .await
+        .expect("delete ok once another admin exists");
+        assert!(
+            gripsou_core::repo::user::profile_by_id(&pool, principal.user_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn users_endpoint_requires_admin(pool: PgPool) {
+        seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        seed_user_role(&pool, "member@t.local", "pw", "user").await;
+
+        let admin_tok = login_token(&pool, "admin@t.local", "pw").await;
+        let admin_sess =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&admin_tok))
+                .await
+                .unwrap()
+                .unwrap();
+        let list = users(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: admin_sess.user_id,
+                session_id: admin_sess.id,
+            },
+        )
+        .await
+        .expect("admin can list users");
+        assert_eq!(list.0.len(), 2);
+
+        let member_tok = login_token(&pool, "member@t.local", "pw").await;
+        let member_sess =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&member_tok))
+                .await
+                .unwrap()
+                .unwrap();
+        let err = users(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: member_sess.user_id,
+                session_id: member_sess.id,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_profile_persists_and_rejects_duplicate_email(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        seed_user_role(&pool, "taken@t.local", "pw", "user").await;
+        let token = login_token(&pool, "a@t.local", "pw").await;
+        let session =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
+                .await
+                .unwrap()
+                .unwrap();
+        let principal = auth::AuthUser {
+            user_id: session.user_id,
+            session_id: session.id,
+        };
+
+        // A successful edit returns the refreshed profile and persists.
+        let updated = update_profile(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(dto::UpdateProfileReq {
+                name: "  New Name  ".into(),
+                email: " new@t.local ".into(),
+            }),
+        )
+        .await
+        .expect("update ok");
+        assert_eq!(updated.0.name, "New Name");
+        assert_eq!(updated.0.email, "new@t.local");
+        let me_resp = me(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(me_resp.0.email, "new@t.local");
+
+        // Empty fields are rejected.
+        let bad = update_profile(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(dto::UpdateProfileReq {
+                name: "   ".into(),
+                email: "x@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+
+        // Colliding with another user's email returns 409.
+        let conflict = update_profile(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Json(dto::UpdateProfileReq {
+                name: "New Name".into(),
+                email: "taken@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(conflict.0, StatusCode::CONFLICT);
     }
 
     #[sqlx::test(migrations = "../migrations")]

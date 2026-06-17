@@ -5,28 +5,31 @@ import { useNavigate } from "@tanstack/react-router";
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { DeleteAccountModal } from "../../components/DeleteAccountModal";
-import { useChangePassword, useSessions, useRevokeSession, useRevokeOtherSessions } from "../../api/hooks";
+import {
+  useChangePassword,
+  useUpdateProfile,
+  useSessions,
+  useRevokeSession,
+  useRevokeOtherSessions,
+} from "../../api/hooks";
 import { useAuth } from "../../auth/context";
 import { formatDate, formatRelative } from "../../lib/date";
-
-// Seeded locally until a profile API lands; fields don't persist yet.
-const INITIAL_PROFILE = {
-  name: "Julien BOURDET",
-  email: "julien.bourdet@example.com",
-};
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 export function SettingsAccount() {
   const { t } = useTranslation();
+  const { user, logout, updateUser } = useAuth();
 
-  const [name, setName] = useState(INITIAL_PROFILE.name);
-  const [email, setEmail] = useState(INITIAL_PROFILE.email);
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const updateProfile = useUpdateProfile();
 
-  const profileDirty =
-    name !== INITIAL_PROFILE.name || email !== INITIAL_PROFILE.email;
+  const profileDirty = name !== (user?.name ?? "") || email !== (user?.email ?? "");
   const profileValid = name.trim() !== "" && EMAIL_RE.test(email);
-  const canSaveProfile = profileDirty && profileValid;
+  const canSaveProfile = profileDirty && profileValid && !updateProfile.isPending;
+  // The handler returns 409 when the new email collides with another account.
+  const emailTaken = updateProfile.error?.message.includes(" 409") ?? false;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -42,7 +45,18 @@ export function SettingsAccount() {
 
   const saveProfile = () => {
     if (!canSaveProfile) return;
-    // TODO: wire to the profile update API once it lands.
+    updateProfile.mutate(
+      { name: name.trim(), email: email.trim() },
+      {
+        onSuccess: (updated) => {
+          // Reflect the edit everywhere the cached profile is read (sidebar
+          // avatar, delete-account confirmation, admin user list).
+          updateUser(updated);
+          setName(updated.name);
+          setEmail(updated.email);
+        },
+      },
+    );
   };
 
   const updatePassword = () => {
@@ -64,7 +78,6 @@ export function SettingsAccount() {
   const revokeOthers = useRevokeOtherSessions();
   const hasOthers = sessions.some((s) => !s.current);
 
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const onDeleted = async () => {
@@ -74,21 +87,35 @@ export function SettingsAccount() {
   };
 
   return (
-    <div className="flex flex-col gap-4 pb-8">
-      <h1 className="text-2xl font-bold">{t("settings.account")}</h1>
-
-      <Surface className="p-6">
+    <div className="flex flex-col gap-4 pb-8 mt-13">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
+      <Surface className="p-6 h-full flex flex-col">
         <h2 className="mb-5 text-lg font-semibold text-fg">
           {t("settings.profile")}
         </h2>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-1 flex-col gap-5">
           <Field label={t("settings.name")}>
-            <TextInput value={name} onChange={setName} />
+            <TextInput value={name} onChange={setName} ariaLabel={t("settings.name")} />
           </Field>
           <Field label={t("settings.email")}>
-            <TextInput type="email" value={email} onChange={setEmail} />
+            <TextInput
+              type="email"
+              value={email}
+              onChange={setEmail}
+              ariaLabel={t("settings.email")}
+            />
           </Field>
-          <div className="flex justify-end pt-1">
+          {updateProfile.isSuccess && (
+            <p className="text-sm text-green">{t("settings.profileUpdated")}</p>
+          )}
+          {updateProfile.isError && (
+            <p className="text-sm text-red">
+              {emailTaken
+                ? t("settings.emailInUse")
+                : t("settings.profileUpdateFailed")}
+            </p>
+          )}
+          <div className="mt-auto flex justify-end pt-1">
             <Button onClick={saveProfile} disabled={!canSaveProfile}>
               {t("settings.saveChanges")}
             </Button>
@@ -96,11 +123,11 @@ export function SettingsAccount() {
         </div>
       </Surface>
 
-      <Surface className="p-6">
+      <Surface className="p-6 h-full flex flex-col">
         <h2 className="mb-5 text-lg font-semibold text-fg">
           {t("settings.password")}
         </h2>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-1 flex-col gap-5">
           <Field label={t("settings.currentPassword")}>
             <TextInput
               type="password"
@@ -136,7 +163,7 @@ export function SettingsAccount() {
               {t("settings.currentPasswordIncorrect")}
             </p>
           )}
-          <div className="flex justify-end pt-1">
+          <div className="mt-auto flex justify-end pt-1">
             <Button
               onClick={updatePassword}
               disabled={!canUpdatePassword || changePassword.isPending}
@@ -146,6 +173,7 @@ export function SettingsAccount() {
           </div>
         </div>
       </Surface>
+      </div>
 
       <Surface className="p-6">
         <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.sessions")}</h2>
@@ -252,7 +280,7 @@ function TextInput({
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
+      className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green h-10.25"
     />
   );
 }

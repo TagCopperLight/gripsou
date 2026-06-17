@@ -61,6 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((next: SessionUser) => setUser(next), []);
+
   const value = useMemo<AuthValue>(
     () => ({
       isAuthenticated: user !== null,
@@ -68,8 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       login,
       logout,
+      updateUser,
     }),
-    [user, isBootstrapping, login, logout],
+    [user, isBootstrapping, login, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

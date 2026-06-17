@@ -32,7 +32,10 @@ async fn main() -> anyhow::Result<()> {
     let api = Router::new()
         .route("/health", get(health))
         .route("/auth/login", post(handlers::login))
-        .route("/auth/me", get(handlers::me))
+        .route(
+            "/auth/me",
+            get(handlers::me).patch(handlers::update_profile),
+        )
         .route("/auth/logout", post(handlers::logout))
         .route("/auth/change-password", post(handlers::change_password))
         .route("/auth/account", delete(handlers::delete_account))

@@ -355,7 +355,7 @@ impl UpdatedAccount {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: String,
@@ -456,6 +456,13 @@ impl SessionDto {
 pub struct LoginResponse {
     pub token: String,
     pub user: SessionUser,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProfileReq {
+    pub name: String,
+    pub email: String,
 }
 
 #[derive(Deserialize)]

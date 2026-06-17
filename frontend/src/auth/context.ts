@@ -7,6 +7,8 @@ export type AuthValue = {
   isBootstrapping: boolean;
   login: (email: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
+  /** Replace the cached profile after the user edits their own account. */
+  updateUser: (user: SessionUser) => void;
 };
 
 export const AuthContext = createContext<AuthValue | null>(null);

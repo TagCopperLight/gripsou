@@ -23,6 +23,7 @@ function wrapWithMock(
     isBootstrapping: false,
     login,
     logout: async () => {},
+    updateUser: () => {},
   };
   return (
     <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

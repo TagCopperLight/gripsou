@@ -10,6 +10,7 @@ const revokeSpy = vi.fn();
 const revokeOthersSpy = vi.fn();
 const logoutSpy = vi.fn();
 const navigateSpy = vi.fn();
+const updateUserSpy = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigateSpy }));
 
@@ -50,6 +51,7 @@ const authValue: AuthValue = {
   isBootstrapping: false,
   login: vi.fn(),
   logout: logoutSpy,
+  updateUser: updateUserSpy,
 };
 
 function withClient(children: ReactNode) {
@@ -91,6 +93,44 @@ describe("SettingsAccount password update", () => {
     fillPasswords();
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
     expect(await screen.findByText("Current password is incorrect")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount profile", () => {
+  beforeEach(() => {
+    updateUserSpy.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it("disables save until a field changes, then patches /auth/me", async () => {
+    const updated = { id: "u1", name: "Julien Renamed", email: "julien@gripsou.local", role: "admin" };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(updated), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(withClient(<SettingsAccount />));
+
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Julien Renamed" } });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+
+    expect(await screen.findByText("Profile updated")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/me",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(updateUserSpy).toHaveBeenCalledWith(updated);
+  });
+
+  it("shows a conflict message when the email is already in use", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("taken", { status: 409 })));
+    render(withClient(<SettingsAccount />));
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "taken@gripsou.local" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("That email is already in use")).toBeInTheDocument();
   });
 });
 
