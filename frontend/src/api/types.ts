@@ -91,3 +91,11 @@ export type User = {
   joinedAt: number;
   isSelf: boolean;
 };
+
+// The authenticated user's own profile, returned by POST /auth/login.
+export type SessionUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+};

@@ -106,6 +106,15 @@
   "sidebar": {
     "administrator": "Administrator"
   },
+  "auth": {
+    "signIn": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "invalidCredentials": "Invalid email or password",
+    "logOut": "Log out",
+    "logOutConfirmTitle": "Log out?",
+    "logOutConfirmBody": "You'll need to sign in again to access your dashboard."
+  },
   "settings": {
     "general": "General",
     "account": "Account",
@@ -138,6 +147,9 @@
     "confirmNewPassword": "Confirm new password",
     "updatePassword": "Update password",
     "passwordsDoNotMatch": "Passwords don't match",
+    "passwordUpdated": "Password updated",
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "passwordUpdateFailed": "Couldn't update password",
     "usersCount_one": "{{count}} member",
     "usersCount_other": "{{count}} members",
     "addUser": "Add user",

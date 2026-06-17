@@ -106,6 +106,15 @@
   "sidebar": {
     "administrator": "Administrateur"
   },
+  "auth": {
+    "signIn": "Se connecter",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "invalidCredentials": "E-mail ou mot de passe invalide",
+    "logOut": "Se déconnecter",
+    "logOutConfirmTitle": "Se déconnecter ?",
+    "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord."
+  },
   "settings": {
     "general": "Général",
     "account": "Compte",
@@ -138,6 +147,9 @@
     "confirmNewPassword": "Confirmer le nouveau mot de passe",
     "updatePassword": "Mettre à jour le mot de passe",
     "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+    "passwordUpdated": "Mot de passe mis à jour",
+    "currentPasswordIncorrect": "Mot de passe actuel incorrect",
+    "passwordUpdateFailed": "Échec de la mise à jour du mot de passe",
     "usersCount_one": "{{count}} membre",
     "usersCount_other": "{{count}} membres",
     "addUser": "Ajouter un utilisateur",

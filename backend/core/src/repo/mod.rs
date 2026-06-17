@@ -9,3 +9,4 @@ pub mod price;
 pub mod query;
 pub mod snapshot;
 pub mod transaction;
+pub mod user;

@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { getJson, patchJson } from "./client";
+import { getJson, patchJson, postJson } from "./client";
 import type {
   Account,
   AccountSeries,
@@ -102,5 +102,17 @@ export function useUpdateAccount() {
       qc.invalidateQueries({ queryKey: ["distribution"] });
       qc.invalidateQueries({ queryKey: ["account-series"] });
     },
+  });
+}
+
+export type ChangePasswordInput = {
+  currentPassword: string;
+  newPassword: string;
+};
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: ({ currentPassword, newPassword }: ChangePasswordInput) =>
+      postJson<void>("/auth/change-password", { currentPassword, newPassword }),
   });
 }

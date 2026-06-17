@@ -1,12 +1,12 @@
+mod auth;
 mod dto;
 mod handlers;
-mod user;
 
 use std::env;
 
 use axum::{
     Json, Router,
-    routing::{get, patch},
+    routing::{get, patch, post},
 };
 use serde_json::{Value, json};
 use tower_http::services::ServeDir;
@@ -18,6 +18,10 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
+
+    let auth_secret =
+        env::var("AUTH_SECRET").map_err(|_| anyhow::anyhow!("AUTH_SECRET must be set"))?;
+    auth::init_secret(auth_secret);
 
     let database_url =
         env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
@@ -31,6 +35,8 @@ async fn main() -> anyhow::Result<()> {
 
     let api = Router::new()
         .route("/health", get(health))
+        .route("/auth/login", post(handlers::login))
+        .route("/auth/change-password", post(handlers::change_password))
         .route("/dashboard/net-worth", get(handlers::net_worth))
         .route("/dashboard/distribution", get(handlers::distribution))
         .route("/accounts", get(handlers::accounts))

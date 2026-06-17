@@ -23,7 +23,8 @@ describe("useHoldings", () => {
     const { result } = renderHook(() => useHoldings(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].ticker).toBe("AAPL");
-    expect(fetch).toHaveBeenCalledWith("/api/holdings");
+    // getJson now attaches an (empty, unauthenticated) headers object.
+    expect(fetch).toHaveBeenCalledWith("/api/holdings", { headers: {} });
   });
 });
 
