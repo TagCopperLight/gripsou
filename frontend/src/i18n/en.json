@@ -137,6 +137,20 @@
     "newPassword": "New password",
     "confirmNewPassword": "Confirm new password",
     "updatePassword": "Update password",
-    "passwordsDoNotMatch": "Passwords don't match"
+    "passwordsDoNotMatch": "Passwords don't match",
+    "usersCount_one": "{{count}} member",
+    "usersCount_other": "{{count}} members",
+    "addUser": "Add user",
+    "columns": {
+      "member": "MEMBER",
+      "role": "ROLE",
+      "joined": "JOINED",
+      "actions": "ACTIONS"
+    },
+    "roleAdmin": "Admin",
+    "roleMember": "Member",
+    "you": "You",
+    "resetPassword": "Reset password",
+    "deleteUser": "Delete user"
   }
 }

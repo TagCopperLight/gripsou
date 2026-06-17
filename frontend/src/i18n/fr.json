@@ -137,6 +137,20 @@
     "newPassword": "Nouveau mot de passe",
     "confirmNewPassword": "Confirmer le nouveau mot de passe",
     "updatePassword": "Mettre à jour le mot de passe",
-    "passwordsDoNotMatch": "Les mots de passe ne correspondent pas"
+    "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+    "usersCount_one": "{{count}} membre",
+    "usersCount_other": "{{count}} membres",
+    "addUser": "Ajouter un utilisateur",
+    "columns": {
+      "member": "MEMBRE",
+      "role": "RÔLE",
+      "joined": "INSCRIT LE",
+      "actions": "ACTIONS"
+    },
+    "roleAdmin": "Admin",
+    "roleMember": "Membre",
+    "you": "Vous",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "deleteUser": "Supprimer l'utilisateur"
   }
 }

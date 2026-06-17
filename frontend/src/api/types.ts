@@ -82,3 +82,12 @@ export type AccountSeries = {
   accounts: { id: string; name: string; color: string }[];
   points: { t: number; values: Record<string, string> }[];
 };
+
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  joinedAt: number;
+  isSelf: boolean;
+};
