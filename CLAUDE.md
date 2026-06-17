@@ -41,6 +41,7 @@ Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` for ju
 - **Escape hatches:** `*_meta` JSONB columns and `external_id` (for idempotent provider upserts/dedup) let adapters absorb provider-specific weirdness without schema churn.
 - **sqlx is compile-time-checked.** Once `query!`/`query_as!` macros are added, `cargo build` requires a reachable `DATABASE_URL` or committed `.sqlx/` offline data (`cargo sqlx prepare`). The current scaffold has no such queries yet, so it builds without a DB.
 - **Config split:** secrets/infra via env (`DATABASE_URL`, `ENCRYPTION_KEY`, `POWENS_*` — see `.env.example`); runtime/admin-tunable values (`cors_origins`, `enabled_providers`) live in the `app_settings` DB row, not env.
+- **Env files live at the repo root.** Copy `.env.example` → `.env` at the root. The backend, even when run from `backend/`, loads the root `.env` via dotenvy's parent-directory search — do not create `backend/.env` (it would shadow the root file). dotenvy only runs at `cargo run`/`seed`, **not** under `cargo test` or `cargo build`/sqlx macros, so those need `DATABASE_URL` exported in the shell.
 - **Credentials at rest** are encrypted with AES-GCM using `ENCRYPTION_KEY`; plaintext secrets never hit the DB.
 - Frontend stack: React 19 + TanStack Router (code-based route tree in `router.tsx`) + TanStack Query, ECharts for charts, react-i18next (en/fr in `src/i18n/`). Per-user formatting prefs drive `Intl` with explicit options.
 

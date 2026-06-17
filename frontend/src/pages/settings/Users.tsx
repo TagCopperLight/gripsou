@@ -108,13 +108,17 @@ export function SettingsUsers() {
                       {/* ACTIONS */}
                       <td className="py-3 px-3 border-t border-surface-2">
                         <div className="flex justify-end gap-1.5">
-                          <button
-                            type="button"
-                            aria-label={t("settings.resetPassword")}
-                            className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
-                          >
-                            <Key className="size-4" />
-                          </button>
+                          {/* Own password lives in the Account tab; here we only
+                              offer to reset *other* users' passwords. */}
+                          {!u.isSelf && (
+                            <button
+                              type="button"
+                              aria-label={t("settings.resetPassword")}
+                              className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
+                            >
+                              <Key className="size-4" />
+                            </button>
+                          )}
                           {!u.isSelf && (
                             <button
                               type="button"

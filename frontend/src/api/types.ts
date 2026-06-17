@@ -99,3 +99,14 @@ export type SessionUser = {
   email: string;
   role: "admin" | "user";
 };
+
+// One active login session, from GET /api/auth/sessions.
+export type Session = {
+  id: string;
+  device: string;
+  ip: string | null;
+  createdAt: number;
+  lastActiveAt: number;
+  remembered: boolean;
+  current: boolean;
+};

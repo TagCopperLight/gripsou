@@ -4,8 +4,9 @@ import type { SessionUser } from "../api/types";
 export type AuthValue = {
   isAuthenticated: boolean;
   user: SessionUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  isBootstrapping: boolean;
+  login: (email: string, password: string, remember: boolean) => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthValue | null>(null);

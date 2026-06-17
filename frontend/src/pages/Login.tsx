@@ -1,26 +1,26 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 
 export function Login() {
   const { t } = useTranslation();
   const { login } = useAuth();
-  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState(false);
   const [pending, setPending] = useState(false);
 
+  // No navigation here: a successful login flips auth, and the /login route
+  // guard redirects to the dashboard once the router context refreshes.
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(false);
     setPending(true);
     try {
-      await login(email, password);
-      navigate({ to: "/" });
+      await login(email, password, remember);
     } catch {
       setError(true);
     } finally {
@@ -63,6 +63,15 @@ export function Login() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green"
             />
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-fg-dim">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="size-4 accent-green"
+            />
+            {t("auth.rememberMe")}
           </label>
           {error && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
           <Button type="submit" disabled={pending} className="mt-1">
