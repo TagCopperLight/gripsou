@@ -41,6 +41,7 @@ pub async fn password_hash(
 }
 
 /// The current user's own profile, fetched by id for the /auth/me bootstrap.
+#[derive(Debug)]
 pub struct UserProfile {
     pub id: Uuid,
     pub name: String,
@@ -62,6 +63,15 @@ pub async fn profile_by_id(
     Ok(row)
 }
 
+/// Number of users with the `admin` role. Used to refuse deleting the last
+/// admin, which would lock everyone out of admin-only settings.
+pub async fn count_admins(pool: &sqlx::PgPool) -> Result<i64, CoreError> {
+    let n = sqlx::query_scalar!(r#"select count(*) from users where role = 'admin'"#)
+        .fetch_one(pool)
+        .await?;
+    Ok(n.unwrap_or(0))
+}
+
 /// Permanently delete a user. FK `on delete cascade` removes their sessions,
 /// connections, accounts, holdings and snapshots. Returns true when a row was
 /// deleted (the user existed).
@@ -70,6 +80,28 @@ pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, Cor
         .execute(pool)
         .await?;
     Ok(res.rows_affected() == 1)
+}
+
+/// Update the user's display name and email, returning the refreshed profile
+/// (or `None` when the user no longer exists). A duplicate email surfaces as the
+/// underlying unique-violation `sqlx::Error`, which the handler maps to 409.
+pub async fn update_profile(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    name: &str,
+    email: &str,
+) -> Result<Option<UserProfile>, CoreError> {
+    let row = sqlx::query_as!(
+        UserProfile,
+        r#"update users set name = $2, email = $3 where id = $1
+           returning id, name, email, role"#,
+        user_id,
+        name,
+        email,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
 }
 
 /// Returns true when a row was updated (the user exists).
@@ -118,6 +150,51 @@ mod tests {
         assert!(update_password(&pool, id, "hash-2").await?);
         assert_eq!(password_hash(&pool, id).await?.unwrap(), "hash-2");
         assert!(!update_password(&pool, Uuid::new_v4(), "x").await?);
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_profile_roundtrip_and_conflict(pool: PgPool) -> anyhow::Result<()> {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "insert into users (id, email, name, password_hash, role) \
+             values ($1, 'a@t.local', 'Ann', 'hash', 'admin')",
+        )
+        .bind(id)
+        .execute(&pool)
+        .await?;
+        // A second user whose email we must not be able to collide with.
+        sqlx::query(
+            "insert into users (id, email, name, password_hash, role) \
+             values ($1, 'taken@t.local', 'Bob', 'hash', 'user')",
+        )
+        .bind(Uuid::new_v4())
+        .execute(&pool)
+        .await?;
+
+        let updated = update_profile(&pool, id, "Annie", "annie@t.local")
+            .await?
+            .unwrap();
+        assert_eq!(updated.name, "Annie");
+        assert_eq!(updated.email, "annie@t.local");
+        let reread = profile_by_id(&pool, id).await?.unwrap();
+        assert_eq!(reread.email, "annie@t.local");
+
+        // Missing user -> None.
+        assert!(
+            update_profile(&pool, Uuid::new_v4(), "X", "x@t.local")
+                .await?
+                .is_none()
+        );
+
+        // Colliding email -> unique-violation error from the DB.
+        let err = update_profile(&pool, id, "Annie", "taken@t.local")
+            .await
+            .unwrap_err();
+        let CoreError::Db(sqlx::Error::Database(db)) = err else {
+            panic!("expected a database error, got {err:?}");
+        };
+        assert!(db.is_unique_violation());
         Ok(())
     }
 }

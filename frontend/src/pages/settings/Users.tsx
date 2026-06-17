@@ -29,11 +29,11 @@ export function SettingsUsers() {
     }));
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 mt-13">
       <Surface className="w-full">
         <div className="flex flex-col p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-fg font-semibold text-sm">
+            <h2 className="text-fg font-semibold text-sm mb-auto">
               {t("settings.users")}
               {ready && (
                 <span className="text-fg-faint font-normal ml-2">

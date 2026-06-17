@@ -15,6 +15,7 @@ import type {
   PricePoint,
   Purchase,
   Session,
+  SessionUser,
   User,
 } from "./types";
 
@@ -102,6 +103,24 @@ export function useUpdateAccount() {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       qc.invalidateQueries({ queryKey: ["distribution"] });
       qc.invalidateQueries({ queryKey: ["account-series"] });
+    },
+  });
+}
+
+export type UpdateProfileInput = {
+  name: string;
+  email: string;
+};
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, email }: UpdateProfileInput) =>
+      patchJson<SessionUser>("/auth/me", { name, email }),
+    onSuccess: () => {
+      // The admin user list shows the current user's name/email; refresh it so
+      // an edit is reflected there too.
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }

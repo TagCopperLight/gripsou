@@ -44,9 +44,7 @@ export function SettingsGeneral() {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      <h1 className="text-2xl font-bold">{t("settings.general")}</h1>
-
-      <Surface className="p-6">
+      <Surface className="p-6 mt-13">
         <h2 className="mb-5 text-lg font-semibold text-fg">
           {t("settings.localization")}
         </h2>

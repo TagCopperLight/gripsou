@@ -41,6 +41,7 @@ const unauth: AuthValue = {
   isBootstrapping: false,
   login: async () => {},
   logout: async () => {},
+  updateUser: () => {},
 };
 
 describe("route guard", () => {
