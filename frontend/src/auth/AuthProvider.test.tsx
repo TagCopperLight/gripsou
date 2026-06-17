@@ -1,9 +1,11 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, it, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider } from "./AuthProvider";
 import { useAuth } from "./context";
 import { setAuthToken } from "../api/client";
 import * as client from "../api/client";
+import { DEFAULT_PREFS, getPrefs, setPrefs } from "../lib/prefs";
+import i18n from "../i18n";
 
 function Probe() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -27,10 +29,23 @@ test("no token → unauthenticated, no /auth/me call", async () => {
 test("stored token → /auth/me resolves → authenticated", async () => {
   setAuthToken("tok", true);
   vi.spyOn(client, "getJson").mockResolvedValue({
-    id: "1", name: "Ann", email: "a@t.local", role: "admin",
+    id: "1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS,
   });
   render(<AuthProvider><Probe /></AuthProvider>);
   await waitFor(() => expect(screen.getByText("in")).toBeInTheDocument());
+});
+
+it("applies prefs from /auth/me to the singleton and i18n on bootstrap", async () => {
+  setPrefs(DEFAULT_PREFS);
+  setAuthToken("tok", true);
+  const user = {
+    id: "1", name: "A", email: "a@t.local", role: "admin" as const,
+    prefs: { ...DEFAULT_PREFS, uiLanguage: "fr" as const, currencySymbol: "$" },
+  };
+  vi.spyOn(client, "getJson").mockResolvedValue(user);
+  render(<AuthProvider><div data-testid="probe" /></AuthProvider>);
+  await waitFor(() => expect(getPrefs().currencySymbol).toBe("$"));
+  expect(i18n.language).toBe("fr");
 });
 
 test("stored token → /auth/me returns 401 → unauthenticated, global handler NOT called", async () => {

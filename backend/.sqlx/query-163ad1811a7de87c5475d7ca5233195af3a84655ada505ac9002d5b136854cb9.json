@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role",
+  "query": "select id, name, email, role,\n                  prefs as \"prefs!: sqlx::types::Json<UserPrefs>\"\n           from users where id = $1",
   "describe": {
     "columns": [
       {
@@ -46,21 +46,31 @@
             "name": "role"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "prefs!: sqlx::types::Json<UserPrefs>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "prefs"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c1d6fceffa7d6eec9bb00f9368a741a6920fb41245bcf48c603f9f016b18ca9a"
+  "hash": "163ad1811a7de87c5475d7ca5233195af3a84655ada505ac9002d5b136854cb9"
 }

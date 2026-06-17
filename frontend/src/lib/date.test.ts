@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { formatRelative } from "./date";
+import { formatRelative, formatDate } from "./date";
+import { DEFAULT_PREFS, setPrefs } from "./prefs";
 
 const NOW = new Date("2026-06-15T12:00:00Z").getTime();
 const ago = (ms: number) => NOW - ms;
@@ -27,5 +28,20 @@ describe("formatRelative", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     expect(formatRelative(ago(30 * DAY))).toBe("16/05/2026");
+  });
+});
+
+describe("formatDate (prefs-driven)", () => {
+  afterEach(() => setPrefs(DEFAULT_PREFS));
+
+  it("uses the prefs date pattern by default", () => {
+    const d = new Date("2026-05-16T00:00:00Z").getTime();
+    setPrefs({ ...DEFAULT_PREFS, dateFormat: "MM/DD/YYYY" });
+    expect(formatDate(d)).toBe("05/16/2026");
+  });
+
+  it("an explicit pattern overrides prefs", () => {
+    const d = new Date("2026-05-16T00:00:00Z").getTime();
+    expect(formatDate(d, { pattern: "YYYY-MM-DD" })).toBe("2026-05-16");
   });
 });

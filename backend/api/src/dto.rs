@@ -397,6 +397,7 @@ pub struct SessionUser {
     pub name: String,
     pub email: String,
     pub role: String,
+    pub prefs: gripsou_core::repo::prefs::UserPrefs,
 }
 
 impl SessionUser {
@@ -406,6 +407,7 @@ impl SessionUser {
             name: c.name.clone(),
             email: c.email.clone(),
             role: c.role.clone(),
+            prefs: c.prefs.clone(),
         }
     }
 
@@ -415,6 +417,7 @@ impl SessionUser {
             name: p.name.clone(),
             email: p.email.clone(),
             role: p.role.clone(),
+            prefs: p.prefs.clone(),
         }
     }
 }

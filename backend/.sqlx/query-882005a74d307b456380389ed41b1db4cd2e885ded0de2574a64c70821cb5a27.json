@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, password_hash, name, email, role\n           from users where email = $1",
+  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     prefs as \"prefs!: sqlx::types::Json<UserPrefs>\"",
   "describe": {
     "columns": [
       {
@@ -16,17 +16,6 @@
       },
       {
         "ordinal": 1,
-        "name": "password_hash",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "users",
-            "name": "password_hash"
-          }
-        }
-      },
-      {
-        "ordinal": 2,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -37,7 +26,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 2,
         "name": "email",
         "type_info": "Text",
         "origin": {
@@ -48,7 +37,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "role",
         "type_info": "Text",
         "origin": {
@@ -57,10 +46,23 @@
             "name": "role"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "prefs!: sqlx::types::Json<UserPrefs>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "prefs"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
+        "Text",
         "Text"
       ]
     },
@@ -72,5 +74,5 @@
       false
     ]
   },
-  "hash": "0eb9df5ed6333773ba1f72fd77d946c4d6e8fe7e7174e62885387b94866adf07"
+  "hash": "882005a74d307b456380389ed41b1db4cd2e885ded0de2574a64c70821cb5a27"
 }

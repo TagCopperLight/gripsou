@@ -1,19 +1,16 @@
 import i18n from "../i18n";
+import { getPrefs } from "./prefs";
 
 export type DateFormatOptions = {
-  /** Token pattern. Supports YYYY, YY, MM, DD. */
+  /** Token pattern. Supports YYYY, YY, MM, DD. Defaults to the user's prefs. */
   pattern?: string;
-};
-
-const DEFAULTS: Required<DateFormatOptions> = {
-  pattern: "DD/MM/YYYY",
 };
 
 export function formatDate(
   value: Date | number | string,
   options: DateFormatOptions = {},
 ): string {
-  const { pattern } = { ...DEFAULTS, ...options };
+  const pattern = options.pattern ?? getPrefs().dateFormat;
   const d = value instanceof Date ? value : new Date(value);
   const pad = (n: number) => String(n).padStart(2, "0");
   const tokens: Record<string, string> = {

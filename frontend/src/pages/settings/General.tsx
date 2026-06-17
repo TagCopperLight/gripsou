@@ -1,21 +1,25 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Select } from "../../components/Select";
+import { useAuth } from "../../auth/context";
+import type { UserPrefs } from "../../lib/prefs";
+import { formatMoney } from "../../lib/money";
+import { formatDate } from "../../lib/date";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
-const CURRENCIES: { code: string; symbol: string }[] = [
-  { code: "EUR", symbol: "€" },
-  { code: "USD", symbol: "$" },
-  { code: "GBP", symbol: "£" },
-  { code: "CHF", symbol: "CHF" },
-  { code: "JPY", symbol: "¥" },
+const CURRENCIES: { symbol: string; label: string }[] = [
+  { symbol: "€", label: "EUR (€)" },
+  { symbol: "$", label: "USD ($)" },
+  { symbol: "£", label: "GBP (£)" },
+  { symbol: "CHF", label: "CHF" },
+  { symbol: "¥", label: "JPY (¥)" },
 ];
 
-const THOUSANDS_OPTIONS = [
+const GROUP_OPTIONS = [
   { value: " ", label: "1 000" },
   { value: ",", label: "1,000" },
   { value: ".", label: "1.000" },
@@ -27,20 +31,26 @@ const DECIMAL_OPTIONS = [
   { value: ",", label: "0,00" },
 ];
 
-type SymbolPosition = "before" | "after";
-
 export function SettingsGeneral() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const { prefs, updatePrefs } = useAuth();
 
-  // Local-only for now: persistence and real currency conversion land later.
-  const [dateFormat, setDateFormat] = useState(DATE_FORMATS[0]);
-  const [currency, setCurrency] = useState(CURRENCIES[0].code);
-  const [thousands, setThousands] = useState(" ");
-  const [decimal, setDecimal] = useState(",");
-  const [symbolPosition, setSymbolPosition] = useState<SymbolPosition>("after");
+  // Auto-save: every change persists the whole prefs object and applies app-wide.
+  const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
+    void updatePrefs({ ...prefs, [key]: value });
 
-  const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
-  const numberOpts = { thousands, decimal, symbol, symbolPosition };
+  // Drive the preview from the reactive context prefs, not the module singleton
+  // that formatMoney reads by default — the singleton isn't a React-tracked
+  // dependency, so a default-args formatMoney("…") would render stale until a
+  // remount. Passing explicit options makes the preview a pure function of the
+  // context prefs, so it updates in lockstep with the controls above.
+  const previewMoneyOpts = {
+    groupSep: prefs.numberGroupSep,
+    decimalSep: prefs.numberDecimalSep,
+    currencySymbol: prefs.currencySymbol,
+    currencyPosition: prefs.currencyPosition,
+    fractionDigits: prefs.numberDecimals,
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -51,8 +61,8 @@ export function SettingsGeneral() {
         <div className="flex flex-col gap-5">
           <Setting label={t("settings.language")} hint={t("settings.interfaceLanguage")}>
             <SegmentedControl
-              value={i18n.language}
-              onChange={(lng) => void i18n.changeLanguage(lng)}
+              value={prefs.uiLanguage}
+              onChange={(lng) => set("uiLanguage", lng as UserPrefs["uiLanguage"])}
               options={[
                 { value: "en", label: "English" },
                 { value: "fr", label: "Français" },
@@ -64,11 +74,13 @@ export function SettingsGeneral() {
 
           <Setting
             label={t("settings.dateFormat")}
-            hint={t("settings.today", { date: formatDate(new Date(), dateFormat) })}
+            hint={t("settings.today", {
+              date: formatDate(new Date(), { pattern: prefs.dateFormat }),
+            })}
           >
             <Select
-              value={dateFormat}
-              onChange={setDateFormat}
+              value={prefs.dateFormat}
+              onChange={(v) => set("dateFormat", v)}
               options={DATE_FORMATS.map((f) => ({ value: f, label: f }))}
               className="w-60"
             />
@@ -86,12 +98,9 @@ export function SettingsGeneral() {
             hint={t("settings.baseReportingCurrency")}
           >
             <Select
-              value={currency}
-              onChange={setCurrency}
-              options={CURRENCIES.map((c) => ({
-                value: c.code,
-                label: `${c.code} (${c.symbol})`,
-              }))}
+              value={prefs.currencySymbol}
+              onChange={(v) => set("currencySymbol", v)}
+              options={CURRENCIES.map((c) => ({ value: c.symbol, label: c.label }))}
               className="w-60"
             />
           </Setting>
@@ -110,15 +119,25 @@ export function SettingsGeneral() {
 
             <div className="grid grid-cols-3 divide-x divide-surface-2">
               <FieldCol label={t("settings.thousandsSeparator")} first>
-                <Select value={thousands} onChange={setThousands} options={THOUSANDS_OPTIONS} />
+                <Select
+                  value={prefs.numberGroupSep}
+                  onChange={(v) => set("numberGroupSep", v)}
+                  options={GROUP_OPTIONS}
+                />
               </FieldCol>
               <FieldCol label={t("settings.decimalSeparator")}>
-                <Select value={decimal} onChange={setDecimal} options={DECIMAL_OPTIONS} />
+                <Select
+                  value={prefs.numberDecimalSep}
+                  onChange={(v) => set("numberDecimalSep", v)}
+                  options={DECIMAL_OPTIONS}
+                />
               </FieldCol>
               <FieldCol label={t("settings.symbolPosition")}>
                 <Select
-                  value={symbolPosition}
-                  onChange={(v) => setSymbolPosition(v as SymbolPosition)}
+                  value={prefs.currencyPosition}
+                  onChange={(v) =>
+                    set("currencyPosition", v as UserPrefs["currencyPosition"])
+                  }
                   options={[
                     { value: "before", label: t("settings.symbolBefore") },
                     { value: "after", label: t("settings.symbolAfter") },
@@ -130,9 +149,11 @@ export function SettingsGeneral() {
             <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
               <span className="text-xs text-fg-faint">{t("settings.preview")}</span>
               <span className="flex gap-5 font-mono text-[15px]">
-                <span className="text-fg">{formatNumber(1234567.89, numberOpts)}</span>
+                <span className="text-fg">
+                  {formatMoney("1234567.89", previewMoneyOpts)}
+                </span>
                 <span className="text-green">
-                  {formatNumber(1234.5, { ...numberOpts, signed: true })}
+                  {formatMoney("1234.5", { ...previewMoneyOpts, signed: true })}
                 </span>
               </span>
             </div>
@@ -182,31 +203,4 @@ function FieldCol({
       {children}
     </div>
   );
-}
-
-function formatDate(date: Date, pattern: string): string {
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = String(date.getFullYear());
-  return pattern.replace("DD", dd).replace("MM", mm).replace("YYYY", yyyy);
-}
-
-function formatNumber(
-  value: number,
-  opts: {
-    thousands: string;
-    decimal: string;
-    symbol: string;
-    symbolPosition: SymbolPosition;
-    signed?: boolean;
-  },
-): string {
-  const { thousands, decimal, symbol, symbolPosition, signed } = opts;
-  const sign = value < 0 ? "-" : signed && value > 0 ? "+" : "";
-  const [intPart, fracPart] = Math.abs(value).toFixed(2).split(".");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousands);
-  const body = `${grouped}${decimal}${fracPart}`;
-  const withSymbol =
-    symbolPosition === "before" ? `${symbol}${body}` : `${body} ${symbol}`;
-  return `${sign}${withSymbol}`;
 }
