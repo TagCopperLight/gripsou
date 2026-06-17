@@ -108,6 +108,10 @@
   },
   "auth": {
     "signIn": "Sign in",
+    "welcomeBack": "Welcome back",
+    "signInToContinue": "Sign in to continue.",
+    "inviteOnly1": "New here? gripsou accounts are created by invitation.",
+    "inviteOnly2": "Open your invite link to set up your account.",
     "email": "Email",
     "password": "Password",
     "invalidCredentials": "Invalid email or password",
