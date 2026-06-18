@@ -5,8 +5,11 @@
       "original_name": "Compte Courant",
       "name": "Compte Courant",
       "balance": 1234.56,
-      "currency": { "id": "EUR", "name": "Euro" },
-      "type": { "name": "checking", "is_invest": false },
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "checking",
       "iban": "FR7612345678901234567890123",
       "number": "12345678901",
       "id_connection": 42,
@@ -16,27 +19,36 @@
       "id": 1002,
       "original_name": "Livret A",
       "name": "Livret A",
-      "balance": 5000.00,
-      "currency": { "id": "EUR", "name": "Euro" },
-      "type": { "name": "livret_a", "is_invest": false },
+      "balance": 5000.0,
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "livret_a",
       "deleted": null
     },
     {
       "id": 1003,
       "original_name": "Assurance Vie",
       "name": "Assurance Vie",
-      "balance": 20000.00,
-      "currency": { "id": "EUR", "name": "Euro" },
-      "type": { "name": "per", "is_invest": true },
+      "balance": 20000.0,
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "per",
       "deleted": null
     },
     {
       "id": 1004,
       "original_name": null,
       "name": null,
-      "balance": 10.00,
-      "currency": { "id": "EUR", "name": "Euro" },
-      "type": { "name": "checking", "is_invest": false },
+      "balance": 10.0,
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "checking",
       "deleted": null
     }
   ],

@@ -28,13 +28,9 @@ export function ConnectionCallback() {
     if (!connectionId || called.current) return;
     called.current = true;
 
-    complete.mutate(
-      { connectionId, params: rest },
-      {
-        onSuccess: () => navigate({ to: "/settings/connections" }),
-        onError: () => setFailed(true),
-      },
-    );
+    complete.mutateAsync({ connectionId, params: rest })
+      .then(() => navigate({ to: "/settings/connections" }))
+      .catch(() => setFailed(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (failed || complete.isError) {
