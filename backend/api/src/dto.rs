@@ -574,6 +574,31 @@ pub struct DeleteAccountReq {
     pub email: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Provider {
+    pub key: String,
+    pub display_name: String,
+    pub description: Option<String>,
+    pub enabled: bool,
+}
+
+impl Provider {
+    pub fn from_row(r: gripsou_core::repo::provider::ProviderRow) -> Self {
+        Provider {
+            key: r.key,
+            display_name: r.display_name,
+            description: r.description,
+            enabled: r.enabled,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetProviderReq {
+    pub enabled: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

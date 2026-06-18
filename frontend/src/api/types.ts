@@ -151,3 +151,10 @@ export function hasSyncing(groups: ProviderGroup[] | undefined): boolean {
 export function hasError(groups: ProviderGroup[] | undefined): boolean {
   return flattenConnections(groups).some((c) => c.status === "error");
 }
+
+export type Provider = {
+  key: string;
+  displayName: string;
+  description: string | null;
+  enabled: boolean;
+};

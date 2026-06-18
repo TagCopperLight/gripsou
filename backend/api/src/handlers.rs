@@ -45,6 +45,22 @@ fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
 }
 
+/// Resolve the caller and require the admin role. Server config and provider
+/// management are admin-only (see ARCHITECTURE: app_settings is admin-tunable).
+async fn require_admin(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<(), (StatusCode, String)> {
+    let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    if profile.role != "admin" {
+        return Err((StatusCode::FORBIDDEN, "admin access required".to_string()));
+    }
+    Ok(())
+}
+
 /// Client IP, reverse-proxy aware: first X-Forwarded-For hop, then X-Real-IP,
 /// then the direct peer address.
 fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
@@ -254,6 +270,40 @@ pub async fn update_account(
     .map_err(internal)?
     .ok_or((StatusCode::NOT_FOUND, "account not found".to_string()))?;
     Ok(Json(dto::UpdatedAccount::from_row(updated)))
+}
+
+pub async fn providers(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<Vec<dto::Provider>>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let rows = gripsou_core::repo::provider::account_providers(&pool)
+        .await
+        .map_err(internal)?;
+    Ok(Json(rows.into_iter().map(dto::Provider::from_row).collect()))
+}
+
+pub async fn set_provider(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(key): Path<String>,
+    Json(body): Json<dto::SetProviderReq>,
+) -> Result<Json<dto::Provider>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    // Reject unknown / non-account providers before mutating.
+    let row = gripsou_core::repo::provider::account_provider(&pool, &key)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "provider not found".to_string()))?;
+    gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled)
+        .await
+        .map_err(internal)?;
+    Ok(Json(dto::Provider {
+        key: row.key,
+        display_name: row.display_name,
+        description: row.description,
+        enabled: body.enabled,
+    }))
 }
 
 pub async fn users(
@@ -1180,5 +1230,107 @@ mod auth_tests {
         .await
         .unwrap_err();
         assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
+        // marketdata is kind='price' and must be excluded; powens is enabled via seed.
+        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        let principal = auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() };
+
+        let list = providers(State(pool.clone()), principal).await.expect("ok").0;
+
+        assert_eq!(list.len(), 1, "only account-kind providers are listed");
+        assert_eq!(list[0].key, "powens");
+        assert_eq!(list[0].display_name, "Powens");
+        assert!(list[0].enabled, "powens is in the seeded enabled_providers");
+        assert!(list[0].description.is_some());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn providers_requires_admin(pool: PgPool) {
+        let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
+        let err = providers(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
+        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        let principal = || auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() };
+
+        // Disable powens (seeded enabled).
+        let off = set_provider(
+            State(pool.clone()),
+            principal(),
+            Path("powens".to_string()),
+            Json(dto::SetProviderReq { enabled: false }),
+        )
+        .await
+        .expect("disable ok")
+        .0;
+        assert!(!off.enabled);
+
+        // Idempotent: disabling again still reports disabled and does not error.
+        let _ = set_provider(
+            State(pool.clone()),
+            principal(),
+            Path("powens".to_string()),
+            Json(dto::SetProviderReq { enabled: false }),
+        )
+        .await
+        .expect("second disable ok");
+
+        // Re-enable.
+        let on = set_provider(
+            State(pool.clone()),
+            principal(),
+            Path("powens".to_string()),
+            Json(dto::SetProviderReq { enabled: true }),
+        )
+        .await
+        .expect("enable ok")
+        .0;
+        assert!(on.enabled);
+
+        // Persisted: a fresh list reflects the enabled flag.
+        let list = providers(State(pool.clone()), principal()).await.unwrap().0;
+        assert!(list.iter().find(|p| p.key == "powens").unwrap().enabled);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_provider_unknown_key_is_404(pool: PgPool) {
+        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        // 'marketdata' is a price provider, not an account provider → treated as not found.
+        for key in ["nope", "marketdata"] {
+            let err = set_provider(
+                State(pool.clone()),
+                auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() },
+                Path(key.to_string()),
+                Json(dto::SetProviderReq { enabled: true }),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(err.0, StatusCode::NOT_FOUND, "key {key}");
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_provider_requires_admin(pool: PgPool) {
+        let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
+        let err = set_provider(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            Path("powens".to_string()),
+            Json(dto::SetProviderReq { enabled: false }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

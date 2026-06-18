@@ -201,6 +201,12 @@
     "deleteAccountConfirmLabel": "Saisissez {{email}} pour confirmer",
     "deleteAccountConfirm": "Supprimer mon compte",
     "deleteAccountPending": "Suppression…",
-    "deleteAccountError": "Échec de la suppression de votre compte"
+    "deleteAccountError": "Échec de la suppression de votre compte",
+    "serverProviders": "Fournisseurs de données",
+    "serverProvidersHint": "Agrégateurs utilisés pour récupérer les données bancaires et de courtage. Activez ceux pour lesquels vous disposez d'identifiants API.",
+    "serverCors": "Origines CORS",
+    "serverCorsHint": "Origines de navigateur autorisées à appeler l'API gripsou. Ajoutez l'adresse que vous utilisez pour accéder à ce tableau de bord.",
+    "serverCorsPlaceholder": "https://gripsou.example.com",
+    "add": "Ajouter"
   }
 }
