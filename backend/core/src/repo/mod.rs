@@ -8,6 +8,7 @@ pub mod holding;
 pub mod instrument;
 pub mod price;
 pub mod prefs;
+pub mod provider;
 pub mod query;
 pub mod session;
 pub mod snapshot;

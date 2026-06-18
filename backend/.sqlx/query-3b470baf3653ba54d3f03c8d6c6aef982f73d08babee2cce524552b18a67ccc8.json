@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update app_settings\n            set enabled_providers = case\n                when $1 = any(enabled_providers) then enabled_providers\n                else array_append(enabled_providers, $1)\n            end\n            where id = 1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b470baf3653ba54d3f03c8d6c6aef982f73d08babee2cce524552b18a67ccc8"
+}

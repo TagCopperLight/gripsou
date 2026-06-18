@@ -201,6 +201,12 @@
     "deleteAccountConfirmLabel": "Type {{email}} to confirm",
     "deleteAccountConfirm": "Delete my account",
     "deleteAccountPending": "Deleting…",
-    "deleteAccountError": "Couldn't delete your account"
+    "deleteAccountError": "Couldn't delete your account",
+    "serverProviders": "Data providers",
+    "serverProvidersHint": "Aggregators used to fetch banking and brokerage data. Enable the ones you hold API credentials for.",
+    "serverCors": "CORS origins",
+    "serverCorsHint": "Browser origins allowed to call the gripsou API. Add the address you use to reach this dashboard.",
+    "serverCorsPlaceholder": "https://gripsou.example.com",
+    "add": "Add"
   }
 }

@@ -13,6 +13,7 @@ import type {
   Holding,
   NetWorthResponse,
   PricePoint,
+  Provider,
   ProviderGroup,
   Purchase,
   Session,
@@ -200,5 +201,33 @@ export function useSyncAll() {
   return useMutation({
     mutationFn: () => postJson<void>("/sync", {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+  });
+}
+
+export function useProviders() {
+  return useQuery({
+    queryKey: ["providers"],
+    queryFn: () => getJson<Provider[]>("/providers"),
+  });
+}
+
+export function useSetProviderEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) =>
+      patchJson<Provider>(`/providers/${key}`, { enabled }),
+    // Optimistically flip the toggle; roll back on error.
+    onMutate: async ({ key, enabled }) => {
+      await qc.cancelQueries({ queryKey: ["providers"] });
+      const prev = qc.getQueryData<Provider[]>(["providers"]);
+      qc.setQueryData<Provider[]>(["providers"], (old) =>
+        old?.map((p) => (p.key === key ? { ...p, enabled } : p)),
+      );
+      return { prev };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["providers"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["providers"] }),
   });
 }

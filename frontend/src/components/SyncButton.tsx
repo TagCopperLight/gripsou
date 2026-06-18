@@ -50,7 +50,7 @@ export function SyncButton() {
         {error && (
           <span
             data-testid="sync-error-dot"
-            className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-red ring-2 ring-bg"
+            className="absolute -top-px -right-px size-2 rounded-full bg-red ring-2 ring-bg"
           />
         )}
       </button>
