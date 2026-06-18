@@ -16,7 +16,7 @@ const SYNC_DEPENDENT_KEYS = [
   ["holdings"],
 ];
 
-// Global sync control: fixed top-right on every page. The icon spins while any
+// Global sync control: positioned top-right on every page. The icon spins while any
 // connection is syncing; a red dot appears when any connection is in error.
 export function SyncButton() {
   const { t } = useTranslation();
@@ -44,7 +44,7 @@ export function SyncButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t("sync.openLabel")}
-        className="fixed top-4 right-4 z-40 grid size-10 place-items-center rounded-xl bg-surface text-fg hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
+        className="absolute top-4 right-4 z-40 grid size-10 place-items-center rounded-xl bg-surface text-fg hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
       >
         <RefreshCw className={`size-5 ${syncing ? "animate-spin" : ""}`} />
         {error && (
