@@ -308,6 +308,26 @@ async fn main() -> anyhow::Result<()> {
     sqlx::query("insert into connection (id, user_id, provider_key, display_name, last_sync_at) values ($1,$2,'seed','Seed data', now() - interval '3 hours')")
         .bind(conn_id).bind(user_id).execute(&pool).await?;
 
+    // Extra connections to exercise the sync modal (scroll + error indicator).
+    // These have no accounts; the 'seed' provider has no adapter, so a real
+    // sync attempt reports "no adapter" — which is fine for a dev demo.
+    for (name, status, err) in [
+        ("Brokerage XYZ", "error", Some("provider not implemented")),
+        ("Crypto wallet", "ok", None::<&str>),
+        ("Savings bank", "ok", None::<&str>),
+    ] {
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name, status, last_error, last_sync_at) \
+             values (gen_random_uuid(), $1, 'seed', $2, $3, $4, now() - interval '1 day')",
+        )
+        .bind(user_id)
+        .bind(name)
+        .bind(status)
+        .bind(err)
+        .execute(&pool)
+        .await?;
+    }
+
     let base = Utc::now();
 
     let mut conn = pool.acquire().await?;

@@ -9,3 +9,4 @@ gripsou-core = { path = "../core" }
 gripsou-providers = { path = "../providers" }
 tokio.workspace = true
 tracing.workspace = true
+uuid.workspace = true

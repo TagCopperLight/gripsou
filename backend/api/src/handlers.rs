@@ -159,6 +159,72 @@ pub async fn account_series(
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
+pub async fn connections(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<Vec<dto::ProviderGroup>>, (StatusCode, String)> {
+    let conns = gripsou_core::repo::connection::list_connections(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(dto::ProviderGroup::tree(conns, accounts)))
+}
+
+pub async fn sync_connection(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
+    use gripsou_core::repo::connection::BeginSync;
+    match gripsou_core::repo::connection::begin_sync(&pool, user_id, id)
+        .await
+        .map_err(internal)?
+    {
+        BeginSync::Started(state) => {
+            // Fire-and-forget: the frontend polls connection status for progress.
+            tokio::spawn(gripsou_jobs::sync_connection(pool.clone(), id));
+            Ok((
+                StatusCode::ACCEPTED,
+                Json(dto::ConnectionState::from_row(state)),
+            ))
+        }
+        BeginSync::AlreadySyncing => Err((
+            StatusCode::CONFLICT,
+            "connection is already syncing".to_string(),
+        )),
+        BeginSync::NotFound => {
+            Err((StatusCode::NOT_FOUND, "connection not found".to_string()))
+        }
+    }
+}
+
+pub async fn sync_all(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+    use gripsou_core::repo::connection::BeginSync;
+    let ids = gripsou_core::repo::connection::ids_for_user(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let mut started = 0u32;
+    for id in ids {
+        if let BeginSync::Started(_) =
+            gripsou_core::repo::connection::begin_sync(&pool, user_id, id)
+                .await
+                .map_err(internal)?
+        {
+            tokio::spawn(gripsou_jobs::sync_connection(pool.clone(), id));
+            started += 1;
+        }
+    }
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "started": started })),
+    ))
+}
+
 pub async fn account_types(
     State(pool): State<PgPool>,
 ) -> Result<Json<Vec<dto::AccountType>>, (StatusCode, String)> {
@@ -987,6 +1053,105 @@ mod auth_tests {
         .await
         .unwrap();
         assert_eq!(me_resp.0.prefs.currency_position, "before");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn sync_connection_guards_and_orchestrator_errors(pool: PgPool) {
+        let user = seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        // `powens` provider is seeded by migration 0002 (the FK requires it).
+        let conn = Uuid::new_v4();
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name) \
+             values ($1,$2,'powens','c')",
+        )
+        .bind(conn)
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let principal =
+            || auth::AuthUser { user_id: user, session_id: Uuid::new_v4() };
+
+        // Unknown connection → 404.
+        let nf = sync_connection(State(pool.clone()), principal(), Path(Uuid::new_v4()))
+            .await
+            .unwrap_err();
+        assert_eq!(nf.0, StatusCode::NOT_FOUND);
+
+        // Force 'syncing', then a trigger → 409.
+        sqlx::query("update connection set status='syncing' where id=$1")
+            .bind(conn)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let busy = sync_connection(State(pool.clone()), principal(), Path(conn))
+            .await
+            .unwrap_err();
+        assert_eq!(busy.0, StatusCode::CONFLICT);
+
+        // Reset, then run the orchestrator directly (deterministic — no spawn):
+        // the stub adapter returns NotImplemented, so status becomes 'error'.
+        sqlx::query("update connection set status='ok' where id=$1")
+            .bind(conn)
+            .execute(&pool)
+            .await
+            .unwrap();
+        gripsou_jobs::sync_connection(pool.clone(), conn).await;
+        let (status, err): (String, Option<String>) =
+            sqlx::query_as("select status, last_error from connection where id=$1")
+                .bind(conn)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(status, "error");
+        assert_eq!(err.as_deref(), Some("provider not implemented"));
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn connections_returns_provider_tree(pool: PgPool) {
+        let user = seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        sqlx::query(
+            "insert into provider (key, display_name, kind, enabled) \
+             values ('powens','Powens','account',true) on conflict (key) do nothing",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let conn = Uuid::new_v4();
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name) \
+             values ($1,$2,'powens','My bank')",
+        )
+        .bind(conn)
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into account (connection_id, name, currency, type_key) \
+             values ($1,'Checking','EUR','checking')",
+        )
+        .bind(conn)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let groups = connections(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+        )
+        .await
+        .expect("connections ok")
+        .0;
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].provider_name, "Powens");
+        assert_eq!(groups[0].connections.len(), 1);
+        assert_eq!(groups[0].connections[0].display_name, "My bank");
+        // Account with no snapshots still appears, valued "0".
+        assert_eq!(groups[0].connections[0].accounts.len(), 1);
+        assert_eq!(groups[0].connections[0].accounts[0].value, "0");
     }
 
     #[sqlx::test(migrations = "../migrations")]

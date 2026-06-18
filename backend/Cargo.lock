@@ -696,6 +696,7 @@ dependencies = [
  "gripsou-providers",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -13,11 +13,13 @@ import type {
   Holding,
   NetWorthResponse,
   PricePoint,
+  ProviderGroup,
   Purchase,
   Session,
   SessionUser,
   User,
 } from "./types";
+import { hasSyncing } from "./types";
 
 export function useNetWorth(range: string) {
   return useQuery({
@@ -171,5 +173,32 @@ export function useRevokeOtherSessions() {
   return useMutation({
     mutationFn: () => deleteJson<void>("/auth/sessions"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
+
+export function useConnections() {
+  return useQuery({
+    queryKey: ["connections"],
+    queryFn: () => getJson<ProviderGroup[]>("/connections"),
+    // Poll while any connection is syncing; stop when none are.
+    refetchInterval: (query) =>
+      hasSyncing(query.state.data as ProviderGroup[] | undefined) ? 2000 : false,
+  });
+}
+
+export function useSyncConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => postJson<void>(`/connections/${id}/sync`, {}),
+    // Refresh so the connection's new 'syncing' state (and polling) kick in.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+  });
+}
+
+export function useSyncAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => postJson<void>("/sync", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
   });
 }

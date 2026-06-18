@@ -1,0 +1,199 @@
+//! Read + sync-state helpers for connections — the sync modal's data source.
+
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use uuid::Uuid;
+
+use crate::error::CoreError;
+
+pub struct ConnectionListRow {
+    pub id: Uuid,
+    pub provider_key: String,
+    pub provider_name: String,
+    pub display_name: String,
+    pub status: String,
+    pub last_sync_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+}
+
+/// All of a user's connections joined to their provider, ordered so that
+/// connections of the same provider are adjacent (the API groups on that).
+pub async fn list_connections(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Vec<ConnectionListRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        ConnectionListRow,
+        r#"
+        select c.id           as "id!",
+               c.provider_key  as "provider_key!",
+               p.display_name  as "provider_name!",
+               c.display_name  as "display_name!",
+               c.status        as "status!",
+               c.last_sync_at,
+               c.last_error
+        from connection c
+        join provider p on p.key = c.provider_key
+        where c.user_id = $1
+        order by p.display_name, c.display_name, c.id
+        "#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct ConnectionAccountRow {
+    pub connection_id: Uuid,
+    pub account_id: Uuid,
+    pub name: String,
+    pub type_label: String,
+    pub value: Decimal,
+    pub last_sync_at: Option<DateTime<Utc>>,
+}
+
+/// Every account under a user's connections, with its latest-snapshot value
+/// (0 when it has no snapshots yet) and the parent connection's last sync time.
+pub async fn list_connection_accounts(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Vec<ConnectionAccountRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        ConnectionAccountRow,
+        r#"
+        with latest as (
+            select distinct on (hs.holding_id) h.account_id, hs.value
+            from holding_snapshot hs
+            join holding h on h.id = hs.holding_id
+            order by hs.holding_id, hs.as_of desc
+        )
+        select a.connection_id        as "connection_id!",
+               a.id                    as "account_id!",
+               a.name                  as "name!",
+               t.label                 as "type_label!",
+               coalesce(sum(l.value), 0) as "value!",
+               c.last_sync_at
+        from account a
+        join connection c   on c.id = a.connection_id
+        join account_type t on t.key = a.type_key
+        left join latest l  on l.account_id = a.id
+        where c.user_id = $1 and a.connection_id is not null
+        group by a.connection_id, a.id, a.name, t.label, c.last_sync_at
+        order by a.name
+        "#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct ConnectionState {
+    pub id: Uuid,
+    pub status: String,
+    pub last_sync_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+}
+
+/// Outcome of attempting to claim a connection for syncing.
+pub enum BeginSync {
+    /// Claimed: status flipped to 'syncing'. Carries the new state.
+    Started(ConnectionState),
+    /// Owned by the user but already syncing — caller should 409.
+    AlreadySyncing,
+    /// Not owned by the user / does not exist — caller should 404.
+    NotFound,
+}
+
+/// Atomically claim a connection for syncing: flip status→'syncing' only if it
+/// is owned by `user_id` and not already syncing. This is the per-connection
+/// lock that prevents double runs.
+pub async fn begin_sync(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<BeginSync, CoreError> {
+    let claimed = sqlx::query_as!(
+        ConnectionState,
+        r#"
+        update connection
+           set status = 'syncing'
+         where id = $1 and user_id = $2 and status <> 'syncing'
+        returning id as "id!", status as "status!", last_sync_at, last_error
+        "#,
+        id,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(state) = claimed {
+        return Ok(BeginSync::Started(state));
+    }
+    // None means either "already syncing" or "not owned" — distinguish.
+    let exists = sqlx::query_scalar!(
+        r#"select exists(select 1 from connection where id = $1 and user_id = $2) as "exists!""#,
+        id,
+        user_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(if exists {
+        BeginSync::AlreadySyncing
+    } else {
+        BeginSync::NotFound
+    })
+}
+
+/// Mark a finished sync as successful.
+pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
+    sqlx::query!(
+        "update connection set status='ok', last_sync_at=now(), last_error=null where id=$1",
+        id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Mark a finished sync as failed, recording the message.
+pub async fn mark_synced_error(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    msg: &str,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        "update connection set status='error', last_error=$2 where id=$1",
+        id,
+        msg,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Provider key for a connection (for the orchestrator's adapter lookup).
+pub async fn provider_key(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+) -> Result<Option<String>, CoreError> {
+    let key = sqlx::query_scalar!("select provider_key from connection where id = $1", id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(key)
+}
+
+/// All connection ids for a user (for "sync all").
+pub async fn ids_for_user(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>, CoreError> {
+    let ids = sqlx::query_scalar!(
+        r#"select id as "id!" from connection where user_id = $1"#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(ids)
+}
