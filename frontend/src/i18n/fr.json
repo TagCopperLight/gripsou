@@ -16,6 +16,18 @@
     "value": "Valeur",
     "total": "Total"
   },
+  "sync": {
+    "title": "Synchronisation",
+    "openLabel": "Synchroniser les données",
+    "syncAll": "Tout synchroniser",
+    "syncing": "Synchronisation…",
+    "sync": "Synchroniser",
+    "retry": "Réessayer",
+    "lastSync": "Dernière synchro {{when}}",
+    "neverSynced": "Jamais synchronisé",
+    "error": "Échec de la synchronisation",
+    "empty": "Aucune connexion pour le moment."
+  },
   "holdingKind": {
     "cash": "Liquidités",
     "etf": "ETF",

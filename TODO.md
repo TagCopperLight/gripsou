@@ -8,3 +8,4 @@
 - [ ] Sync button
 - [ ] Powens integration
 - [ ] Yahoo integration
+- [x] Fix capital invested

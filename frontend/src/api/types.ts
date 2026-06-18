@@ -112,3 +112,42 @@ export type Session = {
   remembered: boolean;
   current: boolean;
 };
+
+export type SyncStatus = "ok" | "syncing" | "error";
+
+export type SyncAccount = {
+  id: string;
+  name: string;
+  typeLabel: string;
+  value: string;
+  lastSyncAt: number | null;
+};
+
+export type SyncConnection = {
+  id: string;
+  displayName: string;
+  status: SyncStatus;
+  lastSyncAt: number | null;
+  lastError: string | null;
+  accounts: SyncAccount[];
+};
+
+export type ProviderGroup = {
+  providerKey: string;
+  providerName: string;
+  connections: SyncConnection[];
+};
+
+export function flattenConnections(
+  groups: ProviderGroup[] | undefined,
+): SyncConnection[] {
+  return (groups ?? []).flatMap((g) => g.connections);
+}
+
+export function hasSyncing(groups: ProviderGroup[] | undefined): boolean {
+  return flattenConnections(groups).some((c) => c.status === "syncing");
+}
+
+export function hasError(groups: ProviderGroup[] | undefined): boolean {
+  return flattenConnections(groups).some((c) => c.status === "error");
+}

@@ -16,6 +16,18 @@
     "value": "Value",
     "total": "Total"
   },
+  "sync": {
+    "title": "Sync",
+    "openLabel": "Sync data",
+    "syncAll": "Sync all",
+    "syncing": "Syncing…",
+    "sync": "Sync",
+    "retry": "Retry",
+    "lastSync": "Last synced {{when}}",
+    "neverSynced": "Never synced",
+    "error": "Sync failed",
+    "empty": "No connections yet."
+  },
   "holdingKind": {
     "cash": "Cash",
     "etf": "ETF",

@@ -325,6 +325,97 @@ impl AccountType {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncAccount {
+    pub id: String,
+    pub name: String,
+    pub type_label: String,
+    pub value: String,
+    pub last_sync_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConnection {
+    pub id: String,
+    pub display_name: String,
+    pub status: String,
+    pub last_sync_at: Option<i64>,
+    pub last_error: Option<String>,
+    pub accounts: Vec<SyncAccount>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGroup {
+    pub provider_key: String,
+    pub provider_name: String,
+    pub connections: Vec<SyncConnection>,
+}
+
+impl ProviderGroup {
+    /// Assemble the provider → connection → account tree from the two flat
+    /// queries. Connection order follows `conns` (provider-grouped); accounts
+    /// attach to their connection by id.
+    pub fn tree(
+        conns: Vec<gripsou_core::repo::connection::ConnectionListRow>,
+        accounts: Vec<gripsou_core::repo::connection::ConnectionAccountRow>,
+    ) -> Vec<ProviderGroup> {
+        use std::collections::HashMap;
+        let mut by_conn: HashMap<uuid::Uuid, Vec<SyncAccount>> = HashMap::new();
+        for a in accounts {
+            by_conn.entry(a.connection_id).or_default().push(SyncAccount {
+                id: a.account_id.to_string(),
+                name: a.name,
+                type_label: a.type_label,
+                value: a.value.to_string(),
+                last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
+            });
+        }
+        let mut groups: Vec<ProviderGroup> = Vec::new();
+        for c in conns {
+            let conn = SyncConnection {
+                id: c.id.to_string(),
+                display_name: c.display_name,
+                status: c.status,
+                last_sync_at: c.last_sync_at.map(|d| d.timestamp_millis()),
+                last_error: c.last_error,
+                accounts: by_conn.remove(&c.id).unwrap_or_default(),
+            };
+            match groups.last_mut() {
+                Some(g) if g.provider_key == c.provider_key => g.connections.push(conn),
+                _ => groups.push(ProviderGroup {
+                    provider_key: c.provider_key,
+                    provider_name: c.provider_name,
+                    connections: vec![conn],
+                }),
+            }
+        }
+        groups
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionState {
+    pub id: String,
+    pub status: String,
+    pub last_sync_at: Option<i64>,
+    pub last_error: Option<String>,
+}
+
+impl ConnectionState {
+    pub fn from_row(r: gripsou_core::repo::connection::ConnectionState) -> Self {
+        ConnectionState {
+            id: r.id.to_string(),
+            status: r.status,
+            last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
+            last_error: r.last_error,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAccountReq {

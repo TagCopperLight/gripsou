@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with latest as (\n            select distinct on (hs.holding_id) h.account_id, hs.value\n            from holding_snapshot hs\n            join holding h on h.id = hs.holding_id\n            order by hs.holding_id, hs.as_of desc\n        )\n        select a.connection_id        as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               t.label                 as \"type_label!\",\n               coalesce(sum(l.value), 0) as \"value!\",\n               c.last_sync_at\n        from account a\n        join connection c   on c.id = a.connection_id\n        join account_type t on t.key = a.type_key\n        left join latest l  on l.account_id = a.id\n        where c.user_id = $1 and a.connection_id is not null\n        group by a.connection_id, a.id, a.name, t.label, c.last_sync_at\n        order by a.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connection_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "connection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "type_label!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_type",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_sync_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "last_sync_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "efaac82aef1b2b882c9b89769543d59cefaa5e5703c31556331795b00ee07953"
+}

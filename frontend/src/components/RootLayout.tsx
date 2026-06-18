@@ -1,5 +1,6 @@
 import { Outlet } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
+import { SyncButton } from "./SyncButton";
 
 export function RootLayout() {
   return (
@@ -8,6 +9,7 @@ export function RootLayout() {
       <main className="flex-1 overflow-auto pr-4 pt-4">
         <Outlet />
       </main>
+      <SyncButton />
     </div>
   );
 }

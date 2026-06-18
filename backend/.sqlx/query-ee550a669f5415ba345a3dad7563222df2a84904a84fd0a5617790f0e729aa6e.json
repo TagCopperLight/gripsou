@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select provider_key from connection where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ee550a669f5415ba345a3dad7563222df2a84904a84fd0a5617790f0e729aa6e"
+}
