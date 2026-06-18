@@ -70,11 +70,7 @@ fn parses_bank_account_decimals_exactly() {
     let acct = account(&fx, 1001);
     assert_eq!(acct.balance, Some(dec("1234.56")));
     assert_eq!(acct.currency.as_ref().unwrap().id, "EUR");
-    assert_eq!(
-        acct.r#type.as_ref().unwrap().name.as_deref(),
-        Some("checking")
-    );
-    assert!(!acct.r#type.as_ref().unwrap().is_invest);
+    assert_eq!(acct.r#type.as_deref(), Some("checking"));
 }
 
 #[test]

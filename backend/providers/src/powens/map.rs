@@ -20,16 +20,21 @@ pub fn map_type_key(name: &str) -> &'static str {
     }
 }
 
+pub fn is_invest_type(name: &str) -> bool {
+    !matches!(
+        name,
+        "checking" | "deposit" | "joint" | "card" | "deferred_card" | "loan" | "mortgage" | "consumercredit"
+        | "savings" | "livret_a" | "livret_b" | "ldds" | "cel" | "csl" | "cat" | "pel"
+    )
+}
+
 /// Map a Powens bank account onto a canonical account. The provider-supplied
 /// `original_name` seeds the display name (gripsou later preserves user edits);
 /// `meta` stashes provider specifics for debugging and the escape hatch.
 pub fn map_account(acct: &BankAccount) -> CanonicalAccount {
-    let type_name = acct
-        .r#type
-        .as_ref()
-        .and_then(|t| t.name.as_deref())
-        .unwrap_or("unknown");
-    let is_invest = acct.r#type.as_ref().is_some_and(|t| t.is_invest);
+    let type_name = acct.r#type.as_deref().unwrap_or("unknown");
+    let is_invest = is_invest_type(type_name);
+    
     let currency = acct
         .currency
         .as_ref()
@@ -110,7 +115,8 @@ pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<Canoni
 /// nonsensical.
 fn cash_holding(acct: &BankAccount, invested: Decimal) -> Option<CanonicalHolding> {
     let balance = acct.balance.unwrap_or(Decimal::ZERO);
-    let is_invest = acct.r#type.as_ref().is_some_and(|t| t.is_invest);
+    let type_name = acct.r#type.as_deref().unwrap_or("unknown");
+    let is_invest = is_invest_type(type_name);
 
     let quantity = if is_invest {
         let residual = balance - invested;

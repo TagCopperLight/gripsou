@@ -141,10 +141,14 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let accounts: AccountsResponse = accounts_resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        let accounts_text = accounts_resp.text().await.map_err(|e| ProviderError::Other(e.to_string()))?;
+        let accounts: AccountsResponse = match serde_json::from_str(&accounts_text) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("Accounts decode error: {}\nRaw JSON: {}", e, accounts_text);
+                return Err(ProviderError::Other(format!("accounts decode error: {}", e)));
+            }
+        };
 
         let investments_resp = self
             .http
@@ -161,10 +165,14 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let investments: InvestmentsResponse = investments_resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        let investments_text = investments_resp.text().await.map_err(|e| ProviderError::Other(e.to_string()))?;
+        let investments: InvestmentsResponse = match serde_json::from_str(&investments_text) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("Investments decode error: {}\nRaw JSON: {}", e, investments_text);
+                return Err(ProviderError::Other(format!("investments decode error: {}", e)));
+            }
+        };
 
         Ok(map::map_sync(&accounts.accounts, &investments.investments))
     }

@@ -15,15 +15,6 @@ pub struct Currency {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct AccountType {
-    /// Powens `AccountTypeName`, e.g. "checking", "pea".
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub is_invest: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
 pub struct BankAccount {
     pub id: i64,
     #[serde(default)]
@@ -35,7 +26,7 @@ pub struct BankAccount {
     #[serde(default)]
     pub currency: Option<Currency>,
     #[serde(rename = "type", default)]
-    pub r#type: Option<AccountType>,
+    pub r#type: Option<String>,
     /// DateTime string or null; presence means the account is gone.
     #[serde(default)]
     pub deleted: Option<String>,

@@ -617,7 +617,7 @@ pub async fn complete_connection(
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid connection_id".to_string()))?;
 
     match gripsou_jobs::complete_connection(pool, user_id, connection_id, &body.params).await {
-        Ok(()) => Ok(StatusCode::OK),
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("not found") {
