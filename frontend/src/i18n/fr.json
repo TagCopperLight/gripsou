@@ -207,6 +207,27 @@
     "serverCors": "Origines CORS",
     "serverCorsHint": "Origines de navigateur autorisées à appeler l'API gripsou. Ajoutez l'adresse que vous utilisez pour accéder à ce tableau de bord.",
     "serverCorsPlaceholder": "https://gripsou.example.com",
-    "add": "Ajouter"
+    "add": "Ajouter",
+    "connections": "Connexions",
+    "addConnection": "Ajouter une connexion",
+    "noConnections": "Aucune connexion pour le moment.",
+    "deleteConnection": "Supprimer la connexion",
+    "deleteConnectionTitle": "Supprimer la connexion ?",
+    "deleteConnectionBody": "Cela supprime définitivement la connexion ainsi que tous les comptes, positions, transactions et instantanés synchronisés. Cette action est irréversible.",
+    "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
+    "connectionStatus": {
+      "ok": "Synchronisé",
+      "syncing": "Synchronisation…",
+      "error": "Échec de la synchronisation",
+      "pending": "Connexion en cours…"
+    },
+    "pickProvider": "Choisir un fournisseur",
+    "connect": "Connecter",
+    "connectError": "Impossible de démarrer la connexion. Veuillez réessayer."
+  },
+  "connections": {
+    "callbackError": "Une erreur s'est produite lors de la connexion de votre compte.",
+    "callbackErrorBody": "Le fournisseur a retourné une erreur. Vous pouvez réessayer depuis la page Connexions.",
+    "backToConnections": "Retour aux connexions"
   }
 }

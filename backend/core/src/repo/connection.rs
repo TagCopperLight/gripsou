@@ -197,3 +197,68 @@ pub async fn ids_for_user(
     .await?;
     Ok(ids)
 }
+
+/// Insert a new connection in 'pending' state (OAuth round-trip not yet done).
+/// Returns the new connection id.
+pub async fn insert_pending(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    provider_key: &str,
+    display_name: &str,
+) -> Result<Uuid, CoreError> {
+    let id = sqlx::query_scalar!(
+        r#"
+        insert into connection (user_id, provider_key, display_name, status)
+        values ($1, $2, $3, 'pending')
+        returning id as "id!"
+        "#,
+        user_id,
+        provider_key,
+        display_name,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(id)
+}
+
+/// Store credentials and flip a pending connection to 'ok'.
+/// Returns true if the connection was found and owned by `user_id`.
+pub async fn finish_connect(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    user_id: Uuid,
+    credentials: serde_json::Value,
+) -> Result<bool, CoreError> {
+    let n = sqlx::query!(
+        r#"
+        update connection
+           set credentials = $3, status = 'ok'
+         where id = $1 and user_id = $2
+        "#,
+        id,
+        user_id,
+        credentials,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(n > 0)
+}
+
+/// Delete a connection and all its cascade-deleted data.
+/// Returns true if a row was deleted, false if not found or not owned by `user_id`.
+pub async fn delete_connection(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<bool, CoreError> {
+    let n = sqlx::query!(
+        "delete from connection where id = $1 and user_id = $2",
+        id,
+        user_id,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(n > 0)
+}

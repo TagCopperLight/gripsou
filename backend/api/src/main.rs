@@ -60,6 +60,10 @@ async fn main() -> anyhow::Result<()> {
             "/providers/{key}",
             patch(handlers::set_provider),
         )
+        .route("/providers/enabled", get(handlers::enabled_providers))
+        .route("/connections/init", post(handlers::init_connection))
+        .route("/connections/complete", post(handlers::complete_connection))
+        .route("/connections/{id}", delete(handlers::delete_connection))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

@@ -13,8 +13,10 @@ import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
 import { SettingsAccount } from "./pages/settings/Account";
+import { SettingsConnections } from "./pages/settings/Connections";
 import { SettingsUsers } from "./pages/settings/Users";
 import { SettingsServer } from "./pages/settings/Server";
+import { ConnectionCallback } from "./pages/ConnectionCallback";
 import type { AuthValue } from "./auth/context";
 
 type RouterContext = { auth: AuthValue };
@@ -94,6 +96,12 @@ const settingsAccountRoute = createRoute({
   component: SettingsAccount,
 });
 
+const settingsConnectionsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "connections",
+  component: SettingsConnections,
+});
+
 const settingsUsersRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "users",
@@ -106,10 +114,17 @@ const settingsServerRoute = createRoute({
   component: SettingsServer,
 });
 
+const connectionsCallbackRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/connections/callback",
+  component: ConnectionCallback,
+});
+
 const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsIndexRoute,
   settingsGeneralRoute,
   settingsAccountRoute,
+  settingsConnectionsRoute,
   settingsUsersRoute,
   settingsServerRoute,
 ]);
@@ -121,6 +136,7 @@ export const routeTree = rootRoute.addChildren([
     accountsRoute,
     transactionsRoute,
     settingsRouteWithChildren,
+    connectionsCallbackRoute,
   ]),
 ]);
 

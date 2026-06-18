@@ -91,3 +91,33 @@ pub async fn set_enabled(
     }
     Ok(())
 }
+
+pub struct EnabledProviderRow {
+    pub key: String,
+    pub display_name: String,
+    pub description: Option<String>,
+}
+
+/// Account providers currently active in `app_settings.enabled_providers`.
+/// Used by the connection-creation UI; returns no admin toggle flag.
+pub async fn enabled_account_providers(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<EnabledProviderRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        EnabledProviderRow,
+        r#"
+        select p.key          as "key!",
+               p.display_name as "display_name!",
+               p.description
+        from provider p
+        cross join app_settings s
+        where s.id = 1
+          and p.kind = 'account'
+          and p.key = any(s.enabled_providers)
+        order by p.display_name
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}

@@ -10,6 +10,7 @@ import type {
   AccountSeries,
   AccountType,
   DistributionAccount,
+  EnabledProvider,
   Holding,
   NetWorthResponse,
   PricePoint,
@@ -229,5 +230,44 @@ export function useSetProviderEnabled() {
       if (ctx?.prev) qc.setQueryData(["providers"], ctx.prev);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["providers"] }),
+  });
+}
+
+export function useEnabledProviders() {
+  return useQuery({
+    queryKey: ["providers-enabled"],
+    queryFn: () => getJson<EnabledProvider[]>("/providers/enabled"),
+  });
+}
+
+export function useInitConnection() {
+  return useMutation({
+    mutationFn: (providerKey: string) =>
+      postJson<{ connectionId: string; redirectUrl: string | null }>(
+        "/connections/init",
+        { providerKey },
+      ),
+  });
+}
+
+export function useCompleteConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      connectionId,
+      params,
+    }: {
+      connectionId: string;
+      params: Record<string, string>;
+    }) => postJson<void>("/connections/complete", { connectionId, params }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+  });
+}
+
+export function useDeleteConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteJson<void>(`/connections/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
   });
 }
