@@ -1243,7 +1243,7 @@ mod auth_tests {
                 .await
                 .unwrap();
         assert_eq!(status, "error");
-        assert_eq!(err.as_deref(), Some("provider not implemented"));
+        assert!(err.is_some(), "expected a last_error message");
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1456,17 +1456,18 @@ mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn init_connection_stub_returns_500(pool: PgPool) {
-        // powens is enabled but its connect() stub returns NotImplemented → 500.
+    async fn init_connection_returns_redirect_url(pool: PgPool) {
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
-        let err = init_connection(
+        let resp = init_connection(
             State(pool.clone()),
             auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
             Json(dto::InitConnectionReq { provider_key: "powens".to_string() }),
         )
         .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+        .unwrap();
+
+        assert_eq!(resp.0, StatusCode::CREATED);
+        assert!(resp.1.redirect_url.as_ref().unwrap().starts_with("https://webview.powens.com/en/connect"));
     }
 
     #[sqlx::test(migrations = "../migrations")]

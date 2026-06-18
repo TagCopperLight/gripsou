@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 gripsou-core = { path = "../core" }
 gripsou-providers = { path = "../providers" }
+serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
