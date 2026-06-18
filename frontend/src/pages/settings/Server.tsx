@@ -88,7 +88,7 @@ export function SettingsServer() {
                 <Toggle
                   aria-label={p.displayName}
                   checked={p.enabled}
-                  disabled={setEnabled.isPending}
+                  disabled={setEnabled.isPending && setEnabled.variables?.key === p.key}
                   onChange={(enabled) => setEnabled.mutate({ key: p.key, enabled })}
                 />
               </div>
