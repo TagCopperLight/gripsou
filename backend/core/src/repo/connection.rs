@@ -184,6 +184,21 @@ pub async fn provider_key(
     Ok(key)
 }
 
+/// Fetch the encrypted credentials blob for a connection.
+/// Returns `None` if the connection does not exist or has no credentials yet.
+pub async fn get_credentials(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+) -> Result<Option<serde_json::Value>, CoreError> {
+    let row = sqlx::query!(
+        "select credentials from connection where id = $1",
+        id
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| Some(r.credentials)))
+}
+
 /// All connection ids for a user (for "sync all").
 pub async fn ids_for_user(
     pool: &sqlx::PgPool,

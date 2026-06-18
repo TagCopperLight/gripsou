@@ -10,3 +10,9 @@ async-trait.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["arbitrary_precision"] }
 rust_decimal = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+wiremock = "0.6"

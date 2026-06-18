@@ -4,14 +4,8 @@ import { router } from "./router";
 import { useAuth } from "./auth/context";
 import { setUnauthorizedHandler } from "./api/client";
 
-export function App() {
+function InnerApp() {
   const auth = useAuth();
-  useEffect(() => {
-    setUnauthorizedHandler(() => {
-      auth.logout();
-      router.navigate({ to: "/login" });
-    });
-  }, [auth]);
 
   // Route guards (beforeLoad) read auth from the router context, which only
   // refreshes on render — they don't re-run by themselves. When auth flips
@@ -21,8 +15,21 @@ export function App() {
     void router.invalidate();
   }, [auth.isAuthenticated]);
 
+  return <RouterProvider router={router} context={{ auth }} />;
+}
+
+export function App() {
+  const auth = useAuth();
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      auth.logout();
+      router.navigate({ to: "/login" });
+    });
+  }, [auth]);
+
   if (auth.isBootstrapping) {
     return <div className="h-screen bg-bg" />;
   }
-  return <RouterProvider router={router} context={{ auth }} />;
+
+  return <InnerApp />;
 }

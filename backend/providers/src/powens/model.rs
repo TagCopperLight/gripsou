@@ -71,3 +71,13 @@ pub struct Investment {
     #[serde(default)]
     pub deleted: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct AccountsResponse {
+    pub accounts: Vec<BankAccount>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InvestmentsResponse {
+    pub investments: Vec<Investment>,
+}

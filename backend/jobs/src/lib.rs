@@ -4,7 +4,6 @@ use std::time::Duration;
 use gripsou_core::db::Db;
 use gripsou_core::provider::AccountProvider;
 use gripsou_core::repo::connection;
-use gripsou_providers::powens::PowensProvider;
 use uuid::Uuid;
 
 /// In-process scheduler. For now: hourly cleanup of expired auth sessions.
@@ -24,41 +23,90 @@ async fn prune_sessions(db: Db) {
     }
 }
 
-/// Account-provider adapters keyed by provider key. Adding a provider is a
-/// registration here — no core or schema change.
+/// Account-provider adapters keyed by provider key. Providers absent from env
+/// are omitted rather than panicking — the caller sees "no adapter" errors.
 fn account_providers() -> HashMap<&'static str, Box<dyn AccountProvider>> {
     let mut m: HashMap<&'static str, Box<dyn AccountProvider>> = HashMap::new();
-    m.insert("powens", Box::new(PowensProvider));
+    if let Some(p) = gripsou_providers::powens::PowensProvider::from_env() {
+        m.insert("powens", Box::new(p));
+    }
     m
 }
 
-/// Run one connection's sync to completion, updating its status. Looks up the
-/// adapter, pulls a `SyncResult`, ingests it, and stamps ok/error. The caller
-/// is expected to have already claimed the connection (status='syncing') via
-/// `connection::begin_sync`. With the current stub adapters this ends in
-/// `error` ("provider not implemented") — expected until a real adapter lands.
+fn encrypt_credentials(
+    key_hex: &str,
+    creds: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let plaintext = serde_json::to_vec(creds).map_err(|e| e.to_string())?;
+    let ct = gripsou_core::crypto::encrypt(key_hex, &plaintext).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "v": 1, "ct": ct }))
+}
+
+fn decrypt_credentials(
+    key_hex: &str,
+    blob: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let ct = blob["ct"]
+        .as_str()
+        .ok_or_else(|| "missing 'ct' in stored credentials".to_string())?;
+    let plaintext = gripsou_core::crypto::decrypt(key_hex, ct).map_err(|e| e.to_string())?;
+    serde_json::from_slice(&plaintext).map_err(|e| e.to_string())
+}
+
+/// Run one connection's sync to completion, updating its status. Fetches and
+/// decrypts credentials from the DB before calling the adapter.
 pub async fn sync_connection(db: Db, connection_id: Uuid) {
-    let key = match connection::provider_key(&db, connection_id).await {
+    let encryption_key = match std::env::var("ENCRYPTION_KEY") {
+        Ok(k) => k,
+        Err(_) => {
+            let _ =
+                connection::mark_synced_error(&db, connection_id, "ENCRYPTION_KEY not set").await;
+            return;
+        }
+    };
+
+    let provider_key = match connection::provider_key(&db, connection_id).await {
         Ok(Some(k)) => k,
-        Ok(None) => return, // connection vanished; nothing to do
+        Ok(None) => return,
         Err(e) => {
             let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
             return;
         }
     };
 
+    let encrypted_creds = match connection::get_credentials(&db, connection_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            let _ =
+                connection::mark_synced_error(&db, connection_id, "no credentials stored").await;
+            return;
+        }
+        Err(e) => {
+            let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
+            return;
+        }
+    };
+
+    let credentials = match decrypt_credentials(&encryption_key, &encrypted_creds) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = connection::mark_synced_error(&db, connection_id, &e).await;
+            return;
+        }
+    };
+
     let providers = account_providers();
-    let Some(adapter) = providers.get(key.as_str()) else {
+    let Some(adapter) = providers.get(provider_key.as_str()) else {
         let _ = connection::mark_synced_error(
             &db,
             connection_id,
-            &format!("no adapter for provider '{key}'"),
+            &format!("no adapter for provider '{provider_key}'"),
         )
         .await;
         return;
     };
 
-    let result = match adapter.sync().await {
+    let result = match adapter.sync(&credentials).await {
         Ok(r) => r,
         Err(e) => {
             let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
@@ -80,7 +128,7 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
 /// create a pending DB row, and append `state=<id>` to the redirect URL.
 ///
 /// Calling `connect()` before inserting the row avoids leaving orphaned
-/// pending rows when the provider stub returns NotImplemented.
+/// pending rows when the provider refuses (e.g. env vars not set).
 pub async fn init_connection(
     db: Db,
     user_id: uuid::Uuid,
@@ -94,7 +142,6 @@ pub async fn init_connection(
         ProviderError::Other(format!("no adapter for provider '{provider_key}'"))
     })?;
 
-    // Call connect() first — if the adapter refuses, no DB row is created.
     let init = adapter.connect().await?;
 
     let connection_id =
@@ -102,7 +149,6 @@ pub async fn init_connection(
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
-    // Append state=<connection_id> so the callback page can identify the connection.
     let init = ConnectInit {
         redirect_url: init.redirect_url.map(|url| {
             let sep = if url.contains('?') { '&' } else { '?' };
@@ -113,7 +159,7 @@ pub async fn init_connection(
     Ok((connection_id, init))
 }
 
-/// Complete a pending connection: call `complete_connect()`, store the
+/// Complete a pending connection: call `complete_connect()`, encrypt the
 /// returned credentials, and flip status to 'ok'.
 pub async fn complete_connection(
     db: Db,
@@ -123,18 +169,19 @@ pub async fn complete_connection(
 ) -> Result<(), gripsou_core::provider::ProviderError> {
     use gripsou_core::provider::ProviderError;
 
-    let provider_key =
-        gripsou_core::repo::connection::provider_key(&db, connection_id)
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?
-            .ok_or_else(|| ProviderError::Other("connection not found".to_string()))?;
+    let encryption_key = std::env::var("ENCRYPTION_KEY")
+        .map_err(|_| ProviderError::Other("ENCRYPTION_KEY not set".into()))?;
+
+    let provider_key = gripsou_core::repo::connection::provider_key(&db, connection_id)
+        .await
+        .map_err(|e| ProviderError::Other(e.to_string()))?
+        .ok_or_else(|| ProviderError::Other("connection not found".to_string()))?;
 
     let providers = account_providers();
-    let adapter = providers.get(provider_key.as_str()).ok_or_else(|| {
-        ProviderError::Other(format!("no adapter for provider '{provider_key}'"))
-    })?;
+    let adapter = providers
+        .get(provider_key.as_str())
+        .ok_or_else(|| ProviderError::Other(format!("no adapter for '{provider_key}'")))?;
 
-    // Encode remaining params as a query string for the trait's `callback: &str`.
     let query: String = params
         .iter()
         .map(|(k, v)| format!("{k}={v}"))
@@ -143,12 +190,15 @@ pub async fn complete_connection(
 
     let credentials = adapter.complete_connect(&query).await?;
 
-    let updated = gripsou_core::repo::connection::finish_connect(&db, connection_id, user_id, credentials)
-        .await
-        .map_err(|e| ProviderError::Other(e.to_string()))?;
+    let encrypted = encrypt_credentials(&encryption_key, &credentials)
+        .map_err(ProviderError::Other)?;
+
+    let updated =
+        gripsou_core::repo::connection::finish_connect(&db, connection_id, user_id, encrypted)
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
     if !updated {
         return Err(ProviderError::Other("connection not found".to_string()));
     }
-
     Ok(())
 }

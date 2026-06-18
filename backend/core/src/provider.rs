@@ -26,7 +26,7 @@ pub trait AccountProvider: Send + Sync {
     async fn complete_connect(&self, callback: &str) -> Result<serde_json::Value, ProviderError>;
 
     /// Pull canonical accounts / holdings / transactions for a connection.
-    async fn sync(&self) -> Result<SyncResult, ProviderError>;
+    async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError>;
 }
 
 #[async_trait]
