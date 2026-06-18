@@ -207,6 +207,27 @@
     "serverCors": "CORS origins",
     "serverCorsHint": "Browser origins allowed to call the gripsou API. Add the address you use to reach this dashboard.",
     "serverCorsPlaceholder": "https://gripsou.example.com",
-    "add": "Add"
+    "add": "Add",
+    "connections": "Connections",
+    "addConnection": "Add connection",
+    "noConnections": "No connections yet.",
+    "deleteConnection": "Delete connection",
+    "deleteConnectionTitle": "Delete connection?",
+    "deleteConnectionBody": "This permanently removes the connection and all synced accounts, holdings, transactions, and snapshots. This cannot be undone.",
+    "deleteConnectionError": "Could not delete the connection. Please try again.",
+    "connectionStatus": {
+      "ok": "Synced",
+      "syncing": "Syncing…",
+      "error": "Sync failed",
+      "pending": "Connecting…"
+    },
+    "pickProvider": "Choose a provider",
+    "connect": "Connect",
+    "connectError": "Could not start the connection. Please try again."
+  },
+  "connections": {
+    "callbackError": "Something went wrong connecting your account.",
+    "callbackErrorBody": "The provider returned an error. You can try again from the Connections page.",
+    "backToConnections": "Back to connections"
   }
 }

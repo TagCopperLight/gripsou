@@ -556,6 +556,94 @@ pub async fn delete_account(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn enabled_providers(
+    State(pool): State<PgPool>,
+    _auth: AuthUser,
+) -> Result<Json<Vec<dto::EnabledProvider>>, (StatusCode, String)> {
+    let rows = gripsou_core::repo::provider::enabled_account_providers(&pool)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        rows.into_iter().map(dto::EnabledProvider::from_row).collect(),
+    ))
+}
+
+pub async fn init_connection(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::InitConnectionReq>,
+) -> Result<(StatusCode, Json<dto::InitConnectionResp>), (StatusCode, String)> {
+    // Validate provider is enabled (also fetches display_name for the row).
+    let enabled = gripsou_core::repo::provider::enabled_account_providers(&pool)
+        .await
+        .map_err(internal)?;
+    let provider = enabled
+        .iter()
+        .find(|p| p.key == body.provider_key)
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("provider '{}' is not enabled", body.provider_key),
+            )
+        })?;
+
+    match gripsou_jobs::init_connection(
+        pool,
+        user_id,
+        &body.provider_key,
+        &provider.display_name,
+    )
+    .await
+    {
+        Ok((connection_id, init)) => Ok((
+            StatusCode::CREATED,
+            Json(dto::InitConnectionResp {
+                connection_id: connection_id.to_string(),
+                redirect_url: init.redirect_url,
+            }),
+        )),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
+
+pub async fn complete_connection(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::CompleteConnectionReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let connection_id = body
+        .connection_id
+        .parse::<Uuid>()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid connection_id".to_string()))?;
+
+    match gripsou_jobs::complete_connection(pool, user_id, connection_id, &body.params).await {
+        Ok(()) => Ok(StatusCode::OK),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                Err((StatusCode::NOT_FOUND, msg))
+            } else {
+                Err((StatusCode::BAD_REQUEST, msg))
+            }
+        }
+    }
+}
+
+pub async fn delete_connection(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let deleted = gripsou_core::repo::connection::delete_connection(&pool, user_id, id)
+        .await
+        .map_err(internal)?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err((StatusCode::NOT_FOUND, "connection not found".to_string()))
+    }
+}
+
 #[cfg(test)]
 mod auth_tests {
     use super::*;
@@ -1332,5 +1420,115 @@ mod auth_tests {
         .await
         .unwrap_err();
         assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn enabled_providers_returns_only_enabled(pool: PgPool) {
+        // Seed: powens is enabled via migration 0002; marketdata is price kind.
+        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let rows = enabled_providers(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+        )
+        .await
+        .expect("ok")
+        .0;
+
+        // Only account-kind AND in enabled_providers list.
+        assert!(rows.iter().all(|p| p.key != "marketdata"),
+            "price providers must be excluded");
+        // Powens is in enabled_providers per seed — it should appear.
+        assert!(rows.iter().any(|p| p.key == "powens"),
+            "powens should be in enabled list");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn init_connection_rejects_unknown_provider(pool: PgPool) {
+        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let err = init_connection(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            Json(dto::InitConnectionReq { provider_key: "nope".to_string() }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn init_connection_stub_returns_500(pool: PgPool) {
+        // powens is enabled but its connect() stub returns NotImplemented → 500.
+        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let err = init_connection(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            Json(dto::InitConnectionReq { provider_key: "powens".to_string() }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_connection_guards_ownership(pool: PgPool) {
+        let owner = seed_user_role(&pool, "owner@t.local", "pw", "user").await;
+        let other = seed_user_role(&pool, "other@t.local", "pw", "user").await;
+
+        let conn_id = Uuid::new_v4();
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name) \
+             values ($1, $2, 'powens', 'c')",
+        )
+        .bind(conn_id)
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Wrong user → 404.
+        let err = delete_connection(
+            State(pool.clone()),
+            auth::AuthUser { user_id: other, session_id: Uuid::new_v4() },
+            axum::extract::Path(conn_id),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+
+        // Correct user → 204.
+        let ok = delete_connection(
+            State(pool.clone()),
+            auth::AuthUser { user_id: owner, session_id: Uuid::new_v4() },
+            axum::extract::Path(conn_id),
+        )
+        .await
+        .expect("delete ok");
+        assert_eq!(ok, StatusCode::NO_CONTENT);
+
+        // Connection is gone.
+        let count: i64 =
+            sqlx::query_scalar("select count(*) from connection where id=$1")
+                .bind(conn_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn complete_connection_unknown_id_returns_error(pool: PgPool) {
+        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let err = complete_connection(
+            State(pool.clone()),
+            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            Json(dto::CompleteConnectionReq {
+                connection_id: Uuid::new_v4().to_string(),
+                params: std::collections::HashMap::new(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        // Unknown connection_id → jobs returns "connection not found" → 400
+        assert!(err.0 == StatusCode::BAD_REQUEST || err.0 == StatusCode::NOT_FOUND);
     }
 }

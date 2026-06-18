@@ -113,7 +113,7 @@ export type Session = {
   current: boolean;
 };
 
-export type SyncStatus = "ok" | "syncing" | "error";
+export type SyncStatus = "ok" | "syncing" | "error" | "pending";
 
 export type SyncAccount = {
   id: string;
@@ -157,4 +157,10 @@ export type Provider = {
   displayName: string;
   description: string | null;
   enabled: boolean;
+};
+
+export type EnabledProvider = {
+  key: string;
+  displayName: string;
+  description: string | null;
 };

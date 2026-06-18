@@ -75,3 +75,80 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
         }
     }
 }
+
+/// Begin a provider connection: check the adapter exists, call `connect()`,
+/// create a pending DB row, and append `state=<id>` to the redirect URL.
+///
+/// Calling `connect()` before inserting the row avoids leaving orphaned
+/// pending rows when the provider stub returns NotImplemented.
+pub async fn init_connection(
+    db: Db,
+    user_id: uuid::Uuid,
+    provider_key: &str,
+    display_name: &str,
+) -> Result<(uuid::Uuid, gripsou_core::provider::ConnectInit), gripsou_core::provider::ProviderError> {
+    use gripsou_core::provider::{ConnectInit, ProviderError};
+
+    let providers = account_providers();
+    let adapter = providers.get(provider_key).ok_or_else(|| {
+        ProviderError::Other(format!("no adapter for provider '{provider_key}'"))
+    })?;
+
+    // Call connect() first — if the adapter refuses, no DB row is created.
+    let init = adapter.connect().await?;
+
+    let connection_id =
+        gripsou_core::repo::connection::insert_pending(&db, user_id, provider_key, display_name)
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+
+    // Append state=<connection_id> so the callback page can identify the connection.
+    let init = ConnectInit {
+        redirect_url: init.redirect_url.map(|url| {
+            let sep = if url.contains('?') { '&' } else { '?' };
+            format!("{url}{sep}state={connection_id}")
+        }),
+    };
+
+    Ok((connection_id, init))
+}
+
+/// Complete a pending connection: call `complete_connect()`, store the
+/// returned credentials, and flip status to 'ok'.
+pub async fn complete_connection(
+    db: Db,
+    user_id: uuid::Uuid,
+    connection_id: uuid::Uuid,
+    params: &std::collections::HashMap<String, String>,
+) -> Result<(), gripsou_core::provider::ProviderError> {
+    use gripsou_core::provider::ProviderError;
+
+    let provider_key =
+        gripsou_core::repo::connection::provider_key(&db, connection_id)
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .ok_or_else(|| ProviderError::Other("connection not found".to_string()))?;
+
+    let providers = account_providers();
+    let adapter = providers.get(provider_key.as_str()).ok_or_else(|| {
+        ProviderError::Other(format!("no adapter for provider '{provider_key}'"))
+    })?;
+
+    // Encode remaining params as a query string for the trait's `callback: &str`.
+    let query: String = params
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+
+    let credentials = adapter.complete_connect(&query).await?;
+
+    let updated = gripsou_core::repo::connection::finish_connect(&db, connection_id, user_id, credentials)
+        .await
+        .map_err(|e| ProviderError::Other(e.to_string()))?;
+    if !updated {
+        return Err(ProviderError::Other("connection not found".to_string()));
+    }
+
+    Ok(())
+}

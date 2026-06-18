@@ -599,6 +599,44 @@ pub struct SetProviderReq {
     pub enabled: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnabledProvider {
+    pub key: String,
+    pub display_name: String,
+    pub description: Option<String>,
+}
+
+impl EnabledProvider {
+    pub fn from_row(r: gripsou_core::repo::provider::EnabledProviderRow) -> Self {
+        EnabledProvider {
+            key: r.key,
+            display_name: r.display_name,
+            description: r.description,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitConnectionReq {
+    pub provider_key: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitConnectionResp {
+    pub connection_id: String,
+    pub redirect_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteConnectionReq {
+    pub connection_id: String,
+    pub params: std::collections::HashMap<String, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

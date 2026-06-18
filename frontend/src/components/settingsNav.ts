@@ -1,6 +1,7 @@
 import {
   SlidersHorizontal,
   User,
+  Link2,
   Users,
   Server,
   type LucideIcon,
@@ -16,6 +17,7 @@ export type SettingsNavItem = {
 export const settingsNavItems: SettingsNavItem[] = [
   { to: "/settings/general", labelKey: "settings.general", icon: SlidersHorizontal, adminOnly: false },
   { to: "/settings/account", labelKey: "settings.account", icon: User, adminOnly: false },
+  { to: "/settings/connections", labelKey: "settings.connections", icon: Link2, adminOnly: false },
   { to: "/settings/users", labelKey: "settings.users", icon: Users, adminOnly: true },
   { to: "/settings/server", labelKey: "settings.server", icon: Server, adminOnly: true },
 ];
