@@ -23,7 +23,7 @@ fn brandfetch_logo_url(ins: &InstrumentRef) -> Option<String> {
 
     let client_id = std::env::var("BRANDFETCH_CLIENT_ID").ok();
     
-    let mut url = format!("{}/fallback/lettermark/theme/light", base_url);
+    let mut url = format!("{}/fallback/404/theme/light", base_url);
     if let Some(c) = client_id {
         url.push_str(&format!("?c={}", c));
     }
