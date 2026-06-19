@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into instrument (kind, symbol, isin, name, currency, logo_url)\n            values ($1, null, $2, $3, $4, $5)\n            on conflict (isin) where isin is not null\n            do update set name = excluded.name, logo_url = coalesce(instrument.logo_url, excluded.logo_url)\n            returning id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9e5bc8deadf712251de3cd2d08cfb72fedebaac71f9077b502d939d3a5cad631"
+}
