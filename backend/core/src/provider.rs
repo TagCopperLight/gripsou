@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
 use crate::dto::{InstrumentRef, PricePoint, SyncResult};
 
@@ -33,10 +34,21 @@ pub trait AccountProvider: Send + Sync {
 pub trait PriceProvider: Send + Sync {
     fn key(&self) -> &str;
 
-    async fn supports(&self, instrument: &InstrumentRef) -> bool;
+    /// Cheap, local eligibility check — no network.
+    fn supports(&self, instrument: &InstrumentRef) -> bool;
 
-    async fn fetch_prices(
+    /// Resolve a provider-native symbol for this instrument. `Ok(None)` means
+    /// "no match found" (distinct from a transient `Err`).
+    async fn resolve_symbol(
         &self,
         instrument: &InstrumentRef,
+    ) -> Result<Option<String>, ProviderError>;
+
+    /// Fetch daily price points for an already-resolved native symbol.
+    /// `since = None` → full backfill; `since = Some(ts)` → points from `ts`.
+    async fn fetch_prices(
+        &self,
+        symbol: &str,
+        since: Option<DateTime<Utc>>,
     ) -> Result<Vec<PricePoint>, ProviderError>;
 }

@@ -81,3 +81,68 @@ pub async fn resolve_instrument(
         name: ins.name.clone(),
     })
 }
+
+pub async fn set_resolved_symbol(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+    yahoo_symbol: &str,
+) -> Result<(), CoreError> {
+    let res = sqlx::query!(
+        r#"
+        update instrument
+        set symbol = $2,
+            meta = jsonb_set(
+                jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),
+                '{yahoo_resolved_at}', to_jsonb(now())
+            )
+        where id = $1
+        "#,
+        instrument_id,
+        yahoo_symbol,
+    )
+    .execute(&mut *conn)
+    .await;
+
+    if let Err(sqlx::Error::Database(db_err)) = &res {
+        if db_err.code().as_deref() == Some("23505") {
+            sqlx::query!(
+                r#"
+                update instrument
+                set meta = jsonb_set(
+                        jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),
+                        '{yahoo_resolved_at}', to_jsonb(now())
+                    )
+                where id = $1
+                "#,
+                instrument_id,
+                yahoo_symbol,
+            )
+            .execute(&mut *conn)
+            .await?;
+            return Ok(());
+        }
+    }
+
+    res?;
+    Ok(())
+}
+
+pub async fn mark_symbol_unresolved(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        r#"
+        update instrument
+        set meta = jsonb_set(
+            jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_resolution}', '"unresolved"'),
+            '{yahoo_resolved_at}', to_jsonb(now())
+        )
+        where id = $1
+        "#,
+        instrument_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}

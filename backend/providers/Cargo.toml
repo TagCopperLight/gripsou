@@ -12,6 +12,9 @@ serde_json = { workspace = true, features = ["arbitrary_precision"] }
 rust_decimal = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
+chrono = { workspace = true }
+yahoo_finance_api = "4.1"
+time = "0.3"
 
 [dev-dependencies]
 tokio = { workspace = true }

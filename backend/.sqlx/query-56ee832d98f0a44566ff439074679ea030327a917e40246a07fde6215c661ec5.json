@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                update instrument\n                set meta = jsonb_set(\n                        jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),\n                        '{yahoo_resolved_at}', to_jsonb(now())\n                    )\n                where id = $1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "56ee832d98f0a44566ff439074679ea030327a917e40246a07fde6215c661ec5"
+}

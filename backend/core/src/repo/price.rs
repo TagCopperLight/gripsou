@@ -30,3 +30,18 @@ pub async fn insert_price(
     .await?;
     Ok(())
 }
+
+/// The most recent price timestamp for an instrument, or `None` if it has no
+/// prices yet. Drives the incremental-fetch `since` and the same-day guard.
+pub async fn latest_price_ts(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+) -> Result<Option<DateTime<Utc>>, CoreError> {
+    let ts = sqlx::query_scalar!(
+        r#"select max(ts) as "ts" from price where instrument_id = $1"#,
+        instrument_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(ts)
+}

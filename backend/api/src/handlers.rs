@@ -1321,7 +1321,7 @@ mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
-        // marketdata is kind='price' and must be excluded; powens is enabled via seed.
+        // yahoo is kind='price' and must be excluded; powens is enabled via seed.
         let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
         let principal = auth::AuthUser {
             user_id: admin,
@@ -1405,8 +1405,8 @@ mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
         let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
-        // 'marketdata' is a price provider, not an account provider → treated as not found.
-        for key in ["nope", "marketdata"] {
+        // 'yahoo' is a price provider, not an account provider → treated as not found.
+        for key in ["nope", "yahoo"] {
             let err = set_provider(
                 State(pool.clone()),
                 auth::AuthUser {
@@ -1441,7 +1441,7 @@ mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
-        // Seed: powens is enabled via migration 0002; marketdata is price kind.
+        // Seed: powens is enabled via migration 0002; yahoo is price kind.
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
         let rows = enabled_providers(
             State(pool.clone()),
@@ -1456,7 +1456,7 @@ mod auth_tests {
 
         // Only account-kind AND in enabled_providers list.
         assert!(
-            rows.iter().all(|p| p.key != "marketdata"),
+            rows.iter().all(|p| p.key != "yahoo"),
             "price providers must be excluded"
         );
         // Powens is in enabled_providers per seed — it should appear.
