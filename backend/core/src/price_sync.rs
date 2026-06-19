@@ -9,7 +9,7 @@ use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 use crate::provider::PriceProvider;
 use crate::repo::instrument::{mark_symbol_unresolved, set_resolved_symbol};
-use crate::repo::price::{insert_price, latest_price_ts};
+use crate::repo::price::{insert_prices, latest_price_ts};
 use crate::repo::query::price_eligible_instruments_for_connection;
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -18,6 +18,9 @@ pub struct PriceSyncSummary {
     pub prices_inserted: usize,
     pub skipped_fresh: usize,
     pub unresolved: usize,
+    /// Points dropped because the price currency differed from the instrument's
+    /// (multi-currency is a non-goal; see the currency guard below).
+    pub skipped_currency: usize,
 }
 
 pub async fn fetch_prices_for_connection(
@@ -79,10 +82,24 @@ pub async fn fetch_prices_for_connection(
         // Fetch the delta (or full history when no prices yet) and upsert.
         match provider.fetch_prices(&symbol, latest).await {
             Ok(points) => {
+                // Multi-currency is a non-goal: only store points quoted in the
+                // instrument's own currency. A wrong-currency listing (or a point
+                // whose currency we couldn't determine) is dropped so valuation
+                // degrades to the provider valuation instead of summing, say, USD
+                // into a EUR total at par.
+                let mut batch: Vec<(chrono::DateTime<chrono::Utc>, rust_decimal::Decimal)> =
+                    Vec::with_capacity(points.len());
                 for p in points {
-                    insert_price(&mut conn, row.id, p.ts, p.unit_price, &p.currency).await?;
-                    summary.prices_inserted += 1;
+                    if p.currency != row.currency {
+                        summary.skipped_currency += 1;
+                        continue;
+                    }
+                    batch.push((p.ts, p.unit_price));
                 }
+                // One batched upsert per instrument (a backfill can be hundreds of
+                // bars) instead of a round-trip per point.
+                let written = insert_prices(&mut conn, row.id, &batch, &row.currency).await?;
+                summary.prices_inserted += written as usize;
             }
             Err(e) => {
                 tracing::warn!("yahoo fetch failed for {symbol}: {e}");

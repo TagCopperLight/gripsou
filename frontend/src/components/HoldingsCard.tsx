@@ -8,9 +8,9 @@ import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
 import { CardState } from "./CardState";
+import { HoldingBadge } from "./HoldingBadge";
 import { formatQuantity } from "../lib/money";
 import { aggregateCash } from "../lib/holdings";
-import { colorForString } from "../lib/palette";
 import { KIND_LABEL_KEY, categoryLabel, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
 
@@ -213,7 +213,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             {rows.map((h) => {
               const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
-              const hasLogoUrl = h.logo && (h.logo.startsWith("http") || h.logo.startsWith("/"));
               // Cash rows are summary lines (no asset detail / purchase history),
               // so they are not clickable.
               return (
@@ -227,16 +226,11 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* ASSET */}
                   <td className="py-3 px-3 border-t border-surface-2">
                     <div className="flex items-center gap-3">
-                      <span
-                        className="size-8 rounded-lg shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold text-fg bg-cover bg-center"
-                        style={
-                          hasLogoUrl
-                            ? { backgroundImage: `url(${h.logo})` }
-                            : { backgroundColor: colorForString(h.ticker) }
-                        }
-                      >
-                        {!hasLogoUrl && h.ticker.slice(0, 2)}
-                      </span>
+                      <HoldingBadge
+                        logo={h.logo}
+                        ticker={h.ticker}
+                        className="size-8 rounded-lg text-[11px]"
+                      />
                       <div className="flex flex-col">
                         <span className="text-sm text-fg leading-tight">
                           {h.name}

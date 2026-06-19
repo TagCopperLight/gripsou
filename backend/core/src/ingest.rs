@@ -13,7 +13,6 @@ use crate::error::CoreError;
 use crate::repo::account::upsert_account;
 use crate::repo::holding::{ids_for_connection, upsert_holding, zero_holding};
 use crate::repo::instrument::resolve_instrument;
-use crate::repo::price::latest_price;
 use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::insert_transaction;
 
@@ -57,10 +56,12 @@ pub async fn ingest(
         let holding_id = upsert_holding(&mut tx, account_id, instrument_id, holding).await?;
         present.insert(holding_id);
 
+        // Snapshot value is the provider's current valuation — a flat fallback.
+        // Price-based valuation is derived at read time from the `price` series
+        // (see query.rs / price_asof), so it stays consistent across reads and
+        // doesn't depend on whether the price pass has run yet this sync.
         let value = if holding.instrument.kind == "cash" {
             holding.quantity
-        } else if let Some(latest) = latest_price(&mut tx, instrument_id).await? {
-            holding.quantity * latest
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
         };

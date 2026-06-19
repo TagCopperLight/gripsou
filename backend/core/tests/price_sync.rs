@@ -15,6 +15,8 @@ use sqlx::PgPool;
 
 struct MockProvider {
     symbol: Option<String>,
+    /// Currency the mock stamps on returned points (equity_holding is "USD").
+    currency: String,
     fetch_calls: Arc<AtomicUsize>,
 }
 
@@ -28,7 +30,7 @@ impl PriceProvider for MockProvider {
     async fn fetch_prices(&self, _symbol: &str, _since: Option<chrono::DateTime<Utc>>)
         -> Result<Vec<PricePoint>, ProviderError> {
         self.fetch_calls.fetch_add(1, Ordering::SeqCst);
-        Ok(vec![PricePoint { ts: Utc::now(), unit_price: Decimal::new(70000, 2), currency: "EUR".into() }])
+        Ok(vec![PricePoint { ts: Utc::now(), unit_price: Decimal::new(70000, 2), currency: self.currency.clone() }])
     }
 }
 
@@ -53,8 +55,11 @@ fn price_count(pool: &PgPool) -> std::pin::Pin<Box<dyn std::future::Future<Outpu
 async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     let conn_id = seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
-    let providers: Vec<Box<dyn PriceProvider>> =
-        vec![Box::new(MockProvider { symbol: Some("MC.PA".into()), fetch_calls: calls.clone() })];
+    let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
+        symbol: Some("MC.PA".into()),
+        currency: "USD".into(), // matches equity_holding's instrument currency
+        fetch_calls: calls.clone(),
+    })];
 
     let s1 = fetch_prices_for_connection(&pool, conn_id, &providers).await.unwrap();
     assert_eq!(s1.resolved, 1);
@@ -78,8 +83,11 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
 async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
     let conn_id = seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
-    let providers: Vec<Box<dyn PriceProvider>> =
-        vec![Box::new(MockProvider { symbol: None, fetch_calls: calls.clone() })];
+    let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
+        symbol: None,
+        currency: "USD".into(),
+        fetch_calls: calls.clone(),
+    })];
 
     let s = fetch_prices_for_connection(&pool, conn_id, &providers).await.unwrap();
     assert_eq!(s.unresolved, 1);
@@ -91,4 +99,23 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
         sqlx::query_scalar("select meta from instrument where isin = 'US0378331005'")
             .fetch_one(&pool).await.unwrap();
     assert_eq!(meta["yahoo_resolution"].as_str(), Some("unresolved"));
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn skips_prices_in_a_different_currency(pool: PgPool) {
+    // equity_holding's instrument is USD; a provider returning EUR-quoted points
+    // must not store them (no FX), so the holding keeps its provider valuation.
+    let conn_id = seed_one_equity(&pool).await;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
+        symbol: Some("MC.PA".into()),
+        currency: "EUR".into(), // ≠ instrument USD
+        fetch_calls: calls.clone(),
+    })];
+
+    let s = fetch_prices_for_connection(&pool, conn_id, &providers).await.unwrap();
+    assert_eq!(s.resolved, 1, "symbol still resolves");
+    assert_eq!(s.prices_inserted, 0, "no same-currency points to store");
+    assert_eq!(s.skipped_currency, 1, "the EUR point was dropped");
+    assert_eq!(price_count(&pool).await, 0);
 }

@@ -8,6 +8,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { ChartLegend } from "./ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
+import { HoldingBadge } from "./HoldingBadge";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { colorForString } from "../lib/palette";
@@ -126,7 +127,6 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
   }, [holding, mode, prices, purchases, qtyNum, investedNum, t]);
 
   const gainUp = gainAbs >= 0;
-  const hasLogoUrl = holding.logo && (holding.logo.startsWith("http") || holding.logo.startsWith("/"));
 
   return (
     <div
@@ -143,16 +143,11 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-6">
           <div className="flex items-center gap-4">
-            <span
-              className="size-12 rounded-xl shrink-0 flex items-center justify-center text-sm font-mono font-semibold text-fg bg-cover bg-center"
-              style={
-                hasLogoUrl
-                  ? { backgroundImage: `url(${holding.logo})` }
-                  : { backgroundColor: colorForString(holding.ticker) }
-              }
-            >
-              {!hasLogoUrl && holding.ticker.slice(0, 2)}
-            </span>
+            <HoldingBadge
+              logo={holding.logo}
+              ticker={holding.ticker}
+              className="size-12 rounded-xl text-sm"
+            />
             <div className="h-12 flex flex-col justify-between py-0.5">
               <h2 className="text-xl font-semibold text-fg leading-none">
                 {holding.name}
