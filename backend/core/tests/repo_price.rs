@@ -25,10 +25,17 @@ async fn latest_price_ts_none_then_max(pool: PgPool) {
 
     let t1 = Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
     let t2 = Utc.with_ymd_and_hms(2026, 6, 3, 0, 0, 0).unwrap();
-    insert_price(&mut conn, instrument, t1, Decimal::new(10, 0), "EUR").await.unwrap();
-    insert_price(&mut conn, instrument, t2, Decimal::new(12, 0), "EUR").await.unwrap();
+    insert_price(&mut conn, instrument, t1, Decimal::new(10, 0), "EUR")
+        .await
+        .unwrap();
+    insert_price(&mut conn, instrument, t2, Decimal::new(12, 0), "EUR")
+        .await
+        .unwrap();
 
-    assert_eq!(latest_price_ts(&mut conn, instrument).await.unwrap(), Some(t2));
+    assert_eq!(
+        latest_price_ts(&mut conn, instrument).await.unwrap(),
+        Some(t2)
+    );
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -68,5 +75,10 @@ async fn insert_prices_batches_and_upserts(pool: PgPool) {
     assert_eq!(latest, Decimal::new(99, 0));
 
     // Empty input is a no-op.
-    assert_eq!(insert_prices(&mut conn, instrument, &[], "EUR").await.unwrap(), 0);
+    assert_eq!(
+        insert_prices(&mut conn, instrument, &[], "EUR")
+            .await
+            .unwrap(),
+        0
+    );
 }

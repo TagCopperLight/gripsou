@@ -4,13 +4,36 @@ mod handlers;
 
 use std::env;
 
+use axum::http::Method;
+use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Json, Router,
+    extract::FromRef,
     routing::{delete, get, patch, post},
 };
 use serde_json::{Value, json};
+use std::sync::{Arc, RwLock};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: sqlx::PgPool,
+    pub cors_origins: Arc<RwLock<Vec<String>>>,
+}
+
+impl FromRef<AppState> for sqlx::PgPool {
+    fn from_ref(state: &AppState) -> sqlx::PgPool {
+        state.db.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
+    fn from_ref(state: &AppState) -> Arc<RwLock<Vec<String>>> {
+        state.cors_origins.clone()
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,6 +49,16 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!("../migrations").run(&db).await?;
     tracing::info!("migrations applied");
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone()));
+
+    let initial_cors = gripsou_core::repo::settings::cors_origins(&db)
+        .await
+        .unwrap_or_default();
+    let cors_origins = Arc::new(RwLock::new(initial_cors));
+
+    let app_state = AppState {
+        db: db.clone(),
+        cors_origins: cors_origins.clone(),
+    };
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
 
@@ -58,6 +91,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/providers", get(handlers::providers))
         .route("/providers/{key}", patch(handlers::set_provider))
         .route("/providers/enabled", get(handlers::enabled_providers))
+        .route(
+            "/settings/cors",
+            get(handlers::cors_origins).patch(handlers::set_cors_origins),
+        )
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))
         .route("/connections/{id}", delete(handlers::delete_connection))
@@ -67,10 +104,31 @@ async fn main() -> anyhow::Result<()> {
             "/holdings/{id}/transactions",
             get(handlers::holding_transactions),
         )
-        .with_state(db.clone());
+        .with_state(app_state);
+
+    let cors_layer = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(
+            move |origin: &axum::http::HeaderValue, _| {
+                let origin_str = origin.to_str().unwrap_or("");
+                if let Ok(origins) = cors_origins.read() {
+                    origins.iter().any(|o| o == origin_str)
+                } else {
+                    false
+                }
+            },
+        ))
+        .allow_methods(vec![
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
+        .allow_credentials(true);
 
     let app = Router::new()
-        .nest("/api", api)
+        .nest("/api", api.layer(cors_layer))
         .fallback_service(ServeDir::new(static_dir));
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());

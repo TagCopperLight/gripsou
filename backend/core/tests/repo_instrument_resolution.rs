@@ -6,12 +6,14 @@ use uuid::Uuid;
 
 async fn isin_instrument(pool: &PgPool, isin: &str) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("insert into instrument (id, kind, isin, name, currency) values ($1,'equity',$2,'X','EUR')")
-        .bind(id)
-        .bind(isin)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "insert into instrument (id, kind, isin, name, currency) values ($1,'equity',$2,'X','EUR')",
+    )
+    .bind(id)
+    .bind(isin)
+    .execute(pool)
+    .await
+    .unwrap();
     id
 }
 
@@ -50,7 +52,11 @@ async fn set_resolved_symbol_swallows_unique_clash(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(symbol, None, "display symbol clash swallowed");
-    assert_eq!(meta["yahoo_symbol"].as_str(), Some("MC.PA"), "meta source-of-truth still written");
+    assert_eq!(
+        meta["yahoo_symbol"].as_str(),
+        Some("MC.PA"),
+        "meta source-of-truth still written"
+    );
 }
 
 #[sqlx::test(migrations = "../migrations")]

@@ -240,6 +240,21 @@ export function useEnabledProviders() {
   });
 }
 
+export function useCorsOrigins() {
+  return useQuery({
+    queryKey: ["cors-origins"],
+    queryFn: () => getJson<string[]>("/settings/cors"),
+  });
+}
+
+export function useSetCorsOrigins() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cors-origins"] }),
+  });
+}
+
 export function useInitConnection() {
   return useMutation({
     mutationFn: (providerKey: string) =>

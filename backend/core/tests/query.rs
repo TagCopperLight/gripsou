@@ -129,7 +129,9 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn net_worth_excludes_pre_acquisition_and_values_by_price(pool: PgPool) -> anyhow::Result<()> {
+async fn net_worth_excludes_pre_acquisition_and_values_by_price(
+    pool: PgPool,
+) -> anyhow::Result<()> {
     // Cash held on both days; the equity is acquired only on d1 (its first
     // snapshot is d1). A backfilled price exists on d0 too. The equity must NOT
     // contribute on d0 (no phantom holding before acquisition), and on d1 it
@@ -165,9 +167,33 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(pool: PgPool) ->
     let at = |d: NaiveDate| d.and_hms_opt(12, 0, 0).unwrap().and_utc();
 
     // Cash: present on both days. Equity: first snapshot is d1 only.
-    stamp_on(&pool, ids[1], d0, Decimal::new(100, 0), Decimal::new(100, 0), Decimal::new(100, 0)).await;
-    stamp_on(&pool, ids[1], d1, Decimal::new(100, 0), Decimal::new(100, 0), Decimal::new(100, 0)).await;
-    stamp_on(&pool, ids[0], d1, Decimal::new(3, 0), Decimal::new(600, 0), Decimal::new(450, 0)).await;
+    stamp_on(
+        &pool,
+        ids[1],
+        d0,
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+    )
+    .await;
+    stamp_on(
+        &pool,
+        ids[1],
+        d1,
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+    )
+    .await;
+    stamp_on(
+        &pool,
+        ids[0],
+        d1,
+        Decimal::new(3, 0),
+        Decimal::new(600, 0),
+        Decimal::new(450, 0),
+    )
+    .await;
     // Price exists on both days; 210 differs from snapshot.value (600) so we can
     // tell price-based valuation (3*210=630) from snapshot-based (600).
     insert_price_on(&pool, instrument_id, at(d0), Decimal::new(210, 0)).await;
@@ -185,7 +211,11 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(pool: PgPool) ->
         Decimal::new(100, 0),
         "d0: cash only; equity not yet acquired must not appear"
     );
-    assert_eq!(rows[0].invested, Decimal::new(100, 0), "d0: only cash cost basis");
+    assert_eq!(
+        rows[0].invested,
+        Decimal::new(100, 0),
+        "d0: only cash cost basis"
+    );
     assert_eq!(
         rows[1].net_worth,
         Decimal::new(730, 0),
@@ -476,7 +506,13 @@ async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow
             .fetch_one(&pool)
             .await?;
     // A price today (210) differs from the snapshot value (600); 3*210 = 630.
-    insert_price_on(&pool, instrument_id, chrono::Utc::now(), Decimal::new(210, 0)).await;
+    insert_price_on(
+        &pool,
+        instrument_id,
+        chrono::Utc::now(),
+        Decimal::new(210, 0),
+    )
+    .await;
 
     let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
         .fetch_one(&pool)
@@ -492,7 +528,11 @@ async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow
 
     let dist = query::distribution(&pool, user_id).await?;
     let total: Decimal = dist.iter().map(|r| r.value).sum();
-    assert_eq!(total, Decimal::new(630, 0), "distribution: same price-based value");
+    assert_eq!(
+        total,
+        Decimal::new(630, 0),
+        "distribution: same price-based value"
+    );
     Ok(())
 }
 

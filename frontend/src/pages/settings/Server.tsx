@@ -6,7 +6,7 @@ import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
 import { CardState } from "../../components/CardState";
-import { useProviders, useSetProviderEnabled } from "../../api/hooks";
+import { useProviders, useSetProviderEnabled, useCorsOrigins, useSetCorsOrigins } from "../../api/hooks";
 
 export function SettingsServer() {
   const { t } = useTranslation();
@@ -15,15 +15,21 @@ export function SettingsServer() {
   const providersReady = providersData !== undefined;
   const setEnabled = useSetProviderEnabled();
 
-  const [origins, setOrigins] = useState<string[]>([]);
+  const originsQuery = useCorsOrigins();
+  const setCorsOrigins = useSetCorsOrigins();
+  const origins = originsQuery.data || [];
+
   const [draft, setDraft] = useState("");
 
-  // Frontend-only for now: nothing is persisted server-side.
   const addOrigin = () => {
     const value = draft.trim();
     if (!value || origins.includes(value)) return;
-    setOrigins([...origins, value]);
+    setCorsOrigins.mutate([...origins, value]);
     setDraft("");
+  };
+
+  const removeOrigin = (origin: string) => {
+    setCorsOrigins.mutate(origins.filter((o) => o !== origin));
   };
 
   return (
@@ -41,8 +47,9 @@ export function SettingsServer() {
               <button
                 type="button"
                 aria-label={`Remove ${origin}`}
-                onClick={() => setOrigins(origins.filter((o) => o !== origin))}
-                className="p-1.5 rounded-lg text-fg-faint hover:bg-surface hover:text-red transition-colors duration-140 cursor-pointer shrink-0"
+                onClick={() => removeOrigin(origin)}
+                disabled={setCorsOrigins.isPending}
+                className="p-1.5 rounded-lg text-fg-faint hover:bg-surface hover:text-red transition-colors duration-140 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 className="size-4" />
               </button>
@@ -58,7 +65,7 @@ export function SettingsServer() {
               placeholder={t("settings.serverCorsPlaceholder")}
               className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
             />
-            <Button onClick={addOrigin} disabled={!draft.trim()}>
+            <Button onClick={addOrigin} disabled={!draft.trim() || setCorsOrigins.isPending}>
               {t("settings.add")}
             </Button>
           </div>

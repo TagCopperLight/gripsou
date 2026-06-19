@@ -136,7 +136,11 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
             {
                 Ok(s) => tracing::info!(
                     "prices for {connection_id}: resolved={} inserted={} skipped_fresh={} unresolved={} skipped_currency={}",
-                    s.resolved, s.prices_inserted, s.skipped_fresh, s.unresolved, s.skipped_currency
+                    s.resolved,
+                    s.prices_inserted,
+                    s.skipped_fresh,
+                    s.unresolved,
+                    s.skipped_currency
                 ),
                 Err(e) => tracing::warn!("price fetch errored for {connection_id}: {e}"),
             }

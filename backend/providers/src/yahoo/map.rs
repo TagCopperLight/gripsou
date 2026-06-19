@@ -12,7 +12,11 @@ pub(crate) fn map_points(rows: &[(i64, f64)], currency: &str) -> Vec<PricePoint>
         .filter_map(|&(ts, close)| {
             let unit_price = Decimal::from_f64_retain(close)?.round_dp(6);
             let ts = DateTime::from_timestamp(ts, 0)?;
-            Some(PricePoint { ts, unit_price, currency: currency.to_string() })
+            Some(PricePoint {
+                ts,
+                unit_price,
+                currency: currency.to_string(),
+            })
         })
         .collect()
 }

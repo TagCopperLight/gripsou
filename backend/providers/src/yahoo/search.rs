@@ -21,12 +21,19 @@ mod tests {
     use super::*;
 
     fn c(symbol: &str, quote_type: &str) -> Candidate {
-        Candidate { symbol: symbol.into(), quote_type: quote_type.into() }
+        Candidate {
+            symbol: symbol.into(),
+            quote_type: quote_type.into(),
+        }
     }
 
     #[test]
     fn picks_first_equity_or_etf_preserving_rank() {
-        let cands = vec![c("CURRENCY", "CURRENCY"), c("MC.PA", "EQUITY"), c("MC.DE", "EQUITY")];
+        let cands = vec![
+            c("CURRENCY", "CURRENCY"),
+            c("MC.PA", "EQUITY"),
+            c("MC.DE", "EQUITY"),
+        ];
         assert_eq!(select_symbol(&cands), Some("MC.PA".to_string()));
     }
 

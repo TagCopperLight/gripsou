@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use yahoo_finance_api::YahooConnector;
 
 use self::map::map_points;
-use self::search::{select_symbol, Candidate};
+use self::search::{Candidate, select_symbol};
 
 pub struct YahooPriceProvider {
     connector: YahooConnector,
@@ -17,8 +17,7 @@ pub struct YahooPriceProvider {
 
 impl YahooPriceProvider {
     pub fn new() -> Result<Self, ProviderError> {
-        let connector =
-            YahooConnector::new().map_err(|e| ProviderError::Other(e.to_string()))?;
+        let connector = YahooConnector::new().map_err(|e| ProviderError::Other(e.to_string()))?;
         Ok(Self { connector })
     }
 }
@@ -74,7 +73,7 @@ impl PriceProvider for YahooPriceProvider {
         let start = OffsetDateTime::from_unix_timestamp(start_ts)
             .map_err(|e| ProviderError::Other(e.to_string()))?;
         let end = OffsetDateTime::now_utc();
-        
+
         let resp = self
             .connector
             .get_quote_history(symbol, start, end)
