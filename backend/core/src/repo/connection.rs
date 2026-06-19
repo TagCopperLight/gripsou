@@ -200,6 +200,27 @@ pub async fn ids_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid
     Ok(ids)
 }
 
+pub struct ActiveConnection {
+    pub id: Uuid,
+    pub user_id: Uuid,
+}
+
+/// Connections that haven't been synced in the last 23 hours (for daily sync job).
+pub async fn connections_needing_sync(pool: &sqlx::PgPool) -> Result<Vec<ActiveConnection>, CoreError> {
+    let rows = sqlx::query_as!(
+        ActiveConnection,
+        r#"
+        select id as "id!", user_id as "user_id!"
+        from connection
+        where status in ('ok', 'error')
+          and (last_sync_at is null or last_sync_at < now() - interval '23 hours')
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Insert a new connection in 'pending' state (OAuth round-trip not yet done).
 /// Returns the new connection id.
 pub async fn insert_pending(
