@@ -45,3 +45,17 @@ pub async fn latest_price_ts(
     .await?;
     Ok(ts)
 }
+
+/// The most recent price for an instrument, or `None` if it has no prices yet.
+pub async fn latest_price(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+) -> Result<Option<Decimal>, CoreError> {
+    let price = sqlx::query_scalar!(
+        r#"select unit_price from price where instrument_id = $1 order by ts desc limit 1"#,
+        instrument_id,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(price)
+}

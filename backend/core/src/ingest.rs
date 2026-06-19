@@ -13,6 +13,7 @@ use crate::error::CoreError;
 use crate::repo::account::upsert_account;
 use crate::repo::holding::{ids_for_connection, upsert_holding, zero_holding};
 use crate::repo::instrument::resolve_instrument;
+use crate::repo::price::latest_price;
 use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::insert_transaction;
 
@@ -58,6 +59,8 @@ pub async fn ingest(
 
         let value = if holding.instrument.kind == "cash" {
             holding.quantity
+        } else if let Some(latest) = latest_price(&mut tx, instrument_id).await? {
+            holding.quantity * latest
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
         };
