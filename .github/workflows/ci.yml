@@ -44,6 +44,8 @@ jobs:
           SQLX_OFFLINE: "true"
       - name: Test
         run: cargo test
+        env:
+          SQLX_OFFLINE: "true"
 
   frontend:
     runs-on: ubuntu-latest
