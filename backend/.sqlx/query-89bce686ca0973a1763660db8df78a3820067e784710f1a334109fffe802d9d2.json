@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select cors_origins\n        from app_settings\n        where id = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cors_origins",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "cors_origins"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "89bce686ca0973a1763660db8df78a3820067e784710f1a334109fffe802d9d2"
+}

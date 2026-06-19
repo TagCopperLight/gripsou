@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update app_settings\n        set cors_origins = $1\n        where id = 1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5030ca2c345016d78060b0f1ecb2571a75f133fba4ae9268e358a409447fa16"
+}

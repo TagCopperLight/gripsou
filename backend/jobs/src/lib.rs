@@ -6,9 +6,34 @@ use gripsou_core::provider::{AccountProvider, PriceProvider};
 use gripsou_core::repo::connection;
 use uuid::Uuid;
 
-/// In-process scheduler. For now: hourly cleanup of expired auth sessions.
+/// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
 pub async fn run_scheduler(db: Db) {
-    tokio::spawn(prune_sessions(db));
+    tokio::spawn(prune_sessions(db.clone()));
+    tokio::spawn(sync_all_daily(db));
+}
+
+async fn sync_all_daily(db: Db) {
+    // Check every hour for connections that haven't been synced in ~24h
+    let mut tick = tokio::time::interval(Duration::from_secs(3600));
+    loop {
+        tick.tick().await;
+        let rows = match connection::connections_needing_sync(&db).await {
+            Ok(rows) => rows,
+            Err(e) => {
+                tracing::warn!("daily sync failed to fetch connections: {e}");
+                continue;
+            }
+        };
+
+        for row in rows {
+            // Attempt to claim the connection; prevents double-syncs
+            if let Ok(connection::BeginSync::Started(_)) =
+                connection::begin_sync(&db, row.user_id, row.id).await
+            {
+                tokio::spawn(sync_connection(db.clone(), row.id));
+            }
+        }
+    }
 }
 
 async fn prune_sessions(db: Db) {

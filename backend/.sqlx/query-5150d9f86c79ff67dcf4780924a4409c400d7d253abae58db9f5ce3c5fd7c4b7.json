@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select id as \"id!\", user_id as \"user_id!\"\n        from connection\n        where status in ('ok', 'error')\n          and (last_sync_at is null or last_sync_at < now() - interval '23 hours')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5150d9f86c79ff67dcf4780924a4409c400d7d253abae58db9f5ce3c5fd7c4b7"
+}
