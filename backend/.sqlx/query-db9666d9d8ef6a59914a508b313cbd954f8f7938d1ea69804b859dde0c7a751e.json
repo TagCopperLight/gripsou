@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into price (instrument_id, ts, unit_price, currency)\n        select $1, u.ts, u.unit_price, $4\n        from unnest($2::timestamptz[], $3::numeric[]) as u(ts, unit_price)\n        on conflict (instrument_id, ts)\n        do update set unit_price = excluded.unit_price, currency = excluded.currency\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TimestamptzArray",
+        "NumericArray",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db9666d9d8ef6a59914a508b313cbd954f8f7938d1ea69804b859dde0c7a751e"
+}

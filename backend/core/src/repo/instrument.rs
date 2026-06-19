@@ -103,8 +103,11 @@ pub async fn set_resolved_symbol(
     .execute(&mut *conn)
     .await;
 
-    if let Err(sqlx::Error::Database(db_err)) = &res {
-        if db_err.code().as_deref() == Some("23505") {
+    match &res {
+        // A unique-index clash on the display `symbol` column (two instruments
+        // resolving to the same Yahoo ticker): keep meta.yahoo_symbol so the
+        // price pass still works, and leave `symbol` as it was.
+        Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23505") => {
             sqlx::query!(
                 r#"
                 update instrument
@@ -119,12 +122,13 @@ pub async fn set_resolved_symbol(
             )
             .execute(&mut *conn)
             .await?;
-            return Ok(());
+            Ok(())
+        }
+        _ => {
+            res?;
+            Ok(())
         }
     }
-
-    res?;
-    Ok(())
 }
 
 pub async fn mark_symbol_unresolved(

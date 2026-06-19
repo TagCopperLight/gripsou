@@ -81,16 +81,20 @@ impl PriceProvider for YahooPriceProvider {
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
+        // Report Yahoo's own currency for the listing. If it's missing we do NOT
+        // guess (an empty string won't match any instrument currency, so the
+        // orchestrator's currency guard drops these points rather than mislabel
+        // a foreign-currency price as the base currency).
         let currency = resp
             .metadata()
             .ok()
             .and_then(|m| m.currency)
-            .unwrap_or_else(|| "EUR".to_string());
+            .unwrap_or_default();
         let rows: Vec<(i64, f64)> = resp
             .quotes()
             .map_err(|e| ProviderError::Other(e.to_string()))?
             .iter()
-            .map(|q| (q.timestamp as i64, q.close))
+            .map(|q| (q.timestamp, q.close))
             .collect();
 
         Ok(map_points(&rows, &currency))
