@@ -70,22 +70,16 @@ impl PriceProvider for YahooPriceProvider {
         symbol: &str,
         since: Option<DateTime<Utc>>,
     ) -> Result<Vec<PricePoint>, ProviderError> {
-        let resp = match since {
-            None => self
-                .connector
-                .get_quote_range(symbol, "1d", "max")
-                .await
-                .map_err(|e| ProviderError::Other(e.to_string()))?,
-            Some(ts) => {
-                let start = OffsetDateTime::from_unix_timestamp(ts.timestamp())
-                    .map_err(|e| ProviderError::Other(e.to_string()))?;
-                let end = OffsetDateTime::now_utc();
-                self.connector
-                    .get_quote_history(symbol, start, end)
-                    .await
-                    .map_err(|e| ProviderError::Other(e.to_string()))?
-            }
-        };
+        let start_ts = since.map(|ts| ts.timestamp()).unwrap_or(0);
+        let start = OffsetDateTime::from_unix_timestamp(start_ts)
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        let end = OffsetDateTime::now_utc();
+        
+        let resp = self
+            .connector
+            .get_quote_history(symbol, start, end)
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
 
         let currency = resp
             .metadata()
