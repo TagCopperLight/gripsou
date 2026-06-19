@@ -396,3 +396,45 @@ pub async fn distribution(
     .await?;
     Ok(rows)
 }
+
+pub struct PriceEligibleInstrument {
+    pub id: Uuid,
+    pub kind: String,
+    pub symbol: Option<String>,
+    pub isin: Option<String>,
+    pub name: String,
+    pub currency: String,
+    pub meta: serde_json::Value,
+}
+
+/// Distinct non-cash instruments held (nonzero quantity) under a connection.
+/// Drives the per-connection price-fetch pass.
+pub async fn price_eligible_instruments_for_connection(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+) -> Result<Vec<PriceEligibleInstrument>, CoreError> {
+    let rows = sqlx::query_as!(
+        PriceEligibleInstrument,
+        r#"
+        select distinct
+               i.id       as "id!",
+               i.kind     as "kind!",
+               i.symbol,
+               i.isin,
+               i.name     as "name!",
+               i.currency as "currency!",
+               i.meta     as "meta!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join instrument i on i.id = h.instrument_id
+        where a.connection_id = $1
+          and i.kind <> 'cash'
+          and h.quantity <> 0
+        order by i.name
+        "#,
+        connection_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}

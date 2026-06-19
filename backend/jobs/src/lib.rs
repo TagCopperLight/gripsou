@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use gripsou_core::db::Db;
-use gripsou_core::provider::AccountProvider;
+use gripsou_core::provider::{AccountProvider, PriceProvider};
 use gripsou_core::repo::connection;
 use uuid::Uuid;
 
@@ -31,6 +31,16 @@ fn account_providers() -> HashMap<&'static str, Box<dyn AccountProvider>> {
         m.insert("powens", Box::new(p));
     }
     m
+}
+
+/// Price-provider adapters. Yahoo needs no credentials, so it is always
+/// registered (unless the connector fails to construct).
+fn price_providers() -> Vec<Box<dyn PriceProvider>> {
+    let mut v: Vec<Box<dyn PriceProvider>> = Vec::new();
+    if let Ok(p) = gripsou_providers::yahoo::YahooPriceProvider::new() {
+        v.push(Box::new(p));
+    }
+    v
 }
 
 fn encrypt_credentials(
@@ -116,6 +126,20 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
 
     match gripsou_core::ingest::ingest(&db, connection_id, &result).await {
         Ok(_) => {
+            // Prices are best-effort: a failure here must not fail the sync.
+            match gripsou_core::price_sync::fetch_prices_for_connection(
+                &db,
+                connection_id,
+                &price_providers(),
+            )
+            .await
+            {
+                Ok(s) => tracing::info!(
+                    "prices for {connection_id}: resolved={} inserted={} skipped={} unresolved={}",
+                    s.resolved, s.prices_inserted, s.skipped_fresh, s.unresolved
+                ),
+                Err(e) => tracing::warn!("price fetch errored for {connection_id}: {e}"),
+            }
             let _ = connection::mark_synced_ok(&db, connection_id).await;
         }
         Err(e) => {
