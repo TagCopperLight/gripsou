@@ -117,7 +117,7 @@ function ProviderCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-2xl px-4 py-3 transition-colors duration-140 border ${
+      className={`w-full text-left rounded-2xl px-4 py-3 transition-colors duration-140 border cursor-pointer ${
         selected
           ? "border-green bg-green-soft"
           : "border-surface-2 bg-surface-2 hover:border-surface-3"
