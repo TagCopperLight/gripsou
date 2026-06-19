@@ -9,8 +9,6 @@ services:
       POSTGRES_DB: gripsou
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U gripsou" ]
       interval: 5s
@@ -21,6 +19,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgres://gripsou:gripsou@postgres:5432/gripsou
       BIND_ADDR: 0.0.0.0:8080
@@ -30,22 +31,15 @@ services:
         condition: service_healthy
     expose:
       - "8080"
+    networks:
+      - default
+      - web
 
-  caddy:
-    image: caddy:2-alpine
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - backend
+networks:
+  # Shared with the central caddy (see /home/ubuntu/caddy); caddy reverse-proxies
+  # gripsou.bourdet.be -> backend:8080 over this network.
+  web:
+    external: true
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
