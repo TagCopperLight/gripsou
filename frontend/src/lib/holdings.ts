@@ -1,4 +1,5 @@
 import type { Holding } from "../api/types";
+import { ACCOUNT_PALETTE } from "./palette";
 
 /**
  * Collapse cash holdings into a single line per currency. Cash is the same
@@ -25,7 +26,7 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
   const merged: Holding[] = [];
   for (const items of groups.values()) {
     if (items.length === 1) {
-      merged.push(items[0]);
+      merged.push({ ...items[0], logo: ACCOUNT_PALETTE[0] });
       continue;
     }
     const value = items.reduce((sum, h) => sum + Number(h.value), 0);
@@ -36,6 +37,8 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       id: `cash:${first.ticker}`,
       accountId: "",
       accountName: multipleLabel,
+      accountColor: ACCOUNT_PALETTE[0],
+      logo: ACCOUNT_PALETTE[0],
       qty: String(qty),
       invested: String(value),
       value: String(value),
