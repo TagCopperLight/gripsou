@@ -13,7 +13,6 @@ use crate::error::CoreError;
 /// one sync and symbol-only in another resolves via two different natural keys
 /// and can produce two `instrument` rows. Cross-key dedup is intentionally left
 /// for when real provider payloads inform the rule.
-
 fn brandfetch_logo_url(ins: &InstrumentRef) -> Option<String> {
     let base_url = match ins.kind.as_str() {
         "crypto" => ins

@@ -206,7 +206,9 @@ pub struct ActiveConnection {
 }
 
 /// Connections that haven't been synced in the last 23 hours (for daily sync job).
-pub async fn connections_needing_sync(pool: &sqlx::PgPool) -> Result<Vec<ActiveConnection>, CoreError> {
+pub async fn connections_needing_sync(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<ActiveConnection>, CoreError> {
     let rows = sqlx::query_as!(
         ActiveConnection,
         r#"

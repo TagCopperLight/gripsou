@@ -3,7 +3,13 @@
 Self-hosted personal finance dashboard. Connect bank/broker/crypto providers,
 sync transactions and holdings, and see net worth and its distribution over time.
 
-See [REQUIREMENTS.md](REQUIREMENTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+## Inspirations
+
+This project is the result of multiple iterations. I've built this "same" personal finance project before, learned from those attempts, and started from scratch again to build it right.
+
+The initial inspiration came from [Finary](https://finary.com/). Later, I discovered [Zoeille/picsou-finance](https://github.com/Zoeille/picsou-finance), which gave me a fresh wave of inspiration (and heavily influenced the project's name, `gripsou`).
+
+The current interface and workflow are a mix of my own ideas, concepts from Picsou, and Finary.
 
 ## Layout
 
@@ -26,7 +32,7 @@ docker compose -f docker/docker-compose.yml up -d postgres
 # 2. Backend (serves API on :8080, applies migrations on startup)
 cp .env.example .env          # then edit secrets
 cd backend
-DATABASE_URL=postgres://gripsou:gripsou@localhost:5432/gripsou cargo run --bin gripsou
+cargo run
 
 # 3. Frontend (dev server on :5173, proxies /api to :8080)
 cd frontend

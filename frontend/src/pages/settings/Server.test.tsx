@@ -18,12 +18,15 @@ describe("SettingsServer — data providers", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) =>
-        new Response(
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes("/settings/cors")) {
+          return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        return new Response(
           JSON.stringify(init?.method === "PATCH" ? { ...PROVIDERS[0], enabled: false } : PROVIDERS),
           { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
+        );
+      }),
     );
   });
 
@@ -49,11 +52,22 @@ describe("SettingsServer — data providers", () => {
 
 describe("SettingsServer — CORS origins", () => {
   beforeEach(() => {
+    let corsOrigins: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
-      ),
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes("/settings/cors")) {
+          if (init?.method === "PATCH") {
+            corsOrigins = JSON.parse(init.body as string) as string[];
+            return new Response("null", { status: 200, headers: { "Content-Type": "application/json" } });
+          }
+          return new Response(JSON.stringify(corsOrigins), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+      }),
     );
   });
 
@@ -64,13 +78,13 @@ describe("SettingsServer — CORS origins", () => {
 
     fireEvent.change(input, { target: { value: "  https://a.test  " } });
     fireEvent.click(add);
-    expect(screen.getByText("https://a.test")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("https://a.test")).toBeInTheDocument());
     expect((input as HTMLInputElement).value).toBe("");
 
     // Duplicate is ignored — still exactly one entry.
     fireEvent.change(input, { target: { value: "https://a.test" } });
     fireEvent.click(add);
-    expect(screen.getAllByText("https://a.test")).toHaveLength(1);
+    await waitFor(() => expect(screen.getAllByText("https://a.test")).toHaveLength(1));
   });
 
   it("removes an origin via its delete button", async () => {
@@ -78,9 +92,10 @@ describe("SettingsServer — CORS origins", () => {
     const input = await screen.findByPlaceholderText("https://gripsou.example.com");
     fireEvent.change(input, { target: { value: "https://b.test" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove https://b.test" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Remove https://b.test" }));
-    expect(screen.queryByText("https://b.test")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("https://b.test")).not.toBeInTheDocument());
   });
 
   it("disables Add when the input is empty", async () => {
