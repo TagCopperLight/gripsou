@@ -28,8 +28,15 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://gripsou:gripsou@localhost:5432/gripsou
+      # Dummy Powens config so the provider adapter registers in tests that
+      # exercise the connect path. connect() is offline (builds a URL), so the
+      # values only need to be present, not real. Locally these come from .env.
+      POWENS_CLIENT_ID: test-client
+      POWENS_CLIENT_SECRET: test-secret
+      POWENS_DOMAIN: test.biapi.pro
+      POWENS_REDIRECT_URI: https://gripsou.test/connections/callback
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -53,7 +60,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - name: Install
         run: bun install --frozen-lockfile
