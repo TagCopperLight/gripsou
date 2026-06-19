@@ -365,13 +365,16 @@ impl ProviderGroup {
         use std::collections::HashMap;
         let mut by_conn: HashMap<uuid::Uuid, Vec<SyncAccount>> = HashMap::new();
         for a in accounts {
-            by_conn.entry(a.connection_id).or_default().push(SyncAccount {
-                id: a.account_id.to_string(),
-                name: a.name,
-                type_label: a.type_label,
-                value: a.value.to_string(),
-                last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
-            });
+            by_conn
+                .entry(a.connection_id)
+                .or_default()
+                .push(SyncAccount {
+                    id: a.account_id.to_string(),
+                    name: a.name,
+                    type_label: a.type_label,
+                    value: a.value.to_string(),
+                    last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
+                });
         }
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {

@@ -58,11 +58,7 @@ pub async fn account_provider(
 
 /// Add or remove `key` from app_settings.enabled_providers. Idempotent: adding
 /// an already-present key (or removing an absent one) is a no-op.
-pub async fn set_enabled(
-    pool: &sqlx::PgPool,
-    key: &str,
-    enabled: bool,
-) -> Result<(), CoreError> {
+pub async fn set_enabled(pool: &sqlx::PgPool, key: &str, enabled: bool) -> Result<(), CoreError> {
     if enabled {
         sqlx::query!(
             r#"

@@ -108,7 +108,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         join instrument i   on i.id = h.instrument_id
         join account_type t on t.key = a.type_key
         join category cat   on cat.key = t.category_key
-        where c.user_id = $1
+        where c.user_id = $1 and h.quantity <> 0
         order by h.id
         "#,
         user_id,

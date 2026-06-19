@@ -134,13 +134,14 @@ pub async fn init_connection(
     user_id: uuid::Uuid,
     provider_key: &str,
     display_name: &str,
-) -> Result<(uuid::Uuid, gripsou_core::provider::ConnectInit), gripsou_core::provider::ProviderError> {
+) -> Result<(uuid::Uuid, gripsou_core::provider::ConnectInit), gripsou_core::provider::ProviderError>
+{
     use gripsou_core::provider::{ConnectInit, ProviderError};
 
     let providers = account_providers();
-    let adapter = providers.get(provider_key).ok_or_else(|| {
-        ProviderError::Other(format!("no adapter for provider '{provider_key}'"))
-    })?;
+    let adapter = providers
+        .get(provider_key)
+        .ok_or_else(|| ProviderError::Other(format!("no adapter for provider '{provider_key}'")))?;
 
     let init = adapter.connect().await?;
 
@@ -190,8 +191,8 @@ pub async fn complete_connection(
 
     let credentials = adapter.complete_connect(&query).await?;
 
-    let encrypted = encrypt_credentials(&encryption_key, &credentials)
-        .map_err(ProviderError::Other)?;
+    let encrypted =
+        encrypt_credentials(&encryption_key, &credentials).map_err(ProviderError::Other)?;
 
     let updated =
         gripsou_core::repo::connection::finish_connect(&db, connection_id, user_id, encrypted)

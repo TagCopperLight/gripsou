@@ -132,10 +132,7 @@ function ConnectionCard({
           {conn.accounts.map((a) => (
             <li key={a.id} className="flex items-center justify-between py-1.5">
               <span className="text-fg-dim text-sm truncate">{a.name}</span>
-              <div className="flex items-center gap-2 shrink-0 ml-2">
-                <span className="text-fg-faint text-xs">{a.typeLabel}</span>
-                <span className="text-fg text-sm font-medium">{a.value}</span>
-              </div>
+              <span className="text-fg-faint text-xs">{a.typeLabel}</span>
             </li>
           ))}
         </ul>

@@ -81,6 +81,7 @@
     "assetsCount": "{{count}} assets",
     "searchPlaceholder": "Search assets ...",
     "all": "All",
+    "multipleAccounts": "Multiple accounts",
     "columns": {
       "asset": "ASSET",
       "quantity": "QUANTITY",

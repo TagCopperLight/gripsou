@@ -158,11 +158,7 @@ pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreErr
 }
 
 /// Mark a finished sync as failed, recording the message.
-pub async fn mark_synced_error(
-    pool: &sqlx::PgPool,
-    id: Uuid,
-    msg: &str,
-) -> Result<(), CoreError> {
+pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection set status='error', last_error=$2 where id=$1",
         id,
@@ -174,10 +170,7 @@ pub async fn mark_synced_error(
 }
 
 /// Provider key for a connection (for the orchestrator's adapter lookup).
-pub async fn provider_key(
-    pool: &sqlx::PgPool,
-    id: Uuid,
-) -> Result<Option<String>, CoreError> {
+pub async fn provider_key(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, CoreError> {
     let key = sqlx::query_scalar!("select provider_key from connection where id = $1", id)
         .fetch_optional(pool)
         .await?;
@@ -190,20 +183,14 @@ pub async fn get_credentials(
     pool: &sqlx::PgPool,
     id: Uuid,
 ) -> Result<Option<serde_json::Value>, CoreError> {
-    let row = sqlx::query!(
-        "select credentials from connection where id = $1",
-        id
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.and_then(|r| Some(r.credentials)))
+    let row = sqlx::query!("select credentials from connection where id = $1", id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.credentials))
 }
 
 /// All connection ids for a user (for "sync all").
-pub async fn ids_for_user(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Uuid>, CoreError> {
+pub async fn ids_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"select id as "id!" from connection where user_id = $1"#,
         user_id,

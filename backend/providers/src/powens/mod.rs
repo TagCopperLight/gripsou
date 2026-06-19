@@ -93,7 +93,7 @@ impl AccountProvider for PowensProvider {
 
         let resp = self
             .http
-            .post(&self.api_url("/auth/token/access"))
+            .post(self.api_url("/auth/token/access"))
             .form(&[
                 ("grant_type", "authorization_code"),
                 ("client_id", &self.client_id),
@@ -128,7 +128,7 @@ impl AccountProvider for PowensProvider {
 
         let accounts_resp = self
             .http
-            .get(&self.api_url("/users/me/accounts"))
+            .get(self.api_url("/users/me/accounts"))
             .bearer_auth(auth_token)
             .send()
             .await
@@ -141,18 +141,24 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let accounts_text = accounts_resp.text().await.map_err(|e| ProviderError::Other(e.to_string()))?;
+        let accounts_text = accounts_resp
+            .text()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
         let accounts: AccountsResponse = match serde_json::from_str(&accounts_text) {
             Ok(v) => v,
             Err(e) => {
                 println!("Accounts decode error: {}\nRaw JSON: {}", e, accounts_text);
-                return Err(ProviderError::Other(format!("accounts decode error: {}", e)));
+                return Err(ProviderError::Other(format!(
+                    "accounts decode error: {}",
+                    e
+                )));
             }
         };
 
         let investments_resp = self
             .http
-            .get(&self.api_url("/users/me/investments"))
+            .get(self.api_url("/users/me/investments"))
             .bearer_auth(auth_token)
             .send()
             .await
@@ -165,14 +171,44 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let investments_text = investments_resp.text().await.map_err(|e| ProviderError::Other(e.to_string()))?;
+        let investments_text = investments_resp
+            .text()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
         let investments: InvestmentsResponse = match serde_json::from_str(&investments_text) {
             Ok(v) => v,
             Err(e) => {
-                println!("Investments decode error: {}\nRaw JSON: {}", e, investments_text);
-                return Err(ProviderError::Other(format!("investments decode error: {}", e)));
+                println!(
+                    "Investments decode error: {}\nRaw JSON: {}",
+                    e, investments_text
+                );
+                return Err(ProviderError::Other(format!(
+                    "investments decode error: {}",
+                    e
+                )));
             }
         };
+
+        // TEMP DEBUG (remove): surface raw balances vs itemised values so we can
+        // see whether Powens includes the liquidity sleeve in `balance`.
+        for a in &accounts.accounts {
+            let sec: rust_decimal::Decimal = investments
+                .investments
+                .iter()
+                .filter(|i| i.id_account == a.id && !map::is_liquidity(i) && i.deleted.is_none())
+                .filter_map(|i| i.valuation)
+                .sum();
+            let liq: rust_decimal::Decimal = investments
+                .investments
+                .iter()
+                .filter(|i| i.id_account == a.id && map::is_liquidity(i) && i.deleted.is_none())
+                .filter_map(|i| i.valuation)
+                .sum();
+            eprintln!(
+                "[powens debug] acct id={} type={:?} balance={:?} securities_sum={} liquidity_sum={}",
+                a.id, a.r#type, a.balance, sec, liq
+            );
+        }
 
         Ok(map::map_sync(&accounts.accounts, &investments.investments))
     }
@@ -197,7 +233,10 @@ mod tests {
         assert!(url.contains("domain=test.biapi.pro"), "url={url}");
         assert!(url.contains("client_id=test-client"), "url={url}");
         assert!(url.contains("redirect_uri="), "url={url}");
-        assert!(!url.contains("auth_token"), "url must not have auth_token: {url}");
+        assert!(
+            !url.contains("auth_token"),
+            "url must not have auth_token: {url}"
+        );
     }
 
     #[tokio::test]
@@ -205,12 +244,10 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/2.0/auth/token/access"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "access_token": "perm-abc",
-                    "token_type": "Bearer"
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "perm-abc",
+                "token_type": "Bearer"
+            })))
             .mount(&server)
             .await;
 
@@ -243,14 +280,12 @@ mod tests {
     async fn sync_fetches_and_maps_accounts_and_investments() {
         let server = MockServer::start().await;
 
-        let accounts: serde_json::Value = serde_json::from_str(
-            include_str!("../../tests/fixtures/powens/accounts.json"),
-        )
-        .unwrap();
-        let investments: serde_json::Value = serde_json::from_str(
-            include_str!("../../tests/fixtures/powens/investments.json"),
-        )
-        .unwrap();
+        let accounts: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/powens/accounts.json"))
+                .unwrap();
+        let investments: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/powens/investments.json"))
+                .unwrap();
 
         Mock::given(method("GET"))
             .and(path("/2.0/users/me/accounts"))

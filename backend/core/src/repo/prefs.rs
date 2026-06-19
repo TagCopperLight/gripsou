@@ -25,14 +25,30 @@ pub struct UserPrefs {
     pub percent_decimals: u8,
 }
 
-fn default_ui_language() -> String { "en".to_string() }
-fn default_date_format() -> String { "DD/MM/YYYY".to_string() }
-fn default_group_sep() -> String { " ".to_string() }
-fn default_decimal_sep() -> String { ",".to_string() }
-fn default_number_decimals() -> u8 { 2 }
-fn default_currency_symbol() -> String { "€".to_string() }
-fn default_currency_position() -> String { "after".to_string() }
-fn default_percent_decimals() -> u8 { 2 }
+fn default_ui_language() -> String {
+    "en".to_string()
+}
+fn default_date_format() -> String {
+    "DD/MM/YYYY".to_string()
+}
+fn default_group_sep() -> String {
+    " ".to_string()
+}
+fn default_decimal_sep() -> String {
+    ",".to_string()
+}
+fn default_number_decimals() -> u8 {
+    2
+}
+fn default_currency_symbol() -> String {
+    "€".to_string()
+}
+fn default_currency_position() -> String {
+    "after".to_string()
+}
+fn default_percent_decimals() -> u8 {
+    2
+}
 
 impl Default for UserPrefs {
     fn default() -> Self {
