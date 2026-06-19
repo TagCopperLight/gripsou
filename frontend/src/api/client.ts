@@ -61,13 +61,13 @@ export async function getJson<T>(path: string, opts?: GetJsonOptions): Promise<T
   return res.json() as Promise<T>;
 }
 
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  handle(res, path, "POST");
+  handle(res, path, "POST", opts);
   // 204 No Content (e.g. change-password) has an empty body.
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

@@ -14,7 +14,7 @@ use axum::{
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
+    let index_html = format!("{static_dir}/index.html");
 
     let api = Router::new()
         .route("/health", get(health))
@@ -129,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .nest("/api", api.layer(cors_layer))
-        .fallback_service(ServeDir::new(static_dir));
+        .fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(index_html)));
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;

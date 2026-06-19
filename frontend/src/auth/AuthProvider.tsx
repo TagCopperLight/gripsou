@@ -49,11 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, remember: boolean) => {
-      const res = await postJson<LoginResponse>("/auth/login", {
-        email,
-        password,
-        remember,
-      });
+      const res = await postJson<LoginResponse>(
+        "/auth/login",
+        { email, password, remember },
+        { skipGlobalUnauthorized: true },
+      );
       setAuthToken(res.token, remember);
       applyUser(res.user);
     },
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await postJson<void>("/auth/logout", {});
+      await postJson<void>("/auth/logout", {}, { skipGlobalUnauthorized: true });
     } catch {
       // Token may already be invalid/expired; clear locally regardless.
     }
