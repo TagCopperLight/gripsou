@@ -163,7 +163,7 @@ fn skips_powens_liquidity_pseudo_instrument() {
 }
 
 #[test]
-fn liquidity_value_folds_into_cash_residual() {
+fn liquidity_line_is_the_invest_account_cash() {
     let fx = load("sync_liquidity.json");
     let result = map::map_sync(&fx.accounts, &fx.investments);
     // One real security + one cash holding; no separate "Liquidités" line.
@@ -175,10 +175,10 @@ fn liquidity_value_folds_into_cash_residual() {
             .any(|h| h.instrument.name == "Liquidités"),
         "the liquidity pseudo-instrument must not appear as a holding"
     );
-    // Cash = residual (balance 1000 - securities 600) + liquidity 50 = 450. The
-    // liquidity sleeve is folded into cash rather than dropped or shown as a line.
-    let cash = cash_for(&result.holdings, "6001").expect("residual cash");
-    assert_eq!(cash.quantity, dec("450.00"));
+    // The liquidity sleeve (50) is the cash; the account's `balance` (1000) is
+    // ignored for invest accounts because it lags the live valuations.
+    let cash = cash_for(&result.holdings, "6001").expect("cash sleeve");
+    assert_eq!(cash.quantity, dec("50"));
 }
 
 fn cash_for<'a>(holdings: &'a [CanonicalHolding], account: &str) -> Option<&'a CanonicalHolding> {

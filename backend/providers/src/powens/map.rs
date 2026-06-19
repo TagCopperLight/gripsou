@@ -136,33 +136,40 @@ pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<Canoni
     })
 }
 
-/// Build the cash holding for an account, given the summed valuation of the
-/// security holdings (`invested`) and of any `XX-liquidity` sleeve (`liquidity`)
-/// booked against it. Non-invest accounts always yield a cash holding (including
-/// a zero balance or a negative overdraft). Invest accounts yield the positive
-/// residual (`balance - invested + liquidity`); a zero or negative result is
-/// dropped, since that cash sleeve would be nonexistent or nonsensical.
+/// Build the cash holding for an account.
 ///
-/// Powens reports an investment account's `balance` as its securities value and
-/// itemises the cash separately as the liquidity sleeve, so `liquidity` is added
-/// on top of the residual rather than being netted out of `balance`.
+/// Non-invest accounts always yield a cash holding from `balance` (including a
+/// zero balance or a negative overdraft).
+///
+/// Invest accounts get their cash sleeve from `liquidity`:
+/// - `Some(v)` — Powens itemised an `XX-liquidity` sleeve summing to `v`. That
+///   is authoritative cash; `balance` is **ignored** because for invest accounts
+///   it lags the live investment valuations (observed: a PEA whose `balance`
+///   sat below its securities' market value, which would make a residual
+///   negative).
+/// - `None` — no liquidity sleeve was reported, so fall back to the residual
+///   `balance - invested` (covers accounts whose cash is only implied by the
+///   balance, e.g. a first sync before investments populate).
+///
+/// A zero or negative result is dropped, since that cash sleeve would be
+/// nonexistent or nonsensical.
 fn cash_holding(
     acct: &BankAccount,
     invested: Decimal,
-    liquidity: Decimal,
+    liquidity: Option<Decimal>,
 ) -> Option<CanonicalHolding> {
     let balance = acct.balance.unwrap_or(Decimal::ZERO);
     let type_name = acct.r#type.as_deref().unwrap_or("unknown");
     let is_invest = is_invest_type(type_name);
 
     let quantity = if is_invest {
-        let residual = balance - invested + liquidity;
-        if residual <= Decimal::ZERO {
+        let cash = liquidity.unwrap_or(balance - invested);
+        if cash <= Decimal::ZERO {
             return None;
         }
-        residual
+        cash
     } else {
-        balance + liquidity
+        balance
     };
 
     let currency = acct
@@ -212,11 +219,14 @@ pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncRes
         let account_currency = acct.currency.as_ref().map(|c| c.id.as_str()).unwrap_or("");
 
         let mut invested = Decimal::ZERO;
-        let mut liquidity = Decimal::ZERO;
+        // `None` until a liquidity line is seen, so `cash_holding` can tell
+        // "no sleeve reported" apart from "a sleeve worth 0".
+        let mut liquidity: Option<Decimal> = None;
         if let Some(invs) = by_account.get(&acct.id) {
             for inv in invs {
                 if is_liquidity(inv) {
-                    liquidity += inv.valuation.unwrap_or(Decimal::ZERO);
+                    *liquidity.get_or_insert(Decimal::ZERO) +=
+                        inv.valuation.unwrap_or(Decimal::ZERO);
                     continue;
                 }
                 if let Some(holding) = map_investment(inv, account_currency) {

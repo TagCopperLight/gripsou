@@ -189,27 +189,6 @@ impl AccountProvider for PowensProvider {
             }
         };
 
-        // TEMP DEBUG (remove): surface raw balances vs itemised values so we can
-        // see whether Powens includes the liquidity sleeve in `balance`.
-        for a in &accounts.accounts {
-            let sec: rust_decimal::Decimal = investments
-                .investments
-                .iter()
-                .filter(|i| i.id_account == a.id && !map::is_liquidity(i) && i.deleted.is_none())
-                .filter_map(|i| i.valuation)
-                .sum();
-            let liq: rust_decimal::Decimal = investments
-                .investments
-                .iter()
-                .filter(|i| i.id_account == a.id && map::is_liquidity(i) && i.deleted.is_none())
-                .filter_map(|i| i.valuation)
-                .sum();
-            eprintln!(
-                "[powens debug] acct id={} type={:?} balance={:?} securities_sum={} liquidity_sum={}",
-                a.id, a.r#type, a.balance, sec, liq
-            );
-        }
-
         Ok(map::map_sync(&accounts.accounts, &investments.investments))
     }
 }
