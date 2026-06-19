@@ -22,16 +22,50 @@ pub async fn net_worth_series(
     let rows = sqlx::query_as!(
         NetWorthRow,
         r#"
-        select hs.as_of as "as_of!",
-               sum(hs.value)      as "net_worth!",
-               sum(hs.cost_basis) as "invested!"
-        from holding_snapshot hs
-        join holding h    on h.id = hs.holding_id
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where c.user_id = $1 and hs.as_of between $2 and $3
-        group by hs.as_of
-        order by hs.as_of
+        with dates as (
+            select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+        ),
+        holdings_on_date as (
+            select d.as_of,
+                   h.id as holding_id,
+                   coalesce(
+                       (select quantity from holding_snapshot hs where hs.holding_id = h.id and hs.as_of <= d.as_of order by as_of desc limit 1),
+                       h.quantity
+                   ) as quantity,
+                   coalesce(
+                       (select cost_basis from holding_snapshot hs where hs.holding_id = h.id and hs.as_of <= d.as_of order by as_of desc limit 1),
+                       h.cost_basis
+                   ) as cost_basis,
+                   (select value from holding_snapshot hs where hs.holding_id = h.id and hs.as_of <= d.as_of order by as_of desc limit 1) as snapshot_value,
+                   i.kind,
+                   i.id as instrument_id
+            from dates d
+            cross join holding h
+            join account a on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            join instrument i on i.id = h.instrument_id
+            where c.user_id = $1 and h.quantity <> 0
+        ),
+        daily_values as (
+            select hd.as_of,
+                   hd.cost_basis,
+                   case
+                       when hd.kind = 'cash' then hd.quantity
+                       else coalesce(
+                           hd.quantity * (select unit_price from price p where p.instrument_id = hd.instrument_id and p.ts::date <= hd.as_of order by ts desc limit 1),
+                           hd.quantity * (select unit_price from price p where p.instrument_id = hd.instrument_id order by ts asc limit 1),
+                           hd.snapshot_value,
+                           0
+                       )
+                   end as value
+            from holdings_on_date hd
+        )
+        select as_of as "as_of!",
+               coalesce(sum(value), 0) as "net_worth!",
+               coalesce(sum(cost_basis), 0) as "invested!"
+        from daily_values
+        group by as_of
+        order by as_of
         "#,
         user_id,
         from,
@@ -277,18 +311,53 @@ pub async fn account_series(
     let rows = sqlx::query_as!(
         AccountSeriesRow,
         r#"
-        select a.id   as "account_id!",
-               a.name as "name!",
-               a.color,
-               hs.as_of as "as_of!",
-               sum(hs.value) as "value!"
-        from holding_snapshot hs
-        join holding h    on h.id = hs.holding_id
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where c.user_id = $1 and hs.as_of between $2 and $3
-        group by a.id, a.name, a.color, hs.as_of
-        order by hs.as_of, a.id
+        with dates as (
+            select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+        ),
+        holdings_on_date as (
+            select d.as_of,
+                   a.id as account_id,
+                   a.name as account_name,
+                   a.color as account_color,
+                   h.id as holding_id,
+                   coalesce(
+                       (select quantity from holding_snapshot hs where hs.holding_id = h.id and hs.as_of <= d.as_of order by as_of desc limit 1),
+                       h.quantity
+                   ) as quantity,
+                   (select value from holding_snapshot hs where hs.holding_id = h.id and hs.as_of <= d.as_of order by as_of desc limit 1) as snapshot_value,
+                   i.kind,
+                   i.id as instrument_id
+            from dates d
+            cross join holding h
+            join account a on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            join instrument i on i.id = h.instrument_id
+            where c.user_id = $1 and h.quantity <> 0
+        ),
+        daily_values as (
+            select hd.as_of,
+                   hd.account_id,
+                   hd.account_name,
+                   hd.account_color,
+                   case
+                       when hd.kind = 'cash' then hd.quantity
+                       else coalesce(
+                           hd.quantity * (select unit_price from price p where p.instrument_id = hd.instrument_id and p.ts::date <= hd.as_of order by ts desc limit 1),
+                           hd.quantity * (select unit_price from price p where p.instrument_id = hd.instrument_id order by ts asc limit 1),
+                           hd.snapshot_value,
+                           0
+                       )
+                   end as value
+            from holdings_on_date hd
+        )
+        select account_id as "account_id!",
+               account_name as "name!",
+               account_color as "color",
+               as_of as "as_of!",
+               coalesce(sum(value), 0) as "value!"
+        from daily_values
+        group by account_id, account_name, account_color, as_of
+        order by as_of, account_id
         "#,
         user_id,
         from,

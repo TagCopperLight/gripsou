@@ -101,7 +101,7 @@ pub struct Holding {
     pub ticker: String,
     pub name: String,
     pub kind: String,
-    pub logo: String,
+    pub logo: Option<String>,
     pub account_id: String,
     pub account_name: String,
     pub account_color: String,
@@ -146,11 +146,7 @@ impl Holding {
             ticker: r.symbol.unwrap_or_else(|| r.currency.clone()),
             name: r.instrument_name,
             kind: r.kind,
-            logo: r.logo_url.unwrap_or_else(|| {
-                r.account_color
-                    .clone()
-                    .unwrap_or_else(|| "#888888".to_string())
-            }),
+            logo: r.logo_url,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
             account_color: r.account_color.unwrap_or_else(|| "#888888".to_string()),

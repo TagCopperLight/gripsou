@@ -10,6 +10,7 @@ import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
+import { colorForString } from "../lib/palette";
 import { KIND_LABEL_KEY, categoryLabel, type Holding, type Purchase } from "../api/types";
 import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
@@ -98,7 +99,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
           {
             name: t("assetModal.unitPrice"),
             data: prices.map((p) => [p.t, Number(p.price)] as [number, number]),
-            color: holding.accountColor,
+            color: colorForString(holding.ticker),
             area: true,
           },
         ] satisfies ChartSeries[],
@@ -125,6 +126,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
   }, [holding, mode, prices, purchases, qtyNum, investedNum, t]);
 
   const gainUp = gainAbs >= 0;
+  const hasLogoUrl = holding.logo && (holding.logo.startsWith("http") || holding.logo.startsWith("/"));
 
   return (
     <div
@@ -142,10 +144,14 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         <div className="flex items-center justify-between p-6">
           <div className="flex items-center gap-4">
             <span
-              className="size-12 rounded-xl shrink-0 flex items-center justify-center text-sm font-mono font-semibold text-fg"
-              style={{ background: holding.logo }}
+              className="size-12 rounded-xl shrink-0 flex items-center justify-center text-sm font-mono font-semibold text-fg bg-cover bg-center"
+              style={
+                hasLogoUrl
+                  ? { backgroundImage: `url(${holding.logo})` }
+                  : { backgroundColor: colorForString(holding.ticker) }
+              }
             >
-              {holding.ticker.slice(0, 2)}
+              {!hasLogoUrl && holding.ticker.slice(0, 2)}
             </span>
             <div className="h-12 flex flex-col justify-between py-0.5">
               <h2 className="text-xl font-semibold text-fg leading-none">

@@ -44,7 +44,7 @@ export type Holding = {
   ticker: string;
   name: string;
   kind: HoldingKind;
-  logo: string;
+  logo: string | null;
   accountId: string;
   accountName: string;
   accountColor: string;
