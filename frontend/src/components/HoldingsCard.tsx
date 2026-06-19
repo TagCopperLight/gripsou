@@ -9,6 +9,7 @@ import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
 import { CardState } from "./CardState";
 import { formatQuantity } from "../lib/money";
+import { aggregateCash } from "../lib/holdings";
 import { KIND_LABEL_KEY, categoryLabel, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
 
@@ -72,7 +73,12 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useHoldings();
   const ready = data !== undefined;
-  const holdings = useMemo(() => data ?? [], [data]);
+  // Cash is the same instrument across accounts; show one summed line per
+  // currency here, with the per-account split living on the Accounts tab.
+  const holdings = useMemo(
+    () => aggregateCash(data ?? [], t("holdings.multipleAccounts")),
+    [data, t],
+  );
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
@@ -206,11 +212,15 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             {rows.map((h) => {
               const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
+              // Cash rows are summary lines (no asset detail / purchase history),
+              // so they are not clickable.
               return (
                 <tr
                   key={h.id}
-                  onClick={() => setSelected(h)}
-                  className="cursor-pointer hover:bg-hover transition-colors duration-140"
+                  onClick={hasPnl ? () => setSelected(h) : undefined}
+                  className={`transition-colors duration-140 ${
+                    hasPnl ? "cursor-pointer hover:bg-hover" : ""
+                  }`}
                 >
                   {/* ASSET */}
                   <td className="py-3 px-3 border-t border-surface-2">

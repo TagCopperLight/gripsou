@@ -238,6 +238,60 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    // First sync: cash + equity.
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![
+                cash_holding("acct-1", Decimal::new(100, 0)),
+                equity_holding(
+                    "acct-1",
+                    "US0378331005",
+                    Decimal::new(3, 0),
+                    Decimal::new(450, 0),
+                    Some(Decimal::new(600, 0)),
+                ),
+            ],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    // Second sync drops the cash holding, so it is closed (quantity 0).
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(3, 0),
+                Decimal::new(450, 0),
+                Some(Decimal::new(600, 0)),
+            )],
+            transactions: vec![],
+        },
+    )
+    .await?;
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let rows = query::holdings(&pool, user_id).await?;
+    assert_eq!(
+        rows.len(),
+        1,
+        "closed (zero-quantity) holdings are excluded"
+    );
+    assert_eq!(rows[0].kind, "equity");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select credentials from connection where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credentials",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "credentials"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d90a14dcb8b437d630b7c44a606991a922a23ad5c83d640fa922d792a2191899"
+}

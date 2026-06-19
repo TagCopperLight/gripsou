@@ -127,6 +127,79 @@ async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+
+    // First sync: a cash holding alongside an equity.
+    let sync1 = SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![
+            cash_holding("acct-1", Decimal::new(1000, 0)),
+            equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(3, 0),
+                Decimal::new(450, 0),
+                Some(Decimal::new(600, 0)),
+            ),
+        ],
+        transactions: vec![],
+    };
+    ingest(&pool, conn_id, &sync1).await?;
+
+    // Second sync: the cash holding is gone (e.g. the invest residual went to
+    // zero). The equity remains.
+    let sync2 = SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![equity_holding(
+            "acct-1",
+            "US0378331005",
+            Decimal::new(3, 0),
+            Decimal::new(450, 0),
+            Some(Decimal::new(600, 0)),
+        )],
+        transactions: vec![],
+    };
+    let summary = ingest(&pool, conn_id, &sync2).await?;
+    assert_eq!(
+        summary.holdings_closed, 1,
+        "the vanished cash holding is closed"
+    );
+
+    // The cash holding's position is zeroed in place (row kept for history).
+    let cash_qty: Decimal = sqlx::query_scalar(
+        "select h.quantity from holding h \
+         join instrument i on i.id = h.instrument_id where i.kind = 'cash'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(cash_qty, Decimal::ZERO, "cash holding quantity zeroed");
+
+    // Its latest snapshot value is zero — no stale value left to double-count.
+    let cash_val: Decimal = sqlx::query_scalar(
+        "select hs.value from holding_snapshot hs \
+         join holding h on h.id = hs.holding_id \
+         join instrument i on i.id = h.instrument_id \
+         where i.kind = 'cash' order by hs.as_of desc limit 1",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(cash_val, Decimal::ZERO, "cash snapshot zeroed");
+
+    // The surviving equity is untouched.
+    let eq_val: Decimal = sqlx::query_scalar(
+        "select hs.value from holding_snapshot hs \
+         join holding h on h.id = hs.holding_id \
+         join instrument i on i.id = h.instrument_id \
+         where i.kind = 'equity' order by hs.as_of desc limit 1",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(eq_val, Decimal::new(600, 0), "equity snapshot intact");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {

@@ -1,7 +1,7 @@
 //! Sync-ingestion orchestrator: persist a provider `SyncResult` for one
 //! connection in a single transaction. Idempotent and atomic.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use rust_decimal::Decimal;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::dto::SyncResult;
 use crate::error::CoreError;
 use crate::repo::account::upsert_account;
-use crate::repo::holding::upsert_holding;
+use crate::repo::holding::{ids_for_connection, upsert_holding, zero_holding};
 use crate::repo::instrument::resolve_instrument;
 use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::insert_transaction;
@@ -23,6 +23,9 @@ pub struct IngestSummary {
     pub holdings: usize,
     pub transactions_inserted: usize,
     pub snapshots: usize,
+    /// Holdings present in a prior sync but absent from this one: their position
+    /// was zeroed and a zero snapshot stamped for today.
+    pub holdings_closed: usize,
 }
 
 pub async fn ingest(
@@ -42,6 +45,7 @@ pub async fn ingest(
 
     // Holdings: resolve instrument, upsert holding, stamp today's snapshot.
     let mut snapshots = 0;
+    let mut present: HashSet<Uuid> = HashSet::new();
     for holding in &sync.holdings {
         let account_id = *account_ids
             .get(holding.account_external_id.as_str())
@@ -50,6 +54,7 @@ pub async fn ingest(
             })?;
         let instrument_id = resolve_instrument(&mut tx, &holding.instrument).await?;
         let holding_id = upsert_holding(&mut tx, account_id, instrument_id, holding).await?;
+        present.insert(holding_id);
 
         let value = if holding.instrument.kind == "cash" {
             holding.quantity
@@ -66,6 +71,28 @@ pub async fn ingest(
         )
         .await?;
         snapshots += 1;
+    }
+
+    // Close holdings that existed before but are absent from this sync (e.g. a
+    // position fully sold, or an invest account's cash residual that went to
+    // zero). Zero the position and stamp a zero snapshot for today so the
+    // "latest snapshot per holding" aggregations (accounts, distribution) and
+    // the holdings list stop counting their stale values. History is kept.
+    let mut holdings_closed = 0;
+    for existing in ids_for_connection(&mut tx, connection_id).await? {
+        if !present.contains(&existing) {
+            zero_holding(&mut tx, existing).await?;
+            stamp_snapshot(
+                &mut tx,
+                existing,
+                today,
+                Decimal::ZERO,
+                Decimal::ZERO,
+                Decimal::ZERO,
+            )
+            .await?;
+            holdings_closed += 1;
+        }
     }
 
     // Transactions: dedup on external_id.
@@ -88,5 +115,6 @@ pub async fn ingest(
         holdings: sync.holdings.len(),
         transactions_inserted,
         snapshots,
+        holdings_closed,
     })
 }

@@ -1,0 +1,46 @@
+{
+  "accounts": [
+    {
+      "id": 6001,
+      "original_name": "PEA",
+      "name": "PEA",
+      "balance": 1000.0,
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "pea",
+      "deleted": null
+    }
+  ],
+  "investments": [
+    {
+      "id": 6101,
+      "id_account": 6001,
+      "label": "Air Liquide",
+      "code": "FR0000120073",
+      "code_type": "ISIN",
+      "stock_symbol": null,
+      "quantity": 25,
+      "unitprice": 160.0,
+      "unitvalue": 160.0,
+      "valuation": 600.0,
+      "original_currency": null,
+      "deleted": null
+    },
+    {
+      "id": 6102,
+      "id_account": 6001,
+      "label": "Liquidités",
+      "code": "XX-liquidity",
+      "code_type": null,
+      "stock_symbol": null,
+      "quantity": 0,
+      "unitprice": null,
+      "unitvalue": null,
+      "valuation": 50.0,
+      "original_currency": null,
+      "deleted": null
+    }
+  ]
+}

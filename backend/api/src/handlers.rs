@@ -47,10 +47,7 @@ fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
 
 /// Resolve the caller and require the admin role. Server config and provider
 /// management are admin-only (see ARCHITECTURE: app_settings is admin-tunable).
-async fn require_admin(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<(), (StatusCode, String)> {
+async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, String)> {
     let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
         .await
         .map_err(internal)?
@@ -210,9 +207,7 @@ pub async fn sync_connection(
             StatusCode::CONFLICT,
             "connection is already syncing".to_string(),
         )),
-        BeginSync::NotFound => {
-            Err((StatusCode::NOT_FOUND, "connection not found".to_string()))
-        }
+        BeginSync::NotFound => Err((StatusCode::NOT_FOUND, "connection not found".to_string())),
     }
 }
 
@@ -280,7 +275,9 @@ pub async fn providers(
     let rows = gripsou_core::repo::provider::account_providers(&pool)
         .await
         .map_err(internal)?;
-    Ok(Json(rows.into_iter().map(dto::Provider::from_row).collect()))
+    Ok(Json(
+        rows.into_iter().map(dto::Provider::from_row).collect(),
+    ))
 }
 
 pub async fn set_provider(
@@ -564,7 +561,9 @@ pub async fn enabled_providers(
         .await
         .map_err(internal)?;
     Ok(Json(
-        rows.into_iter().map(dto::EnabledProvider::from_row).collect(),
+        rows.into_iter()
+            .map(dto::EnabledProvider::from_row)
+            .collect(),
     ))
 }
 
@@ -587,13 +586,8 @@ pub async fn init_connection(
             )
         })?;
 
-    match gripsou_jobs::init_connection(
-        pool,
-        user_id,
-        &body.provider_key,
-        &provider.display_name,
-    )
-    .await
+    match gripsou_jobs::init_connection(pool, user_id, &body.provider_key, &provider.display_name)
+        .await
     {
         Ok((connection_id, init)) => Ok((
             StatusCode::CREATED,
@@ -1208,8 +1202,10 @@ mod auth_tests {
         .await
         .unwrap();
 
-        let principal =
-            || auth::AuthUser { user_id: user, session_id: Uuid::new_v4() };
+        let principal = || auth::AuthUser {
+            user_id: user,
+            session_id: Uuid::new_v4(),
+        };
 
         // Unknown connection → 404.
         let nf = sync_connection(State(pool.clone()), principal(), Path(Uuid::new_v4()))
@@ -1277,7 +1273,10 @@ mod auth_tests {
 
         let groups = connections(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
         )
         .await
         .expect("connections ok")
@@ -1324,9 +1323,15 @@ mod auth_tests {
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
         // marketdata is kind='price' and must be excluded; powens is enabled via seed.
         let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
-        let principal = auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() };
+        let principal = auth::AuthUser {
+            user_id: admin,
+            session_id: Uuid::new_v4(),
+        };
 
-        let list = providers(State(pool.clone()), principal).await.expect("ok").0;
+        let list = providers(State(pool.clone()), principal)
+            .await
+            .expect("ok")
+            .0;
 
         assert_eq!(list.len(), 1, "only account-kind providers are listed");
         assert_eq!(list[0].key, "powens");
@@ -1340,7 +1345,10 @@ mod auth_tests {
         let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
         let err = providers(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
         )
         .await
         .unwrap_err();
@@ -1350,7 +1358,10 @@ mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
         let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
-        let principal = || auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() };
+        let principal = || auth::AuthUser {
+            user_id: admin,
+            session_id: Uuid::new_v4(),
+        };
 
         // Disable powens (seeded enabled).
         let off = set_provider(
@@ -1398,7 +1409,10 @@ mod auth_tests {
         for key in ["nope", "marketdata"] {
             let err = set_provider(
                 State(pool.clone()),
-                auth::AuthUser { user_id: admin, session_id: Uuid::new_v4() },
+                auth::AuthUser {
+                    user_id: admin,
+                    session_id: Uuid::new_v4(),
+                },
                 Path(key.to_string()),
                 Json(dto::SetProviderReq { enabled: true }),
             )
@@ -1413,7 +1427,10 @@ mod auth_tests {
         let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
         let err = set_provider(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
             Path("powens".to_string()),
             Json(dto::SetProviderReq { enabled: false }),
         )
@@ -1428,18 +1445,25 @@ mod auth_tests {
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
         let rows = enabled_providers(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
         )
         .await
         .expect("ok")
         .0;
 
         // Only account-kind AND in enabled_providers list.
-        assert!(rows.iter().all(|p| p.key != "marketdata"),
-            "price providers must be excluded");
+        assert!(
+            rows.iter().all(|p| p.key != "marketdata"),
+            "price providers must be excluded"
+        );
         // Powens is in enabled_providers per seed — it should appear.
-        assert!(rows.iter().any(|p| p.key == "powens"),
-            "powens should be in enabled list");
+        assert!(
+            rows.iter().any(|p| p.key == "powens"),
+            "powens should be in enabled list"
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1447,8 +1471,13 @@ mod auth_tests {
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
         let err = init_connection(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
-            Json(dto::InitConnectionReq { provider_key: "nope".to_string() }),
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
+            Json(dto::InitConnectionReq {
+                provider_key: "nope".to_string(),
+            }),
         )
         .await
         .unwrap_err();
@@ -1460,14 +1489,25 @@ mod auth_tests {
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
         let resp = init_connection(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
-            Json(dto::InitConnectionReq { provider_key: "powens".to_string() }),
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
+            Json(dto::InitConnectionReq {
+                provider_key: "powens".to_string(),
+            }),
         )
         .await
         .unwrap();
 
         assert_eq!(resp.0, StatusCode::CREATED);
-        assert!(resp.1.redirect_url.as_ref().unwrap().starts_with("https://webview.powens.com/en/connect"));
+        assert!(
+            resp.1
+                .redirect_url
+                .as_ref()
+                .unwrap()
+                .starts_with("https://webview.powens.com/en/connect")
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1489,7 +1529,10 @@ mod auth_tests {
         // Wrong user → 404.
         let err = delete_connection(
             State(pool.clone()),
-            auth::AuthUser { user_id: other, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: other,
+                session_id: Uuid::new_v4(),
+            },
             axum::extract::Path(conn_id),
         )
         .await
@@ -1499,7 +1542,10 @@ mod auth_tests {
         // Correct user → 204.
         let ok = delete_connection(
             State(pool.clone()),
-            auth::AuthUser { user_id: owner, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: owner,
+                session_id: Uuid::new_v4(),
+            },
             axum::extract::Path(conn_id),
         )
         .await
@@ -1507,12 +1553,11 @@ mod auth_tests {
         assert_eq!(ok, StatusCode::NO_CONTENT);
 
         // Connection is gone.
-        let count: i64 =
-            sqlx::query_scalar("select count(*) from connection where id=$1")
-                .bind(conn_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let count: i64 = sqlx::query_scalar("select count(*) from connection where id=$1")
+            .bind(conn_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -1521,7 +1566,10 @@ mod auth_tests {
         let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
         let err = complete_connection(
             State(pool.clone()),
-            auth::AuthUser { user_id: user, session_id: Uuid::new_v4() },
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
             Json(dto::CompleteConnectionReq {
                 connection_id: Uuid::new_v4().to_string(),
                 params: std::collections::HashMap::new(),

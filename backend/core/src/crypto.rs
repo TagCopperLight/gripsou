@@ -46,15 +46,20 @@ pub fn encrypt(key_hex: &str, plaintext: &[u8]) -> Result<String, CryptoError> {
 /// Decrypt `blob` (base64 of nonce || ciphertext) using AES-256-GCM.
 /// `key_hex` must be exactly 64 hex characters (32 bytes).
 pub fn decrypt(key_hex: &str, blob: &str) -> Result<Vec<u8>, CryptoError> {
-    let combined = STANDARD.decode(blob).map_err(|_| CryptoError::InvalidBase64)?;
+    let combined = STANDARD
+        .decode(blob)
+        .map_err(|_| CryptoError::InvalidBase64)?;
     if combined.len() < 12 {
         return Err(CryptoError::DecryptionFailed);
     }
-    let nonce_bytes: [u8; 12] = combined[..12].try_into().map_err(|_| CryptoError::DecryptionFailed)?;
+    let nonce_bytes: [u8; 12] = combined[..12]
+        .try_into()
+        .map_err(|_| CryptoError::DecryptionFailed)?;
     let nonce = Nonce::from(nonce_bytes);
     let ciphertext = &combined[12..];
     let key_bytes = parse_key(key_hex)?;
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| CryptoError::DecryptionFailed)?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| CryptoError::DecryptionFailed)?;
     cipher
         .decrypt(&nonce, ciphertext)
         .map_err(|_| CryptoError::DecryptionFailed)

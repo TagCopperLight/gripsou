@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update holding set quantity = 0, cost_basis = 0, updated_at = now() where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dda93260b9108cfabfddf445784c14a6f0ce9cb31a1889d3d084c61363774d2c"
+}
