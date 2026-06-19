@@ -280,6 +280,33 @@ pub async fn providers(
     ))
 }
 
+pub async fn cors_origins(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let origins = gripsou_core::repo::settings::cors_origins(&pool)
+        .await
+        .map_err(internal)?;
+    Ok(Json(origins))
+}
+
+pub async fn set_cors_origins(
+    State(pool): State<PgPool>,
+    State(cors_state): State<std::sync::Arc<std::sync::RwLock<Vec<String>>>>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(origins): Json<Vec<String>>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    gripsou_core::repo::settings::set_cors_origins(&pool, &origins)
+        .await
+        .map_err(internal)?;
+    if let Ok(mut cache) = cors_state.write() {
+        *cache = origins;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn set_provider(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,

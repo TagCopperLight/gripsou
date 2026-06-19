@@ -16,13 +16,23 @@ use crate::error::CoreError;
 
 fn brandfetch_logo_url(ins: &InstrumentRef) -> Option<String> {
     let base_url = match ins.kind.as_str() {
-        "crypto" => ins.symbol.as_ref().map(|s| format!("https://cdn.brandfetch.io/crypto/{}", s)),
-        _ => ins.isin.as_ref().map(|s| format!("https://cdn.brandfetch.io/isin/{}", s))
-            .or_else(|| ins.symbol.as_ref().map(|s| format!("https://cdn.brandfetch.io/ticker/{}", s))),
+        "crypto" => ins
+            .symbol
+            .as_ref()
+            .map(|s| format!("https://cdn.brandfetch.io/crypto/{}", s)),
+        _ => ins
+            .isin
+            .as_ref()
+            .map(|s| format!("https://cdn.brandfetch.io/isin/{}", s))
+            .or_else(|| {
+                ins.symbol
+                    .as_ref()
+                    .map(|s| format!("https://cdn.brandfetch.io/ticker/{}", s))
+            }),
     }?;
 
     let client_id = std::env::var("BRANDFETCH_CLIENT_ID").ok();
-    
+
     let mut url = format!("{}/fallback/404/theme/light", base_url);
     if let Some(c) = client_id {
         url.push_str(&format!("?c={}", c));

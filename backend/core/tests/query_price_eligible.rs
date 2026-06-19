@@ -14,13 +14,21 @@ async fn returns_only_nonzero_noncash(pool: PgPool) {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
-            equity_holding("acct-1", "US0378331005", Decimal::new(3, 0), Decimal::new(450, 0), Some(Decimal::new(600, 0))),
+            equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(3, 0),
+                Decimal::new(450, 0),
+                Some(Decimal::new(600, 0)),
+            ),
         ],
         transactions: vec![],
     };
     ingest(&pool, conn_id, &sync).await.unwrap();
 
-    let rows = price_eligible_instruments_for_connection(&pool, conn_id).await.unwrap();
+    let rows = price_eligible_instruments_for_connection(&pool, conn_id)
+        .await
+        .unwrap();
 
     assert_eq!(rows.len(), 1, "cash excluded, equity included");
     assert_eq!(rows[0].kind, "equity");

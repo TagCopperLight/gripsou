@@ -11,6 +11,7 @@ pub mod price;
 pub mod provider;
 pub mod query;
 pub mod session;
+pub mod settings;
 pub mod snapshot;
 pub mod transaction;
 pub mod user;
