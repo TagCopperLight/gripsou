@@ -8,6 +8,7 @@
 - [x] Settings server page
 - [x] Readme
 - [x] Add CI/CD
+- [x] localhost redirects from powens
 
 - [ ] Currency conversion
 - [ ] Transaction page
@@ -17,6 +18,5 @@
 - [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
-- [ ] localhost redirects from powens
 - [ ] Failed connections kept open
 - [ ] Integrate webhooks
