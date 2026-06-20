@@ -10,10 +10,13 @@
 - [x] Add CI/CD
 
 - [ ] Currency conversion
-- [ ] Not implemented transaction page
+- [ ] Transaction page
 - [ ] Users page funcions
 - [ ] ETF categories and origin stats
 - [ ] Rearrange files and folders
 - [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
+- [ ] localhost redirects from powens
+- [ ] Failed connections kept open
+- [ ] Integrate webhooks
