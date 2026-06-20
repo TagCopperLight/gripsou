@@ -9,10 +9,6 @@ default-run = "gripsou"
 name = "gripsou"
 path = "src/main.rs"
 
-[[bin]]
-name = "seed"
-path = "src/bin/seed.rs"
-
 [dependencies]
 gripsou-core = { path = "../core" }
 gripsou-jobs = { path = "../jobs" }
