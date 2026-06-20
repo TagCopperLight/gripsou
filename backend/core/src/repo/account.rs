@@ -2,10 +2,22 @@
 //! provider-derived fields are updated; user-editable `name`/`color` are
 //! left untouched so a re-sync never clobbers a rename or recolor.
 
+use std::sync::OnceLock;
+
 use uuid::Uuid;
 
 use crate::dto::CanonicalAccount;
 use crate::error::CoreError;
+
+/// Single source of truth shared with the frontend (`shared/account-palette.json`).
+/// Used to assign a random color to a freshly imported account.
+fn account_palette() -> &'static [String] {
+    static PALETTE: OnceLock<Vec<String>> = OnceLock::new();
+    PALETTE.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../../shared/account-palette.json"))
+            .expect("shared/account-palette.json must be a JSON array of strings")
+    })
+}
 
 pub async fn upsert_account(
     conn: &mut sqlx::PgConnection,
@@ -14,8 +26,9 @@ pub async fn upsert_account(
 ) -> Result<Uuid, CoreError> {
     let id = sqlx::query_scalar!(
         r#"
-        insert into account (connection_id, name, currency, type_key, provider_meta, external_id)
-        values ($1, $2, $3, $4, $5, $6)
+        insert into account (connection_id, name, currency, type_key, provider_meta, external_id, color)
+        values ($1, $2, $3, $4, $5, $6,
+            ($7::text[])[1 + floor(random() * array_length($7::text[], 1))::int])
         on conflict (connection_id, external_id) where external_id is not null
         do update set
             currency = excluded.currency,
@@ -29,6 +42,7 @@ pub async fn upsert_account(
         acct.type_key,
         acct.meta,
         acct.external_id,
+        account_palette(),
     )
     .fetch_one(&mut *conn)
     .await?;

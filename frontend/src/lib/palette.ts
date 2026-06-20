@@ -1,18 +1,10 @@
-// Fixed account-color palette shown as swatches in the edit-account modal.
-// `account.color` stores the chosen hex verbatim. Order here is display order;
-// tweak hexes freely.
-export const ACCOUNT_PALETTE = [
-  "#5b9bf0", // blue
-  "#4dd0b1", // teal
-  "#b07ef0", // purple
-  "#f0b952", // amber
-  "#f08fb0", // pink
-  "#9bb06b", // olive
-  "#e88a5f", // coral
-  "#6aa0e0", // steel
-  "#b8a8f0", // lavender
-  "#5fcf9e", // green
-] as const;
+// Fixed account-color palette shown as swatches in the edit-account modal and
+// used by the backend to assign a random color on import. Single source of
+// truth: shared/account-palette.json at the repo root. `account.color` stores
+// the chosen hex verbatim.
+import ACCOUNT_PALETTE from "../../../shared/account-palette.json";
+
+export { ACCOUNT_PALETTE };
 
 function hslToHex(h: number, s: number, l: number): string {
   l /= 100;
