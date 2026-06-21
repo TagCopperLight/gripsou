@@ -6,6 +6,7 @@ pub mod account;
 pub mod connection;
 pub mod holding;
 pub mod instrument;
+pub mod invite_token;
 pub mod prefs;
 pub mod price;
 pub mod provider;

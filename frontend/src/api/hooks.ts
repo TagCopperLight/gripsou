@@ -286,3 +286,24 @@ export function useDeleteConnection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
   });
 }
+
+export function useCreateInvite() {
+  return useMutation({
+    mutationFn: () => postJson<{ token: string }>("/invites", {}),
+  });
+}
+
+export function useCreateResetLink() {
+  return useMutation({
+    mutationFn: (id: string) => postJson<{ token: string }>(`/users/${id}/reset-link`, {}),
+  });
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, email }: { id: string; email: string }) =>
+      deleteJson<void>(`/users/${id}`, { email }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}

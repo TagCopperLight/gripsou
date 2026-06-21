@@ -573,6 +573,11 @@ pub struct DeleteAccountReq {
     pub email: String,
 }
 
+#[derive(serde::Deserialize)]
+pub struct DeleteUserReq {
+    pub email: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Provider {
@@ -614,6 +619,12 @@ impl EnabledProvider {
             description: r.description,
         }
     }
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InviteLinkResp {
+    pub token: String,
 }
 
 #[derive(Deserialize)]

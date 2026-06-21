@@ -15,10 +15,11 @@
 
 - [ ] Currency conversion
 - [ ] Transaction page
-- [ ] Users page functions
 - [ ] Icons for users
 - [ ] ETF categories and origin stats
 - [ ] Rearrange files and folders
 - [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
+- [ ] New look for connections page
+- [ ] Users page functions

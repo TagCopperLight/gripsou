@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update connection set status='awaiting', sync_requested_at=now() where id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "251c08f24d29c8c86f6d3a0001313e5b07f67d4855e1330891dd1deef7e03046"
+}

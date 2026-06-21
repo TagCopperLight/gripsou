@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update connection set status='ok', created_at=now() - interval '20 minutes' where id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4328a138112497d9bb05e1329ec21d027e0cbc1e25ff9972d17d6521ab905ec9"
+}

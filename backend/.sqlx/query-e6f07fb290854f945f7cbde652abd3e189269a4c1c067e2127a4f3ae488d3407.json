@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from connection\n         where status='pending' and created_at < now() - make_interval(mins => $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6f07fb290854f945f7cbde652abd3e189269a4c1c067e2127a4f3ae488d3407"
+}
