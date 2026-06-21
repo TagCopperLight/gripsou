@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../components/Button";
-import { useCompleteConnection } from "../api/hooks";
+import { useCompleteConnection, useDeleteConnection } from "../api/hooks";
 
 function parseCallbackParams(): {
   connectionId: string | null;
@@ -20,13 +20,23 @@ export function ConnectionCallback() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const complete = useCompleteConnection();
+  const deleteConnection = useDeleteConnection();
   const { connectionId, rest } = parseCallbackParams();
-  const [failed, setFailed] = useState(() => !connectionId);
+  // Powens echoes our `state` (the connectionId) plus an `error` param when the
+  // user cancels or the flow fails.
+  const [failed, setFailed] = useState(() => !connectionId || !!rest.error);
   const called = useRef(false);
 
   useEffect(() => {
     if (!connectionId || called.current) return;
     called.current = true;
+
+    // On a Powens failure, drop the orphaned pending row instead of leaving it
+    // stuck on "Connecting…".
+    if (rest.error) {
+      deleteConnection.mutate(connectionId);
+      return;
+    }
 
     complete.mutateAsync({ connectionId, params: rest })
       .then(() => navigate({ to: "/settings/connections" }))
