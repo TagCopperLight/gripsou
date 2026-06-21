@@ -9,6 +9,14 @@ use uuid::Uuid;
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
 
+/// Mark a connection's sync as failed and log why. Centralizes the
+/// previously-silent `mark_synced_error` call sites so failures show in logs.
+async fn fail_sync(db: &Db, id: Uuid, msg: impl Into<String>) {
+    let msg = msg.into();
+    tracing::warn!("sync failed for {id}: {msg}");
+    let _ = connection::mark_synced_error(db, id, &msg).await;
+}
+
 /// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
 pub async fn run_scheduler(db: Db) {
     tokio::spawn(prune_sessions(db.clone()));
@@ -121,8 +129,7 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     let encryption_key = match std::env::var("ENCRYPTION_KEY") {
         Ok(k) => k,
         Err(_) => {
-            let _ =
-                connection::mark_synced_error(&db, connection_id, "ENCRYPTION_KEY not set").await;
+            fail_sync(&db, connection_id, "ENCRYPTION_KEY not set").await;
             return;
         }
     };
@@ -131,7 +138,7 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
         Ok(Some(k)) => k,
         Ok(None) => return,
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
+            fail_sync(&db, connection_id, e.to_string()).await;
             return;
         }
     };
@@ -139,12 +146,11 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     let encrypted_creds = match connection::get_credentials(&db, connection_id).await {
         Ok(Some(v)) => v,
         Ok(None) => {
-            let _ =
-                connection::mark_synced_error(&db, connection_id, "no credentials stored").await;
+            fail_sync(&db, connection_id, "no credentials stored").await;
             return;
         }
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
+            fail_sync(&db, connection_id, e.to_string()).await;
             return;
         }
     };
@@ -152,32 +158,34 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     let credentials = match decrypt_credentials(&encryption_key, &encrypted_creds) {
         Ok(v) => v,
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, connection_id, &e).await;
+            fail_sync(&db, connection_id, e).await;
             return;
         }
     };
 
     let providers = account_providers();
     let Some(adapter) = providers.get(provider_key.as_str()) else {
-        let _ = connection::mark_synced_error(
-            &db,
-            connection_id,
-            &format!("no adapter for provider '{provider_key}'"),
-        )
-        .await;
+        fail_sync(&db, connection_id, format!("no adapter for provider '{provider_key}'")).await;
         return;
     };
 
     let result = match adapter.sync(&credentials).await {
         Ok(r) => r,
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
+            fail_sync(&db, connection_id, e.to_string()).await;
             return;
         }
     };
 
     match gripsou_core::ingest::ingest(&db, connection_id, &result).await {
-        Ok(_) => {
+        Ok(summary) => {
+            tracing::info!(
+                "sync ok for {connection_id}: accounts={} holdings={} txns={} closed={}",
+                summary.accounts,
+                summary.holdings,
+                summary.transactions_inserted,
+                summary.holdings_closed,
+            );
             // Prices are best-effort: a failure here must not fail the sync.
             match gripsou_core::price_sync::fetch_prices_for_connection(
                 &db,
@@ -199,7 +207,7 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
             let _ = connection::mark_synced_ok(&db, connection_id).await;
         }
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, connection_id, &e.to_string()).await;
+            fail_sync(&db, connection_id, e.to_string()).await;
         }
     }
 }
@@ -297,24 +305,24 @@ async fn do_request_refresh(db: Db, id: Uuid, conn: connection::ConnForSync) {
     let key = match std::env::var("ENCRYPTION_KEY") {
         Ok(k) => k,
         Err(_) => {
-            let _ = connection::mark_synced_error(&db, id, "ENCRYPTION_KEY not set").await;
+            fail_sync(&db, id, "ENCRYPTION_KEY not set").await;
             return;
         }
     };
     let creds = match decrypt_credentials(&key, &conn.credentials) {
         Ok(c) => c,
         Err(e) => {
-            let _ = connection::mark_synced_error(&db, id, &e).await;
+            fail_sync(&db, id, e).await;
             return;
         }
     };
     let providers = account_providers();
     let Some(adapter) = providers.get(conn.provider_key.as_str()) else {
-        let _ = connection::mark_synced_error(&db, id, "no adapter").await;
+        fail_sync(&db, id, "no adapter").await;
         return;
     };
     if let Err(e) = adapter.request_refresh(&creds, &conn.provider_meta).await {
-        let _ = connection::mark_synced_error(&db, id, &e.to_string()).await;
+        fail_sync(&db, id, e.to_string()).await;
     }
     // On success: stays 'awaiting'; the webhook (or reaper) drives the fetch.
 }

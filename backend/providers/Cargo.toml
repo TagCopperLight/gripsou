@@ -13,6 +13,7 @@ rust_decimal = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = { workspace = true }
 chrono = { workspace = true }
+tracing.workspace = true
 yahoo_finance_api = "4.1"
 time = "0.3"
 hmac = "0.12"

@@ -197,7 +197,11 @@ impl AccountProvider for PowensProvider {
         let accounts: AccountsResponse = match serde_json::from_str(&accounts_text) {
             Ok(v) => v,
             Err(e) => {
-                println!("Accounts decode error: {}\nRaw JSON: {}", e, accounts_text);
+                tracing::error!("powens accounts decode error: {e}");
+                tracing::debug!(
+                    "powens accounts raw body: {}",
+                    accounts_text.chars().take(500).collect::<String>()
+                );
                 return Err(ProviderError::Other(format!(
                     "accounts decode error: {}",
                     e
@@ -227,9 +231,10 @@ impl AccountProvider for PowensProvider {
         let investments: InvestmentsResponse = match serde_json::from_str(&investments_text) {
             Ok(v) => v,
             Err(e) => {
-                println!(
-                    "Investments decode error: {}\nRaw JSON: {}",
-                    e, investments_text
+                tracing::error!("powens investments decode error: {e}");
+                tracing::debug!(
+                    "powens investments raw body: {}",
+                    investments_text.chars().take(500).collect::<String>()
                 );
                 return Err(ProviderError::Other(format!(
                     "investments decode error: {}",

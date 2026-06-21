@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -129,8 +130,34 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
         .allow_credentials(true);
 
+    // Per-request logging: an info-level span carries method+path so failing
+    // requests show context; 2xx responses log at debug (hidden at info),
+    // 4xx at warn, 5xx at error. `on_request`/`on_failure` are disabled — the
+    // status-class branch in `on_response` is the single source of truth.
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(|req: &axum::http::Request<axum::body::Body>| {
+            tracing::info_span!("request", method = %req.method(), uri = %req.uri().path())
+        })
+        .on_request(())
+        .on_failure(())
+        .on_response(
+            |response: &axum::http::Response<axum::body::Body>,
+             latency: std::time::Duration,
+             _span: &tracing::Span| {
+                let status = response.status().as_u16();
+                let ms = latency.as_millis();
+                if status >= 500 {
+                    tracing::error!("response {status} in {ms}ms");
+                } else if status >= 400 {
+                    tracing::warn!("response {status} in {ms}ms");
+                } else {
+                    tracing::debug!("response {status} in {ms}ms");
+                }
+            },
+        );
+
     let app = Router::new()
-        .nest("/api", api.layer(cors_layer))
+        .nest("/api", api.layer(cors_layer).layer(trace_layer))
         .fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(index_html)));
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
