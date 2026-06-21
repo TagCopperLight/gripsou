@@ -21,7 +21,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use sqlx::PgPool;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 /// All webhook tests share this secret so concurrent runs agree on the
@@ -29,7 +29,7 @@ use uuid::Uuid;
 const WEBHOOK_SECRET: &str = "shared-test-webhook-secret-42";
 
 /// Serialises the env-set + handle_webhook window across concurrent tests.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Compute the BI-Signature for a Powens webhook.
 fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
@@ -112,7 +112,7 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
     headers.insert("bi-signature".to_string(), sig);
 
     let outcome = {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),
@@ -168,7 +168,7 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
     );
 
     let outcome = {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),
@@ -214,7 +214,7 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
     headers.insert("bi-signature".to_string(), sig);
 
     let outcome = {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),

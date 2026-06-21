@@ -247,10 +247,7 @@ pub async fn connections_awaiting_timeout(
 /// Delete 'pending' connections older than `minutes` — webview flows the user
 /// abandoned (closed the tab) so the callback never ran to clean them up.
 /// Returns the number of rows deleted.
-pub async fn delete_stale_pending(
-    pool: &sqlx::PgPool,
-    minutes: i32,
-) -> Result<u64, CoreError> {
+pub async fn delete_stale_pending(pool: &sqlx::PgPool, minutes: i32) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "delete from connection
          where status='pending' and created_at < now() - make_interval(mins => $1)",

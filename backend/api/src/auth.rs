@@ -34,6 +34,12 @@ pub fn hash_token(token: &str) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+/// SHA-256 of the token, base64url-encoded — for the `invite_token.token` text
+/// column (the bytea-friendly `hash_token` is for sessions).
+pub fn hash_token_str(token: &str) -> String {
+    URL_SAFE_NO_PAD.encode(hash_token(token))
+}
+
 /// Best-effort friendly device label. A self-hosted app needs only a small
 /// heuristic; unknown parts degrade to "Unknown …". Order matters: Edge/Opera
 /// UAs also contain "Chrome", and Chrome UAs also contain "Safari".

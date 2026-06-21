@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select provider_meta as \"m!\" from connection where id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "m!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_meta"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f9a68253de4fe76b430d9423ecebedbf0f4a8144ee67fa2292a2697525114a39"
+}

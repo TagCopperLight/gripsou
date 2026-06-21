@@ -325,13 +325,7 @@ pub async fn users(
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::User>>, (StatusCode, String)> {
     // Listing every account (names/emails/roles) is admin-only.
-    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
-    if profile.role != "admin" {
-        return Err((StatusCode::FORBIDDEN, "admin access required".to_string()));
-    }
+    require_admin(&pool, user_id).await?;
     let rows = gripsou_core::repo::query::users(&pool)
         .await
         .map_err(internal)?;
@@ -565,6 +559,88 @@ pub async fn delete_account(
         ));
     }
     gripsou_core::repo::user::delete_user(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn create_invite(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<(StatusCode, Json<dto::InviteLinkResp>), (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let raw = auth::generate_token();
+    let stored = auth::hash_token_str(&raw);
+    let expires_at = Utc::now() + Duration::hours(24);
+    gripsou_core::repo::invite_token::create(&pool, "invite", None, user_id, &stored, expires_at)
+        .await
+        .map_err(internal)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(dto::InviteLinkResp { token: raw }),
+    ))
+}
+
+pub async fn create_reset_link(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<dto::InviteLinkResp>), (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let target = gripsou_core::repo::user::profile_by_id(&pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+    let raw = auth::generate_token();
+    let stored = auth::hash_token_str(&raw);
+    let expires_at = Utc::now() + Duration::hours(24);
+    gripsou_core::repo::invite_token::create(
+        &pool,
+        "reset",
+        Some(&target.email),
+        user_id,
+        &stored,
+        expires_at,
+    )
+    .await
+    .map_err(internal)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(dto::InviteLinkResp { token: raw }),
+    ))
+}
+
+pub async fn delete_user(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<dto::DeleteUserReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let target = gripsou_core::repo::user::profile_by_id(&pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+    // Confirm the typed email matches the user being deleted (case-insensitive).
+    if body.email.trim().to_lowercase() != target.email.to_lowercase() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "email does not match user".to_string(),
+        ));
+    }
+    // Refuse to delete the last admin: it would lock everyone out of admin-only settings.
+    if target.role == "admin"
+        && gripsou_core::repo::user::count_admins(&pool)
+            .await
+            .map_err(internal)?
+            <= 1
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            "cannot delete the last admin".to_string(),
+        ));
+    }
+    gripsou_core::repo::user::delete_user(&pool, id)
         .await
         .map_err(internal)?;
     Ok(StatusCode::NO_CONTENT)
@@ -1619,5 +1695,166 @@ mod auth_tests {
         .unwrap_err();
         // Unknown connection_id → jobs returns "connection not found" → 400
         assert!(err.0 == StatusCode::BAD_REQUEST || err.0 == StatusCode::NOT_FOUND);
+    }
+
+    async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth::AuthUser {
+        let token = login_token(pool, email, pw).await;
+        let session =
+            gripsou_core::repo::session::find_valid_by_hash(pool, &auth::hash_token(&token))
+                .await
+                .unwrap()
+                .unwrap();
+        auth::AuthUser {
+            user_id: session.user_id,
+            session_id: session.id,
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn create_invite_requires_admin(pool: PgPool) {
+        seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "m@t.local", "pw").await;
+        let err = create_invite(State(pool.clone()), who).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn create_invite_writes_invite_row(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let resp = create_invite(State(pool.clone()), who).await.expect("ok");
+        assert_eq!(resp.0, StatusCode::CREATED);
+        assert!(!resp.1.0.token.is_empty());
+
+        let (kind, email): (String, Option<String>) =
+            sqlx::query_as("select type, email from invite_token where created_by = $1")
+                .bind(admin)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(kind, "invite");
+        assert_eq!(email, None);
+
+        let stored_token: String =
+            sqlx::query_scalar("select token from invite_token where created_by = $1")
+                .bind(admin)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_ne!(stored_token, resp.1.0.token, "raw token must not be stored");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn create_reset_link_stores_target_email(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+
+        let resp = create_reset_link(State(pool.clone()), who, Path(target))
+            .await
+            .expect("ok");
+        assert_eq!(resp.0, StatusCode::CREATED);
+
+        let (kind, email): (String, Option<String>) =
+            sqlx::query_as("select type, email from invite_token where type = 'reset'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(kind, "reset");
+        assert_eq!(email.as_deref(), Some("target@t.local"));
+
+        let stored_token: String =
+            sqlx::query_scalar("select token from invite_token where type = 'reset'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_ne!(stored_token, resp.1.0.token, "raw token must not be stored");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_user_rejects_mismatched_email(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+
+        let err = delete_user(
+            State(pool.clone()),
+            who,
+            Path(target),
+            Json(dto::DeleteUserReq {
+                email: "wrong@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert!(
+            gripsou_core::repo::user::profile_by_id(&pool, target)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_user_refuses_last_admin(pool: PgPool) {
+        let admin = seed_user_role(&pool, "boss@t.local", "pw", "admin").await;
+        let who = principal_for(&pool, "boss@t.local", "pw").await;
+
+        let err = delete_user(
+            State(pool.clone()),
+            who,
+            Path(admin),
+            Json(dto::DeleteUserReq {
+                email: "boss@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_user_removes_target(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+
+        // Case-insensitive email match succeeds.
+        let ok = delete_user(
+            State(pool.clone()),
+            who,
+            Path(target),
+            Json(dto::DeleteUserReq {
+                email: "TARGET@t.local".into(),
+            }),
+        )
+        .await
+        .expect("ok");
+        assert_eq!(ok, StatusCode::NO_CONTENT);
+        assert!(
+            gripsou_core::repo::user::profile_by_id(&pool, target)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_user_requires_admin(pool: PgPool) {
+        seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let target = seed_user_role(&pool, "t@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "m@t.local", "pw").await;
+        let err = delete_user(
+            State(pool.clone()),
+            who,
+            Path(target),
+            Json(dto::DeleteUserReq {
+                email: "t@t.local".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

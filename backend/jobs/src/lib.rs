@@ -173,7 +173,12 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
 
     let providers = account_providers();
     let Some(adapter) = providers.get(provider_key.as_str()) else {
-        fail_sync(&db, connection_id, format!("no adapter for provider '{provider_key}'")).await;
+        fail_sync(
+            &db,
+            connection_id,
+            format!("no adapter for provider '{provider_key}'"),
+        )
+        .await;
         return;
     };
 

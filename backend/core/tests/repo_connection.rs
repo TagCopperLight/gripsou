@@ -266,7 +266,9 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
         .await
         .unwrap();
     // An old non-pending row must be left alone.
-    let ok = insert_pending(&pool, user_id, "powens", "ok").await.unwrap();
+    let ok = insert_pending(&pool, user_id, "powens", "ok")
+        .await
+        .unwrap();
     sqlx::query!(
         "update connection set created_at=now() - interval '20 minutes' where id=$1",
         stale

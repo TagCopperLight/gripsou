@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Key, Trash2 } from "lucide-react";
+import { UserPlus, Key, Trash2 } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Avatar } from "../../components/Avatar";
 import { CardState } from "../../components/CardState";
-import { useUsers } from "../../api/hooks";
+import { useUsers, useCreateInvite, useCreateResetLink } from "../../api/hooks";
+import { LinkModal } from "../../components/LinkModal";
+import { DeleteUserModal } from "../../components/DeleteUserModal";
 import { formatDate } from "../../lib/date";
 import type { User } from "../../api/types";
 
@@ -18,6 +20,23 @@ export function SettingsUsers() {
   const { data, isError, refetch } = useUsers();
   const ready = data !== undefined;
   const users = data ?? [];
+
+  const invite = useCreateInvite();
+  const resetLink = useCreateResetLink();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  const openInvite = () => {
+    setInviteOpen(true);
+    invite.mutate();
+  };
+  const openReset = (u: User) => {
+    setResetTarget(u);
+    resetLink.mutate(u.id);
+  };
+  const linkFor = (path: string, token?: string) =>
+    token ? `${window.location.origin}${path}/${token}` : null;
 
   // Local optimistic role overrides; not persisted (no PATCH endpoint yet).
   const [overrides, setOverrides] = useState<Record<string, Role>>({});
@@ -42,9 +61,9 @@ export function SettingsUsers() {
                 </span>
               )}
             </h2>
-            <Button className="inline-flex items-center gap-1.5 text-sm">
-              <Plus className="size-4" />
-              {t("settings.addUser")}
+            <Button onClick={openInvite} className="inline-flex items-center gap-1.5 text-sm">
+              <UserPlus className="size-4" />
+              {t("settings.inviteUser")}
             </Button>
           </div>
 
@@ -113,6 +132,7 @@ export function SettingsUsers() {
                           {!u.isSelf && (
                             <button
                               type="button"
+                              onClick={() => openReset(u)}
                               aria-label={t("settings.resetPassword")}
                               className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
                             >
@@ -122,6 +142,7 @@ export function SettingsUsers() {
                           {!u.isSelf && (
                             <button
                               type="button"
+                              onClick={() => setDeleteTarget(u)}
                               aria-label={t("settings.deleteUser")}
                               className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-red flex items-center justify-center cursor-pointer transition-colors duration-140"
                             >
@@ -138,6 +159,39 @@ export function SettingsUsers() {
           )}
         </div>
       </Surface>
+      {inviteOpen && (
+        <LinkModal
+          title={t("settings.inviteTitle")}
+          subtitle={t("settings.inviteHeading")}
+          body={t("settings.inviteBody")}
+          link={linkFor("/invite", invite.data?.token)}
+          error={invite.isError}
+          onClose={() => {
+            setInviteOpen(false);
+            invite.reset();
+          }}
+        />
+      )}
+      {resetTarget && (
+        <LinkModal
+          title={t("settings.resetTitle")}
+          subtitle={t("settings.resetFor", { name: resetTarget.name })}
+          body={t("settings.resetBody", { name: resetTarget.name })}
+          link={linkFor("/reset", resetLink.data?.token)}
+          error={resetLink.isError}
+          onClose={() => {
+            setResetTarget(null);
+            resetLink.reset();
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteUserModal
+          user={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -56,4 +56,10 @@ describe("SettingsUsers", () => {
     expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Member" })).toHaveLength(1);
   });
+
+  it("renders the Invite user button", async () => {
+    render(withClient(<SettingsUsers />));
+    await screen.findByText("Marie Laurent");
+    expect(screen.getByRole("button", { name: "Invite user" })).toBeInTheDocument();
+  });
 });
