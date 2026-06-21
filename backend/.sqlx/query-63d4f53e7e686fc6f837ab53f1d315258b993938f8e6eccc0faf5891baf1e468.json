@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select email from invite_token\n            where token = $1 and type = 'reset'\n              and used_at is null and expires_at > now()\n            for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "invite_token",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "63d4f53e7e686fc6f837ab53f1d315258b993938f8e6eccc0faf5891baf1e468"
+}

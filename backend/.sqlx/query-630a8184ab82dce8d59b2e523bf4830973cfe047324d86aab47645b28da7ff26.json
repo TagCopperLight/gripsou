@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select type as \"token_type!\", email\n             from invite_token\n            where token = $1 and used_at is null and expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "invite_token",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "invite_token",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "630a8184ab82dce8d59b2e523bf4830973cfe047324d86aab47645b28da7ff26"
+}

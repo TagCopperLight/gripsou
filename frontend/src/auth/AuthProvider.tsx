@@ -67,6 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyUser],
   );
 
+  const adoptSession = useCallback(
+    (token: string, user: SessionUser) => {
+      setAuthToken(token, true); // redemption keeps you signed in (persisted).
+      applyUser(user);
+    },
+    [applyUser],
+  );
+
   const logout = useCallback(async () => {
     try {
       await postJson<void>("/auth/logout", {}, { skipGlobalUnauthorized: true });
@@ -112,11 +120,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       prefs: user?.prefs ?? DEFAULT_PREFS,
       login,
+      adoptSession,
       logout,
       updateUser,
       updatePrefs,
     }),
-    [user, isBootstrapping, login, logout, updateUser, updatePrefs],
+    [user, isBootstrapping, login, adoptSession, logout, updateUser, updatePrefs],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

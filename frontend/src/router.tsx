@@ -17,6 +17,8 @@ import { SettingsConnections } from "./pages/settings/Connections";
 import { SettingsUsers } from "./pages/settings/Users";
 import { SettingsServer } from "./pages/settings/Server";
 import { ConnectionCallback } from "./pages/ConnectionCallback";
+import { Invite } from "./pages/Invite";
+import { Reset } from "./pages/Reset";
 import type { AuthValue } from "./auth/context";
 
 type RouterContext = { auth: AuthValue };
@@ -120,6 +122,18 @@ const connectionsCallbackRoute = createRoute({
   component: ConnectionCallback,
 });
 
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite/$token",
+  component: Invite,
+});
+
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset/$token",
+  component: Reset,
+});
+
 const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsIndexRoute,
   settingsGeneralRoute,
@@ -131,6 +145,8 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
 
 export const routeTree = rootRoute.addChildren([
   loginRoute,
+  inviteRoute,
+  resetRoute,
   appRoute.addChildren([
     indexRoute,
     accountsRoute,

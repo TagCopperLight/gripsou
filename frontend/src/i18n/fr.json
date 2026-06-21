@@ -132,7 +132,20 @@
     "logOut": "Se déconnecter",
     "logOutConfirmTitle": "Se déconnecter ?",
     "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
-    "rememberMe": "Se souvenir de moi"
+    "rememberMe": "Se souvenir de moi",
+    "createAccount": "Créez votre compte",
+    "setUpToContinue": "Configurez votre compte pour commencer.",
+    "name": "Nom",
+    "confirmPassword": "Confirmez le mot de passe",
+    "passwordsDontMatch": "Les mots de passe ne correspondent pas",
+    "emailExists": "Un compte avec cet e-mail existe déjà",
+    "createAccountButton": "Créer le compte",
+    "resetPassword": "Réinitialisez votre mot de passe",
+    "resetForEmail": "Définissez un nouveau mot de passe pour {{email}}.",
+    "newPassword": "Nouveau mot de passe",
+    "updatePasswordButton": "Mettre à jour le mot de passe",
+    "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
+    "dataNotice": "Vos données sont chiffrées au repos, mais le propriétaire de ce serveur peut les consulter."
   },
   "settings": {
     "general": "Général",

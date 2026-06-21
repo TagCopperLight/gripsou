@@ -52,6 +52,7 @@ const authValue: AuthValue = {
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: vi.fn(),
+  adoptSession: () => {},
   logout: logoutSpy,
   updateUser: updateUserSpy,
   updatePrefs: async () => {},

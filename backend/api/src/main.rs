@@ -72,6 +72,9 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::me).patch(handlers::update_profile),
         )
         .route("/auth/logout", post(handlers::logout))
+        .route("/auth/token/{token}", get(handlers::token_info))
+        .route("/auth/invite/{token}/redeem", post(handlers::redeem_invite))
+        .route("/auth/reset/{token}/redeem", post(handlers::redeem_reset))
         .route("/auth/prefs", patch(handlers::update_prefs))
         .route("/auth/change-password", post(handlers::change_password))
         .route("/auth/account", delete(handlers::delete_account))

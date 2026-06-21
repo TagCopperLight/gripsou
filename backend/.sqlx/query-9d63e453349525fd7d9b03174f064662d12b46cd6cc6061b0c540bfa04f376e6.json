@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select 1 from invite_token\n            where token = $1 and type = 'invite'\n              and used_at is null and expires_at > now()\n            for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9d63e453349525fd7d9b03174f064662d12b46cd6cc6061b0c540bfa04f376e6"
+}
