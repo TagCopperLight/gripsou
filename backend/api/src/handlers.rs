@@ -739,6 +739,112 @@ pub async fn webhook(
     }
 }
 
+/// Issue a 30-day session for `user_id` and build the login-shaped response.
+/// Shared by the invite/reset redeem handlers — both auto-log-in the user.
+async fn issue_session(
+    pool: &PgPool,
+    headers: &HeaderMap,
+    peer: SocketAddr,
+    user_id: Uuid,
+) -> Result<dto::LoginResponse, (StatusCode, String)> {
+    let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "user vanished".to_string(),
+        ))?;
+    let token = auth::generate_token();
+    let hash = auth::hash_token(&token);
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
+    let ip = client_ip(headers, peer);
+    let expires_at = Utc::now() + Duration::days(30);
+    gripsou_core::repo::session::create(
+        pool,
+        user_id,
+        &hash,
+        user_agent,
+        Some(ip.as_str()),
+        true,
+        expires_at,
+    )
+    .await
+    .map_err(internal)?;
+    Ok(dto::LoginResponse {
+        token,
+        user: dto::SessionUser::from_profile(&profile),
+    })
+}
+
+/// Public: validate a token on page load so the frontend can redirect away from
+/// `/invite` or `/reset` when it's invalid. 404 = unknown/expired/used.
+pub async fn token_info(
+    State(pool): State<PgPool>,
+    Path(token): Path<String>,
+) -> Result<Json<dto::TokenInfoResp>, (StatusCode, String)> {
+    let hash = auth::hash_token_str(&token);
+    let info = gripsou_core::repo::invite_token::find_valid(&pool, &hash)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+    Ok(Json(dto::TokenInfoResp {
+        token_type: info.token_type,
+        email: info.email,
+    }))
+}
+
+/// Public: redeem an invite — create the account and auto-log-in.
+pub async fn redeem_invite(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(token): Path<String>,
+    Json(body): Json<dto::RedeemInviteReq>,
+) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+    let email = body.email.trim();
+    let name = body.name.trim();
+    if email.is_empty() || name.is_empty() || body.password.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "email, name and password are required".to_string(),
+        ));
+    }
+    let hash = auth::hash_token_str(&token);
+    let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
+    let user_id =
+        gripsou_core::repo::invite_token::redeem_invite(&pool, &hash, email, name, &pw_hash)
+            .await
+            .map_err(unique_or_internal(
+                "an account with this email already exists",
+            ))?
+            .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+    let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    Ok(Json(resp))
+}
+
+/// Public: redeem a reset — set the new password, revoke old sessions, auto-log-in.
+pub async fn redeem_reset(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(token): Path<String>,
+    Json(body): Json<dto::RedeemResetReq>,
+) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+    if body.password.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "password is required".to_string()));
+    }
+    let hash = auth::hash_token_str(&token);
+    let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
+    let user_id = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+    let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    Ok(Json(resp))
+}
+
 pub async fn delete_connection(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -760,6 +866,12 @@ mod auth_tests {
     use crate::auth;
     use crate::dto::{ChangePasswordReq, LoginReq};
     use sqlx::PgPool;
+
+    /// Seed an admin user and return their id — mirrors what `seed_user` does for
+    /// the existing tests (role "admin", email "a@t.local").
+    async fn seed_admin_user(pool: &PgPool) -> Uuid {
+        seed_user(pool, "a@t.local", "hunter2").await
+    }
 
     async fn seed_user_role(pool: &PgPool, email: &str, password: &str, role: &str) -> Uuid {
         let id = Uuid::new_v4();
@@ -1856,5 +1968,87 @@ mod auth_tests {
         .await
         .unwrap_err();
         assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    // ── invite/reset redemption endpoint tests ──────────────────────────────
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_invite_endpoint_creates_account(pool: PgPool) {
+        let admin = seed_admin_user(&pool).await;
+        gripsou_core::repo::invite_token::create(
+            &pool,
+            "invite",
+            None,
+            admin,
+            &auth::hash_token_str("raw-invite"),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+        let resp = redeem_invite(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path("raw-invite".to_string()),
+            Json(dto::RedeemInviteReq {
+                email: "new@t.local".into(),
+                name: "New".into(),
+                password: "hunter2".into(),
+            }),
+        )
+        .await
+        .expect("redeem ok");
+        assert!(!resp.0.token.is_empty());
+        assert_eq!(resp.0.user.email, "new@t.local");
+        assert_eq!(resp.0.user.role, "user");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_invite_endpoint_conflicts_on_existing_email(pool: PgPool) {
+        let admin = seed_admin_user(&pool).await; // creates a@t.local
+        gripsou_core::repo::invite_token::create(
+            &pool,
+            "invite",
+            None,
+            admin,
+            &auth::hash_token_str("raw-invite"),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+        let err = redeem_invite(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path("raw-invite".to_string()),
+            Json(dto::RedeemInviteReq {
+                email: "a@t.local".into(),
+                name: "Dup".into(),
+                password: "hunter2".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+        // Token left unconsumed.
+        assert!(
+            gripsou_core::repo::invite_token::find_valid(
+                &pool,
+                &auth::hash_token_str("raw-invite")
+            )
+            .await
+            .unwrap()
+            .is_some()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn token_info_404_for_unknown(pool: PgPool) {
+        let err = token_info(State(pool.clone()), Path("does-not-exist".to_string()))
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
     }
 }

@@ -627,6 +627,27 @@ pub struct InviteLinkResp {
     pub token: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct TokenInfoResp {
+    #[serde(rename = "type")]
+    pub token_type: String,
+    pub email: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RedeemInviteReq {
+    pub email: String,
+    pub name: String,
+    pub password: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RedeemResetReq {
+    pub password: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitConnectionReq {

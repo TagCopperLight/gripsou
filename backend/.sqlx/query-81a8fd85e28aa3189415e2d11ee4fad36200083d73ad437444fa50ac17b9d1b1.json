@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update invite_token set used_at = now() where token = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81a8fd85e28aa3189415e2d11ee4fad36200083d73ad437444fa50ac17b9d1b1"
+}

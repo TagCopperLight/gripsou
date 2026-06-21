@@ -9,6 +9,8 @@ export type AuthValue = {
   /** Current user's prefs, or defaults when logged out. */
   prefs: UserPrefs;
   login: (email: string, password: string, remember: boolean) => Promise<void>;
+  /** Adopt a session returned by invite/reset redemption (auto-login). */
+  adoptSession: (token: string, user: SessionUser) => void;
   logout: () => Promise<void>;
   /** Replace the cached profile after the user edits their own account. */
   updateUser: (user: SessionUser) => void;

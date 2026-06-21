@@ -42,6 +42,7 @@ const unauth: AuthValue = {
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: async () => {},
+  adoptSession: () => {},
   logout: async () => {},
   updateUser: () => {},
   updatePrefs: async () => {},
@@ -52,6 +53,27 @@ describe("route guard", () => {
     const router = renderAt("/accounts", unauth);
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+});
+
+describe("public invite/reset routes", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders /invite for an unauthenticated visitor without redirecting to login", async () => {
+    // Token guard fetch: return a valid invite so the page renders its form.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ type: "invite", email: null }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    renderAt("/invite/abc", unauth);
+    expect(await screen.findByText("Create your account")).toBeInTheDocument();
   });
 });
 

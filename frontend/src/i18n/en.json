@@ -132,7 +132,20 @@
     "logOut": "Log out",
     "logOutConfirmTitle": "Log out?",
     "logOutConfirmBody": "You'll need to sign in again to access your dashboard.",
-    "rememberMe": "Remember me"
+    "rememberMe": "Remember me",
+    "createAccount": "Create your account",
+    "setUpToContinue": "Set up your account to get started.",
+    "name": "Name",
+    "confirmPassword": "Confirm password",
+    "passwordsDontMatch": "Passwords don't match",
+    "emailExists": "An account with this email already exists",
+    "createAccountButton": "Create account",
+    "resetPassword": "Reset your password",
+    "resetForEmail": "Set a new password for {{email}}.",
+    "newPassword": "New password",
+    "updatePasswordButton": "Update password",
+    "resetLinkInvalid": "This reset link is no longer valid.",
+    "dataNotice": "Your data is encrypted at rest, but the owner of this server can view it."
   },
   "settings": {
     "general": "General",
