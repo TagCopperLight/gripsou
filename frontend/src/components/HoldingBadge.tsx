@@ -9,12 +9,13 @@ function isLogoUrl(logo: string | null | undefined): boolean {
 type Props = {
   logo: string | null;
   ticker: string;
+  fallbackText?: string;
   /** Size/shape utilities (e.g. `size-8 rounded-lg text-[11px]`). */
   className?: string;
 };
 
 /** An instrument's logo, or a deterministic colored swatch with its initials. */
-export function HoldingBadge({ logo, ticker, className = "" }: Props) {
+export function HoldingBadge({ logo, ticker, fallbackText, className = "" }: Props) {
   const hasLogo = isLogoUrl(logo);
   return (
     <span
@@ -25,7 +26,7 @@ export function HoldingBadge({ logo, ticker, className = "" }: Props) {
           : { backgroundColor: colorForString(ticker) }
       }
     >
-      {!hasLogo && ticker.slice(0, 2)}
+      {!hasLogo && (fallbackText ?? ticker.slice(0, 2))}
     </span>
   );
 }
