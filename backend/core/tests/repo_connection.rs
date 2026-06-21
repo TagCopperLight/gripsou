@@ -249,3 +249,49 @@ async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
     let ids: Vec<_> = due.iter().map(|c| c.id).collect();
     assert!(ids.contains(&stale) && !ids.contains(&fresh));
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
+    let user_id = uuid::Uuid::new_v4();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let fresh = insert_pending(&pool, user_id, "powens", "fresh")
+        .await
+        .unwrap();
+    let stale = insert_pending(&pool, user_id, "powens", "stale")
+        .await
+        .unwrap();
+    // An old non-pending row must be left alone.
+    let ok = insert_pending(&pool, user_id, "powens", "ok").await.unwrap();
+    sqlx::query!(
+        "update connection set created_at=now() - interval '20 minutes' where id=$1",
+        stale
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "update connection set status='ok', created_at=now() - interval '20 minutes' where id=$1",
+        ok
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let n = gripsou_core::repo::connection::delete_stale_pending(&pool, 10)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+
+    let remaining: Vec<uuid::Uuid> =
+        sqlx::query_scalar("select id from connection where user_id=$1")
+            .bind(user_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(remaining.contains(&fresh) && remaining.contains(&ok) && !remaining.contains(&stale));
+}

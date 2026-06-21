@@ -8,6 +8,7 @@ use gripsou_core::repo::connection::BeginSync;
 use uuid::Uuid;
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
+const PENDING_TIMEOUT_MINS: i32 = 10;
 
 /// Mark a connection's sync as failed and log why. Centralizes the
 /// previously-silent `mark_synced_error` call sites so failures show in logs.
@@ -43,6 +44,13 @@ async fn reap_awaiting(db: Db) {
                 tracing::info!("awaiting webhook timed out for {}; direct fetch", row.id);
                 tokio::spawn(sync_connection(db.clone(), row.id));
             }
+        }
+
+        // Backstop for abandoned webview flows whose callback never ran.
+        match connection::delete_stale_pending(&db, PENDING_TIMEOUT_MINS).await {
+            Ok(n) if n > 0 => tracing::info!("reaped {n} stale pending connection(s)"),
+            Ok(_) => {}
+            Err(e) => tracing::warn!("stale pending reap failed: {e}"),
         }
     }
 }

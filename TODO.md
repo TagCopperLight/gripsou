@@ -11,6 +11,7 @@
 - [x] localhost redirects from powens
 - [x] Integrate webhooks
 - [x] EUR symbol in holdings
+- [x] Failed connections kept open
 
 - [ ] Currency conversion
 - [ ] Transaction page
@@ -21,4 +22,3 @@
 - [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
-- [ ] Failed connections kept open
