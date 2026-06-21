@@ -6,12 +6,14 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY frontend/ ./
+COPY shared/ ../shared/
 RUN bun run build
 
 # --- Stage 2: build the Rust binary ---
 FROM rust:1-bookworm AS backend
 WORKDIR /app/backend
 COPY backend/ ./
+COPY shared/ ../shared/
 RUN cargo build --release --bin gripsou
 
 # --- Stage 3: runtime ---
