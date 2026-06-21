@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select provider_key as \"provider_key!\", credentials as \"credentials!\",\n                  provider_meta as \"provider_meta!\"\n           from connection where id=$1 and user_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "credentials!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "credentials"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "provider_meta!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_meta"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "869105a226b571d62f6a83723eac1fe304af5415ad9780c71d235931796576f0"
+}

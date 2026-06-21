@@ -15,6 +15,9 @@ urlencoding = { workspace = true }
 chrono = { workspace = true }
 yahoo_finance_api = "4.1"
 time = "0.3"
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
 
 [dev-dependencies]
 tokio = { workspace = true }

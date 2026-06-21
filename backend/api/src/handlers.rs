@@ -191,18 +191,11 @@ pub async fn sync_connection(
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
     use gripsou_core::repo::connection::BeginSync;
-    match gripsou_core::repo::connection::begin_sync(&pool, user_id, id)
-        .await
-        .map_err(internal)?
-    {
-        BeginSync::Started(state) => {
-            // Fire-and-forget: the frontend polls connection status for progress.
-            tokio::spawn(gripsou_jobs::sync_connection(pool.clone(), id));
-            Ok((
-                StatusCode::ACCEPTED,
-                Json(dto::ConnectionState::from_row(state)),
-            ))
-        }
+    match gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
+        BeginSync::Started(state) => Ok((
+            StatusCode::ACCEPTED,
+            Json(dto::ConnectionState::from_row(state)),
+        )),
         BeginSync::AlreadySyncing => Err((
             StatusCode::CONFLICT,
             "connection is already syncing".to_string(),
@@ -221,12 +214,7 @@ pub async fn sync_all(
         .map_err(internal)?;
     let mut started = 0u32;
     for id in ids {
-        if let BeginSync::Started(_) =
-            gripsou_core::repo::connection::begin_sync(&pool, user_id, id)
-                .await
-                .map_err(internal)?
-        {
-            tokio::spawn(gripsou_jobs::sync_connection(pool.clone(), id));
+        if let BeginSync::Started(_) = gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
             started += 1;
         }
     }
@@ -647,6 +635,29 @@ pub async fn complete_connection(
                 Err((StatusCode::BAD_REQUEST, msg))
             }
         }
+    }
+}
+
+pub async fn webhook(
+    State(pool): State<PgPool>,
+    Path(provider): Path<String>,
+    axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> StatusCode {
+    use gripsou_jobs::WebhookOutcome;
+    let hmap: std::collections::HashMap<String, String> = headers
+        .iter()
+        .filter_map(|(k, v)| {
+            v.to_str()
+                .ok()
+                .map(|s| (k.as_str().to_lowercase(), s.to_string()))
+        })
+        .collect();
+    match gripsou_jobs::handle_webhook(pool, &provider, uri.path(), hmap, body.to_vec()).await {
+        WebhookOutcome::Accepted => StatusCode::OK,
+        WebhookOutcome::Unauthorized => StatusCode::UNAUTHORIZED,
+        WebhookOutcome::NotFound => StatusCode::NOT_FOUND,
     }
 }
 

@@ -113,7 +113,7 @@ export type Session = {
   current: boolean;
 };
 
-export type SyncStatus = "ok" | "syncing" | "error" | "pending";
+export type SyncStatus = "ok" | "syncing" | "error" | "pending" | "awaiting";
 
 export type SyncAccount = {
   id: string;
@@ -145,7 +145,9 @@ export function flattenConnections(
 }
 
 export function hasSyncing(groups: ProviderGroup[] | undefined): boolean {
-  return flattenConnections(groups).some((c) => c.status === "syncing");
+  return flattenConnections(groups).some(
+    (c) => c.status === "syncing" || c.status === "awaiting",
+  );
 }
 
 export function hasError(groups: ProviderGroup[] | undefined): boolean {

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import type { ProviderGroup } from "../../api/types";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import type { ProviderGroup, SyncStatus } from "../../api/types";
 
 const connections: { data: ProviderGroup[]; isLoading: boolean; isError: boolean; refetch: () => void } = {
   data: [
@@ -38,7 +38,16 @@ vi.mock("../../components/DeleteConnectionModal", () => ({
 
 import { SettingsConnections } from "./Connections";
 
+function setStatus(status: SyncStatus) {
+  connections.data[0].connections[0].status = status;
+}
+
 describe("SettingsConnections", () => {
+  afterEach(() => {
+    setStatus("ok");
+    cleanup();
+  });
+
   it("renders provider group, connection, and account", () => {
     render(<SettingsConnections />);
     expect(screen.getByText("Powens")).toBeInTheDocument();
@@ -56,5 +65,14 @@ describe("SettingsConnections", () => {
     render(<SettingsConnections />);
     fireEvent.click(screen.getByRole("button", { name: /delete/i }));
     expect(screen.getByTestId("delete-modal")).toBeInTheDocument();
+  });
+
+  it("shows awaiting label and spinner for awaiting connection", () => {
+    setStatus("awaiting");
+    render(<SettingsConnections />);
+    expect(screen.getByText("Waiting for bank sync…")).toBeInTheDocument();
+    // The spinner is a RefreshCw with animate-spin class
+    const statusEl = screen.getByText("Waiting for bank sync…").closest("p");
+    expect(statusEl?.querySelector(".animate-spin")).toBeTruthy();
   });
 });

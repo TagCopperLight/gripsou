@@ -4,12 +4,39 @@ use std::time::Duration;
 use gripsou_core::db::Db;
 use gripsou_core::provider::{AccountProvider, PriceProvider};
 use gripsou_core::repo::connection;
+use gripsou_core::repo::connection::BeginSync;
 use uuid::Uuid;
+
+const AWAITING_TIMEOUT_MINS: i32 = 5;
 
 /// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
 pub async fn run_scheduler(db: Db) {
     tokio::spawn(prune_sessions(db.clone()));
-    tokio::spawn(sync_all_daily(db));
+    tokio::spawn(sync_all_daily(db.clone()));
+    tokio::spawn(reap_awaiting(db));
+}
+
+async fn reap_awaiting(db: Db) {
+    let mut tick = tokio::time::interval(Duration::from_secs(60));
+    loop {
+        tick.tick().await;
+        let rows = match connection::connections_awaiting_timeout(&db, AWAITING_TIMEOUT_MINS).await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("reaper query failed: {e}");
+                continue;
+            }
+        };
+        for row in rows {
+            if let Ok(connection::BeginSync::Started(_)) =
+                connection::begin_sync(&db, row.user_id, row.id).await
+            {
+                tracing::info!("awaiting webhook timed out for {}; direct fetch", row.id);
+                tokio::spawn(sync_connection(db.clone(), row.id));
+            }
+        }
+    }
 }
 
 async fn sync_all_daily(db: Db) {
@@ -177,6 +204,121 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     }
 }
 
+pub enum WebhookOutcome {
+    NotFound,     // unknown provider
+    Unauthorized, // signature rejected
+    Accepted,     // verified (acted, ignored, or unknown connection)
+}
+
+/// Verify an incoming webhook and, if it signals a finished sync, claim the
+/// connection and run the full-fetch. Always returns Accepted on a valid
+/// signature so the provider stops retrying.
+pub async fn handle_webhook(
+    db: Db,
+    provider: &str,
+    path: &str,
+    headers: std::collections::HashMap<String, String>,
+    body: Vec<u8>,
+) -> WebhookOutcome {
+    let providers = account_providers();
+    let Some(adapter) = providers.get(provider) else {
+        return WebhookOutcome::NotFound;
+    };
+    let signal = match adapter.verify_webhook(path, &headers, &body) {
+        Ok(Some(s)) => s,
+        Ok(None) => return WebhookOutcome::Accepted, // valid, ignored
+        Err(_) => return WebhookOutcome::Unauthorized,
+    };
+    match connection::find_by_external_connection_id(&db, provider, &signal.provider_connection_id)
+        .await
+    {
+        Ok(Some((id, user_id))) => {
+            if let Ok(BeginSync::Started(_)) = connection::begin_sync(&db, user_id, id).await {
+                tokio::spawn(sync_connection(db.clone(), id));
+            }
+        }
+        Ok(None) => tracing::warn!(
+            "webhook for unknown {provider} connection {}",
+            signal.provider_connection_id
+        ),
+        Err(e) => tracing::warn!("webhook correlation failed: {e}"),
+    }
+    WebhookOutcome::Accepted
+}
+
+/// Entry point for user-initiated sync. Webhook providers: request a provider
+/// refresh and await the webhook (status 'awaiting'). Others: direct full-fetch.
+pub async fn request_sync(db: Db, user_id: Uuid, id: Uuid) -> BeginSync {
+    let conn = match connection::connection_for_sync(&db, user_id, id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => return BeginSync::NotFound,
+        Err(e) => {
+            tracing::warn!("request_sync read failed: {e}");
+            return BeginSync::NotFound;
+        }
+    };
+
+    let providers = account_providers();
+    let has_external_id = conn
+        .provider_meta
+        .get("external_connection_id")
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| !s.is_empty());
+    let webhook = providers
+        .get(conn.provider_key.as_str())
+        .map(|a| a.webhooks_enabled())
+        .unwrap_or(false)
+        && has_external_id;
+
+    if !webhook {
+        // Direct path (today's behavior).
+        match connection::begin_sync(&db, user_id, id).await {
+            Ok(BeginSync::Started(state)) => {
+                tokio::spawn(sync_connection(db.clone(), id));
+                BeginSync::Started(state)
+            }
+            Ok(other) => other,
+            Err(_) => BeginSync::NotFound,
+        }
+    } else {
+        match connection::begin_await(&db, user_id, id).await {
+            Ok(BeginSync::Started(state)) => {
+                tokio::spawn(do_request_refresh(db.clone(), id, conn));
+                BeginSync::Started(state)
+            }
+            Ok(other) => other,
+            Err(_) => BeginSync::NotFound,
+        }
+    }
+}
+
+/// Decrypt creds and ask the provider to refresh. On failure, surface as error.
+async fn do_request_refresh(db: Db, id: Uuid, conn: connection::ConnForSync) {
+    let key = match std::env::var("ENCRYPTION_KEY") {
+        Ok(k) => k,
+        Err(_) => {
+            let _ = connection::mark_synced_error(&db, id, "ENCRYPTION_KEY not set").await;
+            return;
+        }
+    };
+    let creds = match decrypt_credentials(&key, &conn.credentials) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = connection::mark_synced_error(&db, id, &e).await;
+            return;
+        }
+    };
+    let providers = account_providers();
+    let Some(adapter) = providers.get(conn.provider_key.as_str()) else {
+        let _ = connection::mark_synced_error(&db, id, "no adapter").await;
+        return;
+    };
+    if let Err(e) = adapter.request_refresh(&creds, &conn.provider_meta).await {
+        let _ = connection::mark_synced_error(&db, id, &e.to_string()).await;
+    }
+    // On success: stays 'awaiting'; the webhook (or reaper) drives the fetch.
+}
+
 /// Begin a provider connection: check the adapter exists, call `connect()`,
 /// create a pending DB row, and append `state=<id>` to the redirect URL.
 ///
@@ -242,17 +384,23 @@ pub async fn complete_connection(
         .collect::<Vec<_>>()
         .join("&");
 
-    let credentials = adapter.complete_connect(&query).await?;
+    let completed = adapter.complete_connect(&query).await?;
+    let encrypted = encrypt_credentials(&encryption_key, &completed.credentials)
+        .map_err(ProviderError::Other)?;
 
-    let encrypted =
-        encrypt_credentials(&encryption_key, &credentials).map_err(ProviderError::Other)?;
-
-    let updated =
-        gripsou_core::repo::connection::finish_connect(&db, connection_id, user_id, encrypted)
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+    let updated = gripsou_core::repo::connection::finish_connect(
+        &db,
+        connection_id,
+        user_id,
+        encrypted,
+        completed.provider_meta,
+    )
+    .await
+    .map_err(|e| ProviderError::Other(e.to_string()))?;
     if !updated {
         return Err(ProviderError::Other("connection not found".to_string()));
     }
+    // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
+    let _ = request_sync(db.clone(), user_id, connection_id).await;
     Ok(())
 }

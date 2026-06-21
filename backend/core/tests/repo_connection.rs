@@ -1,7 +1,9 @@
 mod common;
 
 use common::seed_connection;
-use gripsou_core::repo::connection::{BeginSync, begin_sync, mark_synced_error, mark_synced_ok};
+use gripsou_core::repo::connection::{
+    BeginSync, begin_sync, insert_pending, mark_synced_error, mark_synced_ok,
+};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../migrations")]
@@ -96,8 +98,14 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
         gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
 
     let creds = serde_json::json!({"token": "abc"});
-    let updated =
-        gripsou_core::repo::connection::finish_connect(&pool, id, user_id, creds.clone()).await?;
+    let updated = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        id,
+        user_id,
+        creds.clone(),
+        serde_json::json!({}),
+    )
+    .await?;
     assert!(updated);
 
     let (status, stored_creds): (String, serde_json::Value) =
@@ -114,9 +122,44 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
         id,
         uuid::Uuid::new_v4(),
         serde_json::json!({}),
+        serde_json::json!({}),
     )
     .await?;
     assert!(!not_updated);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = uuid::Uuid::new_v4();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(&pool)
+        .await?;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
+
+    let ok = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        id,
+        user_id,
+        serde_json::json!({"auth_token": "x"}),
+        serde_json::json!({"external_connection_id": "99"}),
+    )
+    .await
+    .unwrap();
+    assert!(ok);
+
+    let meta = sqlx::query_scalar!(
+        r#"select provider_meta as "m!" from connection where id=$1"#,
+        id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(meta["external_connection_id"], "99");
     Ok(())
 }
 
@@ -144,4 +187,65 @@ async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
         .await?;
     assert_eq!(count, 0);
     Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = uuid::Uuid::new_v4();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(&pool)
+        .await?;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "Acme").await?;
+
+    sqlx::query!(
+        "update connection set status='awaiting', sync_requested_at=now() where id=$1",
+        id
+    )
+    .execute(&pool)
+    .await?;
+
+    let row = sqlx::query!(
+        r#"select status as "status!", sync_requested_at from connection where id=$1"#,
+        id
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    assert_eq!(row.status, "awaiting");
+    assert!(row.sync_requested_at.is_some());
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
+    let user_id = uuid::Uuid::new_v4();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let fresh = insert_pending(&pool, user_id, "powens", "fresh")
+        .await
+        .unwrap();
+    let stale = insert_pending(&pool, user_id, "powens", "stale")
+        .await
+        .unwrap();
+    sqlx::query!(
+        "update connection set status='awaiting', sync_requested_at=now() where id=$1",
+        fresh
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!("update connection set status='awaiting', sync_requested_at=now() - interval '10 minutes' where id=$1", stale).execute(&pool).await.unwrap();
+    let due = gripsou_core::repo::connection::connections_awaiting_timeout(&pool, 5)
+        .await
+        .unwrap();
+    let ids: Vec<_> = due.iter().map(|c| c.id).collect();
+    assert!(ids.contains(&stale) && !ids.contains(&fresh));
 }

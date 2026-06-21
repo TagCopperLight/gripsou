@@ -99,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))
         .route("/connections/{id}", delete(handlers::delete_connection))
+        .route("/webhooks/{provider}", post(handlers::webhook))
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

@@ -89,17 +89,20 @@ function ConnectionCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const isSyncing = conn.status === "syncing";
+  const isAwaiting = conn.status === "awaiting";
+  const isSyncing = conn.status === "syncing" || isAwaiting;
   const isError = conn.status === "error";
   const isPending = conn.status === "pending";
 
   const statusText = isPending
     ? t("settings.connectionStatus.pending")
-    : isSyncing
-      ? t("settings.connectionStatus.syncing")
-      : isError
-        ? (conn.lastError ?? t("settings.connectionStatus.error"))
-        : formatRelative(conn.lastSyncAt);
+    : isAwaiting
+      ? t("settings.connectionStatus.awaiting")
+      : isSyncing
+        ? t("settings.connectionStatus.syncing")
+        : isError
+          ? (conn.lastError ?? t("settings.connectionStatus.error"))
+          : formatRelative(conn.lastSyncAt);
 
   return (
     <div className="bg-surface-2 rounded-2xl px-4 py-3.5 flex flex-col gap-2">
