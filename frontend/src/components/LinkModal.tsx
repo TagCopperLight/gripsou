@@ -47,7 +47,10 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
-          <h2 className="text-xl font-semibold text-fg">{title}</h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold text-fg">{title}</h2>
+            <p className="text-sm font-medium text-fg-faint">{subtitle}</p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -57,14 +60,13 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
             <X className="size-5" />
           </button>
         </div>
-        <div className="px-6 py-4">
-          <p className="text-sm font-medium text-fg">{subtitle}</p>
-          <p className="mt-1 text-sm text-fg-dim">{body}</p>
+        <div className="px-6 pt-3 pb-5">
+          <p className="text-sm text-fg-dim">{body}</p>
           {error ? (
             <p className="mt-4 text-sm text-red">{t("settings.linkError")}</p>
           ) : (
             <div className="mt-4 flex items-center gap-2">
-              <code className="flex-1 truncate rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg-dim font-mono">
+              <code className="flex-1 truncate rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono">
                 {link ?? t("common.loading")}
               </code>
               <button
@@ -72,7 +74,7 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
                 onClick={copy}
                 disabled={!link}
                 aria-label={t("settings.copyLink")}
-                className="size-10 shrink-0 rounded-xl bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="size-10 shrink-0 rounded-xl bg-surface-2 text-fg hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {copied ? <Check className="size-4 text-green" /> : <Copy className="size-4" />}
               </button>

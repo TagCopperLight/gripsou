@@ -175,7 +175,7 @@ export function SettingsUsers() {
       {resetTarget && (
         <LinkModal
           title={t("settings.resetTitle")}
-          subtitle={t("settings.resetFor", { name: resetTarget.name })}
+          subtitle={t("settings.resetHeading")}
           body={t("settings.resetBody", { name: resetTarget.name })}
           link={linkFor("/reset", resetLink.data?.token)}
           error={resetLink.isError}
