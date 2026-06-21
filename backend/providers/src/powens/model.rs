@@ -72,3 +72,15 @@ pub struct AccountsResponse {
 pub struct InvestmentsResponse {
     pub investments: Vec<Investment>,
 }
+
+/// Minimal shape of a Powens webhook body — only what we need to correlate.
+#[derive(Debug, Deserialize)]
+pub struct WebhookConnection {
+    pub id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WebhookEnvelope {
+    #[serde(default)]
+    pub connection: Option<WebhookConnection>,
+}

@@ -113,7 +113,8 @@ function ConnectionRow({
   pending: boolean;
 }) {
   const { t } = useTranslation();
-  const isSyncing = conn.status === "syncing" || pending;
+  const isAwaiting = conn.status === "awaiting";
+  const isSyncing = conn.status === "syncing" || isAwaiting || pending;
   const isError = conn.status === "error";
 
   return (
@@ -124,11 +125,13 @@ function ConnectionRow({
             {conn.displayName}
           </p>
           <p className={`text-xs ${isError ? "text-red" : "text-fg-faint"}`}>
-            {isSyncing
-              ? t("sync.syncing")
-              : isError
-                ? (conn.lastError ?? t("sync.error"))
-                : fmtLastSync(conn.lastSyncAt)}
+            {isAwaiting
+              ? t("sync.awaiting")
+              : isSyncing
+                ? t("sync.syncing")
+                : isError
+                  ? (conn.lastError ?? t("sync.error"))
+                  : fmtLastSync(conn.lastSyncAt)}
           </p>
         </div>
         <button

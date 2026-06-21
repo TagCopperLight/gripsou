@@ -223,6 +223,27 @@ pub async fn connections_needing_sync(
     Ok(rows)
 }
 
+/// 'awaiting' connections whose force-refresh has not produced a webhook within
+/// `minutes` — candidates for the direct-fetch fallback.
+pub async fn connections_awaiting_timeout(
+    pool: &sqlx::PgPool,
+    minutes: i32,
+) -> Result<Vec<ActiveConnection>, CoreError> {
+    let rows = sqlx::query_as!(
+        ActiveConnection,
+        r#"
+        select id as "id!", user_id as "user_id!"
+        from connection
+        where status='awaiting'
+          and sync_requested_at < now() - make_interval(mins => $1)
+        "#,
+        minutes,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Insert a new connection in 'pending' state (OAuth round-trip not yet done).
 /// Returns the new connection id.
 pub async fn insert_pending(
@@ -253,21 +274,106 @@ pub async fn finish_connect(
     id: Uuid,
     user_id: Uuid,
     credentials: serde_json::Value,
+    provider_meta: serde_json::Value,
 ) -> Result<bool, CoreError> {
     let n = sqlx::query!(
         r#"
         update connection
-           set credentials = $3, status = 'ok'
+           set credentials = $3, provider_meta = $4, status = 'ok'
          where id = $1 and user_id = $2
         "#,
         id,
         user_id,
         credentials,
+        provider_meta,
     )
     .execute(pool)
     .await?
     .rows_affected();
     Ok(n > 0)
+}
+
+pub struct ConnForSync {
+    pub provider_key: String,
+    pub credentials: serde_json::Value,
+    pub provider_meta: serde_json::Value,
+}
+
+/// Read an owned connection's provider info (no mutation). None => not found/owned.
+pub async fn connection_for_sync(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<Option<ConnForSync>, CoreError> {
+    let row = sqlx::query!(
+        r#"select provider_key as "provider_key!", credentials as "credentials!",
+                  provider_meta as "provider_meta!"
+           from connection where id=$1 and user_id=$2"#,
+        id,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| ConnForSync {
+        provider_key: r.provider_key,
+        credentials: r.credentials,
+        provider_meta: r.provider_meta,
+    }))
+}
+
+/// Atomically transition an owned connection to 'awaiting' (force-refresh
+/// requested). Rejects if already 'syncing' or 'awaiting'.
+pub async fn begin_await(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<BeginSync, CoreError> {
+    let claimed = sqlx::query_as!(
+        ConnectionState,
+        r#"
+        update connection
+           set status='awaiting', sync_requested_at=now(), last_error=null
+         where id=$1 and user_id=$2 and status not in ('syncing','awaiting')
+        returning id as "id!", status as "status!", last_sync_at, last_error
+        "#,
+        id,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(state) = claimed {
+        return Ok(BeginSync::Started(state));
+    }
+    let exists = sqlx::query_scalar!(
+        r#"select exists(select 1 from connection where id=$1 and user_id=$2) as "e!""#,
+        id,
+        user_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(if exists {
+        BeginSync::AlreadySyncing
+    } else {
+        BeginSync::NotFound
+    })
+}
+
+/// Find a connection by provider + native connection id stored in provider_meta.
+pub async fn find_by_external_connection_id(
+    pool: &sqlx::PgPool,
+    provider_key: &str,
+    ext_id: &str,
+) -> Result<Option<(Uuid, Uuid)>, CoreError> {
+    let row = sqlx::query!(
+        r#"select id as "id!", user_id as "user_id!"
+           from connection
+           where provider_key=$1 and provider_meta->>'external_connection_id' = $2"#,
+        provider_key,
+        ext_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| (r.id, r.user_id)))
 }
 
 /// Delete a connection and all its cascade-deleted data.

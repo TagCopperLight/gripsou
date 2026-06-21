@@ -51,3 +51,22 @@ docker compose -f docker/docker-compose.yml up --build
 
 One command self-hosts the app: the backend binary serves both the built SPA and
 the JSON API, with Postgres alongside.
+
+## Powens webhooks (optional)
+
+For real-time sync of Powens connections (instead of polling):
+
+1. Expose `https://<host>/api/webhooks/powens` publicly.
+2. In the Powens console, register a webhook for `CONNECTION_SYNCED` pointing to that URL.
+3. Register an HMAC auth provider on the **Powens** API (not gripsou), using your Powens configuration token:
+   ```sh
+   POST https://<your-domain>.biapi.pro/webhooks/auth \
+     -H "Authorization: Bearer <powens-configuration-token>" \
+     -H "Content-Type: application/json" \
+     -d '{ "type": "hmac_signature", "name": "gripsou" }'
+   ```
+   Save the returned `config.secret_key` (shown only once).
+4. In the Powens console, associate the auth provider with your webhook.
+5. Set `POWENS_WEBHOOK_SECRET=<secret_key>` in the root `.env` and restart the backend.
+
+When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.

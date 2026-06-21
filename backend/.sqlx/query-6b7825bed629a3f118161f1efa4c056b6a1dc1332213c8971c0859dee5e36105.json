@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update connection\n           set status='awaiting', sync_requested_at=now(), last_error=null\n         where id=$1 and user_id=$2 and status not in ('syncing','awaiting')\n        returning id as \"id!\", status as \"status!\", last_sync_at, last_error\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "last_sync_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "last_sync_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "last_error"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6b7825bed629a3f118161f1efa4c056b6a1dc1332213c8971c0859dee5e36105"
+}

@@ -21,6 +21,7 @@
     "openLabel": "Sync data",
     "syncAll": "Sync all",
     "syncing": "Syncing…",
+    "awaiting": "Waiting for bank sync…",
     "sync": "Sync",
     "retry": "Retry",
     "lastSync": "Last synced {{when}}",
@@ -219,6 +220,7 @@
     "connectionStatus": {
       "ok": "Synced",
       "syncing": "Syncing…",
+      "awaiting": "Waiting for bank sync…",
       "error": "Sync failed",
       "pending": "Connecting…"
     },

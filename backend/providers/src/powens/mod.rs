@@ -3,7 +3,7 @@ pub mod model;
 
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;
-use gripsou_core::provider::{AccountProvider, ConnectInit, ProviderError};
+use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
 
 pub struct PowensProvider {
     pub(crate) client_id: String,
@@ -15,6 +15,8 @@ pub struct PowensProvider {
     /// Scheme + host, no trailing slash, no /2.0. Used as REST API base.
     pub(crate) origin: String,
     pub(crate) http: reqwest::Client,
+    /// Optional HMAC secret for verifying incoming Powens webhooks.
+    pub(crate) webhook_secret: Option<String>,
 }
 
 impl PowensProvider {
@@ -30,6 +32,7 @@ impl PowensProvider {
             origin: format!("https://{domain}"),
             domain,
             http: reqwest::Client::new(),
+            webhook_secret: std::env::var("POWENS_WEBHOOK_SECRET").ok(),
         })
     }
 
@@ -47,7 +50,15 @@ impl PowensProvider {
             domain: "test.biapi.pro".into(),
             origin: base_url.to_string(),
             http: reqwest::Client::new(),
+            webhook_secret: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test_with_secret(base_url: &str, secret: &str) -> Self {
+        let mut p = Self::for_test(base_url);
+        p.webhook_secret = Some(secret.to_string());
+        p
     }
 }
 
@@ -77,10 +88,15 @@ impl AccountProvider for PowensProvider {
 
     /// Exchange the `code` Powens returns in its callback for a permanent access token.
     /// `callback` is the raw query string from the redirect, e.g. `"code=X&connection_id=Y"`.
-    async fn complete_connect(&self, callback: &str) -> Result<serde_json::Value, ProviderError> {
+    async fn complete_connect(&self, callback: &str) -> Result<CompleteConnect, ProviderError> {
         #[derive(serde::Deserialize)]
         struct TokenAccessResponse {
             access_token: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct Me {
+            id: i64,
         }
 
         let code = callback
@@ -116,7 +132,40 @@ impl AccountProvider for PowensProvider {
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
-        Ok(serde_json::json!({ "auth_token": token_resp.access_token }))
+        let me_resp = self
+            .http
+            .get(self.api_url("/users/me"))
+            .bearer_auth(&token_resp.access_token)
+            .send()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+
+        if !me_resp.status().is_success() {
+            return Err(ProviderError::Other(format!(
+                "GET /users/me failed: {}",
+                me_resp.status()
+            )));
+        }
+
+        let me: Me = me_resp
+            .json()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+
+        let connection_id = callback.split('&').find_map(|pair| {
+            let (k, v) = pair.split_once('=')?;
+            (k == "connection_id").then(|| v.to_string())
+        });
+
+        let mut provider_meta = serde_json::json!({ "powens_user_id": me.id.to_string() });
+        if let Some(cid) = connection_id {
+            provider_meta["external_connection_id"] = serde_json::Value::String(cid);
+        }
+
+        Ok(CompleteConnect {
+            credentials: serde_json::json!({ "auth_token": token_resp.access_token }),
+            provider_meta,
+        })
     }
 
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError> {
@@ -191,13 +240,98 @@ impl AccountProvider for PowensProvider {
 
         Ok(map::map_sync(&accounts.accounts, &investments.investments))
     }
+
+    fn webhooks_enabled(&self) -> bool {
+        self.webhook_secret.is_some()
+    }
+
+    async fn request_refresh(
+        &self,
+        credentials: &serde_json::Value,
+        provider_meta: &serde_json::Value,
+    ) -> Result<(), ProviderError> {
+        let token = credentials["auth_token"]
+            .as_str()
+            .ok_or_else(|| ProviderError::Other("missing auth_token".into()))?;
+        let cid = provider_meta["external_connection_id"]
+            .as_str()
+            .ok_or_else(|| ProviderError::Other("missing external_connection_id".into()))?;
+        let resp = self
+            .http
+            .put(self.api_url(&format!("/users/me/connections/{cid}")))
+            .bearer_auth(token)
+            .query(&[("psu_requested", "false")])
+            .send()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        if !resp.status().is_success() {
+            return Err(ProviderError::Other(format!(
+                "PUT connection refresh failed: {}",
+                resp.status()
+            )));
+        }
+        Ok(())
+    }
+
+    fn verify_webhook(
+        &self,
+        path: &str,
+        headers: &std::collections::HashMap<String, String>,
+        body: &[u8],
+    ) -> Result<Option<gripsou_core::provider::WebhookSignal>, ProviderError> {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+
+        let secret = self
+            .webhook_secret
+            .as_ref()
+            .ok_or_else(|| ProviderError::Other("webhook secret not configured".into()))?;
+        let date = headers
+            .get("bi-signature-date")
+            .ok_or_else(|| ProviderError::Other("missing BI-Signature-Date".into()))?;
+        let given = headers
+            .get("bi-signature")
+            .ok_or_else(|| ProviderError::Other("missing BI-Signature".into()))?;
+
+        let body_str = std::str::from_utf8(body)
+            .map_err(|_| ProviderError::Other("non-utf8 webhook body".into()))?;
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        mac.update(format!("POST.{path}.{date}.{body_str}").as_bytes());
+        let expected = STANDARD.encode(mac.finalize().into_bytes());
+
+        // Compare decoded bytes; timing leakage is negligible (HMAC over unknown secret).
+        let given_bytes = STANDARD.decode(given).unwrap_or_default();
+        let expected_bytes = STANDARD.decode(&expected).unwrap_or_default();
+        if given_bytes.is_empty() || given_bytes != expected_bytes {
+            return Err(ProviderError::Other("bad webhook signature".into()));
+        }
+
+        let env: model::WebhookEnvelope =
+            serde_json::from_slice(body).map_err(|e| ProviderError::Other(e.to_string()))?;
+        Ok(env
+            .connection
+            .map(|c| gripsou_core::provider::WebhookSignal {
+                provider_connection_id: c.id.to_string(),
+            }))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path};
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(format!("POST.{path}.{date}.{body}").as_bytes());
+        STANDARD.encode(mac.finalize().into_bytes())
+    }
 
     #[tokio::test]
     async fn connect_builds_webview_url_with_correct_params() {
@@ -229,10 +363,20 @@ mod tests {
             })))
             .mount(&server)
             .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "id": 42 })))
+            .mount(&server)
+            .await;
 
         let p = PowensProvider::for_test(&server.uri());
-        let creds = p.complete_connect("code=exchange-code-123").await.unwrap();
-        assert_eq!(creds["auth_token"], "perm-abc");
+        let out = p
+            .complete_connect("code=exchange-code-123&connection_id=99")
+            .await
+            .unwrap();
+        assert_eq!(out.credentials["auth_token"], "perm-abc");
+        assert_eq!(out.provider_meta["external_connection_id"], "99");
+        assert_eq!(out.provider_meta["powens_user_id"], "42");
     }
 
     #[tokio::test]
@@ -253,6 +397,33 @@ mod tests {
 
         let p = PowensProvider::for_test(&server.uri());
         assert!(p.complete_connect("code=bad").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn complete_connect_without_connection_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2.0/auth/token/access"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "perm-abc",
+                "token_type": "Bearer"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "id": 42 })))
+            .mount(&server)
+            .await;
+
+        let p = PowensProvider::for_test(&server.uri());
+        let out = p.complete_connect("code=exchange-code-123").await.unwrap();
+        assert!(
+            out.provider_meta.get("external_connection_id").is_none(),
+            "external_connection_id should not be present"
+        );
+        assert_eq!(out.provider_meta["powens_user_id"], "42");
+        assert_eq!(out.credentials["auth_token"], "perm-abc");
     }
 
     #[tokio::test]
@@ -304,5 +475,61 @@ mod tests {
         let p = PowensProvider::for_test(&server.uri());
         let creds = serde_json::json!({ "auth_token": "bad-token" });
         assert!(p.sync(&creds).await.is_err());
+    }
+
+    #[test]
+    fn verify_webhook_accepts_valid_signature_and_returns_connection_id() {
+        let p = PowensProvider::for_test_with_secret("http://x", "shh");
+        let path = "/api/webhooks/powens";
+        let date = "2022-06-27T11:08:52.577831Z";
+        let body = r#"{"connection":{"id":99}}"#;
+        let mut h = std::collections::HashMap::new();
+        h.insert("bi-signature-date".into(), date.into());
+        h.insert("bi-signature".into(), sign("shh", path, date, body));
+        let sig = p
+            .verify_webhook(path, &h, body.as_bytes())
+            .unwrap()
+            .unwrap();
+        assert_eq!(sig.provider_connection_id, "99");
+    }
+
+    #[test]
+    fn verify_webhook_rejects_bad_signature() {
+        let p = PowensProvider::for_test_with_secret("http://x", "shh");
+        let mut h = std::collections::HashMap::new();
+        h.insert("bi-signature-date".into(), "d".into());
+        h.insert("bi-signature".into(), "not-the-right-sig".into());
+        assert!(p.verify_webhook("/api/webhooks/powens", &h, b"{}").is_err());
+    }
+
+    #[test]
+    fn verify_webhook_ignores_body_without_connection() {
+        let p = PowensProvider::for_test_with_secret("http://x", "shh");
+        let path = "/api/webhooks/powens";
+        let date = "d";
+        let body = r#"{"user":{"id":1}}"#;
+        let mut h = std::collections::HashMap::new();
+        h.insert("bi-signature-date".into(), date.into());
+        h.insert("bi-signature".into(), sign("shh", path, date, body));
+        assert!(
+            p.verify_webhook(path, &h, body.as_bytes())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn request_refresh_puts_with_psu_requested_false() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/2.0/users/me/connections/99"))
+            .and(query_param("psu_requested", "false"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&server)
+            .await;
+        let p = PowensProvider::for_test(&server.uri());
+        let creds = serde_json::json!({ "auth_token": "live" });
+        let meta = serde_json::json!({ "external_connection_id": "99" });
+        p.request_refresh(&creds, &meta).await.unwrap();
     }
 }

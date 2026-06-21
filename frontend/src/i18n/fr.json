@@ -21,6 +21,7 @@
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
     "syncing": "Synchronisation…",
+    "awaiting": "En attente de la banque…",
     "sync": "Synchroniser",
     "retry": "Réessayer",
     "lastSync": "Dernière synchro {{when}}",
@@ -219,6 +220,7 @@
     "connectionStatus": {
       "ok": "Synchronisé",
       "syncing": "Synchronisation…",
+      "awaiting": "En attente de la banque…",
       "error": "Échec de la synchronisation",
       "pending": "Connexion en cours…"
     },
