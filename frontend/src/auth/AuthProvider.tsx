@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // POST /auth/logout and navigate before isBootstrapping resolves).
         const u = await getJson<SessionUser>("/auth/me", { skipGlobalUnauthorized: true });
         if (active) applyUser(u);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // A 401 here is expected (stale/invalid stored token) and must NOT
         // trigger the global unauthorized handler (which would fire a spurious
         // POST /auth/logout and navigate before isBootstrapping resolves).
