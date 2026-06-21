@@ -42,7 +42,9 @@ fn default_range() -> String {
 }
 
 fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    let msg = e.to_string();
+    tracing::error!("internal error: {msg}");
+    (StatusCode::INTERNAL_SERVER_ERROR, msg)
 }
 
 /// Resolve the caller and require the admin role. Server config and provider

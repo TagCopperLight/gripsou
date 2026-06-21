@@ -110,7 +110,10 @@ where
         let hash = hash_token(token);
         let session = gripsou_core::repo::session::find_valid_by_hash(&pool, &hash)
             .await
-            .map_err(|_| unauthorized())?
+            .map_err(|e| {
+                tracing::warn!("session lookup failed: {e}");
+                unauthorized()
+            })?
             .ok_or_else(unauthorized)?;
 
         // Throttled sliding-window bump; failures here must not fail the request.
