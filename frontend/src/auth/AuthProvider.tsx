@@ -33,8 +33,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // POST /auth/logout and navigate before isBootstrapping resolves).
         const u = await getJson<SessionUser>("/auth/me", { skipGlobalUnauthorized: true });
         if (active) applyUser(u);
-      } catch {
-        setAuthToken(null);
+      } catch (err: any) {
+        // A 401 here is expected (stale/invalid stored token) and must NOT
+        // trigger the global unauthorized handler (which would fire a spurious
+        // POST /auth/logout and navigate before isBootstrapping resolves).
+        // Only clear the stored token if it's explicitly rejected as unauthorized.
+        // Network errors or 50x shouldn't log the user out.
+        if (err instanceof Error && err.message.includes("unauthorized")) {
+          setAuthToken(null);
+        }
       } finally {
         if (active) setIsBootstrapping(false);
       }

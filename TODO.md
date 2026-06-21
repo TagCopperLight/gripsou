@@ -12,6 +12,7 @@
 - [x] Integrate webhooks
 - [x] EUR symbol in holdings
 - [x] Failed connections kept open
+- [x] Users page functions
 
 - [ ] Currency conversion
 - [ ] Transaction page
@@ -22,4 +23,4 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
 - [ ] New look for connections page
-- [ ] Users page functions
+- [ ] Invite and Reset pages
