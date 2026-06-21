@@ -68,3 +68,19 @@ test("stored token → /auth/me returns 401 → unauthenticated, global handler 
   // Global handler must not have been triggered (no spurious POST /auth/logout).
   expect(unauthorizedSpy).not.toHaveBeenCalled();
 });
+
+test("stored token → /auth/me network error → token preserved", async () => {
+  setAuthToken("good-tok", true);
+
+  // Simulate a network error
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))),
+  );
+
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await waitFor(() => expect(screen.getByText("out")).toBeInTheDocument());
+
+  // Token should NOT be wiped from localStorage.
+  expect(client.getAuthToken()).toBe("good-tok");
+});
