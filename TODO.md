@@ -9,10 +9,12 @@
 - [x] Readme
 - [x] Add CI/CD
 - [x] localhost redirects from powens
+- [x] Integrate webhooks
+- [x] EUR symbol in holdings
 
 - [ ] Currency conversion
 - [ ] Transaction page
-- [ ] Users page funcions
+- [ ] Users page functions
 - [ ] Icons for users
 - [ ] ETF categories and origin stats
 - [ ] Rearrange files and folders
@@ -20,5 +22,3 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
 - [ ] Failed connections kept open
-- [ ] Integrate webhooks
-- [ ] EUR symbol in holdings

@@ -229,7 +229,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       <HoldingBadge
                         logo={h.logo}
                         ticker={h.ticker}
-                        className="size-8 rounded-lg text-[11px]"
+                        fallbackText={h.kind === "cash" && h.ticker === "EUR" ? "€" : undefined}
+                        className="size-8 rounded-lg text-[13px]"
                       />
                       <div className="flex flex-col">
                         <span className="text-sm text-fg leading-tight">
