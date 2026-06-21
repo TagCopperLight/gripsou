@@ -179,7 +179,7 @@
     "inviteHeading": "Share this one-time link",
     "inviteBody": "Anyone who opens this link can create their own account. The link expires in 24 hours.",
     "resetTitle": "Reset password",
-    "resetFor": "For {{name}}",
+    "resetHeading": "Share this one-time link",
     "resetBody": "{{name}} must open this link to choose a new password. It expires in 24 hours and can be used once.",
     "removeUserTitle": "Remove {{name}}",
     "removeUserBody": "This permanently deletes the user and all their data.",

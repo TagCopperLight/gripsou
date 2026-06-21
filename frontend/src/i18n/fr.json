@@ -179,7 +179,7 @@
     "inviteHeading": "Partagez ce lien à usage unique",
     "inviteBody": "Toute personne qui ouvre ce lien peut créer son propre compte. Le lien expire dans 24 heures.",
     "resetTitle": "Réinitialiser le mot de passe",
-    "resetFor": "Pour {{name}}",
+    "resetHeading": "Partagez ce lien à usage unique",
     "resetBody": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut être utilisé qu'une fois.",
     "removeUserTitle": "Supprimer {{name}}",
     "removeUserBody": "Cela supprime définitivement l'utilisateur et toutes ses données.",
