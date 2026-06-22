@@ -1,6 +1,6 @@
 use gripsou_core::dto::CanonicalHolding;
 use gripsou_providers::powens::map;
-use gripsou_providers::powens::model::{BankAccount, Investment};
+use gripsou_providers::powens::model::{BankAccount, Connection, Investment};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
@@ -10,6 +10,8 @@ struct Fixture {
     accounts: Vec<BankAccount>,
     #[serde(default)]
     investments: Vec<Investment>,
+    #[serde(default)]
+    connections: Vec<Connection>,
 }
 
 fn load(name: &str) -> Fixture {
@@ -185,6 +187,21 @@ fn cash_for<'a>(holdings: &'a [CanonicalHolding], account: &str) -> Option<&'a C
     holdings
         .iter()
         .find(|h| h.account_external_id == account && h.instrument.kind == "cash")
+}
+
+#[test]
+fn map_institution_reads_first_connector() {
+    let fx = load("connections.json");
+    let inst = map::map_institution(&fx.connections);
+    assert_eq!(inst.key, "abc-uuid-bnp");
+    assert_eq!(inst.name, "BNP Paribas");
+}
+
+#[test]
+fn map_institution_empty_when_no_connector() {
+    let inst = map::map_institution(&[]);
+    assert_eq!(inst.key, "");
+    assert_eq!(inst.name, "");
 }
 
 #[test]

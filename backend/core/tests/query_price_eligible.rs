@@ -1,7 +1,7 @@
 mod common;
 
 use common::{cash_holding, checking_account, equity_holding, seed_connection};
-use gripsou_core::dto::SyncResult;
+use gripsou_core::dto::{Institution, SyncResult};
 use gripsou_core::ingest::ingest;
 use gripsou_core::repo::query::price_eligible_instruments_for_connection;
 use rust_decimal::Decimal;
@@ -11,6 +11,7 @@ use sqlx::PgPool;
 async fn returns_only_nonzero_noncash(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),

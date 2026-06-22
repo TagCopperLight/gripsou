@@ -243,7 +243,30 @@ impl AccountProvider for PowensProvider {
             }
         };
 
-        Ok(map::map_sync(&accounts.accounts, &investments.investments))
+        // Connections carry the institution (one connector per connection).
+        // Failure here is non-fatal: leave institution empty rather than fail
+        // the whole sync (the ingest guard won't clobber a prior good value).
+        let connections = {
+            let resp = self
+                .http
+                .get(self.api_url("/users/me/connections?expand=connector"))
+                .bearer_auth(auth_token)
+                .send()
+                .await
+                .map_err(|e| ProviderError::Other(e.to_string()))?;
+            if resp.status().is_success() {
+                resp.json::<model::ConnectionsResponse>()
+                    .await
+                    .map(|r| r.connections)
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        };
+
+        let mut result = map::map_sync(&accounts.accounts, &investments.investments);
+        result.institution = map::map_institution(&connections);
+        Ok(result)
     }
 
     fn webhooks_enabled(&self) -> bool {
@@ -527,6 +550,35 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn sync_populates_institution_from_connections() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me/accounts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "accounts": [] })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me/investments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "investments": [] })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me/connections"))
+            .and(query_param("expand", "connector"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "connections": [ { "id": 99, "connector": { "uuid": "abc-uuid-bnp", "name": "BNP Paribas" } } ]
+            })))
+            .mount(&server)
+            .await;
+
+        let p = PowensProvider::for_test(&server.uri());
+        let creds = serde_json::json!({ "auth_token": "live" });
+        let out = p.sync(&creds).await.unwrap();
+        assert_eq!(out.institution.key, "abc-uuid-bnp");
+        assert_eq!(out.institution.name, "BNP Paribas");
     }
 
     #[tokio::test]

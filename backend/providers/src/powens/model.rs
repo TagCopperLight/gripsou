@@ -73,6 +73,27 @@ pub struct InvestmentsResponse {
     pub investments: Vec<Investment>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Connector {
+    #[serde(default)]
+    pub uuid: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Connection {
+    pub id: i64,
+    /// Present when the request used `?expand=connector`.
+    #[serde(default)]
+    pub connector: Option<Connector>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConnectionsResponse {
+    pub connections: Vec<Connection>,
+}
+
 /// Minimal shape of a Powens webhook body — only what we need to correlate.
 #[derive(Debug, Deserialize)]
 pub struct WebhookConnection {

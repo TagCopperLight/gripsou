@@ -112,6 +112,19 @@ pub async fn ingest(
         }
     }
 
+    // Stamp the institution onto the connection. Guarded so a provider that
+    // momentarily reports nothing can't clobber a previously-good value.
+    if !sync.institution.key.is_empty() {
+        sqlx::query!(
+            "update connection set institution_key = $2, institution_name = $3 where id = $1",
+            connection_id,
+            sync.institution.key,
+            sync.institution.name,
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
 
     Ok(IngestSummary {

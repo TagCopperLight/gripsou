@@ -2,11 +2,11 @@
 
 use std::collections::HashMap;
 
-use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef, SyncResult};
+use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, Institution, InstrumentRef, SyncResult};
 use rust_decimal::Decimal;
 use serde_json::json;
 
-use crate::powens::model::{BankAccount, Investment};
+use crate::powens::model::{BankAccount, Connection, Investment};
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
 /// `account_type` keys. Total: any unrecognized value falls back to `brokerage`.
@@ -49,6 +49,21 @@ pub fn is_invest_type(name: &str) -> bool {
 pub fn is_liquidity(inv: &Investment) -> bool {
     inv.code.as_deref() == Some("XX-liquidity")
         || inv.stock_symbol.as_deref() == Some("XX-liquidity")
+}
+
+/// Extract the institution from the connections endpoint. With one connection
+/// per token the first connector is correct.
+// ponytail: takes the first connector; match by accounts' id_connection if a
+// single token ever carries multiple connections.
+pub fn map_institution(connections: &[Connection]) -> Institution {
+    connections
+        .iter()
+        .find_map(|c| c.connector.as_ref())
+        .map(|c| Institution {
+            key: c.uuid.clone().unwrap_or_default(),
+            name: c.name.clone().unwrap_or_default(),
+        })
+        .unwrap_or_default()
 }
 
 /// Map a Powens bank account onto a canonical account. The provider-supplied
@@ -209,7 +224,13 @@ pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncRes
         }
     }
 
-    let mut result = SyncResult::default();
+    // institution is filled by sync() after fetching connections; placeholder here.
+    let mut result = SyncResult {
+        institution: Institution::default(),
+        accounts: Vec::new(),
+        holdings: Vec::new(),
+        transactions: Vec::new(),
+    };
     for acct in accounts {
         if acct.deleted.is_some() {
             continue;

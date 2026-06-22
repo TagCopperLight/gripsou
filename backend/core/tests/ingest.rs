@@ -1,7 +1,7 @@
 mod common;
 
 use common::{cash_holding, checking_account, deposit_txn, equity_holding, seed_connection};
-use gripsou_core::dto::SyncResult;
+use gripsou_core::dto::{Institution, SyncResult};
 use gripsou_core::error::CoreError;
 use gripsou_core::ingest::ingest;
 use rust_decimal::Decimal;
@@ -9,6 +9,7 @@ use sqlx::PgPool;
 
 fn sample_sync() -> SyncResult {
     SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
@@ -65,6 +66,7 @@ async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> 
 async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
@@ -89,6 +91,7 @@ async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Resu
 async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)), // cash -> value = qty = 100
@@ -132,6 +135,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 
     // First sync: a cash holding alongside an equity.
     let sync1 = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(1000, 0)),
@@ -150,6 +154,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     // Second sync: the cash holding is gone (e.g. the invest residual went to
     // zero). The equity remains.
     let sync2 = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
             "acct-1",
@@ -203,6 +208,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("ghost", Decimal::new(100, 0))], // references missing account
         transactions: vec![],
@@ -226,11 +232,13 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
     let conn_b = seed_connection(&pool).await;
 
     let sync_a = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("a-1")],
         holdings: vec![cash_holding("a-1", Decimal::new(100, 0))],
         transactions: vec![],
     };
     let sync_b = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("b-1")],
         holdings: vec![cash_holding("b-1", Decimal::new(200, 0))],
         transactions: vec![],
@@ -250,9 +258,34 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let sync = SyncResult {
+        institution: gripsou_core::dto::Institution {
+            key: "abc-uuid".into(),
+            name: "BNP Paribas".into(),
+        },
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+        transactions: vec![],
+    };
+    ingest(&pool, conn_id, &sync).await?;
+
+    let row: (Option<String>, Option<String>) = sqlx::query_as(
+        "select institution_key, institution_name from connection where id = $1",
+    )
+    .bind(conn_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(row, (Some("abc-uuid".into()), Some("BNP Paribas".into())));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn unknown_account_ref_in_transaction_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![],
         transactions: vec![deposit_txn("ghost", "txn-1", Decimal::new(100, 0))], // unknown account

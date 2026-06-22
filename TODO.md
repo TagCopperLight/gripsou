@@ -23,6 +23,7 @@
 
 ### v1.2.0
 - [x] New look for connections page
+- [x] Organize i18n translations better
 
 ### Future
 - [ ] Currency conversion
@@ -33,7 +34,6 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
-- [ ] Organize i18n translations better
 - [ ] Bank sources and icons
 - [ ] New look for the sync page
 - [ ] Split providers and connections sources in the UI
