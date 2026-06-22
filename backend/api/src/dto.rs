@@ -341,6 +341,7 @@ pub struct SyncConnection {
     pub last_sync_at: Option<i64>,
     pub last_error: Option<String>,
     pub accounts: Vec<SyncAccount>,
+    pub logo: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -378,6 +379,7 @@ impl ProviderGroup {
         for c in conns {
             let conn = SyncConnection {
                 id: c.id.to_string(),
+                logo: gripsou_core::logo::institution_logo_url(c.institution_key.as_deref()),
                 // Bank/broker name once known (filled on first sync); the
                 // provider label ("Powens") is a fallback until then.
                 display_name: c.institution_name.unwrap_or(c.display_name),
@@ -700,5 +702,39 @@ mod tests {
 
         let order: Vec<String> = resp.accounts.iter().map(|x| x.id.clone()).collect();
         assert_eq!(order, vec![a.to_string(), b.to_string()]);
+    }
+
+    use gripsou_core::repo::connection::ConnectionListRow;
+
+    fn conn_row(institution_key: Option<&str>) -> ConnectionListRow {
+        ConnectionListRow {
+            id: Uuid::from_u128(1),
+            provider_key: "powens".into(),
+            provider_name: "Powens".into(),
+            display_name: "My bank".into(),
+            institution_key: institution_key.map(|s| s.to_string()),
+            institution_name: Some("BNP Paribas".into()),
+            status: "ok".into(),
+            last_sync_at: None,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn connection_logo_derives_from_institution_key() {
+        // logo must come from the connector key via the core helper — not be
+        // hardcoded and not derived from the name.
+        let groups = ProviderGroup::tree(vec![conn_row(Some("some-key"))], vec![]);
+        let conn = &groups[0].connections[0];
+        assert_eq!(
+            conn.logo,
+            gripsou_core::logo::institution_logo_url(Some("some-key"))
+        );
+    }
+
+    #[test]
+    fn connection_logo_none_without_institution_key() {
+        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![]);
+        assert_eq!(groups[0].connections[0].logo, None);
     }
 }

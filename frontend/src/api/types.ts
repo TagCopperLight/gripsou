@@ -131,6 +131,7 @@ export type SyncConnection = {
   lastSyncAt: number | null;
   lastError: string | null;
   accounts: SyncAccount[];
+  logo: string | null;
 };
 
 export type ProviderGroup = {

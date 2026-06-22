@@ -557,12 +557,16 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/2.0/users/me/accounts"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "accounts": [] })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "accounts": [] })),
+            )
             .mount(&server)
             .await;
         Mock::given(method("GET"))
             .and(path("/2.0/users/me/investments"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "investments": [] })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "investments": [] })),
+            )
             .mount(&server)
             .await;
         Mock::given(method("GET"))

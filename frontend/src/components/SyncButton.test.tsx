@@ -22,6 +22,7 @@ function groups(status: SyncStatus): ProviderGroup[] {
           lastSyncAt: null,
           lastError: status === "error" ? "boom" : null,
           accounts: [],
+          logo: null,
         },
       ],
     },

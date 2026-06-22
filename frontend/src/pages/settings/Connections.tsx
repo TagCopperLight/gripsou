@@ -124,7 +124,7 @@ function ConnectionRow({
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
       >
         <HoldingBadge
-          logo={null}
+          logo={conn.logo}
           ticker={conn.displayName}
           color={conn.accounts[0]?.color}
           className="size-9 rounded-lg text-[13px]"
