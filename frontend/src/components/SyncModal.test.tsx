@@ -17,7 +17,7 @@ const connectionsData: { data: ProviderGroup[]; isLoading: boolean } = {
           lastSyncAt: null,
           lastError: null,
           accounts: [
-            { id: "a1", name: "Checking", typeLabel: "Current account", value: "10", lastSyncAt: null },
+            { id: "a1", name: "Checking", typeLabel: "Current account", value: "10", lastSyncAt: null, color: null },
           ],
         },
       ],

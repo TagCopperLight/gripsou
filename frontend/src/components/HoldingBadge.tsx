@@ -10,12 +10,15 @@ type Props = {
   logo: string | null;
   ticker: string;
   fallbackText?: string;
+  /** Override the swatch color (e.g. the owning account's color). Falls back to
+   * a deterministic color derived from `ticker` when absent. */
+  color?: string | null;
   /** Size/shape utilities (e.g. `size-8 rounded-lg text-[11px]`). */
   className?: string;
 };
 
-/** An instrument's logo, or a deterministic colored swatch with its initials. */
-export function HoldingBadge({ logo, ticker, fallbackText, className = "" }: Props) {
+/** An instrument's logo, or a colored swatch with its initials. */
+export function HoldingBadge({ logo, ticker, fallbackText, color, className = "" }: Props) {
   const hasLogo = isLogoUrl(logo);
   return (
     <span
@@ -23,7 +26,7 @@ export function HoldingBadge({ logo, ticker, fallbackText, className = "" }: Pro
       style={
         hasLogo
           ? { backgroundImage: `url(${logo})` }
-          : { backgroundColor: colorForString(ticker) }
+          : { backgroundColor: color ?? colorForString(ticker) }
       }
     >
       {!hasLogo && (fallbackText ?? ticker.slice(0, 2))}
