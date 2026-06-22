@@ -1,0 +1,8 @@
+{
+  "connections": [
+    {
+      "id": 99,
+      "connector": { "uuid": "abc-uuid-bnp", "name": "BNP Paribas" }
+    }
+  ]
+}

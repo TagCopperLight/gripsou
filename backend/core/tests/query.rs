@@ -5,7 +5,7 @@ use common::{
     cash_holding, checking_account, equity_holding, holding_ids, insert_price_on, seed_connection,
     stamp_on,
 };
-use gripsou_core::dto::SyncResult;
+use gripsou_core::dto::{Institution, SyncResult};
 use gripsou_core::ingest::ingest;
 use gripsou_core::repo::query;
 use rust_decimal::Decimal;
@@ -18,6 +18,7 @@ async fn insert_price_is_upsert(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
             transactions: vec![],
@@ -55,6 +56,7 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![
                 cash_holding("acct-1", Decimal::new(100, 0)),
@@ -141,6 +143,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![
                 cash_holding("acct-1", Decimal::new(100, 0)),
@@ -232,6 +235,7 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
             transactions: vec![],
@@ -285,6 +289,7 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
                 "acct-1",
@@ -342,6 +347,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![
                 cash_holding("acct-1", Decimal::new(100, 0)),
@@ -362,6 +368,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
                 "acct-1",
@@ -395,6 +402,7 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
                 "acct-1",
@@ -445,6 +453,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
             transactions: vec![],
@@ -489,6 +498,7 @@ async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
                 "acct-1",
@@ -543,6 +553,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
             holdings: vec![
                 cash_holding("acct-1", Decimal::new(100, 0)),
@@ -593,6 +604,7 @@ async fn holding_transactions_returns_buy_lots(pool: PgPool) -> anyhow::Result<(
         &pool,
         conn_id,
         &SyncResult {
+            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
                 "acct-1",

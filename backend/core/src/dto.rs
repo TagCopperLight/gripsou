@@ -64,9 +64,19 @@ pub struct PricePoint {
     pub currency: String,
 }
 
-/// What an `AccountProvider::sync` returns for one connection.
+/// The financial institution (bank/broker) a connection belongs to. One per
+/// connection. `key` is the provider's raw identifier; `provider_key` on the
+/// connection namespaces it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Institution {
+    pub key: String,
+    pub name: String,
+}
+
+/// What an `AccountProvider::sync` returns for one connection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult {
+    pub institution: Institution,
     pub accounts: Vec<CanonicalAccount>,
     pub holdings: Vec<CanonicalHolding>,
     pub transactions: Vec<CanonicalTransaction>,
