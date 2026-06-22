@@ -41,7 +41,7 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("settings.removeUserTitle", { name: user.name })}
+        aria-label={t("settings.users.removeUser.title", { name: user.name })}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
@@ -49,9 +49,9 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
           <div className="flex flex-col gap-1">
             <h2 className="flex items-center gap-2.5 text-xl font-semibold text-fg">
               <TriangleAlert className="size-5 text-red" />
-              {t("settings.removeUserTitle", { name: user.name })}
+              {t("settings.users.removeUser.title", { name: user.name })}
             </h2>
-            <p className="text-sm text-fg-faint">{t("settings.removeUserBody")}</p>
+            <p className="text-sm text-fg-faint">{t("settings.users.removeUser.body")}</p>
           </div>
           <button
             type="button"
@@ -64,11 +64,11 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
         </div>
         <div className="px-6 py-4 flex flex-col gap-4">
           <p className="rounded-xl bg-red/10 px-4 py-3 text-sm text-red">
-            {t("settings.removeUserWarning")}
+            {t("settings.users.removeUser.warning")}
           </p>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm text-fg-dim">
-              {t("settings.removeUserConfirm", { email: user.email })}
+              {t("settings.users.removeUser.confirm", { email: user.email })}
             </span>
             <input
               type="email"
@@ -79,7 +79,7 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
               className="rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono outline-none focus:ring-2 focus:ring-red/40"
             />
           </label>
-          {remove.isError && <p className="text-sm text-red">{t("settings.removeUserError")}</p>}
+          {remove.isError && <p className="text-sm text-red">{t("settings.users.removeUser.error")}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
           <Button variant="ghost" onClick={onClose}>
@@ -89,9 +89,9 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
             variant="danger"
             onClick={confirm}
             disabled={!matches || remove.isPending}
-            aria-label={t("settings.deleteUser")}
+            aria-label={t("settings.users.deleteUser")}
           >
-            {remove.isPending ? t("common.loading") : t("settings.deleteUser")}
+            {remove.isPending ? t("common.loading") : t("settings.users.deleteUser")}
           </Button>
         </div>
       </div>

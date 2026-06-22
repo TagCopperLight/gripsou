@@ -25,13 +25,13 @@ type Column = {
 };
 
 const COLUMNS: Column[] = [
-  { labelKey: "holdings.columns.asset", align: "left", sort: "asset" },
-  { labelKey: "holdings.columns.quantity", align: "right", sort: "qty" },
-  { labelKey: "holdings.columns.account", align: "left" },
-  { labelKey: "holdings.columns.category", align: "left" },
-  { labelKey: "holdings.columns.value", align: "right", sort: "value" },
-  { labelKey: "holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
-  { labelKey: "holdings.columns.thirtyDays", align: "right" },
+  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset" },
+  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty" },
+  { labelKey: "dashboard.holdings.columns.account", align: "left" },
+  { labelKey: "dashboard.holdings.columns.category", align: "left" },
+  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value" },
+  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
+  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right" },
 ];
 
 const GREEN = "var(--color-green)";
@@ -77,7 +77,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   // Cash is the same instrument across accounts; show one summed line per
   // currency here, with the per-account split living on the Accounts tab.
   const holdings = useMemo(
-    () => aggregateCash(data ?? [], t("holdings.multipleAccounts")),
+    () => aggregateCash(data ?? [], t("dashboard.holdings.multipleAccounts")),
     [data, t],
   );
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
@@ -125,10 +125,10 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
       <div className="flex flex-col p-5">
         <div className="flex items-start justify-between">
           <h2 className="text-fg font-semibold text-sm">
-            {t("holdings.title")}
+            {t("dashboard.holdings.title")}
             {ready && (
               <span className="text-fg-faint font-normal ml-3">
-                {t("holdings.assetsCount", { count: holdings.length })}
+                {t("dashboard.holdings.assetsCount", { count: holdings.length })}
               </span>
             )}
           </h2>
@@ -137,7 +137,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("holdings.searchPlaceholder")}
+              placeholder={t("dashboard.holdings.searchPlaceholder")}
               className="bg-transparent text-sm text-fg placeholder:text-fg-faint outline-none w-full"
             />
           </label>
@@ -166,7 +166,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 }`}
               >
                 {c === "All"
-                  ? t("holdings.all")
+                  ? t("dashboard.holdings.all")
                   : categoryLabel(t, c, categoryFallback.get(c) ?? c)}
               </button>
             );

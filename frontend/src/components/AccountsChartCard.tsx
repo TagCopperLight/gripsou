@@ -50,7 +50,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
       <div className="flex flex-col p-5">
         <div className="flex justify-between">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">{t("netWorth.title")}</p>
+            <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
             {ready && (
               <>
                 <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
@@ -60,7 +60,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
-                  <p className="text-fg-faint text-sm">{t("netWorth.over", { range: RANGE_LABEL[range] })}</p>
+                  <p className="text-fg-faint text-sm">{t("dashboard.netWorth.over", { range: RANGE_LABEL[range] })}</p>
                 </div>
               </>
             )}

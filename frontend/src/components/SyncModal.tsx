@@ -138,7 +138,7 @@ function ConnectionRow({
           type="button"
           onClick={onSync}
           disabled={isSyncing}
-          aria-label={isError ? t("sync.retry") : t("sync.sync")}
+          aria-label={isError ? t("common.retry") : t("sync.sync")}
           className="shrink-0 grid size-9 place-items-center rounded-xl bg-surface text-fg-dim hover:bg-hover hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <RefreshCw className={`size-4 ${isSyncing ? "animate-spin" : ""}`} />

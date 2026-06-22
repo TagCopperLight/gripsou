@@ -30,7 +30,7 @@ export function formatRelative(
   value: number | null,
   options: DateFormatOptions = {},
 ): string {
-  if (value === null) return i18n.t("time.neverSynced");
+  if (value === null) return i18n.t("sync.neverSynced");
   const diff = Date.now() - value;
   const MIN = 60_000;
   const HOUR = 60 * MIN;

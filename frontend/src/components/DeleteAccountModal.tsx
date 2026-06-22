@@ -53,7 +53,7 @@ export function DeleteAccountModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("settings.deleteAccountTitle")}
+        aria-label={t("settings.account.deleteAccountTitle")}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
@@ -61,7 +61,7 @@ export function DeleteAccountModal({
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
           <h2 className="flex items-center gap-2.5 text-xl font-semibold text-fg">
             <TriangleAlert className="size-5 text-red" />
-            {t("settings.deleteAccountTitle")}
+            {t("settings.account.deleteAccountTitle")}
           </h2>
           <button
             type="button"
@@ -75,15 +75,15 @@ export function DeleteAccountModal({
 
         {/* Body */}
         <div className="px-6 py-4 flex flex-col gap-5">
-          <p className="text-sm text-fg-dim">{t("settings.deleteAccountBody")}</p>
+          <p className="text-sm text-fg-dim">{t("settings.account.deleteAccountBody")}</p>
 
           <div className="flex flex-col gap-2">
             <span className="text-sm text-fg-faint">
-              {t("settings.deleteAccountConfirmLabel", { email })}
+              {t("settings.account.deleteAccountConfirmLabel", { email })}
             </span>
             <input
               type="email"
-              aria-label={t("settings.deleteAccountConfirmLabel", { email })}
+              aria-label={t("settings.account.deleteAccountConfirmLabel", { email })}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               placeholder={email}
@@ -93,7 +93,7 @@ export function DeleteAccountModal({
           </div>
 
           {remove.isError && (
-            <p className="text-red text-sm">{t("settings.deleteAccountError")}</p>
+            <p className="text-red text-sm">{t("settings.account.deleteAccountError")}</p>
           )}
         </div>
 
@@ -104,8 +104,8 @@ export function DeleteAccountModal({
           </Button>
           <Button variant="danger" onClick={confirm} disabled={!canDelete}>
             {remove.isPending
-              ? t("settings.deleteAccountPending")
-              : t("settings.deleteAccountConfirm")}
+              ? t("settings.account.deleteAccountPending")
+              : t("settings.account.deleteAccountConfirm")}
           </Button>
         </div>
       </div>

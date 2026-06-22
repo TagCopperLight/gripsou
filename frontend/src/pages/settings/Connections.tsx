@@ -32,19 +32,19 @@ export function SettingsConnections() {
         <div className="flex flex-col p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-fg font-semibold text-sm">
-              {t("settings.connections")}
+              {t("settings.connections.title")}
               {!isLoading && (
                 <span className="text-fg-faint font-normal ml-2">
                   <span className="mr-2">·</span>
-                  <span>{t("settings.connectionsCount", { count: connCount })}</span>
+                  <span>{t("settings.connections.connectionsCount", { count: connCount })}</span>
                   <span className="mx-2">·</span>
-                  <span>{t("settings.accountsCount", { count: acctCount })}</span>
+                  <span>{t("settings.connections.accountsCount", { count: acctCount })}</span>
                 </span>
               )}
             </h2>
             <Button onClick={() => setAddOpen(true)} padded={false} className="inline-flex items-center gap-1.5 text-xs px-2.75 py-1.5">
               <Plus className="size-4" />
-              {t("settings.addConnection")}
+              {t("settings.connections.addConnection")}
             </Button>
           </div>
 
@@ -128,7 +128,7 @@ function ConnectionRow({
             <StatusTag conn={conn} />
           </div>
           <p className="text-xs text-fg-faint mt-0.5">
-            {t("settings.accountsCount", { count: conn.accounts.length })}
+            {t("settings.connections.accountsCount", { count: conn.accounts.length })}
             <span className="mx-1.5">·</span>
             {formatRelative(conn.lastSyncAt)}
           </p>
@@ -136,14 +136,14 @@ function ConnectionRow({
         <div className="flex items-center gap-1.5 shrink-0">
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
-            aria-label={t("settings.syncConnection")}
+            aria-label={t("settings.connections.syncConnection")}
             disabled={isSyncing}
           >
             <RefreshCw className={`size-4 ${isSyncing ? "animate-spin" : ""}`} />
           </IconButton>
           <IconButton
             onClick={stop(onDelete)}
-            aria-label={t("settings.deleteConnection")}
+            aria-label={t("settings.connections.deleteConnection")}
             danger
           >
             <Trash2 className="size-4" />
@@ -192,7 +192,7 @@ function ConnectionRow({
     if (isError) {
       return (
         <span className={`${base} bg-red/15 text-red`} title={conn.lastError ?? ""}>
-          {conn.lastError ?? t("settings.connectionStatus.error")}
+          {conn.lastError ?? t("settings.connections.status.error")}
         </span>
       );
     }
@@ -200,20 +200,20 @@ function ConnectionRow({
       return (
         <span className={`${base} bg-surface-3 text-fg-dim`}>
           <RefreshCw className="size-3 animate-spin" />
-          {t(isAwaiting ? "settings.connectionStatus.awaiting" : "settings.connectionStatus.syncing")}
+          {t(isAwaiting ? "settings.connections.status.awaiting" : "settings.connections.status.syncing")}
         </span>
       );
     }
     if (isPending) {
       return (
         <span className={`${base} bg-surface-3 text-fg-dim`}>
-          {t("settings.connectionStatus.pending")}
+          {t("settings.connections.status.pending")}
         </span>
       );
     }
     return (
       <span className={`${base} bg-green-soft text-green`}>
-        {t("settings.connectionConnected")}
+        {t("settings.connections.connectionConnected")}
       </span>
     );
   }

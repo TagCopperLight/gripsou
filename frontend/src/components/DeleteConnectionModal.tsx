@@ -45,14 +45,14 @@ export function DeleteConnectionModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("settings.deleteConnectionTitle")}
+        aria-label={t("settings.connections.deleteConnectionTitle")}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
           <h2 className="flex items-center gap-2.5 text-xl font-semibold text-fg">
             <TriangleAlert className="size-5 text-red" />
-            {t("settings.deleteConnectionTitle")}
+            {t("settings.connections.deleteConnectionTitle")}
           </h2>
           <button
             type="button"
@@ -64,9 +64,9 @@ export function DeleteConnectionModal({
           </button>
         </div>
         <div className="px-6 py-4">
-          <p className="text-sm text-fg-dim">{t("settings.deleteConnectionBody")}</p>
+          <p className="text-sm text-fg-dim">{t("settings.connections.deleteConnectionBody")}</p>
           {remove.isError && (
-            <p className="mt-3 text-sm text-red">{t("settings.deleteConnectionError")}</p>
+            <p className="mt-3 text-sm text-red">{t("settings.connections.deleteConnectionError")}</p>
           )}
         </div>
         <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
@@ -77,11 +77,11 @@ export function DeleteConnectionModal({
             variant="danger"
             onClick={confirm}
             disabled={remove.isPending}
-            aria-label={t("settings.deleteConnection")}
+            aria-label={t("settings.connections.deleteConnection")}
           >
             {remove.isPending
               ? t("common.loading")
-              : t("settings.deleteConnection")}
+              : t("settings.connections.deleteConnection")}
           </Button>
         </div>
       </div>

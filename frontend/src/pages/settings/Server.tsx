@@ -35,8 +35,8 @@ export function SettingsServer() {
   return (
     <div className="flex flex-col gap-4 pb-8">
       <Surface className="p-6 mt-13">
-        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.serverCors")}</h2>
-        <p className="mb-5 text-xs text-fg-faint">{t("settings.serverCorsHint")}</p>
+        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.cors")}</h2>
+        <p className="mb-5 text-xs text-fg-faint">{t("settings.server.corsHint")}</p>
         <div className="flex flex-col gap-2">
           {origins.map((origin) => (
             <div
@@ -62,20 +62,20 @@ export function SettingsServer() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") addOrigin();
               }}
-              placeholder={t("settings.serverCorsPlaceholder")}
+              placeholder={t("settings.server.corsPlaceholder")}
               className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
             />
             <Button onClick={addOrigin} disabled={!draft.trim() || setCorsOrigins.isPending}>
-              {t("settings.add")}
+              {t("settings.server.add")}
             </Button>
           </div>
         </div>
       </Surface>
       <Surface className="p-6">
         <h2 className="mb-1 text-lg font-semibold text-fg">
-          {t("settings.serverProviders")}
+          {t("settings.server.providers")}
         </h2>
-        <p className="mb-5 text-xs text-fg-faint">{t("settings.serverProvidersHint")}</p>
+        <p className="mb-5 text-xs text-fg-faint">{t("settings.server.providersHint")}</p>
         {!providersReady ? (
           <CardState
             variant={providersIsError ? "error" : "loading"}

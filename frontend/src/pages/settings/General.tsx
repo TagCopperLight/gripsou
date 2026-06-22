@@ -56,10 +56,10 @@ export function SettingsGeneral() {
     <div className="flex flex-col gap-4 pb-8">
       <Surface className="p-6 mt-13">
         <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.localization")}
+          {t("settings.general.localization")}
         </h2>
         <div className="flex flex-col gap-5">
-          <Setting label={t("settings.language")} hint={t("settings.interfaceLanguage")}>
+          <Setting label={t("settings.general.language")} hint={t("settings.general.interfaceLanguage")}>
             <SegmentedControl
               value={prefs.uiLanguage}
               onChange={(lng) => set("uiLanguage", lng as UserPrefs["uiLanguage"])}
@@ -73,8 +73,8 @@ export function SettingsGeneral() {
           <Divider />
 
           <Setting
-            label={t("settings.dateFormat")}
-            hint={t("settings.today", {
+            label={t("settings.general.dateFormat")}
+            hint={t("settings.general.today", {
               date: formatDate(new Date(), { pattern: prefs.dateFormat }),
             })}
           >
@@ -90,12 +90,12 @@ export function SettingsGeneral() {
 
       <Surface className="p-6">
         <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.numbersCurrency")}
+          {t("settings.general.numbersCurrency")}
         </h2>
         <div className="flex flex-col gap-5">
           <Setting
-            label={t("settings.currency")}
-            hint={t("settings.baseReportingCurrency")}
+            label={t("settings.general.currency")}
+            hint={t("settings.general.baseReportingCurrency")}
           >
             <Select
               value={prefs.currencySymbol}
@@ -110,44 +110,44 @@ export function SettingsGeneral() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-fg">
-                {t("settings.numberFormat")}
+                {t("settings.general.numberFormat")}
               </span>
               <span className="text-xs text-fg-faint">
-                {t("settings.numberFormatHint")}
+                {t("settings.general.numberFormatHint")}
               </span>
             </div>
 
             <div className="grid grid-cols-3 divide-x divide-surface-2">
-              <FieldCol label={t("settings.thousandsSeparator")} first>
+              <FieldCol label={t("settings.general.thousandsSeparator")} first>
                 <Select
                   value={prefs.numberGroupSep}
                   onChange={(v) => set("numberGroupSep", v)}
                   options={GROUP_OPTIONS}
                 />
               </FieldCol>
-              <FieldCol label={t("settings.decimalSeparator")}>
+              <FieldCol label={t("settings.general.decimalSeparator")}>
                 <Select
                   value={prefs.numberDecimalSep}
                   onChange={(v) => set("numberDecimalSep", v)}
                   options={DECIMAL_OPTIONS}
                 />
               </FieldCol>
-              <FieldCol label={t("settings.symbolPosition")}>
+              <FieldCol label={t("settings.general.symbolPosition")}>
                 <Select
                   value={prefs.currencyPosition}
                   onChange={(v) =>
                     set("currencyPosition", v as UserPrefs["currencyPosition"])
                   }
                   options={[
-                    { value: "before", label: t("settings.symbolBefore") },
-                    { value: "after", label: t("settings.symbolAfter") },
+                    { value: "before", label: t("settings.general.symbolBefore") },
+                    { value: "after", label: t("settings.general.symbolAfter") },
                   ]}
                 />
               </FieldCol>
             </div>
 
             <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
-              <span className="text-xs text-fg-faint">{t("settings.preview")}</span>
+              <span className="text-xs text-fg-faint">{t("settings.general.preview")}</span>
               <span className="flex gap-5 font-mono text-[15px]">
                 <span className="text-fg">
                   {formatMoney("1234567.89", previewMoneyOpts)}
