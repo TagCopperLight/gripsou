@@ -118,6 +118,7 @@ export type SyncStatus = "ok" | "syncing" | "error" | "pending" | "awaiting";
 export type SyncAccount = {
   id: string;
   name: string;
+  color: string | null;
   typeLabel: string;
   value: string;
   lastSyncAt: number | null;

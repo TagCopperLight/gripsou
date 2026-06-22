@@ -21,6 +21,8 @@
 ### v1.1.1
 - [x] fix webhooks
 
+### v1.2.0
+- [x] New look for connections page
 
 ### Future
 - [ ] Currency conversion
@@ -31,5 +33,7 @@
 - [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
-- [ ] New look for connections page
-- [ ] Download logos to not give the api key
+    - [ ] Parameterize webhooks
+- [ ] New look for the sync page
+- [ ] Split providers and connections sources in the UI
+- [ ] Organize i18n translations better

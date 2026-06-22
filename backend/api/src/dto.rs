@@ -326,6 +326,7 @@ impl AccountType {
 pub struct SyncAccount {
     pub id: String,
     pub name: String,
+    pub color: Option<String>,
     pub type_label: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
@@ -367,6 +368,7 @@ impl ProviderGroup {
                 .push(SyncAccount {
                     id: a.account_id.to_string(),
                     name: a.name,
+                    color: a.color,
                     type_label: a.type_label,
                     value: a.value.to_string(),
                     last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),

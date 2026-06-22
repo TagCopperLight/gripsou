@@ -12,10 +12,12 @@ const VARIANTS: Record<ButtonVariant, string> = {
 
 type ButtonProps = ComponentPropsWithoutRef<"button"> & {
   variant?: ButtonVariant;
+  padded?: boolean;
 };
 
 export function Button({
   variant = "primary",
+  padded = true,
   type = "button",
   className = "",
   ...props
@@ -23,7 +25,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`px-4 py-2.5 rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
+      className={`${padded ? "px-4 py-2.5" : ""} rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   );

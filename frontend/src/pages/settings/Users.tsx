@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { UserPlus, Key, Trash2 } from "lucide-react";
+import { Plus, Key, Trash2 } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
@@ -52,7 +52,7 @@ export function SettingsUsers() {
       <Surface className="w-full">
         <div className="flex flex-col p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-fg font-semibold text-sm mb-auto">
+            <h2 className="text-fg font-semibold text-sm">
               {t("settings.users")}
               {ready && (
                 <span className="text-fg-faint font-normal ml-2">
@@ -61,8 +61,8 @@ export function SettingsUsers() {
                 </span>
               )}
             </h2>
-            <Button onClick={openInvite} className="inline-flex items-center gap-1.5 text-sm">
-              <UserPlus className="size-4" />
+            <Button onClick={openInvite} padded={false} className="inline-flex items-center gap-1.5 text-xs px-2.75 py-1.5">
+              <Plus className="size-4" />
               {t("settings.inviteUser")}
             </Button>
           </div>
