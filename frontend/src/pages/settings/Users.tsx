@@ -53,17 +53,17 @@ export function SettingsUsers() {
         <div className="flex flex-col p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-fg font-semibold text-sm">
-              {t("settings.users")}
+              {t("settings.users.title")}
               {ready && (
                 <span className="text-fg-faint font-normal ml-2">
                   <span className="mr-2">·</span>
-                  {t("settings.usersCount", { count: users.length })}
+                  {t("settings.users.usersCount", { count: users.length })}
                 </span>
               )}
             </h2>
             <Button onClick={openInvite} padded={false} className="inline-flex items-center gap-1.5 text-xs px-2.75 py-1.5">
               <Plus className="size-4" />
-              {t("settings.inviteUser")}
+              {t("settings.users.inviteUser")}
             </Button>
           </div>
 
@@ -84,7 +84,7 @@ export function SettingsUsers() {
                         c === "actions" ? "text-right" : "text-left"
                       }`}
                     >
-                      {t(`settings.columns.${c}`)}
+                      {t(`settings.users.columns.${c}`)}
                     </th>
                   ))}
                 </tr>
@@ -92,7 +92,7 @@ export function SettingsUsers() {
               <tbody>
                 {users.map((u) => {
                   const role = roleOf(u);
-                  const label = t(role === "admin" ? "settings.roleAdmin" : "settings.roleMember");
+                  const label = t(role === "admin" ? "settings.users.roleAdmin" : "settings.users.roleMember");
                   return (
                     <tr key={u.id} className="hover:bg-hover transition-colors duration-140">
                       {/* MEMBER */}
@@ -104,7 +104,7 @@ export function SettingsUsers() {
                               {u.name}
                               {u.isSelf && (
                                 <span className="text-[10px] uppercase tracking-wide text-fg-dim border border-surface-3 rounded px-1.5 py-0.5">
-                                  {t("settings.you")}
+                                  {t("settings.users.you")}
                                 </span>
                               )}
                             </span>
@@ -133,7 +133,7 @@ export function SettingsUsers() {
                             <button
                               type="button"
                               onClick={() => openReset(u)}
-                              aria-label={t("settings.resetPassword")}
+                              aria-label={t("settings.users.resetPassword")}
                               className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
                             >
                               <Key className="size-4" />
@@ -143,7 +143,7 @@ export function SettingsUsers() {
                             <button
                               type="button"
                               onClick={() => setDeleteTarget(u)}
-                              aria-label={t("settings.deleteUser")}
+                              aria-label={t("settings.users.deleteUser")}
                               className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-red flex items-center justify-center cursor-pointer transition-colors duration-140"
                             >
                               <Trash2 className="size-4" />
@@ -161,9 +161,9 @@ export function SettingsUsers() {
       </Surface>
       {inviteOpen && (
         <LinkModal
-          title={t("settings.inviteTitle")}
-          subtitle={t("settings.inviteHeading")}
-          body={t("settings.inviteBody")}
+          title={t("settings.users.invite.title")}
+          subtitle={t("settings.users.invite.heading")}
+          body={t("settings.users.invite.body")}
           link={linkFor("/invite", invite.data?.token)}
           error={invite.isError}
           onClose={() => {
@@ -174,9 +174,9 @@ export function SettingsUsers() {
       )}
       {resetTarget && (
         <LinkModal
-          title={t("settings.resetTitle")}
-          subtitle={t("settings.resetHeading")}
-          body={t("settings.resetBody", { name: resetTarget.name })}
+          title={t("settings.users.reset.title")}
+          subtitle={t("settings.users.reset.heading")}
+          body={t("settings.users.reset.body", { name: resetTarget.name })}
           link={linkFor("/reset", resetLink.data?.token)}
           error={resetLink.isError}
           onClose={() => {

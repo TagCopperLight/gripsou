@@ -62,13 +62,13 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("editAccountModal.title")}
+        aria-label={t("account.edit.title")}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
-          <h2 className="text-xl font-semibold text-fg">{t("editAccountModal.title")}</h2>
+          <h2 className="text-xl font-semibold text-fg">{t("account.edit.title")}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -81,7 +81,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
 
         {/* Body */}
         <div className="px-6 py-4 flex flex-col gap-5">
-          <Field label={t("editAccountModal.accountName")}>
+          <Field label={t("account.edit.accountName")}>
             <input
               type="text"
               value={name}
@@ -90,17 +90,17 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             />
           </Field>
 
-          <Field label={t("editAccountModal.type")}>
+          <Field label={t("account.edit.type")}>
             <Select value={typeKey} onChange={setTypeKey} options={typeOptions} />
           </Field>
 
-          <Field label={t("editAccountModal.color")}>
+          <Field label={t("account.edit.color")}>
             <div className="flex flex-wrap gap-2">
               {ACCOUNT_PALETTE.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  aria-label={t("editAccountModal.colorLabel", { color: c })}
+                  aria-label={t("account.edit.colorLabel", { color: c })}
                   aria-pressed={c === color}
                   onClick={() => setColor(c)}
                   className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 ${
@@ -122,7 +122,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
                 style={{ background: color }}
               />
               <span className="text-fg font-semibold text-[15px] truncate">
-                {name.trim() || t("editAccountModal.accountName")}
+                {name.trim() || t("account.edit.accountName")}
               </span>
             </span>
             <span className="text-fg-faint text-sm shrink-0 mr-2">{typeLabel}</span>
@@ -130,7 +130,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
 
           {update.isError && (
             <p className="text-red text-sm">
-              {t("editAccountModal.saveError")}
+              {t("account.edit.saveError")}
             </p>
           )}
         </div>
@@ -138,10 +138,10 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
           <Button variant="ghost" onClick={onClose}>
-            {t("editAccountModal.cancel")}
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={save} disabled={!canSave}>
-            {update.isPending ? t("editAccountModal.saving") : t("editAccountModal.save")}
+            {update.isPending ? t("account.edit.saving") : t("account.edit.save")}
           </Button>
         </div>
       </div>

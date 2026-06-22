@@ -23,7 +23,7 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
     <Surface className="relative p-5">
       <button
         type="button"
-        aria-label={t("editAccountModal.title")}
+        aria-label={t("account.edit.title")}
         onClick={() => setEditing(true)}
         className="absolute top-4 right-4 p-2 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
       >

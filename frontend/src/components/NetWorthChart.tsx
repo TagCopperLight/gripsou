@@ -19,8 +19,8 @@ type NetWorthChartProps = {
 export function NetWorthChart({ data, height = 320, className = "", unit = "value" }: NetWorthChartProps) {
   const { t } = useTranslation();
   const series: ChartSeries[] = [
-    { name: t("netWorth.capitalInvested"), data: data.map((p) => [p.t, p.invested]), color: GRAY, dashed: true },
-    { name: t("netWorth.netWorth"), data: data.map((p) => [p.t, p.netWorth]), color: GREEN, area: true },
+    { name: t("dashboard.netWorth.capitalInvested"), data: data.map((p) => [p.t, p.invested]), color: GRAY, dashed: true },
+    { name: t("dashboard.netWorth.netWorth"), data: data.map((p) => [p.t, p.netWorth]), color: GREEN, area: true },
   ];
   return <ValueChart series={series} unit={unit} height={height} className={className} surfaceColor={SURFACE} />;
 }

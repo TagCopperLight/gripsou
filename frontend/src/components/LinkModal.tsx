@@ -63,7 +63,7 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
         <div className="px-6 pt-3 pb-5">
           <p className="text-sm text-fg-dim">{body}</p>
           {error ? (
-            <p className="mt-4 text-sm text-red">{t("settings.linkError")}</p>
+            <p className="mt-4 text-sm text-red">{t("settings.users.linkError")}</p>
           ) : (
             <div className="mt-4 flex items-center gap-2">
               <code className="flex-1 truncate rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono">
@@ -73,7 +73,7 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
                 type="button"
                 onClick={copy}
                 disabled={!link}
-                aria-label={t("settings.copyLink")}
+                aria-label={t("settings.users.copyLink")}
                 className="size-10 shrink-0 rounded-xl bg-surface-2 text-fg hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {copied ? <Check className="size-4 text-green" /> : <Copy className="size-4" />}
@@ -82,7 +82,7 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
           )}
         </div>
         <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
-          <Button onClick={onClose}>{t("settings.done")}</Button>
+          <Button onClick={onClose}>{t("settings.users.done")}</Button>
         </div>
       </div>
     </div>

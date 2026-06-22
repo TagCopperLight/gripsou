@@ -63,7 +63,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-5">
-        <p className="text-fg font-semibold text-sm">{t("distribution.title")}</p>
+        <p className="text-fg font-semibold text-sm">{t("dashboard.distribution.title")}</p>
         {!ready ? (
           <CardState
             variant={isError ? "error" : "loading"}

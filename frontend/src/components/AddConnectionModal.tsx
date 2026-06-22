@@ -52,13 +52,13 @@ export function AddConnectionModal({ onClose }: AddConnectionModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("settings.pickProvider")}
+        aria-label={t("settings.connections.pickProvider")}
         onClick={(e) => e.stopPropagation()}
         className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
           <h2 className="text-xl font-semibold text-fg">
-            {t("settings.pickProvider")}
+            {t("settings.connections.pickProvider")}
           </h2>
           <button
             type="button"
@@ -82,7 +82,7 @@ export function AddConnectionModal({ onClose }: AddConnectionModalProps) {
             />
           ))}
           {initConnection.isError && (
-            <p className="text-sm text-red">{t("settings.connectError")}</p>
+            <p className="text-sm text-red">{t("settings.connections.connectError")}</p>
           )}
         </div>
 
@@ -94,9 +94,9 @@ export function AddConnectionModal({ onClose }: AddConnectionModalProps) {
             variant="primary"
             onClick={connect}
             disabled={!selected || initConnection.isPending}
-            aria-label={t("settings.connect")}
+            aria-label={t("settings.connections.connect")}
           >
-            {t("settings.connect")}
+            {t("settings.connections.connect")}
           </Button>
         </div>
       </div>

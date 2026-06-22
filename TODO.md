@@ -30,10 +30,11 @@
 - [ ] Icons for users
 - [ ] ETF categories and origin stats
 - [ ] Rearrange files and folders
-- [ ] Bank sources and icons
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
+- [ ] Organize i18n translations better
+- [ ] Bank sources and icons
 - [ ] New look for the sync page
 - [ ] Split providers and connections sources in the UI
-- [ ] Organize i18n translations better
+- [ ] Group connection page by provider

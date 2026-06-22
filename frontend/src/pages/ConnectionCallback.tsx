@@ -48,13 +48,13 @@ export function ConnectionCallback() {
       <div className="flex min-h-screen items-center justify-center p-6">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
           <p className="text-lg font-semibold text-fg">
-            {t("connections.callbackError")}
+            {t("connectionCallback.callbackError")}
           </p>
           <p className="text-sm text-fg-faint">
-            {t("connections.callbackErrorBody")}
+            {t("connectionCallback.callbackErrorBody")}
           </p>
           <Button onClick={() => navigate({ to: "/settings/connections" })}>
-            {t("connections.backToConnections")}
+            {t("connectionCallback.backToConnections")}
           </Button>
         </div>
       </div>

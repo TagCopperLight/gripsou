@@ -91,33 +91,33 @@ export function SettingsAccount() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
       <Surface className="p-6 h-full flex flex-col">
         <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.profile")}
+          {t("settings.account.profile")}
         </h2>
         <div className="flex flex-1 flex-col gap-5">
-          <Field label={t("settings.name")}>
-            <TextInput value={name} onChange={setName} ariaLabel={t("settings.name")} />
+          <Field label={t("settings.account.name")}>
+            <TextInput value={name} onChange={setName} ariaLabel={t("settings.account.name")} />
           </Field>
-          <Field label={t("settings.email")}>
+          <Field label={t("settings.account.email")}>
             <TextInput
               type="email"
               value={email}
               onChange={setEmail}
-              ariaLabel={t("settings.email")}
+              ariaLabel={t("settings.account.email")}
             />
           </Field>
           {updateProfile.isSuccess && (
-            <p className="text-sm text-green">{t("settings.profileUpdated")}</p>
+            <p className="text-sm text-green">{t("settings.account.profileUpdated")}</p>
           )}
           {updateProfile.isError && (
             <p className="text-sm text-red">
               {emailTaken
-                ? t("settings.emailInUse")
-                : t("settings.profileUpdateFailed")}
+                ? t("settings.account.emailInUse")
+                : t("settings.account.profileUpdateFailed")}
             </p>
           )}
           <div className="mt-auto flex justify-end pt-1">
             <Button onClick={saveProfile} disabled={!canSaveProfile}>
-              {t("settings.saveChanges")}
+              {t("settings.account.saveChanges")}
             </Button>
           </div>
         </div>
@@ -125,42 +125,42 @@ export function SettingsAccount() {
 
       <Surface className="p-6 h-full flex flex-col">
         <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.password")}
+          {t("settings.account.password")}
         </h2>
         <div className="flex flex-1 flex-col gap-5">
-          <Field label={t("settings.currentPassword")}>
+          <Field label={t("settings.account.currentPassword")}>
             <TextInput
               type="password"
               value={currentPassword}
               onChange={setCurrentPassword}
-              ariaLabel={t("settings.currentPassword")}
+              ariaLabel={t("settings.account.currentPassword")}
             />
           </Field>
-          <Field label={t("settings.newPassword")}>
+          <Field label={t("settings.account.newPassword")}>
             <TextInput
               type="password"
               value={newPassword}
               onChange={setNewPassword}
-              ariaLabel={t("settings.newPassword")}
+              ariaLabel={t("settings.account.newPassword")}
             />
           </Field>
-          <Field label={t("settings.confirmNewPassword")}>
+          <Field label={t("settings.account.confirmNewPassword")}>
             <TextInput
               type="password"
               value={confirmPassword}
               onChange={setConfirmPassword}
-              ariaLabel={t("settings.confirmNewPassword")}
+              ariaLabel={t("settings.account.confirmNewPassword")}
             />
           </Field>
           {passwordsMismatch && (
-            <p className="text-sm text-red">{t("settings.passwordsDoNotMatch")}</p>
+            <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>
           )}
           {changePassword.isSuccess && (
-            <p className="text-sm text-green">{t("settings.passwordUpdated")}</p>
+            <p className="text-sm text-green">{t("settings.account.passwordUpdated")}</p>
           )}
           {changePassword.isError && (
             <p className="text-sm text-red">
-              {t("settings.currentPasswordIncorrect")}
+              {t("settings.account.currentPasswordIncorrect")}
             </p>
           )}
           <div className="mt-auto flex justify-end pt-1">
@@ -168,7 +168,7 @@ export function SettingsAccount() {
               onClick={updatePassword}
               disabled={!canUpdatePassword || changePassword.isPending}
             >
-              {t("settings.updatePassword")}
+              {t("settings.account.updatePassword")}
             </Button>
           </div>
         </div>
@@ -176,8 +176,8 @@ export function SettingsAccount() {
       </div>
 
       <Surface className="p-6">
-        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.sessions")}</h2>
-        <p className="mb-5 text-sm text-fg-faint">{t("settings.sessionsDescription")}</p>
+        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.account.sessions")}</h2>
+        <p className="mb-5 text-sm text-fg-faint">{t("settings.account.sessionsDescription")}</p>
         <div className="flex flex-col gap-3">
           {sessions.map((s) => (
             <div key={s.id} className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
@@ -186,20 +186,20 @@ export function SettingsAccount() {
                   <span className="text-[15px] text-fg">{s.device}</span>
                   {s.current && (
                     <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
-                      {t("settings.thisDevice")}
+                      {t("settings.account.thisDevice")}
                     </span>
                   )}
                   <span className="rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-fg-dim">
                     {s.remembered
-                      ? t("settings.sessionRemembered")
-                      : t("settings.sessionSingle")}
+                      ? t("settings.account.sessionRemembered")
+                      : t("settings.account.sessionSingle")}
                   </span>
                 </div>
                 <span className="text-sm text-fg-faint">
                   {s.ip ? `${s.ip} · ` : ""}
-                  {t("settings.lastActive", { time: formatRelative(s.lastActiveAt) })}
+                  {t("settings.account.lastActive", { time: formatRelative(s.lastActiveAt) })}
                   {" · "}
-                  {t("settings.signedInOn", { date: formatDate(s.createdAt) })}
+                  {t("settings.account.signedInOn", { date: formatDate(s.createdAt) })}
                 </span>
               </div>
               {!s.current && (
@@ -209,7 +209,7 @@ export function SettingsAccount() {
                   disabled={revokeSession.isPending}
                   className="text-red hover:text-red"
                 >
-                  {t("settings.revokeSession")}
+                  {t("settings.account.revokeSession")}
                 </Button>
               )}
             </div>
@@ -223,7 +223,7 @@ export function SettingsAccount() {
               disabled={revokeOthers.isPending}
               className="text-red hover:text-red"
             >
-              {t("settings.logOutOtherSessions")}
+              {t("settings.account.logOutOtherSessions")}
             </Button>
           </div>
         )}
@@ -231,14 +231,14 @@ export function SettingsAccount() {
 
       <Surface className="p-6 ring-1 ring-red/30">
         <h2 className="mb-1 text-lg font-semibold text-red">
-          {t("settings.dangerZone")}
+          {t("settings.account.dangerZone")}
         </h2>
         <p className="mb-5 text-sm text-fg-faint">
-          {t("settings.deleteAccountDescription")}
+          {t("settings.account.deleteAccountDescription")}
         </p>
         <div className="flex justify-end">
           <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-            {t("settings.deleteAccount")}
+            {t("settings.account.deleteAccount")}
           </Button>
         </div>
       </Surface>
