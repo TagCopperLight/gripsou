@@ -11,6 +11,7 @@ pub struct ConnectionListRow {
     pub provider_key: String,
     pub provider_name: String,
     pub display_name: String,
+    pub institution_name: Option<String>,
     pub status: String,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
@@ -29,6 +30,7 @@ pub async fn list_connections(
                c.provider_key  as "provider_key!",
                p.display_name  as "provider_name!",
                c.display_name  as "display_name!",
+               c.institution_name,
                c.status        as "status!",
                c.last_sync_at,
                c.last_error

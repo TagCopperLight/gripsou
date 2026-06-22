@@ -378,7 +378,9 @@ impl ProviderGroup {
         for c in conns {
             let conn = SyncConnection {
                 id: c.id.to_string(),
-                display_name: c.display_name,
+                // Bank/broker name once known (filled on first sync); the
+                // provider label ("Powens") is a fallback until then.
+                display_name: c.institution_name.unwrap_or(c.display_name),
                 status: c.status,
                 last_sync_at: c.last_sync_at.map(|d| d.timestamp_millis()),
                 last_error: c.last_error,
