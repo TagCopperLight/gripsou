@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use gripsou_core::db::Db;
-use gripsou_core::provider::{AccountProvider, PriceProvider};
+use gripsou_core::provider::{AccountProvider, PriceProvider, ProviderError};
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
 use uuid::Uuid;
@@ -304,7 +304,7 @@ pub async fn request_sync(db: Db, user_id: Uuid, id: Uuid) -> BeginSync {
     } else {
         match connection::begin_await(&db, user_id, id).await {
             Ok(BeginSync::Started(state)) => {
-                tokio::spawn(do_request_refresh(db.clone(), id, conn));
+                tokio::spawn(do_request_refresh(db.clone(), user_id, id, conn));
                 BeginSync::Started(state)
             }
             Ok(other) => other,
@@ -314,7 +314,7 @@ pub async fn request_sync(db: Db, user_id: Uuid, id: Uuid) -> BeginSync {
 }
 
 /// Decrypt creds and ask the provider to refresh. On failure, surface as error.
-async fn do_request_refresh(db: Db, id: Uuid, conn: connection::ConnForSync) {
+async fn do_request_refresh(db: Db, user_id: Uuid, id: Uuid, conn: connection::ConnForSync) {
     let key = match std::env::var("ENCRYPTION_KEY") {
         Ok(k) => k,
         Err(_) => {
@@ -334,10 +334,20 @@ async fn do_request_refresh(db: Db, id: Uuid, conn: connection::ConnForSync) {
         fail_sync(&db, id, "no adapter").await;
         return;
     };
-    if let Err(e) = adapter.request_refresh(&creds, &conn.provider_meta).await {
-        fail_sync(&db, id, e.to_string()).await;
+    match adapter.request_refresh(&creds, &conn.provider_meta).await {
+        // On success the connection stays 'awaiting'; the webhook (or the
+        // awaiting-timeout reaper) drives the fetch.
+        Ok(()) => {}
+        // Provider says the connection is already up to date (no webhook will
+        // come). Don't error — fall back to a direct full-fetch immediately
+        // rather than waiting for the awaiting-timeout reaper.
+        Err(ProviderError::Conflict) => {
+            if let Ok(BeginSync::Started(_)) = connection::begin_sync(&db, user_id, id).await {
+                sync_connection(db.clone(), id).await;
+            }
+        }
+        Err(e) => fail_sync(&db, id, e.to_string()).await,
     }
-    // On success: stays 'awaiting'; the webhook (or reaper) drives the fetch.
 }
 
 /// Begin a provider connection: check the adapter exists, call `connect()`,
@@ -352,7 +362,7 @@ pub async fn init_connection(
     display_name: &str,
 ) -> Result<(uuid::Uuid, gripsou_core::provider::ConnectInit), gripsou_core::provider::ProviderError>
 {
-    use gripsou_core::provider::{ConnectInit, ProviderError};
+    use gripsou_core::provider::ConnectInit;
 
     let providers = account_providers();
     let adapter = providers
@@ -384,8 +394,6 @@ pub async fn complete_connection(
     connection_id: uuid::Uuid,
     params: &std::collections::HashMap<String, String>,
 ) -> Result<(), gripsou_core::provider::ProviderError> {
-    use gripsou_core::provider::ProviderError;
-
     let encryption_key = std::env::var("ENCRYPTION_KEY")
         .map_err(|_| ProviderError::Other("ENCRYPTION_KEY not set".into()))?;
 

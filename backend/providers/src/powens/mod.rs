@@ -269,6 +269,12 @@ impl AccountProvider for PowensProvider {
             .send()
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
+        // 409: Powens considers the connection already up to date (or a sync is
+        // already running) and won't emit a webhook — signal a benign conflict so
+        // the caller can fall back to a direct fetch instead of erroring.
+        if resp.status() == reqwest::StatusCode::CONFLICT {
+            return Err(ProviderError::Conflict);
+        }
         if !resp.status().is_success() {
             return Err(ProviderError::Other(format!(
                 "PUT connection refresh failed: {}",
