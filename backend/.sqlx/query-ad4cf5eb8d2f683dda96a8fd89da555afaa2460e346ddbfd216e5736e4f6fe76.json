@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               p.display_name  as \"provider_name!\",\n               c.display_name  as \"display_name!\",\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error\n        from connection c\n        join provider p on p.key = c.provider_key\n        where c.user_id = $1\n        order by p.display_name, c.display_name, c.id\n        ",
+  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               p.display_name  as \"provider_name!\",\n               c.display_name  as \"display_name!\",\n               c.institution_name,\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error\n        from connection c\n        join provider p on p.key = c.provider_key\n        where c.user_id = $1\n        order by p.display_name, c.display_name, c.id\n        ",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "institution_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "institution_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "status!",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "last_sync_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "last_error",
         "type_info": "Text",
         "origin": {
@@ -91,10 +102,11 @@
       false,
       false,
       false,
+      true,
       false,
       true,
       true
     ]
   },
-  "hash": "a1c54a35b37d4e323f8b9752573dd549967a52998a776b81e135d304c5e48e48"
+  "hash": "ad4cf5eb8d2f683dda96a8fd89da555afaa2460e346ddbfd216e5736e4f6fe76"
 }

@@ -19,7 +19,9 @@ export function SettingsConnections() {
   const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useConnections();
   const groups = data ?? [];
-  const conns = groups.flatMap((g) => g.connections);
+  const conns = groups.flatMap((g) =>
+    g.connections.map((c) => ({ ...c, providerName: g.providerName })),
+  );
   const connCount = conns.length;
   const acctCount = conns.reduce((n, c) => n + c.accounts.length, 0);
 
@@ -90,7 +92,7 @@ function ConnectionRow({
   conn,
   onDelete,
 }: {
-  conn: SyncConnection;
+  conn: SyncConnection & { providerName: string };
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -109,9 +111,16 @@ function ConnectionRow({
 
   return (
     <div className="bg-surface-2 rounded-2xl overflow-hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
       >
         <HoldingBadge
@@ -128,6 +137,8 @@ function ConnectionRow({
             <StatusTag conn={conn} />
           </div>
           <p className="text-xs text-fg-faint mt-0.5">
+            {conn.providerName}
+            <span className="mx-1.5">·</span>
             {t("settings.connections.accountsCount", { count: conn.accounts.length })}
             <span className="mx-1.5">·</span>
             {formatRelative(conn.lastSyncAt)}
@@ -154,7 +165,7 @@ function ConnectionRow({
             <ChevronRight className="size-4 text-fg-faint" />
           )}
         </div>
-      </button>
+      </div>
 
       {open && conn.accounts.length > 0 && (
         <div className="px-4 pb-3">
