@@ -30,13 +30,7 @@ fn brandfetch_logo_url(ins: &InstrumentRef) -> Option<String> {
             }),
     }?;
 
-    let client_id = std::env::var("BRANDFETCH_CLIENT_ID").ok();
-
-    let mut url = format!("{}/fallback/404/theme/light", base_url);
-    if let Some(c) = client_id {
-        url.push_str(&format!("?c={}", c));
-    }
-    Some(url)
+    Some(crate::logo::brandfetch_decorate(&base_url))
 }
 
 pub async fn resolve_instrument(

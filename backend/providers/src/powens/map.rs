@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, Institution, InstrumentRef, SyncResult};
+use gripsou_core::dto::{
+    CanonicalAccount, CanonicalHolding, Institution, InstrumentRef, SyncResult,
+};
 use rust_decimal::Decimal;
 use serde_json::json;
 

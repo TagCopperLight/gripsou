@@ -14,6 +14,7 @@ const conn: SyncConnection = {
   lastSyncAt: null,
   lastError: null,
   accounts: [],
+  logo: null,
 };
 
 describe("DeleteConnectionModal", () => {

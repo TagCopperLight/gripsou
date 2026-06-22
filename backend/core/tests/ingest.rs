@@ -271,12 +271,11 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
     };
     ingest(&pool, conn_id, &sync).await?;
 
-    let row: (Option<String>, Option<String>) = sqlx::query_as(
-        "select institution_key, institution_name from connection where id = $1",
-    )
-    .bind(conn_id)
-    .fetch_one(&pool)
-    .await?;
+    let row: (Option<String>, Option<String>) =
+        sqlx::query_as("select institution_key, institution_name from connection where id = $1")
+            .bind(conn_id)
+            .fetch_one(&pool)
+            .await?;
     assert_eq!(row, (Some("abc-uuid".into()), Some("BNP Paribas".into())));
     Ok(())
 }
