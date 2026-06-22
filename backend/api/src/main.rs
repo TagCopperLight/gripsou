@@ -8,7 +8,7 @@ use axum::http::Method;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Json, Router,
-    extract::FromRef,
+    extract::{DefaultBodyLimit, FromRef},
     routing::{delete, get, patch, post},
 };
 use serde_json::{Value, json};
@@ -106,7 +106,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))
         .route("/connections/{id}", delete(handlers::delete_connection))
-        .route("/webhooks/{provider}", post(handlers::webhook))
+        .route(
+            "/webhooks/{provider}",
+            post(handlers::webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+        )
         .route("/holdings", get(handlers::holdings))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(

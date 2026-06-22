@@ -18,6 +18,10 @@
 - [x] Users page functions
 - [x] Invite and Reset pages
 
+### v1.1.1
+- [x] fix webhooks
+
+
 ### Future
 - [ ] Currency conversion
 - [ ] Transaction page
@@ -28,3 +32,4 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
 - [ ] New look for connections page
+- [ ] Download logos to not give the api key

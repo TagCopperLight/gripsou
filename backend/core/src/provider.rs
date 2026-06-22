@@ -27,6 +27,8 @@ pub struct WebhookSignal {
 pub enum ProviderError {
     #[error("provider not implemented")]
     NotImplemented,
+    #[error("provider refresh conflict (already up to date)")]
+    Conflict,
     #[error("provider error: {0}")]
     Other(String),
 }
