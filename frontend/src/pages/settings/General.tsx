@@ -146,9 +146,9 @@ export function SettingsGeneral() {
               </FieldCol>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl bg-surface-2 px-3.5 py-2.25">
               <span className="text-xs text-fg-faint">{t("settings.general.preview")}</span>
-              <span className="flex gap-5 font-mono text-[15px]">
+              <span className="flex gap-5 font-mono text-sm">
                 <span className="text-fg">
                   {formatMoney("1234567.89", previewMoneyOpts)}
                 </span>
