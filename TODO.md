@@ -24,6 +24,8 @@
 ### v1.2.0
 - [x] New look for connections page
 - [x] Organize i18n translations better
+- [x] Split providers and connections sources in the UI
+- [x] Confusion between category and type
 
 ### Future
 - [ ] Currency conversion
@@ -36,5 +38,3 @@
     - [ ] Parameterize webhooks
 - [ ] Bank sources and icons
 - [ ] New look for the sync page
-- [ ] Split providers and connections sources in the UI
-- [ ] Group connection page by provider

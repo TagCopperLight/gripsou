@@ -39,6 +39,8 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       accountName: multipleLabel,
       accountColor: ACCOUNT_PALETTE[0],
       logo: first.logo,
+      category: "cash",
+      categoryLabel: "Cash",
       qty: String(qty),
       invested: String(value),
       value: String(value),
