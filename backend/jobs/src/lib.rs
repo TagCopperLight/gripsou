@@ -111,6 +111,10 @@ fn price_providers() -> Vec<Box<dyn PriceProvider>> {
     v
 }
 
+fn composition_provider() -> gripsou_providers::boursorama::BoursoramaCompositionProvider {
+    gripsou_providers::boursorama::BoursoramaCompositionProvider::new_default()
+}
+
 fn encrypt_credentials(
     key_hex: &str,
     creds: &serde_json::Value,
@@ -216,6 +220,22 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
                     s.skipped_currency
                 ),
                 Err(e) => tracing::warn!("price fetch errored for {connection_id}: {e}"),
+            }
+            // Composition is best-effort too: a failure must not fail the sync.
+            match gripsou_core::composition_sync::fetch_composition_for_connection(
+                &db,
+                connection_id,
+                &composition_provider(),
+            )
+            .await
+            {
+                Ok(s) => tracing::info!(
+                    "composition for {connection_id}: resolved={} fetched={} unresolved={}",
+                    s.resolved,
+                    s.fetched,
+                    s.unresolved
+                ),
+                Err(e) => tracing::warn!("composition fetch errored for {connection_id}: {e}"),
             }
             let _ = connection::mark_synced_ok(&db, connection_id).await;
         }

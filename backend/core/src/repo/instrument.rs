@@ -3,7 +3,7 @@
 
 use uuid::Uuid;
 
-use crate::dto::InstrumentRef;
+use crate::dto::{Composition, InstrumentRef};
 use crate::error::CoreError;
 
 /// On conflict, the provider-supplied `name` is written (provider-authoritative;
@@ -168,6 +168,64 @@ pub async fn mark_symbol_unresolved(
         where id = $1
         "#,
         instrument_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+pub async fn set_boursorama_symbol(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+    symbol: &str,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        r#"
+        update instrument
+        set meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{boursorama_symbol}', to_jsonb($2::text))
+        where id = $1
+        "#,
+        instrument_id,
+        symbol,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+pub async fn mark_composition_none(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        r#"
+        update instrument
+        set meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{composition_status}', '"none"')
+        where id = $1
+        "#,
+        instrument_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+pub async fn set_composition(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+    composition: &Composition,
+) -> Result<(), CoreError> {
+    let mut value = serde_json::to_value(composition)?;
+    value["as_of"] = serde_json::json!(chrono::Utc::now().date_naive().to_string());
+    sqlx::query!(
+        r#"
+        update instrument
+        set kind = 'etf',
+            meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{composition}', $2)
+        where id = $1
+        "#,
+        instrument_id,
+        value,
     )
     .execute(&mut *conn)
     .await?;

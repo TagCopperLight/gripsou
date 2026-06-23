@@ -109,6 +109,9 @@
       "weightOfNetWorth": "Part du patrimoine net",
       "purchaseHistory": "Historique des achats",
       "noPurchases": "Aucun achat.",
+      "countryDistribution": "Répartition géographique",
+      "sectorDistribution": "Répartition sectorielle",
+      "otherAllocation": "Autres",
       "columns": {
         "date": "DATE",
         "qty": "QTÉ",
@@ -287,5 +290,18 @@
     "callbackError": "Une erreur s'est produite lors de la connexion de votre compte.",
     "callbackErrorBody": "Le fournisseur a retourné une erreur. Vous pouvez réessayer depuis la page Connexions.",
     "backToConnections": "Retour aux connexions"
+  },
+  "sectors": {
+    "Technologie": "Technologie",
+    "Services de communication": "Services de communication",
+    "Biens de consommation cyclique": "Biens de consommation cyclique",
+    "Biens de consommation défensif": "Biens de consommation défensif",
+    "Santé": "Santé",
+    "Industriels": "Industriels",
+    "Services publics": "Services publics",
+    "Matières premières de base": "Matières premières de base",
+    "Énergie": "Énergie",
+    "Services financiers": "Services financiers",
+    "Immobilier": "Immobilier"
   }
 }

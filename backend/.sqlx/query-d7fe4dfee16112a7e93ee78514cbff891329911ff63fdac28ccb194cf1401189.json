@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update instrument set kind='etf',\n           meta = jsonb_set('{}'::jsonb, '{composition}',\n             '{\"countries\":[{\"name\":\"USA\",\"weight\":0.6}],\"sectors\":[]}'::jsonb)\n           where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d7fe4dfee16112a7e93ee78514cbff891329911ff63fdac28ccb194cf1401189"
+}

@@ -85,6 +85,8 @@ pub struct HoldingRow {
     pub price: Option<Decimal>,
     /// Last 30 daily unit prices, ascending by time. Empty if none.
     pub spark: Vec<Decimal>,
+    /// ETF/fund country and sector breakdown, when available in instrument.meta.
+    pub composition: Option<crate::dto::Composition>,
 }
 
 pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
@@ -104,6 +106,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         quantity: Decimal,
         cost_basis: Decimal,
         price: Option<Decimal>,
+        composition: Option<serde_json::Value>,
     }
 
     let bases = sqlx::query_as!(
@@ -114,6 +117,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                i.name          as "instrument_name!",
                i.kind          as "kind!",
                i.logo_url,
+               i.meta->'composition' as "composition?",
                i.currency      as "currency!",
                i.id            as "instrument_id!",
                a.id            as "account_id!",
@@ -166,6 +170,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             cost_basis: b.cost_basis,
             price: b.price,
             spark,
+            composition: b.composition.and_then(|v| serde_json::from_value(v).ok()),
         });
     }
     Ok(out)
@@ -470,6 +475,45 @@ pub struct PriceEligibleInstrument {
     pub name: String,
     pub currency: String,
     pub meta: serde_json::Value,
+}
+
+/// Instruments worth a composition scrape: non-cash, holds a symbol/isin, not
+/// already marked "none", and composition missing or older than 30 days.
+pub async fn composition_eligible_instruments_for_connection(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+) -> Result<Vec<PriceEligibleInstrument>, CoreError> {
+    let rows = sqlx::query_as!(
+        PriceEligibleInstrument,
+        r#"
+        select distinct
+               i.id       as "id!",
+               i.kind     as "kind!",
+               i.symbol,
+               i.isin,
+               i.name     as "name!",
+               i.currency as "currency!",
+               i.meta     as "meta!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join instrument i on i.id = h.instrument_id
+        where a.connection_id = $1
+          and i.kind <> 'cash'
+          and i.kind <> 'crypto'
+          and h.quantity <> 0
+          and (i.symbol is not null or i.isin is not null)
+          and coalesce(i.meta->>'composition_status', '') <> 'none'
+          and (
+            i.meta->'composition'->>'as_of' is null
+            or (i.meta->'composition'->>'as_of')::date < (now() - interval '30 days')::date
+          )
+        order by i.name
+        "#,
+        connection_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 /// Distinct non-cash instruments held (nonzero quantity) under a connection.

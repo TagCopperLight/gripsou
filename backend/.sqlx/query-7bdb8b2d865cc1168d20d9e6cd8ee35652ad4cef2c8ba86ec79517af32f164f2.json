@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update instrument\n        set meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{boursorama_symbol}', to_jsonb($2::text))\n        where id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bdb8b2d865cc1168d20d9e6cd8ee35652ad4cef2c8ba86ec79517af32f164f2"
+}

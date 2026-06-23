@@ -640,6 +640,55 @@ async fn holding_transactions_returns_buy_lots(pool: PgPool) -> anyhow::Result<(
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            institution: Institution::default(),
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(3, 0),
+                Decimal::new(450, 0),
+                Some(Decimal::new(600, 0)),
+            )],
+            transactions: vec![],
+        },
+    )
+    .await?;
+
+    let instrument_id: uuid::Uuid =
+        sqlx::query_scalar("select id from instrument where kind <> 'cash'")
+            .fetch_one(&pool)
+            .await?;
+
+    sqlx::query!(
+        r#"update instrument set kind='etf',
+           meta = jsonb_set('{}'::jsonb, '{composition}',
+             '{"countries":[{"name":"USA","weight":0.6}],"sectors":[]}'::jsonb)
+           where id = $1"#,
+        instrument_id,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let rows = query::holdings(&pool, user_id).await?;
+    let etf = rows.iter().find(|r| r.kind == "etf").unwrap();
+    let comp = etf.composition.as_ref().unwrap();
+    assert_eq!(comp.countries[0].name, "USA");
+    assert!((comp.countries[0].weight - 0.6).abs() < 1e-10);
+    assert!(comp.sectors.is_empty());
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<()> {
     let types = query::account_types(&pool).await?;
     let keys: Vec<&str> = types.iter().map(|t| t.key.as_str()).collect();

@@ -5,6 +5,9 @@ pub enum CoreError {
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 
+    #[error("serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+
     /// A non-cash instrument reference carried neither an ISIN nor a symbol,
     /// so it cannot be deduplicated into a global instrument row.
     #[error("instrument '{name}' has no isin or symbol to identify it")]

@@ -81,3 +81,43 @@ pub struct SyncResult {
     pub holdings: Vec<CanonicalHolding>,
     pub transactions: Vec<CanonicalTransaction>,
 }
+
+/// One slice of an ETF allocation breakdown. `weight` is a display ratio in
+/// 0..1 (not money), so it is an f64 and serializes as a JSON number.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Allocation {
+    pub name: String,
+    pub weight: f64,
+}
+
+/// An ETF's country and sector breakdowns, as scraped from a composition source.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Composition {
+    pub countries: Vec<Allocation>,
+    pub sectors: Vec<Allocation>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn composition_round_trips_with_numeric_weights() {
+        let c = Composition {
+            countries: vec![Allocation {
+                name: "United States".into(),
+                weight: 0.621,
+            }],
+            sectors: vec![Allocation {
+                name: "Technology".into(),
+                weight: 0.312,
+            }],
+        };
+        let v = serde_json::to_value(&c).unwrap();
+        // Weights must be JSON numbers, not strings (display ratios, not money).
+        assert!(v["countries"][0]["weight"].is_number());
+        let back: Composition = serde_json::from_value(v).unwrap();
+        assert_eq!(back.countries[0].name, "United States");
+        assert_eq!(back.sectors[0].weight, 0.312);
+    }
+}

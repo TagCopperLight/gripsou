@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select h.id            as \"holding_id!\",\n               i.symbol,\n               i.name          as \"instrument_name!\",\n               i.kind          as \"kind!\",\n               i.logo_url,\n               i.currency      as \"currency!\",\n               i.id            as \"instrument_id!\",\n               a.id            as \"account_id!\",\n               a.name          as \"account_name!\",\n               a.color         as \"account_color\",\n               cat.key         as \"category_key!\",\n               cat.label       as \"category_label!\",\n               h.quantity      as \"quantity!\",\n               h.cost_basis    as \"cost_basis!\",\n               (select p.unit_price from price p\n                  where p.instrument_id = i.id order by p.ts desc limit 1) as \"price?\"\n        from holding h\n        join account a      on a.id = h.account_id\n        join connection c   on c.id = a.connection_id\n        join instrument i   on i.id = h.instrument_id\n        join account_type t on t.key = a.type_key\n        join category cat   on cat.key = t.category_key\n        where c.user_id = $1 and h.quantity <> 0\n        order by h.id\n        ",
+  "query": "\n        select h.id            as \"holding_id!\",\n               i.symbol,\n               i.name          as \"instrument_name!\",\n               i.kind          as \"kind!\",\n               i.logo_url,\n               i.meta->'composition' as \"composition?\",\n               i.currency      as \"currency!\",\n               i.id            as \"instrument_id!\",\n               a.id            as \"account_id!\",\n               a.name          as \"account_name!\",\n               a.color         as \"account_color\",\n               cat.key         as \"category_key!\",\n               cat.label       as \"category_label!\",\n               h.quantity      as \"quantity!\",\n               h.cost_basis    as \"cost_basis!\",\n               (select p.unit_price from price p\n                  where p.instrument_id = i.id order by p.ts desc limit 1) as \"price?\"\n        from holding h\n        join account a      on a.id = h.account_id\n        join connection c   on c.id = a.connection_id\n        join instrument i   on i.id = h.instrument_id\n        join account_type t on t.key = a.type_key\n        join category cat   on cat.key = t.category_key\n        where c.user_id = $1 and h.quantity <> 0\n        order by h.id\n        ",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,12 @@
       },
       {
         "ordinal": 5,
+        "name": "composition?",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
         "name": "currency!",
         "type_info": "Text",
         "origin": {
@@ -70,7 +76,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "instrument_id!",
         "type_info": "Uuid",
         "origin": {
@@ -81,7 +87,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "account_id!",
         "type_info": "Uuid",
         "origin": {
@@ -92,7 +98,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "account_name!",
         "type_info": "Text",
         "origin": {
@@ -103,7 +109,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "account_color",
         "type_info": "Text",
         "origin": {
@@ -114,7 +120,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "category_key!",
         "type_info": "Text",
         "origin": {
@@ -125,7 +131,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "category_label!",
         "type_info": "Text",
         "origin": {
@@ -136,7 +142,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "quantity!",
         "type_info": "Numeric",
         "origin": {
@@ -147,7 +153,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "cost_basis!",
         "type_info": "Numeric",
         "origin": {
@@ -158,7 +164,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "price?",
         "type_info": "Numeric",
         "origin": "Expression"
@@ -175,6 +181,7 @@
       false,
       false,
       true,
+      null,
       false,
       false,
       false,
@@ -187,5 +194,5 @@
       null
     ]
   },
-  "hash": "8ca60bb745bdfd1235bd1153f2fb4f6fa6cfc4aac21fe509634da6a6e487ca57"
+  "hash": "296dd8fc6d2f123060a2ffdc1419f137ff80131b53f5a16977c35bf9a6e05c58"
 }

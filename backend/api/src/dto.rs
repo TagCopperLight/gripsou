@@ -116,6 +116,7 @@ pub struct Holding {
     pub gl: String,
     pub gl_pct: String,
     pub spark: Option<Vec<String>>,
+    pub composition: Option<gripsou_core::dto::Composition>,
 }
 
 impl Holding {
@@ -159,6 +160,7 @@ impl Holding {
             gl: gl.to_string(),
             gl_pct: gl_pct.to_string(),
             spark,
+            composition: r.composition,
         }
     }
 }
