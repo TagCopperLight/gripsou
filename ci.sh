@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Mirror of .github/workflows/ci.yml — run the same checks locally.
-# ponytail: assumes postgres is already reachable at DATABASE_URL; CI spins one up,
-#           locally use `docker compose -f docker/docker-compose.yml up -d postgres`.
 set -uo pipefail
+
+[ -f .env ] && set -a && . ./.env && set +a
 
 export DATABASE_URL="${DATABASE_URL:-postgres://gripsou:gripsou@localhost:5432/gripsou}"
 export POWENS_CLIENT_ID=test-client
