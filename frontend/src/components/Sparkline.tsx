@@ -16,6 +16,10 @@ export function Sparkline({
   className = "",
 }: SparklineProps) {
   const gradientId = useId();
+  // Red overrides the caller's color when the series ended lower than it started
+  // or went negative — a loss reads red regardless of the passed (positive) color.
+  const last = data.at(-1) ?? 0;
+  const stroke = last < 0 || last < (data[0] ?? 0) ? "var(--color-red)" : color;
   const pad = 3;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -38,15 +42,15 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.22} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
+          <stop offset="0%" stopColor={stroke} stopOpacity={0.22} />
+          <stop offset="100%" stopColor={stroke} stopOpacity={0} />
         </linearGradient>
       </defs>
       <polygon points={area} fill={`url(#${gradientId})`} stroke="none" />
       <polyline
         points={line}
         fill="none"
-        stroke={color}
+        stroke={stroke}
         strokeWidth={1.5}
         strokeLinejoin="round"
         strokeLinecap="round"

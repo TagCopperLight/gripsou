@@ -32,6 +32,10 @@
 - [x] Icons for users
 - [x] ETF categories and origin stats
 
+### v1.2.1
+- [x] Alert when a logo is missing for an institution
+- [x] All graph should be red if negative values
+
 ### Future
 - [ ] Currency conversion
 - [ ] Transaction page
@@ -39,5 +43,3 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
-- [ ] All graph should be red if negative values
-- [ ] Alert when a logo is missing for an institution
