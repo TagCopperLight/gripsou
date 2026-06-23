@@ -13,6 +13,8 @@ const ACCOUNT: Account = {
   typeLabel: "Checking",
   value: "12480.30",
   lastSyncAt: null,
+  sourceName: "BoursoBank",
+  sourceLogo: null,
 };
 
 function withClient(children: ReactNode) {
@@ -36,6 +38,8 @@ describe("AccountCard", () => {
     expect(screen.getByText("Checking")).toBeInTheDocument();
     expect(screen.getByText(/14[.,]2/)).toBeInTheDocument();
     expect(screen.getByText("Never synced")).toBeInTheDocument();
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("BoursoBank")).toBeInTheDocument();
   });
 
   it("opens the edit modal when the edit button is clicked", () => {

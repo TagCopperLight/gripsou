@@ -52,6 +52,7 @@
   "account": {
     "totalValue": "Valeur totale",
     "ofNetWorth": "du patrimoine net",
+    "source": "Source",
     "lastSync": "Dernière synchro",
     "allAccounts": "Tous les comptes",
     "edit": {

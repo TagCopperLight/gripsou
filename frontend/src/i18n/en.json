@@ -52,6 +52,7 @@
   "account": {
     "totalValue": "Total value",
     "ofNetWorth": "of net worth",
+    "source": "Source",
     "lastSync": "Last sync",
     "allAccounts": "All accounts",
     "edit": {

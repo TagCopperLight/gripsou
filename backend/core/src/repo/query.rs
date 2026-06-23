@@ -243,6 +243,8 @@ pub struct AccountRow {
     pub type_label: String,
     pub value: Decimal,
     pub last_sync_at: Option<DateTime<Utc>>,
+    pub institution_key: Option<String>,
+    pub source_name: Option<String>,
 }
 
 /// One row per account: latest snapshot value per holding, summed, with the
@@ -276,13 +278,16 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.type_key as "type_key!",
                t.label as "type_label!",
                sum(l.value) as "value!",
-               c.last_sync_at
+               c.last_sync_at,
+               c.institution_key,
+               coalesce(c.institution_name, p.display_name) as source_name
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
-        group by a.id, a.name, a.color, a.type_key, t.label, c.last_sync_at
+        join provider p     on p.key = c.provider_key
+        group by a.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, p.display_name
         order by sum(l.value) desc
         "#,
         user_id,

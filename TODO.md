@@ -28,6 +28,7 @@
 - [x] Confusion between category and type
 - [x] New look for the sync page
 - [x] All buttons and fields are too big
+- [x] Bank sources and icons
 
 ### Future
 - [ ] Currency conversion
@@ -38,4 +39,3 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
-- [ ] Bank sources and icons

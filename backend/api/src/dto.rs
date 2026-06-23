@@ -209,6 +209,8 @@ pub struct Account {
     pub type_label: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
+    pub source_name: Option<String>,
+    pub source_logo: Option<String>,
 }
 
 impl Account {
@@ -221,6 +223,8 @@ impl Account {
             type_label: r.type_label,
             value: r.value.to_string(),
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
+            source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),
+            source_name: r.source_name,
         }
     }
 }
