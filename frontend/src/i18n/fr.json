@@ -259,6 +259,8 @@
       "connectionsCount_other": "{{count}} connexions",
       "accountsCount_one": "{{count}} compte",
       "accountsCount_other": "{{count}} comptes",
+      "providersCount_one": "{{count}} fournisseur",
+      "providersCount_other": "{{count}} fournisseurs",
       "connectionConnected": "Connecté",
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
