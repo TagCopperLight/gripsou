@@ -109,6 +109,9 @@
       "weightOfNetWorth": "Weight of net worth",
       "purchaseHistory": "Purchase history",
       "noPurchases": "No purchases.",
+      "countryDistribution": "Country distribution",
+      "sectorDistribution": "Sector distribution",
+      "otherAllocation": "Other",
       "columns": {
         "date": "DATE",
         "qty": "QTY",
@@ -287,5 +290,18 @@
     "callbackError": "Something went wrong connecting your account.",
     "callbackErrorBody": "The provider returned an error. You can try again from the Connections page.",
     "backToConnections": "Back to connections"
+  },
+  "sectors": {
+    "Technologie": "Technology",
+    "Services de communication": "Communication Services",
+    "Biens de consommation cyclique": "Consumer Cyclical",
+    "Biens de consommation défensif": "Consumer Defensive",
+    "Santé": "Healthcare",
+    "Industriels": "Industrials",
+    "Services publics": "Utilities",
+    "Matières premières de base": "Basic Materials",
+    "Énergie": "Energy",
+    "Services financiers": "Financial Services",
+    "Immobilier": "Real Estate"
   }
 }

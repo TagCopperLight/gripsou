@@ -30,6 +30,7 @@
 - [x] All buttons and fields are too big
 - [x] Bank sources and icons
 - [x] Icons for users
+- [x] ETF categories and origin stats
 
 ### Future
 - [ ] Currency conversion
@@ -38,4 +39,3 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
-- [ ] ETF categories and origin stats

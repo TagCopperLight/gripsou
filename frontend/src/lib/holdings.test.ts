@@ -21,6 +21,7 @@ function cash(id: string, account: string, value: string): Holding {
     gl: "0",
     glPct: "0",
     spark: null,
+    composition: null,
   };
 }
 
@@ -43,6 +44,7 @@ function equity(id: string, value: string): Holding {
     gl: "0",
     glPct: "0",
     spark: ["1", "2"],
+    composition: null,
   };
 }
 

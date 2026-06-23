@@ -39,6 +39,9 @@ export type DistributionAccount = {
   value: string;
 };
 
+export type Allocation = { name: string; weight: number };
+export type Composition = { countries: Allocation[]; sectors: Allocation[] };
+
 export type Holding = {
   id: string;
   ticker: string;
@@ -57,6 +60,7 @@ export type Holding = {
   gl: string;
   glPct: string;
   spark: string[] | null;
+  composition: Composition | null;
 };
 
 export type PricePoint = { t: number; price: string };

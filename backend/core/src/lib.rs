@@ -1,3 +1,4 @@
+pub mod composition_sync;
 pub mod crypto;
 pub mod db;
 pub mod dto;

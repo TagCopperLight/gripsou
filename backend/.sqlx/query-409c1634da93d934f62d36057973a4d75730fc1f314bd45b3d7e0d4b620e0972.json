@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select kind, meta from instrument where kind <> 'cash' limit 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "meta",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "meta"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "409c1634da93d934f62d36057973a4d75730fc1f314bd45b3d7e0d4b620e0972"
+}

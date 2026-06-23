@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-use crate::dto::{InstrumentRef, PricePoint, SyncResult};
+use crate::dto::{Composition, InstrumentRef, PricePoint, SyncResult};
 
 #[derive(Debug, Clone, Default)]
 pub struct ConnectInit {
@@ -95,4 +95,21 @@ pub trait PriceProvider: Send + Sync {
         symbol: &str,
         since: Option<DateTime<Utc>>,
     ) -> Result<Vec<PricePoint>, ProviderError>;
+}
+
+/// Scrapes an ETF's country/sector breakdown. One implementation (Boursorama);
+/// the trait lives in `core` to keep the provider→core dependency direction.
+#[async_trait]
+pub trait CompositionProvider: Send + Sync {
+    fn key(&self) -> &str;
+
+    /// Resolve a provider-native symbol for this instrument. `Ok(None)` means
+    /// "not a tracker / no composition page" (distinct from a transient `Err`).
+    async fn resolve_symbol(
+        &self,
+        instrument: &InstrumentRef,
+    ) -> Result<Option<String>, ProviderError>;
+
+    /// Fetch composition for an already-resolved native symbol.
+    async fn fetch_composition(&self, symbol: &str) -> Result<Composition, ProviderError>;
 }

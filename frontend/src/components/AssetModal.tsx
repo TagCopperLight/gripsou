@@ -8,6 +8,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { ChartLegend } from "./ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
+import { CompositionSurface } from "./CompositionSurface";
 import { HoldingBadge } from "./HoldingBadge";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
@@ -189,7 +190,8 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 pt-0 flex gap-4 items-start">
+        <div className="flex-1 overflow-y-auto p-6 pt-0 flex flex-col gap-4">
+          <div className="flex gap-4 items-start">
           {/* Left column */}
           <div className="flex-1 min-w-0 bg-surface-2 rounded-2xl p-5 flex flex-col">
             <div className="flex items-start justify-between">
@@ -274,7 +276,12 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               />
             )}
           </div>
-        </div>
+          </div>{/* end chart row */}
+
+          {holding.composition && (
+            <CompositionSurface composition={holding.composition} />
+          )}
+        </div>{/* end body */}
       </div>
     </div>
   );
