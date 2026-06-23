@@ -29,10 +29,16 @@ pub(crate) fn brandfetch_decorate(base: &str) -> String {
 /// absent or unmapped.
 pub fn institution_logo_url(institution_key: Option<&str>) -> Option<String> {
     let key = institution_key?;
-    let domain = INSTITUTION_DOMAINS
+    let Some(domain) = INSTITUTION_DOMAINS
         .iter()
         .find(|(k, _)| *k == key)
-        .map(|(_, d)| *d)?;
+        .map(|(_, d)| *d)
+    else {
+        tracing::warn!(
+            "no logo domain mapped for institution_key {key}; add it to INSTITUTION_DOMAINS"
+        );
+        return None;
+    };
     Some(brandfetch_decorate(&format!(
         "https://cdn.brandfetch.io/{domain}"
     )))

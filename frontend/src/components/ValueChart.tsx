@@ -20,6 +20,7 @@ const GRID = "#262321"; // surface-3
 const FAINT = "#777471"; // fg-faint
 const DIM = "#aeaaa7"; // fg-dim
 const WHITE = "#f4f1ef"; // fg
+const RED = "#f87171"; // color-red
 const SURFACE_2 = "#1c1916"; // default host surface (hollow symbol center)
 const MONO = '"Geist Mono Variable", ui-monospace, monospace';
 
@@ -147,35 +148,41 @@ export function ValueChart({
         formatter: (v: number) => fmt(v, { fractionDigits: 0 }),
       },
     },
-    series: plotted.map((s, i) => ({
-      name: s.name,
-      type: "line",
-      data: s.data,
-      showSymbol: false,
-      symbol: "circle",
-      lineStyle: {
-        color: s.color,
-        width: s.dashed ? 1.5 : 2,
-        type: s.dashed ? "dashed" : "solid",
-      },
-      itemStyle: { color: surfaceColor, borderColor: s.color, borderWidth: 2 },
-      ...(s.area && {
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: rgba(s.color, 0.28) },
-              { offset: 1, color: rgba(s.color, 0) },
-            ],
-          },
+    series: plotted.map((s, i) => {
+      // A tracked value line (the area series) reads red when it ended lower than
+      // it started or went negative — a loss is red whatever color the caller gave.
+      const last = s.data.at(-1)?.[1] ?? 0;
+      const color = s.area && (last < 0 || last < (s.data[0]?.[1] ?? 0)) ? RED : s.color;
+      return {
+        name: s.name,
+        type: "line",
+        data: s.data,
+        showSymbol: false,
+        symbol: "circle",
+        lineStyle: {
+          color,
+          width: s.dashed ? 1.5 : 2,
+          type: s.dashed ? "dashed" : "solid",
         },
-      }),
-      z: i + 1,
-    })),
+        itemStyle: { color: surfaceColor, borderColor: color, borderWidth: 2 },
+        ...(s.area && {
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: rgba(color, 0.28) },
+                { offset: 1, color: rgba(color, 0) },
+              ],
+            },
+          },
+        }),
+        z: i + 1,
+      };
+    }),
   };
 
   const animationKey = `${unit}|${plotted
