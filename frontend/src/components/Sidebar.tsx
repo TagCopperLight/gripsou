@@ -52,7 +52,7 @@ export function Sidebar() {
       </nav>
 
       <Link to="/settings" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover">
-        <Avatar name={self?.name ?? "?"} className="size-8 my-0.5" />
+        <Avatar name={self?.name ?? "?"} src={self?.prefs.avatar} className="size-8 my-0.5" />
         <div className="flex flex-col justify-between h-8">
           <span className="text-[13px] font-semibold text-fg leading-none">{self?.name ?? ""}</span>
           <span className="text-xs text-fg-faint font-normal leading-none">{roleLabel}</span>

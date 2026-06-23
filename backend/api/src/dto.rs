@@ -464,6 +464,7 @@ pub struct User {
     pub role: String,
     pub joined_at: i64,
     pub is_self: bool,
+    pub avatar: Option<String>,
 }
 
 impl User {
@@ -475,6 +476,7 @@ impl User {
             email: r.email,
             role: r.role,
             joined_at: r.created_at.timestamp_millis(),
+            avatar: r.avatar,
         }
     }
 }

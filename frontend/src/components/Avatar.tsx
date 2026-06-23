@@ -16,10 +16,20 @@ function colorForName(name: string): string {
 type AvatarProps = {
   name: string;
   color?: string;
+  src?: string;
   className?: string;
 };
 
-export function Avatar({ name, color, className = "size-9" }: AvatarProps) {
+export function Avatar({ name, color, src, className = "size-9" }: AvatarProps) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className={`rounded-full shrink-0 object-cover ${className}`}
+      />
+    );
+  }
   return (
     <span
       className={`flex items-center justify-center rounded-full shrink-0 font-semibold text-black leading-none ${className}`}

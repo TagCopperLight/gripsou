@@ -12,4 +12,13 @@ describe("Avatar", () => {
     render(<Avatar name="Dev" />);
     expect(screen.getByText("DE")).toBeInTheDocument();
   });
+
+  it("renders an image when src is provided", () => {
+    render(<Avatar name="Julien Bourdet" src="data:image/webp;base64,UklGRg==" />);
+    // alt="" makes the img decorative (role="presentation"); query by tag instead.
+    const img = document.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute("src", "data:image/webp;base64,UklGRg==");
+    expect(screen.queryByText("JB")).not.toBeInTheDocument();
+  });
 });

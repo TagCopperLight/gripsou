@@ -93,6 +93,7 @@ export type User = {
   role: "admin" | "user";
   joinedAt: number;
   isSelf: boolean;
+  avatar?: string;
 };
 
 // The authenticated user's own profile, returned by POST /auth/login.

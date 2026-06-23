@@ -389,6 +389,7 @@ pub struct UserRow {
     pub email: String,
     pub role: String,
     pub created_at: DateTime<Utc>,
+    pub avatar: Option<String>,
 }
 
 /// Every user on the server, oldest first (the seeded admin sorts first).
@@ -397,7 +398,7 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     let rows = sqlx::query_as!(
         UserRow,
         r#"
-        select id, name, email, role, created_at
+        select id, name, email, role, created_at, prefs->>'avatar' as avatar
         from users
         order by created_at
         "#,

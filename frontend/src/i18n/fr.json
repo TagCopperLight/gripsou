@@ -203,7 +203,10 @@
       "deleteAccountConfirmLabel": "Saisissez {{email}} pour confirmer",
       "deleteAccountConfirm": "Supprimer mon compte",
       "deleteAccountPending": "Suppression…",
-      "deleteAccountError": "Échec de la suppression de votre compte"
+      "deleteAccountError": "Échec de la suppression de votre compte",
+      "avatar": "Avatar",
+      "uploadImage": "Importer une image",
+      "removeImage": "Supprimer"
     },
     "users": {
       "title": "Utilisateurs",

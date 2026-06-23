@@ -98,7 +98,7 @@ export function SettingsUsers() {
                       {/* MEMBER */}
                       <td className="py-3 px-3 border-t border-surface-2">
                         <div className="flex items-center gap-3">
-                          <Avatar name={u.name} />
+                          <Avatar name={u.name} src={u.avatar} />
                           <div className="flex flex-col">
                             <span className="text-sm text-fg leading-tight flex items-center gap-2">
                               {u.name}

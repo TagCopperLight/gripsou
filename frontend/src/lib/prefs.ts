@@ -15,6 +15,7 @@ export type UserPrefs = {
   currencySymbol: string;
   currencyPosition: CurrencyPosition;
   percentDecimals: number;
+  avatar?: string;
 };
 
 export const DEFAULT_PREFS: UserPrefs = {

@@ -402,6 +402,17 @@ pub async fn update_prefs(
     AuthUser { user_id, .. }: AuthUser,
     Json(prefs): Json<gripsou_core::repo::prefs::UserPrefs>,
 ) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+    if let Some(avatar) = &prefs.avatar {
+        if !avatar.starts_with("data:image/") {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "avatar must be an image data URL".to_string(),
+            ));
+        }
+        if avatar.len() > 200 * 1024 {
+            return Err((StatusCode::BAD_REQUEST, "avatar too large".to_string()));
+        }
+    }
     let profile = gripsou_core::repo::user::update_prefs(&pool, user_id, &prefs)
         .await
         .map_err(internal)?
@@ -2050,5 +2061,60 @@ mod auth_tests {
             .await
             .unwrap_err();
         assert_eq!(err.0, StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_prefs_rejects_bad_avatar(pool: PgPool) {
+        seed_user_role(&pool, "av@example.com", "pw", "user").await;
+        let token = login_token(&pool, "av@example.com", "pw").await;
+        let session =
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
+                .await
+                .unwrap()
+                .unwrap();
+        let user_id = session.user_id;
+        let session_id = session.id;
+
+        // Non-image data URL rejected.
+        let mut prefs = gripsou_core::repo::prefs::UserPrefs {
+            avatar: Some("data:text/html,<script>".to_string()),
+            ..Default::default()
+        };
+        let bad = update_prefs(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id,
+            },
+            Json(prefs.clone()),
+        )
+        .await;
+        assert!(matches!(bad, Err((StatusCode::BAD_REQUEST, _))));
+
+        // Oversized avatar rejected.
+        prefs.avatar = Some(format!("data:image/webp;base64,{}", "A".repeat(200 * 1024)));
+        let big = update_prefs(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id,
+            },
+            Json(prefs.clone()),
+        )
+        .await;
+        assert!(matches!(big, Err((StatusCode::BAD_REQUEST, _))));
+
+        // Valid small avatar accepted.
+        prefs.avatar = Some("data:image/webp;base64,UklGRg==".to_string());
+        let ok = update_prefs(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id,
+            },
+            Json(prefs),
+        )
+        .await;
+        assert!(ok.is_ok());
     }
 }

@@ -23,6 +23,8 @@ pub struct UserPrefs {
     pub currency_position: String,
     #[serde(default = "default_percent_decimals")]
     pub percent_decimals: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
 }
 
 fn default_ui_language() -> String {
@@ -61,6 +63,7 @@ impl Default for UserPrefs {
             currency_symbol: default_currency_symbol(),
             currency_position: default_currency_position(),
             percent_decimals: default_percent_decimals(),
+            avatar: None,
         }
     }
 }
