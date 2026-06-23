@@ -25,7 +25,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`${padded ? "px-4 py-2.5" : ""} rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
+      className={`${padded ? "px-3.5 py-2.25" : ""} text-sm rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   );

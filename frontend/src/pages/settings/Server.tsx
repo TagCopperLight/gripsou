@@ -41,7 +41,7 @@ export function SettingsServer() {
           {origins.map((origin) => (
             <div
               key={origin}
-              className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3.5 py-2.25"
             >
               <span className="text-sm text-fg truncate">{origin}</span>
               <button
@@ -49,7 +49,7 @@ export function SettingsServer() {
                 aria-label={`Remove ${origin}`}
                 onClick={() => removeOrigin(origin)}
                 disabled={setCorsOrigins.isPending}
-                className="p-1.5 rounded-lg text-fg-faint hover:bg-surface hover:text-red transition-colors duration-140 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="-my-1 p-1.5 rounded-lg text-fg-faint hover:bg-surface hover:text-red transition-colors duration-140 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 className="size-4" />
               </button>
@@ -63,7 +63,7 @@ export function SettingsServer() {
                 if (e.key === "Enter") addOrigin();
               }}
               placeholder={t("settings.server.corsPlaceholder")}
-              className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green"
+              className="w-full bg-surface-2 rounded-xl px-3.5 py-2.25 text-fg text-sm outline-none focus:ring-1 focus:ring-green"
             />
             <Button onClick={addOrigin} disabled={!draft.trim() || setCorsOrigins.isPending}>
               {t("settings.server.add")}

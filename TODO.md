@@ -27,6 +27,7 @@
 - [x] Split providers and connections sources in the UI
 - [x] Confusion between category and type
 - [x] New look for the sync page
+- [x] All buttons and fields are too big
 
 ### Future
 - [ ] Currency conversion

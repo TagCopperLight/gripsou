@@ -32,7 +32,7 @@ export function Select({ value, onChange, options, className = "" }: SelectProps
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        className="w-full flex items-center justify-between bg-surface-2 rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer hover:bg-surface-3 transition-colors duration-140"
       >
         <span>{selected?.label ?? t("common.select")}</span>
         <ChevronDown
@@ -49,7 +49,7 @@ export function Select({ value, onChange, options, className = "" }: SelectProps
                 onChange(o.value);
                 setOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-[15px] cursor-pointer transition-colors duration-140 ${
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors duration-140 ${
                 o.value === value
                   ? "bg-surface-3 text-fg"
                   : "text-fg-dim hover:bg-surface-3 hover:text-fg"
