@@ -4,6 +4,7 @@ import { Pencil, User } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
+import { HoldingBadge } from "./HoldingBadge";
 import { Percent } from "./Percent";
 import { EditAccountModal } from "./EditAccountModal";
 import { withAlpha } from "../lib/color";
@@ -40,12 +41,29 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
         </div>
       </div>
 
-      <div className="mt-5 flex items-baseline gap-1.5 flex-col">
-        <span className="text-fg-faint text-xs">{t("account.totalValue")}</span>
-        <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
-        <span className="text-fg-faint text-xs">
-          <Percent value={proportion} fractionDigits={1} className="text-fg-faint text-xs mr-1.5" />{t("account.ofNetWorth")}
-        </span>
+      <div className="mt-5 flex items-start">
+        <div className="flex items-baseline gap-1.5 flex-col w-60 shrink-0">
+          <span className="text-fg-faint text-xs">{t("account.totalValue")}</span>
+          <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
+          <span className="text-fg-faint text-xs">
+            <Percent value={proportion} fractionDigits={1} className="text-fg-faint text-xs mr-1.5" />{t("account.ofNetWorth")}
+          </span>
+        </div>
+
+        {account.sourceName && (
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <span className="text-fg-faint text-xs">{t("account.source")}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <HoldingBadge
+                logo={account.sourceLogo}
+                ticker={account.sourceName}
+                color={account.color}
+                className="size-7 rounded-lg text-[11px]"
+              />
+              <span className="text-fg text-[13px] truncate">{account.sourceName}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="absolute bottom-4 right-5 flex flex-col text-fg-faint text-xs gap-1 items-end">

@@ -70,6 +70,8 @@ export type Account = {
   typeLabel: string;
   value: string;
   lastSyncAt: number | null;
+  sourceName: string | null;
+  sourceLogo: string | null;
 };
 
 export type AccountType = {

@@ -12,6 +12,8 @@ const ACCOUNT: Account = {
   typeLabel: "Checking",
   value: "12480.30",
   lastSyncAt: null,
+  sourceName: null,
+  sourceLogo: null,
 };
 
 function renderModal(onClose = () => {}) {
