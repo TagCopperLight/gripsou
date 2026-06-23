@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
+import { Avatar } from "../../components/Avatar";
 import { DeleteAccountModal } from "../../components/DeleteAccountModal";
 import {
   useChangePassword,
@@ -14,12 +15,24 @@ import {
 } from "../../api/hooks";
 import { useAuth } from "../../auth/context";
 import { formatDate, formatRelative } from "../../lib/date";
+import { fileToAvatarDataUrl } from "../../lib/avatar";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 export function SettingsAccount() {
   const { t } = useTranslation();
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout, updateUser, prefs, updatePrefs } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    const avatar = await fileToAvatarDataUrl(file);
+    void updatePrefs({ ...prefs, avatar });
+  };
+
+  const removeAvatar = () => void updatePrefs({ ...prefs, avatar: undefined });
 
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -93,6 +106,27 @@ export function SettingsAccount() {
         <h2 className="mb-5 text-lg font-semibold text-fg">
           {t("settings.account.profile")}
         </h2>
+        <div className="mb-6.25 flex items-center gap-4">
+          <Avatar name={name || (user?.name ?? "?")} src={prefs.avatar} className="size-16" />
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => fileRef.current?.click()}>
+              {t("settings.account.uploadImage")}
+            </Button>
+            {prefs.avatar && (
+              <Button variant="ghost" onClick={removeAvatar} className="text-red hover:text-red">
+                {t("settings.account.removeImage")}
+              </Button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            aria-label={t("settings.account.uploadImage")}
+            onChange={onPickAvatar}
+          />
+        </div>
         <div className="flex flex-1 flex-col gap-5">
           <Field label={t("settings.account.name")}>
             <TextInput value={name} onChange={setName} ariaLabel={t("settings.account.name")} />

@@ -29,13 +29,13 @@
 - [x] New look for the sync page
 - [x] All buttons and fields are too big
 - [x] Bank sources and icons
+- [x] Icons for users
 
 ### Future
 - [ ] Currency conversion
 - [ ] Transaction page
-- [ ] Icons for users
-- [ ] ETF categories and origin stats
 - [ ] Rearrange files and folders
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
+- [ ] ETF categories and origin stats

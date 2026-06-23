@@ -203,7 +203,10 @@
       "deleteAccountConfirmLabel": "Type {{email}} to confirm",
       "deleteAccountConfirm": "Delete my account",
       "deleteAccountPending": "Deleting…",
-      "deleteAccountError": "Couldn't delete your account"
+      "deleteAccountError": "Couldn't delete your account",
+      "avatar": "Avatar",
+      "uploadImage": "Upload image",
+      "removeImage": "Remove"
     },
     "users": {
       "title": "Users",
