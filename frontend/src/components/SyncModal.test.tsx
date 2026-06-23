@@ -41,17 +41,23 @@ describe("SyncModal", () => {
     syncAll.mutate.mockReset();
   });
 
-  it("renders the provider/connection/account tree", () => {
+  it("renders the provider/connection tree with a summary subtext", () => {
     render(<SyncModal onClose={() => {}} />);
     expect(screen.getByText("Powens")).toBeInTheDocument();
     expect(screen.getByText("My bank")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, el) => el?.textContent === "1 connection·1 provider"),
+    ).toBeInTheDocument();
+    // Accounts are collapsed until the row is expanded.
+    expect(screen.queryByText("Checking")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("My bank"));
     expect(screen.getByText("Checking")).toBeInTheDocument();
     expect(screen.getByText("Current account")).toBeInTheDocument();
   });
 
   it("syncs one connection and syncs all", () => {
     render(<SyncModal onClose={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
     expect(syncOne.mutate).toHaveBeenCalledWith("c1");
     fireEvent.click(screen.getByRole("button", { name: "Sync all" }));
     expect(syncAll.mutate).toHaveBeenCalled();

@@ -26,6 +26,7 @@
 - [x] Organize i18n translations better
 - [x] Split providers and connections sources in the UI
 - [x] Confusion between category and type
+- [x] New look for the sync page
 
 ### Future
 - [ ] Currency conversion
@@ -37,4 +38,3 @@
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] Bank sources and icons
-- [ ] New look for the sync page

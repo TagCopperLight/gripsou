@@ -259,6 +259,8 @@
       "connectionsCount_other": "{{count}} connections",
       "accountsCount_one": "{{count}} account",
       "accountsCount_other": "{{count}} accounts",
+      "providersCount_one": "{{count}} provider",
+      "providersCount_other": "{{count}} providers",
       "connectionConnected": "Connected",
       "syncConnection": "Sync now",
       "deleteConnection": "Delete connection",
