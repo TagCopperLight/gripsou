@@ -278,7 +278,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
           </div>
           </div>{/* end chart row */}
 
-          {holding.composition && (
+          {mode === "asset" && holding.composition && (
             <CompositionSurface composition={holding.composition} />
           )}
         </div>{/* end body */}

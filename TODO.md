@@ -39,3 +39,5 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
+- [ ] All graph should be red if negative values
+- [ ] Alert when a logo is missing for an institution
