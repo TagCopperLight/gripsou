@@ -1,6 +1,6 @@
 # TODO
 
-### v1.0,0
+### v1.0,0 - pushed
 - [x] Sync button
 - [x] Powens integration
 - [x] Yahoo integration
@@ -10,7 +10,7 @@
 - [x] Readme
 - [x] Add CI/CD
 
-### v1.1,0
+### v1.1,0 - pushed
 - [x] localhost redirects from powens
 - [x] Integrate webhooks
 - [x] EUR symbol in holdings
@@ -18,10 +18,10 @@
 - [x] Users page functions
 - [x] Invite and Reset pages
 
-### v1.1.1
+### v1.1.1 - pushed
 - [x] fix webhooks
 
-### v1.2.0
+### v1.2.0 - pushed
 - [x] New look for connections page
 - [x] Organize i18n translations better
 - [x] Split providers and connections sources in the UI
@@ -32,7 +32,7 @@
 - [x] Icons for users
 - [x] ETF categories and origin stats
 
-### v1.2.1
+### v1.2.1 - pushed
 - [x] Alert when a logo is missing for an institution
 - [x] All graph should be red if negative values
 
@@ -43,3 +43,6 @@
 - [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
+- [ ] By account view
+- [ ] Screenshot in readme
+- [ ] When graph is red, change the legend
