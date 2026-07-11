@@ -46,3 +46,4 @@
 - [ ] By account view
 - [ ] Screenshot in readme
 - [ ] When graph is red, change the legend
+- [ ] Main chart graph date is in the side
