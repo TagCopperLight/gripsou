@@ -22,7 +22,7 @@ const navItems: NavItem[] = [
 ];
 
 const navLinkClassName =
-  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-bold";
+  "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-bold md:justify-start";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -32,12 +32,12 @@ export function Sidebar() {
     : "";
 
   return (
-    <aside className="flex h-full w-72 flex-col gap-6 bg-bg p-4">
-      <div className="flex justify-center py-4 font-wordmark text-2xl font-semibold tracking-tight text-fg">
+    <aside className="flex w-full flex-row gap-6 bg-bg p-4 md:h-full md:w-72 md:flex-col">
+      <div className="hidden justify-center py-4 font-wordmark text-2xl font-semibold tracking-tight text-fg md:flex">
         gripsou
       </div>
 
-      <nav className="flex flex-col gap-1">
+      <nav className="flex flex-1 flex-row justify-around gap-1 md:flex-col md:justify-start">
         {navItems.map(({ to, labelKey, icon: Icon }) => (
           <Link
             key={to}
@@ -46,14 +46,14 @@ export function Sidebar() {
             className={navLinkClassName}
           >
             <Icon className="size-4.5" strokeWidth={2} />
-            <span>{t(labelKey)}</span>
+            <span className="hidden md:inline">{t(labelKey)}</span>
           </Link>
         ))}
       </nav>
 
-      <Link to="/settings" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover">
+      <Link to="/settings" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover md:mt-auto">
         <Avatar name={self?.name ?? "?"} src={self?.prefs.avatar} className="size-8 my-0.5" />
-        <div className="flex flex-col justify-between h-8">
+        <div className="hidden flex-col justify-between h-8 md:flex">
           <span className="text-[13px] font-semibold text-fg leading-none">{self?.name ?? ""}</span>
           <span className="text-xs text-fg-faint font-normal leading-none">{roleLabel}</span>
         </div>
