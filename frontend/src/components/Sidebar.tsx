@@ -22,7 +22,7 @@ const navItems: NavItem[] = [
 ];
 
 const navLinkClassName =
-  "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-bold md:justify-start";
+  "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:text-green data-[status=active]:font-bold md:justify-start md:data-[status=active]:bg-surface-2 md:data-[status=active]:text-fg";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -32,7 +32,7 @@ export function Sidebar() {
     : "";
 
   return (
-    <aside className="flex w-full flex-row gap-6 bg-bg p-4 md:h-full md:w-72 md:flex-col">
+    <aside className="flex w-full flex-row gap-6 bg-surface px-4 py-2 md:bg-bg md:p-4 md:h-full md:w-72 md:flex-col">
       <div className="hidden justify-center py-4 font-wordmark text-2xl font-semibold tracking-tight text-fg md:flex">
         gripsou
       </div>
@@ -45,7 +45,7 @@ export function Sidebar() {
             activeOptions={{ exact: to === "/" }}
             className={navLinkClassName}
           >
-            <Icon className="size-4.5" strokeWidth={2} />
+            <Icon className="size-5.5 md:size-4.5" strokeWidth={2} />
             <span className="hidden md:inline">{t(labelKey)}</span>
           </Link>
         ))}
