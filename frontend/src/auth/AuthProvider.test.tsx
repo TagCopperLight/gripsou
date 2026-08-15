@@ -40,11 +40,11 @@ it("applies prefs from /auth/me to the singleton and i18n on bootstrap", async (
   setAuthToken("tok", true);
   const user = {
     id: "1", name: "A", email: "a@t.local", role: "admin" as const,
-    prefs: { ...DEFAULT_PREFS, uiLanguage: "fr" as const, currencySymbol: "$" },
+    prefs: { ...DEFAULT_PREFS, uiLanguage: "fr" as const, currency: "USD" },
   };
   vi.spyOn(client, "getJson").mockResolvedValue(user);
   render(<AuthProvider><div data-testid="probe" /></AuthProvider>);
-  await waitFor(() => expect(getPrefs().currencySymbol).toBe("$"));
+  await waitFor(() => expect(getPrefs().currency).toBe("USD"));
   expect(i18n.language).toBe("fr");
 });
 

@@ -14,19 +14,29 @@ describe("formatMoney (prefs-driven)", () => {
       ...DEFAULT_PREFS,
       numberGroupSep: ".",
       numberDecimalSep: ",",
-      currencySymbol: "$",
+      currency: "USD",
       currencyPosition: "before",
     });
     expect(formatMoney("1234567.89")).toBe("$1.234.567,89");
   });
 
   it("places the sign before the symbol", () => {
-    setPrefs({ ...DEFAULT_PREFS, currencySymbol: "$", currencyPosition: "before" });
+    setPrefs({ ...DEFAULT_PREFS, currency: "USD", currencyPosition: "before" });
     expect(formatMoney("-1234.5")).toBe("-$1 234,50");
   });
 
   it("respects the signed option for positives", () => {
     expect(formatMoney("1234.5", { signed: true })).toBe("+1 234,50 €");
+  });
+
+  it("uses the prefs currency's symbol by default", () => {
+    setPrefs({ ...DEFAULT_PREFS, currency: "USD", currencyPosition: "before" });
+    expect(formatMoney("12.5")).toBe("$12,50");
+  });
+
+  it("honours a per-call currency override for native-currency figures", () => {
+    setPrefs({ ...DEFAULT_PREFS, currency: "EUR", currencyPosition: "after" });
+    expect(formatMoney("180.42", { currency: "USD" })).toBe("180,42 $");
   });
 });
 

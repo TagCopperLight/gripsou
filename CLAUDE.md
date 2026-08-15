@@ -32,7 +32,9 @@ Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` for ju
 
 **Unified holding model:** cash and securities are the same thing — everything owned is a `holding` of an `instrument`. A checking account is a holding of the `EUR` cash-instrument (quantity = balance, price = 1). This yields one snapshot table and one valuation path. `instrument` and `price` rows are **global/shared across users**; everything else is user-scoped via `connection.user_id`.
 
-**Snapshots are written by the core, not providers.** After each sync the core stamps `holding_snapshot` per holding (idempotent on `(holding_id, as_of)`), so a net-worth time series exists even for a provider that only reports current balances. Net worth at instant `t` = Σ `quantity(last snapshot)` × `price(t)`.
+Currency is part of the same idea: an FX rate is just a price of a cash instrument, so valuation multiplies through `unit_value_asof` and never special-cases cash. Prices are stored in whatever currency the listing quotes; conversion happens at read time from the *price row's* currency, not the instrument's.
+
+**Snapshots are written by the core, not providers.** After each sync the core stamps `holding_snapshot` per holding (idempotent on `(holding_id, as_of)`), so a net-worth time series exists even for a provider that only reports current balances. Net worth at instant `t` = Σ `quantity(last snapshot)` × `unit_value_asof(t)`, where `unit_value_asof` folds in the FX rate — so the sum is in the pivot currency, then divided once into the reader's reporting currency.
 
 ## Conventions that bite if missed
 

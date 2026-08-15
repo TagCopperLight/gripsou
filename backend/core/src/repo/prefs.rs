@@ -17,8 +17,10 @@ pub struct UserPrefs {
     pub number_decimal_sep: String,
     #[serde(default = "default_number_decimals")]
     pub number_decimals: u8,
-    #[serde(default = "default_currency_symbol")]
-    pub currency_symbol: String,
+    /// ISO code of the currency this user reads their figures in. The symbol is
+    /// derived from it on the frontend.
+    #[serde(default = "default_currency")]
+    pub currency: String,
     #[serde(default = "default_currency_position")]
     pub currency_position: String,
     #[serde(default = "default_percent_decimals")]
@@ -42,8 +44,8 @@ fn default_decimal_sep() -> String {
 fn default_number_decimals() -> u8 {
     2
 }
-fn default_currency_symbol() -> String {
-    "€".to_string()
+fn default_currency() -> String {
+    "EUR".to_string()
 }
 fn default_currency_position() -> String {
     "after".to_string()
@@ -60,7 +62,7 @@ impl Default for UserPrefs {
             number_group_sep: default_group_sep(),
             number_decimal_sep: default_decimal_sep(),
             number_decimals: default_number_decimals(),
-            currency_symbol: default_currency_symbol(),
+            currency: default_currency(),
             currency_position: default_currency_position(),
             percent_decimals: default_percent_decimals(),
             avatar: None,
@@ -80,9 +82,23 @@ mod tests {
         assert_eq!(p.number_group_sep, " ");
         assert_eq!(p.number_decimal_sep, ",");
         assert_eq!(p.number_decimals, 2);
-        assert_eq!(p.currency_symbol, "€");
+        assert_eq!(p.currency, "EUR");
         assert_eq!(p.currency_position, "after");
         assert_eq!(p.percent_decimals, 2);
+    }
+
+    #[test]
+    fn currency_defaults_to_the_pivot_code() {
+        let p: UserPrefs = serde_json::from_str("{}").unwrap();
+        assert_eq!(p.currency, "EUR");
+    }
+
+    #[test]
+    fn currency_round_trips_as_a_code() {
+        let p: UserPrefs = serde_json::from_str(r#"{"currency":"CNY"}"#).unwrap();
+        assert_eq!(p.currency, "CNY");
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"currency\":\"CNY\""));
     }
 
     #[test]

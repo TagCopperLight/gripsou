@@ -102,10 +102,11 @@ fn account_providers() -> HashMap<&'static str, Box<dyn AccountProvider>> {
 }
 
 /// Price-provider adapters. Yahoo needs no credentials, so it is always
-/// registered (unless the connector fails to construct).
-fn price_providers() -> Vec<Box<dyn PriceProvider>> {
+/// registered (unless the connector fails to construct). `pivot` is the FX
+/// storage currency, needed to build `{currency}{pivot}=X` symbols.
+fn price_providers(pivot: String) -> Vec<Box<dyn PriceProvider>> {
     let mut v: Vec<Box<dyn PriceProvider>> = Vec::new();
-    if let Ok(p) = gripsou_providers::yahoo::YahooPriceProvider::new() {
+    if let Ok(p) = gripsou_providers::yahoo::YahooPriceProvider::new(pivot) {
         v.push(Box::new(p));
     }
     v
@@ -204,20 +205,26 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
                 summary.holdings_closed,
             );
             // Prices are best-effort: a failure here must not fail the sync.
+            let pivot = gripsou_core::repo::settings::base_currency(&db)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("failed to read base_currency, defaulting to EUR: {e}");
+                    "EUR".to_string()
+                });
             match gripsou_core::price_sync::fetch_prices_for_connection(
                 &db,
                 connection_id,
-                &price_providers(),
+                &price_providers(pivot),
             )
             .await
             {
                 Ok(s) => tracing::info!(
-                    "prices for {connection_id}: resolved={} inserted={} skipped_fresh={} unresolved={} skipped_currency={}",
+                    "prices for {connection_id}: resolved={} inserted={} skipped_fresh={} unresolved={} skipped_unlabelled={}",
                     s.resolved,
                     s.prices_inserted,
                     s.skipped_fresh,
                     s.unresolved,
-                    s.skipped_currency
+                    s.skipped_unlabelled
                 ),
                 Err(e) => tracing::warn!("price fetch errored for {connection_id}: {e}"),
             }

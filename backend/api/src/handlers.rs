@@ -1395,7 +1395,7 @@ mod auth_tests {
 
         let next = UserPrefs {
             ui_language: "fr".into(),
-            currency_symbol: "$".into(),
+            currency: "USD".into(),
             currency_position: "before".into(),
             ..Default::default()
         };
@@ -1411,7 +1411,7 @@ mod auth_tests {
         .await
         .expect("update prefs ok");
         assert_eq!(updated.0.prefs.ui_language, "fr");
-        assert_eq!(updated.0.prefs.currency_symbol, "$");
+        assert_eq!(updated.0.prefs.currency, "USD");
 
         // Persisted: a fresh /auth/me sees the new prefs.
         let me_resp = me(

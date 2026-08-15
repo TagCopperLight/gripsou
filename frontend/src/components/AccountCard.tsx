@@ -44,7 +44,18 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
       <div className="mt-5 flex items-start">
         <div className="flex items-baseline gap-1.5 flex-col w-60 shrink-0">
           <span className="text-fg-faint text-xs">{t("account.totalValue")}</span>
-          <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
+          <span className="flex items-baseline gap-1.5">
+            <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
+            {account.fxMissing && (
+              <span
+                title={t("dashboard.fxMissing")}
+                className="text-fg-faint text-xs"
+                aria-label={t("dashboard.fxMissing")}
+              >
+                ⚠
+              </span>
+            )}
+          </span>
           <span className="text-fg-faint text-xs">
             <Percent value={proportion} fractionDigits={1} className="text-fg-faint text-xs mr-1.5" />{t("account.ofNetWorth")}
           </span>

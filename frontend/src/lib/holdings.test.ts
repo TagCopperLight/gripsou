@@ -16,10 +16,15 @@ function cash(id: string, account: string, value: string): Holding {
     categoryLabel: "Cash",
     qty: value,
     price: "1",
+    currency: "EUR",
+    priceCurrency: "EUR",
+    accountCurrency: "EUR",
     invested: value,
+    investedNative: value,
     value,
     gl: "0",
     glPct: "0",
+    fxMissing: false,
     spark: null,
     composition: null,
   };
@@ -39,10 +44,15 @@ function equity(id: string, value: string): Holding {
     categoryLabel: "Brokerage",
     qty: "1",
     price: value,
+    currency: "EUR",
+    priceCurrency: "EUR",
+    accountCurrency: "EUR",
     invested: value,
+    investedNative: value,
     value,
     gl: "0",
     glPct: "0",
+    fxMissing: false,
     spark: ["1", "2"],
     composition: null,
   };
@@ -83,5 +93,16 @@ describe("aggregateCash", () => {
     expect(cashRows).toHaveLength(2); // EUR merged + USD lone
     expect(cashRows.find((h) => h.ticker === "EUR")!.value).toBe("300");
     expect(cashRows.find((h) => h.ticker === "USD")!.value).toBe("50");
+  });
+
+  it("keeps the fx warning when merging cash rows", () => {
+    const merged = aggregateCash(
+      [
+        { ...cash("c1", "A", "10"), fxMissing: true },
+        { ...cash("c2", "B", "20") },
+      ],
+      "Multiple",
+    );
+    expect(merged[0].fxMissing).toBe(true);
   });
 });

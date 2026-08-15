@@ -35,9 +35,9 @@
 ### v1.2.1 - pushed
 - [x] Alert when a logo is missing for an institution
 - [x] All graph should be red if negative values
+- [x] Currency conversion
 
 ### Future
-- [ ] Currency conversion
 - [ ] Transaction page
 - [ ] Rearrange files and folders
 - [ ] Phone responsive

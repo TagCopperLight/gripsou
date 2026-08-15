@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::error::CoreError;
 
 /// Upsert many price points for one instrument in a single statement. The points
-/// share a currency (the caller filters to the instrument's currency first).
+/// share a currency (they come from one listing, hence one currency).
 /// Returns the number of rows written. Idempotent on (instrument_id, ts).
 pub async fn insert_prices(
     conn: &mut sqlx::PgConnection,
