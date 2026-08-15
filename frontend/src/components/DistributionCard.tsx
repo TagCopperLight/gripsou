@@ -71,7 +71,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
             className="mt-2 h-55"
           />
         ) : (
-        <div className="flex items-center gap-8 mt-2">
+        <div className="mt-2 flex flex-col items-center gap-4 md:flex-row md:gap-8">
           <div className="relative size-55 shrink-0">
             <ReactECharts
               option={option}
@@ -88,7 +88,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col gap-0.5">
+          <div className="w-full flex-1 flex flex-col gap-0.5">
             {ordered.map((a) => {
               const isActive = activeId === a.id;
               const isDimmed = activeId !== null && !isActive;
@@ -97,7 +97,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                   key={a.id}
                   onMouseEnter={() => setActiveId(a.id)}
                   onMouseLeave={() => setActiveId(null)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-140 ${
+                  className={`flex items-center gap-2 rounded-lg px-2 py-2 transition-colors duration-140 md:gap-3 md:px-3 ${
                     isActive ? "bg-surface-2" : "bg-transparent"
                   }`}
                 >
@@ -105,16 +105,16 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                     className="size-3 rounded-sm shrink-0 transition-colors duration-140"
                     style={{ background: isDimmed ? desaturate(a.color) : a.color }}
                   />
-                  <span className="text-sm text-fg">{a.name}</span>
-                  <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
+                  <span className="min-w-0 truncate text-sm text-fg">{a.name}</span>
+                  <span className="hidden md:inline font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5 shrink-0">
                     {categoryLabel(t, a.category, a.categoryLabel)}
                   </span>
                   <Percent
                     value={Number(a.value) / total}
                     fractionDigits={1}
-                    className="ml-auto text-fg text-sm w-14 text-right"
+                    className="hidden md:block ml-auto shrink-0 text-fg text-sm w-14 text-right"
                   />
-                  <span className="w-28 flex items-center justify-end gap-1.5">
+                  <span className="ml-auto flex shrink-0 items-center justify-end gap-1.5 pl-4 md:ml-0 md:w-28 md:pl-0">
                     {a.fxMissing && (
                       <span
                         title={t("dashboard.fxMissing")}
@@ -124,7 +124,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                         ⚠
                       </span>
                     )}
-                    <Money value={a.value} className="text-fg-faint text-sm" />
+                    <Money value={a.value} className="text-sm text-fg md:text-fg-faint" />
                   </span>
                 </div>
               );
