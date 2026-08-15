@@ -35,6 +35,28 @@ async fn set_resolved_symbol_writes_symbol_and_meta(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn set_resolved_symbol_leaves_cash_symbol_null(pool: PgPool) {
+    let id = Uuid::new_v4();
+    sqlx::query("insert into instrument (id, kind, name, currency) values ($1,'cash','CNY','CNY')")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    set_resolved_symbol(&mut conn, id, "CNYEUR=X").await.unwrap();
+
+    let (symbol, meta): (Option<String>, serde_json::Value) =
+        sqlx::query_as("select symbol, meta from instrument where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(symbol, None);
+    assert_eq!(meta["yahoo_symbol"].as_str(), Some("CNYEUR=X"));
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn set_resolved_symbol_swallows_unique_clash(pool: PgPool) {
     // Two instruments resolving to the same (kind, symbol).
     let a = isin_instrument(&pool, "FR0000121014").await;

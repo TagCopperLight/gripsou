@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update instrument\n        -- Cash keeps its display symbol null (the UI falls back to the ISO code);\n        -- the FX pair `CNYEUR=X` is a fetch detail and lives only in meta.\n        set symbol = case when kind = 'cash' then symbol else $2 end,\n            meta = jsonb_set(\n                jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),\n                '{yahoo_resolved_at}', to_jsonb(now())\n            )\n        where id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ffd1e80b7ea8acab419c6139ad55fe97ed450860e5cb80284a8bf7e7a90552ae"
+}
