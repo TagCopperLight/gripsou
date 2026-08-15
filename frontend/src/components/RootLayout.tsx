@@ -4,9 +4,9 @@ import { SyncButton } from "./SyncButton";
 
 export function RootLayout() {
   return (
-    <div className="flex flex-col-reverse h-screen md:flex-row">
+    <div className="flex flex-col-reverse h-dvh md:flex-row">
       <Sidebar />
-      <main className="flex-1 relative overflow-auto pr-4 pt-4">
+      <main className="flex-1 relative overflow-auto px-4 pt-4 md:pl-0">
         <Outlet />
         <SyncButton />
       </main>
