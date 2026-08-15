@@ -11,6 +11,8 @@ import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
 import type { ChartUnit } from "./ValueChart";
 import { useNetWorth } from "../api/hooks";
+import { getPrefs } from "../lib/prefs";
+import { currencySymbol } from "../lib/currency";
 
 const RANGE_OPTIONS = [
   { value: "24h", label: "24h" },
@@ -38,6 +40,12 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
     { value: "percent", label: "%" },
   ];
 
+  // Phone: the word "Value" costs more width than it earns next to "%".
+  const UNIT_OPTIONS_SHORT = [
+    { value: "value", label: currencySymbol(getPrefs().currency) },
+    { value: "percent", label: "%" },
+  ];
+
   const LEGEND_ITEMS = [
     { label: t("dashboard.netWorth.netWorth"), color: "var(--color-green)" },
     { label: t("dashboard.netWorth.capitalInvested"), color: "var(--color-fg-faint)", dashed: true },
@@ -53,17 +61,25 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-5">
-        <div className="flex justify-between">
+      <div className="flex flex-col p-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
+              <SegmentedControl
+                options={UNIT_OPTIONS_SHORT}
+                value={unit}
+                onChange={(v) => setUnit(v as ChartUnit)}
+                className="md:hidden"
+              />
+            </div>
             {ready && (
               <>
                 {/* The dashboard's single biggest number, and the only place
                     that can silently omit a zeroed holding — so it carries the
                     same warning treatment as the holdings/accounts cards. */}
                 <span className="flex items-baseline gap-2">
-                  <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
+                  <Money value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                   {summary?.fxMissing && (
                     <span
                       title={t("dashboard.fxMissing")}
@@ -74,8 +90,8 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     </span>
                   )}
                 </span>
-                <div className="flex items-center gap-4">
-                  <div className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
@@ -85,13 +101,17 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
               </>
             )}
           </div>
-          <div className="flex flex-col">
-            <div>
-              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="mr-6" />
+          <div className="flex flex-col gap-2 md:gap-3">
+            <div className="hidden items-center gap-6 md:flex">
+              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
               <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
             </div>
-            <ChartLegend className="mt-3 self-end" items={LEGEND_ITEMS} />
+            <ChartLegend items={LEGEND_ITEMS} className="md:self-end" />
           </div>
+        </div>
+        {/* Phone: the seven ranges scroll on their own row under the chart. */}
+        <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
+          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="w-max" />
         </div>
         {ready ? (
           <NetWorthChart className="mt-4" data={points} unit={unit} />
