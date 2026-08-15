@@ -113,7 +113,9 @@ pub async fn set_resolved_symbol(
     let res = sqlx::query!(
         r#"
         update instrument
-        set symbol = $2,
+        -- Cash keeps its display symbol null (the UI falls back to the ISO code);
+        -- the FX pair `CNYEUR=X` is a fetch detail and lives only in meta.
+        set symbol = case when kind = 'cash' then symbol else $2 end,
             meta = jsonb_set(
                 jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),
                 '{yahoo_resolved_at}', to_jsonb(now())
