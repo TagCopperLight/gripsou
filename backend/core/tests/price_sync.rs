@@ -139,14 +139,16 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn skips_prices_in_a_different_currency(pool: PgPool) {
-    // equity_holding's instrument is USD; a provider returning EUR-quoted points
-    // must not store them (no FX), so the holding keeps its provider valuation.
+async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
+    // equity_holding's instrument is labelled USD; a provider returning
+    // EUR-quoted points must still store them, tagged EUR. unit_value_asof
+    // converts from the price row's currency at read time, so a provider
+    // mislabelling an instrument no longer costs it its whole price series.
     let conn_id = seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),
-        currency: "EUR".into(), // ≠ instrument USD
+        currency: "EUR".into(), // ≠ the instrument's USD
         fetch_calls: calls.clone(),
     })];
 
@@ -154,7 +156,35 @@ async fn skips_prices_in_a_different_currency(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(s.resolved, 1, "symbol still resolves");
-    assert_eq!(s.prices_inserted, 0, "no same-currency points to store");
-    assert_eq!(s.skipped_currency, 1, "the EUR point was dropped");
+    assert_eq!(s.prices_inserted, 1);
+    assert_eq!(s.skipped_unlabelled, 0);
+    assert_eq!(price_count(&pool).await, 1);
+
+    let stored: String = sqlx::query_scalar("select currency from price limit 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        stored, "EUR",
+        "the row records the currency the point was quoted in"
+    );
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn drops_points_with_no_currency_at_all(pool: PgPool) {
+    // An unlabelled point cannot be converted, so storing it would be a guess.
+    let conn_id = seed_one_equity(&pool).await;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
+        symbol: Some("MC.PA".into()),
+        currency: "".into(),
+        fetch_calls: calls.clone(),
+    })];
+
+    let s = fetch_prices_for_connection(&pool, conn_id, &providers)
+        .await
+        .unwrap();
+    assert_eq!(s.prices_inserted, 0);
+    assert_eq!(s.skipped_unlabelled, 1);
     assert_eq!(price_count(&pool).await, 0);
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into instrument (kind, symbol, isin, name, currency)\n        select distinct 'cash', null, null, needed.cur, needed.cur\n        from (\n            select i.currency as cur\n            from holding h\n            join account a    on a.id = h.account_id\n            join instrument i on i.id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select p.currency\n            from holding h\n            join account a on a.id = h.account_id\n            join price p   on p.instrument_id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select a.currency\n            from account a\n            where a.connection_id = $1\n        ) needed\n        where needed.cur <> (select base_currency from app_settings where id = 1)\n          and needed.cur ~ '^[A-Z]{3}$'\n        on conflict (currency) where kind = 'cash' do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41c5746e5fa6a8a992e7f1d6f677a9b44ab17231199f3e68d8029c12cb6b4905"
+}

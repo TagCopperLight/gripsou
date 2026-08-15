@@ -6,15 +6,17 @@ import { HoldingsCard } from "./HoldingsCard";
 const HOLDING = {
   id: "h1", ticker: "AAPL", name: "Apple Inc.", kind: "equity", logo: "#555",
   accountId: "a1", accountName: "Trade Republic", accountColor: "#f0b35b",
-  category: "brokerage", categoryLabel: "Brokerage", qty: "60", price: "214.3", invested: "11000",
-  value: "12858", gl: "1858", glPct: "0.168", spark: ["200", "214.3"],
+  category: "brokerage", categoryLabel: "Brokerage", qty: "60", price: "214.3", currency: "EUR",
+  invested: "11000", investedNative: "11000",
+  value: "12858", gl: "1858", glPct: "0.168", fxMissing: false, spark: ["200", "214.3"],
 };
 
 const CASH_CHECKING = {
   id: "c1", ticker: "EUR", name: "Euro", kind: "cash", logo: "#888",
   accountId: "a1", accountName: "Checking", accountColor: "#888",
-  category: "cash", categoryLabel: "Cash", qty: "100", price: "1", invested: "100",
-  value: "100", gl: "0", glPct: "0", spark: null,
+  category: "cash", categoryLabel: "Cash", qty: "100", price: "1", currency: "EUR",
+  invested: "100", investedNative: "100",
+  value: "100", gl: "0", glPct: "0", fxMissing: false, spark: null,
 };
 
 const CASH_PEA = {
@@ -49,5 +51,17 @@ describe("HoldingsCard", () => {
     // The individual cash account names are no longer shown as separate rows.
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
     expect(screen.queryByText("PEA")).not.toBeInTheDocument();
+  });
+
+  it("warns on a holding whose FX rate is missing", async () => {
+    renderCard([{ ...HOLDING, fxMissing: true }]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.getByTitle(/exchange rate/i)).toBeInTheDocument();
+  });
+
+  it("does not warn when every rate is known", async () => {
+    renderCard([HOLDING]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.queryByTitle(/exchange rate/i)).toBeNull();
   });
 });

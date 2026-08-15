@@ -59,7 +59,21 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
             <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
             {ready && (
               <>
-                <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
+                {/* The dashboard's single biggest number, and the only place
+                    that can silently omit a zeroed holding — so it carries the
+                    same warning treatment as the holdings/accounts cards. */}
+                <span className="flex items-baseline gap-2">
+                  <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
+                  {summary?.fxMissing && (
+                    <span
+                      title={t("dashboard.fxMissing")}
+                      className="text-fg-faint text-sm"
+                      aria-label={t("dashboard.fxMissing")}
+                    >
+                      ⚠
+                    </span>
+                  )}
+                </span>
                 <div className="flex items-center gap-4">
                   <div className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}

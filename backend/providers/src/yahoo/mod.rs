@@ -13,12 +13,14 @@ use self::search::{Candidate, select_symbol};
 
 pub struct YahooPriceProvider {
     connector: YahooConnector,
+    /// The pivot currency FX rates are quoted against (see migration 0010).
+    pivot: String,
 }
 
 impl YahooPriceProvider {
-    pub fn new() -> Result<Self, ProviderError> {
+    pub fn new(pivot: String) -> Result<Self, ProviderError> {
         let connector = YahooConnector::new().map_err(|e| ProviderError::Other(e.to_string()))?;
-        Ok(Self { connector })
+        Ok(Self { connector, pivot })
     }
 }
 
@@ -29,13 +31,18 @@ impl PriceProvider for YahooPriceProvider {
     }
 
     fn supports(&self, instrument: &InstrumentRef) -> bool {
-        is_supported(instrument)
+        is_supported(instrument, &self.pivot)
     }
 
     async fn resolve_symbol(
         &self,
         instrument: &InstrumentRef,
     ) -> Result<Option<String>, ProviderError> {
+        // An FX pair is deterministic — no search round trip needed.
+        if instrument.kind == "cash" {
+            return Ok(Some(fx_symbol(&instrument.currency, &self.pivot)));
+        }
+
         // Prefer ISIN for the search query; fall back to a provider symbol.
         let query = instrument
             .isin
@@ -100,12 +107,26 @@ impl PriceProvider for YahooPriceProvider {
     }
 }
 
-/// Eligible if it is a non-cash instrument we have an identifier for. Cash is
-/// valued at 1 (handled elsewhere); crypto has no clean ISIN→Yahoo path yet.
-pub(crate) fn is_supported(instrument: &InstrumentRef) -> bool {
-    instrument.kind != "cash"
-        && instrument.kind != "crypto"
-        && (instrument.isin.is_some() || instrument.symbol.is_some())
+/// Yahoo's ticker for "one unit of `currency`, priced in `pivot`".
+pub(crate) fn fx_symbol(currency: &str, pivot: &str) -> String {
+    format!("{currency}{pivot}=X")
+}
+
+/// A well-formed ISO 4217 code. Anything else (a provider's lowercase `"usd"`,
+/// a free-text label, an injection attempt) must never reach `fx_symbol` and so
+/// a live Yahoo URL.
+fn is_iso_currency(code: &str) -> bool {
+    code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase())
+}
+
+/// Eligible if it is a foreign cash instrument (its FX pair), or a non-crypto
+/// security we have an identifier for. Cash in the pivot needs no rate (it is 1
+/// by definition) and crypto has no clean ISIN→Yahoo path yet.
+pub(crate) fn is_supported(instrument: &InstrumentRef, pivot: &str) -> bool {
+    if instrument.kind == "cash" {
+        return is_iso_currency(&instrument.currency) && instrument.currency != pivot;
+    }
+    instrument.kind != "crypto" && (instrument.isin.is_some() || instrument.symbol.is_some())
 }
 
 #[cfg(test)]
@@ -122,20 +143,49 @@ mod tests {
         }
     }
 
+    fn cash(currency: &str) -> InstrumentRef {
+        InstrumentRef {
+            kind: "cash".into(),
+            symbol: None,
+            isin: None,
+            name: currency.into(),
+            currency: currency.into(),
+        }
+    }
+
     #[test]
     fn supports_equity_with_isin() {
-        assert!(is_supported(&iref("equity", Some("FR0000121014"), None)));
+        assert!(is_supported(
+            &iref("equity", Some("FR0000121014"), None),
+            "EUR"
+        ));
     }
 
     #[test]
     fn supports_etf_with_symbol_only() {
-        assert!(is_supported(&iref("etf", None, Some("CSPX.L"))));
+        assert!(is_supported(&iref("etf", None, Some("CSPX.L")), "EUR"));
     }
 
     #[test]
     fn rejects_cash_crypto_and_idless() {
-        assert!(!is_supported(&iref("cash", None, None)));
-        assert!(!is_supported(&iref("crypto", Some("X"), None)));
-        assert!(!is_supported(&iref("equity", None, None)));
+        assert!(!is_supported(&cash("EUR"), "EUR"));
+        assert!(!is_supported(&iref("crypto", Some("X"), None), "EUR"));
+        assert!(!is_supported(&iref("equity", None, None), "EUR"));
+    }
+
+    #[test]
+    fn supports_foreign_cash_but_not_the_pivot() {
+        assert!(is_supported(&cash("CNY"), "EUR"));
+        assert!(!is_supported(&cash("EUR"), "EUR"), "no EUREUR=X exists");
+        assert!(
+            !is_supported(&cash(""), "EUR"),
+            "an unlabelled currency is unfetchable"
+        );
+    }
+
+    #[test]
+    fn builds_the_fx_pair_symbol() {
+        assert_eq!(fx_symbol("CNY", "EUR"), "CNYEUR=X");
+        assert_eq!(fx_symbol("USD", "EUR"), "USDEUR=X");
     }
 }

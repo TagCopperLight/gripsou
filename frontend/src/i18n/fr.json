@@ -67,6 +67,7 @@
     }
   },
   "dashboard": {
+    "fxMissing": "Pas encore de taux de change pour cette devise — la valeur n'est pas comptée. Il devrait arriver à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
       "over": "sur {{range}}",

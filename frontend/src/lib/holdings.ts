@@ -47,6 +47,8 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       gl: "0",
       glPct: "0",
       spark: null,
+      fxMissing: items.some((h) => h.fxMissing),
+      investedNative: String(items.reduce((s, h) => s + Number(h.investedNative), 0)),
     });
   }
 

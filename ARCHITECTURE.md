@@ -22,9 +22,9 @@
 
 ### Explicit non-goals for v1 (YAGNI)
 
-Designed _around_ but not _built_ now: multi-currency conversion, manual entry,
-the Transactions page UI, 2FA, ETF country/sector breakdowns. The model leaves
-room for each without rework.
+Designed _around_ but not _built_ now: manual entry, the Transactions page UI,
+2FA, ETF country/sector breakdowns. The model leaves room for each without
+rework. Multi-currency conversion, once in this list, has since shipped (§11).
 
 ---
 
@@ -108,7 +108,9 @@ JSONB; `external_id` enables idempotent provider upserts.
 
 **app_settings** (singleton row)
 - `cors_origins` (text[]), `enabled_providers` (text[]),
-  `base_currency` (nullable, future)
+  `base_currency` (not null, default `EUR`) — the pivot FX rates are stored
+  against. Never exposed in the UI; every figure is divided into the reading
+  user's `prefs.currency` by `reporting_fx_asof()`.
 
 **provider** (registry / reference)
 - `key` (PK, e.g. `powens`), `display_name`, `kind` (`account` | `price`),
@@ -366,7 +368,7 @@ at compile time.
 | Future feature | Already accommodated by |
 |---|---|
 | Manual accounts/transactions | `account.connection_id` nullable; `ManualAdapter` implements the same trait |
-| Multi-currency | `instrument.currency`, `account.currency`, `app_settings.base_currency`; FX = a PriceProvider concern |
+| Multi-currency | Implemented. An FX rate is a `price` row on the per-currency cash `instrument`; `fx_asof` / `unit_value_asof` / `reporting_fx_asof` (migration 0010) convert at read time. A new currency needs no migration — the cash instrument and its Yahoo `{cur}{pivot}=X` pair are created on first sight. |
 | Transactions page | `transaction` table already generalist and populated |
 | New account types / categories | Insert into `account_type` / `category` reference tables |
 | ETF sector/country breakdown | `instrument.meta` JSONB |

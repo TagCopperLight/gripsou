@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select base_currency as \"base_currency!\"\n        from app_settings\n        where id = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "base_currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "base_currency"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5941247a35a8a21119cb3dbc063a04469f55731134afeb49c187c0faaddf27c8"
+}

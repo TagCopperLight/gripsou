@@ -5,6 +5,7 @@
 // (e.g. US dates + French separators + symbol-after) that a single locale can't.
 
 import { getPrefs } from "./prefs";
+import { currencySymbol } from "./currency";
 
 type SignOption = {
   /** Prefix with + (positive) / - (negative). Zero stays unsigned. */
@@ -20,7 +21,10 @@ type SepOptions = {
 
 export type MoneyFormatOptions = SignOption &
   SepOptions & {
-    /** Defaults to prefs.currencySymbol. */
+    /** ISO code to format in, when it isn't the user's reporting currency
+     * (e.g. a native unit price). Defaults to prefs.currency. */
+    currency?: string;
+    /** Raw symbol override, bypassing the code→symbol map. */
     currencySymbol?: string;
     /** Defaults to prefs.currencyPosition. */
     currencyPosition?: "before" | "after";
@@ -82,7 +86,8 @@ export function formatMoney(
     maxFrac: frac,
     signed: options.signed ?? false,
   });
-  const symbol = options.currencySymbol ?? p.currencySymbol;
+  const symbol =
+    options.currencySymbol ?? currencySymbol(options.currency ?? p.currency);
   const position = options.currencyPosition ?? p.currencyPosition;
   const withSymbol =
     position === "before" ? `${symbol}${body}` : `${body} ${symbol}`;

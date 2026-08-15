@@ -27,6 +27,7 @@ export type NetWorthSummary = {
   invested: string;
   gainAbs: string;
   gainPct: string;
+  fxMissing: boolean;
 };
 export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSummary };
 
@@ -37,6 +38,8 @@ export type DistributionAccount = {
   categoryLabel: string;
   color: string;
   value: string;
+  /** A holding in this slice could not be valued, so the slice understates. */
+  fxMissing: boolean;
 };
 
 export type Allocation = { name: string; weight: number };
@@ -54,11 +57,21 @@ export type Holding = {
   category: string;
   categoryLabel: string;
   qty: string;
+  /** Unit price, denominated in `priceCurrency` — NOT in `currency`. */
   price: string;
+  /** The instrument's quote currency. Identity/labelling only. */
+  currency: string;
+  /** Currency of the unit price and the price chart (the price domain). */
+  priceCurrency: string;
+  /** The account's currency (the amount domain): `investedNative` and every
+   *  transaction figure on this holding are in it. */
+  accountCurrency: string;
   invested: string;
+  investedNative: string;
   value: string;
   gl: string;
   glPct: string;
+  fxMissing: boolean;
   spark: string[] | null;
   composition: Composition | null;
 };
@@ -76,6 +89,7 @@ export type Account = {
   lastSyncAt: number | null;
   sourceName: string | null;
   sourceLogo: string | null;
+  fxMissing: boolean;
 };
 
 export type AccountType = {

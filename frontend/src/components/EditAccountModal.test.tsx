@@ -14,6 +14,7 @@ const ACCOUNT: Account = {
   lastSyncAt: null,
   sourceName: null,
   sourceLogo: null,
+  fxMissing: false,
 };
 
 function renderModal(onClose = () => {}) {

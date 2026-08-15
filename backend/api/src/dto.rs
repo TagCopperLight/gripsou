@@ -24,6 +24,7 @@ pub struct NetWorthSummary {
     pub invested: String,
     pub gain_abs: String,
     pub gain_pct: String,
+    pub fx_missing: bool,
 }
 
 #[derive(Serialize)]
@@ -55,6 +56,7 @@ impl NetWorthResponse {
             (gain_abs / first).round_dp(4)
         };
         let invested = rows.last().map(|r| r.invested).unwrap_or(Decimal::ZERO);
+        let fx_missing = rows.last().map(|r| r.fx_missing).unwrap_or(false);
 
         NetWorthResponse {
             points,
@@ -63,6 +65,7 @@ impl NetWorthResponse {
                 invested: invested.to_string(),
                 gain_abs: gain_abs.to_string(),
                 gain_pct: gain_pct.to_string(),
+                fx_missing,
             },
         }
     }
@@ -79,6 +82,8 @@ pub struct DistributionAccount {
     pub category_label: String,
     pub color: String,
     pub value: String,
+    /// A holding in this slice could not be valued, so the slice understates.
+    pub fx_missing: bool,
 }
 
 impl DistributionAccount {
@@ -90,6 +95,7 @@ impl DistributionAccount {
             category_label: r.category_label,
             color: r.color.unwrap_or_else(|| "#888888".to_string()),
             value: r.value.to_string(),
+            fx_missing: r.fx_missing,
         }
     }
 }
@@ -110,11 +116,22 @@ pub struct Holding {
     /// English category label — i18n fallback when the key has no locale entry.
     pub category_label: String,
     pub qty: String,
+    /// Unit price, denominated in `price_currency` — NOT in `currency`.
     pub price: String,
+    /// The instrument's quote currency. Identity/labelling only; no amount on
+    /// this struct is denominated in it.
+    pub currency: String,
+    /// Currency of the unit price and of the price chart (the price domain).
+    pub price_currency: String,
+    /// The account's currency (the amount domain): `invested_native` and every
+    /// figure on the holding's transactions are in it.
+    pub account_currency: String,
     pub invested: String,
+    pub invested_native: String,
     pub value: String,
     pub gl: String,
     pub gl_pct: String,
+    pub fx_missing: bool,
     pub spark: Option<Vec<String>>,
     pub composition: Option<gripsou_core::dto::Composition>,
 }
@@ -122,19 +139,30 @@ pub struct Holding {
 impl Holding {
     pub fn from_row(r: gripsou_core::repo::query::HoldingRow) -> Self {
         let is_cash = r.kind == "cash";
-        let price = r
-            .price
-            .unwrap_or(if is_cash { Decimal::ONE } else { Decimal::ZERO });
-        let value = if is_cash {
-            r.quantity
+        // Unit price is native to the instrument. A unit of cash is worth one
+        // unit of its own currency by definition — its `price` row holds an FX
+        // rate, which is not what this field means.
+        let price = if is_cash {
+            Decimal::ONE
         } else {
-            r.quantity * price
+            r.price.unwrap_or(Decimal::ZERO)
         };
-        let gl = value - r.cost_basis;
-        let gl_pct = if r.cost_basis.is_zero() {
+        // A unit of cash is one unit of its own currency, so that is the price
+        // currency there. Otherwise it is the currency stamped on the price row
+        // we read the unit price from — which may differ from the instrument's
+        // (Yahoo can resolve a listing quoted elsewhere). Falling back to the
+        // instrument's currency is the best available guess when no price row
+        // exists at all; `price` is then zero anyway.
+        let price_currency = if is_cash {
+            r.currency.clone()
+        } else {
+            r.price_currency.unwrap_or_else(|| r.currency.clone())
+        };
+        let gl = r.value - r.invested;
+        let gl_pct = if r.invested.is_zero() {
             Decimal::ZERO
         } else {
-            (gl / r.cost_basis).round_dp(4)
+            (gl / r.invested).round_dp(4)
         };
         let spark = if is_cash || r.spark.is_empty() {
             None
@@ -155,10 +183,15 @@ impl Holding {
             category_label: r.category_label,
             qty: r.quantity.to_string(),
             price: price.to_string(),
-            invested: r.cost_basis.to_string(),
-            value: value.to_string(),
+            currency: r.currency,
+            price_currency,
+            account_currency: r.account_currency,
+            invested: r.invested.to_string(),
+            invested_native: r.invested_native.to_string(),
+            value: r.value.to_string(),
             gl: gl.to_string(),
             gl_pct: gl_pct.to_string(),
+            fx_missing: r.fx_missing,
             spark,
             composition: r.composition,
         }
@@ -210,6 +243,7 @@ pub struct Account {
     pub type_key: String,
     pub type_label: String,
     pub value: String,
+    pub fx_missing: bool,
     pub last_sync_at: Option<i64>,
     pub source_name: Option<String>,
     pub source_logo: Option<String>,
@@ -224,6 +258,7 @@ impl Account {
             type_key: r.type_key,
             type_label: r.type_label,
             value: r.value.to_string(),
+            fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
             source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),
             source_name: r.source_name,

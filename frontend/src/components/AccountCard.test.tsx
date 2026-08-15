@@ -15,6 +15,7 @@ const ACCOUNT: Account = {
   lastSyncAt: null,
   sourceName: "BoursoBank",
   sourceLogo: null,
+  fxMissing: false,
 };
 
 function withClient(children: ReactNode) {

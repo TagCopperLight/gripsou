@@ -12,7 +12,7 @@ export type UserPrefs = {
   numberGroupSep: string;
   numberDecimalSep: string;
   numberDecimals: number;
-  currencySymbol: string;
+  currency: string;
   currencyPosition: CurrencyPosition;
   percentDecimals: number;
   avatar?: string;
@@ -24,7 +24,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   numberGroupSep: " ",
   numberDecimalSep: ",",
   numberDecimals: 2,
-  currencySymbol: "€",
+  currency: "EUR",
   currencyPosition: "after",
   percentDecimals: 2,
 };

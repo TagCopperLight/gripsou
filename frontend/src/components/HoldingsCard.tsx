@@ -272,7 +272,18 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   </td>
                   {/* VALUE */}
                   <td className="py-3 px-3 border-t border-surface-2 text-right">
-                    <Money value={h.value} className="text-sm text-fg" />
+                    <span className="inline-flex items-center gap-1.5">
+                      {h.fxMissing && (
+                        <span
+                          title={t("dashboard.fxMissing")}
+                          className="text-fg-faint text-xs leading-none"
+                          aria-label={t("dashboard.fxMissing")}
+                        >
+                          ⚠
+                        </span>
+                      )}
+                      <Money value={h.value} className="text-sm text-fg" />
+                    </span>
                   </td>
                   {/* UNREALIZED P/L */}
                   <td className="py-3 px-3 border-t border-surface-2 text-right">

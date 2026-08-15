@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select distinct\n               i.id       as \"id!\",\n               i.kind     as \"kind!\",\n               i.symbol,\n               i.isin,\n               i.name     as \"name!\",\n               i.currency as \"currency!\",\n               i.meta     as \"meta!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join instrument i on i.id = h.instrument_id\n        where a.connection_id = $1\n          and i.kind <> 'cash'\n          and h.quantity <> 0\n\n        union\n\n        -- Foreign cash is eligible: its \"price\" is the FX rate. Cash in the\n        -- pivot is 1 by definition and has no Yahoo pair. This reaches the cash\n        -- instrument backing every currency this connection converts through,\n        -- not just an actually-held foreign cash position (see the doc comment).\n        select distinct\n               fx.id       as \"id!\",\n               fx.kind     as \"kind!\",\n               fx.symbol,\n               fx.isin,\n               fx.name     as \"name!\",\n               fx.currency as \"currency!\",\n               fx.meta     as \"meta!\"\n        from (\n            select i.currency as cur\n            from holding h\n            join account a    on a.id = h.account_id\n            join instrument i on i.id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select p.currency\n            from holding h\n            join account a on a.id = h.account_id\n            join price p   on p.instrument_id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select a.currency\n            from account a\n            where a.connection_id = $1\n        ) needed\n        join instrument fx on fx.kind = 'cash' and fx.currency = needed.cur\n        where needed.cur <> (select base_currency from app_settings where id = 1)\n          and needed.cur ~ '^[A-Z]{3}$'\n\n        order by 5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "symbol",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "isin",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "meta!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "deff6a024afd141d812a56131f0eee986006dd41b1124f1c272ad945a0ae5ef2"
+}

@@ -67,6 +67,7 @@
     }
   },
   "dashboard": {
+    "fxMissing": "No exchange rate yet for this currency — the value is not counted. It should arrive on the next sync.",
     "netWorth": {
       "title": "Net Worth",
       "over": "over {{range}}",

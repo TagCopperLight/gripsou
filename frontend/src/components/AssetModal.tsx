@@ -17,6 +17,33 @@ import { KIND_LABEL_KEY, categoryLabel, type Holding, type Purchase } from "../a
 import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
 
+// This modal shows THREE currency domains on screen. They are distinct and must
+// never be collapsed into one "native" currency:
+//
+// - Reporting domain (`users.prefs.currency`, so no explicit `currency` option):
+//   capitalInvested, currentValue, total unrealized P/L, weight of net worth.
+// - Price domain (`holding.priceCurrency` — the currency stamped on the `price`
+//   ROW we read, which is NOT necessarily `holding.currency`; Powens may label
+//   an instrument EUR while Yahoo resolves a London listing quoted GBP): the
+//   left chart panel's header figure and gain, and the chart itself.
+// - Amount domain (`holding.accountCurrency`): everything the provider
+//   denominated in the account — mean price per share (it is
+//   investedNative / qty, a cost-basis figure, NOT a market price) and the
+//   purchase-history table's price/invested columns (transaction.amount and
+//   transaction.unit_price are amount-domain).
+//
+// `holding.currency` is the instrument's QUOTE currency. It labels the asset's
+// identity, not any amount here, so it formats nothing on this screen.
+//
+// Caveat, deliberately left as-is: in purchases mode the chart overlays a
+// position-value series (price domain) on an invested series (amount domain).
+// Those coincide for the common case where the account and the listing share a
+// currency, and the chart is labelled with the price domain because the value
+// series is the one that moves. Splitting them needs a per-transaction FX rate
+// the provider does not give us.
+// Never mix the domains without labeling — an unlabelled figure sitting next to
+// one in another currency is the bug this split exists to prevent.
+
 // Range buttons for the modal (canonical API keys).
 const RANGES = [
   { key: "24h", label: "24h" },
@@ -86,8 +113,14 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
   };
 
   const qtyNum = Number(holding.qty);
-  const investedNum = Number(holding.invested);
-  const meanPrice = qtyNum ? investedNum / qtyNum : 0;
+  // Unconverted, not `holding.invested`: it is the fallback for a series built
+  // from unconverted prices and purchase amounts, so mixing in the reporting-
+  // currency figure would put two currencies on one line.
+  const investedNum = Number(holding.investedNative);
+  // Cost basis / quantity — an AMOUNT-domain figure (account currency), not a
+  // market price. It is labelled with accountCurrency below, never with the
+  // price row's or the instrument's currency.
+  const meanPrice = qtyNum === 0 ? 0 : Number(holding.investedNative) / qtyNum;
   const up = Number(holding.gl) >= 0;
 
   // Chart series + header figures depend on the mode and range.
@@ -120,7 +153,10 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         { name: t("dashboard.assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
         { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
       ] satisfies ChartSeries[],
-      headerValue: Number(holding.value),
+      // The chart's own last point, not `holding.value`: this series is
+      // price-domain (unit prices x quantity), so the header must read in the
+      // same currency as the axis beneath it — not the reporting currency.
+      headerValue: last,
       gainAbs: last - first,
       gainPct: first ? (last - first) / first : 0,
       chartLabel: t("dashboard.assetModal.positionValue"),
@@ -197,8 +233,13 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
             <div className="flex items-start justify-between">
               <div className="flex flex-col gap-1">
                 <span className="text-fg-faint text-sm">{chartLabel}</span>
+                {/* Both headerValue and gainAbs follow the chart, which is
+                    price-domain in both modes: unit prices in asset mode, and
+                    unit prices x quantity in purchases mode. Never reporting
+                    currency — see the file header. */}
                 <Money
                   value={headerValue}
+                  currency={holding.priceCurrency}
                   className="text-fg text-2xl font-semibold tracking-tight"
                 />
                 <div
@@ -211,7 +252,11 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                   ) : (
                     <ArrowDownRight className="size-4" />
                   )}
-                  <Money value={gainAbs} signed />
+                  <Money
+                    value={gainAbs}
+                    currency={holding.priceCurrency}
+                    signed
+                  />
                   <span className="font-mono ml-2">
                     (<Percent value={gainPct} signed />)
                   </span>
@@ -240,6 +285,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                 unit={unit}
                 height={340}
                 className="mt-4"
+                currency={holding.priceCurrency}
               />
             ) : (
               <CardState
@@ -270,6 +316,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
             ) : (
               <PurchaseHistorySurface
                 purchases={purchases}
+                currency={holding.accountCurrency}
                 ready={txnData !== undefined}
                 isError={txnError}
                 onRetry={() => refetchTxn()}
@@ -310,7 +357,10 @@ function StatsSurface({
     <div className="bg-surface-2 rounded-2xl p-5">
       <div className="grid grid-cols-2 gap-y-4 gap-x-6">
         <Stat label={t("dashboard.assetModal.quantityOwned")} value={formatQuantity(holding.qty)} />
-        <Stat label={t("dashboard.assetModal.meanPricePerShare")} value={formatMoney(meanPrice)} />
+        <Stat
+          label={t("dashboard.assetModal.meanPricePerShare")}
+          value={formatMoney(meanPrice, { currency: holding.accountCurrency })}
+        />
         <Stat label={t("dashboard.assetModal.capitalInvested")} value={formatMoney(holding.invested)} />
         <Stat label={t("dashboard.assetModal.currentValue")} value={formatMoney(holding.value)} />
       </div>
@@ -381,13 +431,17 @@ function AboutSurface({
   );
 }
 
+/// `currency` is the ACCOUNT's currency: transaction.amount and
+/// transaction.unit_price are amount-domain, not price-domain.
 function PurchaseHistorySurface({
   purchases,
+  currency,
   ready,
   isError,
   onRetry,
 }: {
   purchases: Purchase[];
+  currency: string;
   ready: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -424,10 +478,10 @@ function PurchaseHistorySurface({
                   {formatQuantity(p.qty)}
                 </td>
                 <td className="py-2 border-t border-surface-3 text-right text-fg-dim">
-                  {formatMoney(p.price)}
+                  {formatMoney(p.price, { currency })}
                 </td>
                 <td className="py-2 border-t border-surface-3 text-right text-fg">
-                  {formatMoney(p.invested)}
+                  {formatMoney(p.invested, { currency })}
                 </td>
               </tr>
             ))}

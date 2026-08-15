@@ -8,16 +8,9 @@ import { useAuth } from "../../auth/context";
 import type { UserPrefs } from "../../lib/prefs";
 import { formatMoney } from "../../lib/money";
 import { formatDate } from "../../lib/date";
+import { CURRENCIES } from "../../lib/currency";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
-
-const CURRENCIES: { symbol: string; label: string }[] = [
-  { symbol: "€", label: "EUR (€)" },
-  { symbol: "$", label: "USD ($)" },
-  { symbol: "£", label: "GBP (£)" },
-  { symbol: "CHF", label: "CHF" },
-  { symbol: "¥", label: "JPY (¥)" },
-];
 
 const GROUP_OPTIONS = [
   { value: " ", label: "1 000" },
@@ -47,7 +40,7 @@ export function SettingsGeneral() {
   const previewMoneyOpts = {
     groupSep: prefs.numberGroupSep,
     decimalSep: prefs.numberDecimalSep,
-    currencySymbol: prefs.currencySymbol,
+    currency: prefs.currency,
     currencyPosition: prefs.currencyPosition,
     fractionDigits: prefs.numberDecimals,
   };
@@ -98,9 +91,9 @@ export function SettingsGeneral() {
             hint={t("settings.general.baseReportingCurrency")}
           >
             <Select
-              value={prefs.currencySymbol}
-              onChange={(v) => set("currencySymbol", v)}
-              options={CURRENCIES.map((c) => ({ value: c.symbol, label: c.label }))}
+              value={prefs.currency}
+              onChange={(v) => set("currency", v)}
+              options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               className="w-60"
             />
           </Setting>

@@ -54,6 +54,11 @@ type ValueChartProps = {
    * relative to its first point in the range (percent axis). Defaults to value.
    */
   unit?: ChartUnit;
+  /**
+   * ISO code to format money values in (e.g. a native unit-price series).
+   * Defaults to the user's reporting currency. Has no effect in percent mode.
+   */
+  currency?: string;
 };
 
 // To draw cleanly on top, area/solid lines should come last; callers pass them
@@ -69,10 +74,11 @@ export function ValueChart({
   className = "",
   surfaceColor = SURFACE_2,
   unit = "value",
+  currency,
 }: ValueChartProps) {
   const percent = unit === "percent";
   const fmt = (v: number, opts?: { fractionDigits?: number; signed?: boolean }) =>
-    percent ? formatPercent(v, opts) : formatMoney(v, opts);
+    percent ? formatPercent(v, opts) : formatMoney(v, { ...opts, currency });
 
   // In percent mode, rebase each series to its first point's relative change.
   const plotted: ChartSeries[] = percent

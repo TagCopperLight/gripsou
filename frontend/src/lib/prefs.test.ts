@@ -7,12 +7,12 @@ describe("prefs singleton", () => {
   it("starts at defaults", () => {
     expect(getPrefs()).toEqual(DEFAULT_PREFS);
     expect(DEFAULT_PREFS.numberGroupSep).toBe(" ");
-    expect(DEFAULT_PREFS.currencySymbol).toBe("€");
+    expect(DEFAULT_PREFS.currency).toBe("EUR");
   });
 
   it("setPrefs replaces the current prefs", () => {
-    setPrefs({ ...DEFAULT_PREFS, uiLanguage: "fr", currencySymbol: "$" });
+    setPrefs({ ...DEFAULT_PREFS, uiLanguage: "fr", currency: "USD" });
     expect(getPrefs().uiLanguage).toBe("fr");
-    expect(getPrefs().currencySymbol).toBe("$");
+    expect(getPrefs().currency).toBe("USD");
   });
 });

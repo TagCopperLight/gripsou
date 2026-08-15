@@ -30,3 +30,18 @@ pub async fn set_cors_origins(pool: &sqlx::PgPool, origins: &[String]) -> Result
     .await?;
     Ok(())
 }
+
+/// The pivot currency FX rates are stored against. Never displayed; the Yahoo
+/// provider needs it to build `{currency}{pivot}=X` symbols.
+pub async fn base_currency(pool: &sqlx::PgPool) -> Result<String, CoreError> {
+    let row = sqlx::query!(
+        r#"
+        select base_currency as "base_currency!"
+        from app_settings
+        where id = 1
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row.base_currency)
+}

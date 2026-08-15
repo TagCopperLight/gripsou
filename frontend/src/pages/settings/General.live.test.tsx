@@ -24,7 +24,7 @@ test("preview updates live (no refresh) when prefs change", async () => {
     name: "A",
     email: "a@t.local",
     role: "admin" as const,
-    prefs: { ...DEFAULT_PREFS, currencySymbol: "£" },
+    prefs: { ...DEFAULT_PREFS, currency: "GBP" },
   };
   vi.spyOn(client, "getJson").mockResolvedValue(user);
   // PATCH echoes back the sent prefs, like the real backend.

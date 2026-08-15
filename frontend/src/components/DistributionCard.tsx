@@ -114,10 +114,18 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                     fractionDigits={1}
                     className="ml-auto text-fg text-sm w-14 text-right"
                   />
-                  <Money
-                    value={a.value}
-                    className="text-fg-faint text-sm w-28 text-right"
-                  />
+                  <span className="w-28 flex items-center justify-end gap-1.5">
+                    {a.fxMissing && (
+                      <span
+                        title={t("dashboard.fxMissing")}
+                        className="text-fg-faint text-xs leading-none"
+                        aria-label={t("dashboard.fxMissing")}
+                      >
+                        ⚠
+                      </span>
+                    )}
+                    <Money value={a.value} className="text-fg-faint text-sm" />
+                  </span>
                 </div>
               );
             })}

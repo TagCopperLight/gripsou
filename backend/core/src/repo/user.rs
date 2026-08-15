@@ -215,7 +215,7 @@ mod tests {
 
         let profile = profile_by_id(&pool, id).await?.unwrap();
         assert_eq!(profile.prefs.ui_language, "en");
-        assert_eq!(profile.prefs.currency_symbol, "€");
+        assert_eq!(profile.prefs.currency, "EUR");
 
         let creds = credentials_by_email(&pool, "p@t.local").await?.unwrap();
         assert_eq!(creds.prefs.number_decimal_sep, ",");

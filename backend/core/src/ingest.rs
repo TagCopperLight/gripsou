@@ -58,7 +58,7 @@ pub async fn ingest(
 
         // Snapshot value is the provider's current valuation — a flat fallback.
         // Price-based valuation is derived at read time from the `price` series
-        // (see query.rs / price_asof), so it stays consistent across reads and
+        // (see query.rs / unit_value_asof), so it stays consistent across reads and
         // doesn't depend on whether the price pass has run yet this sync.
         let value = if holding.instrument.kind == "cash" {
             holding.quantity

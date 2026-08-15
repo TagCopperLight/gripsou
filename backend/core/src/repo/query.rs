@@ -11,6 +11,8 @@ pub struct NetWorthRow {
     pub as_of: NaiveDate,
     pub net_worth: Decimal,
     pub invested: Decimal,
+    /// At least one holding on this day had no FX rate and was valued at zero.
+    pub fx_missing: bool,
 }
 
 pub async fn net_worth_series(
@@ -23,23 +25,48 @@ pub async fn net_worth_series(
         NetWorthRow,
         r#"
         -- Per day, value each holding from its as-of snapshot (quantity anchor)
-        -- and the price series. The INNER JOIN LATERAL excludes a holding on days
-        -- before its first snapshot (no row) — so a position never contributes
-        -- before it was acquired — and fetches quantity/value/cost_basis in one
-        -- lookup. A sold holding keeps its history (its zero snapshot values it at
-        -- 0 thereafter). Value = qty * price-as-of, falling back to the provider
-        -- valuation (snap.value) when no price exists yet.
+        -- and unit_value_asof, which folds in the FX rate. The INNER JOIN LATERAL
+        -- excludes a holding on days before its first snapshot (no row) — so a
+        -- position never contributes before it was acquired. A sold holding keeps
+        -- its history (its zero snapshot values it at 0 thereafter). Falling back
+        -- to the provider valuation (snap.value) still needs converting, hence
+        -- the explicit fx_asof on that branch. Everything is summed in the pivot,
+        -- then divided once into the reader's reporting currency.
+        --
+        -- Three currency domains, never conflated:
+        --   price     — the `price` row's own currency, folded in by
+        --               unit_value_asof (it reads the price row, not the
+        --               instrument);
+        --   amount    — `account.currency`, which is what the provider denominates
+        --               snapshot.value / snapshot.cost_basis in, hence
+        --               fx_asof(a.currency, …) on both of those branches;
+        --   reporting — `users.prefs.currency`, applied once by the final divide.
+        -- `instrument.currency` is the quote currency of the security and is none
+        -- of the three: a USD-quoted stock inside a EUR account has a EUR cost
+        -- basis.
+        --
+        -- A holding whose rate is unknown contributes NULL, which sum() skips —
+        -- i.e. it is valued at zero — and raises fx_missing so the UI can say so.
+        -- The flag is raised on the failure itself (both value branches NULL),
+        -- not on any one currency, and only for a position actually held that day
+        -- so a sold foreign holding does not leave a permanent warning with no
+        -- row behind it.
         with dates as (
             select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
         )
         select d.as_of as "as_of!",
-               coalesce(sum(
-                   case
-                       when i.kind = 'cash' then snap.quantity
-                       else coalesce(snap.quantity * price_asof(i.id, d.as_of), snap.value, 0)
-                   end
-               ), 0) as "net_worth!",
-               coalesce(sum(snap.cost_basis), 0) as "invested!"
+               coalesce(sum(coalesce(
+                   snap.quantity * unit_value_asof(i.id, d.as_of),
+                   snap.value * fx_asof(a.currency, d.as_of),
+                   0
+               )), 0) / reporting_fx_asof($1, d.as_of) as "net_worth!",
+               coalesce(sum(snap.cost_basis * fx_asof(a.currency, d.as_of)), 0)
+                   / reporting_fx_asof($1, d.as_of) as "invested!",
+               coalesce(bool_or(
+                   snap.quantity <> 0
+                   and unit_value_asof(i.id, d.as_of) is null
+                   and coalesce(snap.value * fx_asof(a.currency, d.as_of), 0) = 0
+               ), false) as "fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -71,7 +98,16 @@ pub struct HoldingRow {
     pub instrument_name: String,
     pub kind: String,
     pub logo_url: Option<String>,
+    /// The instrument's own currency — the currency the security is *quoted* in.
+    /// Not the currency of any amount on this row.
     pub currency: String,
+    /// Currency of the `price` row `price` came from — the price domain. May
+    /// differ from `currency` (Powens labels an instrument EUR, Yahoo resolves a
+    /// London listing quoted GBP). NULL when there is no price row.
+    pub price_currency: Option<String>,
+    /// The account's currency — the amount domain. `cost_basis`,
+    /// `invested_native`, snapshot values and transaction amounts are all in it.
+    pub account_currency: String,
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: Option<String>,
@@ -81,12 +117,24 @@ pub struct HoldingRow {
     /// English category label from the reference table — the i18n fallback.
     pub category_label: String,
     pub quantity: Decimal,
-    pub cost_basis: Decimal,
+    /// Latest unit price, in `price_currency` (NOT `currency`).
     pub price: Option<Decimal>,
     /// Last 30 daily unit prices, ascending by time. Empty if none.
     pub spark: Vec<Decimal>,
     /// ETF/fund country and sector breakdown, when available in instrument.meta.
     pub composition: Option<crate::dto::Composition>,
+    /// Position value in the reader's reporting currency. Zero when the rate is
+    /// unknown (see `fx_missing`).
+    pub value: Decimal,
+    /// Cost basis in the reader's reporting currency.
+    pub invested: Decimal,
+    /// Cost basis in the *account's* currency — the amount-domain figure, which
+    /// is what the provider denominated it in. Label it with `account_currency`,
+    /// never with `currency` or `price_currency`.
+    pub invested_native: Decimal,
+    /// Neither valuation branch resolved (no usable price and no convertible
+    /// snapshot value), so `value` reads zero.
+    pub fx_missing: bool,
 }
 
 pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
@@ -97,6 +145,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         kind: String,
         logo_url: Option<String>,
         currency: String,
+        price_currency: Option<String>,
+        account_currency: String,
         instrument_id: Uuid,
         account_id: Uuid,
         account_name: String,
@@ -104,14 +154,30 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         category_key: String,
         category_label: String,
         quantity: Decimal,
-        cost_basis: Decimal,
         price: Option<Decimal>,
         composition: Option<serde_json::Value>,
+        value: Decimal,
+        invested: Decimal,
+        invested_native: Decimal,
+        fx_missing: bool,
     }
 
     let bases = sqlx::query_as!(
         Base,
         r#"
+        -- Same valuation rule as net_worth_series/accounts/distribution: price
+        -- first, provider valuation (converted from the ACCOUNT's currency)
+        -- second, zero last. Without the snapshot fallback this table would show
+        -- 0 for an instrument with no usable price while the accounts card, the
+        -- pie and the net-worth chart all showed the provider valuation — on the
+        -- same screen. The lateral is LEFT because a holding ingested before its
+        -- first snapshot must still list (it just has no fallback).
+        --
+        -- `price` is the price ROW's unit price and carries that row's own
+        -- currency (`price_currency`), which is not necessarily i.currency.
+        -- `invested`/`invested_native` are amount-domain and therefore convert
+        -- from a.currency, not i.currency.
+        with today as (select (now() at time zone 'utc')::date as d)
         select h.id            as "holding_id!",
                i.symbol,
                i.name          as "instrument_name!",
@@ -119,6 +185,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                i.logo_url,
                i.meta->'composition' as "composition?",
                i.currency      as "currency!",
+               px.currency     as "price_currency?",
+               a.currency      as "account_currency!",
                i.id            as "instrument_id!",
                a.id            as "account_id!",
                a.name          as "account_name!",
@@ -126,15 +194,38 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                cat.key         as "category_key!",
                cat.label       as "category_label!",
                h.quantity      as "quantity!",
-               h.cost_basis    as "cost_basis!",
-               (select p.unit_price from price p
-                  where p.instrument_id = i.id order by p.ts desc limit 1) as "price?"
+               px.unit_price   as "price?",
+               coalesce(
+                   h.quantity * unit_value_asof(i.id, (select d from today)),
+                   snap.value * fx_asof(a.currency, (select d from today)),
+                   0
+               ) / reporting_fx_asof($1, (select d from today)) as "value!",
+               coalesce(h.cost_basis * fx_asof(a.currency, (select d from today)), 0)
+                   / reporting_fx_asof($1, (select d from today)) as "invested!",
+               h.cost_basis    as "invested_native!",
+               (unit_value_asof(i.id, (select d from today)) is null
+                and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
+                   as "fx_missing!"
         from holding h
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
         join instrument i   on i.id = h.instrument_id
         join account_type t on t.key = a.type_key
         join category cat   on cat.key = t.category_key
+        left join lateral (
+            select p.unit_price, p.currency
+            from price p
+            where p.instrument_id = i.id
+            order by p.ts desc
+            limit 1
+        ) px on true
+        left join lateral (
+            select hs.value
+            from holding_snapshot hs
+            where hs.holding_id = h.id
+            order by hs.as_of desc
+            limit 1
+        ) snap on true
         where c.user_id = $1 and h.quantity <> 0
         order by h.id
         "#,
@@ -145,13 +236,18 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 
     let mut out = Vec::with_capacity(bases.len());
     for b in bases {
-        // Last 30 prices, newest-first, then reversed to ascending.
-        let mut spark: Vec<Decimal> = sqlx::query_scalar!(
-            r#"select unit_price as "unit_price!" from price where instrument_id = $1 order by ts desc limit 30"#,
-            b.instrument_id,
-        )
-        .fetch_all(pool)
-        .await?;
+        // Cash rows show no sparkline (their "prices" are FX rates), so don't
+        // pay for the query.
+        let mut spark: Vec<Decimal> = if b.kind == "cash" {
+            Vec::new()
+        } else {
+            sqlx::query_scalar!(
+                r#"select unit_price as "unit_price!" from price where instrument_id = $1 order by ts desc limit 30"#,
+                b.instrument_id,
+            )
+            .fetch_all(pool)
+            .await?
+        };
         spark.reverse();
 
         out.push(HoldingRow {
@@ -161,16 +257,21 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             kind: b.kind,
             logo_url: b.logo_url,
             currency: b.currency,
+            price_currency: b.price_currency,
+            account_currency: b.account_currency,
             account_id: b.account_id,
             account_name: b.account_name,
             account_color: b.account_color,
             category_key: b.category_key,
             category_label: b.category_label,
             quantity: b.quantity,
-            cost_basis: b.cost_basis,
             price: b.price,
             spark,
             composition: b.composition.and_then(|v| serde_json::from_value(v).ok()),
+            value: b.value,
+            invested: b.invested,
+            invested_native: b.invested_native,
+            fx_missing: b.fx_missing,
         });
     }
     Ok(out)
@@ -247,6 +348,7 @@ pub struct AccountRow {
     pub type_key: String,
     pub type_label: String,
     pub value: Decimal,
+    pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub institution_key: Option<String>,
     pub source_name: Option<String>,
@@ -258,17 +360,27 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
     let rows = sqlx::query_as!(
         AccountRow,
         r#"
-        -- Value each holding from its latest snapshot's quantity and the price
-        -- series (price_asof at UTC today), falling back to the provider valuation
-        -- (snapshot.value) when no price exists — the same rule as the net-worth
-        -- series, so the accounts grid sums to the chart's current figure.
-        with latest as (
+        -- Value each holding from its latest snapshot's quantity and
+        -- unit_value_asof (FX included), falling back to the provider valuation
+        -- converted at the same rate — the same rule as net_worth_series, so the
+        -- accounts grid sums to the chart's current figure. `hs.value` is
+        -- amount-domain (the provider denominates it in the account's currency),
+        -- hence fx_asof(a.currency, …) — not the instrument's quote currency.
+        -- fx_missing flags the actual failure (neither branch resolved) on a
+        -- still-held position, matching holdings()'s `h.quantity <> 0`.
+        with today as (select (now() at time zone 'utc')::date as d),
+        latest as (
             select distinct on (hs.holding_id)
                    hs.holding_id,
-                   case
-                       when i.kind = 'cash' then hs.quantity
-                       else coalesce(hs.quantity * price_asof(i.id, (now() at time zone 'utc')::date), hs.value, 0)
-                   end as value
+                   coalesce(
+                       hs.quantity * unit_value_asof(i.id, (select d from today)),
+                       hs.value * fx_asof(a.currency, (select d from today)),
+                       0
+                   ) as value,
+                   h.quantity <> 0
+                   and unit_value_asof(i.id, (select d from today)) is null
+                   and coalesce(hs.value * fx_asof(a.currency, (select d from today)), 0) = 0
+                       as fx_missing
             from holding_snapshot hs
             join holding h    on h.id = hs.holding_id
             join account a    on a.id = h.account_id
@@ -282,7 +394,8 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.color,
                a.type_key as "type_key!",
                t.label as "type_label!",
-               sum(l.value) as "value!",
+               sum(l.value) / reporting_fx_asof($1, (select d from today)) as "value!",
+               coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
                coalesce(c.institution_name, p.display_name) as source_name
@@ -321,7 +434,8 @@ pub async fn account_series(
         AccountSeriesRow,
         r#"
         -- Same valuation as net_worth_series (snapshot-anchored quantity via the
-        -- lateral join + price_asof), grouped per account for the stacked area.
+        -- lateral join + unit_value_asof/fx_asof), grouped per account for the
+        -- stacked area. No fx_missing flag: the accounts grid already surfaces it.
         with dates as (
             select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
         )
@@ -329,12 +443,11 @@ pub async fn account_series(
                a.name as "name!",
                a.color as "color",
                d.as_of as "as_of!",
-               coalesce(sum(
-                   case
-                       when i.kind = 'cash' then snap.quantity
-                       else coalesce(snap.quantity * price_asof(i.id, d.as_of), snap.value, 0)
-                   end
-               ), 0) as "value!"
+               coalesce(sum(coalesce(
+                   snap.quantity * unit_value_asof(i.id, d.as_of),
+                   snap.value * fx_asof(a.currency, d.as_of),
+                   0
+               )), 0) / reporting_fx_asof($1, d.as_of) as "value!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -420,6 +533,9 @@ pub struct DistributionRow {
     pub category_key: String,
     pub category_label: String,
     pub value: Decimal,
+    /// At least one still-held holding in this slice could not be valued, so the
+    /// slice is understated.
+    pub fx_missing: bool,
 }
 
 pub async fn distribution(
@@ -434,10 +550,15 @@ pub async fn distribution(
         with latest as (
             select distinct on (hs.holding_id)
                    hs.holding_id,
-                   case
-                       when i.kind = 'cash' then hs.quantity
-                       else coalesce(hs.quantity * price_asof(i.id, (now() at time zone 'utc')::date), hs.value, 0)
-                   end as value
+                   coalesce(
+                       hs.quantity * unit_value_asof(i.id, (now() at time zone 'utc')::date),
+                       hs.value * fx_asof(a.currency, (now() at time zone 'utc')::date),
+                       0
+                   ) as value,
+                   h.quantity <> 0
+                   and unit_value_asof(i.id, (now() at time zone 'utc')::date) is null
+                   and coalesce(hs.value * fx_asof(a.currency, (now() at time zone 'utc')::date), 0) = 0
+                       as fx_missing
             from holding_snapshot hs
             join holding h    on h.id = hs.holding_id
             join account a    on a.id = h.account_id
@@ -451,14 +572,15 @@ pub async fn distribution(
                a.color,
                cat.key   as "category_key!",
                cat.label as "category_label!",
-               sum(l.value) as "value!"
+               sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) as "value!",
+               coalesce(bool_or(l.fx_missing), false) as "fx_missing!"
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         join category cat   on cat.key = t.category_key
         group by a.id, a.name, a.color, cat.key, cat.label
-        order by sum(l.value) desc
+        order by sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) desc
         "#,
         user_id,
     )
@@ -516,7 +638,22 @@ pub async fn composition_eligible_instruments_for_connection(
     Ok(rows)
 }
 
-/// Distinct non-cash instruments held (nonzero quantity) under a connection.
+/// Distinct non-cash instruments held (nonzero quantity) under a connection,
+/// plus the cash instrument (the FX rate) for every currency this connection
+/// needs a rate for, excluding the pivot. Three sources, one per currency
+/// domain, because a rate missing in any of them zeroes a figure:
+///
+/// * `instrument.currency` — a foreign security held in a base-currency account
+///   (a USD equity in a EUR account) never holds USD *cash* itself, so reaching
+///   rates only through `i.kind = 'cash'` rows would leave USD unfetchable.
+/// * `price.currency` — the price domain. Powens may label an instrument EUR
+///   while Yahoo resolves a London listing quoted GBP; `unit_value_asof` reads
+///   the price row's currency, so without GBP here the holding stays NULL —
+///   valued at zero — forever.
+/// * `account.currency` — the amount domain. `holding.cost_basis` and
+///   `holding_snapshot.value` convert from it, so a CHF account inside a EUR
+///   install needs CHF even if every instrument in it is quoted in EUR.
+///
 /// Drives the per-connection price-fetch pass.
 pub async fn price_eligible_instruments_for_connection(
     pool: &sqlx::PgPool,
@@ -539,7 +676,47 @@ pub async fn price_eligible_instruments_for_connection(
         where a.connection_id = $1
           and i.kind <> 'cash'
           and h.quantity <> 0
-        order by i.name
+
+        union
+
+        -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
+        -- pivot is 1 by definition and has no Yahoo pair. This reaches the cash
+        -- instrument backing every currency this connection converts through,
+        -- not just an actually-held foreign cash position (see the doc comment).
+        select distinct
+               fx.id       as "id!",
+               fx.kind     as "kind!",
+               fx.symbol,
+               fx.isin,
+               fx.name     as "name!",
+               fx.currency as "currency!",
+               fx.meta     as "meta!"
+        from (
+            select i.currency as cur
+            from holding h
+            join account a    on a.id = h.account_id
+            join instrument i on i.id = h.instrument_id
+            where a.connection_id = $1 and h.quantity <> 0
+
+            union
+
+            select p.currency
+            from holding h
+            join account a on a.id = h.account_id
+            join price p   on p.instrument_id = h.instrument_id
+            where a.connection_id = $1 and h.quantity <> 0
+
+            union
+
+            select a.currency
+            from account a
+            where a.connection_id = $1
+        ) needed
+        join instrument fx on fx.kind = 'cash' and fx.currency = needed.cur
+        where needed.cur <> (select base_currency from app_settings where id = 1)
+          and needed.cur ~ '^[A-Z]{3}$'
+
+        order by 5
         "#,
         connection_id,
     )
