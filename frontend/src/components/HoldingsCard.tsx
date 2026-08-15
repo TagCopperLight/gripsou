@@ -22,16 +22,20 @@ type Column = {
   labelKey: string;
   align: "left" | "right";
   sort?: SortKey;
+  /** Dropped below md — a phone fits asset / value / P L and nothing more. */
+  desktopOnly?: boolean;
 };
+
+const HIDDEN_ON_PHONE = "hidden md:table-cell";
 
 const COLUMNS: Column[] = [
   { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset" },
-  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty" },
-  { labelKey: "dashboard.holdings.columns.account", align: "left" },
-  { labelKey: "dashboard.holdings.columns.category", align: "left" },
+  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", desktopOnly: true },
+  { labelKey: "dashboard.holdings.columns.account", align: "left", desktopOnly: true },
+  { labelKey: "dashboard.holdings.columns.category", align: "left", desktopOnly: true },
   { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value" },
   { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
-  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right" },
+  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", desktopOnly: true },
 ];
 
 const GREEN = "var(--color-green)";
@@ -122,8 +126,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-5">
-        <div className="flex items-start justify-between">
+      <div className="flex flex-col p-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <h2 className="text-fg font-semibold text-sm">
             {t("dashboard.holdings.title")}
             {ready && (
@@ -132,7 +136,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               </span>
             )}
           </h2>
-          <label className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 w-64">
+          <label className="flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 md:w-64">
             <Search className="size-4 text-fg-faint shrink-0" />
             <input
               value={query}
@@ -151,7 +155,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           />
         ) : (
         <>
-        <div className="flex items-center gap-1.5 mt-4">
+        <div className="flex flex-wrap items-center gap-1.5 mt-4">
           {categories.map((c) => {
             const selected = c === category;
             return (
@@ -181,9 +185,9 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 return (
                   <th
                     key={col.labelKey}
-                    className={`pb-2 px-3 text-[11px] font-medium tracking-wide font-mono ${
+                    className={`pb-2 px-2 md:px-3 text-[11px] font-medium tracking-wide font-mono ${
                       col.align === "right" ? "text-right" : "text-left"
-                    }`}
+                    } ${col.desktopOnly ? HIDDEN_ON_PHONE : ""}`}
                   >
                     {col.sort ? (
                       <button
@@ -224,7 +228,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   }`}
                 >
                   {/* ASSET */}
-                  <td className="py-3 px-3 border-t border-surface-2">
+                  <td className="max-w-0 w-full py-3 px-2 md:px-3 border-t border-surface-2">
                     <div className="flex items-center gap-3">
                       <HoldingBadge
                         logo={h.logo}
@@ -232,18 +236,18 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         fallbackText={h.kind === "cash" && h.ticker === "EUR" ? "€" : undefined}
                         className="size-8 rounded-lg text-[13px]"
                       />
-                      <div className="flex flex-col">
-                        <span className="text-sm text-fg leading-tight">
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm text-fg leading-tight md:whitespace-normal">
                           {h.name}
                         </span>
-                        <span className="text-xs text-fg-faint font-mono">
+                        <span className="truncate text-xs text-fg-faint font-mono">
                           {h.ticker} · {t(KIND_LABEL_KEY[h.kind])}
                         </span>
                       </div>
                     </div>
                   </td>
                   {/* QUANTITY */}
-                  <td className="py-3 px-3 border-t border-surface-2 text-right">
+                  <td className={`py-3 px-3 border-t border-surface-2 text-right ${HIDDEN_ON_PHONE}`}>
                     {hasPnl ? (
                       <span className="text-sm text-fg-dim font-mono">
                         {formatQuantity(h.qty)}
@@ -253,7 +257,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     )}
                   </td>
                   {/* ACCOUNT */}
-                  <td className="py-3 px-3 border-t border-surface-2">
+                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <div className="flex items-center gap-2">
                       <span
                         className="size-2.5 rounded-sm shrink-0"
@@ -265,13 +269,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     </div>
                   </td>
                   {/* CATEGORY */}
-                  <td className="py-3 px-3 border-t border-surface-2">
+                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
                       {categoryLabel(t, h.category, h.categoryLabel)}
                     </span>
                   </td>
                   {/* VALUE */}
-                  <td className="py-3 px-3 border-t border-surface-2 text-right">
+                  <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
                     <span className="inline-flex items-center gap-1.5">
                       {h.fxMissing && (
                         <span
@@ -286,7 +290,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     </span>
                   </td>
                   {/* UNREALIZED P/L */}
-                  <td className="py-3 px-3 border-t border-surface-2 text-right">
+                  <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
                     {hasPnl ? (
                       <div className="flex flex-col items-end">
                         <Money
@@ -306,7 +310,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     )}
                   </td>
                   {/* 30D */}
-                  <td className="py-3 px-3 border-t border-surface-2">
+                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <div className="flex justify-end">
                       {h.spark ? (
                         <Sparkline data={h.spark.map(Number)} color={up ? GREEN : RED} />
