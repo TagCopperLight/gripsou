@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 
@@ -29,14 +29,14 @@ export function Login() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-bg">
-      <div className="relative">
-        <div className="absolute bottom-full left-1/2 mb-15 -translate-x-1/2 whitespace-nowrap font-wordmark text-[75px] font-semibold tracking-tight text-fg">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-10">
+      <div className="w-100 max-w-full">
+        <div className="mb-8 sm:mb-15 text-center whitespace-nowrap font-wordmark text-[clamp(2.5rem,15vw,75px)] font-semibold tracking-tight text-fg">
           gripsou
         </div>
         <form
           onSubmit={submit}
-          className="flex w-100 max-w-[90vw] flex-col gap-4 rounded-3xl bg-surface p-6"
+          className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
         >
           <div className="flex flex-col pb-1">
             <div className="text-lg font-semibold text-fg">
@@ -65,12 +65,15 @@ export function Login() {
             />
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-fg-dim">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="size-4 accent-green"
-            />
+            <span className="relative inline-flex h-5 w-9 shrink-0 rounded-full bg-surface-3 transition-colors has-checked:bg-green">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="peer sr-only"
+              />
+              <span className="absolute top-0.5 left-0.5 size-4 rounded-full bg-fg transition-transform peer-checked:translate-x-4" />
+            </span>
             {t("auth.rememberMe")}
           </label>
           {error && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
@@ -78,10 +81,13 @@ export function Login() {
             {t("auth.signIn")}
           </Button>
         </form>
-        <p className="absolute top-full left-1/2 mt-6 w-100 max-w-[90vw] -translate-x-1/2 px-2 text-center text-sm text-fg-faint">
+        <p className="mt-6 text-center text-xs text-fg-faint sm:text-sm">
           {t("auth.inviteOnly1")}
           <br />
-          {t("auth.inviteOnly2")}
+          <Trans
+            i18nKey="auth.inviteOnly2"
+            components={{ 1: <span className="text-fg-dim" /> }}
+          />
         </p>
       </div>
     </div>
