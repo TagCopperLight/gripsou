@@ -24,7 +24,7 @@ export function AccountsList({ className = "" }: AccountsListProps) {
           className="h-40"
         />
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {accounts.map((a) => (
             <AccountCard
               key={a.id}

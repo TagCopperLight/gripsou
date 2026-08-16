@@ -21,7 +21,7 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
-    <Surface className="relative p-5">
+    <Surface className="relative p-4 md:p-5">
       <button
         type="button"
         aria-label={t("account.edit.title")}
@@ -31,7 +31,7 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
         <Pencil className="size-4" />
       </button>
 
-      <div className="flex gap-3.5">
+      <div className="flex gap-3.5 pr-10">
         <span className="size-8.5 rounded-xl shrink-0 flex items-center justify-center" style={{ background: withAlpha(account.color, 0.3) }}>
           <User className="size-4" style={{ color: account.color }} />
         </span>
@@ -41,8 +41,8 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
         </div>
       </div>
 
-      <div className="mt-5 flex items-start">
-        <div className="flex items-baseline gap-1.5 flex-col w-60 shrink-0">
+      <div className="mt-5 flex flex-col gap-4 md:flex-row md:gap-6">
+        <div className="flex items-baseline gap-1.5 flex-col shrink-0 md:w-60">
           <span className="text-fg-faint text-xs">{t("account.totalValue")}</span>
           <span className="flex items-baseline gap-1.5">
             <Money value={account.value} className="text-[22px] font-semibold tracking-tight" />
@@ -61,25 +61,27 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
           </span>
         </div>
 
-        {account.sourceName && (
-          <div className="flex flex-col gap-1.5 min-w-0">
-            <span className="text-fg-faint text-xs">{t("account.source")}</span>
-            <div className="flex items-center gap-2 min-w-0">
-              <HoldingBadge
-                logo={account.sourceLogo}
-                ticker={account.sourceName}
-                color={account.color}
-                className="size-7 rounded-lg text-[11px]"
-              />
-              <span className="text-fg text-[13px] truncate">{account.sourceName}</span>
+        <div className="flex flex-1 items-start justify-between gap-4">
+          {account.sourceName && (
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-fg-faint text-xs">{t("account.source")}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <HoldingBadge
+                  logo={account.sourceLogo}
+                  ticker={account.sourceName}
+                  color={account.color}
+                  className="size-7 rounded-lg text-[11px]"
+                />
+                <span className="truncate text-fg text-[13px]">{account.sourceName}</span>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      <div className="absolute bottom-4 right-5 flex flex-col text-fg-faint text-xs gap-1 items-end">
-        <p>{t("account.lastSync")}</p>
-        <p className="text-fg text-[13px]">{formatRelative(account.lastSyncAt)}</p>
+          <div className="ml-auto flex shrink-0 flex-col items-end gap-1 text-fg-faint text-xs md:self-end">
+            <p>{t("account.lastSync")}</p>
+            <p className="text-fg text-[13px]">{formatRelative(account.lastSyncAt)}</p>
+          </div>
+        </div>
       </div>
 
       {editing && (
