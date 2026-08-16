@@ -47,7 +47,7 @@ export function SettingsGeneral() {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      <Surface className="p-6 mt-13">
+      <Surface className="p-6 md:mt-13">
         <h2 className="mb-5 text-lg font-semibold text-fg">
           {t("settings.general.localization")}
         </h2>
@@ -75,7 +75,7 @@ export function SettingsGeneral() {
               value={prefs.dateFormat}
               onChange={(v) => set("dateFormat", v)}
               options={DATE_FORMATS.map((f) => ({ value: f, label: f }))}
-              className="w-60"
+              className="w-36 md:w-60"
             />
           </Setting>
         </div>
@@ -94,7 +94,7 @@ export function SettingsGeneral() {
               value={prefs.currency}
               onChange={(v) => set("currency", v)}
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
-              className="w-60"
+              className="w-36 md:w-60"
             />
           </Setting>
 

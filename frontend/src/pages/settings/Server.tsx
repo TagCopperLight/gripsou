@@ -34,7 +34,7 @@ export function SettingsServer() {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      <Surface className="p-6 mt-13">
+      <Surface className="p-6 md:mt-13">
         <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.cors")}</h2>
         <p className="mb-5 text-xs text-fg-faint">{t("settings.server.corsHint")}</p>
         <div className="flex flex-col gap-2">
