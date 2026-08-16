@@ -100,7 +100,7 @@ export function SettingsAccount() {
   };
 
   return (
-    <div className="flex flex-col gap-4 pb-8 mt-13">
+    <div className="flex flex-col gap-4 pb-8 md:mt-13">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
       <Surface className="p-6 h-full flex flex-col">
         <h2 className="mb-5 text-lg font-semibold text-fg">

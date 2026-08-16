@@ -48,7 +48,7 @@ export function SettingsUsers() {
     }));
 
   return (
-    <div className="pb-8 mt-13">
+    <div className="pb-8 md:mt-13">
       <Surface className="w-full">
         <div className="flex flex-col p-5">
           <div className="flex items-center justify-between">
