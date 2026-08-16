@@ -15,7 +15,7 @@ export function ChartLegend({ items, className = "" }: ChartLegendProps) {
   return (
     <div className={`flex items-center gap-4 ${className}`}>
       {items.map((item) => (
-        <div key={item.label} className="flex items-center gap-2">
+        <div key={item.label} className="flex shrink-0 items-center gap-2">
           <span
             className="w-4"
             style={
@@ -24,7 +24,7 @@ export function ChartLegend({ items, className = "" }: ChartLegendProps) {
                 : { height: 2, borderRadius: 9999, background: item.color }
             }
           />
-          <span className="text-fg-faint text-xs font-mono">{item.label}</span>
+          <span className="whitespace-nowrap text-fg-faint text-xs font-mono">{item.label}</span>
         </div>
       ))}
     </div>

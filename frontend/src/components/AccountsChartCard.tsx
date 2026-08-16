@@ -47,15 +47,15 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-5">
-        <div className="flex justify-between">
+      <div className="flex flex-col p-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1">
             <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
             {ready && (
               <>
-                <Money value={summary?.netWorth ?? "0"} className="text-[40px] font-semibold tracking-tight" />
-                <div className="flex items-center gap-4">
-                  <div className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
+                <Money value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
@@ -65,10 +65,17 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
               </>
             )}
           </div>
-          <div className="flex flex-col items-end">
-            <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
-            <ChartLegend className="mt-3 flex-wrap justify-end" items={legendItems} />
+          <div className="flex flex-col md:items-end">
+            <div className="hidden md:block">
+              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
+            </div>
+            {/* Phone: one swipeable row instead of three wrapped ones. */}
+            <ChartLegend className="-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible" items={legendItems} />
           </div>
+        </div>
+        {/* Phone: the seven ranges scroll on their own row under the chart. */}
+        <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
+          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="w-max" />
         </div>
         {ready ? (
           <StackedAreaChart className="mt-4" series={stacked} />
