@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Key, Trash2 } from "lucide-react";
+import { Plus, Key, Trash2, ChevronRight } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
@@ -9,6 +9,7 @@ import { CardState } from "../../components/CardState";
 import { useUsers, useCreateInvite, useCreateResetLink } from "../../api/hooks";
 import { LinkModal } from "../../components/LinkModal";
 import { DeleteUserModal } from "../../components/DeleteUserModal";
+import { UserDetailModal } from "../../components/UserDetailModal";
 import { formatDate } from "../../lib/date";
 import type { User } from "../../api/types";
 
@@ -26,6 +27,7 @@ export function SettingsUsers() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [detail, setDetail] = useState<User | null>(null);
 
   const openInvite = () => {
     setInviteOpen(true);
@@ -50,8 +52,8 @@ export function SettingsUsers() {
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
-        <div className="flex flex-col p-5">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col p-4 md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">
               {t("settings.users.title")}
               {ready && (
@@ -61,7 +63,7 @@ export function SettingsUsers() {
                 </span>
               )}
             </h2>
-            <Button onClick={openInvite} padded={false} className="inline-flex items-center gap-1.5 text-xs px-2.75 py-1.5">
+            <Button onClick={openInvite} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
               <Plus className="size-4" />
               {t("settings.users.inviteUser")}
             </Button>
@@ -74,7 +76,41 @@ export function SettingsUsers() {
               className="mt-4 h-64"
             />
           ) : (
-            <table className="w-full mt-4 border-separate border-spacing-0">
+            <>
+            {/* Phone: one summary row per user; the rest lives in a modal. */}
+            <div className="mt-4 flex flex-col gap-2 md:hidden">
+              {users.map((u) => {
+                const role = roleOf(u);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => setDetail(u)}
+                    className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
+                  >
+                    <Avatar name={u.name} src={u.avatar} />
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate text-sm text-fg">{u.name}</span>
+                      {u.isSelf && (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-fg-dim border border-surface-3 rounded px-1.5 py-0.5">
+                          {t("settings.users.you")}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium ${
+                        role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim"
+                      }`}
+                    >
+                      {t(role === "admin" ? "settings.users.roleAdmin" : "settings.users.roleMember")}
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-fg-faint" />
+                  </button>
+                );
+              })}
+            </div>
+
+            <table className="hidden w-full mt-4 border-separate border-spacing-0 md:table">
               <thead>
                 <tr>
                   {COLUMNS.map((c) => (
@@ -156,9 +192,36 @@ export function SettingsUsers() {
                 })}
               </tbody>
             </table>
+            </>
           )}
         </div>
       </Surface>
+      {detail && (
+        <UserDetailModal
+          user={detail}
+          role={roleOf(detail)}
+          onToggleRole={() => toggleRole(detail)}
+          onReset={
+            detail.isSelf
+              ? undefined
+              : () => {
+                  const u = detail;
+                  setDetail(null);
+                  openReset(u);
+                }
+          }
+          onDelete={
+            detail.isSelf
+              ? undefined
+              : () => {
+                  const u = detail;
+                  setDetail(null);
+                  setDeleteTarget(u);
+                }
+          }
+          onClose={() => setDetail(null)}
+        />
+      )}
       {inviteOpen && (
         <LinkModal
           title={t("settings.users.invite.title")}
