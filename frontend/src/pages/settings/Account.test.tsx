@@ -146,8 +146,10 @@ describe("SettingsAccount sessions card", () => {
 
   it("lists sessions, marks current, revokes others", async () => {
     render(withClient(<SettingsAccount />));
-    expect(screen.getByText("Chrome on macOS")).toBeInTheDocument();
-    expect(screen.getByText(/this device/i)).toBeInTheDocument();
+    // Phone and desktop layouts are both in the DOM (CSS picks one), so each
+    // session appears twice.
+    expect(screen.getAllByText("Chrome on macOS")).not.toHaveLength(0);
+    expect(screen.getAllByText(/this device/i)).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: /revoke/i }));
     expect(revokeSpy).toHaveBeenCalledWith("2");
   });
