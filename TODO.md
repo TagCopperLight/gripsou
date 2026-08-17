@@ -35,12 +35,14 @@
 ### v1.2.1 - pushed
 - [x] Alert when a logo is missing for an institution
 - [x] All graph should be red if negative values
+
+### v1.3.0
 - [x] Currency conversion
+- [x] Phone responsive
 
 ### Future
 - [ ] Transaction page
 - [ ] Rearrange files and folders
-- [ ] Phone responsive
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] By account view

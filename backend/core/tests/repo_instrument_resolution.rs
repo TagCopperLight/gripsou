@@ -44,7 +44,9 @@ async fn set_resolved_symbol_leaves_cash_symbol_null(pool: PgPool) {
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
 
-    set_resolved_symbol(&mut conn, id, "CNYEUR=X").await.unwrap();
+    set_resolved_symbol(&mut conn, id, "CNYEUR=X")
+        .await
+        .unwrap();
 
     let (symbol, meta): (Option<String>, serde_json::Value) =
         sqlx::query_as("select symbol, meta from instrument where id = $1")
