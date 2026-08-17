@@ -1,11 +1,13 @@
 import { useState, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Avatar } from "../../components/Avatar";
 import { DeleteAccountModal } from "../../components/DeleteAccountModal";
+import { SessionDetailModal } from "../../components/SessionDetailModal";
 import {
   useChangePassword,
   useUpdateProfile,
@@ -14,6 +16,7 @@ import {
   useRevokeOtherSessions,
 } from "../../api/hooks";
 import { useAuth } from "../../auth/context";
+import type { Session } from "../../api/types";
 import { formatDate, formatRelative } from "../../lib/date";
 import { fileToAvatarDataUrl } from "../../lib/avatar";
 
@@ -93,6 +96,7 @@ export function SettingsAccount() {
 
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [detail, setDetail] = useState<Session | null>(null);
   const onDeleted = async () => {
     setDeleteOpen(false);
     await logout();
@@ -212,11 +216,39 @@ export function SettingsAccount() {
       <Surface className="p-6">
         <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.account.sessions")}</h2>
         <p className="mb-5 text-sm text-fg-faint">{t("settings.account.sessionsDescription")}</p>
-        <div className="flex flex-col gap-3">
+        {/* Phone: one fixed-height summary row per session, details on tap. */}
+        <div className="flex flex-col gap-3 md:hidden">
           {sessions.map((s) => (
-            <div key={s.id} className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setDetail(s)}
+              className="flex items-center gap-3 rounded-xl bg-surface-2 px-4 py-3 text-left"
+            >
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-[15px] text-fg">{s.device}</span>
+                  {s.current && (
+                    <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                      {t("settings.account.thisDevice")}
+                    </span>
+                  )}
+                </span>
+                <span className="truncate text-sm text-fg-faint">
+                  {s.ip ? `${s.ip} · ` : ""}
+                  {t("settings.account.lastActive", { time: formatRelative(s.lastActiveAt) })}
+                </span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-fg-faint" />
+            </button>
+          ))}
+        </div>
+
+        <div className="hidden flex-col gap-3 md:flex">
+          {sessions.map((s) => (
+            <div key={s.id} className="flex flex-col gap-2 rounded-xl bg-surface-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[15px] text-fg">{s.device}</span>
                   {s.current && (
                     <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
@@ -241,7 +273,7 @@ export function SettingsAccount() {
                   variant="ghost"
                   onClick={() => revokeSession.mutate(s.id)}
                   disabled={revokeSession.isPending}
-                  className="text-red hover:text-red"
+                  className="self-end shrink-0 text-red hover:text-red"
                 >
                   {t("settings.account.revokeSession")}
                 </Button>
@@ -276,6 +308,22 @@ export function SettingsAccount() {
           </Button>
         </div>
       </Surface>
+
+      {detail && (
+        <SessionDetailModal
+          session={detail}
+          revoking={revokeSession.isPending}
+          onRevoke={
+            detail.current
+              ? undefined
+              : () => {
+                  revokeSession.mutate(detail.id);
+                  setDetail(null);
+                }
+          }
+          onClose={() => setDetail(null)}
+        />
+      )}
 
       {deleteOpen && (
         <DeleteAccountModal

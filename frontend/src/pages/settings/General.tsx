@@ -110,7 +110,7 @@ export function SettingsGeneral() {
               </span>
             </div>
 
-            <div className="grid grid-cols-3 divide-x divide-surface-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-0 md:divide-x md:divide-surface-2">
               <FieldCol label={t("settings.general.thousandsSeparator")} first>
                 <Select
                   value={prefs.numberGroupSep}
@@ -139,9 +139,9 @@ export function SettingsGeneral() {
               </FieldCol>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-surface-2 px-3.5 py-2.25">
+            <div className="flex flex-col gap-1 rounded-xl bg-surface-2 px-3.5 py-2.25 md:flex-row md:items-center md:justify-between md:gap-0">
               <span className="text-xs text-fg-faint">{t("settings.general.preview")}</span>
-              <span className="flex gap-5 font-mono text-sm">
+              <span className="flex flex-wrap gap-x-5 font-mono text-sm">
                 <span className="text-fg">
                   {formatMoney("1234567.89", previewMoneyOpts)}
                 </span>
@@ -191,7 +191,7 @@ function FieldCol({
   children: ReactNode;
 }) {
   return (
-    <div className={`flex flex-col gap-2 ${first ? "pr-4" : "px-4"}`}>
+    <div className={`flex flex-col gap-2 ${first ? "md:pr-4" : "md:px-4"}`}>
       <span className="text-xs text-fg-faint">{label}</span>
       {children}
     </div>
