@@ -77,6 +77,7 @@ export function ConnectionRow({
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          <div className="hidden items-center gap-1.5 md:flex">
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
             aria-label={t("settings.connections.syncConnection")}
@@ -93,6 +94,7 @@ export function ConnectionRow({
               <Trash2 className="size-4" />
             </IconButton>
           )}
+          </div>
           {open ? (
             <ChevronDown className="size-4 text-fg-faint" />
           ) : (
@@ -101,8 +103,9 @@ export function ConnectionRow({
         </div>
       </div>
 
-      {open && conn.accounts.length > 0 && (
+      {open && (
         <div className="px-4 pb-3">
+          {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-3.5">
             <ul className="flex flex-col divide-y divide-surface">
               {conn.accounts.map((a) => (
@@ -116,7 +119,7 @@ export function ConnectionRow({
                       style={{ background: a.color ?? colorForString(a.name) }}
                     />
                     <span className="text-sm text-fg-dim truncate">{a.name}</span>
-                    <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
+                    <span className="hidden md:inline text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
                       {a.typeLabel}
                     </span>
                   </div>
@@ -126,6 +129,31 @@ export function ConnectionRow({
                 </li>
               ))}
             </ul>
+          </div>
+          )}
+
+          {/* Phone: the header has no room for icon buttons, so the actions
+              live here instead. */}
+          <div className="mt-2 flex items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
+            <button
+              type="button"
+              onClick={stop(() => sync.mutate(conn.id))}
+              disabled={isSyncing}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim disabled:opacity-40"
+            >
+              <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+              {t("settings.connections.syncConnection")}
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={stop(onDelete)}
+                className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-red"
+              >
+                <Trash2 className="size-3.5" />
+                {t("settings.connections.deleteConnection")}
+              </button>
+            )}
           </div>
         </div>
       )}

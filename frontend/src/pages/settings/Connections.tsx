@@ -27,8 +27,8 @@ export function SettingsConnections() {
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
-        <div className="flex flex-col p-5">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col p-4 md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">
               {t("settings.connections.title")}
               {!isLoading && (
@@ -40,7 +40,7 @@ export function SettingsConnections() {
                 </span>
               )}
             </h2>
-            <Button onClick={() => setAddOpen(true)} padded={false} className="inline-flex items-center gap-1.5 text-xs px-2.75 py-1.5">
+            <Button onClick={() => setAddOpen(true)} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
               <Plus className="size-4" />
               {t("settings.connections.addConnection")}
             </Button>

@@ -28,13 +28,14 @@ describe("SettingsUsers", () => {
 
   it("renders a row per user with the member count", async () => {
     render(withClient(<SettingsUsers />));
-    expect(await screen.findByText("Marie Laurent")).toBeInTheDocument();
+    // Phone and desktop layouts are both in the DOM (CSS picks one).
+    expect(await screen.findAllByText("Marie Laurent")).not.toHaveLength(0);
     expect(screen.getByText(/3 members/)).toBeInTheDocument();
   });
 
   it("shows reset and delete only for other users, not the self row", async () => {
     render(withClient(<SettingsUsers />));
-    await screen.findByText("Marie Laurent");
+    await screen.findAllByText("Marie Laurent");
     // The self row has no actions: its password lives in the Account tab.
     expect(screen.getAllByLabelText("Reset password")).toHaveLength(2);
     expect(screen.getAllByLabelText("Delete user")).toHaveLength(2);
@@ -42,14 +43,14 @@ describe("SettingsUsers", () => {
 
   it("locks the self row's role (a non-button badge)", async () => {
     render(withClient(<SettingsUsers />));
-    await screen.findByText("Julien Bourdet");
+    await screen.findAllByText("Julien Bourdet");
     // Only the self row is Admin; it must not be a clickable button.
     expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
   });
 
   it("toggles a member's role locally on click", async () => {
     render(withClient(<SettingsUsers />));
-    await screen.findByText("Marie Laurent");
+    await screen.findAllByText("Marie Laurent");
     const memberTags = screen.getAllByRole("button", { name: "Member" });
     expect(memberTags).toHaveLength(2);
     fireEvent.click(memberTags[0]);
@@ -59,7 +60,7 @@ describe("SettingsUsers", () => {
 
   it("renders the Invite user button", async () => {
     render(withClient(<SettingsUsers />));
-    await screen.findByText("Marie Laurent");
+    await screen.findAllByText("Marie Laurent");
     expect(screen.getByRole("button", { name: "Invite user" })).toBeInTheDocument();
   });
 });
