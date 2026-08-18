@@ -53,3 +53,4 @@
 - [ ] Changelog in the readme
 - [ ] When graph is red, change the legend
 - [ ] Main chart graph date is in the side
+- [ ] Version shown in the app
