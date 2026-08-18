@@ -36,9 +36,12 @@
 - [x] Alert when a logo is missing for an institution
 - [x] All graph should be red if negative values
 
-### v1.3.0
+### v1.3.0 - pushed
 - [x] Currency conversion
 - [x] Phone responsive
+
+### v1.3.1
+
 
 ### Future
 - [ ] Transaction page
@@ -47,5 +50,6 @@
     - [ ] Parameterize webhooks
 - [ ] By account view
 - [ ] Screenshot in readme
+- [ ] Changelog in the readme
 - [ ] When graph is red, change the legend
 - [ ] Main chart graph date is in the side
