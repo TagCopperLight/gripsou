@@ -34,12 +34,15 @@
     "equity": "Stock",
     "crypto": "Crypto"
   },
-  "categories": {
-    "cash": "Cash",
+  "accountTypes": {
+    "checking": "Checking",
     "savings": "Savings",
     "pea": "PEA",
     "brokerage": "Brokerage",
-    "crypto": "Crypto"
+    "life_insurance": "Life insurance",
+    "retirement": "Retirement",
+    "crypto": "Crypto",
+    "multiple": "Multiple"
   },
   "time": {
     "justNow": "just now",
@@ -87,7 +90,7 @@
         "asset": "ASSET",
         "quantity": "QUANTITY",
         "account": "ACCOUNT",
-        "category": "CATEGORY",
+        "accountType": "ACCOUNT TYPE",
         "value": "VALUE",
         "unrealizedPnl": "UNREALIZED P/L",
         "thirtyDays": "30D"

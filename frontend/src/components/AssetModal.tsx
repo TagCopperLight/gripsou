@@ -13,7 +13,7 @@ import { HoldingBadge } from "./HoldingBadge";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { colorForString } from "../lib/palette";
-import { KIND_LABEL_KEY, categoryLabel, type Holding, type Purchase } from "../api/types";
+import { KIND_LABEL_KEY, accountTypeLabel, type Holding, type Purchase } from "../api/types";
 import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
 
@@ -192,7 +192,7 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
               <div className="flex items-center gap-2 text-sm leading-none">
                 <span className="font-mono text-fg-faint">{holding.ticker} · </span>
                 <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                  {categoryLabel(t, holding.category, holding.categoryLabel)}
+                  {accountTypeLabel(t, holding.accountType, holding.accountTypeLabel)}
                 </span>
                 <span className="font-mono text-fg-faint"> · </span>
                 <span className="flex items-center gap-1.5 text-fg-dim">

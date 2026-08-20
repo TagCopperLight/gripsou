@@ -34,8 +34,8 @@ describe("EditAccountModal", () => {
         if (typeof url === "string" && url.endsWith("/api/account-types")) {
           return new Response(
             JSON.stringify([
-              { key: "checking", label: "Checking", category: "cash", categoryLabel: "Cash" },
-              { key: "savings", label: "Savings", category: "savings", categoryLabel: "Savings" },
+              { key: "checking", label: "Checking" },
+              { key: "savings", label: "Savings" },
             ]),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );

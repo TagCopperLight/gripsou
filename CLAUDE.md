@@ -39,7 +39,7 @@ Currency is part of the same idea: an FX rate is just a price of a cash instrume
 ## Conventions that bite if missed
 
 - **Money is `rust_decimal::Decimal` ↔ Postgres `NUMERIC`, never floats.** The API sends decimals as **strings**; the frontend formats them.
-- **New account types / categories are data inserts** into the `account_type` / `category` reference tables (see `migrations/0002_seed_reference.sql`), **not migrations**.
+- **New account types are data inserts** into the `account_type` reference table (see `migrations/0002_seed_reference.sql`), **not migrations**.
 - **Escape hatches:** `*_meta` JSONB columns and `external_id` (for idempotent provider upserts/dedup) let adapters absorb provider-specific weirdness without schema churn.
 - **sqlx is compile-time-checked.** Once `query!`/`query_as!` macros are added, `cargo build` requires a reachable `DATABASE_URL` or committed `.sqlx/` offline data (`cargo sqlx prepare`). The current scaffold has no such queries yet, so it builds without a DB.
 - **Config split:** secrets/infra via env (`DATABASE_URL`, `ENCRYPTION_KEY`, `POWENS_*` — see `.env.example`); runtime/admin-tunable values (`cors_origins`, `enabled_providers`) live in the `app_settings` DB row, not env.

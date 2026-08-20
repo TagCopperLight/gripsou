@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import { aggregateCash } from "./holdings";
 import type { Holding } from "../api/types";
 
-function cash(id: string, account: string, value: string): Holding {
+function cash(
+  id: string,
+  account: string,
+  value: string,
+  accountType = "checking",
+  accountTypeLabel = "Checking",
+): Holding {
   return {
     id,
     ticker: "EUR",
@@ -12,8 +18,8 @@ function cash(id: string, account: string, value: string): Holding {
     accountId: account,
     accountName: account,
     accountColor: "#888",
-    category: "cash",
-    categoryLabel: "Cash",
+    accountType,
+    accountTypeLabel,
     qty: value,
     price: "1",
     currency: "EUR",
@@ -40,8 +46,8 @@ function equity(id: string, value: string): Holding {
     accountId: "a",
     accountName: "Trade Republic",
     accountColor: "#555",
-    category: "brokerage",
-    categoryLabel: "Brokerage",
+    accountType: "brokerage",
+    accountTypeLabel: "Brokerage",
     qty: "1",
     price: value,
     currency: "EUR",
@@ -93,6 +99,36 @@ describe("aggregateCash", () => {
     expect(cashRows).toHaveLength(2); // EUR merged + USD lone
     expect(cashRows.find((h) => h.ticker === "EUR")!.value).toBe("300");
     expect(cashRows.find((h) => h.ticker === "USD")!.value).toBe("50");
+  });
+
+  it("marks the merged row \"multiple\" when account types differ", () => {
+    const result = aggregateCash(
+      [
+        cash("c1", "Checking", "100", "checking", "Checking"),
+        cash("c2", "PEA", "200", "pea", "PEA"),
+      ],
+      "Multiple accounts",
+    );
+
+    const cashRows = result.filter((h) => h.kind === "cash");
+    expect(cashRows).toHaveLength(1);
+    expect(cashRows[0].accountType).toBe("multiple");
+    expect(cashRows[0].accountTypeLabel).toBe("Multiple");
+  });
+
+  it("keeps the shared account type when merged rows agree", () => {
+    const result = aggregateCash(
+      [
+        cash("c1", "Checking A", "100", "savings", "Savings"),
+        cash("c2", "Checking B", "200", "savings", "Savings"),
+      ],
+      "Multiple accounts",
+    );
+
+    const cashRows = result.filter((h) => h.kind === "cash");
+    expect(cashRows).toHaveLength(1);
+    expect(cashRows[0].accountType).toBe("savings");
+    expect(cashRows[0].accountTypeLabel).toBe("Savings");
   });
 
   it("keeps the fx warning when merging cash rows", () => {

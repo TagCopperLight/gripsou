@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into account (connection_id, name, currency, type_key, provider_meta, external_id, color)\n        values ($1, $2, $3, $4, $5, $6,\n            ($7::text[])[1 + floor(random() * array_length($7::text[], 1))::int])\n        on conflict (connection_id, external_id) where external_id is not null\n        do update set\n            currency = excluded.currency,\n            provider_meta = excluded.provider_meta\n        returning id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c3ca9d02f1d969285a592c3fceaa45656d2c5dbff47afb183d8af20deee94bc0"
+}

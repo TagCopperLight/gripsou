@@ -8,7 +8,7 @@ import type { Holding } from "../api/types";
 const BASE: Holding = {
   id: "h1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
   accountId: "a1", accountName: "PEA", accountColor: "#6ea8fe",
-  category: "pea", categoryLabel: "PEA", qty: "10", price: "100", currency: "EUR",
+  accountType: "pea", accountTypeLabel: "PEA", qty: "10", price: "100", currency: "EUR",
   priceCurrency: "EUR", accountCurrency: "EUR",
   invested: "800", investedNative: "800", value: "1000", gl: "200", glPct: "0.25",
   fxMissing: false, spark: null,

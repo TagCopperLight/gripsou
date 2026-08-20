@@ -6,7 +6,7 @@ import { Select } from "./Select";
 import { Button } from "./Button";
 import { ACCOUNT_PALETTE } from "../lib/palette";
 import { useAccountTypes, useUpdateAccount } from "../api/hooks";
-import type { Account } from "../api/types";
+import { accountTypeLabel, type Account } from "../api/types";
 
 type EditAccountModalProps = {
   account: Account;
@@ -36,9 +36,15 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
     };
   }, [onClose]);
 
-  const typeOptions = (types ?? []).map((t) => ({ value: t.key, label: t.label }));
-  const typeLabel =
-    types?.find((t) => t.key === typeKey)?.label ?? account.typeLabel;
+  const typeOptions = (types ?? []).map((ty) => ({
+    value: ty.key,
+    label: accountTypeLabel(t, ty.key, ty.label),
+  }));
+  const typeLabel = accountTypeLabel(
+    t,
+    typeKey,
+    types?.find((ty) => ty.key === typeKey)?.label ?? account.typeLabel,
+  );
 
   const dirty =
     name !== account.name || typeKey !== account.typeKey || color !== account.color;

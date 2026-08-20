@@ -13,12 +13,12 @@ export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
   crypto: "holdingKind.crypto",
 };
 
-// Categories are data-driven: the backend sends a stable `key` plus an English
-// `label`. We translate `categories.<key>` and fall back to the backend label
-// when a key has no locale entry yet (e.g. a category added to the DB but not
-// the locale files).
-export function categoryLabel(t: TFunction, key: string, fallback: string): string {
-  return t(`categories.${key}`, { defaultValue: fallback });
+// Account types are data-driven: the backend sends a stable `key` plus an
+// English `label`. We translate `accountTypes.<key>` and fall back to the
+// backend label when a key has no locale entry yet (e.g. a type added to the DB
+// but not the locale files).
+export function accountTypeLabel(t: TFunction, key: string, fallback: string): string {
+  return t(`accountTypes.${key}`, { defaultValue: fallback });
 }
 
 export type NetWorthPoint = { t: number; netWorth: string; invested: string };
@@ -34,8 +34,8 @@ export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSumma
 export type DistributionAccount = {
   id: string;
   name: string;
-  category: string;
-  categoryLabel: string;
+  accountType: string;
+  accountTypeLabel: string;
   color: string;
   value: string;
   /** A holding in this slice could not be valued, so the slice understates. */
@@ -54,8 +54,8 @@ export type Holding = {
   accountId: string;
   accountName: string;
   accountColor: string;
-  category: string;
-  categoryLabel: string;
+  accountType: string;
+  accountTypeLabel: string;
   qty: string;
   /** Unit price, denominated in `priceCurrency` — NOT in `currency`. */
   price: string;
@@ -95,8 +95,6 @@ export type Account = {
 export type AccountType = {
   key: string;
   label: string;
-  category: string;
-  categoryLabel: string;
 };
 
 export type AccountSeries = {

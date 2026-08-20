@@ -275,8 +275,10 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
-    assert_eq!(rows[0].category_key, "cash");
-    assert_eq!(rows[0].category_label, "Cash");
+    // The account is `checking`; before the category table was dropped this
+    // read "cash"/"Cash" via checking -> cash.
+    assert_eq!(rows[0].type_key, "checking");
+    assert_eq!(rows[0].type_label, "Checking");
     assert_eq!(
         rows[0].value,
         Decimal::new(120, 0),
@@ -697,11 +699,8 @@ async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<
     let keys: Vec<&str> = types.iter().map(|t| t.key.as_str()).collect();
     assert!(keys.contains(&"checking"));
     assert!(keys.contains(&"brokerage"));
-    assert_eq!(
-        types.len(),
-        5,
-        "five types seeded in 0002_seed_reference.sql"
-    );
+    assert!(keys.contains(&"life_insurance"));
+    assert!(keys.contains(&"retirement"));
     Ok(())
 }
 

@@ -75,7 +75,7 @@ user ─1∞─ connection ─1∞─ account ─1∞─ holding ─∞1─ inst
                                    │              └─1∞─ price
                                    ├─1∞─ holding_snapshot   (★ net-worth source)
                                    └─1∞─ transaction ─∞1─ instrument?
-account ─∞1─ account_type ─∞1─ category
+account ─∞1─ account_type
 user ─1∞─ invite_token
 ```
 
@@ -132,11 +132,13 @@ JSONB; `external_id` enables idempotent provider upserts.
 - `external_id`, `created_at`
 
 **account_type** (reference — extensible by data insert, not migration)
-- `key` (PK: `checking`, `savings`, `pea`, `brokerage`, …), `label`,
-  `category_key` → category.key
+- `key` (PK: `checking`, `savings`, `pea`, `brokerage`, `life_insurance`,
+  `retirement`, `crypto`), `label`
 
-**category** (reference)
-- `key` (PK: `cash`, `pea`, `brokerage`, …), `label`
+There is no separate category table. It existed, seeded 1:1 with `account_type`,
+and was dropped in `0013` because the hierarchy carried no information.
+Liabilities (`loan`, `card`) are skipped at the adapter rather than typed; they
+get their own types when net worth becomes assets − liabilities.
 
 #### Positions & instruments
 
@@ -182,7 +184,7 @@ Buy/sell rows _are_ the lots that build the "capital invested" staircase.
 |---|---|
 | Net-worth chart (24h…max) + capital invested | `holding_snapshot` anchors qty/cost; × `price(t)` intraday → Σ. Invested = Σ `cost_basis` over time |
 | Account distribution pie | Latest `holding_snapshot` grouped by account (+ `account.color`) |
-| Holdings list + 30d sparkline | `holding` × `instrument` × latest `price`; sparkline = `price` last 30d; category via account→type→category |
+| Holdings list + 30d sparkline | `holding` × `instrument` × latest `price`; sparkline = `price` last 30d; account type via account→account_type |
 | Asset modal mode 1 (asset) | `price` series (unit price) |
 | Asset modal mode 2 (purchases) | `transaction` buys → invested staircase; `holding.quantity` × `price` → total value |
 | Accounts stacked-area | `holding_snapshot` summed per account over time |
@@ -194,8 +196,17 @@ Buy/sell rows _are_ the lots that build the "capital invested" staircase.
 - **Net worth / account value are aggregated from `holding_snapshot`**, not stored
   in a separate table. A materialized rollup can be added later if charts get
   slow — premature now.
-- **Reference tables** (`account_type`, `category`) make new types/categories a
-  data insert, never a migration.
+- **The `account_type` reference table** makes a new type a data insert, never a
+  migration.
+- **Powens' `real_estate` account type deliberately falls through to the
+  `brokerage` fallback** in `map_type_key`, so a real-estate placement displays
+  as "Brokerage". This is intentional, not an oversight — do not give it its
+  own type without reconsidering the tradeoff.
+- **Liabilities are skipped, not typed.** `map_type_key` returns `None` for
+  Powens' `loan` and `card` values (the only two liability values Powens
+  actually emits) and `map_sync` skips those accounts and their holdings
+  entirely. They get their own account types if and when net worth becomes
+  assets − liabilities.
 - **Escape hatches** (`*_meta` JSONB, `external_id`) let any future provider stash
   specifics and dedup without schema churn. The DB stays gripsou-shaped; adapters
   absorb the weirdness.
@@ -370,7 +381,7 @@ at compile time.
 | Manual accounts/transactions | `account.connection_id` nullable; `ManualAdapter` implements the same trait |
 | Multi-currency | Implemented. An FX rate is a `price` row on the per-currency cash `instrument`; `fx_asof` / `unit_value_asof` / `reporting_fx_asof` (migration 0010) convert at read time. A new currency needs no migration — the cash instrument and its Yahoo `{cur}{pivot}=X` pair are created on first sight. |
 | Transactions page | `transaction` table already generalist and populated |
-| New account types / categories | Insert into `account_type` / `category` reference tables |
+| New account types | Insert into the `account_type` reference table |
 | ETF sector/country breakdown | `instrument.meta` JSONB |
 | Persistent sessions / connected devices | ✓ Delivered via opaque `session` table (v1) |
 | 2FA | Future; slots into opaque session auth without redesign |
