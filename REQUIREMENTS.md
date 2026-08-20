@@ -54,19 +54,23 @@ It's a pie chart showing the distribution of the net worth across the different 
 
 ### Holdings
 
-Holdings are every asset you own, it's composed of all liquid and non-liquid assets (cash, stocks, crypto, etc ...). There are four categories:
-- Cash
-- Brokerage
+Holdings are every asset you own, it's composed of all liquid and non-liquid assets (cash, stocks, crypto, etc ...). Each holding belongs to an account, and each account has a type:
+- Checking
+- Savings
 - PEA
+- Brokerage
+- Life insurance
+- Retirement
+- Crypto
 
-But categories could be added in the future.
+But account types could be added in the future.
 
-They are shown in a list, searchable, and filterable by category. In the list there's:
+They are shown in a list, searchable, and filterable by account type. In the list there's:
 - Asset logo
 - Asset name
 - Quantity owned
 - In what account it is
-- Category
+- Account type
 - Current value
 - Unrealized gain/loss (in value and percent)
 - A small chart of the asset's value evolution over time (last 30 days)
@@ -75,7 +79,7 @@ They are shown in a list, searchable, and filterable by category. In the list th
 
 Clicking on an asset in the holdings list opens and very large modal (all the page size) that details the asset. The modals shows :
 
-- Asset logo, name, category
+- Asset logo, name, account type
 
 Then there's two modes you can chose. One that details the current asset, and one that details the purchases of this asset.
 

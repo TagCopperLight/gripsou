@@ -32,6 +32,9 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
     const value = items.reduce((sum, h) => sum + Number(h.value), 0);
     const qty = items.reduce((sum, h) => sum + Number(h.qty), 0);
     const first = items[0];
+    // The merged row can span accounts of different types (a checking EUR
+    // balance and a Livret A). Only claim a type when they all agree.
+    const sameType = items.every((h) => h.accountType === first.accountType);
     merged.push({
       ...first,
       id: `cash:${first.ticker}`,
@@ -39,8 +42,7 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       accountName: multipleLabel,
       accountColor: ACCOUNT_PALETTE[0],
       logo: first.logo,
-      category: "cash",
-      categoryLabel: "Cash",
+      ...(!sameType && { accountType: "multiple", accountTypeLabel: "Multiple" }),
       qty: String(qty),
       invested: String(value),
       value: String(value),

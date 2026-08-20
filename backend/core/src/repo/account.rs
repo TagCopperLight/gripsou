@@ -1,6 +1,7 @@
 //! Upsert a canonical account under a connection. On conflict, only
-//! provider-derived fields are updated; user-editable `name`/`color` are
-//! left untouched so a re-sync never clobbers a rename or recolor.
+//! provider-derived fields are updated; user-editable `name`/`color`/
+//! `type_key` are left untouched so a re-sync never clobbers a rename,
+//! recolor, or a user's chosen account type.
 
 use std::sync::OnceLock;
 
@@ -32,7 +33,6 @@ pub async fn upsert_account(
         on conflict (connection_id, external_id) where external_id is not null
         do update set
             currency = excluded.currency,
-            type_key = excluded.type_key,
             provider_meta = excluded.provider_meta
         returning id
         "#,

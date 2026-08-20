@@ -11,15 +11,21 @@ use serde_json::json;
 use crate::powens::model::{BankAccount, Connection, Investment};
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
-/// `account_type` keys. Total: any unrecognized value falls back to `brokerage`.
-pub fn map_type_key(name: &str) -> &'static str {
-    match name {
-        "checking" => "checking",
-        "savings" | "livret_a" | "livret_b" | "ldds" | "cel" | "csl" | "cat" | "pel"
-        | "deposit" => "savings",
+/// `account_type` keys. `None` marks a liability (loan, card):
+/// gripsou tracks assets only for now, and mapping these onto an asset type
+/// would add their balance to net worth with the wrong sign.
+pub fn map_type_key(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "checking" | "joint" | "deposit" => "checking",
+        "savings" | "livret_a" | "livret_b" | "ldds" | "cel" | "csl" | "cat" | "pel" => "savings",
         "pea" => "pea",
+        "lifeinsurance" => "life_insurance",
+        "per" | "perp" | "pee" | "perco" | "madelin" | "article83" | "rsp" => "retirement",
+        "loan" | "card" => return None,
+        // Anything unrecognised is assumed to be an invest wrapper. A new
+        // liability type would be caught by the arm above once named.
         _ => "brokerage",
-    }
+    })
 }
 
 pub fn is_invest_type(name: &str) -> bool {
@@ -29,10 +35,7 @@ pub fn is_invest_type(name: &str) -> bool {
             | "deposit"
             | "joint"
             | "card"
-            | "deferred_card"
             | "loan"
-            | "mortgage"
-            | "consumercredit"
             | "savings"
             | "livret_a"
             | "livret_b"
@@ -71,7 +74,7 @@ pub fn map_institution(connections: &[Connection]) -> Institution {
 /// Map a Powens bank account onto a canonical account. The provider-supplied
 /// `original_name` seeds the display name (gripsou later preserves user edits);
 /// `meta` stashes provider specifics for debugging and the escape hatch.
-pub fn map_account(acct: &BankAccount) -> CanonicalAccount {
+pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
     let type_name = acct.r#type.as_deref().unwrap_or("unknown");
     let is_invest = is_invest_type(type_name);
 
@@ -89,7 +92,7 @@ pub fn map_account(acct: &BankAccount) -> CanonicalAccount {
     CanonicalAccount {
         external_id: acct.id.to_string(),
         name,
-        type_key: map_type_key(type_name).to_string(),
+        type_key: type_key.to_string(),
         currency,
         meta: json!({
             "powens_type": type_name,
@@ -237,7 +240,12 @@ pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncRes
         if acct.deleted.is_some() {
             continue;
         }
-        result.accounts.push(map_account(acct));
+        // A liability maps to no asset type; skip the account entirely so
+        // neither it nor its holdings reach the database.
+        let Some(type_key) = map_type_key(acct.r#type.as_deref().unwrap_or("unknown")) else {
+            continue;
+        };
+        result.accounts.push(map_account(acct, type_key));
 
         let account_currency = acct.currency.as_ref().map(|c| c.id.as_str()).unwrap_or("");
 

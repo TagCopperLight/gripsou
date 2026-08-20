@@ -9,7 +9,7 @@ import { Percent } from "./Percent";
 import { EditAccountModal } from "./EditAccountModal";
 import { withAlpha } from "../lib/color";
 import { formatRelative } from "../lib/date";
-import type { Account } from "../api/types";
+import { accountTypeLabel, type Account } from "../api/types";
 
 type AccountCardProps = {
   account: Account;
@@ -37,7 +37,9 @@ export function AccountCard({ account, proportion }: AccountCardProps) {
         </span>
         <div className="flex flex-col justify-between h-8.5">
           <p className="text-fg font-semibold text-[15px] leading-none">{account.name}</p>
-          <p className="text-fg-faint text-xs leading-none">{account.typeLabel}</p>
+          <p className="text-fg-faint text-xs leading-none">
+            {accountTypeLabel(t, account.typeKey, account.typeLabel)}
+          </p>
         </div>
       </div>
 

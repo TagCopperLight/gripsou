@@ -111,11 +111,11 @@ pub struct HoldingRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: Option<String>,
-    /// Stable category key (`cash`, `pea`, …); the frontend translates it,
-    /// falling back to `category_label`.
-    pub category_key: String,
-    /// English category label from the reference table — the i18n fallback.
-    pub category_label: String,
+    /// Stable account-type key (`checking`, `pea`, …); the frontend translates
+    /// it, falling back to `type_label`.
+    pub type_key: String,
+    /// English account-type label from the reference table — the i18n fallback.
+    pub type_label: String,
     pub quantity: Decimal,
     /// Latest unit price, in `price_currency` (NOT `currency`).
     pub price: Option<Decimal>,
@@ -151,8 +151,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         account_id: Uuid,
         account_name: String,
         account_color: Option<String>,
-        category_key: String,
-        category_label: String,
+        type_key: String,
+        type_label: String,
         quantity: Decimal,
         price: Option<Decimal>,
         composition: Option<serde_json::Value>,
@@ -191,8 +191,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                a.id            as "account_id!",
                a.name          as "account_name!",
                a.color         as "account_color",
-               cat.key         as "category_key!",
-               cat.label       as "category_label!",
+               a.type_key      as "type_key!",
+               t.label         as "type_label!",
                h.quantity      as "quantity!",
                px.unit_price   as "price?",
                coalesce(
@@ -211,7 +211,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         join connection c   on c.id = a.connection_id
         join instrument i   on i.id = h.instrument_id
         join account_type t on t.key = a.type_key
-        join category cat   on cat.key = t.category_key
         left join lateral (
             select p.unit_price, p.currency
             from price p
@@ -262,8 +261,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             account_id: b.account_id,
             account_name: b.account_name,
             account_color: b.account_color,
-            category_key: b.category_key,
-            category_label: b.category_label,
+            type_key: b.type_key,
+            type_label: b.type_label,
             quantity: b.quantity,
             price: b.price,
             spark,
@@ -476,23 +475,18 @@ pub async fn account_series(
 pub struct AccountTypeRow {
     pub key: String,
     pub label: String,
-    pub category_key: String,
-    pub category_label: String,
 }
 
-/// All account types from the reference table (joined to category), ordered by
-/// label. New types are data inserts here — no code change needed to surface
-/// them in the edit-account dropdown.
+/// All account types from the reference table, ordered by label. New types are
+/// data inserts here — no code change needed to surface them in the
+/// edit-account dropdown.
 pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountTypeRow,
         r#"
-        select t.key     as "key!",
-               t.label   as "label!",
-               cat.key   as "category_key!",
-               cat.label as "category_label!"
+        select t.key   as "key!",
+               t.label as "label!"
         from account_type t
-        join category cat on cat.key = t.category_key
         order by t.label
         "#,
     )
@@ -530,8 +524,8 @@ pub struct DistributionRow {
     pub account_id: Uuid,
     pub name: String,
     pub color: Option<String>,
-    pub category_key: String,
-    pub category_label: String,
+    pub type_key: String,
+    pub type_label: String,
     pub value: Decimal,
     /// At least one still-held holding in this slice could not be valued, so the
     /// slice is understated.
@@ -570,16 +564,15 @@ pub async fn distribution(
         select a.id   as "account_id!",
                a.name as "name!",
                a.color,
-               cat.key   as "category_key!",
-               cat.label as "category_label!",
+               a.type_key as "type_key!",
+               t.label    as "type_label!",
                sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) as "value!",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!"
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
-        join category cat   on cat.key = t.category_key
-        group by a.id, a.name, a.color, cat.key, cat.label
+        group by a.id, a.name, a.color, a.type_key, t.label
         order by sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) desc
         "#,
         user_id,

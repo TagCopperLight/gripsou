@@ -8,7 +8,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { CardState } from "./CardState";
 import { desaturate } from "../lib/color";
-import { categoryLabel, type DistributionAccount } from "../api/types";
+import { accountTypeLabel, type DistributionAccount } from "../api/types";
 import { useDistribution } from "../api/hooks";
 
 const SURFACE = "#13110f";
@@ -107,7 +107,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
                   />
                   <span className="min-w-0 truncate text-sm text-fg">{a.name}</span>
                   <span className="hidden md:inline font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5 shrink-0">
-                    {categoryLabel(t, a.category, a.categoryLabel)}
+                    {accountTypeLabel(t, a.accountType, a.accountTypeLabel)}
                   </span>
                   <Percent
                     value={Number(a.value) / total}

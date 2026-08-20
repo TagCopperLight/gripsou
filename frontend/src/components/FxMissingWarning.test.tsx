@@ -42,8 +42,8 @@ const slice = (fxMissing: boolean): DistributionAccount[] => [
   {
     id: "a1",
     name: "Brokerage account",
-    category: "pea",
-    categoryLabel: "PEA",
+    accountType: "pea",
+    accountTypeLabel: "PEA",
     color: "#6ea8fe",
     value: "1000",
     fxMissing,

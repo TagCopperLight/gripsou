@@ -76,10 +76,10 @@ impl NetWorthResponse {
 pub struct DistributionAccount {
     pub id: String,
     pub name: String,
-    /// Stable category key; the frontend translates it via i18n.
-    pub category: String,
-    /// English category label — i18n fallback when the key has no locale entry.
-    pub category_label: String,
+    /// Stable account-type key; the frontend translates it via i18n.
+    pub account_type: String,
+    /// English account-type label — i18n fallback when the key has no locale entry.
+    pub account_type_label: String,
     pub color: String,
     pub value: String,
     /// A holding in this slice could not be valued, so the slice understates.
@@ -91,8 +91,8 @@ impl DistributionAccount {
         DistributionAccount {
             id: r.account_id.to_string(),
             name: r.name,
-            category: r.category_key,
-            category_label: r.category_label,
+            account_type: r.type_key,
+            account_type_label: r.type_label,
             color: r.color.unwrap_or_else(|| "#888888".to_string()),
             value: r.value.to_string(),
             fx_missing: r.fx_missing,
@@ -111,10 +111,10 @@ pub struct Holding {
     pub account_id: String,
     pub account_name: String,
     pub account_color: String,
-    /// Stable category key; the frontend translates it via i18n.
-    pub category: String,
-    /// English category label — i18n fallback when the key has no locale entry.
-    pub category_label: String,
+    /// Stable account-type key; the frontend translates it via i18n.
+    pub account_type: String,
+    /// English account-type label — i18n fallback when the key has no locale entry.
+    pub account_type_label: String,
     pub qty: String,
     /// Unit price, denominated in `price_currency` — NOT in `currency`.
     pub price: String,
@@ -179,8 +179,8 @@ impl Holding {
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
             account_color: r.account_color.unwrap_or_else(|| "#888888".to_string()),
-            category: r.category_key,
-            category_label: r.category_label,
+            account_type: r.type_key,
+            account_type_label: r.type_label,
             qty: r.quantity.to_string(),
             price: price.to_string(),
             currency: r.currency,
@@ -345,10 +345,6 @@ impl AccountSeriesResponse {
 pub struct AccountType {
     pub key: String,
     pub label: String,
-    /// Stable category key; the frontend translates it via i18n.
-    pub category: String,
-    /// English category label — i18n fallback when the key has no locale entry.
-    pub category_label: String,
 }
 
 impl AccountType {
@@ -356,8 +352,6 @@ impl AccountType {
         AccountType {
             key: r.key,
             label: r.label,
-            category: r.category_key,
-            category_label: r.category_label,
         }
     }
 }

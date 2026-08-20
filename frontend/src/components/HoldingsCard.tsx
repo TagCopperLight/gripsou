@@ -11,7 +11,7 @@ import { CardState } from "./CardState";
 import { HoldingBadge } from "./HoldingBadge";
 import { formatQuantity } from "../lib/money";
 import { aggregateCash } from "../lib/holdings";
-import { KIND_LABEL_KEY, categoryLabel, type Holding } from "../api/types";
+import { KIND_LABEL_KEY, accountTypeLabel, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
 
 type SortKey = "asset" | "qty" | "value" | "pnl";
@@ -32,7 +32,7 @@ const COLUMNS: Column[] = [
   { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset" },
   { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", desktopOnly: true },
   { labelKey: "dashboard.holdings.columns.account", align: "left", desktopOnly: true },
-  { labelKey: "dashboard.holdings.columns.category", align: "left", desktopOnly: true },
+  { labelKey: "dashboard.holdings.columns.accountType", align: "left", desktopOnly: true },
   { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value" },
   { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
   { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", desktopOnly: true },
@@ -85,18 +85,18 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
     [data, t],
   );
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
-  const [category, setCategory] = useState("All");
+  const [accountType, setAccountType] = useState("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
 
-  // Filter by stable category key; keep the backend label around as the i18n
-  // fallback for each key.
-  const categories = useMemo(
-    () => ["All", ...new Set(holdings.map((h) => h.category))],
+  // Filter by stable account-type key; keep the backend label around as the
+  // i18n fallback for each key.
+  const accountTypes = useMemo(
+    () => ["All", ...new Set(holdings.map((h) => h.accountType))],
     [holdings],
   );
-  const categoryFallback = useMemo(
-    () => new Map(holdings.map((h) => [h.category, h.categoryLabel])),
+  const accountTypeFallback = useMemo(
+    () => new Map(holdings.map((h) => [h.accountType, h.accountTypeLabel])),
     [holdings],
   );
 
@@ -109,13 +109,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
     const q = query.trim().toLowerCase();
     const filtered = holdings.filter(
       (h) =>
-        (category === "All" || h.category === category) &&
+        (accountType === "All" || h.accountType === accountType) &&
         (q === "" ||
           h.name.toLowerCase().includes(q) ||
           h.ticker.toLowerCase().includes(q)),
     );
     return sort ? [...filtered].sort((a, b) => compare(a, b, sort)) : filtered;
-  }, [holdings, category, query, sort]);
+  }, [holdings, accountType, query, sort]);
 
   const toggleSort = (key: SortKey) =>
     setSort((prev) =>
@@ -156,13 +156,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         ) : (
         <>
         <div className="flex flex-wrap items-center gap-1.5 mt-4">
-          {categories.map((c) => {
-            const selected = c === category;
+          {accountTypes.map((c) => {
+            const selected = c === accountType;
             return (
               <button
                 key={c}
                 type="button"
-                onClick={() => setCategory(c)}
+                onClick={() => setAccountType(c)}
                 className={`rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 ${
                   selected
                     ? "bg-fg text-bg"
@@ -171,7 +171,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               >
                 {c === "All"
                   ? t("dashboard.holdings.all")
-                  : categoryLabel(t, c, categoryFallback.get(c) ?? c)}
+                  : accountTypeLabel(t, c, accountTypeFallback.get(c) ?? c)}
               </button>
             );
           })}
@@ -185,7 +185,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 return (
                   <th
                     key={col.labelKey}
-                    className={`pb-2 px-2 md:px-3 text-[11px] font-medium tracking-wide font-mono ${
+                    className={`pb-2 px-2 md:px-3 text-[11px] font-medium tracking-wide font-mono whitespace-nowrap ${
                       col.align === "right" ? "text-right" : "text-left"
                     } ${col.desktopOnly ? HIDDEN_ON_PHONE : ""}`}
                   >
@@ -268,10 +268,10 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       </span>
                     </div>
                   </td>
-                  {/* CATEGORY */}
+                  {/* ACCOUNT TYPE */}
                   <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                      {categoryLabel(t, h.category, h.categoryLabel)}
+                      {accountTypeLabel(t, h.accountType, h.accountTypeLabel)}
                     </span>
                   </td>
                   {/* VALUE */}

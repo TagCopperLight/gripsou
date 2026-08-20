@@ -43,26 +43,32 @@ fn investment(fx: &Fixture, id: i64) -> &Investment {
 
 #[test]
 fn maps_account_types_onto_seeded_keys() {
-    assert_eq!(map::map_type_key("checking"), "checking");
-    for t in [
-        "savings", "livret_a", "livret_b", "ldds", "cel", "csl", "cat", "pel", "deposit",
-    ] {
-        assert_eq!(map::map_type_key(t), "savings", "{t}");
+    for t in ["checking", "joint", "deposit"] {
+        assert_eq!(map::map_type_key(t), Some("checking"), "{t}");
     }
-    assert_eq!(map::map_type_key("pea"), "pea");
-    assert_eq!(map::map_type_key("market"), "brokerage");
-    // Everything else falls back to brokerage, including future/unknown values.
     for t in [
-        "lifeinsurance",
-        "per",
-        "perco",
-        "perp",
-        "pee",
-        "loan",
-        "unknown",
-        "totally_new",
+        "savings", "livret_a", "livret_b", "ldds", "cel", "csl", "cat", "pel",
     ] {
-        assert_eq!(map::map_type_key(t), "brokerage", "{t}");
+        assert_eq!(map::map_type_key(t), Some("savings"), "{t}");
+    }
+    assert_eq!(map::map_type_key("pea"), Some("pea"));
+    for t in ["market", "capitalisation", "crowdlending"] {
+        assert_eq!(map::map_type_key(t), Some("brokerage"), "{t}");
+    }
+    assert_eq!(map::map_type_key("lifeinsurance"), Some("life_insurance"));
+    for t in ["per", "perp", "pee", "perco", "madelin", "article83", "rsp"] {
+        assert_eq!(map::map_type_key(t), Some("retirement"), "{t}");
+    }
+    // Unknown values are assumed to be some new invest wrapper.
+    for t in ["unknown", "totally_new"] {
+        assert_eq!(map::map_type_key(t), Some("brokerage"), "{t}");
+    }
+}
+
+#[test]
+fn liability_types_are_not_mapped() {
+    for t in ["loan", "card"] {
+        assert_eq!(map::map_type_key(t), None, "{t}");
     }
 }
 
@@ -88,7 +94,7 @@ fn parses_investment_decimals_exactly() {
 #[test]
 fn maps_account_identity_and_meta() {
     let fx = load("accounts.json");
-    let dto = map::map_account(account(&fx, 1001));
+    let dto = map::map_account(account(&fx, 1001), "checking");
     assert_eq!(dto.external_id, "1001");
     assert_eq!(dto.name, "Compte Courant");
     assert_eq!(dto.type_key, "checking");
@@ -100,17 +106,20 @@ fn maps_account_identity_and_meta() {
 }
 
 #[test]
-fn maps_invest_account_type_to_fallback() {
+fn maps_invest_account_meta() {
     let fx = load("accounts.json");
-    let dto = map::map_account(account(&fx, 1003));
-    assert_eq!(dto.type_key, "brokerage");
+    // Fixture account 1003 has powens type "per", which maps onto the seeded
+    // "retirement" key. The load-bearing assertion here is that its meta
+    // flags it as an invest account.
+    let dto = map::map_account(account(&fx, 1003), "retirement");
+    assert_eq!(dto.type_key, "retirement");
     assert_eq!(dto.meta["is_invest"], true);
 }
 
 #[test]
 fn falls_back_to_synthetic_name_when_unnamed() {
     let fx = load("accounts.json");
-    let dto = map::map_account(account(&fx, 1004));
+    let dto = map::map_account(account(&fx, 1004), "checking");
     assert_eq!(dto.name, "Account 1004");
 }
 
@@ -291,4 +300,32 @@ fn map_sync_links_holdings_to_their_accounts() {
         .find(|a| a.external_id == "5002")
         .unwrap();
     assert_eq!(brokerage.type_key, "brokerage");
+}
+
+#[test]
+fn map_sync_skips_liability_account_and_its_holdings() {
+    // Fixture account 5003 is a "loan" (liability); it has one investment
+    // (id 5102, id_account 5003) attached. Skipping the account must also
+    // skip that holding, not just omit the account row.
+    let fx = load("sync_multi.json");
+    let result = map::map_sync(&fx.accounts, &fx.investments);
+    assert!(
+        !result.accounts.iter().any(|a| a.external_id == "5003"),
+        "liability account must not be mapped"
+    );
+    assert!(
+        !result
+            .holdings
+            .iter()
+            .any(|h| h.account_external_id == "5003"),
+        "holdings of a skipped liability account must not be mapped"
+    );
+    // The loan's own investment (5102) specifically must not appear.
+    assert!(
+        !result
+            .holdings
+            .iter()
+            .any(|h| h.instrument.isin.as_deref() == Some("FR0000999999")),
+        "the loan account's investment must not be mapped as a holding"
+    );
 }

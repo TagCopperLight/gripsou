@@ -34,12 +34,15 @@
     "equity": "Action",
     "crypto": "Crypto"
   },
-  "categories": {
-    "cash": "Liquidités",
+  "accountTypes": {
+    "checking": "Compte courant",
     "savings": "Épargne",
     "pea": "PEA",
     "brokerage": "Courtage",
-    "crypto": "Crypto"
+    "life_insurance": "Assurance-vie",
+    "retirement": "Retraite",
+    "crypto": "Crypto",
+    "multiple": "Multiples"
   },
   "time": {
     "justNow": "à l'instant",
@@ -87,7 +90,7 @@
         "asset": "ACTIF",
         "quantity": "QUANTITÉ",
         "account": "COMPTE",
-        "category": "CATÉGORIE",
+        "accountType": "TYPE DE COMPTE",
         "value": "VALEUR",
         "unrealizedPnl": "P/L LATENT",
         "thirtyDays": "30J"

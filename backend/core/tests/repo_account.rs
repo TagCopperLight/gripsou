@@ -60,20 +60,46 @@ async fn upsert_updates_provider_fields_on_conflict(pool: PgPool) -> anyhow::Res
     let mut conn = pool.acquire().await?;
     let id = upsert_account(&mut conn, conn_id, &acct).await?;
 
-    // Provider reports an updated currency + account type on the next sync.
+    // Provider reports an updated currency on the next sync.
     acct.currency = "USD".to_string();
+    upsert_account(&mut conn, conn_id, &acct).await?;
+
+    let currency: String = sqlx::query_scalar("select currency from account where id = $1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(
+        currency, "USD",
+        "provider-derived fields are updated on re-sync"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn upsert_preserves_user_chosen_type_key(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut acct = checking_account("acct-1");
+
+    let mut conn = pool.acquire().await?;
+    let id = upsert_account(&mut conn, conn_id, &acct).await?;
+
+    // Simulate the user retyping the account via EditAccountModal.
+    sqlx::query("update account set type_key = 'life_insurance' where id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await?;
+
+    // Re-sync with the provider reporting a different type for the same account.
     acct.type_key = "savings".to_string();
     upsert_account(&mut conn, conn_id, &acct).await?;
 
-    let row: (String, String) =
-        sqlx::query_as("select currency, type_key from account where id = $1")
-            .bind(id)
-            .fetch_one(&pool)
-            .await?;
+    let type_key: String = sqlx::query_scalar("select type_key from account where id = $1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await?;
     assert_eq!(
-        row,
-        ("USD".to_string(), "savings".to_string()),
-        "provider-derived fields are updated on re-sync"
+        type_key, "life_insurance",
+        "re-sync must not clobber a user-chosen account type"
     );
     Ok(())
 }

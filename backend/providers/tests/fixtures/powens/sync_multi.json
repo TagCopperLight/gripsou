@@ -23,6 +23,18 @@
       },
       "type": "market",
       "deleted": null
+    },
+    {
+      "id": 5003,
+      "original_name": "Pret Immobilier",
+      "name": "Pret Immobilier",
+      "balance": -150000.0,
+      "currency": {
+        "id": "EUR",
+        "name": "Euro"
+      },
+      "type": "loan",
+      "deleted": null
     }
   ],
   "investments": [
@@ -37,6 +49,20 @@
       "unitprice": 400.0,
       "unitvalue": 500.0,
       "valuation": 5000.0,
+      "original_currency": null,
+      "deleted": null
+    },
+    {
+      "id": 5102,
+      "id_account": 5003,
+      "label": "Amortissement",
+      "code": "FR0000999999",
+      "code_type": "ISIN",
+      "stock_symbol": null,
+      "quantity": 1,
+      "unitprice": 100.0,
+      "unitvalue": 100.0,
+      "valuation": 100.0,
       "original_currency": null,
       "deleted": null
     }
