@@ -70,33 +70,61 @@ describe("HoldingsCard", () => {
     expect(screen.queryByTitle(/exchange rate/i)).toBeNull();
   });
 
-  it("shows the gap badge for a holding with an unexplained quantity", async () => {
+  it("shows the gap dot for a holding with an unexplained quantity", async () => {
     renderCard([{ ...HOLDING, unexplainedQty: "70" }]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /incomplete/i })).toBeInTheDocument();
+    expect(screen.getByTestId("gap-dot")).toBeInTheDocument();
   });
 
-  it("hides the gap badge when unexplainedQty is 0", async () => {
+  it("hides the gap dot when unexplainedQty is 0", async () => {
     renderCard([{ ...HOLDING, unexplainedQty: "0" }]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /incomplete/i })).toBeNull();
+    expect(screen.queryByTestId("gap-dot")).toBeNull();
   });
 
-  it("hides the gap badge on a cash row", async () => {
+  it("hides the gap dot on a cash row", async () => {
     renderCard([HOLDING, CASH_CHECKING]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    // The equity row has no gap either, so no badge should exist at all.
-    expect(screen.queryByRole("button", { name: /incomplete/i })).toBeNull();
+    // The equity row has no gap either, so no dot should exist at all.
+    expect(screen.queryByTestId("gap-dot")).toBeNull();
   });
 
-  it("opens the add-lot modal from the badge without opening the asset modal", async () => {
+  it("opens the record-lots modal from the icon without opening the asset modal", async () => {
     const user = userEvent.setup();
     renderCard([{ ...HOLDING, unexplainedQty: "70" }]);
-    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: /incomplete/i }));
+    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
 
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs).toHaveLength(1);
-    expect(dialogs[0]).toHaveAttribute("aria-label", "Record a purchase");
+    expect(dialogs[0]).toHaveAttribute("aria-label", "Record buy/sell history");
+  });
+});
+
+describe("HoldingsCard gap dot", () => {
+  it("shows the dot when shares are unaccounted for", async () => {
+    renderCard([{ ...HOLDING, unexplainedQty: "5" }]);
+    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
+  });
+
+  // The clamp used to hide this state entirely — the dot exists to surface it.
+  it("shows the dot when MORE is recorded than held", async () => {
+    renderCard([{ ...HOLDING, unexplainedQty: "-5" }]);
+    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
+  });
+
+  it("shows no dot when the history is complete", async () => {
+    renderCard([HOLDING]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.queryByTestId("gap-dot")).not.toBeInTheDocument();
+  });
+
+  it("opens the record modal from the icon without opening the asset modal", async () => {
+    const user = userEvent.setup();
+    renderCard([{ ...HOLDING, unexplainedQty: "5" }]);
+    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
+    // The record modal's own heading, not the asset modal's chart controls.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

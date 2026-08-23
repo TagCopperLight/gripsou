@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from transaction t\n        using holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1\n          and c.user_id = $2\n          and t.account_id = h.account_id\n          and t.instrument_id = h.instrument_id\n          and t.external_id is null\n          and t.type in ('buy', 'sell')\n          and t.id = any($3)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5335a5d706d7202bcabbac5d6758449c00001d824026c0af003d5e8bb43bcb90"
+}

@@ -957,3 +957,69 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
     );
     Ok(())
 }
+
+/// Spec §4.5. The walk runs BACKWARD from today's `holding.cost_basis`,
+/// subtracting each day's lot cost — so a sell, which REMOVED basis, must
+/// contribute a negative, and by `qty × μ` (the lifetime mean buy price), not
+/// by its proceeds. Using proceeds would fold realised P/L into the basis and
+/// make the invested line cross the value line for no reason.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_sell_reduces_the_derived_cost_basis_by_the_mean_price(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &pea_account("acct-1")).await?;
+
+    // 20 shares bought at a mean of 25 (10@20 + 10@30), 5 sold at 35.
+    // Today: 15 shares held, basis 375.
+    let h = equity_holding("acct-1", "IE0100", dec("15"), dec("375"), Some(dec("600")));
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+
+    let today = chrono::Utc::now().date_naive();
+    let sell_day = today - chrono::Duration::days(5);
+    stamp_on(&pool, holding_id, today, dec("15"), dec("600"), dec("375")).await;
+
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount) \
+         values ($1, $2, $3::date, $3::date, 'buy', 10, 20, -200), \
+                ($1, $2, $4::date, $4::date, 'buy', 10, 30, -300), \
+                ($1, $2, $5::date, $5::date, 'sell', 5, 35, 175)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .bind(today - chrono::Duration::days(30))
+    .bind(today - chrono::Duration::days(20))
+    .bind(sell_day)
+    .execute(&pool)
+    .await?;
+
+    backfill_connection(&mut conn, conn_id).await?;
+
+    // The day BEFORE the sell: the basis still holds all 20 shares at μ = 25,
+    // i.e. 375 + 5×25 = 500. Proceeds-based accounting would give 375 + 175 = 550.
+    let before: Decimal = sqlx::query_scalar(
+        "select cost_basis from holding_backfill where holding_id = $1 and as_of = $2",
+    )
+    .bind(holding_id)
+    .bind(sell_day - chrono::Duration::days(1))
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        before,
+        dec("500"),
+        "a sell removes qty × μ, never its proceeds"
+    );
+
+    // The day AFTER the sell (and before today's snapshot): 15 shares at μ = 25.
+    let after: Decimal = sqlx::query_scalar(
+        "select cost_basis from holding_backfill where holding_id = $1 and as_of = $2",
+    )
+    .bind(holding_id)
+    .bind(sell_day + chrono::Duration::days(1))
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(after, dec("375"));
+    Ok(())
+}

@@ -1709,12 +1709,11 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
 }
 
 /// An over-explained position (recorded buys exceeding the current quantity —
-/// realistic after a partial sale that was never recorded) must floor at
-/// zero, not go negative. `a_fully_explained_holding_reports_zero` alone
-/// cannot catch a missing `greatest(…, 0)` floor because its buys exactly
-/// equal the quantity.
+/// realistic after a partial sale that was never recorded) reports a NEGATIVE
+/// shortfall. The old `greatest(…, 0)` floor hid this state entirely: the user
+/// could never be told, and could never open the modal to fix it.
 #[sqlx::test(migrations = "../migrations")]
-async fn an_over_explained_holding_floors_at_zero(pool: PgPool) -> anyhow::Result<()> {
+async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
@@ -1759,8 +1758,8 @@ async fn an_over_explained_holding_floors_at_zero(pool: PgPool) -> anyhow::Resul
         .expect("holding");
     assert_eq!(
         row.unexplained_quantity,
-        Decimal::ZERO,
-        "over-explained must floor at zero, never go negative"
+        Decimal::new(-20, 0),
+        "over-explained must report the signed excess, not a floored zero"
     );
     Ok(())
 }
@@ -1998,5 +1997,162 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
         Decimal::new(100, 0),
         "40 + 60, counted once each"
     );
+    Ok(())
+}
+
+/// The record-lots modal filters this endpoint down to the rows the user may
+/// delete, and `positionSeries` needs the type to stop counting a sale as a
+/// purchase — so id, type and `manual` all have to cross the wire.
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_transactions_expose_id_type_and_manual(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0007",
+        Decimal::new(10, 0),
+        Decimal::new(100, 0),
+        Some(Decimal::new(120, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+
+    // A user-entered buy (external_id null) and a provider-supplied sell.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount, external_id) \
+         values ($1, $2, '2024-01-02T00:00:00Z', 'buy', 20, 10, -200, null), \
+                ($1, $2, '2024-02-02T00:00:00Z', 'sell', 10, 12, 120, 'powens-1')",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holding_transactions(&pool, user_id, holding_id).await?;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].kind, "buy");
+    assert!(rows[0].manual, "external_id null is a user-entered row");
+    assert_ne!(rows[0].id, Uuid::nil());
+    assert_eq!(rows[1].kind, "sell");
+    assert!(!rows[1].manual, "a provider row is not deletable");
+    Ok(())
+}
+
+/// Spec §4.3. `holding.cost_basis` is whatever the provider reported — for a
+/// PEA that is often nothing useful. Once the user's own lots explain the
+/// position exactly, they are strictly more truthful, so they win. Read-time
+/// only: nothing is written, so the next sync cannot clobber it.
+#[sqlx::test(migrations = "../migrations")]
+async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    // The provider claims a basis of 999; the lots say 20 shares at μ = 25.
+    let h = equity_holding(
+        "acct-1",
+        "IE0008",
+        Decimal::new(20, 0),
+        Decimal::new(999, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(1200, 0),
+        h.cost_basis,
+    )
+    .await;
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 10, 20, -200), \
+                ($1, $2, now(), 'buy', 10, 30, -300)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(row.unexplained_quantity, Decimal::ZERO);
+    assert_eq!(
+        row.invested_native,
+        Decimal::new(500, 0),
+        "μ × quantity, not the provider's 999"
+    );
+    // The reporting-currency sibling too, not just the native one: both read
+    // `lot.basis`, but only this one passes through the fx conversion, so a
+    // regression isolated to that line would otherwise go uncaught. The account
+    // and the reporting currency are both EUR here, so the two must agree.
+    assert_eq!(row.invested, Decimal::new(500, 0));
+    Ok(())
+}
+
+/// A partial history is NOT more truthful than the provider's figure — it is
+/// only part of the story — so the override must not fire.
+#[sqlx::test(migrations = "../migrations")]
+async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0009",
+        Decimal::new(20, 0),
+        Decimal::new(999, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(1200, 0),
+        h.cost_basis,
+    )
+    .await;
+    // Only 10 of the 20 shares explained.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 10, 20, -200)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(row.unexplained_quantity, Decimal::new(10, 0));
+    assert_eq!(row.invested_native, Decimal::new(999, 0));
+    assert_eq!(row.invested, Decimal::new(999, 0));
     Ok(())
 }

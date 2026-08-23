@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AssetModal } from "./AssetModal";
 import type { Holding } from "../api/types";
+
+// Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
+// the chart mid-test — stub it out, as FxMissingWarning.test.tsx does.
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
   id: "h1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
@@ -89,5 +94,45 @@ describe("AssetModal currency domains", () => {
     // figures. Nothing on the price or amount side may carry it.
     expect(screen.queryByText("100,00 €")).not.toBeInTheDocument();
     expect(screen.queryByText("80,00 €")).not.toBeInTheDocument();
+  });
+});
+
+describe("incomplete-history strip", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify([]), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      }),
+    ));
+  });
+
+  it("offers to record the history, in both modes", async () => {
+    const user = userEvent.setup();
+    const onRecordLots = vi.fn();
+    render(withClient(
+      <AssetModal
+        holding={{ ...BASE, unexplainedQty: "5" }}
+        netWorth={1000}
+        onClose={vi.fn()}
+        onRecordLots={onRecordLots}
+      />,
+    ));
+    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /purchases/i }));
+    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
+    expect(onRecordLots).toHaveBeenCalled();
+  });
+
+  it("stays out of the way when the history is complete", () => {
+    render(withClient(
+      <AssetModal
+        holding={{ ...BASE, unexplainedQty: "0" }}
+        netWorth={1000}
+        onClose={vi.fn()}
+        onRecordLots={vi.fn()}
+      />,
+    ));
+    expect(screen.queryByText(/incomplete buy\/sell history/i)).not.toBeInTheDocument();
   });
 });

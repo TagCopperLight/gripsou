@@ -136,14 +136,42 @@ pub async fn backfill_connection(
               and (not s.is_cash or s.is_account_currency)
             group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
         ),
-        -- §8.2: the same per-day shape as `moves`, for buy lots.
-        lots as materialized (
-            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
-                   sum(t.quantity * t.unit_price) as cost
+        -- Spec §4.1: μ, the lifetime mean buy price per holding. Order-
+        -- independent by construction, which is what lets `lots` below stay a
+        -- plain aggregate instead of a recursive walk.
+        --
+        -- ponytail: a buy recorded AFTER a sell shifts μ for that earlier sale
+        -- too, which a running average would not. Upgrade path if it ever
+        -- matters: a recursive CTE in `booked_on` order here AND the same change
+        -- in `query.rs` and `lib/lots.ts`, or the modal and the chart disagree.
+        mean_buy as materialized (
+            select s.holding_id,
+                   sum(t.quantity * t.unit_price) / nullif(sum(t.quantity), 0) as mu
             from scope s
             join transaction t on t.account_id = s.account_id
                               and t.instrument_id = s.instrument_id
             where t.type = 'buy'
+              and t.quantity is not null and t.unit_price is not null
+            group by s.holding_id
+        ),
+        -- §8.2: the same per-day shape as `moves`, for lots.
+        --
+        -- The walk runs BACKWARD from today's basis, subtracting each day's
+        -- `cost` for the days after it — so the sign is the sign of what the
+        -- day ADDED to the basis. A buy adds its cost; a sell removes qty × μ,
+        -- hence the negative. Never its proceeds: that would fold realised P/L
+        -- into the basis and make the invested line move with the market.
+        lots as materialized (
+            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
+                   sum(case
+                       when t.type = 'buy' then t.quantity * t.unit_price
+                       else -t.quantity * coalesce(mb.mu, 0)
+                   end) as cost
+            from scope s
+            join transaction t on t.account_id = s.account_id
+                              and t.instrument_id = s.instrument_id
+            left join mean_buy mb on mb.holding_id = s.holding_id
+            where t.type in ('buy', 'sell')
               and t.quantity is not null and t.unit_price is not null
             group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
         ),

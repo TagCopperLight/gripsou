@@ -80,7 +80,18 @@ export type Holding = {
 };
 
 export type PricePoint = { t: number; price: string };
-export type Purchase = { t: number; qty: string; price: string; invested: string };
+export type Purchase = {
+  id: string;
+  t: number;
+  type: "buy" | "sell";
+  qty: string;
+  price: string;
+  /** Raw `transaction.amount`: NEGATIVE for a buy, positive for a sell. Negate
+   *  once at the point of use — never treat it as an invested figure directly. */
+  invested: string;
+  /** True when the user entered this row; only these may be deleted. */
+  manual: boolean;
+};
 
 export type Account = {
   id: string;

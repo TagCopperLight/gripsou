@@ -204,11 +204,23 @@ impl Holding {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AddLotReq {
+pub struct LotEntry {
+    /// `buy` or `sell`. Named `kind` because `type` is a Rust keyword.
+    #[serde(rename = "type")]
+    pub kind: String,
     pub date: NaiveDate,
     /// Decimal strings — money and quantities never cross the wire as floats.
     pub quantity: String,
     pub unit_price: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveLotsReq {
+    #[serde(default)]
+    pub adds: Vec<LotEntry>,
+    #[serde(default)]
+    pub deletes: Vec<uuid::Uuid>,
 }
 
 #[derive(Serialize)]
@@ -230,19 +242,29 @@ impl PricePoint {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Purchase {
+    pub id: String,
     pub t: i64,
+    #[serde(rename = "type")]
+    pub kind: String,
     pub qty: String,
     pub price: String,
+    /// The raw `transaction.amount`: NEGATIVE for a buy (cash out), positive for
+    /// a sell. Consumers negate it once to get an invested figure — see
+    /// `lib/assetSeries.ts`.
     pub invested: String,
+    pub manual: bool,
 }
 
 impl Purchase {
     pub fn from_row(r: gripsou_core::repo::query::TxnRow) -> Self {
         Purchase {
+            id: r.id.to_string(),
             t: r.ts.timestamp_millis(),
+            kind: r.kind,
             qty: r.quantity.unwrap_or(Decimal::ZERO).to_string(),
             price: r.unit_price.unwrap_or(Decimal::ZERO).to_string(),
             invested: r.amount.to_string(),
+            manual: r.manual,
         }
     }
 }

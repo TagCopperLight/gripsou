@@ -9,11 +9,12 @@ import { ChartLegend } from "./ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
 import { CompositionSurface } from "./CompositionSurface";
-import { HoldingBadge } from "./HoldingBadge";
+import { HoldingModalHeader } from "./HoldingModalHeader";
+import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
 import { formatMoney, formatQuantity } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { colorForString } from "../lib/palette";
-import { KIND_LABEL_KEY, accountTypeLabel, type Holding, type Purchase } from "../api/types";
+import { KIND_LABEL_KEY, type Holding, type Purchase } from "../api/types";
 import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
 
@@ -67,9 +68,10 @@ type AssetModalProps = {
   /** Total net worth, for the "weight of net worth" stat. */
   netWorth: number;
   onClose: () => void;
+  onRecordLots?: () => void;
 };
 
-export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
+export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetModalProps) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("asset");
   const [range, setRange] = useState("1mo");
@@ -177,53 +179,24 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
         onClick={(e) => e.stopPropagation()}
         className="absolute inset-[5%] bg-surface rounded-3xl flex flex-col overflow-hidden"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6">
-          <div className="flex items-center gap-4">
-            <HoldingBadge
-              logo={holding.logo}
-              ticker={holding.ticker}
-              className="size-12 rounded-xl text-sm"
-            />
-            <div className="h-12 flex flex-col justify-between py-0.5">
-              <h2 className="text-xl font-semibold text-fg leading-none">
-                {holding.name}
-              </h2>
-              <div className="flex items-center gap-2 text-sm leading-none">
-                <span className="font-mono text-fg-faint">{holding.ticker} · </span>
-                <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                  {accountTypeLabel(t, holding.accountType, holding.accountTypeLabel)}
-                </span>
-                <span className="font-mono text-fg-faint"> · </span>
-                <span className="flex items-center gap-1.5 text-fg-dim">
-                  <span
-                    className="size-2.5 rounded-sm"
-                    style={{ background: holding.accountColor }}
-                  />
-                  {holding.accountName}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <SegmentedControl
-              value={mode}
-              onChange={(v) => setMode(v as Mode)}
-              options={[
-                { value: "asset", label: t("dashboard.assetModal.asset") },
-                { value: "purchases", label: t("dashboard.assetModal.purchases") },
-              ]}
-            />
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t("common.close")}
-              className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
-        </div>
+        <HoldingModalHeader holding={holding}>
+          <SegmentedControl
+            value={mode}
+            onChange={(v) => setMode(v as Mode)}
+            options={[
+              { value: "asset", label: t("dashboard.assetModal.asset") },
+              { value: "purchases", label: t("dashboard.assetModal.purchases") },
+            ]}
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
+          >
+            <X className="size-5" />
+          </button>
+        </HoldingModalHeader>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 pt-0 flex flex-col gap-4">
@@ -320,6 +293,12 @@ export function AssetModal({ holding, netWorth, onClose }: AssetModalProps) {
                 ready={txnData !== undefined}
                 isError={txnError}
                 onRetry={() => refetchTxn()}
+              />
+            )}
+            {onRecordLots && (
+              <IncompleteHistoryStrip
+                unexplainedQty={holding.unexplainedQty}
+                onOpen={onRecordLots}
               />
             )}
           </div>
@@ -481,7 +460,9 @@ function PurchaseHistorySurface({
                   {formatMoney(p.price, { currency })}
                 </td>
                 <td className="py-2 border-t border-surface-3 text-right text-fg">
-                  {formatMoney(p.invested, { currency })}
+                  {/* Raw `transaction.amount`, negated: positive means money
+                      went in (a buy), negative means it came back out (a sale). */}
+                  {formatMoney(-Number(p.invested), { currency })}
                 </td>
               </tr>
             ))}
