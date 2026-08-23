@@ -6,10 +6,11 @@ import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
 import { CardState } from "../../components/CardState";
-import { useProviders, useSetProviderEnabled, useCorsOrigins, useSetCorsOrigins } from "../../api/hooks";
+import { useProviders, useSetProviderEnabled, useCorsOrigins, useSetCorsOrigins, useHealth } from "../../api/hooks";
 
 export function SettingsServer() {
   const { t } = useTranslation();
+  const version = useHealth().data?.version;
   const providers = useProviders();
   const { data: providersData, isError: providersIsError, refetch: providersRefetch } = providers;
   const providersReady = providersData !== undefined;
@@ -35,6 +36,14 @@ export function SettingsServer() {
   return (
     <div className="flex flex-col gap-4 pb-8">
       <Surface className="p-6 md:mt-13">
+        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.about")}</h2>
+        <div className="flex items-center gap-3 pt-4">
+          <span className="text-sm font-medium text-fg">{t("settings.server.version")}</span>
+          {/* select-all so it is one click to paste into a bug report */}
+          <span className="select-all text-sm text-fg-faint">{version ?? "—"}</span>
+        </div>
+      </Surface>
+      <Surface className="p-6">
         <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.cors")}</h2>
         <p className="mb-5 text-xs text-fg-faint">{t("settings.server.corsHint")}</p>
         <div className="flex flex-col gap-2">

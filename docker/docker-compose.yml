@@ -19,6 +19,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${VERSION:-}
     restart: always
     env_file:
       - ../.env

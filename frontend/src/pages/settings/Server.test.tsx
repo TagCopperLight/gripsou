@@ -104,3 +104,32 @@ describe("SettingsServer — CORS origins", () => {
     expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
   });
 });
+
+describe("SettingsServer — about", () => {
+  it("renders the version from /api/health", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/health")) {
+          return new Response(JSON.stringify({ status: "ok", version: "v1.3.0-9-gd5fd32d" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+      }),
+    );
+    render(withClient(<SettingsServer />));
+    expect(await screen.findByText("v1.3.0-9-gd5fd32d")).toBeInTheDocument();
+    expect(screen.getByText("Version")).toBeInTheDocument();
+  });
+
+  it("shows a dash while the version is still loading", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    render(withClient(<SettingsServer />));
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});

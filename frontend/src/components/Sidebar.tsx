@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../auth/context";
+import { useHealth } from "../api/hooks";
 
 type NavItem = {
   to: string;
@@ -27,6 +28,7 @@ const navLinkClassName =
 export function Sidebar() {
   const { t } = useTranslation();
   const { user: self } = useAuth();
+  const version = useHealth().data?.version;
   const roleLabel = self
     ? t(self.role === "admin" ? "sidebar.administrator" : "settings.roleMember")
     : "";
@@ -58,6 +60,11 @@ export function Sidebar() {
           <span className="text-xs text-fg-faint font-normal leading-none">{roleLabel}</span>
         </div>
       </Link>
+
+      {/* Desktop only: the mobile sidebar is a bottom bar with no room for it. */}
+      {version && (
+        <span className="hidden px-3 text-[11px] text-fg-faint md:-mt-4 md:block">{version}</span>
+      )}
     </aside>
   );
 }

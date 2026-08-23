@@ -322,6 +322,8 @@
     },
     "server": {
       "title": "Serveur",
+      "about": "À propos",
+      "version": "Version",
       "providers": "Fournisseurs de données",
       "providersHint": "Agrégateurs utilisés pour récupérer les données bancaires et de courtage. Activez ceux pour lesquels vous disposez d'identifiants API.",
       "cors": "Origines CORS",

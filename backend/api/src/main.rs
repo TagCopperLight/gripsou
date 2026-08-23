@@ -183,5 +183,5 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn health() -> Json<Value> {
-    Json(json!({ "status": "ok" }))
+    Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
 }

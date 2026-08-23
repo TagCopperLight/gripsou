@@ -195,7 +195,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       <button
                         type="button"
                         onClick={() => toggleSort(col.sort!)}
-                        className={`inline-flex items-center gap-1 cursor-pointer transition-colors duration-140 ${
+                        className={`inline-flex h-4 items-center align-middle gap-1 cursor-pointer transition-colors duration-140 ${
                           col.align === "right" ? "flex-row-reverse" : ""
                         } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
                       >
@@ -208,7 +208,9 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           ))}
                       </button>
                     ) : (
-                      <span className="text-fg-faint">{t(col.labelKey)}</span>
+                      <span className="inline-flex h-4 items-center align-middle text-fg-faint">
+                        {t(col.labelKey)}
+                      </span>
                     )}
                   </th>
                 );
@@ -295,7 +297,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         className="size-2.5 rounded-sm shrink-0"
                         style={{ background: h.accountColor }}
                       />
-                      <span className="text-sm text-fg-dim">
+                      <span className="text-sm text-fg-dim whitespace-nowrap">
                         {h.accountName}
                       </span>
                     </div>

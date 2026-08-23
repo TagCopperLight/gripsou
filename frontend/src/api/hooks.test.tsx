@@ -6,6 +6,7 @@ import {
   TRANSACTIONS_PAGE_SIZE,
   useSaveLots,
   useChangePassword,
+  useHealth,
   useHoldings,
   useTransactions,
   useUpdateAccount,
@@ -158,6 +159,24 @@ describe("useTransactions", () => {
       { headers: {} },
     );
     expect(result.current.hasNextPage).toBe(false);
+  });
+});
+
+describe("useHealth", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ status: "ok", version: "v1.3.0-9-gd5fd32d" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+  });
+
+  it("fetches /api/health and exposes the version", async () => {
+    const { result } = renderHook(() => useHealth(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(fetch).toHaveBeenCalledWith("/api/health", expect.anything());
+    expect(result.current.data?.version).toBe("v1.3.0-9-gd5fd32d");
   });
 });
 

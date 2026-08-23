@@ -40,17 +40,20 @@
 - [x] Currency conversion
 - [x] Phone responsive
 
-### v1.3.1
+### v1.4.0 - pushed
+- [x] Transaction page
+- [x] Version shown in the app
+- [x] Changelog in the readme
+- [x] Realign holdings table columns
 
 
 ### Future
-- [ ] Transaction page
 - [ ] Rearrange files and folders
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] By account view
 - [ ] Screenshot in readme
-- [ ] Changelog in the readme
 - [ ] When graph is red, change the legend
 - [ ] Main chart graph date is in the side
-- [ ] Version shown in the app
+- [ ] Better transaction table
+- [ ] Budget page (@TRANSACTION.md phase 2)
