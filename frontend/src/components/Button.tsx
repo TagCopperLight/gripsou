@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-type ButtonVariant = "primary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "ghost" | "danger" | "amber";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
@@ -8,6 +8,12 @@ const VARIANTS: Record<ButtonVariant, string> = {
   ghost: "text-fg-dim hover:text-fg font-medium transition-colors duration-140",
   danger:
     "bg-red text-black font-semibold transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed",
+  // A variant rather than classes passed by the caller: `ghost` sets its own
+  // `text-fg-dim`, and utilities of equal specificity resolve by their order in
+  // the generated stylesheet, not by the order of the class attribute — so a
+  // caller-supplied `text-amber` silently loses to it.
+  amber:
+    "bg-amber/32 text-amber font-medium transition-colors duration-140 hover:bg-amber/45",
 };
 
 type ButtonProps = ComponentPropsWithoutRef<"button"> & {

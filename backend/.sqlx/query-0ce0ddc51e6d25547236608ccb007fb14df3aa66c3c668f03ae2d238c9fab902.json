@@ -1,0 +1,250 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Same valuation rule as net_worth_series/accounts/distribution: price\n        -- first, provider valuation (converted from the ACCOUNT's currency)\n        -- second, zero last. Without the snapshot fallback this table would show\n        -- 0 for an instrument with no usable price while the accounts card, the\n        -- pie and the net-worth chart all showed the provider valuation — on the\n        -- same screen. The lateral is LEFT because a holding ingested before its\n        -- first snapshot must still list (it just has no fallback).\n        --\n        -- `price` is the price ROW's unit price and carries that row's own\n        -- currency (`price_currency`), which is not necessarily i.currency.\n        -- `invested`/`invested_native` are amount-domain and therefore convert\n        -- from a.currency, not i.currency.\n        with today as (select (now() at time zone 'utc')::date as d)\n        select h.id            as \"holding_id!\",\n               i.symbol,\n               i.name          as \"instrument_name!\",\n               i.kind          as \"kind!\",\n               i.logo_url,\n               i.meta->'composition' as \"composition?\",\n               i.currency      as \"currency!\",\n               px.currency     as \"price_currency?\",\n               a.currency      as \"account_currency!\",\n               i.id            as \"instrument_id!\",\n               a.id            as \"account_id!\",\n               a.name          as \"account_name!\",\n               a.color         as \"account_color\",\n               a.type_key      as \"type_key!\",\n               t.label         as \"type_label!\",\n               h.quantity      as \"quantity!\",\n               px.unit_price   as \"price?\",\n               coalesce(\n                   h.quantity * unit_value_asof(i.id, (select d from today)),\n                   snap.value * fx_asof(a.currency, (select d from today)),\n                   0\n               ) / reporting_fx_asof($1, (select d from today)) as \"value!\",\n               -- §4.3: once the user's lots explain the position EXACTLY, they\n               -- are strictly more truthful than `h.cost_basis` (which for a PEA\n               -- is often whatever the provider felt like reporting). A partial\n               -- history is only part of the story, so it does not qualify.\n               -- Read-time only — nothing is written, so a resync cannot\n               -- clobber this and no migration is involved. The rule itself\n               -- lives in the `lot` lateral as `basis`; these two columns only\n               -- convert it.\n               coalesce(lot.basis * fx_asof(a.currency, (select d from today)), 0)\n                   / reporting_fx_asof($1, (select d from today)) as \"invested!\",\n               lot.basis      as \"invested_native!\",\n               (unit_value_asof(i.id, (select d from today)) is null\n                and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)\n                   as \"fx_missing!\",\n               -- §9.1: shares no recorded lot explains. Scoped to THIS holding's\n               -- (account, instrument) via the `lot` lateral — never the\n               -- instrument alone, or another user's buy of the same ETF would\n               -- reduce this figure (the exact cross-user bug already found and\n               -- fixed in the backfill engine).\n               --\n               -- SIGNED, deliberately: negative means more is recorded than is\n               -- held. Flooring it at zero made that state invisible, so the\n               -- user was never told and could never open the modal to fix it.\n               case when i.kind = 'cash' then 0\n                    else h.quantity - coalesce(lot.explained, 0)\n               end as \"unexplained_quantity!\"\n        from holding h\n        join account a      on a.id = h.account_id\n        join connection c   on c.id = a.connection_id\n        join instrument i   on i.id = h.instrument_id\n        join account_type t on t.key = a.type_key\n        left join lateral (\n            select p.unit_price, p.currency\n            from price p\n            where p.instrument_id = i.id\n            order by p.ts desc\n            limit 1\n        ) px on true\n        left join lateral (\n            select hs.value\n            from holding_snapshot hs\n            where hs.holding_id = h.id\n            order by hs.as_of desc\n            limit 1\n        ) snap on true\n        left join lateral (\n            -- Spec §4.1/§4.3, one pass for every consumer below.\n            -- `explained` is the net quantity the recorded lots account for;\n            -- `mu` the lifetime mean buy price. `mu` additionally requires a\n            -- unit price (a quantity with no price says nothing about basis)\n            -- while `explained` does not — a row with a quantity still moves\n            -- the position whether or not its price was recorded.\n            --\n            -- `basis` is resolved HERE, once, so the reporting-currency and\n            -- native `invested` columns below cannot drift apart: §4.3's rule\n            -- exists in exactly one place.\n            select agg.explained,\n                   case when i.kind <> 'cash'\n                         and agg.explained = h.quantity\n                         and agg.mu is not null\n                        then agg.mu * h.quantity\n                        else h.cost_basis\n                   end as basis\n            from (\n                select sum(case when t.type = 'buy' then t.quantity else -t.quantity end) as explained,\n                       sum(t.quantity * t.unit_price)\n                           filter (where t.type = 'buy' and t.unit_price is not null)\n                       / nullif(sum(t.quantity)\n                           filter (where t.type = 'buy' and t.unit_price is not null), 0) as mu\n                from transaction t\n                where t.account_id = h.account_id\n                  and t.instrument_id = h.instrument_id\n                  and t.type in ('buy', 'sell')\n                  and t.quantity is not null\n            ) agg\n        ) lot on true\n        where c.user_id = $1 and h.quantity <> 0\n        order by h.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "holding_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "holding",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "symbol",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "symbol"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "instrument_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "logo_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "logo_url"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "composition?",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "price_currency?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "account_currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "instrument_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "account_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "account_color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "type_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "type_key"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "type_label!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_type",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "quantity!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "holding",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "price?",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "invested!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "invested_native!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 20,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 21,
+        "name": "unexplained_quantity!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      null,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0ce0ddc51e6d25547236608ccb007fb14df3aa66c3c668f03ae2d238c9fab902"
+}

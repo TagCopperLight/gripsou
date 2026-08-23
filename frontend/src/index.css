@@ -19,12 +19,12 @@
   /* Accents */
   --color-green: #34d399;
   --color-red: #f87171;
-  --color-amber: #f59e0b;
+  --color-amber: #f0b35b;
 
   /* Semi transparents */
   --color-green-soft: rgba(52, 211, 153, 0.16);
   --color-red-soft: rgba(248, 113, 113, 0.16);
-  --color-amber-soft: rgba(245, 158, 11, 0.16);
+  --color-amber-soft: rgba(240, 179, 91, 0.15);
 
   --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import {
   TRANSACTIONS_PAGE_SIZE,
-  useAddLot,
+  useSaveLots,
   useChangePassword,
   useHoldings,
   useTransactions,
@@ -77,8 +77,8 @@ describe("useUpdateAccount", () => {
   });
 });
 
-describe("useAddLot", () => {
-  it("invalidates every query a saved lot changes, including account-series and holding-* views", async () => {
+describe("useSaveLots", () => {
+  it("invalidates every query a saved batch changes, including account-series and holding-* views", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 204 })),
@@ -86,9 +86,12 @@ describe("useAddLot", () => {
 
     const { client, wrapper: w } = makeWrapper();
     const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useAddLot("h1"), { wrapper: w });
+    const { result } = renderHook(() => useSaveLots("h1"), { wrapper: w });
 
-    result.current.mutate({ date: "2024-05-02", quantity: "20", unitPrice: "16.03" });
+    result.current.mutate({
+      adds: [{ type: "buy", date: "2024-05-02", quantity: "20", unitPrice: "16.03" }],
+      deletes: [],
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);

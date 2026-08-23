@@ -110,6 +110,40 @@ export function formatQuantity(
   return `${sign}${body}`;
 }
 
+/** An FR keyboard under `inputMode="decimal"` produces `16,03`, so a comma has
+ *  to be readable as a decimal separator. But `16,029` (three decimals, like
+ *  the PEA's real unit price) and `1,234` (en-US grouping) are indistinguishable
+ *  from the string alone, and guessing wrong posts a value 1000x off in silence.
+ *
+ *  So the reader is locale-led: under `fr` a comma is the decimal separator,
+ *  which is what the French keyboard produces and what French formatting means.
+ *  Under any other language a comma is grouping, and a decimal comma is not
+ *  expected — so anything containing one is left alone for `DECIMAL_RE` to
+ *  reject, and the user is told rather than silently misread. Mixed or repeated
+ *  separators are always ambiguous and always refused. */
+export function normaliseDecimal(raw: string, language: string): string {
+  const s = raw.trim();
+  // Both separators, or more than one comma: grouped, never unambiguous.
+  if (s.includes(".") && s.includes(",")) return s;
+  if ((s.match(/,/g) ?? []).length > 1) return s;
+  if (!language.toLowerCase().startsWith("fr")) return s;
+  return s.replace(",", ".");
+}
+
+export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
+
+export type ValidationError = "invalidNumber" | "nonPositiveQuantity" | "negativeUnitPrice";
+
+/** Mirrors the server's validation rules so a malformed row is caught with a
+ *  specific, translated message instead of a generic "row N failed" once it
+ *  round-trips to the API and back as a 400. */
+export function validateRow(quantity: string, unitPrice: string): ValidationError | null {
+  if (!DECIMAL_RE.test(quantity) || !DECIMAL_RE.test(unitPrice)) return "invalidNumber";
+  if (Number(quantity) <= 0) return "nonPositiveQuantity";
+  if (Number(unitPrice) < 0) return "negativeUnitPrice";
+  return null;
+}
+
 export function formatPercent(
   value: string | number,
   options: PercentFormatOptions = {},

@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { deleteJson, getJson, patchJson, postJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
@@ -48,16 +48,24 @@ export function useHoldings() {
   });
 }
 
-export type AddLotInput = { date: string; quantity: string; unitPrice: string };
+export type SaveLotAdd = {
+  type: "buy" | "sell";
+  /** `YYYY-MM-DD`, straight from `<input type="date">`. */
+  date: string;
+  quantity: string;
+  unitPrice: string;
+};
+export type SaveLotsInput = { adds: SaveLotAdd[]; deletes: string[] };
 
-export function useAddLot(holdingId: string) {
+export function useSaveLots(holdingId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (lot: AddLotInput) => postJson<void>(`/holdings/${holdingId}/lots`, lot),
+    mutationFn: (batch: SaveLotsInput) =>
+      putJson<void>(`/holdings/${holdingId}/lots`, batch),
     onSuccess: () => {
-      // The lot changes the explained quantity, the cost basis and the derived
+      // The batch changes the explained quantity, the cost basis and the derived
       // history, so every read of those has to refetch: the holdings list, the
-      // transactions ledger (the lot is itself a transaction row), net worth,
+      // transactions ledger (a lot is itself a transaction row), net worth,
       // the accounts stacked-area chart, and this holding's own purchase list
       // and price history shown in AssetModal.
       qc.invalidateQueries({ queryKey: ["holdings"] });

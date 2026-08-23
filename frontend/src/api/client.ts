@@ -73,6 +73,18 @@ export async function postJson<T>(path: string, body: unknown, opts?: HandleOpti
   return res.json() as Promise<T>;
 }
 
+export async function putJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  handle(res, path, "PUT", opts);
+  // 204 No Content (e.g. save-lots) has an empty body.
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
 export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: "PATCH",

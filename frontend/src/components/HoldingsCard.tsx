@@ -7,7 +7,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
-import { AddLotModal } from "./AddLotModal";
+import { RecordLotsModal } from "./RecordLotsModal";
 import { CardState } from "./CardState";
 import { HoldingBadge } from "./HoldingBadge";
 import { formatQuantity } from "../lib/money";
@@ -232,12 +232,42 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* ASSET */}
                   <td className="max-w-0 w-full py-3 px-2 md:px-3 border-t border-surface-2">
                     <div className="flex items-center gap-3">
-                      <HoldingBadge
-                        logo={h.logo}
-                        ticker={h.ticker}
-                        fallbackText={h.kind === "cash" && h.ticker === "EUR" ? "€" : undefined}
-                        className="size-8 rounded-lg text-[13px]"
-                      />
+                      {Number(h.unexplainedQty) !== 0 ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLotFor(h);
+                          }}
+                          aria-label={t("dashboard.holdings.gap.open")}
+                          title={t(
+                            Number(h.unexplainedQty) > 0
+                              ? "dashboard.holdings.gap.tooltipShort"
+                              : "dashboard.holdings.gap.tooltipExcess",
+                            { qty: formatQuantity(String(Math.abs(Number(h.unexplainedQty)))) },
+                          )}
+                          className="relative shrink-0 cursor-pointer"
+                        >
+                          <HoldingBadge
+                            logo={h.logo}
+                            ticker={h.ticker}
+                            className="size-8 rounded-lg text-[13px]"
+                          />
+                          {/* The ring is load-bearing: without it the dot
+                              disappears into a light logo. */}
+                          <span
+                            data-testid="gap-dot"
+                            className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-amber ring-2 ring-surface"
+                          />
+                        </button>
+                      ) : (
+                        <HoldingBadge
+                          logo={h.logo}
+                          ticker={h.ticker}
+                          fallbackText={h.kind === "cash" && h.ticker === "EUR" ? "€" : undefined}
+                          className="size-8 rounded-lg text-[13px]"
+                        />
+                      )}
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate text-sm text-fg leading-tight md:whitespace-normal">
                           {h.name}
@@ -246,21 +276,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           {h.ticker} · {t(KIND_LABEL_KEY[h.kind])}
                         </span>
                       </div>
-                      {Number(h.unexplainedQty) > 0 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLotFor(h);
-                          }}
-                          title={t("dashboard.holdings.gap.tooltip", {
-                            qty: formatQuantity(h.unexplainedQty),
-                          })}
-                          className="ml-1 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-soft text-amber cursor-pointer"
-                        >
-                          {t("dashboard.holdings.gap.badge")}
-                        </button>
-                      )}
                     </div>
                   </td>
                   {/* QUANTITY */}
@@ -350,10 +365,16 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           holding={selected}
           netWorth={netWorth}
           onClose={() => setSelected(null)}
+          // One modal at a time: the asset modal closes as the record modal
+          // opens, so the user never has two stacked dialogs.
+          onRecordLots={() => {
+            setLotFor(selected);
+            setSelected(null);
+          }}
         />
       )}
 
-      {lotFor && <AddLotModal holding={lotFor} onClose={() => setLotFor(null)} />}
+      {lotFor && <RecordLotsModal holding={lotFor} onClose={() => setLotFor(null)} />}
     </Surface>
   );
 }

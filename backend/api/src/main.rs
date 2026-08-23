@@ -9,7 +9,7 @@ use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, FromRef},
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
@@ -117,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
             "/holdings/{id}/transactions",
             get(handlers::holding_transactions),
         )
-        .route("/holdings/{id}/lots", post(handlers::add_lot))
+        .route("/holdings/{id}/lots", put(handlers::save_lots))
         .with_state(app_state);
 
     let cors_layer = CorsLayer::new()

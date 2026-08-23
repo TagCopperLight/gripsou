@@ -16,8 +16,13 @@ export function positionSeries(
     let invested = 0;
     for (const lot of purchases) {
       if (lot.t <= p.t) {
-        qty += Number(lot.qty);
-        invested += Number(lot.invested);
+        const q = Number(lot.qty);
+        qty += lot.type === "sell" ? -q : q;
+        // `lot.invested` is the raw `transaction.amount`: NEGATIVE for a buy
+        // (cash out), positive for a sale. Negating it gives money-in, which is
+        // what a line labelled "Invested" has to mean — before this, a position
+        // built entirely of buys charted as a negative invested line.
+        invested -= Number(lot.invested);
       }
     }
     if (qty === 0) {

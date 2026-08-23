@@ -198,8 +198,10 @@ async fn manual_lot_records_an_honest_buy(pool: PgPool) -> anyhow::Result<()> {
             .and_hms_opt(0, 0, 0)
             .unwrap()
             .and_utc(),
+        "buy",
         Decimal::new(20, 0),
         Decimal::new(16029, 3),
+        -Decimal::new(20, 0) * Decimal::new(16029, 3),
     )
     .await?
     .expect("owning user's write must succeed");
@@ -256,8 +258,10 @@ async fn insert_manual_lot_rejects_a_non_owning_user(pool: PgPool) -> anyhow::Re
             .and_hms_opt(0, 0, 0)
             .unwrap()
             .and_utc(),
+        "buy",
         Decimal::new(20, 0),
         Decimal::new(16029, 3),
+        -Decimal::new(20, 0) * Decimal::new(16029, 3),
     )
     .await?;
     assert!(

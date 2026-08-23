@@ -151,10 +151,11 @@ pub struct HoldingRow {
     /// Neither valuation branch resolved (no usable price and no convertible
     /// snapshot value), so `value` reads zero.
     pub fx_missing: bool,
-    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells`, floored
-    /// at zero (§9.1). Non-zero means the cost basis and the pre-purchase
-    /// history are guesses, which the Holdings badge says out loud. Always zero
-    /// for cash — a cash line has nothing to explain.
+    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells` (§9.1).
+    /// Signed: positive means shares no lot explains, negative means more is
+    /// recorded than held (an unrecorded sale). Non-zero means the cost basis
+    /// and the pre-purchase history are guesses, which the Holdings badge says
+    /// out loud. Always zero for cash — a cash line has nothing to explain.
     pub unexplained_quantity: Decimal,
 }
 
@@ -222,27 +223,32 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                    snap.value * fx_asof(a.currency, (select d from today)),
                    0
                ) / reporting_fx_asof($1, (select d from today)) as "value!",
-               coalesce(h.cost_basis * fx_asof(a.currency, (select d from today)), 0)
+               -- §4.3: once the user's lots explain the position EXACTLY, they
+               -- are strictly more truthful than `h.cost_basis` (which for a PEA
+               -- is often whatever the provider felt like reporting). A partial
+               -- history is only part of the story, so it does not qualify.
+               -- Read-time only — nothing is written, so a resync cannot
+               -- clobber this and no migration is involved. The rule itself
+               -- lives in the `lot` lateral as `basis`; these two columns only
+               -- convert it.
+               coalesce(lot.basis * fx_asof(a.currency, (select d from today)), 0)
                    / reporting_fx_asof($1, (select d from today)) as "invested!",
-               h.cost_basis    as "invested_native!",
+               lot.basis      as "invested_native!",
                (unit_value_asof(i.id, (select d from today)) is null
                 and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
                    as "fx_missing!",
                -- §9.1: shares no recorded lot explains. Scoped to THIS holding's
-               -- (account, instrument) — never the instrument alone, or another
-               -- user's buy of the same ETF would reduce this figure (the exact
-               -- cross-user bug already found and fixed in the backfill engine).
-               case when i.kind = 'cash' then 0 else greatest(
-                   h.quantity - coalesce((
-                       select sum(case when t.type = 'buy' then t.quantity else -t.quantity end)
-                       from transaction t
-                       where t.account_id = h.account_id
-                         and t.instrument_id = h.instrument_id
-                         and t.type in ('buy', 'sell')
-                         and t.quantity is not null
-                   ), 0),
-                   0
-               ) end as "unexplained_quantity!"
+               -- (account, instrument) via the `lot` lateral — never the
+               -- instrument alone, or another user's buy of the same ETF would
+               -- reduce this figure (the exact cross-user bug already found and
+               -- fixed in the backfill engine).
+               --
+               -- SIGNED, deliberately: negative means more is recorded than is
+               -- held. Flooring it at zero made that state invisible, so the
+               -- user was never told and could never open the modal to fix it.
+               case when i.kind = 'cash' then 0
+                    else h.quantity - coalesce(lot.explained, 0)
+               end as "unexplained_quantity!"
         from holding h
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
@@ -262,6 +268,37 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             order by hs.as_of desc
             limit 1
         ) snap on true
+        left join lateral (
+            -- Spec §4.1/§4.3, one pass for every consumer below.
+            -- `explained` is the net quantity the recorded lots account for;
+            -- `mu` the lifetime mean buy price. `mu` additionally requires a
+            -- unit price (a quantity with no price says nothing about basis)
+            -- while `explained` does not — a row with a quantity still moves
+            -- the position whether or not its price was recorded.
+            --
+            -- `basis` is resolved HERE, once, so the reporting-currency and
+            -- native `invested` columns below cannot drift apart: §4.3's rule
+            -- exists in exactly one place.
+            select agg.explained,
+                   case when i.kind <> 'cash'
+                         and agg.explained = h.quantity
+                         and agg.mu is not null
+                        then agg.mu * h.quantity
+                        else h.cost_basis
+                   end as basis
+            from (
+                select sum(case when t.type = 'buy' then t.quantity else -t.quantity end) as explained,
+                       sum(t.quantity * t.unit_price)
+                           filter (where t.type = 'buy' and t.unit_price is not null)
+                       / nullif(sum(t.quantity)
+                           filter (where t.type = 'buy' and t.unit_price is not null), 0) as mu
+                from transaction t
+                where t.account_id = h.account_id
+                  and t.instrument_id = h.instrument_id
+                  and t.type in ('buy', 'sell')
+                  and t.quantity is not null
+            ) agg
+        ) lot on true
         where c.user_id = $1 and h.quantity <> 0
         order by h.id
         "#,
@@ -348,10 +385,17 @@ pub async fn holding_prices(
 }
 
 pub struct TxnRow {
+    pub id: Uuid,
     pub ts: DateTime<Utc>,
+    /// `transaction.type` — `buy` or `sell`. Named `kind` because `type` is a
+    /// Rust keyword; it is serialised back to `type` on the wire.
+    pub kind: String,
     pub quantity: Option<Decimal>,
     pub unit_price: Option<Decimal>,
     pub amount: Decimal,
+    /// `external_id is null` — a row the user entered, and the only kind the
+    /// record-lots modal may delete.
+    pub manual: bool,
 }
 
 pub async fn holding_transactions(
@@ -362,7 +406,8 @@ pub async fn holding_transactions(
     let rows = sqlx::query_as!(
         TxnRow,
         r#"
-        select t.ts as "ts!", t.quantity, t.unit_price, t.amount as "amount!"
+        select t.id as "id!", t.ts as "ts!", t.type as "kind!", t.quantity, t.unit_price,
+               t.amount as "amount!", (t.external_id is null) as "manual!"
         from transaction t
         join holding h    on h.account_id = t.account_id and h.instrument_id = t.instrument_id
         join account a    on a.id = h.account_id
