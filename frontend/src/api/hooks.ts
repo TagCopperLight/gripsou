@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -19,6 +20,8 @@ import type {
   Purchase,
   Session,
   SessionUser,
+  Transaction,
+  TransactionQuery,
   User,
 } from "./types";
 import { hasSyncing } from "./types";
@@ -42,6 +45,28 @@ export function useHoldings() {
   return useQuery({
     queryKey: ["holdings"],
     queryFn: () => getJson<Holding[]>(`/holdings`),
+  });
+}
+
+export type AddLotInput = { date: string; quantity: string; unitPrice: string };
+
+export function useAddLot(holdingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lot: AddLotInput) => postJson<void>(`/holdings/${holdingId}/lots`, lot),
+    onSuccess: () => {
+      // The lot changes the explained quantity, the cost basis and the derived
+      // history, so every read of those has to refetch: the holdings list, the
+      // transactions ledger (the lot is itself a transaction row), net worth,
+      // the accounts stacked-area chart, and this holding's own purchase list
+      // and price history shown in AssetModal.
+      qc.invalidateQueries({ queryKey: ["holdings"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["net-worth"] });
+      qc.invalidateQueries({ queryKey: ["account-series"] });
+      qc.invalidateQueries({ queryKey: ["holding-transactions", holdingId] });
+      qc.invalidateQueries({ queryKey: ["holding-prices", holdingId] });
+    },
   });
 }
 
@@ -71,6 +96,40 @@ export function useAccountSeries(range: string) {
   return useQuery({
     queryKey: ["account-series", range],
     queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+// The Transactions page is deliberately plain (§10): a load-more button over
+// useInfiniteQuery's built-in page tracking, rather than a page-number UI or
+// scroll-triggered fetching. Each page asks for PAGE_SIZE rows at `offset`;
+// a page shorter than PAGE_SIZE means there is nothing left to fetch.
+export const TRANSACTIONS_PAGE_SIZE = 200;
+
+export type TransactionFilterQuery = Omit<TransactionQuery, "limit" | "offset">;
+
+export function useTransactions(q: TransactionFilterQuery) {
+  return useInfiniteQuery({
+    queryKey: ["transactions", q],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (q.search) params.set("search", q.search);
+      if (q.accountId) params.set("accountId", q.accountId);
+      if (q.type) params.set("type", q.type);
+      if (q.from) params.set("from", q.from);
+      if (q.to) params.set("to", q.to);
+      params.set("limit", String(TRANSACTIONS_PAGE_SIZE));
+      params.set("offset", String(pageParam));
+      return getJson<Transaction[]>(`/transactions?${params}`);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length < TRANSACTIONS_PAGE_SIZE
+        ? undefined
+        : allPages.length * TRANSACTIONS_PAGE_SIZE,
+    // Changing any filter changes the queryKey, which makes react-query start
+    // a fresh page-1 fetch on its own — the reset a filter change needs falls
+    // out of this for free, with no extra state to keep in sync.
     placeholderData: keepPreviousData,
   });
 }

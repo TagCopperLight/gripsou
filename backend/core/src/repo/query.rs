@@ -72,9 +72,13 @@ pub async fn net_worth_series(
         join account a    on a.id = h.account_id
         join connection c on c.id = a.connection_id
         join instrument i on i.id = h.instrument_id
+        -- `holding_point` is holding_snapshot ∪ holding_backfill. The invariant
+        -- (§4, enforced by stamp_snapshot) is that no day carries both, so the
+        -- union needs no precedence rule: synced truth simply exists where it
+        -- exists, and derived values fill the rest.
         join lateral (
             select hs.quantity, hs.value, hs.cost_basis
-            from holding_snapshot hs
+            from holding_point hs
             where hs.holding_id = h.id and hs.as_of <= d.as_of
             order by hs.as_of desc
             limit 1
@@ -135,6 +139,11 @@ pub struct HoldingRow {
     /// Neither valuation branch resolved (no usable price and no convertible
     /// snapshot value), so `value` reads zero.
     pub fx_missing: bool,
+    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells`, floored
+    /// at zero (§9.1). Non-zero means the cost basis and the pre-purchase
+    /// history are guesses, which the Holdings badge says out loud. Always zero
+    /// for cash — a cash line has nothing to explain.
+    pub unexplained_quantity: Decimal,
 }
 
 pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
@@ -160,6 +169,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         invested: Decimal,
         invested_native: Decimal,
         fx_missing: bool,
+        unexplained_quantity: Decimal,
     }
 
     let bases = sqlx::query_as!(
@@ -205,7 +215,22 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                h.cost_basis    as "invested_native!",
                (unit_value_asof(i.id, (select d from today)) is null
                 and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
-                   as "fx_missing!"
+                   as "fx_missing!",
+               -- §9.1: shares no recorded lot explains. Scoped to THIS holding's
+               -- (account, instrument) — never the instrument alone, or another
+               -- user's buy of the same ETF would reduce this figure (the exact
+               -- cross-user bug already found and fixed in the backfill engine).
+               case when i.kind = 'cash' then 0 else greatest(
+                   h.quantity - coalesce((
+                       select sum(case when t.type = 'buy' then t.quantity else -t.quantity end)
+                       from transaction t
+                       where t.account_id = h.account_id
+                         and t.instrument_id = h.instrument_id
+                         and t.type in ('buy', 'sell')
+                         and t.quantity is not null
+                   ), 0),
+                   0
+               ) end as "unexplained_quantity!"
         from holding h
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
@@ -271,6 +296,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             invested: b.invested,
             invested_native: b.invested_native,
             fx_missing: b.fx_missing,
+            unexplained_quantity: b.unexplained_quantity,
         });
     }
     Ok(out)
@@ -454,7 +480,7 @@ pub async fn account_series(
         join instrument i on i.id = h.instrument_id
         join lateral (
             select hs.quantity, hs.value
-            from holding_snapshot hs
+            from holding_point hs
             where hs.holding_id = h.id and hs.as_of <= d.as_of
             order by hs.as_of desc
             limit 1
@@ -576,6 +602,78 @@ pub async fn distribution(
         order by sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) desc
         "#,
         user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub struct TransactionListRow {
+    pub id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub kind: String,
+    pub description: Option<String>,
+    /// In `account_currency` — the amount domain, as the provider sent it. Not
+    /// converted: the list shows what actually moved in the account.
+    pub amount: Decimal,
+    pub account_id: Uuid,
+    pub account_name: String,
+    pub account_color: Option<String>,
+    pub account_currency: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransactionFilters {
+    /// Case-insensitive substring of `description`.
+    pub search: Option<String>,
+    pub account_id: Option<Uuid>,
+    pub kind: Option<String>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// The Transactions page (§10). Every filter is optional and applied with the
+/// `$n is null or ...` idiom so one prepared statement covers all combinations —
+/// no query builder, and the macro still checks it at compile time.
+pub async fn transactions(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    f: &TransactionFilters,
+) -> Result<Vec<TransactionListRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        TransactionListRow,
+        r#"
+        select t.id as "id!",
+               t.ts as "ts!",
+               t.type as "kind!",
+               t.description,
+               t.amount as "amount!",
+               a.id as "account_id!",
+               a.name as "account_name!",
+               a.color as "account_color",
+               a.currency as "account_currency!"
+        from transaction t
+        join account a    on a.id = t.account_id
+        join connection c on c.id = a.connection_id
+        where c.user_id = $1
+          and ($2::text is null or t.description ilike '%' || $2 || '%')
+          and ($3::uuid is null or a.id = $3)
+          and ($4::text is null or t.type = $4)
+          and ($5::date is null or t.ts::date >= $5)
+          and ($6::date is null or t.ts::date <= $6)
+        order by t.ts desc, t.id
+        limit $7 offset $8
+        "#,
+        user_id,
+        f.search,
+        f.account_id,
+        f.kind,
+        f.from,
+        f.to,
+        f.limit,
+        f.offset,
     )
     .fetch_all(pool)
     .await?;

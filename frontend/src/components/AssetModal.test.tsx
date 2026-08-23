@@ -13,6 +13,7 @@ const BASE: Holding = {
   invested: "800", investedNative: "800", value: "1000", gl: "200", glPct: "0.25",
   fxMissing: false, spark: null,
   composition: { countries: [{ name: "United States", weight: 0.62 }], sectors: [] },
+  unexplainedQty: "0",
 };
 
 function withClient(children: ReactNode) {

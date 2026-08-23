@@ -1,14 +1,15 @@
 //! Pure mapping: Powens wire models -> gripsou canonical DTOs.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use gripsou_core::dto::{
-    CanonicalAccount, CanonicalHolding, Institution, InstrumentRef, SyncResult,
+    CanonicalAccount, CanonicalHolding, CanonicalTransaction, Institution, InstrumentRef,
+    SyncResult,
 };
 use rust_decimal::Decimal;
 use serde_json::json;
 
-use crate::powens::model::{BankAccount, Connection, Investment};
+use crate::powens::model::{BankAccount, Connection, Investment, PowensTransaction};
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
 /// `account_type` keys. `None` marks a liability (loan, card):
@@ -218,10 +219,23 @@ fn cash_holding(
     })
 }
 
-/// Top-level mapping: Powens accounts + investments -> a canonical `SyncResult`.
+/// Top-level mapping: Powens accounts + investments + transactions -> a
+/// canonical `SyncResult`.
+///
 /// Deleted accounts (and their holdings) are skipped; each surviving account
 /// contributes its security holdings and a cash holding per `cash_holding`.
-pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncResult {
+///
+/// Transactions are filtered here rather than in `map_transactions` because
+/// only this function knows which accounts were emitted: `/users/me/transactions`
+/// is user-scoped, so it returns rows belonging to the accounts skipped above
+/// (a loan, a deferred-debit card, a deleted account). Emitting those would
+/// hand the core a dangling `account_external_id`, which is exactly the kind of
+/// dangling reference the core is entitled to treat as a bug.
+pub fn map_sync(
+    accounts: &[BankAccount],
+    investments: &[Investment],
+    transactions: &[PowensTransaction],
+) -> SyncResult {
     let mut by_account: HashMap<i64, Vec<&Investment>> = HashMap::new();
     for inv in investments {
         if inv.deleted.is_none() {
@@ -271,5 +285,85 @@ pub fn map_sync(accounts: &[BankAccount], investments: &[Investment]) -> SyncRes
             result.holdings.push(cash);
         }
     }
+
+    let emitted: HashSet<&str> = result
+        .accounts
+        .iter()
+        .map(|a| a.external_id.as_str())
+        .collect();
+    result.transactions = map_transactions(transactions)
+        .into_iter()
+        .filter(|t| emitted.contains(t.account_external_id.as_str()))
+        .collect();
+
     result
+}
+
+/// Powens appends the card's last four digits to the wording on ~77% of card
+/// rows (§2.1). It carries no information the app uses, and it defeats both
+/// search and Phase 2 merchant matching.
+pub fn strip_card_mask(wording: &str) -> &str {
+    let Some(idx) = wording.rfind("CB*") else {
+        return wording;
+    };
+    let tail = &wording[idx + 3..];
+    if tail.is_empty() || !tail.chars().all(|c| c.is_ascii_digit()) {
+        return wording;
+    }
+    wording[..idx].trim_end()
+}
+
+/// Direction comes from the sign of `value`; the Powens `type` only picks a
+/// semantic label the sign cannot express (§6.2). Stated this way because
+/// `market_fee` rows were observed carrying positive "INTERETS" values, and
+/// Powens warns that new type strings appear without notice.
+pub fn map_txn_type(powens_type: Option<&str>, value: Decimal) -> &'static str {
+    let negative = value < Decimal::ZERO;
+    match powens_type.unwrap_or("") {
+        "transfer" | "order" => "transfer",
+        "profit" => "dividend",
+        "market_fee" => {
+            if negative {
+                "fee"
+            } else {
+                "interest"
+            }
+        }
+        "bank" | "fee" => "fee",
+        "market_order" => {
+            if negative {
+                "buy"
+            } else {
+                "sell"
+            }
+        }
+        _ if negative => "withdrawal",
+        _ => "deposit",
+    }
+}
+
+/// `None` for a row that must not enter the ledger: pending (§6.1), deleted, or
+/// missing the two fields the ledger cannot do without.
+pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
+    if t.coming || t.deleted.is_some() {
+        return None;
+    }
+    let value = t.value?;
+    let day = t.rdate.or(t.date)?;
+    Some(CanonicalTransaction {
+        account_external_id: t.id_account.to_string(),
+        external_id: t.id.to_string(),
+        kind: map_txn_type(t.r#type.as_deref(), value).to_string(),
+        ts: day.and_hms_opt(0, 0, 0)?.and_utc(),
+        quantity: None,
+        unit_price: None,
+        amount: value,
+        fee: None,
+        description: t.wording.as_deref().map(|w| strip_card_mask(w).to_string()),
+        provider_meta: serde_json::Value::Object(t.raw.clone()),
+    })
+}
+
+pub fn map_transactions(txns: &[PowensTransaction]) -> Vec<CanonicalTransaction> {
+    txns.iter().filter_map(map_transaction).collect()
 }

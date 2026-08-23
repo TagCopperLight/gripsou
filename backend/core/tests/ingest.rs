@@ -280,22 +280,100 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
+/// A transaction on an account the sync never emitted must not destroy an
+/// otherwise good sync. Powens' transactions endpoint is user-scoped, so it can
+/// name a liability or deleted account that the mapper skipped on purpose; that
+/// used to abort the whole ingest transaction and, since the condition is
+/// permanent, fail every subsequent sync forever.
 #[sqlx::test(migrations = "../migrations")]
-async fn unknown_account_ref_in_transaction_rolls_back(pool: PgPool) -> anyhow::Result<()> {
+async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
-        holdings: vec![],
-        transactions: vec![deposit_txn("ghost", "txn-1", Decimal::new(100, 0))], // unknown account
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+        transactions: vec![
+            deposit_txn("acct-1", "txn-1", Decimal::new(100, 0)),
+            deposit_txn("ghost", "txn-2", Decimal::new(50, 0)), // unknown account
+        ],
+    };
+    let summary = ingest(&pool, conn_id, &sync).await?;
+
+    // Everything else committed, and the summary counts only what was written.
+    assert_eq!(summary.accounts, 1);
+    assert_eq!(summary.holdings, 1);
+    assert_eq!(summary.snapshots, 1);
+    assert_eq!(
+        summary.transactions_inserted, 1,
+        "the dangling row is skipped"
+    );
+    assert_eq!(summary.transactions_updated, 0);
+
+    let accounts: i64 = sqlx::query_scalar("select count(*) from account")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(
+        accounts, 1,
+        "a dangling transaction must not roll back the sync"
+    );
+    let txns: Vec<String> = sqlx::query_scalar("select external_id from transaction")
+        .fetch_all(&pool)
+        .await?;
+    assert_eq!(txns, vec!["txn-1".to_string()]);
+    Ok(())
+}
+
+/// A dangling *holding* reference stays fatal: `map_sync` guarantees every
+/// holding belongs to an emitted account, so a violation is a real bug.
+#[sqlx::test(migrations = "../migrations")]
+async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let sync = SyncResult {
+        institution: Institution::default(),
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![cash_holding("ghost", Decimal::new(100, 0))],
+        transactions: vec![],
     };
     let err = ingest(&pool, conn_id, &sync).await.unwrap_err();
     assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
-
-    // The valid account must not have been committed (whole ingest rolls back).
     let accounts: i64 = sqlx::query_scalar("select count(*) from account")
         .fetch_one(&pool)
         .await?;
     assert_eq!(accounts, 0, "failed ingest rolls back entirely");
+    Ok(())
+}
+
+/// The backfill runs as part of ingest, so a sync that reports a balance and a
+/// history of transactions leaves a usable series behind it.
+#[sqlx::test(migrations = "../migrations")]
+async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let day = chrono::Utc::now().date_naive() - chrono::Duration::days(3);
+    let sync = SyncResult {
+        institution: Institution::default(),
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
+        transactions: vec![common::txn_on(
+            "acct-1",
+            "t1",
+            "deposit",
+            Decimal::new(2500, 2),
+            day,
+        )],
+    };
+    let summary = gripsou_core::ingest::ingest(&pool, conn_id, &sync).await?;
+    assert_eq!(summary.transactions_inserted, 1);
+    assert!(summary.backfill_rows > 0, "ingest derives history");
+
+    let before: Option<Decimal> =
+        sqlx::query_scalar("select hb.quantity from holding_backfill hb where hb.as_of = $1")
+            .bind(day - chrono::Duration::days(1))
+            .fetch_optional(&pool)
+            .await?;
+    assert_eq!(
+        before,
+        Some(Decimal::new(7500, 2)),
+        "100.00 - 25.00 deposit"
+    );
     Ok(())
 }

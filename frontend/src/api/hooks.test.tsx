@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useChangePassword, useHoldings, useUpdateAccount } from "./hooks";
+import {
+  TRANSACTIONS_PAGE_SIZE,
+  useAddLot,
+  useChangePassword,
+  useHoldings,
+  useTransactions,
+  useUpdateAccount,
+} from "./hooks";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -67,6 +74,87 @@ describe("useUpdateAccount", () => {
         color: "#4dd0b1",
       }),
     });
+  });
+});
+
+describe("useAddLot", () => {
+  it("invalidates every query a saved lot changes, including account-series and holding-* views", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    const { client, wrapper: w } = makeWrapper();
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useAddLot("h1"), { wrapper: w });
+
+    result.current.mutate({ date: "2024-05-02", quantity: "20", unitPrice: "16.03" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(["holdings"]);
+    expect(invalidatedKeys).toContainEqual(["transactions"]);
+    expect(invalidatedKeys).toContainEqual(["net-worth"]);
+    expect(invalidatedKeys).toContainEqual(["account-series"]);
+    expect(invalidatedKeys).toContainEqual(["holding-transactions", "h1"]);
+    expect(invalidatedKeys).toContainEqual(["holding-prices", "h1"]);
+  });
+});
+
+describe("useTransactions", () => {
+  function page(n: number) {
+    return Array.from({ length: n }, (_, i) => ({ id: `t${i}` }));
+  }
+
+  it("requests the first page at offset 0 with the page-size limit", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify(page(TRANSACTIONS_PAGE_SIZE)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useTransactions({ search: "leclerc" }), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/transactions?search=leclerc&limit=${TRANSACTIONS_PAGE_SIZE}&offset=0`,
+      { headers: {} },
+    );
+    expect(result.current.hasNextPage).toBe(true);
+  });
+
+  it("fetches the next page at the accumulated offset, and stops once a page comes back short", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(page(TRANSACTIONS_PAGE_SIZE)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(page(5)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useTransactions({}), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(true);
+
+    result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data?.pages.length).toBe(2));
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/transactions?limit=${TRANSACTIONS_PAGE_SIZE}&offset=${TRANSACTIONS_PAGE_SIZE}`,
+      { headers: {} },
+    );
+    expect(result.current.hasNextPage).toBe(false);
   });
 });
 

@@ -69,6 +69,34 @@
       "saving": "Saving…"
     }
   },
+  "transactions": {
+    "search": "Search descriptions",
+    "empty": "No transactions match these filters.",
+    "loadMore": "Load more",
+    "loadingMore": "Loading…",
+    "allAccounts": "All accounts",
+    "allTypes": "All types",
+    "from": "From",
+    "to": "To",
+    "columns": {
+      "date": "Date",
+      "description": "Description",
+      "account": "Account",
+      "amount": "Amount"
+    },
+    "types": {
+      "deposit": "Deposit",
+      "withdrawal": "Withdrawal",
+      "buy": "Buy",
+      "sell": "Sell",
+      "dividend": "Dividend",
+      "fee": "Fee",
+      "interest": "Interest",
+      "transfer": "Transfer"
+    },
+    "shown_one": "Showing {{count}} transaction",
+    "shown_other": "Showing {{count}} transactions"
+  },
   "dashboard": {
     "fxMissing": "No exchange rate yet for this currency — the value is not counted. It should arrive on the next sync.",
     "netWorth": {
@@ -94,6 +122,22 @@
         "value": "VALUE",
         "unrealizedPnl": "UNREALIZED P/L",
         "thirtyDays": "30D"
+      },
+      "gap": {
+        "badge": "Incomplete",
+        "tooltip": "{{qty}} shares have no recorded purchase — add one to fix the cost basis and the past chart.",
+        "title": "Record a purchase",
+        "date": "Date",
+        "quantity": "Quantity",
+        "unitPrice": "Unit price",
+        "add": "Add another",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Saved",
+        "saveError": "Row {{row}} could not save. The rows before it were saved to your account; fix row {{row}} and save again.",
+        "invalidNumber": "Row {{row}}: enter a valid number, e.g. 16.03.",
+        "nonPositiveQuantity": "Row {{row}}: quantity must be greater than zero.",
+        "negativeUnitPrice": "Row {{row}}: unit price cannot be negative."
       }
     },
     "assetModal": {

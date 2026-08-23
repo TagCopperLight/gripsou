@@ -88,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/accounts", get(handlers::accounts))
         .route("/accounts/series", get(handlers::account_series))
         .route("/accounts/{id}", patch(handlers::update_account))
+        .route("/transactions", get(handlers::transactions))
         .route("/account-types", get(handlers::account_types))
         .route("/connections", get(handlers::connections))
         .route("/connections/{id}/sync", post(handlers::sync_connection))
@@ -116,6 +117,7 @@ async fn main() -> anyhow::Result<()> {
             "/holdings/{id}/transactions",
             get(handlers::holding_transactions),
         )
+        .route("/holdings/{id}/lots", post(handlers::add_lot))
         .with_state(app_state);
 
     let cors_layer = CorsLayer::new()

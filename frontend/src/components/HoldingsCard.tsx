@@ -7,6 +7,7 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
+import { AddLotModal } from "./AddLotModal";
 import { CardState } from "./CardState";
 import { HoldingBadge } from "./HoldingBadge";
 import { formatQuantity } from "../lib/money";
@@ -88,6 +89,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const [accountType, setAccountType] = useState("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
+  const [lotFor, setLotFor] = useState<Holding | null>(null);
 
   // Filter by stable account-type key; keep the backend label around as the
   // i18n fallback for each key.
@@ -244,6 +246,21 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           {h.ticker} · {t(KIND_LABEL_KEY[h.kind])}
                         </span>
                       </div>
+                      {Number(h.unexplainedQty) > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLotFor(h);
+                          }}
+                          title={t("dashboard.holdings.gap.tooltip", {
+                            qty: formatQuantity(h.unexplainedQty),
+                          })}
+                          className="ml-1 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-soft text-amber cursor-pointer"
+                        >
+                          {t("dashboard.holdings.gap.badge")}
+                        </button>
+                      )}
                     </div>
                   </td>
                   {/* QUANTITY */}
@@ -335,6 +352,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           onClose={() => setSelected(null)}
         />
       )}
+
+      {lotFor && <AddLotModal holding={lotFor} onClose={() => setLotFor(null)} />}
     </Surface>
   );
 }
