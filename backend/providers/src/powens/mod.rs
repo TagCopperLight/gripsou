@@ -41,8 +41,12 @@ impl PowensProvider {
         format!("{}/2.0/{}", self.origin, path.trim_start_matches('/'))
     }
 
-    #[cfg(test)]
-    pub(crate) fn for_test(base_url: &str) -> Self {
+    /// Test-only constructor pointing the REST API base at a mock server.
+    /// Not `#[cfg(test)]`-gated because integration tests in `providers/tests/`
+    /// build against this crate as an ordinary dependency, where `cfg(test)`
+    /// items don't exist at all.
+    #[doc(hidden)]
+    pub fn for_test(base_url: &str) -> Self {
         Self {
             client_id: "test-client".into(),
             client_secret: "test-secret".into(),
@@ -54,11 +58,52 @@ impl PowensProvider {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn for_test_with_secret(base_url: &str, secret: &str) -> Self {
+    #[doc(hidden)]
+    pub fn for_test_with_secret(base_url: &str, secret: &str) -> Self {
         let mut p = Self::for_test(base_url);
         p.webhook_secret = Some(secret.to_string());
         p
+    }
+
+    /// Full history, every sync. Powens' `last_update` filter returns only rows
+    /// edited since a timestamp and therefore cannot backfill, so incremental is
+    /// unsafe; full-fetch + external_id dedup is idempotent instead (§6.1).
+    ///
+    /// ponytail: fetches the whole history; add a min_date window if payloads
+    /// grow past a few thousand rows (largest observed: 2,111).
+    async fn fetch_transactions(
+        &self,
+        auth_token: &str,
+    ) -> Result<Vec<model::PowensTransaction>, ProviderError> {
+        let mut url = self.api_url("/users/me/transactions?limit=1000");
+        let mut all = Vec::new();
+        // Bounded so a provider bug cannot spin forever: 1000 rows/page.
+        for _ in 0..100 {
+            let resp = self
+                .http
+                .get(&url)
+                .bearer_auth(auth_token)
+                .send()
+                .await
+                .map_err(|e| ProviderError::Other(e.to_string()))?;
+            if !resp.status().is_success() {
+                return Err(ProviderError::Other(format!(
+                    "GET /users/me/transactions failed: {}",
+                    resp.status()
+                )));
+            }
+            let page: model::TransactionsResponse = resp
+                .json()
+                .await
+                .map_err(|e| ProviderError::Other(format!("transactions decode error: {e}")))?;
+            all.extend(page.transactions);
+            match page.links.next {
+                Some(next) => url = next.href,
+                None => return Ok(all),
+            }
+        }
+        tracing::warn!("powens transactions: page limit hit, history may be truncated");
+        Ok(all)
     }
 }
 
@@ -264,7 +309,9 @@ impl AccountProvider for PowensProvider {
             }
         };
 
-        let mut result = map::map_sync(&accounts.accounts, &investments.investments);
+        let transactions = self.fetch_transactions(auth_token).await?;
+
+        let mut result = map::map_sync(&accounts.accounts, &investments.investments, &transactions);
         result.institution = map::map_institution(&connections);
         Ok(result)
     }
@@ -481,6 +528,13 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(&investments))
             .mount(&server)
             .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me/transactions"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "transactions": [] })),
+            )
+            .mount(&server)
+            .await;
 
         let p = PowensProvider::for_test(&server.uri());
         let creds = serde_json::json!({ "auth_token": "live-token" });
@@ -575,6 +629,13 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "connections": [ { "id": 99, "connector": { "uuid": "abc-uuid-bnp", "name": "BNP Paribas" } } ]
             })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/2.0/users/me/transactions"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "transactions": [] })),
+            )
             .mount(&server)
             .await;
 

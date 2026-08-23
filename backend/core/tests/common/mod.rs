@@ -12,6 +12,13 @@ use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction
 
 /// Insert a user + connection, returning the connection id.
 pub async fn seed_connection(pool: &PgPool) -> Uuid {
+    let (_user_id, conn_id) = seed_user_and_connection(pool).await;
+    conn_id
+}
+
+/// Same, but hands back the owning user so a test can add a second connection
+/// under it (the backfill horizon is user-wide).
+pub async fn seed_user_and_connection(pool: &PgPool) -> (Uuid, Uuid) {
     let user_id = Uuid::new_v4();
     sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Test', 'x')")
         .bind(user_id)
@@ -19,7 +26,12 @@ pub async fn seed_connection(pool: &PgPool) -> Uuid {
         .execute(pool)
         .await
         .unwrap();
+    let conn_id = seed_connection_for(pool, user_id).await;
+    (user_id, conn_id)
+}
 
+/// Insert another connection belonging to an existing user.
+pub async fn seed_connection_for(pool: &PgPool, user_id: Uuid) -> Uuid {
     let conn_id = Uuid::new_v4();
     sqlx::query(
         "insert into connection (id, user_id, provider_key, display_name) \
@@ -96,6 +108,44 @@ pub fn deposit_txn(
         unit_price: None,
         amount,
         fee: None,
+        description: None,
+        provider_meta: serde_json::json!({}),
+    }
+}
+
+/// A transaction of an arbitrary type, for ingest/backfill tests.
+pub fn txn(
+    account_external_id: &str,
+    external_id: &str,
+    kind: &str,
+    amount: Decimal,
+    description: Option<&str>,
+) -> CanonicalTransaction {
+    CanonicalTransaction {
+        account_external_id: account_external_id.to_string(),
+        external_id: external_id.to_string(),
+        kind: kind.to_string(),
+        ts: Utc::now(),
+        quantity: None,
+        unit_price: None,
+        amount,
+        fee: None,
+        description: description.map(str::to_string),
+        provider_meta: serde_json::json!({}),
+    }
+}
+
+/// Same, on a specific day (the backfill walks by date, not by instant).
+pub fn txn_on(
+    account_external_id: &str,
+    external_id: &str,
+    kind: &str,
+    amount: Decimal,
+    day: NaiveDate,
+) -> CanonicalTransaction {
+    CanonicalTransaction {
+        ts: day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        ..txn(account_external_id, external_id, kind, amount, None)
     }
 }
 

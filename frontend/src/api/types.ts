@@ -74,6 +74,9 @@ export type Holding = {
   fxMissing: boolean;
   spark: string[] | null;
   composition: Composition | null;
+  /** Shares no recorded lot explains (§9.1). "0" when the position is fully
+   *  accounted for. A non-zero value drives the fill-in badge. */
+  unexplainedQty: string;
 };
 
 export type PricePoint = { t: number; price: string };
@@ -186,4 +189,28 @@ export type EnabledProvider = {
   key: string;
   displayName: string;
   description: string | null;
+};
+
+export type Transaction = {
+  id: string;
+  t: number;
+  type: string;
+  description: string | null;
+  /** Decimal string, denominated in the ACCOUNT's own currency (see `currency`),
+   *  never the user's reporting currency — do not relabel it. */
+  amount: string;
+  currency: string;
+  accountId: string;
+  accountName: string;
+  accountColor: string | null;
+};
+
+export type TransactionQuery = {
+  search?: string;
+  accountId?: string;
+  type?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
 };

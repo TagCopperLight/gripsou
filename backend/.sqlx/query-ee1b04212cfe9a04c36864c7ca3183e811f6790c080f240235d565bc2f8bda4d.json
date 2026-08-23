@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from holding_backfill hb\n        using holding h\n        join account a on a.id = h.account_id\n        where hb.holding_id = h.id and a.connection_id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee1b04212cfe9a04c36864c7ca3183e811f6790c080f240235d565bc2f8bda4d"
+}

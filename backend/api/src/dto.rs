@@ -134,6 +134,9 @@ pub struct Holding {
     pub fx_missing: bool,
     pub spark: Option<Vec<String>>,
     pub composition: Option<gripsou_core::dto::Composition>,
+    /// Shares no recorded lot explains (§9.1). "0" when the position is fully
+    /// accounted for. A non-zero value drives the fill-in badge.
+    pub unexplained_qty: String,
 }
 
 impl Holding {
@@ -194,8 +197,18 @@ impl Holding {
             fx_missing: r.fx_missing,
             spark,
             composition: r.composition,
+            unexplained_qty: r.unexplained_quantity.to_string(),
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddLotReq {
+    pub date: NaiveDate,
+    /// Decimal strings — money and quantities never cross the wire as floats.
+    pub quantity: String,
+    pub unit_price: String,
 }
 
 #[derive(Serialize)]
@@ -230,6 +243,39 @@ impl Purchase {
             qty: r.quantity.unwrap_or(Decimal::ZERO).to_string(),
             price: r.unit_price.unwrap_or(Decimal::ZERO).to_string(),
             invested: r.amount.to_string(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transaction {
+    pub id: String,
+    /// Epoch milliseconds, like every other timestamp in this API.
+    pub t: i64,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub description: Option<String>,
+    /// Decimal string in `currency` — never a float.
+    pub amount: String,
+    pub currency: String,
+    pub account_id: String,
+    pub account_name: String,
+    pub account_color: Option<String>,
+}
+
+impl Transaction {
+    pub fn from_row(r: gripsou_core::repo::query::TransactionListRow) -> Self {
+        Transaction {
+            id: r.id.to_string(),
+            t: r.ts.timestamp_millis(),
+            kind: r.kind,
+            description: r.description,
+            amount: r.amount.to_string(),
+            currency: r.account_currency,
+            account_id: r.account_id.to_string(),
+            account_name: r.account_name,
+            account_color: r.account_color,
         }
     }
 }

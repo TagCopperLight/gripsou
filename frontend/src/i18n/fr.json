@@ -69,6 +69,34 @@
       "saving": "Enregistrement…"
     }
   },
+  "transactions": {
+    "search": "Rechercher dans les libellés",
+    "empty": "Aucune transaction ne correspond à ces filtres.",
+    "loadMore": "Charger plus",
+    "loadingMore": "Chargement…",
+    "allAccounts": "Tous les comptes",
+    "allTypes": "Tous les types",
+    "from": "Du",
+    "to": "Au",
+    "columns": {
+      "date": "Date",
+      "description": "Libellé",
+      "account": "Compte",
+      "amount": "Montant"
+    },
+    "types": {
+      "deposit": "Dépôt",
+      "withdrawal": "Retrait",
+      "buy": "Achat",
+      "sell": "Vente",
+      "dividend": "Dividende",
+      "fee": "Frais",
+      "interest": "Intérêts",
+      "transfer": "Virement"
+    },
+    "shown_one": "{{count}} transaction affichée",
+    "shown_other": "{{count}} transactions affichées"
+  },
   "dashboard": {
     "fxMissing": "Pas encore de taux de change pour cette devise — la valeur n'est pas comptée. Il devrait arriver à la prochaine synchronisation.",
     "netWorth": {
@@ -94,6 +122,22 @@
         "value": "VALEUR",
         "unrealizedPnl": "P/L LATENT",
         "thirtyDays": "30J"
+      },
+      "gap": {
+        "badge": "Incomplet",
+        "tooltip": "{{qty}} titres sans achat enregistré — ajoutez-en un pour corriger le prix de revient et l'historique.",
+        "title": "Enregistrer un achat",
+        "date": "Date",
+        "quantity": "Quantité",
+        "unitPrice": "Prix unitaire",
+        "add": "Ajouter une ligne",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "saved": "Enregistré",
+        "saveError": "La ligne {{row}} n'a pas pu être enregistrée. Les lignes précédentes ont bien été enregistrées ; corrigez la ligne {{row}} et réessayez.",
+        "invalidNumber": "Ligne {{row}} : saisissez un nombre valide, par exemple 16,03.",
+        "nonPositiveQuantity": "Ligne {{row}} : la quantité doit être supérieure à zéro.",
+        "negativeUnitPrice": "Ligne {{row}} : le prix unitaire ne peut pas être négatif."
       }
     },
     "assetModal": {

@@ -5,6 +5,7 @@ use axum::Json;
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::net::SocketAddr;
@@ -41,10 +42,16 @@ fn default_range() -> String {
     "6mo".to_string()
 }
 
+/// The real error goes to the log; the client gets a fixed, non-descriptive
+/// message. sqlx/Postgres error strings quote the failing statement and its
+/// parameters, so returning them hands an untrusted caller a view of the schema
+/// and of whatever input reached the query.
 fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    let msg = e.to_string();
-    tracing::error!("internal error: {msg}");
-    (StatusCode::INTERNAL_SERVER_ERROR, msg)
+    tracing::error!("internal error: {e}");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal server error".to_string(),
+    )
 }
 
 /// Resolve the caller and require the admin role. Server config and provider
@@ -147,6 +154,115 @@ pub async fn holding_transactions(
     ))
 }
 
+/// §9.2/§9.3: record a user-entered lot against a holding.
+///
+/// `holding` carries no `user_id` of its own, so ownership must be proven by
+/// joining `holding -> account -> connection` and checking `connection.user_id`
+/// before any write happens — without it, any authenticated user could write a
+/// transaction into another user's account. A holding the caller does not own
+/// reads as 404, not 403, so the endpoint does not confirm the existence of ids
+/// the caller cannot see.
+pub async fn add_lot(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(holding_id): Path<Uuid>,
+    Json(req): Json<dto::AddLotReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let bad = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
+    let quantity: Decimal = req
+        .quantity
+        .parse()
+        .map_err(|_| bad("quantity is not a decimal"))?;
+    let unit_price: Decimal = req
+        .unit_price
+        .parse()
+        .map_err(|_| bad("unitPrice is not a decimal"))?;
+    if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
+        return Err(bad(
+            "quantity must be positive and unitPrice must not be negative",
+        ));
+    }
+    // `Decimal` decodes at most ~29 significant digits (96-bit mantissa) and a
+    // scale of at most 28. `transaction.quantity/unit_price/amount` are
+    // unconstrained `numeric`, so nothing stops a value that writes fine but
+    // can never be read back as a `Decimal` — every later read of this user's
+    // transactions would 500 forever. Bounds below are generous for any real
+    // security/crypto lot (8 decimal places covers satoshi-level precision;
+    // 10^12 units or currency-per-unit is far beyond any real holding) while
+    // still being tight enough, combined, that the multiplied `amount` cannot
+    // approach the ~29-digit ceiling.
+    const MAX_SCALE: u32 = 8;
+    let max_magnitude = Decimal::from(1_000_000_000_000i64); // 10^12
+    if quantity.scale() > MAX_SCALE || unit_price.scale() > MAX_SCALE {
+        return Err(bad(
+            "quantity and unitPrice support at most 8 decimal places",
+        ));
+    }
+    if quantity.abs() >= max_magnitude || unit_price.abs() >= max_magnitude {
+        return Err(bad("quantity and unitPrice must be below 10^12"));
+    }
+    let amount = quantity
+        .checked_mul(unit_price)
+        .ok_or_else(|| bad("quantity * unitPrice does not fit in a decimal"))?;
+    if amount.scale() > 28 {
+        return Err(bad("quantity * unitPrice does not fit in a decimal"));
+    }
+
+    let ts = req
+        .date
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| bad("invalid date"))?
+        .and_utc();
+
+    // One transaction for the whole thing: the lot and the history it implies
+    // are written together, so a failed backfill can never leave the lot
+    // recorded with a stale derived series behind it.
+    let mut tx = pool.begin().await.map_err(internal)?;
+
+    // Ownership check and the connection the backfill must rebuild, in one
+    // query: the connection is *derived* from the holding, never taken from the
+    // request, so a caller cannot aim the rebuild at someone else's connection.
+    let connection_id = sqlx::query_scalar!(
+        r#"
+        select a.connection_id as "connection_id!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join connection c on c.id = a.connection_id
+        where h.id = $1 and c.user_id = $2
+        "#,
+        holding_id,
+        user_id,
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(internal)?;
+    // A holding the caller does not own reads as 404, so the endpoint does not
+    // confirm the existence of ids the caller cannot see.
+    let Some(connection_id) = connection_id else {
+        return Err((StatusCode::NOT_FOUND, "unknown holding".to_string()));
+    };
+
+    let inserted = gripsou_core::repo::transaction::insert_manual_lot(
+        &mut tx, holding_id, user_id, ts, quantity, unit_price,
+    )
+    .await
+    .map_err(internal)?;
+    if inserted.is_none() {
+        // The check above already gated on ownership; the write's own predicate
+        // is belt and braces — 404, never a 500 from an empty row.
+        return Err((StatusCode::NOT_FOUND, "unknown holding".to_string()));
+    }
+
+    // §9: manual entry is the main path for securities, so the derived history
+    // must move now — not at the next daily sync, a day later.
+    gripsou_core::backfill::backfill_connection(&mut tx, connection_id)
+        .await
+        .map_err(internal)?;
+
+    tx.commit().await.map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn accounts(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -172,6 +288,42 @@ pub async fn account_series(
     .await
     .map_err(internal)?;
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionParams {
+    pub search: Option<String>,
+    pub account_id: Option<Uuid>,
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn transactions(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Query(p): Query<TransactionParams>,
+) -> Result<Json<Vec<dto::Transaction>>, (StatusCode, String)> {
+    // Capped so a crafted `limit` cannot ask for the whole ledger at once.
+    let filters = gripsou_core::repo::query::TransactionFilters {
+        search: p.search.filter(|s| !s.trim().is_empty()),
+        account_id: p.account_id,
+        kind: p.kind.filter(|s| !s.is_empty()),
+        from: p.from,
+        to: p.to,
+        limit: p.limit.unwrap_or(200).clamp(1, 500),
+        offset: p.offset.unwrap_or(0).max(0),
+    };
+    let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        rows.into_iter().map(dto::Transaction::from_row).collect(),
+    ))
 }
 
 pub async fn connections(
@@ -2116,5 +2268,336 @@ mod auth_tests {
         )
         .await;
         assert!(ok.is_ok());
+    }
+
+    /// Insert a user + connection, returning the connection id (mirrors
+    /// core's `common::seed_connection`, but this crate can't import that
+    /// test-only module across crates).
+    async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
+        let user_id = seed_user_role(pool, email, "hunter2", "user").await;
+        let conn_id = Uuid::new_v4();
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name) \
+             values ($1, $2, 'powens', 'Test connection')",
+        )
+        .bind(conn_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        conn_id
+    }
+
+    /// Seed a holding for a freshly created user/connection/account/instrument,
+    /// returning (user_id, holding_id).
+    async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
+        use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
+        use gripsou_core::repo::account::upsert_account;
+        use gripsou_core::repo::holding::upsert_holding;
+        use gripsou_core::repo::instrument::resolve_instrument;
+
+        let conn_id = seed_connection(pool, email).await;
+        let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+            .bind(conn_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+
+        let mut conn = pool.acquire().await.unwrap();
+        let account = CanonicalAccount {
+            external_id: "acct-1".into(),
+            name: "PEA".into(),
+            type_key: "pea".into(),
+            currency: "EUR".into(),
+            meta: serde_json::json!({}),
+        };
+        let account_id = upsert_account(&mut conn, conn_id, &account).await.unwrap();
+        let instrument = InstrumentRef {
+            kind: "equity".into(),
+            symbol: Some("ESE".into()),
+            isin: Some("IE00B5BMR087".into()),
+            name: "S&P 500".into(),
+            currency: "USD".into(),
+        };
+        let instrument_id = resolve_instrument(&mut conn, &instrument).await.unwrap();
+        let holding = CanonicalHolding {
+            account_external_id: "acct-1".into(),
+            instrument,
+            quantity: Decimal::new(100, 0),
+            cost_basis: Decimal::new(1000, 0),
+            valuation: Some(Decimal::new(1200, 0)),
+        };
+        let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &holding)
+            .await
+            .unwrap();
+        (user_id, holding_id)
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_writes_an_honest_buy(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+
+        let status = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id: Uuid::new_v4(),
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "20".into(),
+                unit_price: "16.029".into(),
+            }),
+        )
+        .await
+        .expect("add_lot ok");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let (kind, amount, external_id): (String, rust_decimal::Decimal, Option<String>) =
+            sqlx::query_as(
+                "select type, amount, external_id from transaction \
+                 where account_id = (select account_id from holding where id = $1)",
+            )
+            .bind(holding_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(kind, "buy");
+        assert_eq!(amount, Decimal::new(-32058, 2));
+        assert_eq!(external_id, None);
+    }
+
+    /// §9: manual entry is the main path for securities, so a lot must rebuild
+    /// the derived history immediately — otherwise the chart is unchanged until
+    /// the next daily sync, which is the feature failing at its stated purpose.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_rebuilds_the_derived_history(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let today = chrono::Utc::now().date_naive();
+        let lot_day = today - Duration::days(3);
+        gripsou_core::repo::snapshot::stamp_snapshot(
+            &mut pool.acquire().await.unwrap(),
+            holding_id,
+            today,
+            Decimal::new(100, 0),
+            Decimal::new(1200, 0),
+            Decimal::new(1000, 0),
+        )
+        .await
+        .unwrap();
+
+        let derived_before: i64 =
+            sqlx::query_scalar("select count(*) from holding_backfill where holding_id = $1")
+                .bind(holding_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(derived_before, 0, "nothing derived yet");
+
+        add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id: Uuid::new_v4(),
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: lot_day,
+                quantity: "20".into(),
+                unit_price: "16.029".into(),
+            }),
+        )
+        .await
+        .expect("add_lot ok");
+
+        // The day before the lot must now show the pre-lot position, walked
+        // back from today's snapshot of 100 shares.
+        let before_the_lot: Option<Decimal> = sqlx::query_scalar(
+            "select quantity from holding_backfill where holding_id = $1 and as_of = $2",
+        )
+        .bind(holding_id)
+        .bind(lot_day - Duration::days(1))
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            before_the_lot,
+            Some(Decimal::new(80, 0)),
+            "the lot must be reflected in the derived history straight away"
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_rejects_a_holding_owned_by_another_user(pool: PgPool) {
+        let (_owner_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let attacker_id = seed_user_role(&pool, "attacker@t.local", "hunter2", "user").await;
+
+        let err = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: attacker_id,
+                session_id: Uuid::new_v4(),
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "20".into(),
+                unit_price: "16.029".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            err.0,
+            StatusCode::NOT_FOUND,
+            "a holding the caller does not own must 404, not confirm its existence"
+        );
+
+        let count: i64 = sqlx::query_scalar("select count(*) from transaction")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "no row must be written for a rejected request");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_rejects_bad_decimals_and_non_positive_quantity(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let principal = auth::AuthUser {
+            user_id,
+            session_id: Uuid::new_v4(),
+        };
+
+        let not_a_number = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "not-a-number".into(),
+                unit_price: "16.029".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(not_a_number.0, StatusCode::BAD_REQUEST);
+
+        let zero_qty = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "0".into(),
+                unit_price: "16.029".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(zero_qty.0, StatusCode::BAD_REQUEST);
+
+        let negative_price = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "20".into(),
+                unit_price: "-1".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(negative_price.0, StatusCode::BAD_REQUEST);
+    }
+
+    /// Fix 2: a high-but-legitimate-precision lot (fractional crypto quantity
+    /// at satoshi-level, 8 decimal places on both fields) must still be
+    /// accepted — the bounds must not reject real securities/crypto lots.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_accepts_high_but_legitimate_precision(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+
+        let status = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id: Uuid::new_v4(),
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "0.12345678".into(),
+                unit_price: "123456.78901234".into(),
+            }),
+        )
+        .await
+        .expect("a high-precision but legitimate lot must be accepted");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    /// Fix 2: values that cannot round-trip through `Decimal` must be
+    /// rejected with 400, not silently truncated into a transaction that
+    /// later fails to decode. Scale and magnitude are the two ways a caller
+    /// could break every future read of their own transactions.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn add_lot_rejects_absurd_scale_and_magnitude(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let principal = auth::AuthUser {
+            user_id,
+            session_id: Uuid::new_v4(),
+        };
+
+        // Magnitude far beyond any real holding (10^14 > the 10^12 cap).
+        let huge_quantity = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "99999999999999".into(),
+                unit_price: "1".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(huge_quantity.0, StatusCode::BAD_REQUEST);
+
+        // Scale far beyond satoshi-level precision (20 decimal places).
+        let absurd_scale = add_lot(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id: principal.user_id,
+                session_id: principal.session_id,
+            },
+            Path(holding_id),
+            Json(dto::AddLotReq {
+                date: NaiveDate::from_ymd_opt(2024, 5, 2).unwrap(),
+                quantity: "1".into(),
+                unit_price: "1.00000000000000000001".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(absurd_scale.0, StatusCode::BAD_REQUEST);
+
+        let count: i64 = sqlx::query_scalar("select count(*) from transaction")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "no row must be written for a rejected request");
     }
 }

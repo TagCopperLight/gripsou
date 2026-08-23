@@ -5,11 +5,16 @@ use common::{
     cash_holding, checking_account, equity_holding, holding_ids, insert_price_on, seed_connection,
     stamp_on,
 };
+use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{Institution, SyncResult};
 use gripsou_core::ingest::ingest;
+use gripsou_core::repo::account::upsert_account;
+use gripsou_core::repo::holding::upsert_holding;
+use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::query;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[sqlx::test(migrations = "../migrations")]
 async fn insert_price_is_upsert(pool: PgPool) -> anyhow::Result<()> {
@@ -1240,6 +1245,712 @@ async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> a
     assert!(
         !cash_currencies.iter().any(|c| c == "usd"),
         "lowercase 'usd' rejected, got {cash_currencies:?}"
+    );
+    Ok(())
+}
+
+/// A derived row is a first-class point on the chart: net worth on a day with
+/// no snapshot comes from the backfill rather than from the older snapshot.
+#[sqlx::test(migrations = "../migrations")]
+async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let instrument_id = resolve_instrument(
+        &mut conn,
+        &gripsou_core::dto::InstrumentRef {
+            kind: "cash".into(),
+            symbol: None,
+            isin: None,
+            name: "Euro".into(),
+            currency: "EUR".into(),
+        },
+    )
+    .await?;
+    let holding_id = upsert_holding(
+        &mut conn,
+        account_id,
+        instrument_id,
+        &cash_holding("acct-1", Decimal::new(10000, 2)),
+    )
+    .await?;
+
+    let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let derived_day = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+    stamp_on(
+        &pool,
+        holding_id,
+        anchor,
+        Decimal::new(10000, 2),
+        Decimal::new(10000, 2),
+        Decimal::new(10000, 2),
+    )
+    .await;
+    sqlx::query(
+        "insert into holding_backfill (holding_id, as_of, quantity, value, cost_basis) \
+         values ($1, $2, 75, 75, 75)",
+    )
+    .bind(holding_id)
+    .bind(derived_day)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == derived_day)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(75, 0),
+        "derived quantity drives the point"
+    );
+    Ok(())
+}
+
+/// Seed one equity holding with a single snapshot on `anchor`, run the
+/// backfill, and return (user_id, instrument_id). The derived day is
+/// `anchor - 1`: the backfill horizon reaches one day past the earliest
+/// evidence, and days after the last snapshot have no anchor to walk from.
+async fn seed_backfilled_equity(
+    pool: &PgPool,
+    anchor: NaiveDate,
+    valuation: Decimal,
+) -> anyhow::Result<(Uuid, Uuid)> {
+    let conn_id = seed_connection(pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let holding = equity_holding(
+        "acct-1",
+        "US0378331005",
+        Decimal::new(10, 0),
+        Decimal::new(1000, 0),
+        Some(valuation),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &holding.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &holding).await?;
+    stamp_on(
+        pool,
+        holding_id,
+        anchor,
+        Decimal::new(10, 0),
+        valuation,
+        Decimal::new(1000, 0),
+    )
+    .await;
+
+    backfill_connection(&mut conn, conn_id).await?;
+    Ok((user_id, instrument_id))
+}
+
+/// A security with no price row at all is valued on derived days by carrying
+/// the anchor snapshot's unit valuation flat backward (§3 rule 3 applied to
+/// price). Without that the chart would dip to zero on every derived day and
+/// spuriously raise fx_missing.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_priceless_security_keeps_its_valuation_on_derived_days(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let derived_day = NaiveDate::from_ymd_opt(2026, 1, 9).unwrap();
+    let (user_id, _) = seed_backfilled_equity(&pool, anchor, Decimal::new(1200, 0)).await?;
+
+    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == derived_day)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(1200, 0),
+        "the anchor's unit valuation is carried flat backward, not zeroed"
+    );
+    assert!(
+        !on_derived.fx_missing,
+        "a valued derived day must not raise the missing-rate warning"
+    );
+    Ok(())
+}
+
+/// The priced path is untouched: when a price exists, quantity × unit_value_asof
+/// wins and the backfill's stored `value` is never consulted.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_priced_security_is_valued_from_the_price_on_derived_days(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let derived_day = NaiveDate::from_ymd_opt(2026, 1, 9).unwrap();
+    // Provider valuation (1200) deliberately disagrees with the price (100/unit
+    // × 10 = 1000) so the assertion can only pass via the primary branch.
+    let (user_id, instrument_id) =
+        seed_backfilled_equity(&pool, anchor, Decimal::new(1200, 0)).await?;
+    insert_price_on(
+        &pool,
+        instrument_id,
+        derived_day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        Decimal::new(100, 0),
+    )
+    .await;
+
+    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == derived_day)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(1000, 0),
+        "the price wins over the carried valuation"
+    );
+    Ok(())
+}
+
+/// Seed one equity holding that was fully sold: a valued snapshot on `held_day`,
+/// a sell of the whole position on `sell_day`, and a zero-quantity snapshot on
+/// `anchor`. Returns (user_id, holding_id).
+async fn seed_sold_equity(
+    pool: &PgPool,
+    held_day: Option<(NaiveDate, Decimal, Decimal)>,
+    sell_day: NaiveDate,
+    anchor: NaiveDate,
+    cost_basis: Decimal,
+) -> anyhow::Result<Uuid> {
+    let conn_id = seed_connection(pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let holding = equity_holding(
+        "acct-1",
+        "US0378331005",
+        Decimal::ZERO,
+        cost_basis,
+        Some(Decimal::ZERO),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &holding.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &holding).await?;
+
+    if let Some((day, qty, value)) = held_day {
+        stamp_on(pool, holding_id, day, qty, value, cost_basis).await;
+    }
+    sqlx::query(
+        "insert into transaction \
+             (account_id, instrument_id, ts, type, quantity, unit_price, amount, external_id) \
+         values ($1, $2, $3, 'sell', 10, 120, 1200, 'sell-1')",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .bind(sell_day.and_hms_opt(12, 0, 0).unwrap().and_utc())
+    .execute(pool)
+    .await?;
+    stamp_on(
+        pool,
+        holding_id,
+        anchor,
+        Decimal::ZERO,
+        Decimal::ZERO,
+        cost_basis,
+    )
+    .await;
+
+    backfill_connection(&mut conn, conn_id).await?;
+    Ok(user_id)
+}
+
+/// A fully-sold priceless security: every *later* snapshot has quantity zero, so
+/// the per-unit valuation has to be found by looking backward. Without that the
+/// chart dips to zero across exactly the window the position was held.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let held = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+    let derived_day = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+    let sell_day = NaiveDate::from_ymd_opt(2026, 1, 7).unwrap();
+    let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let user_id = seed_sold_equity(
+        &pool,
+        Some((held, Decimal::new(10, 0), Decimal::new(1200, 0))),
+        sell_day,
+        anchor,
+        Decimal::new(1000, 0),
+    )
+    .await?;
+
+    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == derived_day)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(1200, 0),
+        "the last valued snapshot's unit value is carried forward into the held window"
+    );
+    assert!(
+        !on_derived.fx_missing,
+        "a valued derived day must not raise the missing-rate warning"
+    );
+    Ok(())
+}
+
+/// No snapshot anywhere carries a non-zero quantity, so no per-unit valuation
+/// exists at all: the derived row falls back to its own cost basis rather than
+/// to zero.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_cost_basis(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    // With no earlier snapshot the horizon starts one day before the sell, so
+    // that is the only derived day on which the position is still held.
+    let derived_day = NaiveDate::from_ymd_opt(2026, 1, 6).unwrap();
+    let sell_day = NaiveDate::from_ymd_opt(2026, 1, 7).unwrap();
+    let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let user_id = seed_sold_equity(&pool, None, sell_day, anchor, Decimal::new(1000, 0)).await?;
+
+    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == derived_day)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(1000, 0),
+        "with no market value available the row is valued at cost"
+    );
+    assert!(
+        !on_derived.fx_missing,
+        "a valued derived day must not raise the missing-rate warning"
+    );
+    Ok(())
+}
+
+/// The production gap shape: a derived day sitting *between* two snapshots must
+/// read the derived row, not the older snapshot carried forward.
+#[sqlx::test(migrations = "../migrations")]
+async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let instrument_id = resolve_instrument(
+        &mut conn,
+        &gripsou_core::dto::InstrumentRef {
+            kind: "cash".into(),
+            symbol: None,
+            isin: None,
+            name: "Euro".into(),
+            currency: "EUR".into(),
+        },
+    )
+    .await?;
+    let holding_id = upsert_holding(
+        &mut conn,
+        account_id,
+        instrument_id,
+        &cash_holding("acct-1", Decimal::new(30000, 2)),
+    )
+    .await?;
+
+    let d1 = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+    let d5 = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+    let d10 = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    stamp_on(
+        &pool,
+        holding_id,
+        d1,
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+        Decimal::new(100, 0),
+    )
+    .await;
+    stamp_on(
+        &pool,
+        holding_id,
+        d10,
+        Decimal::new(300, 0),
+        Decimal::new(300, 0),
+        Decimal::new(300, 0),
+    )
+    .await;
+    sqlx::query(
+        "insert into holding_backfill (holding_id, as_of, quantity, value, cost_basis) \
+         values ($1, $2, 200, 200, 200)",
+    )
+    .bind(holding_id)
+    .bind(d5)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::net_worth_series(&pool, user_id, d1, d10).await?;
+    let on_derived = rows
+        .iter()
+        .find(|r| r.as_of == d5)
+        .expect("row for the derived day");
+    assert_eq!(
+        on_derived.net_worth,
+        Decimal::new(200, 0),
+        "the derived row wins over the older snapshot carried forward"
+    );
+    Ok(())
+}
+
+/// §9.1: a security position no lot explains is what the badge keys off.
+#[sqlx::test(migrations = "../migrations")]
+async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0001",
+        Decimal::new(100, 0),
+        Decimal::new(1000, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(1200, 0),
+        h.cost_basis,
+    )
+    .await;
+
+    // 30 of the 100 shares are explained by a lot.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 30, 10, -300)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(row.unexplained_quantity, Decimal::new(70, 0));
+    Ok(())
+}
+
+/// A fully explained position reports zero, not a negative shortfall.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0002",
+        Decimal::new(30, 0),
+        Decimal::new(300, 0),
+        Some(Decimal::new(300, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(300, 0),
+        h.cost_basis,
+    )
+    .await;
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 30, 10, -300)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(row.unexplained_quantity, Decimal::ZERO);
+    Ok(())
+}
+
+/// An over-explained position (recorded buys exceeding the current quantity —
+/// realistic after a partial sale that was never recorded) must floor at
+/// zero, not go negative. `a_fully_explained_holding_reports_zero` alone
+/// cannot catch a missing `greatest(…, 0)` floor because its buys exactly
+/// equal the quantity.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_over_explained_holding_floors_at_zero(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0006",
+        Decimal::new(30, 0),
+        Decimal::new(300, 0),
+        Some(Decimal::new(300, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(300, 0),
+        h.cost_basis,
+    )
+    .await;
+    // 50 recorded buys against a 30-share holding — a sale must have gone
+    // unrecorded.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 50, 10, -500)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(
+        row.unexplained_quantity,
+        Decimal::ZERO,
+        "over-explained must floor at zero, never go negative"
+    );
+    Ok(())
+}
+
+/// A holding with both buys and sells recorded must compute
+/// `quantity − Σbuys + Σsells`, exercising the `sell` branch of the case
+/// expression that no other test touches.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let h = equity_holding(
+        "acct-1",
+        "IE0007",
+        Decimal::new(100, 0),
+        Decimal::new(1000, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        h.quantity,
+        Decimal::new(1200, 0),
+        h.cost_basis,
+    )
+    .await;
+    // Bought 80, sold 20: 100 − 80 + 20 = 40 unexplained.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 80, 10, -800)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'sell', 20, 10, 200)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(
+        row.unexplained_quantity,
+        Decimal::new(40, 0),
+        "100 − 80 (buys) + 20 (sells) = 40"
+    );
+    Ok(())
+}
+
+/// Cash has nothing to explain regardless of transaction history.
+#[sqlx::test(migrations = "../migrations")]
+async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let instrument_id = resolve_instrument(
+        &mut conn,
+        &gripsou_core::dto::InstrumentRef {
+            kind: "cash".into(),
+            symbol: None,
+            isin: None,
+            name: "Euro".into(),
+            currency: "EUR".into(),
+        },
+    )
+    .await?;
+    let holding_id = upsert_holding(
+        &mut conn,
+        account_id,
+        instrument_id,
+        &cash_holding("acct-1", Decimal::new(30000, 2)),
+    )
+    .await?;
+    stamp_on(
+        &pool,
+        holding_id,
+        chrono::Utc::now().date_naive(),
+        Decimal::new(30000, 2),
+        Decimal::new(30000, 2),
+        Decimal::new(30000, 2),
+    )
+    .await;
+
+    let rows = query::holdings(&pool, user_id).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_id)
+        .expect("holding");
+    assert_eq!(row.unexplained_quantity, Decimal::ZERO);
+    Ok(())
+}
+
+/// The gap-detection subquery must be scoped to (account, instrument), not the
+/// instrument alone: another user's buy of the same ETF must never reduce this
+/// holding's unexplained figure (§9.1 cross-user scoping, mirroring the
+/// backfill-engine bug found earlier in this feature).
+#[sqlx::test(migrations = "../migrations")]
+async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_a = seed_connection(&pool).await;
+    let user_a: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_a)
+        .fetch_one(&pool)
+        .await?;
+    let conn_b = seed_connection(&pool).await;
+
+    let mut conn = pool.acquire().await?;
+    let account_a = upsert_account(&mut conn, conn_a, &checking_account("acct-a")).await?;
+    let account_b = upsert_account(&mut conn, conn_b, &checking_account("acct-b")).await?;
+
+    let h_a = equity_holding(
+        "acct-a",
+        "IE0004",
+        Decimal::new(100, 0),
+        Decimal::new(1000, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let instrument_id = resolve_instrument(&mut conn, &h_a.instrument).await?;
+    let holding_a = upsert_holding(&mut conn, account_a, instrument_id, &h_a).await?;
+    stamp_on(
+        &pool,
+        holding_a,
+        chrono::Utc::now().date_naive(),
+        h_a.quantity,
+        Decimal::new(1200, 0),
+        h_a.cost_basis,
+    )
+    .await;
+
+    let h_b = equity_holding(
+        "acct-b",
+        "IE0004",
+        Decimal::new(100, 0),
+        Decimal::new(1000, 0),
+        Some(Decimal::new(1200, 0)),
+    );
+    let holding_b = upsert_holding(&mut conn, account_b, instrument_id, &h_b).await?;
+    stamp_on(
+        &pool,
+        holding_b,
+        chrono::Utc::now().date_naive(),
+        h_b.quantity,
+        Decimal::new(1200, 0),
+        h_b.cost_basis,
+    )
+    .await;
+
+    // User B buys 100 of the same instrument in their own account — must not
+    // explain user A's holding.
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount) \
+         values ($1, $2, now(), 'buy', 100, 10, -1000)",
+    )
+    .bind(account_b)
+    .bind(instrument_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = query::holdings(&pool, user_a).await?;
+    let row = rows
+        .iter()
+        .find(|r| r.holding_id == holding_a)
+        .expect("holding");
+    assert_eq!(
+        row.unexplained_quantity,
+        Decimal::new(100, 0),
+        "user A's holding must remain fully unexplained"
     );
     Ok(())
 }

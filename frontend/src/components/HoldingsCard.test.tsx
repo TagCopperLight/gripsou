@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HoldingsCard } from "./HoldingsCard";
 
@@ -9,6 +10,7 @@ const HOLDING = {
   accountType: "brokerage", accountTypeLabel: "Brokerage", qty: "60", price: "214.3", currency: "EUR",
   invested: "11000", investedNative: "11000",
   value: "12858", gl: "1858", glPct: "0.168", fxMissing: false, spark: ["200", "214.3"],
+  unexplainedQty: "0",
 };
 
 const CASH_CHECKING = {
@@ -17,6 +19,7 @@ const CASH_CHECKING = {
   accountType: "checking", accountTypeLabel: "Checking", qty: "100", price: "1", currency: "EUR",
   invested: "100", investedNative: "100",
   value: "100", gl: "0", glPct: "0", fxMissing: false, spark: null,
+  unexplainedQty: "0",
 };
 
 const CASH_PEA = {
@@ -65,5 +68,35 @@ describe("HoldingsCard", () => {
     renderCard([HOLDING]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
     expect(screen.queryByTitle(/exchange rate/i)).toBeNull();
+  });
+
+  it("shows the gap badge for a holding with an unexplained quantity", async () => {
+    renderCard([{ ...HOLDING, unexplainedQty: "70" }]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /incomplete/i })).toBeInTheDocument();
+  });
+
+  it("hides the gap badge when unexplainedQty is 0", async () => {
+    renderCard([{ ...HOLDING, unexplainedQty: "0" }]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /incomplete/i })).toBeNull();
+  });
+
+  it("hides the gap badge on a cash row", async () => {
+    renderCard([HOLDING, CASH_CHECKING]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    // The equity row has no gap either, so no badge should exist at all.
+    expect(screen.queryByRole("button", { name: /incomplete/i })).toBeNull();
+  });
+
+  it("opens the add-lot modal from the badge without opening the asset modal", async () => {
+    const user = userEvent.setup();
+    renderCard([{ ...HOLDING, unexplainedQty: "70" }]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /incomplete/i }));
+
+    const dialogs = screen.getAllByRole("dialog");
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toHaveAttribute("aria-label", "Record a purchase");
   });
 });

@@ -33,6 +33,7 @@ function cash(
     fxMissing: false,
     spark: null,
     composition: null,
+    unexplainedQty: "0",
   };
 }
 
@@ -61,6 +62,7 @@ function equity(id: string, value: string): Holding {
     fxMissing: false,
     spark: ["1", "2"],
     composition: null,
+    unexplainedQty: "0",
   };
 }
 
