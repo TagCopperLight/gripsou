@@ -1954,3 +1954,49 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     );
     Ok(())
 }
+
+/// A CTE join keyed on (instrument, day) or (currency, day) must not multiply
+/// rows when two holdings share an instrument or two accounts share a currency.
+/// This is the failure mode the rewrite introduces if the join keys are wrong,
+/// and it would silently double net worth rather than error.
+#[sqlx::test(migrations = "../migrations")]
+async fn sharing_an_instrument_or_currency_does_not_double_count(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+
+    // Two EUR accounts, each holding the same cash instrument: 40 + 60 = 100.
+    let a1 = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let a2 = upsert_account(&mut conn, conn_id, &checking_account("acct-2")).await?;
+    let eur = resolve_instrument(
+        &mut conn,
+        &gripsou_core::dto::InstrumentRef {
+            kind: "cash".into(),
+            symbol: None,
+            isin: None,
+            name: "Euro".into(),
+            currency: "EUR".into(),
+        },
+    )
+    .await?;
+    let day = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    for (acct, ext, qty) in [(a1, "acct-1", "40"), (a2, "acct-2", "60")] {
+        let q: Decimal = qty.parse().unwrap();
+        let hid = upsert_holding(&mut conn, acct, eur, &cash_holding(ext, q)).await?;
+        stamp_on(&pool, hid, day, q, q, q).await;
+    }
+
+    let rows = query::net_worth_series(&pool, user_id, day, day).await?;
+    assert_eq!(rows.len(), 1, "one row per day, not one per holding");
+    assert_eq!(
+        rows[0].net_worth,
+        Decimal::new(100, 0),
+        "40 + 60, counted once each"
+    );
+    Ok(())
+}

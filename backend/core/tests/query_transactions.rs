@@ -165,3 +165,153 @@ async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
     assert!(stranger_rows.is_empty());
     Ok(())
 }
+
+fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
+    gripsou_core::dto::CanonicalAccount {
+        type_key: "pea".to_string(),
+        ..checking_account(external_id)
+    }
+}
+
+/// §8.1 already excludes these three types on a PEA from the cash walk: a
+/// transfer into the PEA is the mirror of an outflow from the checking account,
+/// and a buy converts cash into an asset already counted as a holding. The list
+/// showed both sides of the same movement.
+#[sqlx::test(migrations = "../migrations")]
+async fn hides_provider_pea_transfers_and_trades(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    let checking_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
+
+    upsert_transaction(
+        &mut conn,
+        checking_id,
+        &txn(
+            "acct-1",
+            "c1",
+            "transfer",
+            dec("-50.00"),
+            Some("Virement vers PEA"),
+        ),
+    )
+    .await?;
+    for (id, kind, amount, desc) in [
+        ("p1", "transfer", "50.00", "Virement depuis BoursoBank"),
+        ("p2", "buy", "-210.53", "ACHAT COMPTANT"),
+        ("p3", "sell", "40.00", "VENTE COMPTANT"),
+        ("p4", "dividend", "6.63", "COUPONS"),
+        ("p5", "fee", "-1.20", "FRAIS"),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            pea_id,
+            &txn("pea-1", id, kind, dec(amount), Some(desc)),
+        )
+        .await?;
+    }
+
+    let rows = transactions(&pool, user_id, &all()).await?;
+    let ids: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
+
+    assert!(
+        rows.iter().any(|r| r.account_id == checking_id),
+        "the checking-account side of the transfer is still shown"
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.account_id == pea_id
+                && matches!(r.kind.as_str(), "transfer" | "buy" | "sell")),
+        "PEA transfer/buy/sell are hidden, got {ids:?}"
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r.account_id == pea_id && r.kind == "dividend"),
+        "a PEA dividend is real money arriving and must still show"
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r.account_id == pea_id && r.kind == "fee"),
+        "a PEA fee is real money leaving and must still show"
+    );
+    Ok(())
+}
+
+/// Unreachable, not merely hidden: an explicit type filter must not resurrect
+/// a provider-supplied PEA transfer.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_explicit_type_filter_does_not_resurrect_pea_transfers(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
+    upsert_transaction(
+        &mut conn,
+        pea_id,
+        &txn("pea-1", "p1", "transfer", dec("50.00"), Some("Virement")),
+    )
+    .await?;
+
+    let rows = transactions(
+        &pool,
+        user_id,
+        &TransactionFilters {
+            kind: Some("transfer".into()),
+            ..all()
+        },
+    )
+    .await?;
+    assert!(
+        rows.is_empty(),
+        "the rule is unconditional, not a default view"
+    );
+    Ok(())
+}
+
+/// A manual lot is a `buy` on the PEA too, but the user entered it themselves —
+/// it carries `external_id = null` (§9.2, which is what keeps it outside the
+/// provider dedup index) and must stay visible.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_manual_lot_on_the_pea_is_still_listed(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
+
+    // Provider buy: hidden. Manual buy (no external_id): shown.
+    upsert_transaction(
+        &mut conn,
+        pea_id,
+        &txn("pea-1", "p1", "buy", dec("-210.53"), Some("ACHAT COMPTANT")),
+    )
+    .await?;
+    sqlx::query(
+        "insert into transaction (account_id, ts, type, amount, quantity, unit_price, description) \
+         values ($1, now(), 'buy', -320.58, 20, 16.029, 'Manual lot')",
+    )
+    .bind(pea_id)
+    .execute(&pool)
+    .await?;
+
+    let rows = transactions(&pool, user_id, &all()).await?;
+    assert_eq!(
+        rows.len(),
+        1,
+        "exactly the manual lot, not the provider buy"
+    );
+    assert_eq!(rows[0].description.as_deref(), Some("Manual lot"));
+    Ok(())
+}

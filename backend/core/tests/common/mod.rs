@@ -110,6 +110,7 @@ pub fn deposit_txn(
         fee: None,
         description: None,
         provider_meta: serde_json::json!({}),
+        booked_on: None,
     }
 }
 
@@ -132,6 +133,7 @@ pub fn txn(
         fee: None,
         description: description.map(str::to_string),
         provider_meta: serde_json::json!({}),
+        booked_on: None,
     }
 }
 
@@ -185,4 +187,22 @@ pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
     .fetch_all(pool)
     .await
     .unwrap()
+}
+
+/// A transaction whose spend date and booking date differ — the real shape of
+/// 70% of Powens rows, and the case the backward walk gets wrong when it keys
+/// on `ts`.
+pub fn txn_booked(
+    account_external_id: &str,
+    external_id: &str,
+    kind: &str,
+    amount: Decimal,
+    spent_on: NaiveDate,
+    booked_on: NaiveDate,
+) -> CanonicalTransaction {
+    CanonicalTransaction {
+        ts: spent_on.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        booked_on: Some(booked_on),
+        ..txn(account_external_id, external_id, kind, amount, None)
+    }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select t.id as \"id!\",\n               t.ts as \"ts!\",\n               t.type as \"kind!\",\n               t.description,\n               t.amount as \"amount!\",\n               a.id as \"account_id!\",\n               a.name as \"account_name!\",\n               a.color as \"account_color\",\n               a.currency as \"account_currency!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection c on c.id = a.connection_id\n        where c.user_id = $1\n          and ($2::text is null or t.description ilike '%' || $2 || '%')\n          and ($3::uuid is null or a.id = $3)\n          and ($4::text is null or t.type = $4)\n          and ($5::date is null or t.ts::date >= $5)\n          and ($6::date is null or t.ts::date <= $6)\n        order by t.ts desc, t.id\n        limit $7 offset $8\n        ",
+  "query": "\n        select t.id as \"id!\",\n               t.ts as \"ts!\",\n               t.type as \"kind!\",\n               t.description,\n               t.amount as \"amount!\",\n               a.id as \"account_id!\",\n               a.name as \"account_name!\",\n               a.color as \"account_color\",\n               a.currency as \"account_currency!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection c on c.id = a.connection_id\n        where c.user_id = $1\n          and ($2::text is null or t.description ilike '%' || $2 || '%')\n          and ($3::uuid is null or a.id = $3)\n          and ($4::text is null or t.type = $4)\n          -- Mirrors §8.1's cash-walk exclusion, for the same reason: a transfer\n          -- into the PEA is the other half of an outflow already listed on the\n          -- checking account, and a buy converts cash into an asset already\n          -- counted as a holding. Unconditional — these rows are not filterable,\n          -- they are unreachable through this endpoint.\n          --\n          -- `external_id is not null` scopes the rule to provider-supplied rows.\n          -- A manual lot carries a null external_id (§9.2 — that is what keeps it\n          -- outside the provider dedup index), so a lot the user entered\n          -- themselves still appears.\n          and not (a.type_key = 'pea'\n                   and t.external_id is not null\n                   and t.type in ('transfer', 'buy', 'sell'))\n          and ($5::date is null or t.ts::date >= $5)\n          and ($6::date is null or t.ts::date <= $6)\n        order by t.ts desc, t.id\n        limit $7 offset $8\n        ",
   "describe": {
     "columns": [
       {
@@ -127,5 +127,5 @@
       false
     ]
   },
-  "hash": "0bb769761e5be011aafabc0d127c159a416cbb7940e2cc8f5a80910ab5e0375e"
+  "hash": "330ac5e3ee7df0a7944905c299956975507fa21beebeb5409cad751ed848d521"
 }

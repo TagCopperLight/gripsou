@@ -86,7 +86,14 @@ pub async fn backfill_connection(
                          (now() at time zone 'utc')::date)
             ) - 1 as start_day
         ),
-        -- Signed daily movement per holding. Cash moves by `amount`; a security
+        -- Signed daily movement per holding, keyed on the day the *balance*
+        -- moved (`booked_on`), not the day the user spent (`ts`). They disagree
+        -- on 70% of real Powens rows by up to five days, and the walk anchors on
+        -- the balance — keying on `ts` subtracts card spending before the
+        -- balance reflected it, which drove derived cash negative on 1,753 days.
+        -- `coalesce` keeps a provider that reports only one date working as before.
+        --
+        -- Cash moves by `amount`; a security
         -- moves by share count. On a PEA, transfer/buy/sell are excluded from
         -- the cash walk (§8.1): the PEA's history starts 2026-01-14 while the
         -- position predates it, so its buys have no matching transfer-in and a
@@ -99,7 +106,7 @@ pub async fn backfill_connection(
         -- movement here and is held flat by §3 rule 3 until `transaction` grows
         -- a currency column to discriminate by.
         moves as (
-            select s.holding_id, (t.ts at time zone 'utc')::date as day,
+            select s.holding_id, coalesce(t.booked_on, (t.ts at time zone 'utc')::date) as day,
                    sum(case
                        when s.is_cash then t.amount
                        when t.type = 'buy'  then coalesce(t.quantity, 0)
@@ -111,7 +118,7 @@ pub async fn backfill_connection(
             where (not s.is_cash or not (s.is_pea and t.type in ('transfer', 'buy', 'sell')))
               and (s.is_cash or t.instrument_id = s.instrument_id)
               and (not s.is_cash or s.is_account_currency)
-            group by s.holding_id, (t.ts at time zone 'utc')::date
+            group by s.holding_id, coalesce(t.booked_on, (t.ts at time zone 'utc')::date)
         ),
         days as (
             select s.holding_id, gs::date as as_of
@@ -173,7 +180,7 @@ pub async fn backfill_connection(
                          and t.instrument_id = s.instrument_id
                          and t.type = 'buy'
                          and t.quantity is not null and t.unit_price is not null
-                         and (t.ts at time zone 'utc')::date > g.as_of
+                         and coalesce(t.booked_on, (t.ts at time zone 'utc')::date) > g.as_of
                    ), 0) as cost_basis
             from gaps g
             join scope s on s.holding_id = g.holding_id

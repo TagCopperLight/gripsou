@@ -696,3 +696,112 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// The walk must follow the day the balance moved, not the day the card was
+/// tapped. Here a −30 card purchase is spent on the 5th but booked on the 8th,
+/// with a snapshot of 100 on the 10th. The balance only dropped on the 8th, so
+/// days 8 and 9 read 100 and days 5-7 read 130 — keying on `ts` instead would
+/// subtract it three days early and report 130 on the 8th and 9th.
+#[sqlx::test(migrations = "../migrations")]
+async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("100"), d(2026, 1, 10)).await;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &common::txn_booked(
+            "acct-1",
+            "t1",
+            "withdrawal",
+            dec("-30"),
+            d(2026, 1, 5),
+            d(2026, 1, 8),
+        ),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
+        Some(dec("100"))
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 8)).await,
+        Some(dec("100"))
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 7)).await,
+        Some(dec("130")),
+        "the balance had not yet dropped on the 7th"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 5)).await,
+        Some(dec("130"))
+    );
+    Ok(())
+}
+
+/// The reconciliation invariant: with a complete ledger, walking back from a
+/// later snapshot must land exactly on the earlier one. This is the property
+/// the real data violates by 4.50 over 18 days on CPT COURANT, and the reason
+/// derived cash goes negative.
+#[sqlx::test(migrations = "../migrations")]
+async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    // Balance 100 on the 1st, 85 on the 10th. Booked movements between them:
+    // −30 (booked 4th), +20 (booked 6th), −5 (booked 9th) = −15. 100 − 15 = 85.
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("85"), d(2026, 1, 10)).await;
+    stamp_on(
+        &pool,
+        holding_id,
+        d(2026, 1, 1),
+        dec("100"),
+        dec("100"),
+        dec("100"),
+    )
+    .await;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
+    for (id, amount, spent, booked) in [
+        ("t1", "-30", d(2026, 1, 2), d(2026, 1, 4)),
+        ("t2", "20", d(2026, 1, 6), d(2026, 1, 6)),
+        ("t3", "-5", d(2026, 1, 7), d(2026, 1, 9)),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &common::txn_booked("acct-1", id, "withdrawal", dec(amount), spent, booked),
+        )
+        .await?;
+    }
+    backfill_connection(&mut conn, conn_id).await?;
+
+    // The derived day immediately after the earlier snapshot must agree with it:
+    // nothing was booked on the 2nd, so the balance is still 100.
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 2)).await,
+        Some(dec("100")),
+        "the walk back from the 10th must reconcile with the snapshot on the 1st"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
+        Some(dec("70"))
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 6)).await,
+        Some(dec("90"))
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
+        Some(dec("85"))
+    );
+    Ok(())
+}

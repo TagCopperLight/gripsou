@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -60,6 +60,11 @@ pub struct CanonicalTransaction {
     /// The raw provider transaction payload, kept for forensics only —
     /// nothing the app reads lives here (§4, §6.2).
     pub provider_meta: serde_json::Value,
+    /// The day the provider's balance actually moved, when it reports one
+    /// separately from `ts`. `ts` is the day the user spent (Powens' `rdate`);
+    /// these disagree on 70% of real rows by up to five days. The backfill walks
+    /// on this, because it anchors on the balance; the UI shows `ts`.
+    pub booked_on: Option<NaiveDate>,
 }
 
 /// A single point on an instrument's price series.

@@ -25,8 +25,8 @@ pub async fn upsert_transaction(
         r#"
         insert into transaction
             (account_id, instrument_id, ts, type, quantity, unit_price, amount, fee,
-             description, external_id, provider_meta)
-        values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             description, external_id, provider_meta, booked_on)
+        values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         on conflict (account_id, external_id) where external_id is not null
         do update set
             ts            = excluded.ts,
@@ -34,6 +34,7 @@ pub async fn upsert_transaction(
             amount        = excluded.amount,
             fee           = excluded.fee,
             description   = excluded.description,
+            booked_on     = excluded.booked_on,
             provider_meta = excluded.provider_meta,
             -- User enrichment: Powens always sends null here (§2.1), and a plain
             -- assignment would wipe an instrument the user identified.
@@ -52,6 +53,7 @@ pub async fn upsert_transaction(
         txn.description,
         txn.external_id,
         txn.provider_meta,
+        txn.booked_on,
     )
     .fetch_one(&mut *conn)
     .await?;

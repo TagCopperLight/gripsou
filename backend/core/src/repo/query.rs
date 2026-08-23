@@ -661,6 +661,19 @@ pub async fn transactions(
           and ($2::text is null or t.description ilike '%' || $2 || '%')
           and ($3::uuid is null or a.id = $3)
           and ($4::text is null or t.type = $4)
+          -- Mirrors §8.1's cash-walk exclusion, for the same reason: a transfer
+          -- into the PEA is the other half of an outflow already listed on the
+          -- checking account, and a buy converts cash into an asset already
+          -- counted as a holding. Unconditional — these rows are not filterable,
+          -- they are unreachable through this endpoint.
+          --
+          -- `external_id is not null` scopes the rule to provider-supplied rows.
+          -- A manual lot carries a null external_id (§9.2 — that is what keeps it
+          -- outside the provider dedup index), so a lot the user entered
+          -- themselves still appears.
+          and not (a.type_key = 'pea'
+                   and t.external_id is not null
+                   and t.type in ('transfer', 'buy', 'sell'))
           and ($5::date is null or t.ts::date >= $5)
           and ($6::date is null or t.ts::date <= $6)
         order by t.ts desc, t.id

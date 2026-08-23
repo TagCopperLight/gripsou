@@ -476,3 +476,30 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
         );
     }
 }
+
+/// §6.2 keys `ts` on `rdate` because it is 100% filled — but the *balance*
+/// follows the booking date, and the two disagree on 70% of real rows by up to
+/// five days. `ts` stays the day the card was tapped (what the user recognises
+/// on the list); `booked_on` carries the day the money actually moved, which is
+/// the only date the backward walk can honestly use.
+#[test]
+fn carries_both_the_spend_date_and_the_booking_date() {
+    let txns = mapped_txns();
+    let t = by_id(&txns, "1019");
+    assert_eq!(t.ts.date_naive().to_string(), "2026-08-14", "ts is rdate");
+    assert_eq!(
+        t.booked_on.map(|d| d.to_string()).as_deref(),
+        Some("2026-08-17"),
+        "booked_on is the booking date"
+    );
+}
+
+#[test]
+fn falls_back_to_the_booking_date_when_rdate_is_absent() {
+    let t = by_id(&mapped_txns(), "1020");
+    assert_eq!(t.ts.date_naive().to_string(), "2026-08-19");
+    assert_eq!(
+        t.booked_on.map(|d| d.to_string()).as_deref(),
+        Some("2026-08-19")
+    );
+}
