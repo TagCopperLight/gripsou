@@ -197,6 +197,28 @@
       "type": "market_fee",
       "coming": false,
       "deleted": null
+    },
+    {
+      "id": 1019,
+      "id_account": 501,
+      "rdate": "2026-08-14",
+      "date": "2026-08-17",
+      "value": -24.98,
+      "wording": "AMAZON EU SARL 2",
+      "type": "card",
+      "coming": false,
+      "deleted": null
+    },
+    {
+      "id": 1020,
+      "id_account": 501,
+      "rdate": null,
+      "date": "2026-08-19",
+      "value": -5.0,
+      "wording": "BOOKING ONLY",
+      "type": "card",
+      "coming": false,
+      "deleted": null
     }
   ]
 }

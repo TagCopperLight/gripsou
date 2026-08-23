@@ -1,0 +1,14 @@
+-- The day the bank actually moved the money, as distinct from `ts` (which is
+-- Powens' `rdate` — the day the card was tapped). They disagree on 70% of real
+-- rows, by up to five days.
+--
+-- This matters because the backfill anchors on `holding.quantity`, written from
+-- the provider's *balance*, and walks backward subtracting transactions. The
+-- balance follows the booking date, so keying the walk on `ts` subtracts card
+-- spending days before the balance ever reflected it — which is what drove
+-- derived cash negative on 1,753 days.
+--
+-- Nullable: a provider that reports only one date leaves it null, and the walk
+-- coalesces back to `ts`. Full-fetch + upsert (TRANSACTIONS.md §6.1) means one
+-- sync populates every existing row, so no data migration is needed.
+alter table transaction add column booked_on date;
