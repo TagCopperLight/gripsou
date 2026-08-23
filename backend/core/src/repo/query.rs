@@ -25,21 +25,21 @@ pub async fn net_worth_series(
         NetWorthRow,
         r#"
         -- Per day, value each holding from its as-of snapshot (quantity anchor)
-        -- and unit_value_asof, which folds in the FX rate. The INNER JOIN LATERAL
+        -- and valuation_grid's unit_value, which folds in the FX rate. The INNER JOIN LATERAL
         -- excludes a holding on days before its first snapshot (no row) — so a
         -- position never contributes before it was acquired. A sold holding keeps
         -- its history (its zero snapshot values it at 0 thereafter). Falling back
         -- to the provider valuation (snap.value) still needs converting, hence
-        -- the explicit fx_asof on that branch. Everything is summed in the pivot,
+        -- the account-currency rate (afx) on that branch. Everything is summed in the pivot,
         -- then divided once into the reader's reporting currency.
         --
         -- Three currency domains, never conflated:
         --   price     — the `price` row's own currency, folded in by
-        --               unit_value_asof (it reads the price row, not the
+        --               valuation_grid (it reads the price row, not the
         --               instrument);
         --   amount    — `account.currency`, which is what the provider denominates
-        --               snapshot.value / snapshot.cost_basis in, hence
-        --               fx_asof(a.currency, …) on both of those branches;
+        --               snapshot.value / snapshot.cost_basis in, hence the
+        --               afx join on both of those branches;
         --   reporting — `users.prefs.currency`, applied once by the final divide.
         -- `instrument.currency` is the quote currency of the security and is none
         -- of the three: a USD-quoted stock inside a EUR account has a EUR cost
@@ -53,25 +53,37 @@ pub async fn net_worth_series(
         -- row behind it.
         with dates as (
             select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+        ),
+        -- One valuation per instrument-day instead of one per holding-day, with
+        -- the FX lookup folded into the same scan. `materialized` is load-bearing
+        -- on all three: an inlined CTE here gets re-executed per outer row.
+        grid as materialized (select * from valuation_grid($1, $2, $3)),
+        fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
+        rep  as materialized (
+            select as_of, unit_value from fx
+            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
         )
         select d.as_of as "as_of!",
                coalesce(sum(coalesce(
-                   snap.quantity * unit_value_asof(i.id, d.as_of),
-                   snap.value * fx_asof(a.currency, d.as_of),
+                   snap.quantity * uv.unit_value,
+                   snap.value * afx.unit_value,
                    0
-               )), 0) / reporting_fx_asof($1, d.as_of) as "net_worth!",
-               coalesce(sum(snap.cost_basis * fx_asof(a.currency, d.as_of)), 0)
-                   / reporting_fx_asof($1, d.as_of) as "invested!",
+               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "net_worth!",
+               coalesce(sum(snap.cost_basis * afx.unit_value), 0)
+                   / coalesce(nullif(rep.unit_value, 0), 1) as "invested!",
                coalesce(bool_or(
                    snap.quantity <> 0
-                   and unit_value_asof(i.id, d.as_of) is null
-                   and coalesce(snap.value * fx_asof(a.currency, d.as_of), 0) = 0
+                   and uv.unit_value is null
+                   and coalesce(snap.value * afx.unit_value, 0) = 0
                ), false) as "fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
         join connection c on c.id = a.connection_id
-        join instrument i on i.id = h.instrument_id
+        -- INNER join: an instrument with no grid row cannot be valued at all.
+        join grid uv      on uv.instrument_id = h.instrument_id and uv.as_of = d.as_of
+        left join fx afx  on afx.as_of = d.as_of and afx.currency = a.currency
+        left join rep     on rep.as_of = d.as_of
         -- `holding_point` is holding_snapshot ∪ holding_backfill. The invariant
         -- (§4, enforced by stamp_snapshot) is that no day carries both, so the
         -- union needs no precedence rule: synced truth simply exists where it
@@ -84,7 +96,7 @@ pub async fn net_worth_series(
             limit 1
         ) snap on true
         where c.user_id = $1
-        group by d.as_of
+        group by d.as_of, rep.unit_value
         order by d.as_of
         "#,
         user_id,
@@ -459,25 +471,33 @@ pub async fn account_series(
         AccountSeriesRow,
         r#"
         -- Same valuation as net_worth_series (snapshot-anchored quantity via the
-        -- lateral join + unit_value_asof/fx_asof), grouped per account for the
+        -- lateral join + valuation_grid), grouped per account for the
         -- stacked area. No fx_missing flag: the accounts grid already surfaces it.
         with dates as (
             select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+        ),
+        grid as materialized (select * from valuation_grid($1, $2, $3)),
+        fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
+        rep  as materialized (
+            select as_of, unit_value from fx
+            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
         )
         select a.id   as "account_id!",
                a.name as "name!",
                a.color as "color",
                d.as_of as "as_of!",
                coalesce(sum(coalesce(
-                   snap.quantity * unit_value_asof(i.id, d.as_of),
-                   snap.value * fx_asof(a.currency, d.as_of),
+                   snap.quantity * uv.unit_value,
+                   snap.value * afx.unit_value,
                    0
-               )), 0) / reporting_fx_asof($1, d.as_of) as "value!"
+               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "value!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
         join connection c on c.id = a.connection_id
-        join instrument i on i.id = h.instrument_id
+        join grid uv      on uv.instrument_id = h.instrument_id and uv.as_of = d.as_of
+        left join fx afx  on afx.as_of = d.as_of and afx.currency = a.currency
+        left join rep     on rep.as_of = d.as_of
         join lateral (
             select hs.quantity, hs.value
             from holding_point hs
@@ -486,7 +506,7 @@ pub async fn account_series(
             limit 1
         ) snap on true
         where c.user_id = $1
-        group by a.id, a.name, a.color, d.as_of
+        group by a.id, a.name, a.color, d.as_of, rep.unit_value
         order by d.as_of, a.id
         "#,
         user_id,

@@ -47,7 +47,19 @@ pub async fn backfill_connection(
                    i.kind = 'cash' as is_cash,
                    a.type_key = 'pea' as is_pea,
                    h.cost_basis as total_cost,
-                   i.currency = a.currency as is_account_currency
+                   i.currency = a.currency as is_account_currency,
+                   -- Whether this account's `booked_on` is a booking date at
+                   -- all. Some connectors send the *statement period* instead,
+                   -- stamping a whole fortnight onto the 1st or the 16th. The
+                   -- tell is a row booked before it was spent, which cannot
+                   -- happen: LIVRET A does it on 123 of 167 rows, CPT COURANT
+                   -- never. Decided per account on every run, so a connector
+                   -- that starts sending real dates is picked up on its own.
+                   not exists (
+                       select 1 from transaction t
+                       where t.account_id = a.id
+                         and t.booked_on < (t.ts at time zone 'utc')::date
+                   ) as trust_booked_on
             from holding h
             join account a    on a.id = h.account_id
             join instrument i on i.id = h.instrument_id
@@ -105,8 +117,12 @@ pub async fn backfill_connection(
         -- cash holding on the same account, in another currency, gets no
         -- movement here and is held flat by §3 rule 3 until `transaction` grows
         -- a currency column to discriminate by.
-        moves as (
-            select s.holding_id, coalesce(t.booked_on, (t.ts at time zone 'utc')::date) as day,
+        -- `materialized` is load-bearing: inlined, this aggregate was re-run once
+        -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
+        -- once. Same for `lots`. The two together, plus the JIT compilation the
+        -- inflated cost estimate was triggering, were 2.4 s of a 3.1 s statement.
+        moves as materialized (
+            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
                    sum(case
                        when s.is_cash then t.amount
                        when t.type = 'buy'  then coalesce(t.quantity, 0)
@@ -118,7 +134,18 @@ pub async fn backfill_connection(
             where (not s.is_cash or not (s.is_pea and t.type in ('transfer', 'buy', 'sell')))
               and (s.is_cash or t.instrument_id = s.instrument_id)
               and (not s.is_cash or s.is_account_currency)
-            group by s.holding_id, coalesce(t.booked_on, (t.ts at time zone 'utc')::date)
+            group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
+        ),
+        -- §8.2: the same per-day shape as `moves`, for buy lots.
+        lots as materialized (
+            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
+                   sum(t.quantity * t.unit_price) as cost
+            from scope s
+            join transaction t on t.account_id = s.account_id
+                              and t.instrument_id = s.instrument_id
+            where t.type = 'buy'
+              and t.quantity is not null and t.unit_price is not null
+            group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
         ),
         days as (
             select s.holding_id, gs::date as as_of
@@ -164,7 +191,7 @@ pub async fn backfill_connection(
             )
         ),
         walked as (
-            select g.holding_id, g.as_of, s.is_cash,
+            select g.holding_id, g.as_of, g.anchor_day, s.is_cash,
                    g.unit_qty, g.unit_value,
                    g.anchor_qty - coalesce((
                        select sum(m.delta) from moves m
@@ -174,18 +201,41 @@ pub async fn backfill_connection(
                    -- §8.2: known lots up to this day, plus the basis no lot
                    -- explains, carried flat backward until the user fills it in.
                    s.total_cost - coalesce((
-                       select sum(t.quantity * t.unit_price)
-                       from transaction t
-                       where t.account_id = s.account_id
-                         and t.instrument_id = s.instrument_id
-                         and t.type = 'buy'
-                         and t.quantity is not null and t.unit_price is not null
-                         and coalesce(t.booked_on, (t.ts at time zone 'utc')::date) > g.as_of
+                       select sum(l.cost) from lots l
+                       where l.holding_id = g.holding_id and l.day > g.as_of
                    ), 0) as cost_basis
             from gaps g
             join scope s on s.holding_id = g.holding_id
+        ),
+        -- Nothing owned can be a negative amount, yet 2,435 derived days were:
+        -- the earliest snapshot anchors every day before it, so a
+        -- reconciliation gap on that one day becomes a constant bias over the
+        -- whole history. Revolut's first snapshot sits 10.00 under its own
+        -- ledger (one card payment the balance had taken and the connector had
+        -- not yet booked) and that 10.00 is the entire negative population.
+        -- The PEA's is the 6.63 dividend that §8.1 still counts, walked back
+        -- from a 0.45 balance.
+        --
+        -- The error is a constant, so each anchored stretch that dips below
+        -- zero is raised by its own shortfall. The shape of the line survives
+        -- exactly — every step stays where it was — and what it costs is a
+        -- discontinuity of at most the shortfall where the stretch meets its
+        -- anchor. That beats a line sitting under zero for 1,221 days.
+        --
+        -- Per stretch, not per holding: a gap between two sound snapshots must
+        -- not be dragged up by a shortfall on some older one.
+        --
+        -- ponytail: this treats the shortfall as an unknown opening balance and
+        -- spreads it flat. Attributing it to the transaction that actually went
+        -- missing would be exact, but nothing in the ledger says which one.
+        lifted as (
+            select w.*,
+                   greatest(0, -min(w.quantity) over (
+                       partition by w.holding_id, w.anchor_day
+                   )) as lift
+            from walked w
         )
-        select w.holding_id, w.as_of, w.quantity,
+        select w.holding_id, w.as_of, w.quantity + w.lift,
                -- `value` is only the fallback branch of the read-side valuation
                -- (quantity × unit_value_asof wins whenever a price exists), so
                -- it matters solely for an instrument with no price row at all.
@@ -199,14 +249,14 @@ pub async fn backfill_connection(
                -- row then falls back to its own cost basis, the usual convention
                -- when no market value is available.
                case
-                   when w.is_cash then w.quantity
+                   when w.is_cash then w.quantity + w.lift
                    else coalesce(
-                       w.quantity * w.unit_value / nullif(w.unit_qty, 0),
+                       (w.quantity + w.lift) * w.unit_value / nullif(w.unit_qty, 0),
                        w.cost_basis
                    )
                end,
-               case when w.is_cash then w.quantity else w.cost_basis end
-        from walked w
+               case when w.is_cash then w.quantity + w.lift else w.cost_basis end
+        from lifted w
         "#,
         connection_id,
     )

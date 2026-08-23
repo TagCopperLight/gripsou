@@ -805,3 +805,155 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     );
     Ok(())
 }
+
+/// Some banks do not send a booking date at all: they send the *statement
+/// period* every row landed in. LIVRET A stamps a whole fortnight of movements
+/// on the 1st or the 16th, which collapses them onto one day and craters the
+/// days just before it (−131.13 on four days of real data).
+///
+/// The tell is a row whose money supposedly moved *before* it was spent, which
+/// cannot happen — 123 of LIVRET A's 167 rows do it. When an account shows that
+/// signature, the whole account is walked on the spend date instead.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    // Opening 0, then +300 (spent the 4th), −240 (spent the 10th), −40 (spent
+    // the 19th) leaves 20 on the 20th. The bank stamps them onto two statement
+    // days: the 1st and the 16th.
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("20"), d(2026, 1, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
+    for (id, amount, spent, booked) in [
+        ("t1", "300", d(2026, 1, 4), d(2026, 1, 16)),
+        ("t2", "-240", d(2026, 1, 10), d(2026, 1, 1)),
+        // Booked before it was spent: the signature of a statement period.
+        ("t3", "-40", d(2026, 1, 19), d(2026, 1, 16)),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &common::txn_booked("acct-1", id, "transfer", dec(amount), spent, booked),
+        )
+        .await?;
+    }
+    backfill_connection(&mut conn, conn_id).await?;
+
+    // On the statement dates the batch nets +260, so keying on them puts the
+    // 15th at 20 − 260 = −240. Keyed on the spend date only the −40 of the 19th
+    // is still ahead, so the balance was 60.
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 15)).await,
+        Some(dec("60")),
+        "the statement date must be ignored on an account that sends them"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
+        Some(dec("300")),
+        "before the −240 was spent"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 3)).await,
+        Some(dec("0")),
+        "the walk must still land on the opening balance"
+    );
+    Ok(())
+}
+
+/// The earliest snapshot anchors every derived day before it, so a
+/// reconciliation gap on that one day becomes a constant bias over the whole
+/// history. Revolut's first snapshot is 10.00 below its own ledger — one card
+/// payment the balance had already taken and the bank had not yet booked — and
+/// that 10.00 pushed 1,221 derived days below zero.
+///
+/// A balance cannot be negative, and the error is a constant, so each anchored
+/// stretch that dips below zero is lifted by its own shortfall: the shape of
+/// the line is untouched, it just sits at the right height.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    // The snapshot says 0 on the 10th, but the ledger says the +50 of the 5th
+    // should have left it at 50 — the balance had already taken a −50 the bank
+    // has not reported. Walking back naively puts everything before the 5th at
+    // −50.
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("0"), d(2026, 1, 10)).await;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on("acct-1", "t1", "deposit", dec("50"), d(2026, 1, 5)),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
+        Some(dec("0")),
+        "the shortfall is lifted away instead of showing as a negative balance"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
+        Some(dec("50")),
+        "the whole stretch rises by the same amount, so the step of the 5th survives"
+    );
+    let negatives: i64 = sqlx::query_scalar(
+        "select count(*) from holding_backfill where holding_id = $1 and quantity < 0",
+    )
+    .bind(holding_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(negatives, 0);
+    Ok(())
+}
+
+/// The lift is per anchored stretch, not per holding: a gap between two sound
+/// snapshots must not be dragged up by a shortfall on some older one.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    // Snapshot 0 on the 10th (short by 50, as above) and 80 on the 20th, with a
+    // +80 on the 15th that reconciles the later pair exactly.
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("80"), d(2026, 1, 20)).await;
+    stamp_on(
+        &pool,
+        holding_id,
+        d(2026, 1, 10),
+        dec("0"),
+        dec("0"),
+        dec("0"),
+    )
+    .await;
+
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
+    for (id, amount, day) in [("t1", "50", d(2026, 1, 5)), ("t2", "80", d(2026, 1, 15))] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn_on("acct-1", id, "deposit", dec(amount), day),
+        )
+        .await?;
+    }
+    backfill_connection(&mut conn, conn_id).await?;
+
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 14)).await,
+        Some(dec("0")),
+        "this stretch never went negative, so it must be left exactly where it was"
+    );
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
+        Some(dec("0")),
+        "while the older stretch is still lifted"
+    );
+    Ok(())
+}

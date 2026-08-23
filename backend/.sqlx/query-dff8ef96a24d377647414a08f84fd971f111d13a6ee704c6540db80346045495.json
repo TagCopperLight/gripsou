@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Per day, value each holding from its as-of snapshot (quantity anchor)\n        -- and valuation_grid's unit_value, which folds in the FX rate. The INNER JOIN LATERAL\n        -- excludes a holding on days before its first snapshot (no row) — so a\n        -- position never contributes before it was acquired. A sold holding keeps\n        -- its history (its zero snapshot values it at 0 thereafter). Falling back\n        -- to the provider valuation (snap.value) still needs converting, hence\n        -- the account-currency rate (afx) on that branch. Everything is summed in the pivot,\n        -- then divided once into the reader's reporting currency.\n        --\n        -- Three currency domains, never conflated:\n        --   price     — the `price` row's own currency, folded in by\n        --               valuation_grid (it reads the price row, not the\n        --               instrument);\n        --   amount    — `account.currency`, which is what the provider denominates\n        --               snapshot.value / snapshot.cost_basis in, hence the\n        --               afx join on both of those branches;\n        --   reporting — `users.prefs.currency`, applied once by the final divide.\n        -- `instrument.currency` is the quote currency of the security and is none\n        -- of the three: a USD-quoted stock inside a EUR account has a EUR cost\n        -- basis.\n        --\n        -- A holding whose rate is unknown contributes NULL, which sum() skips —\n        -- i.e. it is valued at zero — and raises fx_missing so the UI can say so.\n        -- The flag is raised on the failure itself (both value branches NULL),\n        -- not on any one currency, and only for a position actually held that day\n        -- so a sold foreign holding does not leave a permanent warning with no\n        -- row behind it.\n        with dates as (\n            select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of\n        ),\n        -- One valuation per instrument-day instead of one per holding-day, with\n        -- the FX lookup folded into the same scan. `materialized` is load-bearing\n        -- on all three: an inlined CTE here gets re-executed per outer row.\n        grid as materialized (select * from valuation_grid($1, $2, $3)),\n        fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),\n        rep  as materialized (\n            select as_of, unit_value from fx\n            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')\n        )\n        select d.as_of as \"as_of!\",\n               coalesce(sum(coalesce(\n                   snap.quantity * uv.unit_value,\n                   snap.value * afx.unit_value,\n                   0\n               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as \"net_worth!\",\n               coalesce(sum(snap.cost_basis * afx.unit_value), 0)\n                   / coalesce(nullif(rep.unit_value, 0), 1) as \"invested!\",\n               coalesce(bool_or(\n                   snap.quantity <> 0\n                   and uv.unit_value is null\n                   and coalesce(snap.value * afx.unit_value, 0) = 0\n               ), false) as \"fx_missing!\"\n        from dates d\n        cross join holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        -- INNER join: an instrument with no grid row cannot be valued at all.\n        join grid uv      on uv.instrument_id = h.instrument_id and uv.as_of = d.as_of\n        left join fx afx  on afx.as_of = d.as_of and afx.currency = a.currency\n        left join rep     on rep.as_of = d.as_of\n        -- `holding_point` is holding_snapshot ∪ holding_backfill. The invariant\n        -- (§4, enforced by stamp_snapshot) is that no day carries both, so the\n        -- union needs no precedence rule: synced truth simply exists where it\n        -- exists, and derived values fill the rest.\n        join lateral (\n            select hs.quantity, hs.value, hs.cost_basis\n            from holding_point hs\n            where hs.holding_id = h.id and hs.as_of <= d.as_of\n            order by hs.as_of desc\n            limit 1\n        ) snap on true\n        where c.user_id = $1\n        group by d.as_of, rep.unit_value\n        order by d.as_of\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "as_of!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "net_worth!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "invested!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "dff8ef96a24d377647414a08f84fd971f111d13a6ee704c6540db80346045495"
+}
