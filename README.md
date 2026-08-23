@@ -70,3 +70,63 @@ For real-time sync of Powens connections (instead of polling):
 5. Set `POWENS_WEBHOOK_SECRET=<secret_key>` in the root `.env` and restart the backend.
 
 When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.
+
+## Changelog
+
+<details>
+<summary><strong>v1.4.0</strong> — transactions</summary>
+
+- Transaction page
+- Version shown in the app
+- Changelog in the README
+- Realigned holdings table columns
+</details>
+
+<details>
+<summary><strong>v1.3.0</strong> — currencies & mobile</summary>
+
+- Currency conversion
+- Phone-responsive layout
+</details>
+
+<details>
+<summary><strong>v1.2.1</strong></summary>
+
+- Alert when an institution logo is missing
+- Charts turn red on negative values
+</details>
+
+<details>
+<summary><strong>v1.2.0</strong> — UI overhaul</summary>
+
+- New connections page and sync page
+- Providers and connection sources split in the UI
+- Category vs. type confusion resolved
+- Smaller buttons and fields
+- Bank sources, institution icons, user icons
+- ETF category and origin stats
+- i18n translations reorganized
+</details>
+
+<details>
+<summary><strong>v1.1.1</strong></summary>
+
+- Webhook fixes
+</details>
+
+<details>
+<summary><strong>v1.1.0</strong> — webhooks & user management</summary>
+
+- Powens webhook integration, localhost redirects
+- Failed connections stay open
+- Users page, invite and reset pages
+- EUR symbol in holdings
+</details>
+
+<details>
+<summary><strong>v1.0.0</strong> — first release</summary>
+
+- Powens and Yahoo integrations, sync button
+- Capital invested fix, asset logos
+- Server settings page, CI/CD
+</details>

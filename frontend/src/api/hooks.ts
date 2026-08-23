@@ -34,6 +34,17 @@ export function useNetWorth(range: string) {
   });
 }
 
+export type Health = { status: string; version: string };
+
+export function useHealth() {
+  return useQuery({
+    queryKey: ["health"],
+    // The version cannot change without a page reload, so never refetch it.
+    queryFn: () => getJson<Health>(`/health`),
+    staleTime: Infinity,
+  });
+}
+
 export function useDistribution() {
   return useQuery({
     queryKey: ["distribution"],

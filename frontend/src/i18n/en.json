@@ -322,6 +322,8 @@
     },
     "server": {
       "title": "Server",
+      "about": "About",
+      "version": "Version",
       "providers": "Data providers",
       "providersHint": "Aggregators used to fetch banking and brokerage data. Enable the ones you hold API credentials for.",
       "cors": "CORS origins",
