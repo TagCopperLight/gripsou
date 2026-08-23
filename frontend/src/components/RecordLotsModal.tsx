@@ -38,6 +38,9 @@ type Row = {
   pristine?: { date: string; quantity: string; unitPrice: string };
 };
 
+const ADD_ROW_BUTTON =
+  "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
+
 /** True for a saved row whose date/quantity/unitPrice no longer match what it
  *  was seeded with. Always false for a row the user just added (no pristine).
  *
@@ -51,9 +54,6 @@ type Row = {
  *
  *  The date stays a string comparison: it is an exact `YYYY-MM-DD` from the
  *  date input, with no equivalent-but-differently-written forms. */
-const ADD_ROW_BUTTON =
-  "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
-
 const sameAmount = (a: string, b: string): boolean =>
   a.trim() === b.trim() || Number(a) === Number(b);
 
@@ -252,9 +252,9 @@ export function RecordLotsModal({
                 <tr className="text-[11px] font-mono text-fg-faint">
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
-                  <th className="text-right font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
-                  <th className="text-right font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                  <th className="text-right font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
+                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
+                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
@@ -304,7 +304,7 @@ export function RecordLotsModal({
                           className={`${input} text-right ${badPrice ? ring : ""}`}
                         />
                       </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim">
+                      <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
                         {p === null
                           ? "—"
                           : formatMoney(

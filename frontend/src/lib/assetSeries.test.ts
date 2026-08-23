@@ -39,8 +39,21 @@ describe("positionSeries", () => {
     expect(pts[0].invested).toBe(100);
   });
 
-  it("falls back to the current position when every lot postdates the window", () => {
-    const pts = positionSeries(prices, [buy(9999, "10", "-100")], 7, 70);
+  it("starts at the first purchase instead of charting a position before it", () => {
+    // Buy between the two points: the earlier point is not part of the series.
+    const pts = positionSeries(prices, [buy(200, "10", "-100")], 10, 100);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].t).toBe(300);
+    expect(pts[0].value).toBe(10 * 12);
+  });
+
+  it("charts a sold-out position as zero, not as the current holding", () => {
+    const pts = positionSeries(prices, [buy(50, "10", "-100"), sell(200, "10", "120")], 0, 0);
+    expect(pts[1].value).toBe(0);
+  });
+
+  it("keeps the flat current position when no lots are known", () => {
+    const pts = positionSeries(prices, [], 7, 70);
     expect(pts[0].value).toBe(7 * 10);
     expect(pts[0].invested).toBe(70);
   });
