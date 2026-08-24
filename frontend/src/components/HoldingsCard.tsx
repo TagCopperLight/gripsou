@@ -39,8 +39,6 @@ const COLUMNS: Column[] = [
   { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", desktopOnly: true },
 ];
 
-const GREEN = "var(--color-green)";
-const RED = "var(--color-red)";
 
 // Cash has no meaningful quantity or P/L; those rows always sort to the bottom.
 function qtyOf(h: Holding): number | null {
@@ -347,7 +345,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <div className="flex justify-end">
                       {h.spark ? (
-                        <Sparkline data={h.spark.map(Number)} color={up ? GREEN : RED} />
+                        <Sparkline data={h.spark.map(Number)} />
                       ) : (
                         <span className="text-sm text-fg-faint">-</span>
                       )}

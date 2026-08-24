@@ -345,17 +345,29 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     for b in bases {
         // Cash rows show no sparkline (their "prices" are FX rates), so don't
         // pay for the query.
-        let mut spark: Vec<Decimal> = if b.kind == "cash" {
+        // The last 30 *days*, not the last 30 rows: a row count silently covers a
+        // different window whenever the feed's cadence changes, so the "30D"
+        // label stops meaning 30D. A market instrument yields ~21 points here
+        // (weekends have no price), which is the honest shape.
+        //
+        // ponytail: no cap on the row count. A daily feed makes this ~30 rows;
+        // add a sample-down (repo::series) if an intraday feed ever lands here.
+        let spark: Vec<Decimal> = if b.kind == "cash" {
             Vec::new()
         } else {
             sqlx::query_scalar!(
-                r#"select unit_price as "unit_price!" from price where instrument_id = $1 order by ts desc limit 30"#,
+                r#"
+                select unit_price as "unit_price!"
+                from price
+                where instrument_id = $1
+                  and ts >= now() - interval '30 days'
+                order by ts
+                "#,
                 b.instrument_id,
             )
             .fetch_all(pool)
             .await?
         };
-        spark.reverse();
 
         out.push(HoldingRow {
             holding_id: b.holding_id,

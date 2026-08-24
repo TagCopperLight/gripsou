@@ -2,7 +2,6 @@ import { useId } from "react";
 
 type SparklineProps = {
   data: number[];
-  color: string;
   width?: number;
   height?: number;
   className?: string;
@@ -10,16 +9,18 @@ type SparklineProps = {
 
 export function Sparkline({
   data,
-  color,
   width = 96,
   height = 32,
   className = "",
 }: SparklineProps) {
   const gradientId = useId();
-  // Red overrides the caller's color when the series ended lower than it started
-  // or went negative — a loss reads red regardless of the passed (positive) color.
+  // The colour is the window's own direction and nothing else: green when this
+  // month ended above where it started, red otherwise. Deliberately NOT the
+  // holding's all-time gain — a position bought two years ago and still under
+  // water can have had a good month, and this chart is about the month.
   const last = data.at(-1) ?? 0;
-  const stroke = last < 0 || last < (data[0] ?? 0) ? "var(--color-red)" : color;
+  const stroke =
+    last >= (data[0] ?? 0) ? "var(--color-green)" : "var(--color-red)";
   const pad = 3;
   const min = Math.min(...data);
   const max = Math.max(...data);
