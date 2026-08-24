@@ -1023,3 +1023,380 @@ async fn a_sell_reduces_the_derived_cost_basis_by_the_mean_price(
     assert_eq!(after, dec("375"));
     Ok(())
 }
+
+/// A snapshot dated after today. `stamp_snapshot` puts no upper bound on
+/// `as_of`, but the derived day axis stops at today — so such a snapshot can be
+/// an `anchor_day` that lies outside the axis. The suffix-sum CTE joins on the
+/// anchor day, and an INNER join against an axis missing it would silently drop
+/// every row anchored on it. This is the hazard the `holding_snapshot` union in
+/// `axis` exists for.
+#[sqlx::test(migrations = "../migrations")]
+async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let today = chrono::Utc::now().date_naive();
+    let future = today + chrono::Duration::days(5);
+
+    let (account_id, holding_id) = seed_cash(&pool, conn_id, &acct, dec("1000"), future).await;
+
+    let mut conn = pool.acquire().await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on(
+            "acct-1",
+            "past-1",
+            "deposit",
+            dec("100"),
+            today - chrono::Duration::days(3),
+        ),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    // Anchor holds 1000 on `future`. Walking back past the +100 deposit gives
+    // 900 for any day before it.
+    assert_eq!(
+        quantity_on(&pool, holding_id, today - chrono::Duration::days(4)).await,
+        Some(dec("900"))
+    );
+    Ok(())
+}
+
+/// The `axis` union with `moves` is load-bearing (not merely defensive) when
+/// `anchor_day > today`: a movement dated in `(today, anchor_day]` sits
+/// inside the walk's window but is neither a `days` entry (which stops at
+/// today) nor a snapshot day. Without that union it would have no row in
+/// `axis` at all, so the left join in `moves_after` would never see it and
+/// its delta would be silently missing from every suffix sum on the walk-back
+/// side of it — not merely cancelled out, but dropped.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let today = chrono::Utc::now().date_naive();
+    let future_anchor = today + chrono::Duration::days(5);
+    let (account_id, holding_id) =
+        seed_cash(&pool, conn_id, &acct, dec("1000"), future_anchor).await;
+
+    let mut conn = pool.acquire().await?;
+    // An older transaction just to push the horizon back past today — without
+    // any evidence before the future anchor, `start_day` itself lands after
+    // today and the derived range would be empty.
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on(
+            "acct-1",
+            "past-deposit",
+            "deposit",
+            dec("50"),
+            today - chrono::Duration::days(10),
+        ),
+    )
+    .await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on(
+            "acct-1",
+            "future-deposit",
+            "deposit",
+            dec("200"),
+            today + chrono::Duration::days(2),
+        ),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    // The deposit at today+2 sits inside (today, future_anchor], so walking
+    // back from the future anchor's 1000 to today must subtract it.
+    assert_eq!(
+        quantity_on(&pool, holding_id, today).await,
+        Some(dec("800")),
+        "a movement between today and a future-dated anchor must still be subtracted"
+    );
+    Ok(())
+}
+
+/// A transaction dated after today cancels out of
+/// `Σ(> as_of) − Σ(> anchor_day)`, because it is after both bounds. It must
+/// therefore leave every derived day exactly as it was — the differential is
+/// the assertion, so this holds without knowing the absolute values.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let today = chrono::Utc::now().date_naive();
+    let anchor = today - chrono::Duration::days(2);
+
+    // Same scenario twice: once clean, once with a future-dated deposit added.
+    let conn_a = seed_connection(&pool).await;
+    let acct_a = checking_account("acct-a");
+    let (account_a, holding_a) = seed_cash(&pool, conn_a, &acct_a, dec("1000"), anchor).await;
+
+    let conn_b = seed_connection(&pool).await;
+    let acct_b = checking_account("acct-b");
+    let (account_b, holding_b) = seed_cash(&pool, conn_b, &acct_b, dec("1000"), anchor).await;
+
+    let mut conn = pool.acquire().await?;
+    for (account_id, tag) in [(account_a, "a"), (account_b, "b")] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn_on(
+                &format!("acct-{tag}"),
+                &format!("shared-{tag}"),
+                "deposit",
+                dec("100"),
+                today - chrono::Duration::days(10),
+            ),
+        )
+        .await?;
+    }
+    // Only B gets the future-dated one.
+    upsert_transaction(
+        &mut conn,
+        account_b,
+        &txn_on(
+            "acct-b",
+            "future-b",
+            "deposit",
+            dec("500"),
+            today + chrono::Duration::days(7),
+        ),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_a).await?;
+    backfill_connection(&mut conn, conn_b).await?;
+    drop(conn);
+
+    let a = backfill_digest(&pool, holding_a).await;
+    let b = backfill_digest(&pool, holding_b).await;
+    assert!(!a.is_empty(), "the clean scenario must derive something");
+    assert_eq!(
+        a.len(),
+        b.len(),
+        "a future-dated transaction changed the number of derived days"
+    );
+    for (ra, rb) in a.iter().zip(b.iter()) {
+        assert_eq!(ra.0, rb.0);
+        assert_eq!(ra.1, rb.1, "quantity changed on {}", ra.0);
+        assert_eq!(ra.2, rb.2, "value changed on {}", ra.0);
+        assert_eq!(ra.3, rb.3, "cost_basis changed on {}", ra.0);
+    }
+    Ok(())
+}
+
+/// A movement landing exactly on the anchor day is INSIDE the walk's window
+/// (`day > as_of and day <= anchor_day`), and one landing exactly on the day
+/// being computed is OUTSIDE it. Both boundaries must survive the rewrite.
+#[sqlx::test(migrations = "../migrations")]
+async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let (account_id, holding_id) =
+        seed_cash(&pool, conn_id, &acct, dec("1000"), d(2026, 8, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    // On the anchor day itself: inside the window, so it is subtracted.
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on("acct-1", "on-anchor", "deposit", dec("100"), d(2026, 8, 20)),
+    )
+    .await?;
+    // On the day being asked about: outside the window, so it is not.
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on("acct-1", "on-day", "deposit", dec("7"), d(2026, 8, 15)),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    // 1000 (anchor) - 100 (the on-anchor deposit, inside the window) = 900.
+    // The on-day deposit is excluded, so it does not appear.
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 8, 15)).await,
+        Some(dec("900"))
+    );
+    Ok(())
+}
+
+/// Pins the `uv` lateral's ordering: earliest NON-ZERO snapshot strictly
+/// AFTER the day, else latest non-zero AT OR BEFORE it
+/// (`coalesce(nxt.*, prv.*)`). Getting that backward still compiles and still
+/// returns a row, so it needs a case where the two orders disagree.
+///
+/// Uses a security holding (`is_cash` false), because for cash the final
+/// select never reads `uv` at all (`case when w.is_cash then w.quantity +
+/// w.lift`) — the previous version of this test seeded cash and its 0/0
+/// assertion held under either ordering.
+///
+/// Two non-zero snapshots at different per-unit values (10, then 15), plus
+/// the sale itself so the walk can reconstruct the pre-sale quantity: 40
+/// units bought and held from 07-20, revalued at the 08-10 snapshot, sold
+/// whole on 08-20.
+#[sqlx::test(migrations = "../migrations")]
+async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+
+    let h = equity_holding("acct-1", "IE0100", dec("0"), dec("0"), Some(dec("0")));
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
+
+    // 07-20: 40 units @ per-unit 10 (value 400).
+    stamp_on(
+        &pool,
+        holding_id,
+        d(2026, 7, 20),
+        dec("40"),
+        dec("400"),
+        dec("400"),
+    )
+    .await;
+    // 08-10: still 40 units, revalued to per-unit 15 (value 600).
+    stamp_on(
+        &pool,
+        holding_id,
+        d(2026, 8, 10),
+        dec("40"),
+        dec("600"),
+        dec("600"),
+    )
+    .await;
+    // 08-20: sold to zero.
+    stamp_on(
+        &pool,
+        holding_id,
+        d(2026, 8, 20),
+        dec("0"),
+        dec("0"),
+        dec("0"),
+    )
+    .await;
+    // The sale itself, so the walk reconstructs the pre-sale quantity for the
+    // held window instead of anchoring on the zero snapshot.
+    insert_buy(
+        &pool,
+        account_id,
+        instrument_id,
+        "buy-40",
+        dec("40"),
+        dec("10"),
+        d(2026, 7, 20),
+    )
+    .await;
+    sqlx::query(
+        "insert into transaction (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount) \
+         values ($1, $2, $3::date, $3::date, 'sell', 40, 15, 600)",
+    )
+    .bind(account_id)
+    .bind(instrument_id)
+    .bind(d(2026, 8, 20))
+    .execute(&pool)
+    .await?;
+
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    let rows = backfill_digest(&pool, holding_id).await;
+
+    // 08-01 sits before the 08-10 revaluation: the earliest non-zero snapshot
+    // strictly after it (`nxt`) is 08-10 (per-unit 15), so 40 * 600/40 = 600.
+    // Reversing the coalesce order to prefer `prv` (07-20, per-unit 10) would
+    // give 40 * 400/40 = 400 instead — this is the number that pins the order.
+    let (_, qty, value, _) = rows
+        .iter()
+        .find(|(day, _, _, _)| *day == d(2026, 8, 1))
+        .expect("a derived day must exist between 07-20 and 08-10");
+    assert_eq!(*qty, dec("40"));
+    assert_eq!(
+        *value,
+        dec("600"),
+        "must prefer the later (nxt) snapshot's per-unit value over the earlier (prv) one"
+    );
+
+    // 08-15 sits after the last non-zero snapshot (08-10) and before the sale:
+    // `nxt` finds nothing, so `uv` must fall back to `prv` (08-10, per-unit 15).
+    let (_, qty2, value2, _) = rows
+        .iter()
+        .find(|(day, _, _, _)| *day == d(2026, 8, 15))
+        .expect("a derived day must exist between 08-10 and the sale");
+    assert_eq!(
+        *qty2,
+        dec("40"),
+        "the sell transaction reconstructs the pre-sale quantity"
+    );
+    assert_eq!(
+        *value2,
+        dec("600"),
+        "falls back to the prv (08-10) per-unit value when nxt finds nothing"
+    );
+    Ok(())
+}
+
+/// A holding with no transactions at all is held flat (spec rule 3). The
+/// suffix-sum join must not drop it for want of a `moves` row.
+///
+/// (Corrected from the brief's expectation: with no transactions anywhere for
+/// the user, `horizon` collapses to `min(now, snapshot_day) - 1`, i.e.
+/// 2026-08-19 here, not far enough back to reach 2026-08-10 — that day is
+/// outside the derived range entirely and `quantity_on` returns `None` for it,
+/// verified against unmodified `src/`. 2026-08-19 is the sole derived day, so
+/// it is checked twice: once via `quantity_on` and once via the digest, both
+/// of which must show the same flat 750.)
+#[sqlx::test(migrations = "../migrations")]
+async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let (_account_id, holding_id) =
+        seed_cash(&pool, conn_id, &acct, dec("750"), d(2026, 8, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    // Outside the derived range: no row at all.
+    assert_eq!(quantity_on(&pool, holding_id, d(2026, 8, 10)).await, None);
+    // The one derived day (start_day = anchor - 1), held flat at the anchor.
+    assert_eq!(
+        quantity_on(&pool, holding_id, d(2026, 8, 19)).await,
+        Some(dec("750"))
+    );
+    Ok(())
+}
+
+/// The first and last day of the derived range must both exist. An off-by-one
+/// in the day axis is the classic way a windowed rewrite goes wrong.
+#[sqlx::test(migrations = "../migrations")]
+async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = checking_account("acct-1");
+    let (account_id, holding_id) =
+        seed_cash(&pool, conn_id, &acct, dec("1000"), d(2026, 8, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on("acct-1", "first", "deposit", dec("50"), d(2026, 8, 10)),
+    )
+    .await?;
+    backfill_connection(&mut conn, conn_id).await?;
+    drop(conn);
+
+    let rows = backfill_digest(&pool, holding_id).await;
+    assert!(!rows.is_empty(), "the derived range must not be empty");
+    // The horizon is the earliest evidence minus one day.
+    assert_eq!(rows.first().unwrap().0, d(2026, 8, 9));
+    // The last derived day is the one before the anchoring snapshot.
+    assert_eq!(rows.last().unwrap().0, d(2026, 8, 19));
+    Ok(())
+}

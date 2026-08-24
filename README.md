@@ -71,6 +71,20 @@ For real-time sync of Powens connections (instead of polling):
 
 When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.
 
+## Profiling
+
+`backend/core/examples/perf.rs` times the operations that dominate a sync and a
+dashboard load: the history rebuild, both chart series, the distribution pie and
+the holdings list. It creates a throwaway database, seeds a synthetic portfolio
+at a chosen scale, runs `ANALYZE`, and reports min/median/max over several runs.
+
+```sh
+cd backend
+cargo run -p gripsou-core --example perf -- --holdings 13 --days 1300 --runs 5
+cargo run -p gripsou-core --example perf -- ... --save baseline.json    # record
+cargo run -p gripsou-core --example perf -- ... --compare baseline.json # diff
+```
+
 ## Changelog
 
 <details>

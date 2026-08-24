@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select min(hp.as_of) as \"min_as_of?\"\n        from holding_point hp\n        join holding h    on h.id = hp.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where c.user_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "min_as_of?",
+        "type_info": "Date",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "328a920bd4f45328aecf0581c491571ad8898f9aab848b6d78aed95e83942047"
+}
