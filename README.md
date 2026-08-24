@@ -88,6 +88,15 @@ cargo run -p gripsou-core --example perf -- ... --compare baseline.json # diff
 ## Changelog
 
 <details>
+<summary><strong>v1.4.1</strong> — performance</summary>
+
+- Performance optimizations
+- 30D chart fix
+- Yahoo price gap fix (and a tool to repair existing databases)
+- Better chart tooltips, fixed percentage charts
+</details>
+
+<details>
 <summary><strong>v1.4.0</strong> — transactions</summary>
 
 - Transaction page

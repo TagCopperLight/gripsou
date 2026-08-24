@@ -2,6 +2,7 @@ import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
 import { formatDate } from "../lib/date";
+import { windowReturn } from "../lib/assetSeries";
 
 export type ChartUnit = "value" | "percent";
 
@@ -84,27 +85,21 @@ export function ValueChart({
     percent ? formatPercent(v, opts) : formatMoney(v, { ...opts, currency });
 
   // Percent mode. With a dashed baseline series (capital invested) it plots the
-  // ONE thing that means something: return on the capital in at each instant,
-  // (value - invested) / invested. Rebasing to the first point instead would
-  // report deposits as growth. Without a baseline (a unit-price chart) it falls
-  // back to change relative to the first point.
+  // ONE thing that means something: return over the displayed window, starting
+  // at 0% — profit since the range's start over the capital at work, so deposits
+  // don't read as growth. Without a baseline (a unit-price chart) it falls back
+  // to change relative to the first point.
   const baseline = series.find((s) => s.dashed);
   const plotted: ChartSeries[] = !percent
     ? series
     : baseline
       ? series
           .filter((s) => !s.dashed)
-          .map((s) => {
-            const investedAt = new Map(baseline.data);
-            return {
-              ...s,
-              name: percentLabel ?? s.name,
-              data: s.data.map(([t, v]) => {
-                const inv = investedAt.get(t) ?? 0;
-                return [t, inv ? (v - inv) / inv : 0] as [number, number];
-              }),
-            };
-          })
+          .map((s) => ({
+            ...s,
+            name: percentLabel ?? s.name,
+            data: windowReturn(s.data, baseline.data),
+          }))
       : series.map((s) => {
           const base = s.data[0]?.[1] ?? 0;
           return {
