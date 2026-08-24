@@ -22,5 +22,14 @@ export function NetWorthChart({ data, height = 320, className = "", unit = "valu
     { name: t("dashboard.netWorth.capitalInvested"), data: data.map((p) => [p.t, p.invested]), color: GRAY, dashed: true },
     { name: t("dashboard.netWorth.netWorth"), data: data.map((p) => [p.t, p.netWorth]), color: GREEN, area: true },
   ];
-  return <ValueChart series={series} unit={unit} height={height} className={className} surfaceColor={SURFACE} />;
+  return (
+    <ValueChart
+      series={series}
+      unit={unit}
+      percentLabel={t("common.return")}
+      height={height}
+      className={className}
+      surfaceColor={SURFACE}
+    />
+  );
 }

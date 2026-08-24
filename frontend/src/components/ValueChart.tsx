@@ -59,6 +59,8 @@ type ValueChartProps = {
    * Defaults to the user's reporting currency. Has no effect in percent mode.
    */
   currency?: string;
+  /** Series name shown in percent mode when a baseline turns it into a return. */
+  percentLabel?: string;
 };
 
 // To draw cleanly on top, area/solid lines should come last; callers pass them
@@ -75,23 +77,43 @@ export function ValueChart({
   surfaceColor = SURFACE_2,
   unit = "value",
   currency,
+  percentLabel,
 }: ValueChartProps) {
   const percent = unit === "percent";
   const fmt = (v: number, opts?: { fractionDigits?: number; signed?: boolean }) =>
     percent ? formatPercent(v, opts) : formatMoney(v, { ...opts, currency });
 
-  // In percent mode, rebase each series to its first point's relative change.
-  const plotted: ChartSeries[] = percent
-    ? series.map((s) => {
-        const base = s.data[0]?.[1] ?? 0;
-        return {
-          ...s,
-          data: s.data.map(
-            ([t, v]) => [t, base ? (v - base) / base : 0] as [number, number],
-          ),
-        };
-      })
-    : series;
+  // Percent mode. With a dashed baseline series (capital invested) it plots the
+  // ONE thing that means something: return on the capital in at each instant,
+  // (value - invested) / invested. Rebasing to the first point instead would
+  // report deposits as growth. Without a baseline (a unit-price chart) it falls
+  // back to change relative to the first point.
+  const baseline = series.find((s) => s.dashed);
+  const plotted: ChartSeries[] = !percent
+    ? series
+    : baseline
+      ? series
+          .filter((s) => !s.dashed)
+          .map((s) => {
+            const investedAt = new Map(baseline.data);
+            return {
+              ...s,
+              name: percentLabel ?? s.name,
+              data: s.data.map(([t, v]) => {
+                const inv = investedAt.get(t) ?? 0;
+                return [t, inv ? (v - inv) / inv : 0] as [number, number];
+              }),
+            };
+          })
+      : series.map((s) => {
+          const base = s.data[0]?.[1] ?? 0;
+          return {
+            ...s,
+            data: s.data.map(
+              ([t, v]) => [t, base ? (v - base) / base : 0] as [number, number],
+            ),
+          };
+        });
 
   const option: EChartsOption = {
     backgroundColor: "transparent",
@@ -110,7 +132,7 @@ export function ValueChart({
         const items = params as unknown as TooltipParam[];
         // The series itemStyle color is the (hollow) symbol center, i.e. the
         // surface — use the real line color from the series for the marker.
-        const colorByName = new Map(series.map((s) => [s.name, s.color]));
+        const colorByName = new Map(plotted.map((s) => [s.name, s.color]));
         // ponytail: callers pass the dashed invested line first for z-order;
         // the tooltip reads better with the bigger value line on top.
         const rows = [...items]

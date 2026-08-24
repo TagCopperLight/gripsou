@@ -14,7 +14,8 @@
     "cancel": "Annuler",
     "select": "Sélectionner…",
     "value": "Valeur",
-    "total": "Total"
+    "total": "Total",
+    "return": "Rendement"
   },
   "sync": {
     "title": "Synchronisation",
