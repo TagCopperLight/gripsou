@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { positionSeries } from "./assetSeries";
+import { positionSeries, windowReturn } from "./assetSeries";
 import type { Purchase, PricePoint } from "../api/types";
 
 const prices: PricePoint[] = [
@@ -56,5 +56,19 @@ describe("positionSeries", () => {
     const pts = positionSeries(prices, [], 7, 70);
     expect(pts[0].value).toBe(7 * 10);
     expect(pts[0].invested).toBe(70);
+  });
+});
+
+describe("windowReturn", () => {
+  it("starts at 0 and reads the window's gain, not lifetime gain", () => {
+    // Already +100% at window start (100 value on 50 invested), then +10 value.
+    const r = windowReturn([[1, 100], [2, 110]], [[1, 50], [2, 50]]);
+    expect(r[0][1]).toBe(0);
+    expect(r[1][1]).toBeCloseTo(0.1, 10);
+  });
+
+  it("does not count a mid-window deposit as gain", () => {
+    const r = windowReturn([[1, 100], [2, 200]], [[1, 50], [2, 150]]);
+    expect(r[1][1]).toBe(0);
   });
 });

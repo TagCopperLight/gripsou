@@ -39,3 +39,23 @@ export function positionSeries(
       return { t: p.t, value: Number(p.price) * qty, invested };
     });
 }
+
+// Return over the displayed window, rebased so the window starts at 0%:
+// profit made since the start, over the capital that was at work for it.
+// ponytail: simple-Dietz denominator (start value + net contributions since),
+// not time-weighted — a big deposit late in the window still flatters it
+// slightly. Swap for TWR if that ever matters.
+export function windowReturn(
+  values: [number, number][],
+  invested: [number, number][],
+): [number, number][] {
+  const investedAt = new Map(invested);
+  const v0 = values[0]?.[1] ?? 0;
+  const inv0 = investedAt.get(values[0]?.[0]) ?? 0;
+  return values.map(([t, v]) => {
+    const inv = investedAt.get(t) ?? inv0;
+    const gain = v - inv - (v0 - inv0);
+    const base = v0 + (inv - inv0);
+    return [t, base ? gain / base : 0];
+  });
+}

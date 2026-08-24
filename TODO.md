@@ -46,7 +46,7 @@
 - [x] Changelog in the readme
 - [x] Realign holdings table columns
 
-### v1.4.1
+### v1.4.1 - pushed
 - [x] Performance optimizations
 - [x] 30D chart fix
 - [x] yahoo price gaps fix (and tool to fix existing database)
