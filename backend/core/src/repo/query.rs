@@ -21,6 +21,36 @@ pub async fn net_worth_series(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<NetWorthRow>, CoreError> {
+    net_worth_series_with_target(
+        pool,
+        user_id,
+        from,
+        to,
+        crate::repo::series::CHART_TARGET_POINTS,
+    )
+    .await
+}
+
+/// Same as [`net_worth_series`] but with the sample target exposed. Exists so
+/// the golden sampling tests (`tests/golden.rs`) can force a small target
+/// against the fixed-size seeded scenario, which is otherwise too short to
+/// ever produce a stride above 1. Not part of the public API.
+#[doc(hidden)]
+pub async fn net_worth_series_with_target(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    from: NaiveDate,
+    to: NaiveDate,
+    target: usize,
+) -> Result<Vec<NetWorthRow>, CoreError> {
+    // Clamp to real history, then sample. `range=max` asks for 4000 days
+    // regardless of how much exists, and a 4000-point line is drawn into about
+    // 800 pixels.
+    let start = crate::repo::series::history_start(pool, user_id)
+        .await?
+        .map_or(from, |h| h.max(from));
+    let days = crate::repo::series::sample_days(start, to, target);
+
     let rows = sqlx::query_as!(
         NetWorthRow,
         r#"
@@ -51,13 +81,18 @@ pub async fn net_worth_series(
         -- not on any one currency, and only for a position actually held that day
         -- so a sold foreign holding does not leave a permanent warning with no
         -- row behind it.
+        --
+        -- The `dates` array is not every day in the range: see repo::series,
+        -- whose `sample_days` clamps the axis to real history and samples it
+        -- down to roughly CHART_TARGET_POINTS points before this query ever
+        -- runs.
         with dates as (
-            select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+            select distinct unnest($2::date[]) as as_of
         ),
         -- One valuation per instrument-day instead of one per holding-day, with
         -- the FX lookup folded into the same scan. `materialized` is load-bearing
         -- on all three: an inlined CTE here gets re-executed per outer row.
-        grid as materialized (select * from valuation_grid($1, $2, $3)),
+        grid as materialized (select * from valuation_grid($1, $2)),
         fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
         rep  as materialized (
             select as_of, unit_value from fx
@@ -100,8 +135,7 @@ pub async fn net_worth_series(
         order by d.as_of
         "#,
         user_id,
-        from,
-        to,
+        &days,
     )
     .fetch_all(pool)
     .await?;
@@ -512,6 +546,32 @@ pub async fn account_series(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<AccountSeriesRow>, CoreError> {
+    account_series_with_target(
+        pool,
+        user_id,
+        from,
+        to,
+        crate::repo::series::CHART_TARGET_POINTS,
+    )
+    .await
+}
+
+/// Same as [`account_series`] but with the sample target exposed — see
+/// [`net_worth_series_with_target`] for why this seam exists. Not part of the
+/// public API.
+#[doc(hidden)]
+pub async fn account_series_with_target(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    from: NaiveDate,
+    to: NaiveDate,
+    target: usize,
+) -> Result<Vec<AccountSeriesRow>, CoreError> {
+    let start = crate::repo::series::history_start(pool, user_id)
+        .await?
+        .map_or(from, |h| h.max(from));
+    let days = crate::repo::series::sample_days(start, to, target);
+
     let rows = sqlx::query_as!(
         AccountSeriesRow,
         r#"
@@ -519,9 +579,9 @@ pub async fn account_series(
         -- lateral join + valuation_grid), grouped per account for the
         -- stacked area. No fx_missing flag: the accounts grid already surfaces it.
         with dates as (
-            select generate_series($2::date, $3::date, '1 day'::interval)::date as as_of
+            select distinct unnest($2::date[]) as as_of
         ),
-        grid as materialized (select * from valuation_grid($1, $2, $3)),
+        grid as materialized (select * from valuation_grid($1, $2)),
         fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
         rep  as materialized (
             select as_of, unit_value from fx
@@ -555,8 +615,7 @@ pub async fn account_series(
         order by d.as_of, a.id
         "#,
         user_id,
-        from,
-        to,
+        &days,
     )
     .fetch_all(pool)
     .await?;
@@ -632,23 +691,51 @@ pub async fn distribution(
         r#"
         -- Same per-holding valuation as accounts()/net_worth_series so the pie
         -- sums to the net-worth figure.
-        with latest as (
+        --
+        -- Valued through `valuation_grid` rather than the scalar
+        -- unit_value_asof/fx_asof/reporting_fx_asof functions. The scalars are
+        -- fine for a single lookup, but this query made several per holding —
+        -- unit_value_asof and fx_asof twice each (once for the value, once for
+        -- the fx_missing test) and reporting_fx_asof twice more (select and
+        -- order by) — each one a planned index seek with a nested fx lookup
+        -- inside it. That was 33 ms of a 35 ms statement.
+        --
+        -- The grid computes the same arithmetic once per instrument instead of
+        -- once per holding, and folds the FX lookup into the same scan. Unlike
+        -- the chart series this needs a single day, so there is no sampling and
+        -- no day axis to keep in step — just a one-element array.
+        --
+        -- The joins are LEFT on purpose: a missing grid row must leave
+        -- unit_value NULL so the coalesce falls through to the provider
+        -- valuation, exactly as a NULL from unit_value_asof did.
+        with today as (select (now() at time zone 'utc')::date as d),
+        grid as materialized (
+            select * from valuation_grid($1, array[(select d from today)]::date[])
+        ),
+        fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
+        rep as materialized (
+            select unit_value from fx
+            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+        ),
+        latest as (
             select distinct on (hs.holding_id)
                    hs.holding_id,
                    coalesce(
-                       hs.quantity * unit_value_asof(i.id, (now() at time zone 'utc')::date),
-                       hs.value * fx_asof(a.currency, (now() at time zone 'utc')::date),
+                       hs.quantity * uv.unit_value,
+                       hs.value * afx.unit_value,
                        0
                    ) as value,
                    h.quantity <> 0
-                   and unit_value_asof(i.id, (now() at time zone 'utc')::date) is null
-                   and coalesce(hs.value * fx_asof(a.currency, (now() at time zone 'utc')::date), 0) = 0
+                   and uv.unit_value is null
+                   and coalesce(hs.value * afx.unit_value, 0) = 0
                        as fx_missing
             from holding_snapshot hs
             join holding h    on h.id = hs.holding_id
             join account a    on a.id = h.account_id
             join connection c on c.id = a.connection_id
             join instrument i on i.id = h.instrument_id
+            left join grid uv on uv.instrument_id = i.id
+            left join fx afx  on afx.currency = a.currency
             where c.user_id = $1
             order by hs.holding_id, hs.as_of desc
         )
@@ -657,14 +744,14 @@ pub async fn distribution(
                a.color,
                a.type_key as "type_key!",
                t.label    as "type_label!",
-               sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) as "value!",
+               sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!"
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         group by a.id, a.name, a.color, a.type_key, t.label
-        order by sum(l.value) / reporting_fx_asof($1, (now() at time zone 'utc')::date) desc
+        order by sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) desc
         "#,
         user_id,
     )

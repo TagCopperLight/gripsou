@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Same per-holding valuation as accounts()/net_worth_series so the pie\n        -- sums to the net-worth figure.\n        --\n        -- Valued through `valuation_grid` rather than the scalar\n        -- unit_value_asof/fx_asof/reporting_fx_asof functions. The scalars are\n        -- fine for a single lookup, but this query made several per holding —\n        -- unit_value_asof and fx_asof twice each (once for the value, once for\n        -- the fx_missing test) and reporting_fx_asof twice more (select and\n        -- order by) — each one a planned index seek with a nested fx lookup\n        -- inside it. That was 33 ms of a 35 ms statement.\n        --\n        -- The grid computes the same arithmetic once per instrument instead of\n        -- once per holding, and folds the FX lookup into the same scan. Unlike\n        -- the chart series this needs a single day, so there is no sampling and\n        -- no day axis to keep in step — just a one-element array.\n        --\n        -- The joins are LEFT on purpose: a missing grid row must leave\n        -- unit_value NULL so the coalesce falls through to the provider\n        -- valuation, exactly as a NULL from unit_value_asof did.\n        with today as (select (now() at time zone 'utc')::date as d),\n        grid as materialized (\n            select * from valuation_grid($1, array[(select d from today)]::date[])\n        ),\n        fx  as materialized (select currency, unit_value from grid where kind = 'cash'),\n        rep as materialized (\n            select unit_value from fx\n            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')\n        ),\n        latest as (\n            select distinct on (hs.holding_id)\n                   hs.holding_id,\n                   coalesce(\n                       hs.quantity * uv.unit_value,\n                       hs.value * afx.unit_value,\n                       0\n                   ) as value,\n                   h.quantity <> 0\n                   and uv.unit_value is null\n                   and coalesce(hs.value * afx.unit_value, 0) = 0\n                       as fx_missing\n            from holding_snapshot hs\n            join holding h    on h.id = hs.holding_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            join instrument i on i.id = h.instrument_id\n            left join grid uv on uv.instrument_id = i.id\n            left join fx afx  on afx.currency = a.currency\n            where c.user_id = $1\n            order by hs.holding_id, hs.as_of desc\n        )\n        select a.id   as \"account_id!\",\n               a.name as \"name!\",\n               a.color,\n               a.type_key as \"type_key!\",\n               t.label    as \"type_label!\",\n               sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as \"value!\",\n               coalesce(bool_or(l.fx_missing), false) as \"fx_missing!\"\n        from latest l\n        join holding h      on h.id = l.holding_id\n        join account a      on a.id = h.account_id\n        join account_type t on t.key = a.type_key\n        group by a.id, a.name, a.color, a.type_key, t.label\n        order by sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "type_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "type_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "type_label!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_type",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "de2ea74a8bfc1c312603ea42121e6f4a6ead0f55b44098ee7a1b839bc9d6ad0e"
+}

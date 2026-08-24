@@ -182,16 +182,105 @@ pub async fn backfill_connection(
             cross join lateral generate_series(
                 hz.start_day, (now() at time zone 'utc')::date, '1 day') gs
         ),
+        -- The day axis the suffix sums are computed over. It must cover every
+        -- day a suffix sum is READ at, which is `as_of` and `anchor_day`.
+        --
+        -- `as_of` always comes from `days`. `anchor_day` is a snapshot day, and
+        -- `stamp_snapshot` puts no upper bound on those — a snapshot dated
+        -- after today would fall outside `days`, and the INNER join below would
+        -- then silently drop every derived row anchored on it. Hence the union
+        -- with `holding_snapshot`.
+        --
+        -- The union with `moves` is load-bearing, not defensive, whenever
+        -- `anchor_day > today`. `days` stops at today, so a movement dated in
+        -- `(today, anchor_day]` — inside the walk's window, and exactly what
+        -- `anchors_on_a_snapshot_dated_after_today` covers — is neither a
+        -- `days` entry nor a snapshot day. Without this branch that day would
+        -- have no row in `axis` at all, so the left join in `moves_after`
+        -- below would never see it and its delta would be silently missing
+        -- from both suffix sums, for every `as_of` on the walk-back side of
+        -- it — not just cancelled out, dropped. The old correlated subquery
+        -- had no such gap because it counted every row directly.
+        axis as materialized (
+            select holding_id, as_of as day from days
+            union
+            select holding_id, day from moves
+            union
+            select hs.holding_id, hs.as_of
+            from holding_snapshot hs
+            join scope s on s.holding_id = hs.holding_id
+        ),
+        -- `Σ delta for day > d`, computed once per (holding, day) instead of
+        -- once per derived row. The old correlated subquery was evaluated
+        -- TWICE per row — Postgres does not share it between `walked.quantity`
+        -- and the `min(w.quantity) over (...)` window in `lifted` that reads it
+        -- — which was 607 ms of a 764 ms statement.
+        --
+        -- Descending order with the frame excluding the current row is exactly
+        -- "strictly after this day". `sum` skips NULLs, so days with no
+        -- movement contribute nothing; the outer coalesce covers the newest day,
+        -- whose frame is empty.
+        --
+        -- `groups`, not `rows`: peer groups are defined by the `order by`
+        -- key (`a.day`), so "unbounded preceding to 1 preceding group" means
+        -- "every strictly-greater day" regardless of how many rows share a
+        -- day. `rows between unbounded preceding and 1 preceding` would only
+        -- coincide with that if `(holding_id, day)` were guaranteed unique in
+        -- this window's input — true today (`axis` is a `union`, which dedups,
+        -- and `moves` is grouped by `(holding_id, day)`), but a silent
+        -- invariant a future duplicate-day row could break without any query
+        -- change flagging it. `groups` costs nothing extra here (measured
+        -- within noise of `rows`, ~155-168ms either way against the 152ms
+        -- reference) so there is no reason to lean on that invariant.
+        moves_after as materialized (
+            select a.holding_id, a.day,
+                   coalesce(sum(m.delta) over (
+                       partition by a.holding_id
+                       order by a.day desc
+                       groups between unbounded preceding and 1 preceding
+                   ), 0) as total
+            from axis a
+            left join moves m on m.holding_id = a.holding_id and m.day = a.day
+        ),
+        -- The derived days, each already carrying its own suffix total.
+        --
+        -- This is `days` again, read back off `moves_after` instead of joining
+        -- to it. Joining was the obvious shape and it was catastrophic: a CTE
+        -- carries no statistics and no index, so the planner estimated the
+        -- outer side at one row and nested-looped, rescanning all 3,234
+        -- `moves_after` rows per derived row — twice, the second scan nested
+        -- inside the first. 764 ms became over five minutes. Migration 0018's
+        -- comment describes the same trap from the other side.
+        --
+        -- Reading the total off the row removes the join entirely, so there is
+        -- nothing left for the planner to get wrong.
+        days_t as materialized (
+            select ma.holding_id, ma.day as as_of, ma.total
+            from moves_after ma
+            cross join horizon hz
+            where ma.day between hz.start_day and (now() at time zone 'utc')::date
+        ),
+        -- The same totals restricted to snapshot days, which is all `anchor_day`
+        -- can ever be. Tiny (one row per holding per sync), so this join stays
+        -- cheap whichever strategy the planner picks — the property the
+        -- `moves_after` join above did not have.
+        anchor_after as materialized (
+            select ma.holding_id, ma.day, ma.total
+            from moves_after ma
+            join scope s on s.holding_id = ma.holding_id
+            join holding_snapshot hs
+              on hs.holding_id = ma.holding_id and hs.as_of = ma.day
+        ),
         -- Only days with no snapshot, each paired with the first snapshot after
         -- it. A day past the last snapshot has no anchor and drops out here.
         -- The `not exists` is what keeps the holding_point invariant from this
         -- side: stamp_snapshot deletes a colliding backfill row, and this never
         -- writes one for a day that already has a snapshot.
         gaps as (
-            select d.holding_id, d.as_of, nx.as_of as anchor_day,
+            select d.holding_id, d.as_of, d.total, nx.as_of as anchor_day,
                    nx.quantity as anchor_qty,
                    uv.quantity as unit_qty, uv.value as unit_value
-            from days d
+            from days_t d
             join lateral (
                 select hs.as_of, hs.quantity
                 from holding_snapshot hs
@@ -206,12 +295,47 @@ pub async fn backfill_connection(
             -- no per-unit information: for a fully-sold position every later
             -- snapshot is zero, so the search has to reach back past the sale
             -- or the held window would be valued at nothing.
+            --
+            -- Split into two index seeks rather than one `order by
+            -- (as_of <= day), abs(as_of - day) limit 1`. That ordering is on
+            -- expressions, which no index serves, so it top-N sorted this
+            -- holding's whole snapshot history on every one of the 9,072 rows —
+            -- 118 ms of a 764 ms statement. Both halves below are ordinary
+            -- seeks on the (holding_id, as_of) unique index.
+            --
+            -- `gaps` only contains days with no snapshot of their own, so
+            -- "strictly after" and "at or after" cannot differ here, and
+            -- neither can "before" and "at or before".
+            -- The two `coalesce`s are independent per column, so they could in
+            -- principle mix a quantity from `nxt` with a value from `prv` (or
+            -- vice versa) if one of `nxt`/`prv` matched and the other did not
+            -- on only one column. That never happens here because
+            -- `holding_snapshot.quantity` and `.value` are both `not null`
+            -- (see `backend/migrations/0001_initial_schema.sql`): a row that
+            -- matches at all supplies both columns together, so `nxt` and
+            -- `prv` are each all-or-nothing.
             left join lateral (
-                select hs.quantity, hs.value
-                from holding_snapshot hs
-                where hs.holding_id = d.holding_id and hs.quantity <> 0
-                order by hs.as_of <= d.as_of, abs(hs.as_of - d.as_of)
-                limit 1
+                select coalesce(nxt.quantity, prv.quantity) as quantity,
+                       coalesce(nxt.value,    prv.value)    as value
+                from (select 1) _one
+                left join lateral (
+                    select hs.quantity, hs.value
+                    from holding_snapshot hs
+                    where hs.holding_id = d.holding_id
+                      and hs.quantity <> 0
+                      and hs.as_of > d.as_of
+                    order by hs.as_of
+                    limit 1
+                ) nxt on true
+                left join lateral (
+                    select hs.quantity, hs.value
+                    from holding_snapshot hs
+                    where hs.holding_id = d.holding_id
+                      and hs.quantity <> 0
+                      and hs.as_of <= d.as_of
+                    order by hs.as_of desc
+                    limit 1
+                ) prv on true
             ) uv on true
             where not exists (
                 select 1 from holding_snapshot hs
@@ -221,19 +345,29 @@ pub async fn backfill_connection(
         walked as (
             select g.holding_id, g.as_of, g.anchor_day, s.is_cash,
                    g.unit_qty, g.unit_value,
-                   g.anchor_qty - coalesce((
-                       select sum(m.delta) from moves m
-                       where m.holding_id = g.holding_id
-                         and m.day > g.as_of and m.day <= g.anchor_day
-                   ), 0) as quantity,
+                   -- Σ(as_of, anchor_day] = Σ(> as_of) − Σ(> anchor_day).
+                   -- `as_of < anchor_day` always holds (the anchor is the first
+                   -- snapshot strictly after the day), so this interval is never
+                   -- inverted or empty-by-inversion by construction — the sum
+                   -- itself can still be negative (any withdrawal makes it so).
+                   -- The join is INNER and safe: `axis` contains every snapshot
+                   -- day, so every anchor has a row.
+                   g.anchor_qty - (g.total - aa.total) as quantity,
                    -- §8.2: known lots up to this day, plus the basis no lot
                    -- explains, carried flat backward until the user fills it in.
+                   --
+                   -- ponytail: left as a correlated subquery. Measured at 9 ms
+                   -- of 764 ms (there are only a handful of lot rows), so the
+                   -- suffix-sum treatment above would buy nothing. Give it the
+                   -- same treatment if lots ever become numerous.
                    s.total_cost - coalesce((
                        select sum(l.cost) from lots l
                        where l.holding_id = g.holding_id and l.day > g.as_of
                    ), 0) as cost_basis
             from gaps g
             join scope s on s.holding_id = g.holding_id
+            join anchor_after aa
+              on aa.holding_id = g.holding_id and aa.day = g.anchor_day
         ),
         -- Nothing owned can be a negative amount, yet 2,435 derived days were:
         -- the earliest snapshot anchors every day before it, so a

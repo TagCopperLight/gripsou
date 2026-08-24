@@ -1,0 +1,476 @@
+  121 Euro/g-checking 40 40 40
+  119 Euro/g-checking 1940 1940 1940
+  118 Euro/g-checking 1940 1940 1940
+  117 Euro/g-checking 1940 1940 1940
+  116 Euro/g-checking 1940 1940 1940
+  115 Euro/g-checking 1940 1940 1940
+  114 Euro/g-checking 1940 1940 1940
+  113 Euro/g-checking 1940 1940 1940
+  112 Euro/g-checking 1940 1940 1940
+  111 Euro/g-checking 1940 1940 1940
+  110 Euro/g-checking 2440 2440 2440
+  109 Euro/g-checking 2440 2440 2440
+  108 Euro/g-checking 2440 2440 2440
+  107 Euro/g-checking 2440 2440 2440
+  106 Euro/g-checking 2440 2440 2440
+  105 Euro/g-checking 2440 2440 2440
+  104 Euro/g-checking 2440 2440 2440
+  103 Euro/g-checking 2440 2440 2440
+  102 Euro/g-checking 2440 2440 2440
+  101 Euro/g-checking 2440 2440 2440
+  100 Euro/g-checking 2040 2040 2040
+   99 Euro/g-checking 2040 2040 2040
+   98 Euro/g-checking 2040 2040 2040
+   97 Euro/g-checking 2040 2040 2040
+   96 Euro/g-checking 2040 2040 2040
+   95 Euro/g-checking 2040 2040 2040
+   94 Euro/g-checking 2040 2040 2040
+   93 Euro/g-checking 2040 2040 2040
+   92 Euro/g-checking 2040 2040 2040
+   91 Euro/g-checking 2040 2040 2040
+   90 Euro/g-checking 2040 2040 2040
+   89 Euro/g-checking 2040 2040 2040
+   88 Euro/g-checking 2040 2040 2040
+   87 Euro/g-checking 2040 2040 2040
+   86 Euro/g-checking 2040 2040 2040
+   85 Euro/g-checking 2040 2040 2040
+   84 Euro/g-checking 2040 2040 2040
+   83 Euro/g-checking 2040 2040 2040
+   82 Euro/g-checking 2040 2040 2040
+   81 Euro/g-checking 2040 2040 2040
+   80 Euro/g-checking 40 40 40
+   79 Euro/g-checking 40 40 40
+   78 Euro/g-checking 40 40 40
+   77 Euro/g-checking 40 40 40
+   76 Euro/g-checking 40 40 40
+   75 Euro/g-checking 40 40 40
+   74 Euro/g-checking 40 40 40
+   73 Euro/g-checking 40 40 40
+   72 Euro/g-checking 40 40 40
+   71 Euro/g-checking 40 40 40
+   70 Euro/g-checking 40 40 40
+   69 Euro/g-checking 40 40 40
+   68 Euro/g-checking 40 40 40
+   67 Euro/g-checking 40 40 40
+   66 Euro/g-checking 40 40 40
+   65 Euro/g-checking 40 40 40
+   64 Euro/g-checking 40 40 40
+   63 Euro/g-checking 40 40 40
+   62 Euro/g-checking 40 40 40
+   61 Euro/g-checking 40 40 40
+   59 Euro/g-checking 0 0 0
+   58 Euro/g-checking 0 0 0
+   57 Euro/g-checking 0 0 0
+   56 Euro/g-checking 0 0 0
+   55 Euro/g-checking 0 0 0
+   54 Euro/g-checking 0 0 0
+   53 Euro/g-checking 0 0 0
+   52 Euro/g-checking 0 0 0
+   51 Euro/g-checking 0 0 0
+   50 Euro/g-checking 1200 1200 1200
+   49 Euro/g-checking 1200 1200 1200
+   48 Euro/g-checking 1200 1200 1200
+   47 Euro/g-checking 1200 1200 1200
+   46 Euro/g-checking 1200 1200 1200
+   45 Euro/g-checking 1200 1200 1200
+   44 Euro/g-checking 1200 1200 1200
+   43 Euro/g-checking 1200 1200 1200
+   42 Euro/g-checking 1200 1200 1200
+   41 Euro/g-checking 1200 1200 1200
+   40 Euro/g-checking 1200 1200 1200
+   39 Euro/g-checking 1200 1200 1200
+   38 Euro/g-checking 1200 1200 1200
+   37 Euro/g-checking 1200 1200 1200
+   36 Euro/g-checking 1200 1200 1200
+   35 Euro/g-checking 1200 1200 1200
+   34 Euro/g-checking 1200 1200 1200
+   33 Euro/g-checking 1200 1200 1200
+   32 Euro/g-checking 1200 1200 1200
+   31 Euro/g-checking 1200 1200 1200
+   30 Euro/g-checking 1200 1200 1200
+   29 Euro/g-checking 1200 1200 1200
+   28 Euro/g-checking 1200 1200 1200
+   27 Euro/g-checking 1200 1200 1200
+   26 Euro/g-checking 1200 1200 1200
+   25 Euro/g-checking 1200 1200 1200
+   24 Euro/g-checking 1200 1200 1200
+   23 Euro/g-checking 1200 1200 1200
+   22 Euro/g-checking 1200 1200 1200
+   21 Euro/g-checking 1200 1200 1200
+   20 Euro/g-checking 1200 1200 1200
+   19 Euro/g-checking 1200 1200 1200
+   18 Euro/g-checking 1200 1200 1200
+   17 Euro/g-checking 1200 1200 1200
+   16 Euro/g-checking 1200 1200 1200
+   15 Euro/g-checking 1200 1200 1200
+   14 Euro/g-checking 1200 1200 1200
+   13 Euro/g-checking 1200 1200 1200
+   12 Euro/g-checking 1200 1200 1200
+   11 Euro/g-checking 1200 1200 1200
+   10 Euro/g-checking 1050 1050 1050
+    9 Euro/g-checking 1050 1050 1050
+    8 Euro/g-checking 1050 1050 1050
+    7 Euro/g-checking 1050 1050 1050
+    6 Euro/g-checking 1050 1050 1050
+    5 Euro/g-checking 1050 1050 1050
+    4 Euro/g-checking 1050 1050 1050
+    3 Euro/g-checking 1050 1050 1050
+    2 Euro/g-checking 1050 1050 1050
+    1 Euro/g-checking 1050 1050 1050
+  121 Golden Equity 0/g-checking 40 600.0000000000000000 0
+  119 Golden Equity 0/g-checking 0 0 0
+  118 Golden Equity 0/g-checking 0 0 0
+  117 Golden Equity 0/g-checking 0 0 0
+  116 Golden Equity 0/g-checking 0 0 0
+  115 Golden Equity 0/g-checking 0 0 0
+  114 Golden Equity 0/g-checking 0 0 0
+  113 Golden Equity 0/g-checking 0 0 0
+  112 Golden Equity 0/g-checking 0 0 0
+  111 Golden Equity 0/g-checking 0 0 0
+  110 Golden Equity 0/g-checking 0 0 0
+  109 Golden Equity 0/g-checking 0 0 0
+  108 Golden Equity 0/g-checking 0 0 0
+  107 Golden Equity 0/g-checking 0 0 0
+  106 Golden Equity 0/g-checking 0 0 0
+  105 Golden Equity 0/g-checking 0 0 0
+  104 Golden Equity 0/g-checking 0 0 0
+  103 Golden Equity 0/g-checking 0 0 0
+  102 Golden Equity 0/g-checking 0 0 0
+  101 Golden Equity 0/g-checking 0 0 0
+  100 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   99 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   98 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   97 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   96 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   95 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   94 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   93 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   92 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   91 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   90 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   89 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   88 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   87 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   86 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   85 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   84 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   83 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   82 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   81 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   80 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   79 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   78 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   77 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   76 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   75 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   74 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   73 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   72 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   71 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   70 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   69 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   68 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   67 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   66 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   65 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   64 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   63 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   62 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   61 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   59 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   58 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   57 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   56 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   55 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   54 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   53 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   52 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   51 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   50 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   49 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   48 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   47 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   46 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   45 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   44 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   43 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   42 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   41 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   40 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   39 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   38 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   37 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   36 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   35 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   34 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   33 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   32 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   31 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   30 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   29 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   28 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   27 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   26 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   25 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   24 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   23 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   22 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   21 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   20 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   19 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   18 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   17 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   16 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   15 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   14 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   13 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   12 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   11 Golden Equity 0/g-checking 40 600.0000000000000000 400
+   10 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    9 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    8 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    7 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    6 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    5 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    4 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    3 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    2 Golden Equity 0/g-checking 40 600.0000000000000000 400
+    1 Golden Equity 0/g-checking 40 600.0000000000000000 400
+  121 Golden Equity 1/g-pea 40 600.0000000000000000 400.0000000000000000
+  119 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  118 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  117 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  116 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  115 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  114 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  113 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  112 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  111 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  110 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  109 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  108 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  107 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  106 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  105 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  104 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  103 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  102 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  101 Golden Equity 1/g-pea 0 0 400.0000000000000000
+  100 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   99 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   98 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   97 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   96 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   95 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   94 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   93 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   92 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   91 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   90 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   89 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   88 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   87 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   86 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   85 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   84 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   83 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   82 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   81 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   80 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   79 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   78 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   77 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   76 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   75 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   74 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   73 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   72 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   71 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   70 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   69 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   68 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   67 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   66 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   65 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   64 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   63 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   62 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   61 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   59 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   58 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   57 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   56 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   55 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   54 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   53 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   52 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   51 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   50 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   49 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   48 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   47 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   46 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   45 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   44 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   43 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   42 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   41 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   40 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   39 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   38 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   37 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   36 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   35 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   34 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   33 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   32 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   31 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   30 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   29 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   28 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   27 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   26 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   25 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   24 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   23 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   22 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   21 Golden Equity 1/g-pea 40 600.0000000000000000 800.0000000000000000
+   20 Golden Equity 1/g-pea 0 0 400
+   19 Golden Equity 1/g-pea 0 0 400
+   18 Golden Equity 1/g-pea 0 0 400
+   17 Golden Equity 1/g-pea 0 0 400
+   16 Golden Equity 1/g-pea 0 0 400
+   15 Golden Equity 1/g-pea 0 0 400
+   14 Golden Equity 1/g-pea 0 0 400
+   13 Golden Equity 1/g-pea 0 0 400
+   12 Golden Equity 1/g-pea 0 0 400
+   11 Golden Equity 1/g-pea 0 0 400
+   10 Golden Equity 1/g-pea 0 0 400
+    9 Golden Equity 1/g-pea 0 0 400
+    8 Golden Equity 1/g-pea 0 0 400
+    7 Golden Equity 1/g-pea 0 0 400
+    6 Golden Equity 1/g-pea 0 0 400
+    5 Golden Equity 1/g-pea 0 0 400
+    4 Golden Equity 1/g-pea 0 0 400
+    3 Golden Equity 1/g-pea 0 0 400
+    2 Golden Equity 1/g-pea 0 0 400
+    1 Golden Equity 1/g-pea 0 0 400
+  121 US Dollar/g-pea 40 40 40
+  119 US Dollar/g-pea 40 40 40
+  118 US Dollar/g-pea 40 40 40
+  117 US Dollar/g-pea 40 40 40
+  116 US Dollar/g-pea 40 40 40
+  115 US Dollar/g-pea 40 40 40
+  114 US Dollar/g-pea 40 40 40
+  113 US Dollar/g-pea 40 40 40
+  112 US Dollar/g-pea 40 40 40
+  111 US Dollar/g-pea 40 40 40
+  110 US Dollar/g-pea 40 40 40
+  109 US Dollar/g-pea 40 40 40
+  108 US Dollar/g-pea 40 40 40
+  107 US Dollar/g-pea 40 40 40
+  106 US Dollar/g-pea 40 40 40
+  105 US Dollar/g-pea 40 40 40
+  104 US Dollar/g-pea 40 40 40
+  103 US Dollar/g-pea 40 40 40
+  102 US Dollar/g-pea 40 40 40
+  101 US Dollar/g-pea 40 40 40
+  100 US Dollar/g-pea 40 40 40
+   99 US Dollar/g-pea 40 40 40
+   98 US Dollar/g-pea 40 40 40
+   97 US Dollar/g-pea 40 40 40
+   96 US Dollar/g-pea 40 40 40
+   95 US Dollar/g-pea 40 40 40
+   94 US Dollar/g-pea 40 40 40
+   93 US Dollar/g-pea 40 40 40
+   92 US Dollar/g-pea 40 40 40
+   91 US Dollar/g-pea 40 40 40
+   90 US Dollar/g-pea 40 40 40
+   89 US Dollar/g-pea 40 40 40
+   88 US Dollar/g-pea 40 40 40
+   87 US Dollar/g-pea 40 40 40
+   86 US Dollar/g-pea 40 40 40
+   85 US Dollar/g-pea 40 40 40
+   84 US Dollar/g-pea 40 40 40
+   83 US Dollar/g-pea 40 40 40
+   82 US Dollar/g-pea 40 40 40
+   81 US Dollar/g-pea 40 40 40
+   80 US Dollar/g-pea 40 40 40
+   79 US Dollar/g-pea 40 40 40
+   78 US Dollar/g-pea 40 40 40
+   77 US Dollar/g-pea 40 40 40
+   76 US Dollar/g-pea 40 40 40
+   75 US Dollar/g-pea 40 40 40
+   74 US Dollar/g-pea 40 40 40
+   73 US Dollar/g-pea 40 40 40
+   72 US Dollar/g-pea 40 40 40
+   71 US Dollar/g-pea 40 40 40
+   70 US Dollar/g-pea 40 40 40
+   69 US Dollar/g-pea 40 40 40
+   68 US Dollar/g-pea 40 40 40
+   67 US Dollar/g-pea 40 40 40
+   66 US Dollar/g-pea 40 40 40
+   65 US Dollar/g-pea 40 40 40
+   64 US Dollar/g-pea 40 40 40
+   63 US Dollar/g-pea 40 40 40
+   62 US Dollar/g-pea 40 40 40
+   61 US Dollar/g-pea 40 40 40
+   59 US Dollar/g-pea 40 40 40
+   58 US Dollar/g-pea 40 40 40
+   57 US Dollar/g-pea 40 40 40
+   56 US Dollar/g-pea 40 40 40
+   55 US Dollar/g-pea 40 40 40
+   54 US Dollar/g-pea 40 40 40
+   53 US Dollar/g-pea 40 40 40
+   52 US Dollar/g-pea 40 40 40
+   51 US Dollar/g-pea 40 40 40
+   50 US Dollar/g-pea 40 40 40
+   49 US Dollar/g-pea 40 40 40
+   48 US Dollar/g-pea 40 40 40
+   47 US Dollar/g-pea 40 40 40
+   46 US Dollar/g-pea 40 40 40
+   45 US Dollar/g-pea 40 40 40
+   44 US Dollar/g-pea 40 40 40
+   43 US Dollar/g-pea 40 40 40
+   42 US Dollar/g-pea 40 40 40
+   41 US Dollar/g-pea 40 40 40
+   40 US Dollar/g-pea 40 40 40
+   39 US Dollar/g-pea 40 40 40
+   38 US Dollar/g-pea 40 40 40
+   37 US Dollar/g-pea 40 40 40
+   36 US Dollar/g-pea 40 40 40
+   35 US Dollar/g-pea 40 40 40
+   34 US Dollar/g-pea 40 40 40
+   33 US Dollar/g-pea 40 40 40
+   32 US Dollar/g-pea 40 40 40
+   31 US Dollar/g-pea 40 40 40
+   30 US Dollar/g-pea 40 40 40
+   29 US Dollar/g-pea 40 40 40
+   28 US Dollar/g-pea 40 40 40
+   27 US Dollar/g-pea 40 40 40
+   26 US Dollar/g-pea 40 40 40
+   25 US Dollar/g-pea 40 40 40
+   24 US Dollar/g-pea 40 40 40
+   23 US Dollar/g-pea 40 40 40
+   22 US Dollar/g-pea 40 40 40
+   21 US Dollar/g-pea 40 40 40
+   20 US Dollar/g-pea 40 40 40
+   19 US Dollar/g-pea 40 40 40
+   18 US Dollar/g-pea 40 40 40
+   17 US Dollar/g-pea 40 40 40
+   16 US Dollar/g-pea 40 40 40
+   15 US Dollar/g-pea 40 40 40
+   14 US Dollar/g-pea 40 40 40
+   13 US Dollar/g-pea 40 40 40
+   12 US Dollar/g-pea 40 40 40
+   11 US Dollar/g-pea 40 40 40
+   10 US Dollar/g-pea 40 40 40
+    9 US Dollar/g-pea 40 40 40
+    8 US Dollar/g-pea 40 40 40
+    7 US Dollar/g-pea 40 40 40
+    6 US Dollar/g-pea 40 40 40
+    5 US Dollar/g-pea 40 40 40
+    4 US Dollar/g-pea 40 40 40
+    3 US Dollar/g-pea 40 40 40
+    2 US Dollar/g-pea 40 40 40
+    1 US Dollar/g-pea 40 40 40

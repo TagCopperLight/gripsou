@@ -11,6 +11,7 @@ pub mod prefs;
 pub mod price;
 pub mod provider;
 pub mod query;
+pub mod series;
 pub mod session;
 pub mod settings;
 pub mod snapshot;
