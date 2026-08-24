@@ -111,7 +111,10 @@ export function ValueChart({
         // The series itemStyle color is the (hollow) symbol center, i.e. the
         // surface — use the real line color from the series for the marker.
         const colorByName = new Map(series.map((s) => [s.name, s.color]));
-        const rows = items
+        // ponytail: callers pass the dashed invested line first for z-order;
+        // the tooltip reads better with the bigger value line on top.
+        const rows = [...items]
+          .reverse()
           .map((it) =>
             tooltipRow(
               colorByName.get(it.seriesName) ?? it.color,
