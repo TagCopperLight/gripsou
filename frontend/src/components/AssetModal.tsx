@@ -243,10 +243,14 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 />
                 {mode === "purchases" && (
                   <ChartLegend
-                    items={[
-                      { label: t("dashboard.assetModal.positionValue"), color: GREEN },
-                      { label: t("dashboard.assetModal.invested"), color: FAINT, dashed: true },
-                    ]}
+                    items={
+                      unit === "percent"
+                        ? [{ label: t("common.return"), color: GREEN }]
+                        : [
+                            { label: t("dashboard.assetModal.positionValue"), color: GREEN },
+                            { label: t("dashboard.assetModal.invested"), color: FAINT, dashed: true },
+                          ]
+                    }
                   />
                 )}
               </div>
@@ -256,6 +260,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
               <ValueChart
                 series={series}
                 unit={unit}
+                percentLabel={t("common.return")}
                 height={340}
                 className="mt-4"
                 currency={holding.priceCurrency}

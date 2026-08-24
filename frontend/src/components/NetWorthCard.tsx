@@ -46,10 +46,13 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
     { value: "percent", label: "%" },
   ];
 
-  const LEGEND_ITEMS = [
-    { label: t("dashboard.netWorth.netWorth"), color: "var(--color-green)" },
-    { label: t("dashboard.netWorth.capitalInvested"), color: "var(--color-fg-faint)", dashed: true },
-  ];
+  const LEGEND_ITEMS =
+    unit === "percent"
+      ? [{ label: t("common.return"), color: "var(--color-green)" }]
+      : [
+          { label: t("dashboard.netWorth.netWorth"), color: "var(--color-green)" },
+          { label: t("dashboard.netWorth.capitalInvested"), color: "var(--color-fg-faint)", dashed: true },
+        ];
 
   const points = (data?.points ?? []).map((p) => ({
     t: p.t,
