@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select unit_price as \"unit_price!\" from price where instrument_id = $1 order by ts desc limit 30",
+  "query": "\n                select unit_price as \"unit_price!\"\n                from price\n                where instrument_id = $1\n                  and ts >= now() - interval '30 days'\n                order by ts\n                ",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "75fe4a19c4c8202346bb08850587793058051ad5f7779ad07f0936641dc37856"
+  "hash": "dbdd99f8f1702afb35de74a6c6bf54196f0dfbae7838f2f7d6dc421952f9f155"
 }
