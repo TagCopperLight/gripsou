@@ -52,13 +52,13 @@
 - [x] yahoo price gaps fix (and tool to fix existing database)
 - [x] Better charts tooltips, fix % charts meaning nothing
 
-### Future
-- [ ] Rearrange files and folders
-- [ ] First admin configuration
-    - [ ] Parameterize webhooks
+### v1.4.2
+- [x] Private mode
 - [ ] By account view
 - [ ] Screenshot in readme
-- [ ] When graph is red, change the legend
-- [ ] Main chart graph date is in the side
-- [ ] Better transaction table
+
+
+### Future
+- [ ] First admin configuration
+    - [ ] Parameterize webhooks
 - [ ] Budget page (@TRANSACTION.md phase 2)

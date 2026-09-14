@@ -4,6 +4,7 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
+import { PrivateMoney } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { StackedAreaChart, type StackedSeries } from "./StackedAreaChart";
@@ -53,7 +54,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
             <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
             {ready && (
               <>
-                <Money value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
+                <PrivateMoney value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}

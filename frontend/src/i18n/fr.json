@@ -15,7 +15,9 @@
     "select": "Sélectionner…",
     "value": "Valeur",
     "total": "Total",
-    "return": "Rendement"
+    "return": "Rendement",
+    "showAmount": "Afficher le montant",
+    "hideAmount": "Masquer le montant"
   },
   "sync": {
     "title": "Synchronisation",
@@ -236,7 +238,10 @@
       "symbolPosition": "Position du symbole",
       "symbolBefore": "Avant",
       "symbolAfter": "Après",
-      "preview": "Aperçu"
+      "preview": "Aperçu",
+      "privacy": "Confidentialité",
+      "privateMode": "Mode privé",
+      "privateModeHint": "Masquer votre patrimoine derrière des astérisques"
     },
     "account": {
       "title": "Compte",

@@ -15,6 +15,8 @@ export type UserPrefs = {
   currency: string;
   currencyPosition: CurrencyPosition;
   percentDecimals: number;
+  /** Masks the headline net-worth figure on the dashboard and accounts pages. */
+  privateMode: boolean;
   avatar?: string;
 };
 
@@ -27,6 +29,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   currency: "EUR",
   currencyPosition: "after",
   percentDecimals: 2,
+  privateMode: false,
 };
 
 let current: UserPrefs = DEFAULT_PREFS;

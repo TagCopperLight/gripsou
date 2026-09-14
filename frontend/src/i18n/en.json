@@ -15,7 +15,9 @@
     "select": "Select…",
     "value": "Value",
     "total": "Total",
-    "return": "Return"
+    "return": "Return",
+    "showAmount": "Show amount",
+    "hideAmount": "Hide amount"
   },
   "sync": {
     "title": "Sync",
@@ -236,7 +238,10 @@
       "symbolPosition": "Symbol position",
       "symbolBefore": "Before",
       "symbolAfter": "After",
-      "preview": "Preview"
+      "preview": "Preview",
+      "privacy": "Privacy",
+      "privateMode": "Private mode",
+      "privateModeHint": "Hide your net worth behind asterisks"
     },
     "account": {
       "title": "Account",

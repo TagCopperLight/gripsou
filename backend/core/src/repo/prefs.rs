@@ -25,6 +25,10 @@ pub struct UserPrefs {
     pub currency_position: String,
     #[serde(default = "default_percent_decimals")]
     pub percent_decimals: u8,
+    /// Masks the headline net-worth figure on the dashboard and accounts
+    /// pages. Display-only — the API still sends the real amounts.
+    #[serde(default)]
+    pub private_mode: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
 }
@@ -65,6 +69,7 @@ impl Default for UserPrefs {
             currency: default_currency(),
             currency_position: default_currency_position(),
             percent_decimals: default_percent_decimals(),
+            private_mode: false,
             avatar: None,
         }
     }
@@ -85,6 +90,7 @@ mod tests {
         assert_eq!(p.currency, "EUR");
         assert_eq!(p.currency_position, "after");
         assert_eq!(p.percent_decimals, 2);
+        assert!(!p.private_mode);
     }
 
     #[test]
