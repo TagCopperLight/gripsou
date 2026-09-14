@@ -4,6 +4,7 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
+import { PrivateMoney } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { NetWorthChart } from "./NetWorthChart";
@@ -82,7 +83,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     that can silently omit a zeroed holding — so it carries the
                     same warning treatment as the holdings/accounts cards. */}
                 <span className="flex items-baseline gap-2">
-                  <Money value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
+                  <PrivateMoney value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                   {summary?.fxMissing && (
                     <span
                       title={t("dashboard.fxMissing")}

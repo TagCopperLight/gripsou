@@ -5,14 +5,35 @@ import type { ReactNode } from "react";
 import { NetWorthCard } from "./NetWorthCard";
 import { DistributionCard } from "./DistributionCard";
 import type { DistributionAccount, NetWorthResponse } from "../api/types";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
 
 const WARNING = /No exchange rate yet/;
 
+// NetWorthCard's headline renders PrivateMoney, which reads useAuth() —
+// provide a minimal mock context (private mode off) rather than pulling in
+// the full AuthProvider bootstrap flow.
+const authValue: AuthValue = {
+  isAuthenticated: false,
+  user: null,
+  isBootstrapping: false,
+  prefs: DEFAULT_PREFS,
+  login: async () => {},
+  adoptSession: () => {},
+  logout: async () => {},
+  updateUser: () => {},
+  updatePrefs: async () => {},
+};
+
 function withClient(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <AuthContext.Provider value={authValue}>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </AuthContext.Provider>
+  );
 }
 
 function stubJson(body: unknown) {

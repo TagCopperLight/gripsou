@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "../../components/Surface";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Select } from "../../components/Select";
+import { Toggle } from "../../components/Toggle";
 import { useAuth } from "../../auth/context";
 import type { UserPrefs } from "../../lib/prefs";
 import { formatMoney } from "../../lib/money";
@@ -152,6 +153,22 @@ export function SettingsGeneral() {
             </div>
           </div>
         </div>
+      </Surface>
+
+      <Surface className="p-6">
+        <h2 className="mb-5 text-lg font-semibold text-fg">
+          {t("settings.general.privacy")}
+        </h2>
+        <Setting
+          label={t("settings.general.privateMode")}
+          hint={t("settings.general.privateModeHint")}
+        >
+          <Toggle
+            checked={prefs.privateMode}
+            onChange={(v) => set("privateMode", v)}
+            aria-label={t("settings.general.privateMode")}
+          />
+        </Setting>
       </Surface>
     </div>
   );
