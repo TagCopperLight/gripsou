@@ -59,7 +59,7 @@ async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn stores_composition_and_sets_etf_kind(pool: PgPool) {
+async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
     let conn_id = seed_one_equity(&pool).await;
 
     let provider = MockComp {
@@ -76,7 +76,10 @@ async fn stores_composition_and_sets_etf_kind(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(row.kind, "etf");
+    // `kind` is half the natural key the next sync re-resolves this row by, so
+    // the scrape must not relabel it; the tracker/share distinction is derived
+    // from the presence of a composition at read time instead.
+    assert_eq!(row.kind, "equity", "provider kind left intact");
     assert_eq!(row.meta["composition"]["countries"][0]["name"], "USA");
 
     // Second run: row is now fresh (composition.as_of is today), so the

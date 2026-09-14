@@ -105,18 +105,24 @@ pub async fn resolve_instrument(
     })
 }
 
+/// Cache the Yahoo ticker for an instrument.
+///
+/// Writes to `meta` only. `symbol` and `kind` are half of the natural key the
+/// next sync re-resolves this row by (`instrument_kind_symbol_uq`), so nothing
+/// after the initial insert may touch them: rewriting `symbol` to the Yahoo
+/// ticker made the next `resolve_instrument` miss, insert a duplicate
+/// instrument and a duplicate holding, and let ingest's close loop zero the
+/// original — losing that position's history. `price_sync` reads the ticker
+/// from `meta.yahoo_symbol`, never from `symbol`.
 pub async fn set_resolved_symbol(
     conn: &mut sqlx::PgConnection,
     instrument_id: Uuid,
     yahoo_symbol: &str,
 ) -> Result<(), CoreError> {
-    let res = sqlx::query!(
+    sqlx::query!(
         r#"
         update instrument
-        -- Cash keeps its display symbol null (the UI falls back to the ISO code);
-        -- the FX pair `CNYEUR=X` is a fetch detail and lives only in meta.
-        set symbol = case when kind = 'cash' then symbol else $2 end,
-            meta = jsonb_set(
+        set meta = jsonb_set(
                 jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),
                 '{yahoo_resolved_at}', to_jsonb(now())
             )
@@ -126,34 +132,8 @@ pub async fn set_resolved_symbol(
         yahoo_symbol,
     )
     .execute(&mut *conn)
-    .await;
-
-    match &res {
-        // A unique-index clash on the display `symbol` column (two instruments
-        // resolving to the same Yahoo ticker): keep meta.yahoo_symbol so the
-        // price pass still works, and leave `symbol` as it was.
-        Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23505") => {
-            sqlx::query!(
-                r#"
-                update instrument
-                set meta = jsonb_set(
-                        jsonb_set(coalesce(meta, '{}'::jsonb), '{yahoo_symbol}', to_jsonb($2::text)),
-                        '{yahoo_resolved_at}', to_jsonb(now())
-                    )
-                where id = $1
-                "#,
-                instrument_id,
-                yahoo_symbol,
-            )
-            .execute(&mut *conn)
-            .await?;
-            Ok(())
-        }
-        _ => {
-            res?;
-            Ok(())
-        }
-    }
+    .await?;
+    Ok(())
 }
 
 pub async fn mark_symbol_unresolved(
@@ -222,8 +202,7 @@ pub async fn set_composition(
     sqlx::query!(
         r#"
         update instrument
-        set kind = 'etf',
-            meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{composition}', $2)
+        set meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{composition}', $2)
         where id = $1
         "#,
         instrument_id,
