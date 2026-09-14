@@ -1,0 +1,203 @@
+# AUDIT-FIXES — working method
+
+Companion to `AUDIT.md` (105 findings, audited at commit `4c55dba`). This file exists so the work can
+be picked up in a fresh session without re-deriving the protocol. **Read `AUDIT.md`'s "Fix log" table
+first** — that is the authoritative record of what is done; this file is the *how*.
+
+Neither `AUDIT.md` nor this file is committed. Both are untracked and follow you across branches.
+
+---
+
+## Where the work lives
+
+- **Branch**: `audit-fixes`, cut from `main` at `3f5ed1c`.
+- **Never commit.** The user commits, always. Do not run `git commit` for any reason, including when a
+  skill or plan tells you to.
+- `TODO.md` has a `- [ ] Audit fixes` entry under v1.4.2 (the user added it; leave it alone).
+
+---
+
+## The protocol
+
+The user drives. One issue at a time, in this loop:
+
+1. **Pick the next issue** from the queue below. Group findings that the six audit lenses reported
+   separately but that are the same underlying bug — the audit's own cross-cutting table (in
+   `AUDIT.md`, under "The cross-cutting theme") tells you which ones collapse together.
+2. **Verify before presenting.** Read the cited code. Do not trust the audit's line numbers or its
+   claims — they were written against `4c55dba` and the tree has moved. Where the finding is about
+   data (duplicate rows, missing rates, stale snapshots), **query the live database** and say what is
+   actually there. The user's standing rule: measure before asserting. Several confident assertions in
+   past sessions turned out wrong.
+3. **Present it**: what the code does, how it fails, where the user actually stands (is it live or
+   dormant?), and the proposed fix as a concrete table of file → change. Flag consequences the audit
+   missed.
+4. **The user decides**: fix / skip / defer.
+5. **Ask clarifying questions** with the `AskUserQuestion` tool if the fix has a real fork in it. Give
+   a recommendation, don't just enumerate. The user may reject the tool call to clarify the question
+   first — that is normal, ask them what they want to clarify and reformulate.
+6. **Implement**, verify (see below), then **mark `AUDIT.md`**.
+7. Report what changed, what the tests prove, and anything noticed-but-not-fixed.
+
+Explain in plain language throughout. No SQL dumps or jargon at the user — plain words, concrete
+numbers, tradeoffs expressed as visible outcomes.
+
+---
+
+## Marking `AUDIT.md`
+
+Two places, both required:
+
+1. **The Fix log table** at the top of `AUDIT.md` — one row per issue worked:
+   `| C-1, C-2, D-7 (part) | <short title> | ✅ Fixed |`
+   Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
+   Skipped and deferred decisions go in the table too — it is the record of what was chosen *not* to
+   do, which matters as much as what was.
+2. **A `**Status**` line inline** at the finding's own `###` heading, inserted directly above
+   `**Severity**:`. Say specifically what was done and name the regression test. For a partial fix,
+   say which half is resolved and which half is still open.
+
+Do not renumber or retitle findings — the document cross-references them heavily.
+
+---
+
+## Verification loop
+
+The backend needs a reachable Postgres for sqlx's compile-time checking. **The compose Postgres is not
+published to a host port**, so `localhost:5432` will not work — derive the container IP:
+
+```fish
+set IP (docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+    (docker compose -f docker/docker-compose.yml ps -q postgres))
+# was 172.18.0.2 — re-derive it, it changes when the container is recreated
+```
+
+Then, from `backend/`, with `DATABASE_URL=postgres://gripsou:gripsou@$IP:5432/gripsou`:
+
+```
+cargo fmt
+cargo build
+cargo test            # ~23 test binaries, ~250 tests
+cargo clippy --workspace --all-targets    # must be silent
+```
+
+**Any change to a `query!`/`query_as!` macro — in src *or* tests — requires regenerating the offline
+data**, or CI's offline build breaks:
+
+```fish
+# sqlx-cli is installed but not on PATH; it lives in ~/.cargo/bin.
+# It must be invoked as `cargo sqlx`, not `cargo-sqlx sqlx` — the latter errors on $CARGO.
+PATH=$HOME/.cargo/bin:$PATH cargo sqlx prepare --workspace -- --all-targets
+```
+
+Then confirm the committed data actually works, touching a file first so the check isn't cached:
+
+```
+touch core/src/repo/query.rs
+env -u DATABASE_URL SQLX_OFFLINE=true cargo check --workspace --all-targets
+```
+
+Frontend, from `frontend/`: `bun run lint` **and** `bun run test` and `bun run build`. Lint is not
+optional — eslint's `react-refresh` rule forbids non-component exports from a component file, and
+`bun run build` will not catch it.
+
+`cargo fmt` reformatting files you did not touch is expected and fine; do not revert it.
+
+---
+
+## Conventions that bit during issue 1
+
+- Money is `rust_decimal::Decimal` ↔ Postgres `NUMERIC`, never floats. The API ships decimals as
+  **strings**.
+- New account types are **data inserts** into `account_type`, not migrations.
+- `instrument.kind` and `instrument.symbol` are now **write-once at insert**, from whatever the
+  provider said. Nothing may mutate them afterwards — they are the natural key the next sync
+  re-resolves the row by. Anything derived (display ticker, tracker-vs-share label) is computed at
+  read time, from `meta` or in the DTO layer.
+- Before removing a write, check who *reads* that column. Issue 1's near-miss: `set_resolved_symbol`
+  was the only thing that ever populated `instrument.symbol` on the ISIN path, and `Holding.ticker` is
+  `symbol.unwrap_or(currency)` — dropping the write silently would have shown "EUR" as every new
+  instrument's ticker. The test suite caught it; don't rely on that next time.
+
+---
+
+## Queue
+
+Severity order, with the same-bug groupings already applied. `AUDIT.md` holds the detail for each.
+
+### Critical
+
+| Findings | Issue | Status |
+|---|---|---|
+| C-1, C-2, D-7 (part) | Instrument identity built from mutable columns | ✅ Fixed |
+| **D-1, Z-1, C-7** | **Cost basis / PnL computed 4× in 3 languages, two copies already disagree** | **← next** |
+| D-2 | "Net worth" is gross assets; liabilities dropped at the adapter | open |
+
+D-1 is the big one and the audit's own headline: the backend computes invested as `qty × μ`, while
+`frontend/src/lib/assetSeries.ts:38` subtracts sale proceeds, folding realised P/L into the basis —
+which `backfill.rs:164-169` explicitly refuses to do. Buy 10 @ 100, sell 5 @ 200: backend says
+invested = 500, AssetModal says 0, same screen, same session. Fixing it is as much a "where should
+this live" decision as a code change, so expect to use `AskUserQuestion`.
+
+### High
+
+Correctness: C-3 · C-4 · C-5 · C-6
+Design: D-3 · D-4 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
+Quality: Q-1 · Q-2 · Q-3 · Q-4
+Centralization: Z-1 (with D-1) · Z-2 · Z-3 · Z-4 · Z-5 · Z-6
+Security: the two high-severity of S-1…S-17 (own section, severities listed there)
+
+Known cheap wins worth batching: **Z-4** is a live user-visible bug — `Sidebar.tsx:33` calls
+`t("settings.roleMember")`, a key that does not exist (it is `settings.users.roleMember`), so every
+member-role user sees a raw key string in both languages. One line.
+
+Pairs that should be fixed together because they are one bug seen twice:
+- **D-4 + Q-4** — a connection wedged in `syncing` forever; Q-4 found the silent `let _ =` that causes
+  D-4's design gap.
+- **C-17 + C-18 + Z-6** — a finished sync invalidates only `["connections"]`, leaving the dashboard,
+  holdings and transactions caches stale.
+- **C-11 + D-12** — the headline gain% and the chart's % mode are two different metrics on one card.
+- **Z-5 + Q-17** — chart colours hardcoded as hex, diverged from the CSS tokens.
+- **Z-14 + Q-24** — the `#888888` fallback, twice.
+
+### Medium / Low
+
+See the severity listing in `AUDIT.md`. The audit's own "Recommended order of work" section covers
+the comments lens (M-1…M-5 plus the deletion batches) and is a reasonable script for that chunk —
+M-1 first, since the `§4.x` citations guard the very money formula D-1 is about.
+
+---
+
+## Issue 1, for reference
+
+**C-1 / C-2 / D-7(part) — instrument identity built from two columns that later get rewritten.**
+
+`(kind, symbol)` was the dedup key for ISIN-less instruments, but `set_resolved_symbol` overwrote
+`symbol` with the Yahoo ticker and `set_composition` flipped `kind` to `'etf'`. The next sync missed
+the key, inserted a duplicate instrument and holding, and ingest's close loop zeroed the original —
+destroying that position's history, every sync, forever.
+
+Live data check: all 5 of the user's ETFs carry an ISIN and so dedup on `(isin)`, which nothing
+rewrites; the only symbol-only row is `XX-liquidity`, which Yahoo never resolves. **The bug was real
+but dormant** — it would fire on the first holding with a ticker and no ISIN.
+
+Changes:
+
+| File | Change |
+|---|---|
+| `core/src/repo/instrument.rs` | `set_resolved_symbol` writes `meta` only; its 23505-clash fallback deleted as unreachable. `set_composition` no longer sets `kind`. |
+| `core/src/repo/query.rs:239` | Display ticker = `coalesce(i.symbol, meta->>'yahoo_symbol')`, cash excluded so it keeps falling back to the ISO code rather than showing `CNYEUR=X`. |
+| `api/src/dto.rs` | New `display_kind(kind, has_composition)` — an `equity` with a scraped composition renders as `etf`. |
+
+Decision taken: **keep Powens' `kind` as-is** (it reports everything as `equity`) rather than
+populating it from Yahoo's `quoteType`, and infer the ETF label from the presence of a scraped
+composition instead. This avoided a migration, an index change and a `PriceProvider` trait change.
+Accepted tradeoff: an ETF whose Boursorama scrape has not landed yet displays as "Equity".
+
+Existing rows were **not** normalized — the five ETFs still carry their old mutated `kind='etf'` and
+`.PA` symbols. Harmless, since nothing mutates them now and they dedup on ISIN. A normalization
+migration remains available if tidiness is wanted.
+
+Noticed, not fixed, not in the audit: `resolve_instrument`'s own doc comment admits cross-key dedup is
+deferred — the same security reported with an ISIN one sync and symbol-only the next still produces
+two rows.

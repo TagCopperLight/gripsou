@@ -236,7 +236,16 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         -- from a.currency, not i.currency.
         with today as (select (now() at time zone 'utc')::date as d)
         select h.id            as "holding_id!",
-               i.symbol,
+               -- Display ticker, not the identity column. `symbol` is null on
+               -- the ISIN path (ISIN is the identity there, and tickers are not
+               -- globally unique), so the resolved Yahoo ticker in meta is what
+               -- the user should see. Cash is excluded: its meta holds an FX
+               -- pair like `CNYEUR=X`, a fetch detail, and the UI falls back to
+               -- the ISO code.
+               coalesce(
+                   i.symbol,
+                   case when i.kind <> 'cash' then i.meta->>'yahoo_symbol' end
+               )               as "symbol",
                i.name          as "instrument_name!",
                i.kind          as "kind!",
                i.logo_url,

@@ -139,9 +139,26 @@ pub struct Holding {
     pub unexplained_qty: String,
 }
 
+/// Display kind for a holding.
+///
+/// `instrument.kind` is whatever the provider said and is never rewritten — it
+/// is half the natural key the next sync re-resolves the row by. Powens cannot
+/// tell an ETF from a share and reports every security as `equity`, so the
+/// tracker/share distinction is inferred here instead: a scraped composition
+/// only ever exists for a tracker (the scraper writes `composition_status =
+/// "none"` and no `composition` key for anything else). An ETF whose scrape has
+/// not landed yet therefore reads as `equity`, which is the honest answer.
+fn display_kind(kind: &str, has_composition: bool) -> String {
+    match (kind, has_composition) {
+        ("equity", true) => "etf".to_string(),
+        _ => kind.to_string(),
+    }
+}
+
 impl Holding {
     pub fn from_row(r: gripsou_core::repo::query::HoldingRow) -> Self {
         let is_cash = r.kind == "cash";
+        let kind = display_kind(&r.kind, r.composition.is_some());
         // Unit price is native to the instrument. A unit of cash is worth one
         // unit of its own currency by definition — its `price` row holds an FX
         // rate, which is not what this field means.
@@ -177,7 +194,7 @@ impl Holding {
             id: r.holding_id.to_string(),
             ticker: r.symbol.unwrap_or_else(|| r.currency.clone()),
             name: r.instrument_name,
-            kind: r.kind,
+            kind,
             logo: r.logo_url,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
@@ -784,6 +801,16 @@ mod tests {
     use super::*;
     use gripsou_core::repo::query::AccountSeriesRow;
     use uuid::Uuid;
+
+    #[test]
+    fn display_kind_promotes_only_an_equity_with_a_composition() {
+        assert_eq!(display_kind("equity", true), "etf");
+        assert_eq!(display_kind("equity", false), "equity");
+        // A scrape never lands on these, but be explicit: nothing else moves.
+        assert_eq!(display_kind("cash", true), "cash");
+        assert_eq!(display_kind("crypto", true), "crypto");
+        assert_eq!(display_kind("etf", false), "etf");
+    }
 
     fn row(id: Uuid, day: u32, value: i64) -> AccountSeriesRow {
         AccountSeriesRow {

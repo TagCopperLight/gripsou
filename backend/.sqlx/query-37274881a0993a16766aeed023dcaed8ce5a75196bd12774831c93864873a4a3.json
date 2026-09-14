@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update instrument\n        set meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{composition}', $2)\n        where id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "37274881a0993a16766aeed023dcaed8ce5a75196bd12774831c93864873a4a3"
+}

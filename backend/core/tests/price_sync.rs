@@ -91,13 +91,16 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     assert_eq!(s1.prices_inserted, 1);
     assert_eq!(price_count(&pool).await, 1);
 
-    // Display symbol populated.
-    let symbol: Option<String> =
-        sqlx::query_scalar("select symbol from instrument where isin = 'US0378331005'")
+    // The resolved ticker is cached in meta, and the identity columns the next
+    // sync re-resolves this row by are left exactly as they were.
+    let (kind, symbol, meta): (String, Option<String>, serde_json::Value) =
+        sqlx::query_as("select kind, symbol, meta from instrument where isin = 'US0378331005'")
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(symbol.as_deref(), Some("MC.PA"));
+    assert_eq!(meta["yahoo_symbol"].as_str(), Some("MC.PA"));
+    assert_eq!(symbol, None, "ISIN path keeps symbol null");
+    assert_eq!(kind, "equity");
 
     // Second pass: latest price is today → guard skips, fetch not called again.
     let s2 = fetch_prices_for_connection(&pool, conn_id, &providers)
