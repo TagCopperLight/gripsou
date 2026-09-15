@@ -88,6 +88,18 @@ async fn ensure_cash_instruments_for_held_currencies(
             select a.currency
             from account a
             where a.connection_id = $1
+
+            union
+
+            -- The owner's reporting preference. It is not held, quoted or
+            -- denominated in anything — it is only ever the divisor — so none
+            -- of the arms above reach it, and without this the rate is never
+            -- fetched: reporting_fx_asof falls back to 1 and every figure stays
+            -- in the pivot while wearing the chosen currency's symbol.
+            select u.prefs->>'currency'
+            from connection c
+            join users u on u.id = c.user_id
+            where c.id = $1
         ) needed
         where needed.cur <> (select base_currency from app_settings where id = 1)
           and needed.cur ~ '^[A-Z]{3}$'

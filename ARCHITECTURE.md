@@ -110,7 +110,11 @@ JSONB; `external_id` enables idempotent provider upserts.
 - `cors_origins` (text[]), `enabled_providers` (text[]),
   `base_currency` (not null, default `EUR`) — the pivot FX rates are stored
   against. Never exposed in the UI; every figure is divided into the reading
-  user's `prefs.currency` by `reporting_fx_asof()`.
+  user's `prefs.currency` by `reporting_fx_asof()`. That preference is itself a
+  rate-eligible currency — the price pass fetches its pair even though nothing
+  is held or quoted in it — and when no rate exists yet `reporting_fx_asof`
+  falls back to the pivot while `reporting_fx_degraded()` (0026) says so, so an
+  unconverted figure is never shown wearing the chosen currency's symbol.
 
 **provider** (registry / reference)
 - `key` (PK, e.g. `powens`), `display_name`, `kind` (`account` | `price`),
@@ -379,7 +383,7 @@ at compile time.
 | Future feature | Already accommodated by |
 |---|---|
 | Manual accounts/transactions | `account.connection_id` nullable; `ManualAdapter` implements the same trait |
-| Multi-currency | Implemented. An FX rate is a `price` row on the per-currency cash `instrument`; `fx_asof` / `unit_value_asof` / `reporting_fx_asof` (migration 0010) convert at read time. A new currency needs no migration — the cash instrument and its Yahoo `{cur}{pivot}=X` pair are created on first sight. |
+| Multi-currency | Implemented. An FX rate is a `price` row on the per-currency cash `instrument`; `fx_asof` / `unit_value_asof` / `reporting_fx_asof` (migration 0010) convert at read time. A new currency needs no migration — the cash instrument and its Yahoo `{cur}{pivot}=X` pair are created on first sight, including the reader's reporting preference, which nothing else would make eligible. `reporting_fx_degraded` (0026) flags the fallback-to-pivot case. |
 | Transactions page | `transaction` table already generalist and populated |
 | New account types | Insert into the `account_type` reference table |
 | ETF sector/country breakdown | `instrument.meta` JSONB |

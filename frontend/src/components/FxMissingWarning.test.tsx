@@ -6,11 +6,12 @@ import { NetWorthCard } from "./NetWorthCard";
 import { DistributionCard } from "./DistributionCard";
 import type { DistributionAccount, NetWorthResponse } from "../api/types";
 import { AuthContext, type AuthValue } from "../auth/context";
-import { DEFAULT_PREFS } from "../lib/prefs";
+import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
 
 const WARNING = /No exchange rate yet/;
+const REPORTING_WARNING = /No exchange rate for USD yet/;
 
 // NetWorthCard's headline renders PrivateMoney, which reads useAuth() —
 // provide a minimal mock context (private mode off) rather than pulling in
@@ -48,7 +49,10 @@ function stubJson(body: unknown) {
   );
 }
 
-const netWorth = (fxMissing: boolean): NetWorthResponse => ({
+const netWorth = (
+  fxMissing: boolean,
+  reportingFxMissing = false,
+): NetWorthResponse => ({
   points: [{ t: 1735689600000, netWorth: "1000", invested: "900" }],
   summary: {
     netWorth: "1000",
@@ -56,6 +60,7 @@ const netWorth = (fxMissing: boolean): NetWorthResponse => ({
     gainAbs: "100",
     gainPct: "0.1",
     fxMissing,
+    reportingFxMissing,
   },
 });
 
@@ -72,7 +77,10 @@ const slice = (fxMissing: boolean): DistributionAccount[] => [
 ];
 
 describe("fx-missing warning", () => {
-  beforeEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    setPrefs(DEFAULT_PREFS);
+  });
 
   it("warns next to the headline net-worth figure", async () => {
     stubJson(netWorth(true));
@@ -86,6 +94,24 @@ describe("fx-missing warning", () => {
     // Wait for the card to actually render before asserting an absence.
     expect(await screen.findByText(/1[ ,.]?000/)).toBeInTheDocument();
     expect(screen.queryByLabelText(WARNING)).not.toBeInTheDocument();
+  });
+
+  // The two warnings answer different questions: fxMissing means a holding
+  // was left out of the sum, reportingFxMissing means the whole sum is in the
+  // wrong currency. They must not be collapsed into one message.
+  it("says so when the reporting currency has no rate", async () => {
+    setPrefs({ ...DEFAULT_PREFS, currency: "USD" });
+    stubJson(netWorth(false, true));
+    render(withClient(<NetWorthCard />));
+    expect(await screen.findByText(REPORTING_WARNING)).toBeInTheDocument();
+  });
+
+  it("stays quiet when the reporting currency converts", async () => {
+    setPrefs({ ...DEFAULT_PREFS, currency: "USD" });
+    stubJson(netWorth(false));
+    render(withClient(<NetWorthCard />));
+    expect(await screen.findByText(/1[ ,.]?000/)).toBeInTheDocument();
+    expect(screen.queryByText(REPORTING_WARNING)).not.toBeInTheDocument();
   });
 
   it("warns on an understated distribution slice", async () => {

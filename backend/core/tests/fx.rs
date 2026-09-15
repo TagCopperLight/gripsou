@@ -224,5 +224,66 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
         .fetch_one(&pool)
         .await?;
     assert_eq!(d, Some(Decimal::ONE));
+    // The fallback is deliberate — reporting in the pivot beats collapsing every
+    // figure to NULL — but it must not be silent, or 100 EUR renders as
+    // "CN\u00a5100". reporting_fx_degraded is the flag that says it happened, and
+    // it mirrors this function's own guard so the two cannot disagree.
+    let degraded: bool = sqlx::query_scalar("select reporting_fx_degraded($1, $2)")
+        .bind(user_id)
+        .bind(day(2026, 8, 14))
+        .fetch_one(&pool)
+        .await?;
+    assert!(degraded, "the fallback to the pivot must be announced");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn reporting_fx_degraded_is_false_when_the_conversion_really_happened(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+
+    // The pivot itself is never a degradation: fx_asof answers 1 by definition
+    // and an all-pivot install has no FX data at all.
+    let degraded: bool = sqlx::query_scalar("select reporting_fx_degraded($1, $2)")
+        .bind(user_id)
+        .bind(day(2026, 8, 14))
+        .fetch_one(&pool)
+        .await?;
+    assert!(!degraded, "reporting in EUR on an EUR pivot converts by 1");
+
+    let usd = cash_instrument(&pool, "USD").await;
+    let mut conn = pool.acquire().await?;
+    gripsou_core::repo::price::insert_price(
+        &mut conn,
+        usd,
+        "2026-08-12T00:00:00Z".parse()?,
+        "0.90".parse()?,
+        "EUR",
+    )
+    .await?;
+    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let degraded: bool = sqlx::query_scalar("select reporting_fx_degraded($1, $2)")
+        .bind(user_id)
+        .bind(day(2026, 8, 14))
+        .fetch_one(&pool)
+        .await?;
+    assert!(!degraded, "a rate exists, so the figures are really in USD");
+
+    // A day before the first stored rate is still a degradation: fx_asof seeks
+    // backwards and finds nothing.
+    let degraded: bool = sqlx::query_scalar("select reporting_fx_degraded($1, $2)")
+        .bind(user_id)
+        .bind(day(2026, 8, 1))
+        .fetch_one(&pool)
+        .await?;
+    assert!(degraded, "no rate had been stored yet on that day");
     Ok(())
 }

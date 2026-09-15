@@ -2179,3 +2179,123 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     }
     Ok(())
 }
+
+/// C-3: picking a reporting currency the install has no rate for must not
+/// silently relabel pivot figures with the wrong symbol. The fallback to the
+/// pivot stays — it beats collapsing every figure to NULL — but the row now
+/// says the conversion did not happen so the UI can too.
+#[sqlx::test(migrations = "../migrations")]
+async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id = user_of(&pool, conn_id).await?;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            institution: Institution::default(),
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    let today = chrono::Utc::now().date_naive();
+
+    // Reporting in the pivot: nothing to convert, nothing to warn about.
+    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    assert!(!rows[0].reporting_fx_missing);
+
+    // Switch to a currency no rate exists for. The figure stays 100 — it is
+    // euros — and that is exactly what makes the flag necessary: without it the
+    // UI renders "$100" for 100 EUR.
+    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    assert_eq!(rows[0].net_worth, Decimal::new(100, 0), "still the pivot");
+    assert!(rows[0].reporting_fx_missing, "and the UI must be told");
+    assert!(
+        !rows[0].fx_missing,
+        "distinct from a holding that could not be valued: nothing is missing \
+         from the sum, the whole sum is in the wrong currency"
+    );
+
+    // Once the rate lands the flag clears and the figure converts.
+    let usd: uuid::Uuid = sqlx::query_scalar(
+        "insert into instrument (kind, name, currency) values ('cash', 'Dollar', 'USD') returning id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
+    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    assert_eq!(rows[0].net_worth, "125".parse()?);
+    assert!(!rows[0].reporting_fx_missing);
+    Ok(())
+}
+
+/// C-6: a position can be perfectly priceable while the account it sits in has
+/// no rate. Net worth counts it; `invested` used to drop its basis on the floor
+/// with no flag, which reads as a several-hundred-percent gain out of nowhere.
+#[sqlx::test(migrations = "../migrations")]
+async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let user_id = user_of(&pool, conn_id).await?;
+    let mut cny_account = checking_account("acct-cny");
+    cny_account.currency = "CNY".to_string();
+    // Priced in the pivot (insert_price_on stamps EUR), so the VALUE branch
+    // resolves; only the account-currency rate is missing.
+    let equity = equity_holding(
+        "acct-cny",
+        "US0378331005",
+        Decimal::new(3, 0),
+        Decimal::new(600, 0),
+        Some(Decimal::new(1350, 0)),
+    );
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            institution: Institution::default(),
+            accounts: vec![cny_account],
+            holdings: vec![equity],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    let instrument_id: uuid::Uuid =
+        sqlx::query_scalar("select id from instrument where kind = 'equity'")
+            .fetch_one(&pool)
+            .await?;
+    insert_price_on(
+        &pool,
+        instrument_id,
+        chrono::Utc::now(),
+        Decimal::new(450, 0),
+    )
+    .await;
+    let today = chrono::Utc::now().date_naive();
+
+    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    assert_eq!(rows[0].net_worth, "1350".parse()?, "priced, so counted");
+    assert_eq!(rows[0].invested, Decimal::ZERO, "no CNY rate to convert it");
+    assert!(
+        rows[0].fx_missing,
+        "the gap between the two lines is not a gain and must not read as one"
+    );
+    let held = query::holdings(&pool, user_id).await?;
+    assert_eq!(held[0].invested, Decimal::ZERO);
+    assert!(held[0].fx_missing, "the holdings row says so too");
+
+    // With the rate, the basis converts and both flags clear.
+    let cny: uuid::Uuid = sqlx::query_scalar(
+        "insert into instrument (kind, name, currency) values ('cash', 'Yuan', 'CNY') returning id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    insert_price_on(&pool, cny, chrono::Utc::now(), "0.12".parse()?).await;
+    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    assert_eq!(rows[0].invested, "72.00".parse()?, "600 CNY at 0.12");
+    assert!(!rows[0].fx_missing);
+    Ok(())
+}

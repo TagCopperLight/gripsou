@@ -106,6 +106,7 @@
   },
   "dashboard": {
     "fxMissing": "No exchange rate yet for this currency — the value is not counted. It should arrive on the next sync.",
+    "reportingFxMissing": "No exchange rate for {{currency}} yet — the figures below are still in the app’s base currency, not converted. It should arrive on the next sync.",
     "netWorth": {
       "title": "Net Worth",
       "over": "over {{range}}",
