@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select coalesce(b.mean_price, 0) as \"mean_price!\",\n               b.explained_qty as \"explained_qty!\",\n               b.basis as \"basis!\",\n               b.realised as \"realised!\"\n        from lot_basis(array[$1]::uuid[], array[(now() at time zone 'utc')::date]) b\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mean_price!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "explained_qty!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "basis!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "realised!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ab9dc4012e0bf9ff12f9addac326f3a2493eb4e962a46d2ea61a0a7cc00bf7f0"
+}

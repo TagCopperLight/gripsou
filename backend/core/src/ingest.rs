@@ -68,15 +68,7 @@ pub async fn ingest(
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
         };
-        stamp_snapshot(
-            &mut tx,
-            holding_id,
-            today,
-            holding.quantity,
-            value,
-            holding.cost_basis,
-        )
-        .await?;
+        stamp_snapshot(&mut tx, holding_id, today, holding.quantity, value).await?;
         snapshots += 1;
     }
 
@@ -89,15 +81,7 @@ pub async fn ingest(
     for existing in ids_for_connection(&mut tx, connection_id).await? {
         if !present.contains(&existing) {
             zero_holding(&mut tx, existing).await?;
-            stamp_snapshot(
-                &mut tx,
-                existing,
-                today,
-                Decimal::ZERO,
-                Decimal::ZERO,
-                Decimal::ZERO,
-            )
-            .await?;
+            stamp_snapshot(&mut tx, existing, today, Decimal::ZERO, Decimal::ZERO).await?;
             holdings_closed += 1;
         }
     }

@@ -137,6 +137,12 @@ pub struct Holding {
     /// Shares no recorded lot explains (§9.1). "0" when the position is fully
     /// accounted for. A non-zero value drives the fill-in badge.
     pub unexplained_qty: String,
+    /// Fee-inclusive mean buy price, amount domain (account currency). "0" when
+    /// no buys are recorded.
+    pub mean_price: String,
+    /// The part of the cost basis no recorded lot explains, amount domain.
+    /// "0" when the lots account for the position exactly.
+    pub unexplained_cost: String,
 }
 
 /// Display kind for a holding.
@@ -215,6 +221,8 @@ impl Holding {
             spark,
             composition: r.composition,
             unexplained_qty: r.unexplained_quantity.to_string(),
+            mean_price: r.mean_price.to_string(),
+            unexplained_cost: r.unexplained_cost.to_string(),
         }
     }
 }
@@ -229,6 +237,8 @@ pub struct LotEntry {
     /// Decimal strings — money and quantities never cross the wire as floats.
     pub quantity: String,
     pub unit_price: String,
+    /// Absent parses as zero — most manual entries have no fee to record.
+    pub fee: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -238,6 +248,55 @@ pub struct SaveLotsReq {
     pub adds: Vec<LotEntry>,
     #[serde(default)]
     pub deletes: Vec<uuid::Uuid>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lot {
+    pub id: String,
+    /// Epoch milliseconds at UTC midnight of `acquired_on`, like every other
+    /// timestamp in this API. The stored value is a plain date — a lot has no
+    /// time of day — and this is the wire representation of it.
+    pub t: i64,
+    pub side: String,
+    pub qty: String,
+    pub price: String,
+    pub fee: String,
+    /// True when the user entered this row; only these may be deleted.
+    pub manual: bool,
+}
+
+impl Lot {
+    pub fn from_row(r: gripsou_core::repo::lot::LotRow) -> Self {
+        Lot {
+            id: r.id.to_string(),
+            t: r.acquired_on
+                .and_hms_opt(0, 0, 0)
+                .expect("midnight is a valid time")
+                .and_utc()
+                .timestamp_millis(),
+            side: r.side,
+            qty: r.quantity.to_string(),
+            price: r.unit_price.to_string(),
+            fee: r.fee.to_string(),
+            manual: r.manual,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewLotsReq {
+    pub rows: Vec<LotEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasisPreview {
+    pub mean_price: String,
+    pub invested: String,
+    pub realised: String,
+    pub unrealised: String,
 }
 
 #[derive(Serialize)]
@@ -258,36 +317,6 @@ impl PricePoint {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Purchase {
-    pub id: String,
-    pub t: i64,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub qty: String,
-    pub price: String,
-    /// The raw `transaction.amount`: NEGATIVE for a buy (cash out), positive for
-    /// a sell. Consumers negate it once to get an invested figure — see
-    /// `lib/assetSeries.ts`.
-    pub invested: String,
-    pub manual: bool,
-}
-
-impl Purchase {
-    pub fn from_row(r: gripsou_core::repo::query::TxnRow) -> Self {
-        Purchase {
-            id: r.id.to_string(),
-            t: r.ts.timestamp_millis(),
-            kind: r.kind,
-            qty: r.quantity.unwrap_or(Decimal::ZERO).to_string(),
-            price: r.unit_price.unwrap_or(Decimal::ZERO).to_string(),
-            invested: r.amount.to_string(),
-            manual: r.manual,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: String,
     /// Epoch milliseconds, like every other timestamp in this API.
@@ -301,6 +330,16 @@ pub struct Transaction {
     pub account_id: String,
     pub account_name: String,
     pub account_color: Option<String>,
+    /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale. The
+    /// frontend picks its rendering (and i18n) off this discriminator.
+    pub source: String,
+    pub ticker: Option<String>,
+    /// Decimal string, never a float.
+    pub quantity: Option<String>,
+    /// Decimal string, never a float.
+    pub unit_price: Option<String>,
+    /// Decimal string, never a float.
+    pub fee: Option<String>,
 }
 
 impl Transaction {
@@ -315,6 +354,11 @@ impl Transaction {
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
             account_color: r.account_color,
+            source: r.source,
+            ticker: r.ticker,
+            quantity: r.quantity.map(|d| d.to_string()),
+            unit_price: r.unit_price.map(|d| d.to_string()),
+            fee: r.fee.map(|d| d.to_string()),
         }
     }
 }

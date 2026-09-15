@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { Money } from "./Money";
+import { formatQuantity } from "../lib/money";
 import type { Transaction } from "../api/types";
 
 /** Date only — the ledger stores midnight for most rows, so a time column
@@ -28,7 +29,14 @@ export function TransactionsTable({ rows }: { rows: Transaction[] }) {
           <tr key={r.id} className="border-t border-surface-2">
             <td className="py-2 whitespace-nowrap">{formatDay(r.t, i18n.language)}</td>
             <td className="py-2">
-              <div>{r.description}</div>
+              <div>
+                {r.source === "lot"
+                  ? t(`transactions.lot.${r.type}`, {
+                      qty: formatQuantity(r.quantity ?? "0"),
+                      ticker: r.ticker ?? "",
+                    })
+                  : r.description}
+              </div>
               <div className="text-xs text-fg-faint">
                 {t(`transactions.types.${r.type}`, { defaultValue: r.type })}
               </div>

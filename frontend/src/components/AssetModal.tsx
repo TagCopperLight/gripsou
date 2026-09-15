@@ -11,11 +11,11 @@ import { CardState } from "./CardState";
 import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
-import { formatMoney, formatQuantity } from "../lib/money";
+import { formatMoney, formatQuantity, lotCashAmount } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { colorForString } from "../lib/palette";
-import { KIND_LABEL_KEY, type Holding, type Purchase } from "../api/types";
-import { useHoldingPrices, useHoldingTransactions } from "../api/hooks";
+import { KIND_LABEL_KEY, type Holding, type Lot } from "../api/types";
+import { useHoldingLots, useHoldingPrices } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
 
 // This modal shows THREE currency domains on screen. They are distinct and must
@@ -28,10 +28,11 @@ import { positionSeries } from "../lib/assetSeries";
 //   an instrument EUR while Yahoo resolves a London listing quoted GBP): the
 //   left chart panel's header figure and gain, and the chart itself.
 // - Amount domain (`holding.accountCurrency`): everything the provider
-//   denominated in the account — mean price per share (it is
-//   investedNative / qty, a cost-basis figure, NOT a market price) and the
-//   purchase-history table's price/invested columns (transaction.amount and
-//   transaction.unit_price are amount-domain).
+//   denominated in the account — mean price per share (`holding.meanPrice`,
+//   the same fee-inclusive figure `lot_basis` computes for RecordLotsModal,
+//   NOT a market price) and the purchase-history table's price/amount
+//   columns (`Lot.price`/`Lot.fee`, and the derived cash amount, are all
+//   amount-domain).
 //
 // `holding.currency` is the instrument's QUOTE currency. It labels the asset's
 // identity, not any amount here, so it formats nothing on this screen.
@@ -99,7 +100,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
   const { data: txnData, isError: txnError, refetch: refetchTxn } =
-    useHoldingTransactions(holding.id);
+    useHoldingLots(holding.id);
   const prices = useMemo(() => priceData ?? [], [priceData]);
   const purchases = useMemo(() => txnData ?? [], [txnData]);
 
@@ -119,10 +120,19 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   // from unconverted prices and purchase amounts, so mixing in the reporting-
   // currency figure would put two currencies on one line.
   const investedNum = Number(holding.investedNative);
-  // Cost basis / quantity — an AMOUNT-domain figure (account currency), not a
-  // market price. It is labelled with accountCurrency below, never with the
-  // price row's or the instrument's currency.
-  const meanPrice = qtyNum === 0 ? 0 : Number(holding.investedNative) / qtyNum;
+  // The server's fee-inclusive mean buy price (`lot_basis`) — the same figure
+  // RecordLotsModal shows under the same label. It is "0" only when no buy is
+  // recorded at all (e.g. a provider that reports a balance but no lots); in
+  // that one case fall back to the plain average so the stat does not read as
+  // zero for a real position. Amount-domain (account currency), not a market
+  // price — labelled with accountCurrency below, never the price row's or the
+  // instrument's currency.
+  const meanPrice =
+    holding.meanPrice !== "0"
+      ? Number(holding.meanPrice)
+      : qtyNum === 0
+        ? 0
+        : Number(holding.investedNative) / qtyNum;
   const up = Number(holding.gl) >= 0;
 
   // Chart series + header figures depend on the mode and range.
@@ -146,7 +156,14 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         chartLabel: t("dashboard.assetModal.unitPrice"),
       };
     }
-    const pts = positionSeries(prices, purchases, qtyNum, investedNum);
+    const pts = positionSeries(
+      prices,
+      purchases,
+      Number(holding.meanPrice),
+      Number(holding.unexplainedCost),
+      qtyNum,
+      investedNum,
+    );
     const values = pts.map((p) => p.value);
     const first = values[0] ?? 0;
     const last = values[values.length - 1] ?? 0;
@@ -424,7 +441,7 @@ function PurchaseHistorySurface({
   isError,
   onRetry,
 }: {
-  purchases: Purchase[];
+  purchases: Lot[];
   currency: string;
   ready: boolean;
   isError: boolean;
@@ -465,9 +482,11 @@ function PurchaseHistorySurface({
                   {formatMoney(p.price, { currency })}
                 </td>
                 <td className="py-2 border-t border-surface-3 text-right text-fg">
-                  {/* Raw `transaction.amount`, negated: positive means money
-                      went in (a buy), negative means it came back out (a sale). */}
-                  {formatMoney(-Number(p.invested), { currency })}
+                  {/* Same convention as the transactions ledger and
+                      RecordLotsModal: a buy is negative (cash out, fee
+                      included), a sale is positive (cash in, net of fee). Plain
+                      cash arithmetic, not the cost-basis rule. */}
+                  {formatMoney(lotCashAmount(p.side, p.qty, p.price, p.fee), { currency })}
                 </td>
               </tr>
             ))}

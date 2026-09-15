@@ -41,12 +41,18 @@ pub async fn backfill_connection(
 
     let written = sqlx::query!(
         r#"
-        insert into holding_backfill (holding_id, as_of, quantity, value, cost_basis)
+        insert into holding_backfill (holding_id, as_of, quantity, value)
         with scope as (
             select h.id as holding_id, h.account_id, h.instrument_id,
                    i.kind = 'cash' as is_cash,
                    a.type_key = 'pea' as is_pea,
-                   h.cost_basis as total_cost,
+                   -- Not a cost-basis walk input (that rule is retired from
+                   -- this file, 0023). Just the holding's own stored figure,
+                   -- carried flat as the last-resort value fallback below when
+                   -- no snapshot of this holding ever carried a non-zero
+                   -- quantity, so there is nothing to carry a per-unit value
+                   -- forward from.
+                   h.cost_basis as book_value,
                    i.currency = a.currency as is_account_currency,
                    -- Whether this account's `booked_on` is a booking date at
                    -- all. Some connectors send the *statement period* instead,
@@ -95,6 +101,15 @@ pub async fn backfill_connection(
                           join account a    on a.id = h.account_id
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
+                         (now() at time zone 'utc')::date),
+                -- Securities move by `lot` now (0021), so a lot dated earlier
+                -- than any transaction or snapshot must extend the horizon
+                -- too, or the days it explains never get a derived row.
+                coalesce((select min(l.acquired_on) from lot l
+                          join holding h    on h.id = l.holding_id
+                          join account a    on a.id = h.account_id
+                          join connection c on c.id = a.connection_id
+                          where c.user_id = (select user_id from owner)),
                          (now() at time zone 'utc')::date)
             ) - 1 as start_day
         ),
@@ -119,61 +134,31 @@ pub async fn backfill_connection(
         -- a currency column to discriminate by.
         -- `materialized` is load-bearing: inlined, this aggregate was re-run once
         -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
-        -- once. Same for `lots`. The two together, plus the JIT compilation the
-        -- inflated cost estimate was triggering, were 2.4 s of a 3.1 s statement.
+        -- once.
         moves as materialized (
+            -- Cash moves by transaction amount, keyed on the day the BALANCE
+            -- moved. Every comment that used to sit above this aggregate still
+            -- applies to this branch and should be kept with it.
             select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
-                   sum(case
-                       when s.is_cash then t.amount
-                       when t.type = 'buy'  then coalesce(t.quantity, 0)
-                       when t.type = 'sell' then -coalesce(t.quantity, 0)
-                       else 0
-                   end) as delta
+                   sum(t.amount) as delta
             from scope s
             join transaction t on t.account_id = s.account_id
-            where (not s.is_cash or not (s.is_pea and t.type in ('transfer', 'buy', 'sell')))
-              and (s.is_cash or t.instrument_id = s.instrument_id)
-              and (not s.is_cash or s.is_account_currency)
+            where s.is_cash
+              and not (s.is_pea and t.type in ('transfer', 'buy', 'sell'))
+              and s.is_account_currency
             group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
-        ),
-        -- Spec §4.1: μ, the lifetime mean buy price per holding. Order-
-        -- independent by construction, which is what lets `lots` below stay a
-        -- plain aggregate instead of a recursive walk.
-        --
-        -- ponytail: a buy recorded AFTER a sell shifts μ for that earlier sale
-        -- too, which a running average would not. Upgrade path if it ever
-        -- matters: a recursive CTE in `booked_on` order here AND the same change
-        -- in `query.rs` and `lib/lots.ts`, or the modal and the chart disagree.
-        mean_buy as materialized (
-            select s.holding_id,
-                   sum(t.quantity * t.unit_price) / nullif(sum(t.quantity), 0) as mu
+
+            union all
+
+            -- Securities move by share count, and shares now live in `lot`.
+            -- `acquired_on` is already a date, so no txn_day() reconciliation
+            -- and no timezone cast is involved on this branch.
+            select l.holding_id, l.acquired_on as day,
+                   sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as delta
             from scope s
-            join transaction t on t.account_id = s.account_id
-                              and t.instrument_id = s.instrument_id
-            where t.type = 'buy'
-              and t.quantity is not null and t.unit_price is not null
-            group by s.holding_id
-        ),
-        -- §8.2: the same per-day shape as `moves`, for lots.
-        --
-        -- The walk runs BACKWARD from today's basis, subtracting each day's
-        -- `cost` for the days after it — so the sign is the sign of what the
-        -- day ADDED to the basis. A buy adds its cost; a sell removes qty × μ,
-        -- hence the negative. Never its proceeds: that would fold realised P/L
-        -- into the basis and make the invested line move with the market.
-        lots as materialized (
-            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
-                   sum(case
-                       when t.type = 'buy' then t.quantity * t.unit_price
-                       else -t.quantity * coalesce(mb.mu, 0)
-                   end) as cost
-            from scope s
-            join transaction t on t.account_id = s.account_id
-                              and t.instrument_id = s.instrument_id
-            left join mean_buy mb on mb.holding_id = s.holding_id
-            where t.type in ('buy', 'sell')
-              and t.quantity is not null and t.unit_price is not null
-            group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
+            join lot l on l.holding_id = s.holding_id
+            where not s.is_cash
+            group by l.holding_id, l.acquired_on
         ),
         days as (
             select s.holding_id, gs::date as as_of
@@ -344,7 +329,7 @@ pub async fn backfill_connection(
         ),
         walked as (
             select g.holding_id, g.as_of, g.anchor_day, s.is_cash,
-                   g.unit_qty, g.unit_value,
+                   g.unit_qty, g.unit_value, s.book_value,
                    -- Σ(as_of, anchor_day] = Σ(> as_of) − Σ(> anchor_day).
                    -- `as_of < anchor_day` always holds (the anchor is the first
                    -- snapshot strictly after the day), so this interval is never
@@ -352,18 +337,7 @@ pub async fn backfill_connection(
                    -- itself can still be negative (any withdrawal makes it so).
                    -- The join is INNER and safe: `axis` contains every snapshot
                    -- day, so every anchor has a row.
-                   g.anchor_qty - (g.total - aa.total) as quantity,
-                   -- §8.2: known lots up to this day, plus the basis no lot
-                   -- explains, carried flat backward until the user fills it in.
-                   --
-                   -- ponytail: left as a correlated subquery. Measured at 9 ms
-                   -- of 764 ms (there are only a handful of lot rows), so the
-                   -- suffix-sum treatment above would buy nothing. Give it the
-                   -- same treatment if lots ever become numerous.
-                   s.total_cost - coalesce((
-                       select sum(l.cost) from lots l
-                       where l.holding_id = g.holding_id and l.day > g.as_of
-                   ), 0) as cost_basis
+                   g.anchor_qty - (g.total - aa.total) as quantity
             from gaps g
             join scope s on s.holding_id = g.holding_id
             join anchor_after aa
@@ -406,18 +380,23 @@ pub async fn backfill_connection(
                -- (§3 rule 3 applied to price), because writing 0 here would make
                -- the chart dip to zero on every derived day and raise fx_missing
                -- spuriously. Multiply before dividing so a day whose quantity is
-               -- unchanged reproduces the snapshot's value exactly, and divide by
-               -- NULL (not by zero) when no valued snapshot exists at all — the
-               -- row then falls back to its own cost basis, the usual convention
-               -- when no market value is available.
+               -- unchanged reproduces the snapshot's value exactly. When no
+               -- valued snapshot exists at all (unit_qty null, i.e. no
+               -- snapshot of this holding ever carried a non-zero quantity),
+               -- there is no per-unit value to carry forward, so this falls
+               -- back to `book_value` (holding.cost_basis, read flat — NOT a
+               -- basis walk, that rule is retired from this file, 0023).
+               -- Valuing an owned asset at zero would be worse than valuing it
+               -- at book, and would ALSO spuriously raise fx_missing on the
+               -- read side (quantity <> 0 and unit_value is null and value =
+               -- 0 is exactly its trigger condition).
                case
                    when w.is_cash then w.quantity + w.lift
                    else coalesce(
                        (w.quantity + w.lift) * w.unit_value / nullif(w.unit_qty, 0),
-                       w.cost_basis
+                       w.book_value
                    )
-               end,
-               case when w.is_cash then w.quantity + w.lift else w.cost_basis end
+               end
         from lifted w
         "#,
         connection_id,

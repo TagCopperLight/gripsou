@@ -98,7 +98,11 @@
       "transfer": "Virement"
     },
     "shown_one": "{{count}} transaction affichée",
-    "shown_other": "{{count}} transactions affichées"
+    "shown_other": "{{count}} transactions affichées",
+    "lot": {
+      "buy": "Achat de {{qty}} × {{ticker}}",
+      "sell": "Vente de {{qty}} × {{ticker}}"
+    }
   },
   "dashboard": {
     "fxMissing": "Pas encore de taux de change pour cette devise — la valeur n'est pas comptée. Il devrait arriver à la prochaine synchronisation.",
@@ -140,6 +144,7 @@
           "date": "DATE",
           "quantity": "QUANTITÉ",
           "unitPrice": "PRIX UNITAIRE",
+          "fee": "FRAIS",
           "total": "TOTAL"
         },
         "buy": "Achat",

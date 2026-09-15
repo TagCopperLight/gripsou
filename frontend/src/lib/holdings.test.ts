@@ -34,6 +34,8 @@ function cash(
     spark: null,
     composition: null,
     unexplainedQty: "0",
+    meanPrice: "0",
+    unexplainedCost: "0",
   };
 }
 
@@ -63,6 +65,8 @@ function equity(id: string, value: string): Holding {
     spark: ["1", "2"],
     composition: null,
     unexplainedQty: "0",
+    meanPrice: "0",
+    unexplainedCost: "0",
   };
 }
 

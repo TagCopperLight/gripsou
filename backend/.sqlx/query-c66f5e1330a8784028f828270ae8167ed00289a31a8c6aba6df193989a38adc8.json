@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from lot l\n        using holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1\n          and c.user_id = $2\n          and l.holding_id = h.id\n          and l.source = 'manual'\n          and l.id = any($3)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c66f5e1330a8784028f828270ae8167ed00289a31a8c6aba6df193989a38adc8"
+}

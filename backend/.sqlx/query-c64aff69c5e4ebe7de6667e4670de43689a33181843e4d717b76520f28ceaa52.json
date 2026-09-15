@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select p.unit_price as \"unit_price!\"\n        from price p\n        join holding h on h.instrument_id = p.instrument_id\n        where h.id = $1\n        order by p.ts desc\n        limit 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c64aff69c5e4ebe7de6667e4670de43689a33181843e4d717b76520f28ceaa52"
+}

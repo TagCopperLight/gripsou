@@ -51,6 +51,13 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       spark: null,
       fxMissing: items.some((h) => h.fxMissing),
       investedNative: String(items.reduce((s, h) => s + Number(h.investedNative), 0)),
+      // Cash has no lots, so `lot_basis` always reports this as "0" for every
+      // cash holding (there's no unexplained gap to carry) — summing is safe
+      // today and, unlike carrying just `first`'s value, stays correct if
+      // that ever stops being true, matching how the other numeric fields
+      // above are combined across the merged accounts rather than taken from
+      // one arbitrary member.
+      unexplainedCost: String(items.reduce((s, h) => s + Number(h.unexplainedCost), 0)),
     });
   }
 

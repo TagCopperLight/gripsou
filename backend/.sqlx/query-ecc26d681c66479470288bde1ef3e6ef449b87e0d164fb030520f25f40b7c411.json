@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select t.id as \"id!\", t.ts as \"ts!\", t.type as \"kind!\", t.quantity, t.unit_price,\n               t.amount as \"amount!\", (t.external_id is null) as \"manual!\"\n        from transaction t\n        join holding h    on h.account_id = t.account_id and h.instrument_id = t.instrument_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1 and c.user_id = $2 and t.type in ('buy', 'sell')\n        order by t.ts\n        ",
+  "query": "\n        select l.id as \"id!\", l.side as \"side!\", l.acquired_on as \"acquired_on!\",\n               l.quantity as \"quantity!\", l.unit_price as \"unit_price!\", l.fee as \"fee!\",\n               (l.source = 'manual') as \"manual!\"\n        from lot l\n        join holding h    on h.id = l.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where l.holding_id = $1 and c.user_id = $2\n        order by l.acquired_on, l.created_at\n        ",
   "describe": {
     "columns": [
       {
@@ -9,63 +9,63 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "transaction",
+            "table": "lot",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "ts!",
-        "type_info": "Timestamptz",
+        "name": "side!",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "transaction",
-            "name": "ts"
+            "table": "lot",
+            "name": "side"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "kind!",
-        "type_info": "Text",
+        "name": "acquired_on!",
+        "type_info": "Date",
         "origin": {
           "Table": {
-            "table": "transaction",
-            "name": "type"
+            "table": "lot",
+            "name": "acquired_on"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "quantity",
+        "name": "quantity!",
         "type_info": "Numeric",
         "origin": {
           "Table": {
-            "table": "transaction",
+            "table": "lot",
             "name": "quantity"
           }
         }
       },
       {
         "ordinal": 4,
-        "name": "unit_price",
+        "name": "unit_price!",
         "type_info": "Numeric",
         "origin": {
           "Table": {
-            "table": "transaction",
+            "table": "lot",
             "name": "unit_price"
           }
         }
       },
       {
         "ordinal": 5,
-        "name": "amount!",
+        "name": "fee!",
         "type_info": "Numeric",
         "origin": {
           "Table": {
-            "table": "transaction",
-            "name": "amount"
+            "table": "lot",
+            "name": "fee"
           }
         }
       },
@@ -86,11 +86,11 @@
       false,
       false,
       false,
-      true,
-      true,
+      false,
+      false,
       false,
       null
     ]
   },
-  "hash": "aa77f922ff9fc74dd38b20193bb7142130c1d58acfe0604d592c7a29442f6bbd"
+  "hash": "ecc26d681c66479470288bde1ef3e6ef449b87e0d164fb030520f25f40b7c411"
 }

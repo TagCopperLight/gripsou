@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into holding_snapshot (holding_id, as_of, quantity, value)\n        values ($1, $2, $3, $4)\n        on conflict (holding_id, as_of)\n        do update set\n            quantity = excluded.quantity,\n            value = excluded.value\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aed43a6621745347da9fa6dba6f13701606bc8abf059ed5ba7887f7ca81698c2"
+}

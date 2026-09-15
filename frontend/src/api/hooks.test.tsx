@@ -100,7 +100,7 @@ describe("useSaveLots", () => {
     expect(invalidatedKeys).toContainEqual(["transactions"]);
     expect(invalidatedKeys).toContainEqual(["net-worth"]);
     expect(invalidatedKeys).toContainEqual(["account-series"]);
-    expect(invalidatedKeys).toContainEqual(["holding-transactions", "h1"]);
+    expect(invalidatedKeys).toContainEqual(["holding-lots", "h1"]);
     expect(invalidatedKeys).toContainEqual(["holding-prices", "h1"]);
   });
 });
