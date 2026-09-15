@@ -28,6 +28,13 @@ export type NetWorthSummary = {
   gainAbs: string;
   gainPct: string;
   fxMissing: boolean;
+  /**
+   * No rate exists for the reporting currency, so every figure on this response
+   * is still in the pivot currency despite wearing the chosen one's symbol.
+   * Distinct from `fxMissing`: nothing is absent from the sum, the whole sum is
+   * in the wrong currency.
+   */
+  reportingFxMissing: boolean;
 };
 export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSummary };
 

@@ -33,6 +33,8 @@ marked inline at its own heading with a `**Status**` line.
 | D-1, Z-1, C-7 | Cost basis moved to a `lot` table with one SQL definition | ✅ Fixed |
 | C-9 (part) | Transactions list date filters no longer use the session timezone | ✅ Fixed |
 | C-7 (follow-up) | Chart's invested line back-dated today's cash balance across all history | ✅ Fixed |
+| D-2 | "Net worth" is gross assets; liabilities dropped at the adapter | ⏭️ Skipped |
+| C-3, C-6 | A missing FX rate is absorbed silently — reporting currency and cost basis | ✅ Fixed |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -177,6 +179,22 @@ natural key independent of `kind`, e.g. drop `kind` from the partial unique inde
 
 ### C-3 — Reporting currency silently degrades to the pivot with no flag
 
+**Status**: ✅ **Fixed.** Two halves. (1) The reporting preference is now a rate-eligible currency:
+`ensure_cash_instruments_for_held_currencies` and `price_eligible_instruments_for_connection` both
+union the owning user's `prefs.currency`, so its cash instrument is created and its pair fetched on
+the next price pass even though nothing is held or quoted in it. (2) The fallback is announced:
+migration `0026` adds `reporting_fx_degraded(user, day)`, mirroring `reporting_fx_asof`'s own
+currency resolution and `nullif(…, 0)` guard so the two cannot disagree; `net_worth_series` returns it
+as `reporting_fx_missing`, the API ships it on the net-worth summary, and `NetWorthCard` renders an
+amber strip (not the ⚠ tooltip the holding warnings use — a tooltip nobody hovers would leave the
+user reading euros as dollars). The fallback to the pivot itself is kept: it beats collapsing every
+figure to NULL. Verified live before fixing — the install is EUR/CNY, CNY has 5,915 rates back to
+2003, so picking USD, GBP, CHF or JPY in Settings was a two-click reproduction of the bug.
+Regression tests: `core/tests/query.rs::reporting_in_a_currency_with_no_rate_is_flagged`,
+`core/tests/query_price_eligible.rs::the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_it`,
+`core/tests/fx.rs::reporting_fx_degraded_is_false_when_the_conversion_really_happened` plus an added
+assertion on the pre-existing fallback test, and `FxMissingWarning.test.tsx` (two cases).
+
 **Severity**: High
 **Confidence**: Certain
 **Location**: `backend/migrations/0011_reporting_fx_zero_guard.sql:11`, `backend/core/src/repo/query.rs:97`, `backend/core/src/price_sync.rs:63`
@@ -249,6 +267,16 @@ sync transaction before the backfill runs.
 ---
 
 ### C-6 — `invested` on the chart silently drops any holding whose account currency has no rate
+
+**Status**: ✅ **Fixed.** `net_worth_series` now coalesces per row (`sum(coalesce(lb.basis * afx, 0))`)
+instead of around the sum, and `fx_missing` gained a second disjunct (`lb.basis <> 0 and afx.unit_value is null`) because the existing condition requires the *value* branch to have failed,
+which is false precisely when the position is priceable. `holdings()` had the coalesce already but the
+same blind spot in its flag, and got the same disjunct. `account_series` needed nothing: it carries no
+invested line and its value expression already coalesces per row. Dormant on this install when fixed
+(the only foreign account is CNY, whose rates predate its history by 20 years); it fires on the first
+sync of an account in a new currency, where the account lands before the rate does. Regression test:
+`core/tests/query.rs::invested_flags_a_basis_it_could_not_convert`, which holds a pivot-priced equity
+in a CNY account so only the account-currency rate is missing.
 
 **Severity**: High
 **Confidence**: Certain
@@ -2471,6 +2499,21 @@ three queries, the frontend loses two files). Do it before the lot data grows.
 ---
 
 ### D-2 — "Net worth" is gross assets: the model has no sign, and liabilities are dropped at the adapter
+
+**Status**: ⏭️ **Skipped, deliberately** — revisit when an account with a negative value actually
+exists. Verified against the live database at the time of the decision: 8 accounts (5 checking, 2
+savings, 1 PEA), 13 holdings, **no negative quantity and no loan/card row anywhere**, so nothing is
+being dropped today and the headline number is a true net worth for this install. The bug is real but
+dormant; it fires the first time a connected bank exposes a `loan` or `card` account, which vanishes
+silently. Noted for that day: the unified model makes this cheaper than the finding suggests — a debt
+is a negative-quantity cash holding, and every total in `query.rs` is a plain `sum()`, so the net-worth
+number, the chart and the account series need **no query change**. Only the display side breaks
+(`distribution()`'s negative slice and its `order by sum(...) desc`, the Holdings table, the account
+cards). Also confirmed: a negative *checking* balance already passes straight through `cash_holding`
+as a negative cash holding, so overdrafts already subtract while cards and loans do not — the two
+liabilities behave inconsistently, as the finding says. Powens' sign convention for loan balances
+could not be verified (no such account to observe); storing liability balances as `-abs(balance)`
+would sidestep it. No code changed, no test.
 
 **Severity**: Critical
 **Confidence**: Certain

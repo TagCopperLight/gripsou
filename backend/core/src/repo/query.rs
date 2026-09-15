@@ -11,8 +11,14 @@ pub struct NetWorthRow {
     pub as_of: NaiveDate,
     pub net_worth: Decimal,
     pub invested: Decimal,
-    /// At least one holding on this day had no FX rate and was valued at zero.
+    /// At least one holding on this day had no FX rate, so it was valued at
+    /// zero or its cost basis was left out of `invested`.
     pub fx_missing: bool,
+    /// The reader's reporting currency had no rate on this day, so the figures
+    /// are still denominated in the pivot rather than converted. Distinct from
+    /// `fx_missing`: nothing is *missing* from the sum, the whole sum is in the
+    /// wrong currency.
+    pub reporting_fx_missing: bool,
 }
 
 pub async fn net_worth_series(
@@ -118,13 +124,25 @@ pub async fn net_worth_series_with_target(
                    snap.value * afx.unit_value,
                    0
                )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "net_worth!",
-               coalesce(sum(lb.basis * afx.unit_value), 0)
+               -- Per-row coalesce, not one around the sum: without it a single
+               -- holding whose account currency has no rate turns its own term
+               -- NULL, sum() skips it, and the invested line silently loses that
+               -- position's basis while net worth still counts it — a fabricated
+               -- gain with nothing on screen to explain it. The row is worth
+               -- zero here and says so through fx_missing below.
+               coalesce(sum(coalesce(lb.basis * afx.unit_value, 0)), 0)
                    / coalesce(nullif(rep.unit_value, 0), 1) as "invested!",
                coalesce(bool_or(
-                   snap.quantity <> 0
-                   and uv.unit_value is null
-                   and coalesce(snap.value * afx.unit_value, 0) = 0
-               ), false) as "fx_missing!"
+                   (snap.quantity <> 0
+                    and uv.unit_value is null
+                    and coalesce(snap.value * afx.unit_value, 0) = 0)
+                   -- The basis failure is its own case: a position can be
+                   -- perfectly priceable (uv resolves) while the account's own
+                   -- rate is unknown, in which case the value branch above is
+                   -- false and only this one fires.
+                   or (lb.basis <> 0 and afx.unit_value is null)
+               ), false) as "fx_missing!",
+               reporting_fx_degraded($1, d.as_of) as "reporting_fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -298,8 +316,15 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                lot.basis      as "invested_native!",
                lot.mean_price       as "mean_price!",
                lot.unexplained_cost as "unexplained_cost!",
-               (unit_value_asof(i.id, (select d from today)) is null
-                and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
+               -- Two separate failures, one flag: the position could not be
+               -- valued at all, OR it is priceable but its account's currency
+               -- has no rate, so `invested` above coalesced to zero. The second
+               -- used to pass unflagged, showing a real value against a zero
+               -- cost basis and an invented gain.
+               ((unit_value_asof(i.id, (select d from today)) is null
+                 and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
+                or (coalesce(lot.basis, 0) <> 0
+                    and fx_asof(a.currency, (select d from today)) is null))
                    as "fx_missing!",
                -- §9.1: shares no recorded lot explains. Scoped to THIS holding's
                -- (account, instrument) via the `lot` lateral — never the
@@ -1006,6 +1031,19 @@ pub async fn price_eligible_instruments_for_connection(
             select a.currency
             from account a
             where a.connection_id = $1
+
+            union
+
+            -- The owner's reporting preference, which is a divisor and nothing
+            -- else — no holding, price or account carries it, so it would never
+            -- otherwise become rate-eligible and reporting_fx_asof would fall
+            -- back to the pivot forever. Its cash instrument is created by
+            -- ensure_cash_instruments_for_held_currencies, which unions the
+            -- same arm.
+            select u.prefs->>'currency'
+            from connection c
+            join users u on u.id = c.user_id
+            where c.id = $1
         ) needed
         join instrument fx on fx.kind = 'cash' and fx.currency = needed.cur
         where needed.cur <> (select base_currency from app_settings where id = 1)

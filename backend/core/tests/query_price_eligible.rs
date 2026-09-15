@@ -120,3 +120,45 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
     );
     Ok(())
 }
+
+/// C-3: the reporting currency is a divisor and nothing else — no holding,
+/// price or account carries it — so it would never become rate-eligible on its
+/// own, and `reporting_fx_asof` would fall back to the pivot forever while the
+/// UI wore the chosen currency's symbol.
+#[sqlx::test(migrations = "../migrations")]
+async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_it(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            institution: Institution::default(),
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    // An all-EUR install whose owner reads in dollars.
+    sqlx::query(
+        "update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"')
+         where id = (select user_id from connection where id = $1)",
+    )
+    .bind(conn_id)
+    .execute(&pool)
+    .await?;
+
+    let providers: Vec<Box<dyn PriceProvider>> = vec![];
+    fetch_prices_for_connection(&pool, conn_id, &providers).await?;
+
+    let rows = price_eligible_instruments_for_connection(&pool, conn_id).await?;
+    let currencies: Vec<&str> = rows.iter().map(|r| r.currency.as_str()).collect();
+    assert!(
+        rows.iter().any(|r| r.kind == "cash" && r.currency == "USD"),
+        "USD is held in nothing and quoted in nothing, but it is what every \
+         figure is divided into: got currencies {currencies:?}"
+    );
+    Ok(())
+}

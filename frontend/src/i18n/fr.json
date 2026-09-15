@@ -106,6 +106,7 @@
   },
   "dashboard": {
     "fxMissing": "Pas encore de taux de change pour cette devise — la valeur n'est pas comptée. Il devrait arriver à la prochaine synchronisation.",
+    "reportingFxMissing": "Pas encore de taux de change pour {{currency}} — les montants ci-dessous sont toujours dans la devise de base de l’application, non convertis. Il devrait arriver à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
       "over": "sur {{range}}",

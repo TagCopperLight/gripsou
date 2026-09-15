@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into instrument (kind, symbol, isin, name, currency)\n        select distinct 'cash', null, null, needed.cur, needed.cur\n        from (\n            select i.currency as cur\n            from holding h\n            join account a    on a.id = h.account_id\n            join instrument i on i.id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select p.currency\n            from holding h\n            join account a on a.id = h.account_id\n            join price p   on p.instrument_id = h.instrument_id\n            where a.connection_id = $1 and h.quantity <> 0\n\n            union\n\n            select a.currency\n            from account a\n            where a.connection_id = $1\n\n            union\n\n            -- The owner's reporting preference. It is not held, quoted or\n            -- denominated in anything — it is only ever the divisor — so none\n            -- of the arms above reach it, and without this the rate is never\n            -- fetched: reporting_fx_asof falls back to 1 and every figure stays\n            -- in the pivot while wearing the chosen currency's symbol.\n            select u.prefs->>'currency'\n            from connection c\n            join users u on u.id = c.user_id\n            where c.id = $1\n        ) needed\n        where needed.cur <> (select base_currency from app_settings where id = 1)\n          and needed.cur ~ '^[A-Z]{3}$'\n        on conflict (currency) where kind = 'cash' do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "02222339428c14918188c19931d7ab03f918daa5a0bef59ba2c507e7dfb50d06"
+}

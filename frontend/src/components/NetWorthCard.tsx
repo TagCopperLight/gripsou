@@ -102,6 +102,21 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                   </div>
                   <p className="text-fg-faint text-sm">{t("dashboard.netWorth.over", { range: RANGE_LABEL[range] })}</p>
                 </div>
+                {/* Not the ⚠ glyph the other warnings use: this one is not about
+                    one holding being left out, it is about every figure on the
+                    dashboard being denominated in a currency the user did not
+                    pick. A tooltip nobody hovers would leave them reading euros
+                    as dollars. */}
+                {summary?.reportingFxMissing && (
+                  <p
+                    role="status"
+                    className="bg-amber-soft text-fg-dim self-start rounded-lg px-2 py-1 text-sm"
+                  >
+                    {t("dashboard.reportingFxMissing", {
+                      currency: getPrefs().currency,
+                    })}
+                  </p>
+                )}
               </>
             )}
           </div>

@@ -103,6 +103,11 @@ optional — eslint's `react-refresh` rule forbids non-component exports from a 
 
 `cargo fmt` reformatting files you did not touch is expected and fine; do not revert it.
 
+The golden tests (`core/tests/golden.rs`) compare whole outputs against committed fixtures. A drift is
+"a conversation about which answer is correct", never a reflex regeneration — but when the new answer
+*is* the correct one, regenerate deliberately with
+`UPDATE_GOLDEN=1 cargo test -p gripsou-core --test golden` and check `git diff` on the fixture.
+
 ---
 
 ## Conventions that bit during issue 1
@@ -130,21 +135,28 @@ Severity order, with the same-bug groupings already applied. `AUDIT.md` holds th
 | Findings | Issue | Status |
 |---|---|---|
 | C-1, C-2, D-7 (part) | Instrument identity built from mutable columns | ✅ Fixed |
-| **D-1, Z-1, C-7** | **Cost basis / PnL computed 4× in 3 languages, two copies already disagree** | **← next** |
-| D-2 | "Net worth" is gross assets; liabilities dropped at the adapter | open |
+| D-1, Z-1, C-7 | Cost basis moved to a `lot` table with one SQL definition | ✅ Fixed |
+| C-9 (part) | Transactions list date filters no longer use the session timezone | ✅ Fixed |
+| C-7 (follow-up) | Chart's invested line back-dated today's cash balance | ✅ Fixed |
+| D-2 | "Net worth" is gross assets; liabilities dropped at the adapter | ⏭️ Skipped |
 
-D-1 is the big one and the audit's own headline: the backend computes invested as `qty × μ`, while
-`frontend/src/lib/assetSeries.ts:38` subtracts sale proceeds, folding realised P/L into the basis —
-which `backfill.rs:164-169` explicitly refuses to do. Buy 10 @ 100, sell 5 @ 200: backend says
-invested = 500, AssetModal says 0, same screen, same session. Fixing it is as much a "where should
-this live" decision as a code change, so expect to use `AskUserQuestion`.
+**The Critical tier is closed.** D-2 was skipped by the user's decision: no loan, card or negative
+holding exists in the live database, so nothing is being dropped today and the headline number is a
+true net worth for this install. Revisit it the day an account with a negative value appears. The
+`**Status**` line on D-2 in `AUDIT.md` records what was measured and what the fix would cost then.
 
-### High
+### High ← the work is here now
 
-Correctness: C-3 · C-4 · C-5 · C-6
+| Findings | Issue | Status |
+|---|---|---|
+| C-3, C-6 | A missing FX rate absorbed silently, twice: the reporting divisor and the cost basis | ✅ Fixed |
+
+Remaining:
+
+Correctness: C-4 · C-5
 Design: D-3 · D-4 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
 Quality: Q-1 · Q-2 · Q-3 · Q-4
-Centralization: Z-1 (with D-1) · Z-2 · Z-3 · Z-4 · Z-5 · Z-6
+Centralization: Z-2 · Z-3 · Z-4 · Z-5 · Z-6
 Security: the two high-severity of S-1…S-17 (own section, severities listed there)
 
 Known cheap wins worth batching: **Z-4** is a live user-visible bug — `Sidebar.tsx:33` calls
