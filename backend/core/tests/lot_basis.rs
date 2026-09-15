@@ -3,6 +3,8 @@ mod common;
 use chrono::NaiveDate;
 use common::{checking_account, seed_connection};
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::repo::holding::upsert_holding;
+use gripsou_core::repo::instrument::resolve_instrument;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -165,5 +167,40 @@ async fn mean_price_is_order_independent(pool: PgPool) {
         mean_price,
         Some(dec("25")),
         "(10x20 + 10x30) / 20, regardless of the sell's date"
+    );
+}
+
+/// A cash holding has no lots, so its basis is simply what it held — but *on
+/// the day asked*, read from `holding_point` the same way the net-worth query
+/// reads it. Answering `holding.cost_basis` flat (0022's behaviour, fixed in
+/// 0025) back-dated today's balance across all of history.
+#[sqlx::test(migrations = "../migrations")]
+async fn cash_basis_is_the_balance_on_that_day(pool: PgPool) {
+    let conn_id = seed_connection(&pool).await;
+    let mut conn = pool.acquire().await.unwrap();
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
+        .await
+        .unwrap();
+    let holding = common::cash_holding("acct-1", dec("500"));
+    let instrument_id = resolve_instrument(&mut conn, &holding.instrument)
+        .await
+        .unwrap();
+    let h = upsert_holding(&mut conn, account_id, instrument_id, &holding)
+        .await
+        .unwrap();
+    common::stamp_on(&pool, h, day("2026-01-15"), dec("300"), dec("300")).await;
+    common::stamp_on(&pool, h, day("2026-06-15"), dec("500"), dec("500")).await;
+
+    let (january, _, _) = basis_on(&pool, h, "2026-01-20").await;
+    let (september, _, _) = basis_on(&pool, h, "2026-09-14").await;
+    assert_eq!(january, dec("300"), "January's balance, not September's");
+    assert_eq!(september, dec("500"));
+
+    let (before_any_point, _, _) = basis_on(&pool, h, "2025-01-01").await;
+    assert_eq!(
+        before_any_point,
+        dec("500"),
+        "with no point at or before the day there is nothing better than the \
+         provider's current figure; the chart drops that holding-day anyway"
     );
 }

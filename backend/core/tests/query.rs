@@ -2132,3 +2132,50 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
         "the fee-inclusive lot basis, unaffected by user B's much larger buy of the same instrument"
     );
 }
+
+/// The cash half of the chart's "Capital invested" line must move with the
+/// balance actually held on each day. Before 0025 `lot_basis` answered
+/// `holding.cost_basis` — today's balance — for every day asked, so a past
+/// point carried the CURRENT cash position: on the live tree that put the
+/// dashed invested line 1 335 EUR *above* net worth in January 2026. Cash is
+/// valued at book on both sides, so the two must cancel exactly, every day.
+#[sqlx::test(migrations = "../migrations")]
+async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            institution: Institution::default(),
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![cash_holding("acct-1", Decimal::new(120, 0))],
+            transactions: vec![],
+        },
+    )
+    .await?;
+    let ids = holding_ids(&pool).await;
+    let today = chrono::Utc::now().date_naive();
+    let yesterday = today - chrono::Days::new(1);
+    stamp_on(&pool, ids[0], yesterday, dec("100"), dec("100")).await;
+    stamp_on(&pool, ids[0], today, dec("120"), dec("120")).await;
+
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let series = query::net_worth_series(&pool, user_id, yesterday, today).await?;
+
+    assert_eq!(series.len(), 2);
+    assert_eq!(
+        series[0].invested,
+        dec("100"),
+        "yesterday's balance, not today's"
+    );
+    assert_eq!(series[1].invested, dec("120"));
+    for p in &series {
+        assert_eq!(
+            p.invested, p.net_worth,
+            "cash is valued at book on both sides: the gap must be exactly zero"
+        );
+    }
+    Ok(())
+}
