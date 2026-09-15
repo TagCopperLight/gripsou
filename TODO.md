@@ -63,3 +63,4 @@
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] Budget page (@TRANSACTION.md phase 2)
+- [ ] Infer lots

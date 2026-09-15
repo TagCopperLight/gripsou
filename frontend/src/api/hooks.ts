@@ -10,14 +10,15 @@ import type {
   Account,
   AccountSeries,
   AccountType,
+  BasisPreview,
   DistributionAccount,
   EnabledProvider,
   Holding,
+  Lot,
   NetWorthResponse,
   PricePoint,
   Provider,
   ProviderGroup,
-  Purchase,
   Session,
   SessionUser,
   Transaction,
@@ -65,8 +66,17 @@ export type SaveLotAdd = {
   date: string;
   quantity: string;
   unitPrice: string;
+  /** Decimal string, amount domain. Omitting it means zero. */
+  fee?: string;
 };
 export type SaveLotsInput = { adds: SaveLotAdd[]; deletes: string[] };
+
+export function useLotsPreview(id: string) {
+  return useMutation({
+    mutationFn: (rows: SaveLotAdd[]) =>
+      postJson<BasisPreview>(`/holdings/${id}/lots/preview`, { rows }),
+  });
+}
 
 export function useSaveLots(holdingId: string) {
   const qc = useQueryClient();
@@ -83,7 +93,7 @@ export function useSaveLots(holdingId: string) {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["net-worth"] });
       qc.invalidateQueries({ queryKey: ["account-series"] });
-      qc.invalidateQueries({ queryKey: ["holding-transactions", holdingId] });
+      qc.invalidateQueries({ queryKey: ["holding-lots", holdingId] });
       qc.invalidateQueries({ queryKey: ["holding-prices", holdingId] });
     },
   });
@@ -97,10 +107,10 @@ export function useHoldingPrices(id: string, range: string) {
   });
 }
 
-export function useHoldingTransactions(id: string) {
+export function useHoldingLots(id: string) {
   return useQuery({
-    queryKey: ["holding-transactions", id],
-    queryFn: () => getJson<Purchase[]>(`/holdings/${id}/transactions`),
+    queryKey: ["holding-lots", id],
+    queryFn: () => getJson<Lot[]>(`/holdings/${id}/lots`),
   });
 }
 

@@ -30,6 +30,8 @@ marked inline at its own heading with a `**Status**` line.
 | Findings | Issue | Status |
 |---|---|---|
 | C-1, C-2, D-7 (part) | Instrument identity built from two columns that later get rewritten | ✅ Fixed |
+| D-1, Z-1, C-7 | Cost basis moved to a `lot` table with one SQL definition | ✅ Fixed |
+| C-9 (part) | Transactions list date filters no longer use the session timezone | ✅ Fixed |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -271,6 +273,12 @@ which has no flag at all).
 
 ### C-7 — "Invested" means two different things on two screens
 
+**Status**: ✅ Fixed. Both the Holdings table and the net-worth chart's "Capital invested" line now
+read the same `lot_basis` SQL function (`0022`) — `core/src/repo/query.rs:104` (chart series) and
+`:298` (holdings). Verified live: `select sum(b.basis) from holding h join instrument i ... cross
+join lateral lot_basis(...)` returns `1296.6594` (1 296,66 €), matching what both endpoints
+compute. Regression tests: `core/tests/query.rs::chart_invested_matches_the_holdings_table`.
+
 **Severity**: Medium
 **Confidence**: Certain
 **Location**: `backend/core/src/repo/query.rs:268` vs `backend/core/src/repo/query.rs:107`, `backend/core/src/backfill.rs:363`
@@ -315,6 +323,15 @@ overwrite that `'ok'` back to `'error'`.
 ---
 
 ### C-9 — Transaction date filters are evaluated in the server's session timezone
+
+**Status**: 🟡 Partially fixed. The transactions list's two date filters (`core/src/repo/query.rs:
+860-861`) now cast with `(ts at time zone 'utc')::date` instead of the bare `t.ts::date` cited
+above, matching the rest of the schema. Regression test:
+`core/tests/query_transactions.rs::lots_appear_on_the_transactions_list`. Scope note: this fix only
+touched the location this finding cites; grepping the rest of `backend/` for other `::date` casts
+on a `timestamptz` (migrations included) found every remaining one already wrapped in
+`at time zone 'utc'`, so no further instance of this specific bug was found — but the finding is
+logged as partial per the fix-log convention rather than claiming a codebase-wide audit.
 
 **Severity**: Medium
 **Confidence**: Certain
@@ -963,6 +980,14 @@ All sites use `formatQuantity` (`HoldingsCard.tsx:285`, `AssetModal.tsx:343`/`:4
 ---
 
 ### Z-1 — The mean-price / cost-basis formula is implemented three times in three languages
+
+**Status**: ✅ Fixed. The rule lives only in `lot_basis` (`0022`), a SQL function over the new
+`lot` table (`0021`). `backfill.rs`'s `mean_buy` and `lots` CTEs are deleted, and
+`frontend/src/lib/lots.ts` is deleted outright. The Record-Lots modal's live preview no longer
+reimplements the math client-side — it calls `POST /holdings/:id/lots/preview`, which runs
+`lot_basis` inside a rolled-back transaction, so the preview and the saved result can never
+diverge. Regression tests: `core/tests/lot_basis.rs::a_sale_removes_cost_not_proceeds`,
+`core/tests/lot_basis.rs::fee_is_part_of_the_basis`.
 
 **Severity**: High
 
@@ -2364,6 +2389,20 @@ Read: all 20 migrations, `core/src/{dto,provider,ingest,backfill,price_sync,comp
 ---
 
 ### D-1 — Cost basis and PnL are computed four times, in three languages, from a source that cannot supply lots
+
+**Status**: ✅ Fixed. Lots are a first-class `lot` table (`0021`) with a per-lot fee; the basis rule
+lives only in `lot_basis` (`0022`) and every consumer calls it. `backfill.rs`'s `mean_buy`/`lots`
+CTEs and `frontend/src/lib/lots.ts` are deleted; `assetSeries.ts` is reduced to a multiplication
+that reads no cash amount. Stored per-day basis is dropped from `holding_snapshot`/
+`holding_backfill` (`0023`), and `transaction` is now cash-only with `instrument_id`/`quantity`/
+`unit_price` dropped (`0024`), so point 3 (basis stored in three tables) no longer applies — it is
+stored in zero tables and derived in one function. Regression tests:
+`core/tests/lot_basis.rs::a_sale_removes_cost_not_proceeds`,
+`core/tests/query.rs::chart_invested_matches_the_holdings_table`,
+`core/tests/query_transactions.rs::lots_appear_on_the_transactions_list`,
+`frontend/src/lib/assetSeries.test.ts` "a sale removes cost, not proceeds". Point 4 (mean-cost is
+not the right accounting method) is answered rather than fixed: PRMP is the method French tax law
+requires for a PEA, so it is deliberate. Lot matching remains unbuilt, by decision.
 
 **Severity**: Critical
 **Confidence**: Certain

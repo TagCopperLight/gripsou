@@ -493,15 +493,7 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
             } else {
                 Decimal::from(100)
             };
-            stamp_snapshot(
-                &mut conn,
-                *holding_id,
-                d,
-                qty,
-                Decimal::from(1500),
-                Decimal::from(1000),
-            )
-            .await?;
+            stamp_snapshot(&mut conn, *holding_id, d, qty, Decimal::from(1500)).await?;
             d += ChronoDuration::days(30);
         }
         let final_qty = if is_sold {
@@ -515,7 +507,6 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
             today,
             final_qty,
             Decimal::from(1500),
-            Decimal::from(1000),
         )
         .await?;
     }

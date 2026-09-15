@@ -27,7 +27,6 @@ async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
         day,
         Decimal::new(100, 0),
         Decimal::new(100, 0),
-        Decimal::new(100, 0),
     )
     .await?;
     // Same day, new values -> overwrite, not a second row.
@@ -35,7 +34,6 @@ async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
         &mut conn,
         holding_id,
         day,
-        Decimal::new(150, 0),
         Decimal::new(150, 0),
         Decimal::new(150, 0),
     )
@@ -89,8 +87,8 @@ async fn stamping_a_snapshot_removes_the_backfill_row_for_that_day(
 
     let day = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
     sqlx::query(
-        "insert into holding_backfill (holding_id, as_of, quantity, value, cost_basis) \
-         values ($1, $2, 1, 1, 1)",
+        "insert into holding_backfill (holding_id, as_of, quantity, value) \
+         values ($1, $2, 1, 1)",
     )
     .bind(holding_id)
     .bind(day)
@@ -101,7 +99,6 @@ async fn stamping_a_snapshot_removes_the_backfill_row_for_that_day(
         &mut conn,
         holding_id,
         day,
-        Decimal::new(20000, 2),
         Decimal::new(20000, 2),
         Decimal::new(20000, 2),
     )

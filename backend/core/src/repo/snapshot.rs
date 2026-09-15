@@ -16,23 +16,20 @@ pub async fn stamp_snapshot(
     as_of: NaiveDate,
     quantity: Decimal,
     value: Decimal,
-    cost_basis: Decimal,
 ) -> Result<(), CoreError> {
     sqlx::query!(
         r#"
-        insert into holding_snapshot (holding_id, as_of, quantity, value, cost_basis)
-        values ($1, $2, $3, $4, $5)
+        insert into holding_snapshot (holding_id, as_of, quantity, value)
+        values ($1, $2, $3, $4)
         on conflict (holding_id, as_of)
         do update set
             quantity = excluded.quantity,
-            value = excluded.value,
-            cost_basis = excluded.cost_basis
+            value = excluded.value
         "#,
         holding_id,
         as_of,
         quantity,
         value,
-        cost_basis,
     )
     .execute(&mut *conn)
     .await?;

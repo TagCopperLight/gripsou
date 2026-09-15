@@ -141,17 +141,81 @@ pub async fn holding_prices(
     ))
 }
 
-pub async fn holding_transactions(
-    State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Vec<dto::Purchase>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::query::holding_transactions(&pool, user_id, id)
-        .await
-        .map_err(internal)?;
-    Ok(Json(
-        rows.into_iter().map(dto::Purchase::from_row).collect(),
-    ))
+/// Validate a batch of lot adds shared by `save_lots` and `preview_lots` —
+/// the buy/sell check, the decimal parses, the positivity checks, and the
+/// `MAX_SCALE` / `10^12` magnitude bounds all live here exactly once, so the
+/// number shown while editing and the number accepted on save reject the same
+/// inputs.
+fn parse_lot_adds(
+    adds: &[dto::LotEntry],
+) -> Result<Vec<gripsou_core::repo::lot::PreviewLot>, (StatusCode, String)> {
+    let bad = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
+
+    let mut parsed = Vec::with_capacity(adds.len());
+    for a in adds {
+        let side = match a.kind.as_str() {
+            "buy" => "buy",
+            "sell" => "sell",
+            _ => return Err(bad("type must be buy or sell")),
+        };
+        let quantity: Decimal = a
+            .quantity
+            .parse()
+            .map_err(|_| bad("quantity is not a decimal"))?;
+        let unit_price: Decimal = a
+            .unit_price
+            .parse()
+            .map_err(|_| bad("unitPrice is not a decimal"))?;
+        let fee: Decimal = match &a.fee {
+            Some(f) => f.parse().map_err(|_| bad("fee is not a decimal"))?,
+            None => Decimal::ZERO,
+        };
+        if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
+            return Err(bad(
+                "quantity must be positive and unitPrice must not be negative",
+            ));
+        }
+        if fee < Decimal::ZERO {
+            return Err(bad("fee must not be negative"));
+        }
+        // `Decimal` decodes at most ~29 significant digits (96-bit mantissa) and
+        // a scale of at most 28. `lot.quantity/unit_price` are unconstrained
+        // `numeric`, so nothing stops a value that writes fine but can never be
+        // read back as a `Decimal` — every later read of this holding's lots
+        // would 500 forever. Bounds below are generous for any real
+        // security/crypto lot (8 decimal places covers satoshi-level precision;
+        // 10^12 units or currency-per-unit is far beyond any real holding)
+        // while still being tight enough, combined, that the multiplied gross
+        // value cannot approach the ~29-digit ceiling.
+        const MAX_SCALE: u32 = 8;
+        let max_magnitude = Decimal::from(1_000_000_000_000i64); // 10^12
+        if quantity.scale() > MAX_SCALE || unit_price.scale() > MAX_SCALE || fee.scale() > MAX_SCALE
+        {
+            return Err(bad(
+                "quantity, unitPrice and fee support at most 8 decimal places",
+            ));
+        }
+        if quantity.abs() >= max_magnitude
+            || unit_price.abs() >= max_magnitude
+            || fee.abs() >= max_magnitude
+        {
+            return Err(bad("quantity, unitPrice and fee must be below 10^12"));
+        }
+        let gross = quantity
+            .checked_mul(unit_price)
+            .ok_or_else(|| bad("quantity * unitPrice does not fit in a decimal"))?;
+        if gross.scale() > 28 {
+            return Err(bad("quantity * unitPrice does not fit in a decimal"));
+        }
+        parsed.push(gripsou_core::repo::lot::PreviewLot {
+            side: side.to_string(),
+            acquired_on: a.date,
+            quantity,
+            unit_price,
+            fee,
+        });
+    }
+    Ok(parsed)
 }
 
 /// Apply a batch of manual lot adds and deletes atomically.
@@ -166,78 +230,10 @@ pub async fn save_lots(
     Path(holding_id): Path<Uuid>,
     Json(req): Json<dto::SaveLotsReq>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let bad = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
-
     // Validate EVERY add before writing anything, so a rejected batch leaves no
     // trace — the transaction would roll back anyway, but failing early keeps
     // the error attributable to a row rather than to the batch.
-    struct Parsed {
-        kind: &'static str,
-        ts: chrono::DateTime<chrono::Utc>,
-        quantity: Decimal,
-        unit_price: Decimal,
-        amount: Decimal,
-    }
-    let mut parsed = Vec::with_capacity(req.adds.len());
-    for a in &req.adds {
-        let kind = match a.kind.as_str() {
-            "buy" => "buy",
-            "sell" => "sell",
-            _ => return Err(bad("type must be buy or sell")),
-        };
-        let quantity: Decimal = a
-            .quantity
-            .parse()
-            .map_err(|_| bad("quantity is not a decimal"))?;
-        let unit_price: Decimal = a
-            .unit_price
-            .parse()
-            .map_err(|_| bad("unitPrice is not a decimal"))?;
-        if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
-            return Err(bad(
-                "quantity must be positive and unitPrice must not be negative",
-            ));
-        }
-        // `Decimal` decodes at most ~29 significant digits (96-bit mantissa) and
-        // a scale of at most 28. `transaction.quantity/unit_price/amount` are
-        // unconstrained `numeric`, so nothing stops a value that writes fine but
-        // can never be read back as a `Decimal` — every later read of this
-        // user's transactions would 500 forever. Bounds below are generous for
-        // any real security/crypto lot (8 decimal places covers satoshi-level
-        // precision; 10^12 units or currency-per-unit is far beyond any real
-        // holding) while still being tight enough, combined, that the multiplied
-        // `amount` cannot approach the ~29-digit ceiling.
-        const MAX_SCALE: u32 = 8;
-        let max_magnitude = Decimal::from(1_000_000_000_000i64); // 10^12
-        if quantity.scale() > MAX_SCALE || unit_price.scale() > MAX_SCALE {
-            return Err(bad(
-                "quantity and unitPrice support at most 8 decimal places",
-            ));
-        }
-        if quantity.abs() >= max_magnitude || unit_price.abs() >= max_magnitude {
-            return Err(bad("quantity and unitPrice must be below 10^12"));
-        }
-        let gross = quantity
-            .checked_mul(unit_price)
-            .ok_or_else(|| bad("quantity * unitPrice does not fit in a decimal"))?;
-        if gross.scale() > 28 {
-            return Err(bad("quantity * unitPrice does not fit in a decimal"));
-        }
-        // §9.2: `amount` is the REAL cash impact — out for a buy, in for a sale.
-        let amount = if kind == "buy" { -gross } else { gross };
-        let ts = a
-            .date
-            .and_hms_opt(0, 0, 0)
-            .ok_or_else(|| bad("invalid date"))?
-            .and_utc();
-        parsed.push(Parsed {
-            kind,
-            ts,
-            quantity,
-            unit_price,
-            amount,
-        });
-    }
+    let parsed = parse_lot_adds(&req.adds)?;
 
     // A repeated id would make the delete count fall short of the requested
     // count and reject a request that is merely redundant.
@@ -271,11 +267,9 @@ pub async fn save_lots(
     };
 
     if !deletes.is_empty() {
-        let deleted = gripsou_core::repo::transaction::delete_manual_lots(
-            &mut tx, holding_id, user_id, &deletes,
-        )
-        .await
-        .map_err(internal)?;
+        let deleted = gripsou_core::repo::lot::delete_lots(&mut tx, holding_id, user_id, &deletes)
+            .await
+            .map_err(internal)?;
         // Anything the predicate refused — another user's row, a provider row,
         // another holding's row, an id that never existed — lands here as the
         // same 404, and takes the adds down with it.
@@ -285,15 +279,15 @@ pub async fn save_lots(
     }
 
     for p in &parsed {
-        let inserted = gripsou_core::repo::transaction::insert_manual_lot(
+        let inserted = gripsou_core::repo::lot::insert_lot(
             &mut tx,
             holding_id,
             user_id,
-            p.ts,
-            p.kind,
+            &p.side,
+            p.acquired_on,
             p.quantity,
             p.unit_price,
-            p.amount,
+            p.fee,
         )
         .await
         .map_err(internal)?;
@@ -315,6 +309,80 @@ pub async fn save_lots(
 
     tx.commit().await.map_err(internal)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn holding_lots(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(holding_id): Path<Uuid>,
+) -> Result<Json<Vec<dto::Lot>>, (StatusCode, String)> {
+    let rows = gripsou_core::repo::lot::list_lots(&pool, user_id, holding_id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(rows.into_iter().map(dto::Lot::from_row).collect()))
+}
+
+/// Latest known unit price for a holding's instrument, in whatever currency
+/// that price row carries. No helper for this already existed outside the
+/// full `holdings()` listing query, so this is a new, narrow lookup rather
+/// than a reuse. Zero when no price row exists yet, mirroring `Holding`'s own
+/// fallback for the same case.
+async fn current_price(
+    pool: &PgPool,
+    holding_id: Uuid,
+) -> Result<Decimal, gripsou_core::error::CoreError> {
+    let price = sqlx::query_scalar!(
+        r#"
+        select p.unit_price as "unit_price!"
+        from price p
+        join holding h on h.instrument_id = p.instrument_id
+        where h.id = $1
+        order by p.ts desc
+        limit 1
+        "#,
+        holding_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(price.unwrap_or(Decimal::ZERO))
+}
+
+/// What the figures would be for a set of unsaved rows.
+///
+/// The math is not duplicated here: `basis_preview` writes the rows, calls
+/// `lot_basis`, and rolls back. That is what guarantees the number shown while
+/// editing is the number obtained after saving (AUDIT.md Z-1).
+pub async fn preview_lots(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(holding_id): Path<Uuid>,
+    Json(req): Json<dto::PreviewLotsReq>,
+) -> Result<Json<dto::BasisPreview>, (StatusCode, String)> {
+    let rows = parse_lot_adds(&req.rows)?;
+    // `None` is an unowned or unknown holding. It must read as 404, exactly as
+    // `save_lots` does — that handler's comment states the reason: the endpoint
+    // must not confirm the existence of ids the caller cannot see. Letting this
+    // fall through as a 500 would diverge from the sibling endpoint on the same
+    // resource.
+    let f = gripsou_core::repo::lot::basis_preview(&pool, user_id, holding_id, &rows)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "unknown holding".to_string()))?;
+    let price = current_price(&pool, holding_id).await.map_err(internal)?;
+    // `price` comes straight from the `price` row and is in the PRICE domain (a
+    // London listing can be GBP while the account is EUR); `f.basis` is in the
+    // ACCOUNT-CURRENCY / amount domain. Mixing them here is a pre-existing,
+    // accepted approximation, not a fix target: the two coincide whenever the
+    // account and the listing share a currency, which is the common case, and
+    // diverge only for cross-currency holdings, where this preview is already
+    // approximate.
+    let unrealised = f.explained_qty * price - f.basis;
+    Ok(Json(dto::BasisPreview {
+        mean_price: f.mean_price.to_string(),
+        invested: f.basis.to_string(),
+        realised: f.realised.to_string(),
+        unrealised: unrealised.to_string(),
+    }))
 }
 
 pub async fn accounts(
@@ -2400,6 +2468,7 @@ mod auth_tests {
             date: NaiveDate::from_ymd_opt(day.0, day.1, day.2).unwrap(),
             quantity: quantity.into(),
             unit_price: unit_price.into(),
+            fee: None,
         }
     }
 
@@ -2423,22 +2492,23 @@ mod auth_tests {
         .expect("save_lots ok");
         assert_eq!(status, StatusCode::NO_CONTENT);
 
-        let rows: Vec<(String, Decimal, Option<String>)> = sqlx::query_as(
-            "select type, amount, external_id from transaction \
-             where account_id = (select account_id from holding where id = $1) order by ts",
+        let rows: Vec<(String, Decimal, Decimal, Option<String>)> = sqlx::query_as(
+            "select side, quantity, unit_price, external_id from lot \
+             where holding_id = $1 order by acquired_on",
         )
         .bind(holding_id)
         .fetch_all(&pool)
         .await
         .unwrap();
         assert_eq!(rows.len(), 2);
-        // A buy is cash OUT, a sale is cash IN — §9.2's "amount is honest".
         assert_eq!(rows[0].0, "buy");
-        assert_eq!(rows[0].1, Decimal::new(-32058, 2));
-        assert_eq!(rows[0].2, None, "a manual lot carries no external_id");
+        assert_eq!(rows[0].1, Decimal::new(20, 0));
+        assert_eq!(rows[0].2, Decimal::new(16029, 3));
+        assert_eq!(rows[0].3, None, "a manual lot carries no external_id");
         assert_eq!(rows[1].0, "sell");
-        assert_eq!(rows[1].1, Decimal::new(9000, 2));
-        assert_eq!(rows[1].2, None);
+        assert_eq!(rows[1].1, Decimal::new(5, 0));
+        assert_eq!(rows[1].2, Decimal::new(18, 0));
+        assert_eq!(rows[1].3, None);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2455,13 +2525,11 @@ mod auth_tests {
         )
         .await
         .unwrap();
-        let id: Uuid = sqlx::query_scalar(
-            "select id from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let id: Uuid = sqlx::query_scalar("select id from lot where holding_id = $1")
+            .bind(holding_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         let status = save_lots(
             State(pool.clone()),
@@ -2476,13 +2544,11 @@ mod auth_tests {
         .expect("delete ok");
         assert_eq!(status, StatusCode::NO_CONTENT);
 
-        let left: i64 = sqlx::query_scalar(
-            "select count(*) from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let left: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+            .bind(holding_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(left, 0);
     }
 
@@ -2505,13 +2571,11 @@ mod auth_tests {
         .expect_err("unknown delete id must fail");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
 
-        let written: i64 = sqlx::query_scalar(
-            "select count(*) from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let written: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+            .bind(holding_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(written, 0, "the add must not survive the failed delete");
     }
 
@@ -2521,9 +2585,8 @@ mod auth_tests {
     async fn a_provider_row_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         let id: Uuid = sqlx::query_scalar(
-            "insert into transaction (account_id, instrument_id, ts, type, quantity, unit_price, amount, external_id) \
-             select h.account_id, h.instrument_id, now(), 'buy', 5, 10, -50, 'powens-1' \
-             from holding h where h.id = $1 returning id",
+            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source, external_id) \
+             values ($1, 'buy', current_date, 5, 10, 'provider', 'powens-1') returning id",
         )
         .bind(holding_id)
         .fetch_one(&pool)
@@ -2543,7 +2606,7 @@ mod auth_tests {
         .expect_err("provider row must not delete");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
 
-        let alive: i64 = sqlx::query_scalar("select count(*) from transaction where id = $1")
+        let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(id)
             .fetch_one(&pool)
             .await
@@ -2595,15 +2658,15 @@ mod auth_tests {
             .unwrap()
     }
 
-    /// Pins the `t.account_id = h.account_id and t.instrument_id = h.instrument_id`
-    /// correlation in `delete_manual_lots`. Every other refusal test is settled
-    /// before that predicate ever runs — by the handler's own ownership lookup,
-    /// or by `external_id`/`type` — so none of them exercises those two clauses.
-    /// This is the only test where the caller legitimately owns BOTH holdings:
-    /// the row belongs to holding A, and the delete is aimed at holding B. If
-    /// those clauses were ever dropped, a user could delete their OWN manual lot
-    /// through the WRONG holding's endpoint — silently corrupting that other
-    /// holding's cost basis while the rest of the suite stayed green.
+    /// Pins the `l.holding_id = h.id` correlation in `lot::delete_lots`. Every
+    /// other refusal test is settled before that predicate ever runs — by the
+    /// handler's own ownership lookup, or by `source = 'manual'` — so none of
+    /// them exercises this clause. This is the only test where the caller
+    /// legitimately owns BOTH holdings: the row belongs to holding A, and the
+    /// delete is aimed at holding B. If that clause were ever dropped, a user
+    /// could delete their OWN manual lot through the WRONG holding's endpoint —
+    /// silently corrupting that other holding's cost basis while the rest of
+    /// the suite stayed green.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_row_from_another_holding_of_the_same_user_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_a) = seed_holding(&pool, "owner@t.local").await;
@@ -2620,13 +2683,11 @@ mod auth_tests {
         )
         .await
         .unwrap();
-        let lot_on_a: Uuid = sqlx::query_scalar(
-            "select id from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_a)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let lot_on_a: Uuid = sqlx::query_scalar("select id from lot where holding_id = $1")
+            .bind(holding_a)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         let err = save_lots(
             State(pool.clone()),
@@ -2641,20 +2702,19 @@ mod auth_tests {
         .expect_err("a row from a different holding of the same user must not delete");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
 
-        let alive: i64 = sqlx::query_scalar("select count(*) from transaction where id = $1")
+        let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(lot_on_a)
             .fetch_one(&pool)
             .await
             .unwrap();
         assert_eq!(alive, 1, "holding A's row must survive the refused delete");
 
-        let written_on_b: i64 = sqlx::query_scalar(
-            "select count(*) from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_b)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let written_on_b: i64 =
+            sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+                .bind(holding_b)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(
             written_on_b, 0,
             "the add on B must not survive the failed delete"
@@ -2676,13 +2736,11 @@ mod auth_tests {
         )
         .await
         .unwrap();
-        let victim: Uuid = sqlx::query_scalar(
-            "select id from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(owner_holding)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let victim: Uuid = sqlx::query_scalar("select id from lot where holding_id = $1")
+            .bind(owner_holding)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         let err = save_lots(
             State(pool.clone()),
@@ -2698,7 +2756,7 @@ mod auth_tests {
         // 404, not 403: the endpoint must not confirm that this holding exists.
         assert_eq!(err.0, StatusCode::NOT_FOUND);
 
-        let alive: i64 = sqlx::query_scalar("select count(*) from transaction where id = $1")
+        let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(victim)
             .fetch_one(&pool)
             .await
@@ -2728,13 +2786,11 @@ mod auth_tests {
         .expect_err("zero quantity must fail");
         assert_eq!(err.0, StatusCode::BAD_REQUEST);
 
-        let written: i64 = sqlx::query_scalar(
-            "select count(*) from transaction where account_id = (select account_id from holding where id = $1)",
-        )
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let written: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+            .bind(holding_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(written, 0);
     }
 
@@ -2767,7 +2823,6 @@ mod auth_tests {
             today,
             Decimal::new(100, 0),
             Decimal::new(1200, 0),
-            Decimal::new(1000, 0),
         )
         .await
         .unwrap();

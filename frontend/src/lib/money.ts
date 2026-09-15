@@ -161,3 +161,21 @@ export function formatPercent(
   });
   return `${sign}${body}`;
 }
+
+/** Cash impact of a single lot, matching the backend's convention exactly
+ *  (`query.rs`, transactions view): a buy is `-(qty x price + fee)` — money
+ *  out, fee included; a sale is `+(qty x price - fee)` — money in, net of
+ *  fee. This is plain cash arithmetic, not the cost-basis rule (no averaging
+ *  across rows), so computing it locally is fine — but every screen that
+ *  shows a lot's amount must use this one function, or two screens can show
+ *  two different numbers for the same row. */
+export function lotCashAmount(
+  side: "buy" | "sell",
+  qty: string | number,
+  price: string | number,
+  fee: string | number = 0,
+): number {
+  const gross = Number(qty) * Number(price);
+  const f = Number(fee);
+  return side === "buy" ? -(gross + f) : gross - f;
+}

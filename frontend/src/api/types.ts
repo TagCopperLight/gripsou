@@ -77,20 +77,34 @@ export type Holding = {
   /** Shares no recorded lot explains (§9.1). "0" when the position is fully
    *  accounted for. A non-zero value drives the fill-in badge. */
   unexplainedQty: string;
+  /** Fee-inclusive mean buy price, amount domain. "0" with no recorded buys. */
+  meanPrice: string;
+  /** The part of the basis no lot explains, amount domain. "0" when the lots
+   *  account for the position exactly. */
+  unexplainedCost: string;
 };
 
 export type PricePoint = { t: number; price: string };
-export type Purchase = {
+
+export type Lot = {
   id: string;
+  /** Epoch milliseconds at UTC midnight of the acquisition date. */
   t: number;
-  type: "buy" | "sell";
+  side: "buy" | "sell";
   qty: string;
   price: string;
-  /** Raw `transaction.amount`: NEGATIVE for a buy, positive for a sell. Negate
-   *  once at the point of use — never treat it as an invested figure directly. */
-  invested: string;
+  /** Acquisition fee, amount domain. "0" when not recorded. Part of the cost
+   *  basis: French PRMP includes it, and so does the provider's own figure. */
+  fee: string;
   /** True when the user entered this row; only these may be deleted. */
   manual: boolean;
+};
+
+export type BasisPreview = {
+  meanPrice: string;
+  invested: string;
+  realised: string;
+  unrealised: string;
 };
 
 export type Account = {
@@ -214,6 +228,13 @@ export type Transaction = {
   accountId: string;
   accountName: string;
   accountColor: string | null;
+  /** "cash" for a ledger row, "lot" for a purchase or sale. Lot rows carry the
+   *  four instrument fields below and no description. */
+  source: "cash" | "lot";
+  ticker: string | null;
+  quantity: string | null;
+  unitPrice: string | null;
+  fee: string | null;
 };
 
 export type TransactionQuery = {

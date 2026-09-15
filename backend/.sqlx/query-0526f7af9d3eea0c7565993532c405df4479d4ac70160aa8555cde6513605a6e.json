@@ -1,0 +1,121 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with rows as (\n            select t.id, t.ts, t.type as kind, t.description, t.amount,\n                   'cash'::text as source,\n                   null::text as ticker, null::numeric as quantity,\n                   null::numeric as unit_price, null::numeric as fee,\n                   a.id as account_id, a.name as account_name,\n                   a.color as account_color, a.currency as account_currency\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection c on c.id = a.connection_id\n            where c.user_id = $1\n              -- Mirrors §8.1's cash-walk exclusion, for the same reason: a\n              -- transfer into the PEA is the other half of an outflow already\n              -- listed on the checking account, and a provider buy is the\n              -- cash leg of a purchase the lot branch below already lists.\n              -- Unconditional — these rows are not filterable, they are\n              -- unreachable through this endpoint.\n              --\n              -- Scoped to provider rows via `external_id is not null`: there\n              -- are no manual buy/sell rows in `transaction` any more (they\n              -- moved to `lot`), so the user's own purchases now arrive\n              -- through the lot branch of the union instead.\n              and not (a.type_key = 'pea'\n                       and t.external_id is not null\n                       and t.type in ('transfer', 'buy', 'sell'))\n\n            union all\n\n            -- Lots reach the list as structured rows, not pre-built sentences,\n            -- so the frontend's i18n and per-user number formatting render them.\n            -- A buy's amount is -(qty x price + fee); a sale's is\n            -- +(qty x price - fee). That is the real cash impact either way.\n            select l.id,\n                   (l.acquired_on::timestamp at time zone 'UTC') as ts,\n                   l.side as kind,\n                   null::text as description,\n                   case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)\n                        else l.quantity * l.unit_price - l.fee end as amount,\n                   'lot'::text as source,\n                   -- `resolve_instrument` stores `symbol` as null whenever an\n                   -- ISIN identifies the row (ISINs are the identity there;\n                   -- ticker symbols collide across exchanges), which is the\n                   -- common case for PEA holdings. Fall back through isin\n                   -- before the instrument name so the list still shows a\n                   -- short, identifying label rather than \"Apple Inc.\".\n                   coalesce(i.symbol, i.isin, i.name) as ticker,\n                   l.quantity, l.unit_price, l.fee,\n                   a.id, a.name, a.color, a.currency\n            from lot l\n            join holding h    on h.id = l.holding_id\n            join instrument i on i.id = h.instrument_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            where c.user_id = $1\n        )\n        select id as \"id!\", ts as \"ts!\", kind as \"kind!\", description, amount as \"amount!\",\n               source as \"source!\", ticker, quantity, unit_price, fee,\n               account_id as \"account_id!\", account_name as \"account_name!\",\n               account_color, account_currency as \"account_currency!\"\n        from rows\n        where ($2::text is null\n               or description ilike '%' || $2 || '%'\n               -- Lot rows carry no `description` (it's null, see the union\n               -- above) but the list shows their `ticker`, and that's what a\n               -- user searching for a purchase naturally types. Both sides\n               -- stay nullable-safe: `ilike` against a null column is null,\n               -- which the `or` just drops.\n               or ticker ilike '%' || $2 || '%')\n          and ($3::uuid is null or account_id = $3)\n          and ($4::text is null or kind = $4)\n          and ($5::date is null or (ts at time zone 'utc')::date >= $5)\n          and ($6::date is null or (ts at time zone 'utc')::date <= $6)\n        order by ts desc, id\n        limit $7 offset $8\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "ticker",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "quantity",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "unit_price",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "fee",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "account_name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "account_color",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "account_currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Date",
+        "Date",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0526f7af9d3eea0c7565993532c405df4479d4ac70160aa8555cde6513605a6e"
+}

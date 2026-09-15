@@ -211,17 +211,25 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
 
         sqlx::query(
             "insert into transaction \
-             (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount, external_id) \
-             values ($1, $2, $3, $4, 'buy', $5, $6, $7, $8)",
+             (account_id, ts, booked_on, type, amount, external_id) \
+             values ($1, $2, $3, 'buy', $4, $5)",
         )
         .bind(account_id)
-        .bind(instrument_id)
         .bind(day(100).and_hms_opt(12, 0, 0).unwrap().and_utc())
         .bind(day(100))
-        .bind(dec("40"))
-        .bind(dec("10"))
         .bind(dec("-400"))
         .bind(format!("g-buy-{n}"))
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        // Securities move by `lot`, not by `transaction`, so the backfill's
+        // quantity walk needs its own record of this buy.
+        sqlx::query(
+            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
+             values ($1, 'buy', $2, 40, 10, 'manual')",
+        )
+        .bind(holding_id)
+        .bind(day(100))
         .execute(&mut *conn)
         .await
         .unwrap();
@@ -229,19 +237,27 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
 
     // Sell the second security to zero, so the nearest-non-zero snapshot search
     // has to reach backwards past the sale.
-    let (sold_holding, sold_instrument, sold_account) = security_holdings[1];
+    let (sold_holding, _sold_instrument, sold_account) = security_holdings[1];
     sqlx::query(
         "insert into transaction \
-         (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount, external_id) \
-         values ($1, $2, $3, $4, 'sell', $5, $6, $7, 'g-sell')",
+         (account_id, ts, booked_on, type, amount, external_id) \
+         values ($1, $2, $3, 'sell', $4, 'g-sell')",
     )
     .bind(sold_account)
-    .bind(sold_instrument)
     .bind(day(20).and_hms_opt(12, 0, 0).unwrap().and_utc())
     .bind(day(20))
-    .bind(dec("40"))
-    .bind(dec("15"))
     .bind(dec("600"))
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    // Same reason as the buy above: the sale must exist as a `lot` for the
+    // quantity walk to see it.
+    sqlx::query(
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
+         values ($1, 'sell', $2, 40, 15, 'manual')",
+    )
+    .bind(sold_holding)
+    .bind(day(20))
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -285,16 +301,9 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
             } else {
                 dec("40")
             };
-            stamp_snapshot(
-                &mut conn,
-                holding_id,
-                day(back),
-                qty,
-                qty * dec("15"),
-                dec("400"),
-            )
-            .await
-            .unwrap();
+            stamp_snapshot(&mut conn, holding_id, day(back), qty, qty * dec("15"))
+                .await
+                .unwrap();
         }
     }
 
@@ -305,8 +314,8 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
 /// Holdings are numbered by a stable ordering, never by uuid, which changes
 /// every run.
 async fn backfill_digest(pool: &PgPool) -> String {
-    let rows: Vec<(NaiveDate, String, Decimal, Decimal, Decimal)> = sqlx::query_as(
-        "select hb.as_of, i.name || '/' || a.external_id, hb.quantity, hb.value, hb.cost_basis \
+    let rows: Vec<(NaiveDate, String, Decimal, Decimal)> = sqlx::query_as(
+        "select hb.as_of, i.name || '/' || a.external_id, hb.quantity, hb.value \
          from holding_backfill hb \
          join holding h    on h.id = hb.holding_id \
          join account a    on a.id = h.account_id \
@@ -319,9 +328,9 @@ async fn backfill_digest(pool: &PgPool) -> String {
 
     let today = Utc::now().date_naive();
     let mut out = String::new();
-    for (as_of, label, qty, value, cost) in rows {
+    for (as_of, label, qty, value) in rows {
         out.push_str(&format!(
-            "{:>5} {label} {qty} {value} {cost}\n",
+            "{:>5} {label} {qty} {value}\n",
             (today - as_of).num_days()
         ));
     }

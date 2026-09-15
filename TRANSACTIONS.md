@@ -13,6 +13,13 @@
 > Written against **real production data** (see §2). Supersedes the earlier
 > backend-ingestion-only draft, whose central caveat — that this was a Powens
 > *sandbox* connector serving demo data — was wrong. The connection is real.
+>
+> **Updated 2026-09-15** for the lot-table refactor (migrations 0021-0024):
+> purchases and sales moved out of `transaction` into a new `lot` table, cost
+> basis is now derived at read time by the single `lot_basis` SQL function, and
+> `transaction` became a pure cash ledger. The passages this touches are
+> corrected in place; section numbers are unchanged so existing citations by
+> section still land on the right place.
 
 ---
 
@@ -135,6 +142,12 @@ create table holding_backfill (
 );
 ```
 
+> **`cost_basis` here was dropped by migration 0023.** Storing a basis per day
+> alongside `lot`, the source of truth `lot_basis` derives from, was the same
+> "known to be wrong, routed around at read time" problem the lot table was
+> built to end. `holding_backfill` now carries only `quantity` and `value`;
+> basis for a backfilled day comes from `lot_basis` like any other day.
+
 - `description` is a **column, not JSONB** — the list renders it and search matches
   it. `provider_meta` keeps the raw payload for forensics only; nothing the app
   reads lives there.
@@ -143,9 +156,14 @@ create table holding_backfill (
 - **Invariant: no backfill row may exist for a day that has a snapshot.** The
   snapshot upsert deletes the matching backfill row. One line, and the union stays
   unambiguous forever.
-- **No table for manual lots.** A manual lot *is* a `transaction` row — exactly what
-  `ARCHITECTURE.md` §3.3 already says buys are. The existing partial unique index
-  (`where external_id is not null`) already permits them.
+- ~~**No table for manual lots.** A manual lot *is* a `transaction` row~~ — this
+  was reversed by migration 0021. A `transaction` row doing double duty as both
+  the cash movement and the investment record could not carry a fee, and the
+  cost-basis rule ended up reimplemented four times over three languages with
+  two copies disagreeing on screen (AUDIT.md D-1, Z-1, C-7). Purchases and sales
+  now live in their own `lot` table, keyed on `holding_id`, with a `fee` column
+  and a `source` (`manual` / `provider`) that is the delete path's whole
+  security model. `transaction` is a pure cash ledger (0024).
 
 ---
 
@@ -226,31 +244,26 @@ so provider corrections propagate.
 
 ```sql
 insert into transaction
-    (account_id, instrument_id, ts, type, quantity, unit_price, amount, fee,
-     description, external_id, provider_meta)
+    (account_id, ts, type, amount, fee, description, external_id, provider_meta)
 values (...)
 on conflict (account_id, external_id) where external_id is not null
 do update set
-    -- provider wins on what the provider knows
+    -- provider wins on what the provider knows; there is nothing else here to
+    -- protect any more
     ts            = excluded.ts,
     type          = excluded.type,
     amount        = excluded.amount,
     fee           = excluded.fee,
     description   = excluded.description,
-    provider_meta = excluded.provider_meta,
-    -- user enrichment survives: Powens always sends null here
-    instrument_id = coalesce(excluded.instrument_id, transaction.instrument_id),
-    quantity      = coalesce(excluded.quantity,      transaction.quantity),
-    unit_price    = coalesce(excluded.unit_price,    transaction.unit_price)
+    provider_meta = excluded.provider_meta
 returning (xmax = 0) as inserted;
 ```
 
-**The `coalesce` is defensive, and kept deliberately.** Manual lots carry
-`external_id = null`, so the conflict target never matches them and this upsert can
-never touch one — the protection is not load-bearing today. It stays because a plain
-`= excluded.instrument_id` silently erases a non-null value whenever the provider
-sends null, which is the exact footgun anything that ever writes to those columns
-would hit. One word per column, pinned by a test (§11).
+**The `instrument_id`/`quantity`/`unit_price` coalesce described here in earlier
+revisions of this document is gone.** Migration 0024 dropped those three columns
+from `transaction` entirely — a purchase or sale is a `lot` row now, and
+`transaction` is a pure cash ledger, so there is nothing left on this row for a
+provider update to coalesce against.
 
 `IngestSummary` gains `transactions_inserted` / `transactions_updated`.
 
@@ -316,11 +329,25 @@ exact after 2026-01-14 and approximate before it for no visible reason.
 ```
 quantity(d)   = quantity(d+1) − Σ buy qty(d+1) + Σ sell qty(d+1)
 value(d)      = quantity(d) × price(d)          -- from `price`, deep history exists
-cost_basis(d) = Σ over lots up to d of (qty × unit_price)  +  unexplained_cost
 ```
 
-where `unexplained_cost = holding.cost_basis − Σ known lots` is carried flat
-backward alongside the unexplained quantity, until the user fills the gap (§9).
+Cost basis is no longer stored per backfill day — it is derived at read time by
+the single `lot_basis` SQL function (migration 0022), the same one every other
+consumer calls. The rule is PRMP, fee-inclusive weighted average over the `lot`
+table:
+
+```
+μ           = Σ(qty × unit_price + fee) / Σ qty        -- over all buy lots, any date
+explained(d) = Σ buy qty − Σ sell qty, over lots up to d
+basis(d)     = μ × explained(d) + unexplained_cost(d)
+```
+
+where `unexplained_cost` is **0** when the lots explain the position exactly
+(`Σ lot quantity = holding.quantity`), and otherwise
+`holding.cost_basis − μ × explained(today)`, carried flat backward alongside the
+unexplained quantity until the user fills the gap (§9). This replaces the
+earlier, fee-exclusive formula published in prior revisions of this document —
+that version undercounted every purchase that carried a fee.
 
 ### 8.3 When it runs, and when it re-runs
 
@@ -357,18 +384,20 @@ notification centre — the badge is where the user already looks, and it never 
 
 ### 9.2 One flow, and why it needs no special casing
 
-The user records a purchase as an ordinary `transaction` row:
+The user records a purchase as a `lot` row (migration 0021), not a `transaction`
+row:
 
-- `external_id = null` — marks it user-entered and keeps it outside the provider
-  dedup index,
-- `instrument_id`, `quantity`, `unit_price` — what was bought,
-- `type = 'buy'`, `amount = −(quantity × unit_price)` — the **real** cash impact.
+- `source = 'manual'`, `external_id = null` — marks it user-entered; `source`
+  is what the delete path checks before letting the user remove it,
+- `holding_id`, `side = 'buy'`, `quantity`, `unit_price`, `fee` — what was
+  bought, including the fee a `transaction` row could never carry,
+- no `amount` to compute — a `lot` row is not a cash movement at all.
 
-`amount` is honest, so the Transactions page and Phase 2 budgeting both see the
-true figure. And it needs no flag to stay out of the cash walk, because a manual
-lot is a `buy` on the PEA and §8.1 already excludes those. The exclusion
-rule earns its keep twice: once for the provider's `ACHAT COMPTANT` rows, once for
-the user's lots, with no rule that mentions "manual" at all.
+Because the lot lives outside `transaction` entirely, it needs no exclusion
+rule to stay out of the cash walk — there is no cash-ledger row for it to
+exclude. (Historically, before 0021, a manual purchase *was* a `transaction`
+row, and the cash-walk exclusion in §8.1 covering `ACHAT COMPTANT` also had to
+cover it. That special case is gone along with the row it protected against.)
 
 **Not built, deliberately:** filling the instrument onto an existing `ACHAT
 COMPTANT` row instead of creating a lot. It needs a second write path, a second

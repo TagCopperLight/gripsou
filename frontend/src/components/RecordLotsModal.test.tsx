@@ -1,18 +1,77 @@
+import { act, useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import { RecordLotsModal } from "./RecordLotsModal";
-import type { Holding, Purchase } from "../api/types";
+import type { BasisPreview, Holding, Lot } from "../api/types";
+import type { SaveLotAdd } from "../api/hooks";
 
 const mutateAsync = vi.fn();
-let txns: Purchase[] = [];
+let txns: Lot[] = [];
+
+// Fixed sentinel responses for the mocked preview endpoint. Deliberately NOT a
+// reimplementation of the basis formula (that was the bug in fix round 1:
+// wrong, fee-blind, and it let a test assert only that the UI echoes what the
+// test itself computed). These prove the plumbing — the row set reaching the
+// server and the figures the server sends back reaching the screen — and
+// nothing about the formula, which only the backend may compute.
+const PREVIEW_RESULTS: BasisPreview[] = [
+  { meanPrice: "25", invested: "375", realised: "0", unrealised: "12" },
+  { meanPrice: "30", invested: "400", realised: "5", unrealised: "20" },
+];
+
+let previewMutate: ReturnType<typeof vi.fn<(rows: SaveLotAdd[]) => void>>;
+let previewCallCount: number;
+// When true, a preview resolution is queued instead of applied immediately —
+// lets a test inspect state while a request is deliberately left "in flight".
+let holdPreviewResolution: boolean;
+let heldResolvers: Array<() => void>;
+
+function releaseHeldPreview() {
+  const resolve = heldResolvers.shift();
+  if (resolve) act(resolve);
+}
+
 vi.mock("../api/hooks", async () => {
   const actual = await vi.importActual<typeof import("../api/hooks")>("../api/hooks");
   return {
     ...actual,
     useSaveLots: () => ({ mutateAsync, isPending: false }),
-    useHoldingTransactions: () => ({ data: txns, isError: false, refetch: vi.fn() }),
+    useHoldingLots: () => ({ data: txns, isError: false, refetch: vi.fn() }),
+    // Mirrors the one behaviour that mattered for fix round 1's flicker bug:
+    // TanStack Query's real `useMutation` resets `data` to `undefined` the
+    // instant a mutation goes pending, and only `onSuccess` carries the next
+    // value. A mock that kept the previous `data` around (as fix round 1's
+    // did) could not have caught the regression.
+    useLotsPreview: () => {
+      const [data, setData] = useState<BasisPreview | undefined>(undefined);
+      return {
+        mutate: (rows: SaveLotAdd[], options?: { onSuccess?: (d: BasisPreview) => void }) => {
+          previewMutate(rows);
+          setData(undefined);
+          // An incidental extra call with no rows can land before the seeded
+          // rows' debounced call does (mount timing) — it must not consume a
+          // sentinel slot the assertions below are counting on.
+          const result =
+            rows.length === 0
+              ? { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" }
+              : PREVIEW_RESULTS[Math.min(previewCallCount, PREVIEW_RESULTS.length - 1)];
+          if (rows.length > 0) previewCallCount += 1;
+          const resolve = () => {
+            setData(result);
+            options?.onSuccess?.(result);
+          };
+          if (holdPreviewResolution) {
+            heldResolvers.push(resolve);
+          } else {
+            resolve();
+          }
+        },
+        data,
+        isPending: false,
+      };
+    },
   };
 });
 
@@ -31,13 +90,13 @@ const holding = {
   unexplainedQty: "20",
 } as Holding;
 
-const lot = (id: string, type: "buy" | "sell", qty: string, price: string): Purchase => ({
+const lot = (id: string, side: "buy" | "sell", qty: string, price: string, fee = "0"): Lot => ({
   id,
   t: Date.parse("2024-05-02T00:00:00Z"),
-  type,
+  side,
   qty,
   price,
-  invested: type === "buy" ? `-${Number(qty) * Number(price)}` : `${Number(qty) * Number(price)}`,
+  fee,
   manual: true,
 });
 
@@ -46,6 +105,10 @@ describe("RecordLotsModal", () => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue(undefined);
     txns = [];
+    previewMutate = vi.fn<(rows: SaveLotAdd[]) => void>();
+    previewCallCount = 0;
+    holdPreviewResolution = false;
+    heldResolvers = [];
   });
   afterEach(async () => {
     await i18n.changeLanguage("en");
@@ -71,14 +134,55 @@ describe("RecordLotsModal", () => {
     expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-red");
   });
 
-  it("shows the resulting figures for the recorded rows", () => {
+  // The figures are the server's, verbatim — this proves the plumbing (the
+  // right rows reach `mutate`, and whatever it resolves with reaches the
+  // screen), not the formula. The formula itself is the backend's alone.
+  it("shows the resulting figures the preview endpoint returns", async () => {
     txns = [lot("a", "buy", "10", "20"), lot("b", "buy", "10", "30"), lot("c", "sell", "5", "35")];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    // μ = 25 → invested 375, realised +50, unrealised 15×40 − 375 = 225.
+    // The mount fires an initial (empty-rows) preview before the seeded rows'
+    // debounced call lands, so wait for the CALL with the real rows first —
+    // the sentinel is the same regardless of rows, so asserting on the figure
+    // text alone would pass too early.
+    await waitFor(() =>
+      expect(previewMutate).toHaveBeenCalledWith([
+        { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },
+        { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "30", fee: "0" },
+        { type: "sell", date: "2024-05-02", quantity: "5", unitPrice: "35", fee: "0" },
+      ]),
+    );
     expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("25");
     expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
-    expect(screen.getByTestId("figure-realised")).toHaveTextContent("50");
-    expect(screen.getByTestId("figure-unrealised")).toHaveTextContent("225");
+    expect(screen.getByTestId("figure-realised")).toHaveTextContent("0");
+    expect(screen.getByTestId("figure-unrealised")).toHaveTextContent("12");
+  });
+
+  // Fix round 1: `preview.data ?? ZERO` blanked every figure to 0,00 € on
+  // every edit after the first, because TanStack Query resets a mutation's
+  // `data` to `undefined` the moment it goes pending again. The modal must
+  // hold the last successful figures itself and keep showing them until a
+  // new result actually lands.
+  it("keeps the previous figures on screen while a new preview is in flight", async () => {
+    txns = [lot("a", "buy", "10", "20")];
+    const user = userEvent.setup();
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("25"));
+
+    holdPreviewResolution = true;
+    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.type(screen.getAllByTestId("lot-quantity")[1], "1");
+    await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
+
+    // The edit's debounced preview call has fired and is being held pending —
+    // the panel must still show the FIRST result, not zero.
+    await waitFor(() => expect(previewCallCount).toBe(2));
+    expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("25");
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
+
+    holdPreviewResolution = false;
+    releaseHeldPreview();
+    await waitFor(() => expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("30"));
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("400");
   });
 
   it("disables Save when there is nothing to save", () => {
@@ -97,9 +201,13 @@ describe("RecordLotsModal", () => {
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
     // 10 of 20 — the invalid row contributed nothing, so the bar has not moved.
     expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-amber");
-    // Nor the figures: a lone valid buy of 10@20 has invested 200, mean price 20.
-    expect(screen.getByTestId("figure-invested")).toHaveTextContent("200");
-    expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("20");
+    // Nor the preview request: the invalid row must never reach `mutate`, only
+    // the one valid buy of 10@20.
+    await waitFor(() =>
+      expect(previewMutate).toHaveBeenCalledWith([
+        { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },
+      ]),
+    );
   });
 
   // The server rejects an empty date at deserialization (400, nothing saved),
@@ -155,6 +263,24 @@ describe("RecordLotsModal", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  it("sends the fee with a saved lot", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    txns = [];
+    render(<RecordLotsModal holding={holding} onClose={onClose} />);
+
+    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.type(screen.getAllByTestId("lot-quantity")[0], "2");
+    await user.type(screen.getAllByTestId("lot-unitPrice")[0], "104.74");
+    await user.type(screen.getAllByTestId("lot-fee")[0], "1.05");
+
+    await user.click(screen.getByRole("button", { name: /save 1 entry/i }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    const saved = mutateAsync.mock.calls[0][0];
+    expect(saved.adds[0]).toMatchObject({ quantity: "2", unitPrice: "104.74", fee: "1.05" });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
   it("reads a French decimal comma", async () => {
     await i18n.changeLanguage("fr");
     const user = userEvent.setup();
@@ -188,7 +314,7 @@ describe("RecordLotsModal", () => {
     await user.click(screen.getByRole("button", { name: /save 1 entry/i }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(mutateAsync).toHaveBeenCalledWith({
-      adds: [{ type: "buy", date: "2024-05-02", quantity: "12", unitPrice: "20" }],
+      adds: [{ type: "buy", date: "2024-05-02", quantity: "12", unitPrice: "20", fee: "0" }],
       deletes: ["a"],
     });
     await waitFor(() => expect(onClose).toHaveBeenCalled());

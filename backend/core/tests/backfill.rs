@@ -58,7 +58,7 @@ async fn seed_cash(
     )
     .await
     .unwrap();
-    stamp_on(pool, holding_id, snapshot_day, balance, balance, balance).await;
+    stamp_on(pool, holding_id, snapshot_day, balance, balance).await;
     (account_id, holding_id)
 }
 
@@ -80,60 +80,18 @@ async fn backfill_rows_on(pool: &PgPool, holding_id: Uuid, day: NaiveDate) -> i6
         .unwrap()
 }
 
-async fn cost_basis_on(pool: &PgPool, holding_id: Uuid, day: NaiveDate) -> Option<Decimal> {
-    sqlx::query_scalar("select cost_basis from holding_point where holding_id = $1 and as_of = $2")
-        .bind(holding_id)
-        .bind(day)
-        .fetch_optional(pool)
-        .await
-        .unwrap()
-}
-
-/// A row of `(as_of, quantity, value, cost_basis)`, ordered by day. Comparing
+/// A row of `(as_of, quantity, value)`, ordered by day. Comparing
 /// this vector between two runs (rather than just row counts) is what makes
 /// an idempotence test actually catch a value-shifting bug.
-async fn backfill_digest(
-    pool: &PgPool,
-    holding_id: Uuid,
-) -> Vec<(NaiveDate, Decimal, Decimal, Decimal)> {
+async fn backfill_digest(pool: &PgPool, holding_id: Uuid) -> Vec<(NaiveDate, Decimal, Decimal)> {
     sqlx::query_as(
-        "select as_of, quantity, value, cost_basis from holding_backfill \
+        "select as_of, quantity, value from holding_backfill \
          where holding_id = $1 order by as_of",
     )
     .bind(holding_id)
     .fetch_all(pool)
     .await
     .unwrap()
-}
-
-/// Insert a `buy` transaction row with an instrument attached directly.
-/// `upsert_transaction` always writes a null `instrument_id` (Powens never
-/// links one, §2.1); a test that needs a lot on the security walk must
-/// insert the row itself, same as the seed binary does.
-async fn insert_buy(
-    pool: &PgPool,
-    account_id: Uuid,
-    instrument_id: Uuid,
-    external_id: &str,
-    quantity: Decimal,
-    unit_price: Decimal,
-    day: NaiveDate,
-) {
-    sqlx::query(
-        "insert into transaction \
-             (account_id, instrument_id, ts, type, quantity, unit_price, amount, external_id) \
-         values ($1, $2, $3, 'buy', $4, $5, $6, $7)",
-    )
-    .bind(account_id)
-    .bind(instrument_id)
-    .bind(day.and_hms_opt(12, 0, 0).unwrap().and_utc())
-    .bind(quantity)
-    .bind(unit_price)
-    .bind(-(quantity * unit_price))
-    .bind(external_id)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -262,15 +220,7 @@ async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("100"), d(2026, 1, 10)).await;
     // A second, later snapshot with a different balance and no transaction to
     // explain the difference: each gap must resolve against its own anchor.
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 1, 20),
-        dec("300"),
-        dec("300"),
-        dec("300"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 1, 20), dec("300"), dec("300")).await;
 
     let mut conn = pool.acquire().await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -312,7 +262,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     assert_eq!(first, second, "re-running writes the same number of rows");
     assert_eq!(
         first_digest, second_digest,
-        "re-running derives the same (as_of, quantity, value, cost_basis) rows, \
+        "re-running derives the same (as_of, quantity, value) rows, \
          not just the same row count"
     );
     assert_eq!(
@@ -331,92 +281,6 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
         Some(dec("50"))
-    );
-    Ok(())
-}
-
-/// Regression: §8.2's cost-basis subquery must filter buys by
-/// `t.account_id = w.account_id` in addition to instrument. Without the
-/// account filter, a different user's buy of the *same* instrument bleeds
-/// into this user's derived cost basis — a cross-user data leak.
-#[sqlx::test(migrations = "../migrations")]
-async fn cost_basis_ignores_another_users_buys_of_the_same_instrument(
-    pool: PgPool,
-) -> anyhow::Result<()> {
-    // User A: holds ACME, cost_basis 1000, one buy of 4 @ 50 on 2026-01-06.
-    let conn_a = seed_connection(&pool).await;
-    let acct_a = checking_account("acct-a");
-    let mut conn = pool.acquire().await?;
-    let account_a = upsert_account(&mut conn, conn_a, &acct_a).await?;
-    let instrument_id = resolve_instrument(
-        &mut conn,
-        &InstrumentRef {
-            kind: "equity".into(),
-            symbol: Some("ACME".into()),
-            isin: Some("ACMEISIN0001".into()),
-            name: "Acme Corp".into(),
-            currency: "USD".into(),
-        },
-    )
-    .await?;
-    let holding_a = upsert_holding(
-        &mut conn,
-        account_a,
-        instrument_id,
-        &equity_holding("acct-a", "ACMEISIN0001", dec("4"), dec("1000"), None),
-    )
-    .await?;
-    stamp_on(
-        &pool,
-        holding_a,
-        d(2026, 1, 10),
-        dec("4"),
-        dec("0"),
-        dec("1000"),
-    )
-    .await;
-    insert_buy(
-        &pool,
-        account_a,
-        instrument_id,
-        "buy-a",
-        dec("4"),
-        dec("50"),
-        d(2026, 1, 6),
-    )
-    .await;
-
-    // User B: a DIFFERENT user, connection, and account — buys 5 @ 100 of the
-    // exact same instrument on 2026-01-08.
-    let conn_b = seed_connection(&pool).await;
-    let acct_b = checking_account("acct-b");
-    let account_b = upsert_account(&mut conn, conn_b, &acct_b).await?;
-    insert_buy(
-        &pool,
-        account_b,
-        instrument_id,
-        "buy-b",
-        dec("5"),
-        dec("100"),
-        d(2026, 1, 8),
-    )
-    .await;
-
-    backfill_connection(&mut conn, conn_a).await?;
-
-    // Without the account filter, B's buy (ts date 01-08, > 01-07) would be
-    // subtracted too: 1000 - 500 = 500 instead of 1000.
-    assert_eq!(
-        cost_basis_on(&pool, holding_a, d(2026, 1, 7)).await,
-        Some(dec("1000")),
-        "user B's later buy of the same instrument must not affect A's cost basis"
-    );
-    // Without the account filter, both buys (200 + 500) would be subtracted:
-    // 1000 - 700 = 300 instead of 800.
-    assert_eq!(
-        cost_basis_on(&pool, holding_a, d(2026, 1, 5)).await,
-        Some(dec("800")),
-        "only A's own buy (4 @ 50 = 200) should be subtracted here"
     );
     Ok(())
 }
@@ -451,15 +315,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
         &cash_holding("acct-1", dec("100")),
     )
     .await?;
-    stamp_on(
-        &pool,
-        eur_holding,
-        d(2026, 1, 10),
-        dec("100"),
-        dec("100"),
-        dec("100"),
-    )
-    .await;
+    stamp_on(&pool, eur_holding, d(2026, 1, 10), dec("100"), dec("100")).await;
 
     let usd_instrument = resolve_instrument(
         &mut conn,
@@ -491,15 +347,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
         },
     )
     .await?;
-    stamp_on(
-        &pool,
-        usd_holding,
-        d(2026, 1, 10),
-        dec("50"),
-        dec("50"),
-        dec("50"),
-    )
-    .await;
+    stamp_on(&pool, usd_holding, d(2026, 1, 10), dec("50"), dec("50")).await;
 
     upsert_transaction(
         &mut conn,
@@ -758,15 +606,7 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     // Balance 100 on the 1st, 85 on the 10th. Booked movements between them:
     // −30 (booked 4th), +20 (booked 6th), −5 (booked 9th) = −15. 100 − 15 = 85.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("85"), d(2026, 1, 10)).await;
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 1, 1),
-        dec("100"),
-        dec("100"),
-        dec("100"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 1, 1), dec("100"), dec("100")).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
@@ -923,15 +763,7 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
     // Snapshot 0 on the 10th (short by 50, as above) and 80 on the 20th, with a
     // +80 on the 15th that reconciles the later pair exactly.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("80"), d(2026, 1, 20)).await;
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 1, 10),
-        dec("0"),
-        dec("0"),
-        dec("0"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 1, 10), dec("0"), dec("0")).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
@@ -955,72 +787,6 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
         Some(dec("0")),
         "while the older stretch is still lifted"
     );
-    Ok(())
-}
-
-/// Spec §4.5. The walk runs BACKWARD from today's `holding.cost_basis`,
-/// subtracting each day's lot cost — so a sell, which REMOVED basis, must
-/// contribute a negative, and by `qty × μ` (the lifetime mean buy price), not
-/// by its proceeds. Using proceeds would fold realised P/L into the basis and
-/// make the invested line cross the value line for no reason.
-#[sqlx::test(migrations = "../migrations")]
-async fn a_sell_reduces_the_derived_cost_basis_by_the_mean_price(
-    pool: PgPool,
-) -> anyhow::Result<()> {
-    let conn_id = seed_connection(&pool).await;
-    let mut conn = pool.acquire().await?;
-    let account_id = upsert_account(&mut conn, conn_id, &pea_account("acct-1")).await?;
-
-    // 20 shares bought at a mean of 25 (10@20 + 10@30), 5 sold at 35.
-    // Today: 15 shares held, basis 375.
-    let h = equity_holding("acct-1", "IE0100", dec("15"), dec("375"), Some(dec("600")));
-    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
-    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
-
-    let today = chrono::Utc::now().date_naive();
-    let sell_day = today - chrono::Duration::days(5);
-    stamp_on(&pool, holding_id, today, dec("15"), dec("600"), dec("375")).await;
-
-    sqlx::query(
-        "insert into transaction (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount) \
-         values ($1, $2, $3::date, $3::date, 'buy', 10, 20, -200), \
-                ($1, $2, $4::date, $4::date, 'buy', 10, 30, -300), \
-                ($1, $2, $5::date, $5::date, 'sell', 5, 35, 175)",
-    )
-    .bind(account_id)
-    .bind(instrument_id)
-    .bind(today - chrono::Duration::days(30))
-    .bind(today - chrono::Duration::days(20))
-    .bind(sell_day)
-    .execute(&pool)
-    .await?;
-
-    backfill_connection(&mut conn, conn_id).await?;
-
-    // The day BEFORE the sell: the basis still holds all 20 shares at μ = 25,
-    // i.e. 375 + 5×25 = 500. Proceeds-based accounting would give 375 + 175 = 550.
-    let before: Decimal = sqlx::query_scalar(
-        "select cost_basis from holding_backfill where holding_id = $1 and as_of = $2",
-    )
-    .bind(holding_id)
-    .bind(sell_day - chrono::Duration::days(1))
-    .fetch_one(&pool)
-    .await?;
-    assert_eq!(
-        before,
-        dec("500"),
-        "a sell removes qty × μ, never its proceeds"
-    );
-
-    // The day AFTER the sell (and before today's snapshot): 15 shares at μ = 25.
-    let after: Decimal = sqlx::query_scalar(
-        "select cost_basis from holding_backfill where holding_id = $1 and as_of = $2",
-    )
-    .bind(holding_id)
-    .bind(sell_day + chrono::Duration::days(1))
-    .fetch_one(&pool)
-    .await?;
-    assert_eq!(after, dec("375"));
     Ok(())
 }
 
@@ -1185,7 +951,6 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
         assert_eq!(ra.0, rb.0);
         assert_eq!(ra.1, rb.1, "quantity changed on {}", ra.0);
         assert_eq!(ra.2, rb.2, "value changed on {}", ra.0);
-        assert_eq!(ra.3, rb.3, "cost_basis changed on {}", ra.0);
     }
     Ok(())
 }
@@ -1252,53 +1017,21 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
 
     // 07-20: 40 units @ per-unit 10 (value 400).
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 7, 20),
-        dec("40"),
-        dec("400"),
-        dec("400"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 7, 20), dec("40"), dec("400")).await;
     // 08-10: still 40 units, revalued to per-unit 15 (value 600).
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 8, 10),
-        dec("40"),
-        dec("600"),
-        dec("600"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 8, 10), dec("40"), dec("600")).await;
     // 08-20: sold to zero.
-    stamp_on(
-        &pool,
-        holding_id,
-        d(2026, 8, 20),
-        dec("0"),
-        dec("0"),
-        dec("0"),
-    )
-    .await;
+    stamp_on(&pool, holding_id, d(2026, 8, 20), dec("0"), dec("0")).await;
     // The sale itself, so the walk reconstructs the pre-sale quantity for the
-    // held window instead of anchoring on the zero snapshot.
-    insert_buy(
-        &pool,
-        account_id,
-        instrument_id,
-        "buy-40",
-        dec("40"),
-        dec("10"),
-        d(2026, 7, 20),
-    )
-    .await;
+    // held window instead of anchoring on the zero snapshot. Securities move
+    // by `lot` now, not by `transaction`.
     sqlx::query(
-        "insert into transaction (account_id, instrument_id, ts, booked_on, type, quantity, unit_price, amount) \
-         values ($1, $2, $3::date, $3::date, 'sell', 40, 15, 600)",
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
+         values ($1, 'buy', $2, 40, 10, 'manual'), \
+                ($1, 'sell', $3, 40, 15, 'manual')",
     )
-    .bind(account_id)
-    .bind(instrument_id)
+    .bind(holding_id)
+    .bind(d(2026, 7, 20))
     .bind(d(2026, 8, 20))
     .execute(&pool)
     .await?;
@@ -1312,9 +1045,9 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     // strictly after it (`nxt`) is 08-10 (per-unit 15), so 40 * 600/40 = 600.
     // Reversing the coalesce order to prefer `prv` (07-20, per-unit 10) would
     // give 40 * 400/40 = 400 instead — this is the number that pins the order.
-    let (_, qty, value, _) = rows
+    let (_, qty, value) = rows
         .iter()
-        .find(|(day, _, _, _)| *day == d(2026, 8, 1))
+        .find(|(day, _, _)| *day == d(2026, 8, 1))
         .expect("a derived day must exist between 07-20 and 08-10");
     assert_eq!(*qty, dec("40"));
     assert_eq!(
@@ -1325,9 +1058,9 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
 
     // 08-15 sits after the last non-zero snapshot (08-10) and before the sale:
     // `nxt` finds nothing, so `uv` must fall back to `prv` (08-10, per-unit 15).
-    let (_, qty2, value2, _) = rows
+    let (_, qty2, value2) = rows
         .iter()
-        .find(|(day, _, _, _)| *day == d(2026, 8, 15))
+        .find(|(day, _, _)| *day == d(2026, 8, 15))
         .expect("a derived day must exist between 08-10 and the sale");
     assert_eq!(
         *qty2,

@@ -6,18 +6,28 @@ import { Button } from "./Button";
 import { CardState } from "./CardState";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Money } from "./Money";
-import { useHoldingTransactions, useSaveLots, type SaveLotAdd } from "../api/hooks";
-import { formatMoney, formatQuantity, normaliseDecimal, validateRow } from "../lib/money";
-import { resultingFigures, type LotRow } from "../lib/lots";
-import type { Holding } from "../api/types";
+import { useHoldingLots, useLotsPreview, useSaveLots, type SaveLotAdd } from "../api/hooks";
+import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
+import type { BasisPreview, Holding } from "../api/types";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
-// quantities, unit prices, and everything `resultingFigures` derives from them.
-// The one exception is `holding.price`, which is PRICE domain and feeds the
-// unrealised figure — the same approximation `AssetModal` documents for its
-// purchases chart, exact whenever the account and the listing share a currency.
-// Never label anything here with `holding.currency` (the instrument's quote
-// currency): it names the asset's identity, not any amount on this screen.
+// quantities, unit prices, and everything the preview endpoint derives from
+// them. The one exception is `holding.price`, which is PRICE domain — the same
+// approximation `AssetModal` documents for its purchases chart, exact whenever
+// the account and the listing share a currency. Never label anything here with
+// `holding.currency` (the instrument's quote currency): it names the asset's
+// identity, not any amount on this screen.
+//
+// The resulting figures (mean price, invested, realised, unrealised) are never
+// computed here — they come verbatim from `POST /holdings/:id/lots/preview`,
+// which runs the same `lot_basis` function the save path and the chart use.
+// This file must never grow a `buyCost / buyQty` of its own (AUDIT.md Z-1).
+
+const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" };
+
+/** How long to wait after the last edit before asking the server for updated
+ *  figures — avoids firing a request per keystroke. */
+const PREVIEW_DEBOUNCE_MS = 300;
 
 /** Quantities compare through a tolerance, not `===`: these are decimal strings
  *  parsed into IEEE doubles, and 0.1 + 0.2 must still count as 0.3. */
@@ -32,10 +42,12 @@ type Row = {
   date: string;
   quantity: string;
   unitPrice: string;
+  /** Optional; an empty string means zero. */
+  fee: string;
   /** Present only on rows seeded from the server: the values as loaded, so an
    *  edit can be detected later. A saved row is "changed" when its date differs
-   *  as a string, or either amount differs NUMERICALLY — see `isRowChanged`. */
-  pristine?: { date: string; quantity: string; unitPrice: string };
+   *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
+  pristine?: { date: string; quantity: string; unitPrice: string; fee: string };
 };
 
 const ADD_ROW_BUTTON =
@@ -61,7 +73,8 @@ const isRowChanged = (r: Row): boolean =>
   r.pristine !== undefined &&
   (r.date.trim() !== r.pristine.date.trim() ||
     !sameAmount(r.quantity, r.pristine.quantity) ||
-    !sameAmount(r.unitPrice, r.pristine.unitPrice));
+    !sameAmount(r.unitPrice, r.pristine.unitPrice) ||
+    !sameAmount(r.fee, r.pristine.fee));
 
 export function RecordLotsModal({
   holding,
@@ -71,8 +84,9 @@ export function RecordLotsModal({
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const { data, isError, refetch } = useHoldingTransactions(holding.id);
+  const { data, isError, refetch } = useHoldingLots(holding.id);
   const saveLots = useSaveLots(holding.id);
+  const preview = useLotsPreview(holding.id);
 
   const [rows, setRows] = useState<Row[] | null>(null);
   // Ids the user explicitly binned via the delete button. A changed-but-not-
@@ -98,12 +112,21 @@ export function RecordLotsModal({
     setSeededFrom(data);
     setRows(
       data
-        .filter((p) => p.manual)
-        .map((p) => {
-          const date = new Date(p.t).toISOString().slice(0, 10);
-          const quantity = p.qty;
-          const unitPrice = p.price;
-          return { id: p.id, type: p.type, date, quantity, unitPrice, pristine: { date, quantity, unitPrice } };
+        .filter((l) => l.manual)
+        .map((l) => {
+          const date = new Date(l.t).toISOString().slice(0, 10);
+          const quantity = l.qty;
+          const unitPrice = l.price;
+          const fee = l.fee;
+          return {
+            id: l.id,
+            type: l.side,
+            date,
+            quantity,
+            unitPrice,
+            fee,
+            pristine: { date, quantity, unitPrice, fee },
+          };
         }),
     );
   }
@@ -141,28 +164,55 @@ export function RecordLotsModal({
    *  either jump. The server rejects an empty date at deserialization, so
    *  gating here keeps Save from ever offering a batch the server would
    *  refuse. */
-  const parse = (r: Row): LotRow | null => {
+  const toLotEntry = (r: Row): SaveLotAdd | null => {
     if (r.date === "") return null;
     const quantity = normaliseDecimal(r.quantity, i18n.language);
     const unitPrice = normaliseDecimal(r.unitPrice, i18n.language);
     if (validateRow(quantity, unitPrice) !== null) return null;
-    return { type: r.type, quantity: Number(quantity), unitPrice: Number(unitPrice) };
+    const fee = r.fee.trim() === "" ? undefined : normaliseDecimal(r.fee, i18n.language);
+    return { type: r.type, date: r.date, quantity, unitPrice, ...(fee !== undefined ? { fee } : {}) };
   };
 
   const parsed = useMemo(
-    () => list.map(parse).filter((p): p is LotRow => p !== null),
+    () => list.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [list, i18n.language],
   );
-  const anyInvalid = list.some((r) => parse(r) === null);
+  const anyInvalid = list.some((r) => toLotEntry(r) === null);
 
+  // Net quantity is a plain count, not a money figure — safe to derive locally
+  // (unlike mean price / invested / realised, which only ever come from the
+  // preview endpoint).
+  const recorded = parsed.reduce(
+    (acc, p) => acc + (p.type === "sell" ? -Number(p.quantity) : Number(p.quantity)),
+    0,
+  );
   const total = Number(holding.qty);
-  const figures = resultingFigures(parsed, Number(holding.price));
-  const recorded = figures.netQty;
   const short = recorded < total - EPS;
   const over = recorded > total + EPS;
   const barColor = over ? "bg-red" : short ? "bg-amber" : "bg-green";
   const barWidth = over || total <= 0 ? 1 : Math.max(0, Math.min(1, recorded / total));
+
+  // Debounce the preview request: fire it only once edits settle, not on every
+  // keystroke. TanStack Query's mutation state resets `data` to `undefined`
+  // the instant a mutation goes pending — `preview.data` alone would blank
+  // the panel to zero on every request, not just the first. So the last
+  // successful result is held here explicitly, and THAT is what renders;
+  // `preview.data` is read only inside `onSuccess`, never for display.
+  const [lastPreview, setLastPreview] = useState<BasisPreview>(ZERO_PREVIEW);
+  const [debouncedRows, setDebouncedRows] = useState<SaveLotAdd[]>(parsed);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedRows(parsed), PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(parsed)]);
+
+  useEffect(() => {
+    preview.mutate(debouncedRows, { onSuccess: setLastPreview });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(debouncedRows), holding.id]);
+
+  const figures: BasisPreview = lastPreview;
 
   // A changed saved row is saved as a delete + re-add in the same atomic
   // batch — the backend applies both halves in one DB transaction, so the
@@ -170,12 +220,9 @@ export function RecordLotsModal({
   const newRows = list.filter((r) => r.id === undefined);
   const changedSaved = list.filter((r) => r.id !== undefined && isRowChanged(r));
 
-  const adds: SaveLotAdd[] = [...newRows, ...changedSaved].map((r) => ({
-    type: r.type,
-    date: r.date,
-    quantity: normaliseDecimal(r.quantity, i18n.language),
-    unitPrice: normaliseDecimal(r.unitPrice, i18n.language),
-  }));
+  const adds: SaveLotAdd[] = [...newRows, ...changedSaved]
+    .map(toLotEntry)
+    .filter((p): p is SaveLotAdd => p !== null);
   const deletes = [...queuedDeletes, ...changedSaved.map((r) => r.id!)];
   // One user-visible edit = one entry, even though a changed row contributes
   // to both `adds` and `deletes` above.
@@ -254,13 +301,14 @@ export function RecordLotsModal({
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.fee")}</th>
                   <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
               <tbody>
                 {list.map((r, i) => {
-                  const p = parse(r);
+                  const p = toLotEntry(r);
                   const badQty =
                     r.quantity !== "" &&
                     validateRow(normaliseDecimal(r.quantity, i18n.language), "1") !== null;
@@ -304,13 +352,21 @@ export function RecordLotsModal({
                           className={`${input} text-right ${badPrice ? ring : ""}`}
                         />
                       </td>
+                      <td className="py-1.5 pr-2 border-t border-surface-2">
+                        <input
+                          inputMode="decimal"
+                          data-testid="lot-fee"
+                          value={r.fee}
+                          onChange={(e) => set(i, { fee: e.target.value })}
+                          className={`${input} text-right`}
+                        />
+                      </td>
                       <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
                         {p === null
                           ? "—"
-                          : formatMoney(
-                              (p.type === "sell" ? 1 : -1) * p.quantity * p.unitPrice,
-                              { currency },
-                            )}
+                          : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), {
+                              currency,
+                            })}
                       </td>
                       <td className="py-1.5 border-t border-surface-2 text-right">
                         <button
@@ -337,7 +393,10 @@ export function RecordLotsModal({
               className={ADD_ROW_BUTTON}
               onClick={() => {
                 setDirty(true);
-                setRows((rs) => [...(rs ?? []), { type: "buy", date: today(), quantity: "", unitPrice: "" }]);
+                setRows((rs) => [
+                  ...(rs ?? []),
+                  { type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" },
+                ]);
               }}
             >
               {t("dashboard.holdings.gap.addBuy")}
@@ -347,7 +406,10 @@ export function RecordLotsModal({
               className={ADD_ROW_BUTTON}
               onClick={() => {
                 setDirty(true);
-                setRows((rs) => [...(rs ?? []), { type: "sell", date: today(), quantity: "", unitPrice: "" }]);
+                setRows((rs) => [
+                  ...(rs ?? []),
+                  { type: "sell", date: today(), quantity: "", unitPrice: "", fee: "" },
+                ]);
               }}
             >
               {t("dashboard.holdings.gap.addSell")}
@@ -379,13 +441,13 @@ export function RecordLotsModal({
               <SignedFigure
                 testId="figure-realised"
                 label={t("dashboard.holdings.gap.realisedPnl")}
-                value={figures.realised}
+                value={Number(figures.realised)}
                 currency={currency}
               />
               <SignedFigure
                 testId="figure-unrealised"
                 label={t("dashboard.holdings.gap.unrealisedPnl")}
-                value={figures.unrealised}
+                value={Number(figures.unrealised)}
                 currency={currency}
               />
             </div>

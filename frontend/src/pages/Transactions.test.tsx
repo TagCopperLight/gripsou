@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Transactions } from "./Transactions";
+import type { Transaction } from "../api/types";
 
 vi.mock("../api/hooks", async () => {
   const actual = await vi.importActual<typeof import("../api/hooks")>("../api/hooks");
@@ -15,11 +16,12 @@ vi.mock("../api/hooks", async () => {
 
 import { useTransactions } from "../api/hooks";
 
-const rows = [
+const rows: Transaction[] = [
   {
     id: "1", t: Date.UTC(2026, 2, 14), type: "withdrawal", description: "LECLERC",
     amount: "-42.50", currency: "EUR",
     accountId: "a1", accountName: "Current account", accountColor: null,
+    source: "cash", ticker: null, quantity: null, unitPrice: null, fee: null,
   },
 ];
 
@@ -99,6 +101,21 @@ describe("Transactions", () => {
     );
     renderPage();
     expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled();
+  });
+
+  it("renders a lot row with its instrument and quantity", async () => {
+    const lotRow: Transaction = {
+      id: "2", t: Date.UTC(2025, 5, 3), type: "buy", description: null,
+      amount: "-210.53", currency: "EUR",
+      accountId: "a1", accountName: "Current account", accountColor: null,
+      source: "lot", ticker: "PUST", quantity: "2", unitPrice: "104.74", fee: "1.05",
+    };
+    vi.mocked(useTransactions).mockReturnValue(infiniteResult([[lotRow]]) as never);
+    renderPage();
+    expect(await screen.findByText(/PUST/)).toBeInTheDocument();
+    // Amount formatting (separators/currency symbol) is exercised elsewhere —
+    // here we just confirm the lot's amount reaches the page.
+    expect(screen.getByText(/210,53/)).toBeInTheDocument();
   });
 
   it("resets back to the query's first page when a filter changes", async () => {

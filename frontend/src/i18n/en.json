@@ -98,7 +98,11 @@
       "transfer": "Transfer"
     },
     "shown_one": "Showing {{count}} transaction",
-    "shown_other": "Showing {{count}} transactions"
+    "shown_other": "Showing {{count}} transactions",
+    "lot": {
+      "buy": "Bought {{qty}} × {{ticker}}",
+      "sell": "Sold {{qty}} × {{ticker}}"
+    }
   },
   "dashboard": {
     "fxMissing": "No exchange rate yet for this currency — the value is not counted. It should arrive on the next sync.",
@@ -140,6 +144,7 @@
           "date": "DATE",
           "quantity": "QUANTITY",
           "unitPrice": "UNIT PRICE",
+          "fee": "FEE",
           "total": "TOTAL"
         },
         "buy": "Purchase",

@@ -278,40 +278,43 @@ async fn an_explicit_type_filter_does_not_resurrect_pea_transfers(
     Ok(())
 }
 
-/// A manual lot is a `buy` on the PEA too, but the user entered it themselves —
-/// it carries `external_id = null` (§9.2, which is what keeps it outside the
-/// provider dedup index) and must stay visible.
+/// A hand-entered lot must still appear on the transactions page after moving
+/// out of `transaction` — the 9 lots from 2024-2025 predate the PEA connector's
+/// history and have no provider row behind them, so losing them here would
+/// erase real entries.
 #[sqlx::test(migrations = "../migrations")]
-async fn a_manual_lot_on_the_pea_is_still_listed(pool: PgPool) -> anyhow::Result<()> {
+async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
         .fetch_one(&pool)
-        .await?;
-    let mut conn = pool.acquire().await?;
-    let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
-
-    // Provider buy: hidden. Manual buy (no external_id): shown.
-    upsert_transaction(
-        &mut conn,
-        pea_id,
-        &txn("pea-1", "p1", "buy", dec("-210.53"), Some("ACHAT COMPTANT")),
-    )
-    .await?;
+        .await
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
+        .await
+        .unwrap();
+    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
     sqlx::query(
-        "insert into transaction (account_id, ts, type, amount, quantity, unit_price, description) \
-         values ($1, now(), 'buy', -320.58, 20, 16.029, 'Manual lot')",
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
+         values ($1, 'buy', date '2026-06-01', 2, 104.74, 1.05, 'manual')",
     )
-    .bind(pea_id)
+    .bind(holding_id)
     .execute(&pool)
-    .await?;
+    .await
+    .unwrap();
 
-    let rows = transactions(&pool, user_id, &all()).await?;
+    let rows = transactions(&pool, user_id, &all()).await.unwrap();
+    let lot = rows
+        .iter()
+        .find(|r| r.source == "lot")
+        .expect("the lot must be listed");
+    assert_eq!(lot.ticker.as_deref(), Some("PUST"));
+    assert_eq!(lot.quantity, Some(dec("2")));
+    assert_eq!(lot.fee, Some(dec("1.05")));
     assert_eq!(
-        rows.len(),
-        1,
-        "exactly the manual lot, not the provider buy"
+        lot.amount,
+        dec("-210.53"),
+        "a buy's amount is -(qty x price + fee): the real cash impact"
     );
-    assert_eq!(rows[0].description.as_deref(), Some("Manual lot"));
-    Ok(())
 }

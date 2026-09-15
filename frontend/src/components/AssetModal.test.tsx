@@ -19,6 +19,7 @@ const BASE: Holding = {
   fxMissing: false, spark: null,
   composition: { countries: [{ name: "United States", weight: 0.62 }], sectors: [] },
   unexplainedQty: "0",
+  meanPrice: "80", unexplainedCost: "0",
 };
 
 function withClient(children: ReactNode) {

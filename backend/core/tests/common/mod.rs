@@ -171,10 +171,9 @@ pub async fn stamp_on(
     day: NaiveDate,
     qty: Decimal,
     value: Decimal,
-    cost: Decimal,
 ) {
     let mut conn = pool.acquire().await.unwrap();
-    gripsou_core::repo::snapshot::stamp_snapshot(&mut conn, holding_id, day, qty, value, cost)
+    gripsou_core::repo::snapshot::stamp_snapshot(&mut conn, holding_id, day, qty, value)
         .await
         .unwrap();
 }
@@ -205,4 +204,26 @@ pub fn txn_booked(
         booked_on: Some(booked_on),
         ..txn(account_external_id, external_id, kind, amount, None)
     }
+}
+
+/// Upsert one equity holding and hand back its id. Wraps the
+/// resolve-instrument-then-upsert-holding dance every lot test needs.
+///
+/// `account_id` is the account's own id (an `upsert_account` return value),
+/// not its external id — the caller must have upserted the account first.
+pub async fn seed_equity_holding(
+    pool: &PgPool,
+    account_id: Uuid,
+    symbol: &str,
+    quantity: Decimal,
+) -> Uuid {
+    let mut conn = pool.acquire().await.unwrap();
+    let holding = equity_holding("unused", symbol, quantity, Decimal::ZERO, None);
+    let instrument_id =
+        gripsou_core::repo::instrument::resolve_instrument(&mut conn, &holding.instrument)
+            .await
+            .unwrap();
+    gripsou_core::repo::holding::upsert_holding(&mut conn, account_id, instrument_id, &holding)
+        .await
+        .unwrap()
 }
