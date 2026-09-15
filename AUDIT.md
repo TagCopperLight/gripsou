@@ -32,6 +32,7 @@ marked inline at its own heading with a `**Status**` line.
 | C-1, C-2, D-7 (part) | Instrument identity built from two columns that later get rewritten | ✅ Fixed |
 | D-1, Z-1, C-7 | Cost basis moved to a `lot` table with one SQL definition | ✅ Fixed |
 | C-9 (part) | Transactions list date filters no longer use the session timezone | ✅ Fixed |
+| C-7 (follow-up) | Chart's invested line back-dated today's cash balance across all history | ✅ Fixed |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -278,6 +279,19 @@ read the same `lot_basis` SQL function (`0022`) — `core/src/repo/query.rs:104`
 `:298` (holdings). Verified live: `select sum(b.basis) from holding h join instrument i ... cross
 join lateral lot_basis(...)` returns `1187.4210` (1 187,42 €), matching what both endpoints
 compute. Regression tests: `core/tests/query.rs::chart_invested_matches_the_holdings_table`.
+
+**Follow-up (2026-09-15)**: the 0022 fix left one half wrong. `lot_basis` answered
+`holding.cost_basis` for every *cash* holding regardless of the day asked for, so each of the
+chart's ~200 sampled days carried the balance the account holds *now*. The holdings table only ever
+asks for today and so never showed it; the chart did. Measured live before the fix: a mid-winter day read
+invested 6 820,00 € against a net worth of 5 480,00 € — the dashed line 1 340 € *above* the green
+area, because that day's real 3 900,00 € of cash had been replaced by today's 5 240,00 €. Fixed
+in `migrations/0025_cash_basis_per_day.sql`: cash now reads the same `holding_point` the net-worth
+side reads, with the same "last point at or before this day" rule, so the two cancel by
+construction. After: the same day reads invested 5 390,00 € against 5 480,00 €, a gap of 90,00 € —
+exactly the ETFs' unrealised gain that day. Regression tests:
+`core/tests/lot_basis.rs::cash_basis_is_the_balance_on_that_day` and
+`core/tests/query.rs::cash_invested_follows_the_balance_held_that_day`.
 
 **Severity**: Medium
 **Confidence**: Certain
