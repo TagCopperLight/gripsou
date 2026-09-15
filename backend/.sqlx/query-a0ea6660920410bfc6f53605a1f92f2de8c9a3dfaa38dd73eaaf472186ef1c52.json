@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        update connection\n           set status='awaiting', sync_requested_at=now(), last_error=null\n         where id=$1 and user_id=$2 and status not in ('syncing','awaiting')\n        returning id as \"id!\", status as \"status!\", last_sync_at, last_error\n        ",
+  "query": "\n        update connection\n           set status='awaiting', sync_requested_at=now(), last_error=null,\n               sync_started_at=null\n         where id=$1 and user_id=$2\n           and (status not in ('syncing','awaiting')\n                or (status='syncing'\n                    and (sync_started_at is null\n                         or sync_started_at < now() - make_interval(mins => $3))))\n        returning id as \"id!\", status as \"status!\", last_sync_at, last_error\n        ",
   "describe": {
     "columns": [
       {
@@ -51,7 +51,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -61,5 +62,5 @@
       true
     ]
   },
-  "hash": "6b7825bed629a3f118161f1efa4c056b6a1dc1332213c8971c0859dee5e36105"
+  "hash": "a0ea6660920410bfc6f53605a1f92f2de8c9a3dfaa38dd73eaaf472186ef1c52"
 }

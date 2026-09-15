@@ -30,7 +30,7 @@ export function Sidebar() {
   const { user: self } = useAuth();
   const version = useHealth().data?.version;
   const roleLabel = self
-    ? t(self.role === "admin" ? "sidebar.administrator" : "settings.roleMember")
+    ? t(self.role === "admin" ? "roles.admin" : "roles.member")
     : "";
 
   return (

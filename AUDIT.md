@@ -37,6 +37,8 @@ marked inline at its own heading with a `**Status**` line.
 | C-3, C-6 | A missing FX rate is absorbed silently — reporting currency and cost basis | ✅ Fixed |
 | C-4 | Powens account and investment lists are paginated to exhaustion | ✅ Fixed |
 | C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
+| D-4, Q-4 | A wedged `syncing` connection is now recoverable, and the silent lock writes speak | ✅ Fixed |
+| Z-4 | One `roles.admin` / `roles.member` pair; the sidebar no longer renders a raw key | ✅ Fixed |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -1158,6 +1160,14 @@ the weight per row so no client-side division happens at all.
 
 ### Z-4 — `settings.roleMember` does not exist: the sidebar renders a raw i18n key for non-admins
 
+**Status**: ✅ Fixed. One top-level `roles.admin` / `roles.member` pair now serves all four role-label
+call sites (`Sidebar.tsx`, `UserDetailModal.tsx`, `Users.tsx` ×2); `sidebar.administrator` and
+`settings.users.roleAdmin` / `roleMember` are deleted from `en.json` and `fr.json`. The sidebar
+therefore says "Admin" where it used to say "Administrator" — the same word every other screen uses.
+`settings.adminBadge` was **kept**: it marks a nav item as admin-only, which is a different statement
+from "this person is an admin", and merging the two would have tied unrelated strings together.
+Regression test: `Sidebar.test.tsx` — "renders the %s role label", which fails against the old keys.
+
 **Severity**: High
 
 **The shared thing**: `frontend/src/i18n/en.json` / `fr.json`. The role label is
@@ -1698,6 +1708,14 @@ The findings below are therefore mostly about *shape* — error types, function 
 ---
 
 ### Q-4 — Silent `let _ =` on the writes that clear a connection's sync state
+
+**Status**: ✅ Fixed. The lock-release write logs a `tracing::warn!` naming the connection when it
+fails (the stale-lock sweep from D-4 is what then frees the row), and the post-connect
+`request_sync` call now matches on its `BeginSync` outcome — `NotFound` warns, `AlreadySyncing`
+logs at info, so "the connection we just created is unreadable" is no longer indistinguishable from
+success. The other two sites are unchanged, as the finding itself recommends: `fail_sync`'s own
+`mark_synced_error` is already the failure path, and `auth.rs`'s session touch is documented as
+must-not-fail-the-request.
 
 **Severity**: High
 
@@ -2610,6 +2628,21 @@ connection that never syncs. Prefer it, and delete the "nullable = manual" claim
 ---
 
 ### D-4 — A crashed or restarted process wedges a connection in `syncing` forever
+
+**Status**: ✅ Fixed (the lock; the column split and the staleness surface were not done). Migration
+`0027_connection_sync_started_at.sql` adds `sync_started_at`, stamped by `begin_sync` and cleared by
+`mark_synced_ok` / `mark_synced_error`. Three things now free a wedged lock: `begin_sync` takes over a
+claim older than `SYNC_LOCK_STALE_MINS` (30) or one with no stamp; the minute reaper calls
+`clear_stale_syncing`, which moves such rows to `'error'` with "sync interrupted" as `last_error` so
+the user sees a failure instead of an eternal spinner; and `run_scheduler` sweeps every `syncing` row
+at boot, which is safe because the scheduler is in-process and the app is single-instance. Live data
+at the time of the fix: all four connections `ok`, none wedged — the bug was real but dormant.
+Regression tests: `core/tests/repo_connection.rs` — `begin_sync_takes_over_a_stale_claim`,
+`clear_stale_syncing_only_releases_old_claims`, `finishing_a_sync_clears_the_claim_stamp`,
+`begin_await_takes_over_a_stale_claim` — the webhook path claims through `begin_await`, so it
+honours the same takeover, which is what makes the fix reach this install's Powens connections.
+**Still open from this finding**: `status` still conflates lock state, health and lifecycle, and the
+dashboard still shows no "last successful sync" (that overlaps C-22).
 
 **Severity**: High
 **Confidence**: Certain

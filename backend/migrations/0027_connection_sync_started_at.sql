@@ -1,0 +1,14 @@
+-- Make the per-connection sync lock recoverable.
+--
+-- The lock is `connection.status = 'syncing'`, released at the end of
+-- sync_connection. Nothing released it when the process died mid-sync: a
+-- rebuild, an OOM kill or a panic in the detached task left the flag set,
+-- begin_sync refused forever, the daily sweep skipped the row (it only looks at
+-- 'ok'/'error'), and the UI polled a spinner every 2s until someone ran an
+-- UPDATE by hand.
+--
+-- This stamp is what makes "how long has it been claimed?" answerable, so a
+-- stale claim can be taken over (begin_sync) or cleared by the reaper. Existing
+-- 'syncing' rows get NULL, which every predicate treats as stale — correct,
+-- since a row already stuck when this lands has no live sync behind it.
+alter table connection add column sync_started_at timestamptz;

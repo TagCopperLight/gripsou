@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update connection\n            set status='error',\n                last_error='sync interrupted (the server restarted or the sync crashed)'\n          where status='syncing'\n            and (sync_started_at is null\n                 or sync_started_at < now() - make_interval(mins => $1))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b73bc75a82d34c79e0a4fd3a04690854dd72d684d3e4e595ba8b1aad5e3da7d3"
+}

@@ -152,6 +152,8 @@ true net worth for this install. Revisit it the day an account with a negative v
 | C-3, C-6 | A missing FX rate absorbed silently, twice: the reporting divisor and the cost basis | ✅ Fixed |
 | C-4 | Powens account and investment lists are paginated to exhaustion | ✅ Fixed |
 | C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
+| D-4, Q-4 | A wedged `syncing` connection is recoverable; the silent lock writes now log | ✅ Fixed |
+| Z-4 | One `roles.admin` / `roles.member` pair, five call sites repointed | ✅ Fixed |
 
 **C-5 is deferred on purpose**, not skipped: it is the same work as the "Transactions reconciliation"
 item the user added under the Budget page in `TODO.md`, and it needs C-4's guarantee that a fetch is
@@ -160,18 +162,12 @@ complete before anything may be deleted for being absent from it. Pick it up the
 Remaining:
 
 Correctness: (none — C-4 closed the tier, C-5 moved to the reconciliation work)
-Design: D-3 · D-4 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
-Quality: Q-1 · Q-2 · Q-3 · Q-4
-Centralization: Z-2 · Z-3 · Z-4 · Z-5 · Z-6
+Design: D-3 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
+Quality: Q-1 · Q-2 · Q-3
+Centralization: Z-2 · Z-3 · Z-5 · Z-6
 Security: the two high-severity of S-1…S-17 (own section, severities listed there)
 
-Known cheap wins worth batching: **Z-4** is a live user-visible bug — `Sidebar.tsx:33` calls
-`t("settings.roleMember")`, a key that does not exist (it is `settings.users.roleMember`), so every
-member-role user sees a raw key string in both languages. One line.
-
 Pairs that should be fixed together because they are one bug seen twice:
-- **D-4 + Q-4** — a connection wedged in `syncing` forever; Q-4 found the silent `let _ =` that causes
-  D-4's design gap.
 - **C-17 + C-18 + Z-6** — a finished sync invalidates only `["connections"]`, leaving the dashboard,
   holdings and transactions caches stale.
 - **C-11 + D-12** — the headline gain% and the chart's % mode are two different metrics on one card.
@@ -219,3 +215,25 @@ migration remains available if tidiness is wanted.
 Noticed, not fixed, not in the audit: `resolve_instrument`'s own doc comment admits cross-key dedup is
 deferred — the same security reported with an ISIN one sync and symbol-only the next still produces
 two rows.
+
+---
+
+## Issue 7, for reference
+
+**D-4 / Q-4 — a wedged `syncing` connection, plus the discarded writes that hid it. And Z-4.**
+
+The per-connection lock was `status='syncing'` with nothing to release it when the process holding it
+died. New column `sync_started_at` (migration `0027`) makes the claim's age answerable, so `begin_sync`
+takes over a claim older than 30 minutes, the minute reaper moves such rows to `'error'` with an
+"interrupted" message, and `run_scheduler` sweeps leftovers at boot. Dormant when fixed — all four live
+connections read `ok`.
+
+Two conventions this surfaced:
+
+- **A raw `update connection set status='syncing'` in a test is now a *stale* claim**, because it leaves
+  `sync_started_at` null. One api handler test had to stamp `now()` to keep asserting a 409.
+- `mark_synced_ok` / `mark_synced_error` null the stamp; without that, the next sweep would judge
+  staleness from a claim nobody holds.
+
+Deviation from the audit on Z-4: `settings.adminBadge` was kept. It labels a nav item as admin-only,
+not a person as an admin — same word, different statement.

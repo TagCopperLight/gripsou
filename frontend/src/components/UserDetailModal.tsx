@@ -47,7 +47,7 @@ export function UserDetailModal({
   const roleColor =
     role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim";
   const roleLabel = t(
-    role === "admin" ? "settings.users.roleAdmin" : "settings.users.roleMember",
+    role === "admin" ? "roles.admin" : "roles.member",
   );
 
   return (
