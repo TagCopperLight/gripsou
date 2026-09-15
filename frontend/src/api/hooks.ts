@@ -22,14 +22,25 @@ import type {
   Session,
   SessionUser,
   Transaction,
-  TransactionQuery,
+  TransactionFilterQuery,
   User,
 } from "./types";
 import { hasSyncing } from "./types";
+import { keys } from "./keys";
+import {
+  afterAccountEdit,
+  afterConnectionDeleted,
+  afterLotsSaved,
+  afterSessionChange,
+  afterSyncRequested,
+  afterUserChange,
+} from "./invalidate";
+
+export type { TransactionFilterQuery };
 
 export function useNetWorth(range: string) {
   return useQuery({
-    queryKey: ["net-worth", range],
+    queryKey: keys.netWorth(range),
     queryFn: () => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`),
     placeholderData: keepPreviousData,
   });
@@ -39,7 +50,7 @@ export type Health = { status: string; version: string };
 
 export function useHealth() {
   return useQuery({
-    queryKey: ["health"],
+    queryKey: keys.health(),
     // The version cannot change without a page reload, so never refetch it.
     queryFn: () => getJson<Health>(`/health`),
     staleTime: Infinity,
@@ -48,14 +59,14 @@ export function useHealth() {
 
 export function useDistribution() {
   return useQuery({
-    queryKey: ["distribution"],
+    queryKey: keys.distribution(),
     queryFn: () => getJson<DistributionAccount[]>(`/dashboard/distribution`),
   });
 }
 
 export function useHoldings() {
   return useQuery({
-    queryKey: ["holdings"],
+    queryKey: keys.holdings(),
     queryFn: () => getJson<Holding[]>(`/holdings`),
   });
 }
@@ -83,25 +94,13 @@ export function useSaveLots(holdingId: string) {
   return useMutation({
     mutationFn: (batch: SaveLotsInput) =>
       putJson<void>(`/holdings/${holdingId}/lots`, batch),
-    onSuccess: () => {
-      // The batch changes the explained quantity, the cost basis and the derived
-      // history, so every read of those has to refetch: the holdings list, the
-      // transactions ledger (a lot is itself a transaction row), net worth,
-      // the accounts stacked-area chart, and this holding's own purchase list
-      // and price history shown in AssetModal.
-      qc.invalidateQueries({ queryKey: ["holdings"] });
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["net-worth"] });
-      qc.invalidateQueries({ queryKey: ["account-series"] });
-      qc.invalidateQueries({ queryKey: ["holding-lots", holdingId] });
-      qc.invalidateQueries({ queryKey: ["holding-prices", holdingId] });
-    },
+    onSuccess: () => afterLotsSaved(qc, holdingId),
   });
 }
 
 export function useHoldingPrices(id: string, range: string) {
   return useQuery({
-    queryKey: ["holding-prices", id, range],
+    queryKey: keys.holdingPrices(id, range),
     queryFn: () => getJson<PricePoint[]>(`/holdings/${id}/prices?range=${range}`),
     placeholderData: keepPreviousData,
   });
@@ -109,21 +108,21 @@ export function useHoldingPrices(id: string, range: string) {
 
 export function useHoldingLots(id: string) {
   return useQuery({
-    queryKey: ["holding-lots", id],
+    queryKey: keys.holdingLots(id),
     queryFn: () => getJson<Lot[]>(`/holdings/${id}/lots`),
   });
 }
 
 export function useAccounts() {
   return useQuery({
-    queryKey: ["accounts"],
+    queryKey: keys.accounts(),
     queryFn: () => getJson<Account[]>(`/accounts`),
   });
 }
 
 export function useAccountSeries(range: string) {
   return useQuery({
-    queryKey: ["account-series", range],
+    queryKey: keys.accountSeries(range),
     queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
     placeholderData: keepPreviousData,
   });
@@ -135,11 +134,9 @@ export function useAccountSeries(range: string) {
 // a page shorter than PAGE_SIZE means there is nothing left to fetch.
 export const TRANSACTIONS_PAGE_SIZE = 200;
 
-export type TransactionFilterQuery = Omit<TransactionQuery, "limit" | "offset">;
-
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({
-    queryKey: ["transactions", q],
+    queryKey: keys.transactions(q),
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams();
       if (q.search) params.set("search", q.search);
@@ -165,14 +162,14 @@ export function useTransactions(q: TransactionFilterQuery) {
 
 export function useAccountTypes() {
   return useQuery({
-    queryKey: ["account-types"],
+    queryKey: keys.accountTypes(),
     queryFn: () => getJson<AccountType[]>(`/account-types`),
   });
 }
 
 export function useUsers() {
   return useQuery({
-    queryKey: ["users"],
+    queryKey: keys.users(),
     queryFn: () => getJson<User[]>(`/users`),
   });
 }
@@ -189,13 +186,7 @@ export function useUpdateAccount() {
   return useMutation({
     mutationFn: ({ id, name, typeKey, color }: UpdateAccountInput) =>
       patchJson(`/accounts/${id}`, { name, typeKey, color }),
-    onSuccess: () => {
-      // Color/type changes ripple into the list, the distribution pie, and the
-      // accounts stacked-area chart.
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      qc.invalidateQueries({ queryKey: ["distribution"] });
-      qc.invalidateQueries({ queryKey: ["account-series"] });
-    },
+    onSuccess: () => afterAccountEdit(qc),
   });
 }
 
@@ -212,7 +203,7 @@ export function useUpdateProfile() {
     onSuccess: () => {
       // The admin user list shows the current user's name/email; refresh it so
       // an edit is reflected there too.
-      qc.invalidateQueries({ queryKey: ["users"] });
+      afterUserChange(qc);
     },
   });
 }
@@ -230,7 +221,7 @@ export function useChangePassword() {
     onSuccess: () => {
       // Changing the password revokes all other sessions server-side; refresh
       // the sessions list so stale entries disappear immediately.
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      afterSessionChange(qc);
     },
   });
 }
@@ -245,7 +236,7 @@ export function useDeleteAccount() {
 
 export function useSessions() {
   return useQuery({
-    queryKey: ["sessions"],
+    queryKey: keys.sessions(),
     queryFn: () => getJson<Session[]>("/auth/sessions"),
   });
 }
@@ -254,7 +245,7 @@ export function useRevokeSession() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteJson<void>(`/auth/sessions/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+    onSuccess: () => afterSessionChange(qc),
   });
 }
 
@@ -262,13 +253,13 @@ export function useRevokeOtherSessions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => deleteJson<void>("/auth/sessions"),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+    onSuccess: () => afterSessionChange(qc),
   });
 }
 
 export function useConnections() {
   return useQuery({
-    queryKey: ["connections"],
+    queryKey: keys.connections(),
     queryFn: () => getJson<ProviderGroup[]>("/connections"),
     // Poll while any connection is syncing; stop when none are.
     refetchInterval: (query) =>
@@ -281,7 +272,7 @@ export function useSyncConnection() {
   return useMutation({
     mutationFn: (id: string) => postJson<void>(`/connections/${id}/sync`, {}),
     // Refresh so the connection's new 'syncing' state (and polling) kick in.
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+    onSuccess: () => afterSyncRequested(qc),
   });
 }
 
@@ -289,13 +280,13 @@ export function useSyncAll() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => postJson<void>("/sync", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+    onSuccess: () => afterSyncRequested(qc),
   });
 }
 
 export function useProviders() {
   return useQuery({
-    queryKey: ["providers"],
+    queryKey: keys.providers(),
     queryFn: () => getJson<Provider[]>("/providers"),
   });
 }
@@ -307,30 +298,30 @@ export function useSetProviderEnabled() {
       patchJson<Provider>(`/providers/${key}`, { enabled }),
     // Optimistically flip the toggle; roll back on error.
     onMutate: async ({ key, enabled }) => {
-      await qc.cancelQueries({ queryKey: ["providers"] });
-      const prev = qc.getQueryData<Provider[]>(["providers"]);
-      qc.setQueryData<Provider[]>(["providers"], (old) =>
+      await qc.cancelQueries({ queryKey: keys.providers() });
+      const prev = qc.getQueryData<Provider[]>(keys.providers());
+      qc.setQueryData<Provider[]>(keys.providers(), (old) =>
         old?.map((p) => (p.key === key ? { ...p, enabled } : p)),
       );
       return { prev };
     },
     onError: (_e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["providers"], ctx.prev);
+      if (ctx?.prev) qc.setQueryData(keys.providers(), ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["providers"] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.providers() }),
   });
 }
 
 export function useEnabledProviders() {
   return useQuery({
-    queryKey: ["providers-enabled"],
+    queryKey: keys.providersEnabled(),
     queryFn: () => getJson<EnabledProvider[]>("/providers/enabled"),
   });
 }
 
 export function useCorsOrigins() {
   return useQuery({
-    queryKey: ["cors-origins"],
+    queryKey: keys.corsOrigins(),
     queryFn: () => getJson<string[]>("/settings/cors"),
   });
 }
@@ -339,7 +330,7 @@ export function useSetCorsOrigins() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cors-origins"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.corsOrigins() }),
   });
 }
 
@@ -363,7 +354,9 @@ export function useCompleteConnection() {
       connectionId: string;
       params: Record<string, string>;
     }) => postJson<void>("/connections/complete", { connectionId, params }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+    // A completed connect kicks an initial sync server-side, so the poll that
+    // `afterSyncRequested` starts is what eventually refreshes the data views.
+    onSuccess: () => afterSyncRequested(qc),
   });
 }
 
@@ -371,7 +364,9 @@ export function useDeleteConnection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteJson<void>(`/connections/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+    // Deleting cascades to the connection's accounts and holdings immediately,
+    // so every dashboard figure changes with it — not just the list.
+    onSuccess: () => afterConnectionDeleted(qc),
   });
 }
 
@@ -392,6 +387,6 @@ export function useDeleteUser() {
   return useMutation({
     mutationFn: ({ id, email }: { id: string; email: string }) =>
       deleteJson<void>(`/users/${id}`, { email }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => afterUserChange(qc),
   });
 }
