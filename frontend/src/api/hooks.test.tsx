@@ -10,6 +10,7 @@ import {
   useHoldings,
   useTransactions,
   useUpdateAccount,
+  useDeleteConnection,
 } from "./hooks";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -75,6 +76,66 @@ describe("useUpdateAccount", () => {
         color: "#4dd0b1",
       }),
     });
+  });
+});
+
+describe("useUpdateAccount invalidation", () => {
+  it("also refreshes the holdings and transactions tables, which render the account name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "a1" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+
+    const { client, wrapper: w } = makeWrapper();
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateAccount(), { wrapper: w });
+
+    result.current.mutate({ id: "a1", name: "New", typeKey: "savings", color: "#4dd0b1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
+    // The last two are C-18: both tables print accountName/accountColor from
+    // their own payload, so a rename left them showing the old value.
+    expect(invalidatedKeys).toEqual([
+      ["accounts"],
+      ["distribution"],
+      ["account-series"],
+      ["holdings"],
+      ["transactions"],
+    ]);
+  });
+});
+
+describe("useDeleteConnection", () => {
+  it("refreshes every figure the deleted connection fed, not just the list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    const { client, wrapper: w } = makeWrapper();
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteConnection(), { wrapper: w });
+
+    result.current.mutate("c1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
+    expect(invalidatedKeys).toEqual([
+      ["connections"],
+      ["net-worth"],
+      ["distribution"],
+      ["accounts"],
+      ["account-series"],
+      ["holdings"],
+      ["transactions"],
+    ]);
   });
 });
 

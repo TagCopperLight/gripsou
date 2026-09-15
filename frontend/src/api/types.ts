@@ -253,3 +253,7 @@ export type TransactionQuery = {
   limit?: number;
   offset?: number;
 };
+
+/** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the
+ * filter set the user picks, which is also what the query key is built from. */
+export type TransactionFilterQuery = Omit<TransactionQuery, "limit" | "offset">;

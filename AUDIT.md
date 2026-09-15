@@ -39,6 +39,9 @@ marked inline at its own heading with a `**Status**` line.
 | C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
 | D-4, Q-4 | A wedged `syncing` connection is now recoverable, and the silent lock writes speak | ✅ Fixed |
 | Z-4 | One `roles.admin` / `roles.member` pair; the sidebar no longer renders a raw key | ✅ Fixed |
+| S-1, S-2, S-3 | Login hardening: rate limiting, password floor, timing oracle | ⏳ Deferred |
+| C-11, D-12 | Headline badge vs. the chart's % mode — two metrics, by design | ⏭️ Skipped |
+| C-17, C-18, Z-6 | Query-key factory + named invalidation groups; three stale screens closed | ✅ Fixed |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -446,6 +449,12 @@ day `-50`. `gain_abs = +50`, `gain_pct = 50 / -100 = -0.5`. The card renders a g
 
 ### C-11 — The headline "% over range" and the chart's "%" mode compute different quantities
 
+**Status**: ⏭️ Skipped (2026-09-15). The split is deliberate and the user confirmed it: **the badge is raw movement of the balance over the period; the deposit-adjusted return is what the `%` toggle is for.** The audit's framing — "two numbers labelled the same thing" — does not hold on inspection: in percent mode the chart's legend and series are labelled `common.return` ("Return" / "Rendement", set at `NetWorthChart.tsx:29`), while the badge carries no metric word at all, only `dashboard.netWorth.over` ("over 3 months"). The two are distinguishable in the UI.
+
+Measured on live data before the decision (2026-09-15, history clamped to its 2026-06-19 start): net worth 3 928,84 € → 4 916,29 €, invested 3 740,97 € → 4 727,96 €. The badge therefore reads about **+987 € / +25,1 %** while the chart's percent mode ends at about **+0,01 %** — a genuinely large gap, and the right one to show in two different places. Roughly 987 € was deposited over the window and it earned about 46 cents.
+
+Not done, and cheap if it is ever wanted: the badge has no label of its own. A word there ("change" / "évolution") would remove the last of the ambiguity without touching either metric.
+
 **Severity**: Medium
 **Confidence**: Certain
 **Location**: `frontend/src/components/NetWorthCard.tsx:100` vs `frontend/src/lib/assetSeries.ts:211-224`
@@ -579,6 +588,14 @@ members sharing an `accountCurrency`.
 
 ### C-17 — A finished sync does not invalidate the transactions cache
 
+**Status**: ✅ Fixed (2026-09-15). Fixed as one issue with C-17 and C-18, since all three are the same cause: the invalidation set for a mutation was hand-written per call site. New `frontend/src/api/keys.ts` is the single definition of every query key (a parameterised key called with no argument yields its family prefix, so read sites pass the range and invalidation sites don't), and new `frontend/src/api/invalidate.ts` names one group per domain event — `afterSyncFinished`, `afterSyncRequested`, `afterAccountEdit`, `afterConnectionDeleted`, `afterLotsSaved`, `afterSessionChange`, `afterUserChange`. All 20 read sites and all 22 invalidation sites in `hooks.ts` plus `SyncButton.tsx` now go through them; no string key literal remains outside `keys.ts`.
+
+Three real stale screens closed: transactions after a sync (C-17), holdings + transactions after an account rename (C-18), and everything after deleting a connection (Z-6's fourth site).
+
+**Two of Z-6's five claimed sites were wrong and were deliberately left as they are.** `useSyncConnection` / `useSyncAll` invalidating only `connections` is correct, not a bug: the backend answers `202 Accepted` and runs the sync in a detached task, so there is nothing fresh to fetch at mutation-success time. The connections query polls every 2s while syncing and `SyncButton`'s syncing→idle effect is the completion signal for every screen — that path is now `afterSyncFinished`. `useCompleteConnection` is the same case, because `complete_connection` kicks an initial sync server-side (`jobs/src/lib.rs`). Both now call `afterSyncRequested`, which documents the intent instead of leaving a bare one-key list that reads like an omission.
+
+Regression tests: `api/invalidate.test.ts` pins each group to its **exact** key set (containment assertions cannot catch a missing key, which is what all three bugs were); `api/keys.test.ts` asserts the prefix property the scheme rests on; `api/hooks.test.tsx` adds `useUpdateAccount invalidation` and `useDeleteConnection`; `components/SyncButton.test.tsx` now asserts the exact list including `transactions`. Frontend suite 221 passed (was 211), `bun run lint` silent, `bun run build` clean. No backend change.
+
 **Severity**: Low
 **Confidence**: Certain
 **Location**: `frontend/src/components/SyncButton.tsx:11-17`
@@ -597,6 +614,14 @@ rather than a decision.
 ---
 
 ### C-18 — Renaming or recoloring an account leaves the Holdings table stale
+
+**Status**: ✅ Fixed (2026-09-15). Fixed as one issue with C-17 and C-18, since all three are the same cause: the invalidation set for a mutation was hand-written per call site. New `frontend/src/api/keys.ts` is the single definition of every query key (a parameterised key called with no argument yields its family prefix, so read sites pass the range and invalidation sites don't), and new `frontend/src/api/invalidate.ts` names one group per domain event — `afterSyncFinished`, `afterSyncRequested`, `afterAccountEdit`, `afterConnectionDeleted`, `afterLotsSaved`, `afterSessionChange`, `afterUserChange`. All 20 read sites and all 22 invalidation sites in `hooks.ts` plus `SyncButton.tsx` now go through them; no string key literal remains outside `keys.ts`.
+
+Three real stale screens closed: transactions after a sync (C-17), holdings + transactions after an account rename (C-18), and everything after deleting a connection (Z-6's fourth site).
+
+**Two of Z-6's five claimed sites were wrong and were deliberately left as they are.** `useSyncConnection` / `useSyncAll` invalidating only `connections` is correct, not a bug: the backend answers `202 Accepted` and runs the sync in a detached task, so there is nothing fresh to fetch at mutation-success time. The connections query polls every 2s while syncing and `SyncButton`'s syncing→idle effect is the completion signal for every screen — that path is now `afterSyncFinished`. `useCompleteConnection` is the same case, because `complete_connection` kicks an initial sync server-side (`jobs/src/lib.rs`). Both now call `afterSyncRequested`, which documents the intent instead of leaving a bare one-key list that reads like an omission.
+
+Regression tests: `api/invalidate.test.ts` pins each group to its **exact** key set (containment assertions cannot catch a missing key, which is what all three bugs were); `api/keys.test.ts` asserts the prefix property the scheme rests on; `api/hooks.test.tsx` adds `useUpdateAccount invalidation` and `useDeleteConnection`; `components/SyncButton.test.tsx` now asserts the exact list including `transactions`. Frontend suite 221 passed (was 211), `bun run lint` silent, `bun run build` clean. No backend change.
 
 **Severity**: Low
 **Confidence**: Certain
@@ -783,6 +808,8 @@ All routes are under `/api`. "User-scoped in query?" = does the SQL constrain ro
 
 ### S-1 — No rate limiting on login (or anywhere else)
 
+**Status**: ⏳ Deferred (2026-09-15). Verified still true in the working tree — no limiter crate in any `Cargo.toml`, and the only layers wrapped around the API router in `api/src/main.rs` are `CorsLayer` and `TraceLayer`. **This one is live, not dormant**: `docker/docker-compose.yml` joins the external `web` network and the central Caddy reverse-proxies `gripsou.bourdet.be` to it, so the login endpoint is on the public internet with two accounts behind it. Deferred by the user's decision to a later session, together with S-2 and S-3 — they are one code path and should be fixed as one change. The open design question when it is picked up: the per-IP limiter is meaningless behind Caddy unless the forwarded-IP header is explicitly trusted, and forging-dangerous if trusted loosely.
+
 - **Severity**: High
 - **Confidence**: Certain
 - **Location**: `backend/api/src/main.rs:67-115` (router — no throttling layer), `backend/api/src/handlers.rs:545`
@@ -792,6 +819,8 @@ All routes are under `/api`. "User-scoped in query?" = does the SQL constrain ro
 
 ### S-2 — No password strength requirements anywhere
 
+**Status**: ⏳ Deferred (2026-09-15). Verified: `redeem_invite` (`handlers.rs:1093`) and `redeem_reset` (`handlers.rs:1120`) check only `is_empty()`; `change_password` (`handlers.rs:789-808`) checks the *current* password and then hashes `new_password` with no validation whatsoever, so an empty password can be set and would then be accepted at login. Deferred with S-1 and S-3. Undecided when deferred: the minimum length (the audit says 12) and whether to mirror the rule in the three frontend forms.
+
 - **Severity**: High
 - **Confidence**: Certain
 - **Location**: `backend/api/src/handlers.rs:1024-1030` (redeem_invite), `handlers.rs:1052-1054` (redeem_reset), `handlers.rs:721-747` (change_password)
@@ -800,6 +829,8 @@ All routes are under `/api`. "User-scoped in query?" = does the SQL constrain ro
 - **Fix**: Enforce a minimum length (12+ chars for a self-hosted finance app) and reject empty/whitespace in all three paths, ideally with a common-password denylist. Mirror the validation on the frontend but enforce it server-side.
 
 ### S-3 — Login is a user-enumeration oracle via timing
+
+**Status**: ⏳ Deferred (2026-09-15). Verified at `handlers.rs:625-631`: an unknown email short-circuits on `ok_or_else(unauthorized)` before `verify_password` runs, so the Argon2 cost is paid only for real accounts. Not high-severity on its own, but it is three lines in the same handler S-1 and S-2 touch, so it was grouped with them and deferred with them.
 
 - **Severity**: Medium
 - **Confidence**: Certain
@@ -1217,6 +1248,14 @@ generated constants file), and have every chart and legend import from it.
 ---
 
 ### Z-6 — Cache invalidation is hand-written per mutation and is incomplete in four places
+
+**Status**: ✅ Fixed (2026-09-15). Fixed as one issue with C-17 and C-18, since all three are the same cause: the invalidation set for a mutation was hand-written per call site. New `frontend/src/api/keys.ts` is the single definition of every query key (a parameterised key called with no argument yields its family prefix, so read sites pass the range and invalidation sites don't), and new `frontend/src/api/invalidate.ts` names one group per domain event — `afterSyncFinished`, `afterSyncRequested`, `afterAccountEdit`, `afterConnectionDeleted`, `afterLotsSaved`, `afterSessionChange`, `afterUserChange`. All 20 read sites and all 22 invalidation sites in `hooks.ts` plus `SyncButton.tsx` now go through them; no string key literal remains outside `keys.ts`.
+
+Three real stale screens closed: transactions after a sync (C-17), holdings + transactions after an account rename (C-18), and everything after deleting a connection (Z-6's fourth site).
+
+**Two of Z-6's five claimed sites were wrong and were deliberately left as they are.** `useSyncConnection` / `useSyncAll` invalidating only `connections` is correct, not a bug: the backend answers `202 Accepted` and runs the sync in a detached task, so there is nothing fresh to fetch at mutation-success time. The connections query polls every 2s while syncing and `SyncButton`'s syncing→idle effect is the completion signal for every screen — that path is now `afterSyncFinished`. `useCompleteConnection` is the same case, because `complete_connection` kicks an initial sync server-side (`jobs/src/lib.rs`). Both now call `afterSyncRequested`, which documents the intent instead of leaving a bare one-key list that reads like an omission.
+
+Regression tests: `api/invalidate.test.ts` pins each group to its **exact** key set (containment assertions cannot catch a missing key, which is what all three bugs were); `api/keys.test.ts` asserts the prefix property the scheme rests on; `api/hooks.test.tsx` adds `useUpdateAccount invalidation` and `useDeleteConnection`; `components/SyncButton.test.tsx` now asserts the exact list including `transactions`. Frontend suite 221 passed (was 211), `bun run lint` silent, `bun run build` clean. No backend change.
 
 **Severity**: High
 
@@ -2897,6 +2936,12 @@ a genuine error rather than a normal left-edge condition.
 ---
 
 ### D-12 — The headline gain% and the chart's % mode are two different metrics on the same card
+
+**Status**: ⏭️ Skipped (2026-09-15). The split is deliberate and the user confirmed it: **the badge is raw movement of the balance over the period; the deposit-adjusted return is what the `%` toggle is for.** The audit's framing — "two numbers labelled the same thing" — does not hold on inspection: in percent mode the chart's legend and series are labelled `common.return` ("Return" / "Rendement", set at `NetWorthChart.tsx:29`), while the badge carries no metric word at all, only `dashboard.netWorth.over` ("over 3 months"). The two are distinguishable in the UI.
+
+Measured on live data before the decision (2026-09-15, history clamped to its 2026-06-19 start): net worth 3 928,84 € → 4 916,29 €, invested 3 740,97 € → 4 727,96 €. The badge therefore reads about **+987 € / +25,1 %** while the chart's percent mode ends at about **+0,01 %** — a genuinely large gap, and the right one to show in two different places. Roughly 987 € was deposited over the window and it earned about 46 cents.
+
+Not done, and cheap if it is ever wanted: the badge has no label of its own. A word there ("change" / "évolution") would remove the last of the ambiguity without touching either metric.
 
 **Severity**: Medium
 **Confidence**: Certain

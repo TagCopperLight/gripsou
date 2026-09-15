@@ -154,23 +154,35 @@ true net worth for this install. Revisit it the day an account with a negative v
 | C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
 | D-4, Q-4 | A wedged `syncing` connection is recoverable; the silent lock writes now log | ✅ Fixed |
 | Z-4 | One `roles.admin` / `roles.member` pair, five call sites repointed | ✅ Fixed |
+| S-1, S-2, S-3 | Login hardening: rate limiting, password floor, timing oracle | ⏳ Deferred |
+| C-11, D-12 | Headline badge vs. the chart's % mode — two metrics, by design | ⏭️ Skipped |
+| C-17, C-18, Z-6 | Query-key factory + named invalidation groups; three stale screens closed | ✅ Fixed |
 
 **C-5 is deferred on purpose**, not skipped: it is the same work as the "Transactions reconciliation"
 item the user added under the Budget page in `TODO.md`, and it needs C-4's guarantee that a fetch is
 complete before anything may be deleted for being absent from it. Pick it up there, not here.
+
+**S-1 / S-2 / S-3 are deferred**, not skipped. They are one code path — the login and
+password-setting handlers — and the user chose to take them in a later session. They are the only
+*live, internet-reachable* High left: the instance is proxied to `gripsou.bourdet.be` by the central
+Caddy, login has no rate limit, `change_password` validates nothing at all, and an unknown email
+returns before Argon2 runs so account existence is a one-request timing oracle. When picking this up,
+the two open decisions are the minimum password length and how the per-IP limiter learns the real
+client IP through Caddy.
 
 Remaining:
 
 Correctness: (none — C-4 closed the tier, C-5 moved to the reconciliation work)
 Design: D-3 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
 Quality: Q-1 · Q-2 · Q-3
-Centralization: Z-2 · Z-3 · Z-5 · Z-6
-Security: the two high-severity of S-1…S-17 (own section, severities listed there)
+Centralization: Z-2 · Z-3 · Z-5
+Security: S-1 · S-2 (both High) deferred above; S-3…S-17 are Medium/Low
+
+**Measured and found dormant, so not yet worth doing**: Z-3's four "% of net worth" denominators
+(accounts list, distribution pie, holdings table, headline) are all still computed separately, but on
+2026-09-15 all four came to 4 916,29 € exactly. It is a drift risk, not a live wrong number.
 
 Pairs that should be fixed together because they are one bug seen twice:
-- **C-17 + C-18 + Z-6** — a finished sync invalidates only `["connections"]`, leaving the dashboard,
-  holdings and transactions caches stale.
-- **C-11 + D-12** — the headline gain% and the chart's % mode are two different metrics on one card.
 - **Z-5 + Q-17** — chart colours hardcoded as hex, diverged from the CSS tokens.
 - **Z-14 + Q-24** — the `#888888` fallback, twice.
 
@@ -237,3 +249,33 @@ Two conventions this surfaced:
 
 Deviation from the audit on Z-4: `settings.adminBadge` was kept. It labels a nav item as admin-only,
 not a person as an admin — same word, different statement.
+
+---
+
+## Issue 9, for reference
+
+**C-17 / C-18 / Z-6 — every mutation hand-wrote its own list of what to refresh.**
+
+`frontend/src/api/keys.ts` is now the single definition of every query key, and
+`frontend/src/api/invalidate.ts` names one group per domain event. All 42 sites go through them.
+
+The key-factory convention worth knowing: **a parameterised key called with no argument returns its
+family prefix** — `keys.netWorth("1y")` is `["net-worth", "1y"]`, `keys.netWorth()` is
+`["net-worth"]`. Read sites pass the parameter, invalidation sites omit it, and react-query's prefix
+matching does the rest. `api/keys.test.ts` pins that property, because if a parameterised key ever
+stops starting with its own prefix the invalidation misses silently.
+
+Three real stale screens closed: transactions after a sync, holdings + transactions after an account
+rename, everything after deleting a connection.
+
+**Two of Z-6's five claimed sites were wrong**, and verifying that was the whole value of step 2 of
+the protocol. `useSyncConnection` / `useSyncAll` / `useCompleteConnection` invalidating only
+`connections` is *correct*: the sync endpoints answer `202 Accepted` and work in a detached task, so
+the connections poll landing on `ok` — handled once, in `SyncButton` — is the completion signal for
+every screen. Had the audit been implemented as written, three mutations would have grown pointless
+invalidations that fire before any new data exists.
+
+Test convention this set: **invalidation groups are asserted against their exact key set, never with
+`arrayContaining`.** All three bugs were a key *missing* from a list, and a containment assertion
+cannot catch that. `SyncButton.test.tsx`'s existing check was loosened in exactly that way and was
+tightened as part of this.

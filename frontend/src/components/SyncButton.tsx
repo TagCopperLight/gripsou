@@ -4,17 +4,9 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useConnections } from "../api/hooks";
+import { afterSyncFinished } from "../api/invalidate";
 import { hasError, hasSyncing } from "../api/types";
 import { SyncModal } from "./SyncModal";
-
-// Views whose values depend on synced data — refreshed once a sync settles.
-const SYNC_DEPENDENT_KEYS = [
-  ["net-worth"],
-  ["distribution"],
-  ["accounts"],
-  ["account-series"],
-  ["holdings"],
-];
 
 // Global sync control: positioned top-right on every page. The icon spins while any
 // connection is syncing; a red dot appears when any connection is in error.
@@ -26,15 +18,13 @@ export function SyncButton() {
   const syncing = hasSyncing(data);
   const error = hasError(data);
 
-  // When a sync finishes (syncing → idle), snapshots/values may have changed —
-  // refresh the dashboard/accounts/holdings views so they reflect the new data.
+  // When a sync finishes (syncing → idle), snapshots/values may have changed.
+  // This is the ONLY place a completed sync is noticed: the sync mutations
+  // answer 202 and the work happens in a detached task, so the connections poll
+  // landing on 'ok' is the completion signal for every screen.
   const wasSyncing = useRef(false);
   useEffect(() => {
-    if (wasSyncing.current && !syncing) {
-      for (const queryKey of SYNC_DEPENDENT_KEYS) {
-        qc.invalidateQueries({ queryKey });
-      }
-    }
+    if (wasSyncing.current && !syncing) afterSyncFinished(qc);
     wasSyncing.current = syncing;
   }, [syncing, qc]);
 
