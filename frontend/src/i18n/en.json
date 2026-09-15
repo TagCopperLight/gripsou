@@ -195,9 +195,6 @@
       }
     }
   },
-  "sidebar": {
-    "administrator": "Administrator"
-  },
   "auth": {
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
@@ -224,6 +221,10 @@
     "updatePasswordButton": "Update password",
     "resetLinkInvalid": "This reset link is no longer valid.",
     "dataNotice": "Your data is encrypted at rest, but the owner of this server can view it."
+  },
+  "roles": {
+    "admin": "Admin",
+    "member": "Member"
   },
   "settings": {
     "adminBadge": "Admin",
@@ -305,8 +306,6 @@
         "joined": "JOINED",
         "actions": "ACTIONS"
       },
-      "roleAdmin": "Admin",
-      "roleMember": "Member",
       "you": "You",
       "resetPassword": "Reset password",
       "deleteUser": "Delete user",

@@ -102,7 +102,7 @@ export function SettingsUsers() {
                         role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim"
                       }`}
                     >
-                      {t(role === "admin" ? "settings.users.roleAdmin" : "settings.users.roleMember")}
+                      {t(role === "admin" ? "roles.admin" : "roles.member")}
                     </span>
                     <ChevronRight className="size-4 shrink-0 text-fg-faint" />
                   </button>
@@ -128,7 +128,7 @@ export function SettingsUsers() {
               <tbody>
                 {users.map((u) => {
                   const role = roleOf(u);
-                  const label = t(role === "admin" ? "settings.users.roleAdmin" : "settings.users.roleMember");
+                  const label = t(role === "admin" ? "roles.admin" : "roles.member");
                   return (
                     <tr key={u.id} className="hover:bg-hover transition-colors duration-140">
                       {/* MEMBER */}

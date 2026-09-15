@@ -195,9 +195,6 @@
       }
     }
   },
-  "sidebar": {
-    "administrator": "Administrateur"
-  },
   "auth": {
     "signIn": "Se connecter",
     "welcomeBack": "Bon retour",
@@ -224,6 +221,10 @@
     "updatePasswordButton": "Mettre à jour le mot de passe",
     "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
     "dataNotice": "Vos données sont chiffrées au repos, mais le propriétaire de ce serveur peut les consulter."
+  },
+  "roles": {
+    "admin": "Admin",
+    "member": "Membre"
   },
   "settings": {
     "adminBadge": "Admin",
@@ -305,8 +306,6 @@
         "joined": "INSCRIT LE",
         "actions": "ACTIONS"
       },
-      "roleAdmin": "Admin",
-      "roleMember": "Membre",
       "you": "Vous",
       "resetPassword": "Réinitialiser le mot de passe",
       "deleteUser": "Supprimer l'utilisateur",

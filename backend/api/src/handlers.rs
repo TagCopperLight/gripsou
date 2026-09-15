@@ -1726,8 +1726,9 @@ mod auth_tests {
             .unwrap_err();
         assert_eq!(nf.0, StatusCode::NOT_FOUND);
 
-        // Force 'syncing', then a trigger → 409.
-        sqlx::query("update connection set status='syncing' where id=$1")
+        // Force a *live* 'syncing' claim (stamped now, so the stale-lock
+        // takeover in begin_sync does not fire), then a trigger → 409.
+        sqlx::query("update connection set status='syncing', sync_started_at=now() where id=$1")
             .bind(conn)
             .execute(&pool)
             .await

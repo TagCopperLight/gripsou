@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        update connection\n           set status = 'syncing'\n         where id = $1 and user_id = $2 and status <> 'syncing'\n        returning id as \"id!\", status as \"status!\", last_sync_at, last_error\n        ",
+  "query": "\n        update connection\n           set status = 'syncing', sync_started_at = now()\n         where id = $1 and user_id = $2\n           and (status <> 'syncing'\n                or sync_started_at is null\n                or sync_started_at < now() - make_interval(mins => $3))\n        returning id as \"id!\", status as \"status!\", last_sync_at, last_error\n        ",
   "describe": {
     "columns": [
       {
@@ -51,7 +51,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -61,5 +62,5 @@
       true
     ]
   },
-  "hash": "e551f8e29218d13966681ca6ee111844ed707a4fdd241a9681b887800b2be606"
+  "hash": "74a657ecf5ad35a0f9da9f08d9eb65103bec210156d6cd846ea5fe545b8e4d4b"
 }

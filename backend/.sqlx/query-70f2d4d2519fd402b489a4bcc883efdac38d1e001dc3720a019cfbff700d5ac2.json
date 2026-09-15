@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update connection\n            set status='ok', last_sync_at=now(), last_error=null, sync_started_at=null\n          where id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70f2d4d2519fd402b489a4bcc883efdac38d1e001dc3720a019cfbff700d5ac2"
+}

@@ -2,7 +2,8 @@ mod common;
 
 use common::seed_connection;
 use gripsou_core::repo::connection::{
-    BeginSync, begin_sync, insert_pending, mark_synced_error, mark_synced_ok,
+    BeginSync, SYNC_LOCK_STALE_MINS, begin_await, begin_sync, clear_stale_syncing, insert_pending,
+    mark_synced_error, mark_synced_ok,
 };
 use sqlx::PgPool;
 
@@ -296,4 +297,179 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
             .await
             .unwrap();
     assert!(remaining.contains(&fresh) && remaining.contains(&ok) && !remaining.contains(&stale));
+}
+
+/// A process that dies mid-sync leaves `status='syncing'` with nobody to
+/// release it. `begin_sync` must take a claim over once it is older than
+/// `SYNC_LOCK_STALE_MINS`, otherwise the connection is wedged forever.
+#[sqlx::test(migrations = "../migrations")]
+async fn begin_sync_takes_over_a_stale_claim(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::Started(_)
+    ));
+    // A fresh claim is still honoured.
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::AlreadySyncing
+    ));
+
+    // Age the claim past the threshold.
+    sqlx::query(
+        "update connection set sync_started_at = now() - make_interval(mins => $2) where id=$1",
+    )
+    .bind(conn)
+    .bind(SYNC_LOCK_STALE_MINS + 1)
+    .execute(&pool)
+    .await?;
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::Started(_)
+    ));
+
+    // The takeover re-stamps, so the next caller is refused again.
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::AlreadySyncing
+    ));
+
+    // A row stuck before migration 0027 has no stamp at all — also stale.
+    sqlx::query("update connection set sync_started_at = null where id=$1")
+        .bind(conn)
+        .execute(&pool)
+        .await?;
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::Started(_)
+    ));
+    Ok(())
+}
+
+/// The reaper's sweep: only claims past the threshold are released, and they
+/// land in 'error' so the user sees the sync did not finish.
+#[sqlx::test(migrations = "../migrations")]
+async fn clear_stale_syncing_only_releases_old_claims(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = uuid::Uuid::new_v4();
+    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
+        .bind(user_id)
+        .bind(format!("u-{user_id}@test.local"))
+        .execute(&pool)
+        .await?;
+    let fresh = insert_pending(&pool, user_id, "powens", "fresh").await?;
+    let stale = insert_pending(&pool, user_id, "powens", "stale").await?;
+    let unstamped = insert_pending(&pool, user_id, "powens", "unstamped").await?;
+
+    begin_sync(&pool, user_id, fresh).await?;
+    begin_sync(&pool, user_id, stale).await?;
+    sqlx::query(
+        "update connection set sync_started_at = now() - make_interval(mins => $2) where id=$1",
+    )
+    .bind(stale)
+    .bind(SYNC_LOCK_STALE_MINS + 1)
+    .execute(&pool)
+    .await?;
+    sqlx::query("update connection set status='syncing', sync_started_at=null where id=$1")
+        .bind(unstamped)
+        .execute(&pool)
+        .await?;
+
+    let n = clear_stale_syncing(&pool, SYNC_LOCK_STALE_MINS).await?;
+    assert_eq!(n, 2);
+
+    let statuses: Vec<(uuid::Uuid, String, Option<String>)> =
+        sqlx::query_as("select id, status, last_error from connection where user_id=$1")
+            .bind(user_id)
+            .fetch_all(&pool)
+            .await?;
+    for (id, status, last_error) in statuses {
+        if id == fresh {
+            assert_eq!(status, "syncing");
+            assert!(last_error.is_none());
+        } else {
+            assert_eq!(status, "error", "connection {id}");
+            assert!(last_error.is_some_and(|e| e.contains("interrupted")));
+        }
+    }
+    Ok(())
+}
+
+/// Releasing the lock must clear the stamp too, or the next sweep would judge
+/// staleness from a claim that is no longer held.
+#[sqlx::test(migrations = "../migrations")]
+async fn finishing_a_sync_clears_the_claim_stamp(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+
+    begin_sync(&pool, user_id, conn).await?;
+    let stamped: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select sync_started_at from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert!(stamped.is_some());
+
+    mark_synced_ok(&pool, conn).await?;
+    let after_ok: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select sync_started_at from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert!(after_ok.is_none());
+
+    begin_sync(&pool, user_id, conn).await?;
+    mark_synced_error(&pool, conn, "boom").await?;
+    let after_err: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select sync_started_at from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert!(after_err.is_none());
+    Ok(())
+}
+
+/// Webhook providers request a sync through `begin_await`, so it must honour
+/// the same stale-claim takeover — otherwise a wedged lock still blocks them.
+#[sqlx::test(migrations = "../migrations")]
+async fn begin_await_takes_over_a_stale_claim(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+
+    begin_sync(&pool, user_id, conn).await?;
+    // A live claim still blocks it.
+    assert!(matches!(
+        begin_await(&pool, user_id, conn).await?,
+        BeginSync::AlreadySyncing
+    ));
+
+    sqlx::query(
+        "update connection set sync_started_at = now() - make_interval(mins => $2) where id=$1",
+    )
+    .bind(conn)
+    .bind(SYNC_LOCK_STALE_MINS + 1)
+    .execute(&pool)
+    .await?;
+    match begin_await(&pool, user_id, conn).await? {
+        BeginSync::Started(s) => assert_eq!(s.status, "awaiting"),
+        _ => panic!("expected Started"),
+    }
+    // The takeover left no stale stamp behind.
+    let stamp: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select sync_started_at from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert!(stamp.is_none());
+    Ok(())
 }

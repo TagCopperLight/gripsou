@@ -20,6 +20,16 @@ async fn fail_sync(db: &Db, id: Uuid, msg: impl Into<String>) {
 
 /// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
 pub async fn run_scheduler(db: Db) {
+    // Boot sweep: every 'syncing' row predates this process, so whatever held
+    // the lock is gone. The scheduler runs in the API process and the app is
+    // single-instance, so there is no sibling whose live claim this could steal.
+    match connection::clear_stale_syncing(&db, 0).await {
+        Ok(n) if n > 0 => {
+            tracing::warn!("released {n} sync lock(s) left behind by a previous process")
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("boot sync-lock sweep failed: {e}"),
+    }
     tokio::spawn(prune_sessions(db.clone()));
     tokio::spawn(sync_all_daily(db.clone()));
     tokio::spawn(reap_awaiting(db));
@@ -44,6 +54,14 @@ async fn reap_awaiting(db: Db) {
                 tracing::info!("awaiting webhook timed out for {}; direct fetch", row.id);
                 tokio::spawn(sync_connection(db.clone(), row.id));
             }
+        }
+
+        // A sync whose task died without a restart (panic, lost DB connection)
+        // holds its lock until this clears it — see connection::clear_stale_syncing.
+        match connection::clear_stale_syncing(&db, connection::SYNC_LOCK_STALE_MINS).await {
+            Ok(n) if n > 0 => tracing::warn!("released {n} stale sync lock(s)"),
+            Ok(_) => {}
+            Err(e) => tracing::warn!("stale sync-lock sweep failed: {e}"),
         }
 
         // Backstop for abandoned webview flows whose callback never ran.
@@ -244,7 +262,14 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
                 ),
                 Err(e) => tracing::warn!("composition fetch errored for {connection_id}: {e}"),
             }
-            let _ = connection::mark_synced_ok(&db, connection_id).await;
+            // The write that releases the lock. If it fails the data is already
+            // committed but the connection would sit on a spinner, so say so —
+            // the stale-lock sweep is what eventually frees it.
+            if let Err(e) = connection::mark_synced_ok(&db, connection_id).await {
+                tracing::warn!(
+                    "sync for {connection_id} succeeded but the lock was not released: {e}"
+                );
+            }
         }
         Err(e) => {
             fail_sync(&db, connection_id, e.to_string()).await;
@@ -457,6 +482,16 @@ pub async fn complete_connection(
         return Err(ProviderError::Other("connection not found".to_string()));
     }
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
-    let _ = request_sync(db.clone(), user_id, connection_id).await;
+    // The connect itself has succeeded either way, so a failure here is logged,
+    // not returned — but it must not be invisible.
+    match request_sync(db.clone(), user_id, connection_id).await {
+        BeginSync::Started(_) => {}
+        BeginSync::AlreadySyncing => {
+            tracing::info!("initial sync for {connection_id} skipped: already running")
+        }
+        BeginSync::NotFound => {
+            tracing::warn!("initial sync for {connection_id} skipped: connection not readable")
+        }
+    }
     Ok(())
 }
