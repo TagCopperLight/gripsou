@@ -110,8 +110,15 @@ describe("RecordLotsModal", () => {
     holdPreviewResolution = false;
     heldResolvers = [];
   });
+  // This runs while the modal is still mounted (Vitest unwinds afterEach hooks
+  // in reverse registration order, so RTL's auto-cleanup — registered when this
+  // file imported it — goes last). `changeLanguage` emits `languageChanged`,
+  // which re-renders every mounted `useTranslation` consumer, so it must be
+  // acted on or React reports an un-acted update for each one.
   afterEach(async () => {
-    await i18n.changeLanguage("en");
+    await act(async () => {
+      await i18n.changeLanguage("en");
+    });
   });
 
   it("shows only user-entered rows", () => {

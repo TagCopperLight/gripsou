@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { SettingsAccount } from "./Account";
@@ -193,7 +193,9 @@ describe("SettingsAccount delete account", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
 
-    await vi.waitFor(() => expect(logoutSpy).toHaveBeenCalled());
+    // RTL's `waitFor`, not `vi.waitFor`: the delete mutation resolves and sets
+    // state between polls, and only RTL's wraps the wait in act(...).
+    await waitFor(() => expect(logoutSpy).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/account",
       expect.objectContaining({ method: "DELETE" }),
