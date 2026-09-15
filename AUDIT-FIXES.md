@@ -150,10 +150,16 @@ true net worth for this install. Revisit it the day an account with a negative v
 | Findings | Issue | Status |
 |---|---|---|
 | C-3, C-6 | A missing FX rate absorbed silently, twice: the reporting divisor and the cost basis | ✅ Fixed |
+| C-4 | Powens account and investment lists are paginated to exhaustion | ✅ Fixed |
+| C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
+
+**C-5 is deferred on purpose**, not skipped: it is the same work as the "Transactions reconciliation"
+item the user added under the Budget page in `TODO.md`, and it needs C-4's guarantee that a fetch is
+complete before anything may be deleted for being absent from it. Pick it up there, not here.
 
 Remaining:
 
-Correctness: C-4 · C-5
+Correctness: (none — C-4 closed the tier, C-5 moved to the reconciliation work)
 Design: D-3 · D-4 · D-5 · D-6 · D-8 · D-9 · D-7 (remainder: no exchange/MIC column, shared mutable row)
 Quality: Q-1 · Q-2 · Q-3 · Q-4
 Centralization: Z-2 · Z-3 · Z-4 · Z-5 · Z-6

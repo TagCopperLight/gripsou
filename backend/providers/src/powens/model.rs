@@ -67,11 +67,15 @@ pub struct Investment {
 #[derive(Debug, Deserialize)]
 pub struct AccountsResponse {
     pub accounts: Vec<BankAccount>,
+    #[serde(default, rename = "_links")]
+    pub links: Links,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct InvestmentsResponse {
     pub investments: Vec<Investment>,
+    #[serde(default, rename = "_links")]
+    pub links: Links,
 }
 
 #[derive(Debug, Clone, Deserialize)]

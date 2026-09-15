@@ -35,6 +35,8 @@ marked inline at its own heading with a `**Status**` line.
 | C-7 (follow-up) | Chart's invested line back-dated today's cash balance across all history | ✅ Fixed |
 | D-2 | "Net worth" is gross assets; liabilities dropped at the adapter | ⏭️ Skipped |
 | C-3, C-6 | A missing FX rate is absorbed silently — reporting currency and cost basis | ✅ Fixed |
+| C-4 | Powens account and investment lists are paginated to exhaustion | ✅ Fixed |
+| C-5 | Cancelled transactions are never removed from the ledger | ⏳ Deferred |
 
 Legend: ✅ fixed · 🟡 partially fixed · ⏭️ deliberately skipped · ⏳ deferred.
 
@@ -221,6 +223,21 @@ UI can say "shown in EUR".
 
 ### C-4 — `/users/me/accounts` and `/users/me/investments` are fetched unpaginated
 
+**Status**: ✅ **Fixed.** All three Powens list fetches now go through one `fetch_all` helper
+(`providers/src/powens/mod.rs`) that walks the endpoint to exhaustion: it requests `limit=1000`,
+follows `_links.next` when the page carries a cursor, and falls back to `offset` paging when a *full*
+page arrives without one — which is the case that matters, since Powens documents no cursor for
+`/accounts` or `/investments`, only `limit`/`offset`. `AccountsResponse` and `InvestmentsResponse`
+gained the `_links` block they previously discarded. Truncation is now an **error, not a short
+list**: reaching the 100-page bound fails the sync rather than handing the ingest a partial view, so
+the close loop can keep trusting "absent means sold". That was chosen over the audit's suggested
+`truncated` flag on `SyncResult` — at 100 × 1000 rows the bound is only reachable via a provider bug,
+where failing loudly beats half-ingesting, and it keeps the change inside the Powens crate. Dormant
+on this install when fixed: 8 accounts, 13 holdings. Regression tests in
+`providers/tests/powens_fetch.rs`: `a_full_account_page_without_a_cursor_is_followed_by_offset`
+(1000-row first page plus an `offset=1000` second page), `investments_follow_the_next_link`, and
+`a_cursor_that_never_ends_fails_the_sync`.
+
 **Severity**: High
 **Confidence**: Likely
 **Location**: `backend/providers/src/powens/mod.rs:225`, `backend/providers/src/powens/mod.rs:259`
@@ -243,6 +260,17 @@ the ingest's close loop refuse to zero holdings when the fetch reported truncati
 ---
 
 ### C-5 — Powens transactions that are deleted or revert to pending are never removed from the ledger
+
+**Status**: ⏳ **Deferred** to the transactions-reconciliation work (`TODO.md`, under the Budget
+page). Confirmed still live, and worse than written: Powens' docs state that `/users/me/transactions`
+returns only active rows by default, so the `t.deleted.is_some()` guard in `map_transaction` is
+effectively dead code — a cancelled transaction does not arrive flagged, it simply stops arriving.
+Any fix therefore needs either the `all` query flag plus tombstone deletes, or full reconciliation of
+the connection's stored `external_id` set against the fetched one; the latter is the direction chosen,
+and it is only safe now that C-4 guarantees the fetch is complete. Not measurable from the database:
+a row deleted at the bank is indistinguishable from a live one in our copy. A scan of the 2,803 stored
+transactions for bank-reissue signatures (same account, day, amount and wording) found 84 groups, all
+of which sample as genuine repeats with consecutive Powens ids.
 
 **Severity**: High
 **Confidence**: Certain
