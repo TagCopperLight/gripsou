@@ -19,6 +19,41 @@ pub struct PowensProvider {
     pub(crate) webhook_secret: Option<String>,
 }
 
+/// Powens caps `limit` at 1000 on every list endpoint.
+const PAGE_LIMIT: usize = 1000;
+/// Bound so a provider bug cannot spin forever. 100 pages of 1000 rows is far
+/// past any real portfolio or ledger, so reaching it means the cursor stopped
+/// advancing rather than that the data is genuinely that large.
+const MAX_PAGES: usize = 100;
+
+/// One page of a Powens list endpoint: its rows, plus the cursor to the next
+/// page for the endpoints that use relational pagination.
+pub(crate) trait ListPage: serde::de::DeserializeOwned {
+    type Item;
+    fn into_parts(self) -> (Vec<Self::Item>, Option<String>);
+}
+
+impl ListPage for model::TransactionsResponse {
+    type Item = model::PowensTransaction;
+    fn into_parts(self) -> (Vec<Self::Item>, Option<String>) {
+        (self.transactions, self.links.next.map(|l| l.href))
+    }
+}
+
+impl ListPage for model::AccountsResponse {
+    type Item = model::BankAccount;
+    fn into_parts(self) -> (Vec<Self::Item>, Option<String>) {
+        (self.accounts, self.links.next.map(|l| l.href))
+    }
+}
+
+impl ListPage for model::InvestmentsResponse {
+    type Item = model::Investment;
+    fn into_parts(self) -> (Vec<Self::Item>, Option<String>) {
+        (self.investments, self.links.next.map(|l| l.href))
+    }
+}
+
 impl PowensProvider {
     pub fn from_env() -> Option<Self> {
         let client_id = std::env::var("POWENS_CLIENT_ID").ok()?;
@@ -65,20 +100,27 @@ impl PowensProvider {
         p
     }
 
-    /// Full history, every sync. Powens' `last_update` filter returns only rows
-    /// edited since a timestamp and therefore cannot backfill, so incremental is
-    /// unsafe; full-fetch + external_id dedup is idempotent instead (§6.1).
+    /// Walks a Powens list endpoint to exhaustion.
     ///
-    /// ponytail: fetches the whole history; add a min_date window if payloads
-    /// grow past a few thousand rows (largest observed: 2,111).
-    async fn fetch_transactions(
+    /// Two pagination styles are in play. Transactions hand back a
+    /// `_links.next` cursor; `/accounts` and `/investments` document only
+    /// `limit`/`offset`. Follow the cursor when the page carries one, fall back
+    /// to offset paging when a full page arrives without one.
+    ///
+    /// A fetch that cannot be walked to the end is an **error, never a short
+    /// list**: the ingest reads "holding absent from this sync" as "position
+    /// sold" and stamps a zero snapshot for it, so a truncated page would not
+    /// merely under-report — it would destroy that position's history (C-4).
+    async fn fetch_all<P: ListPage>(
         &self,
         auth_token: &str,
-    ) -> Result<Vec<model::PowensTransaction>, ProviderError> {
-        let mut url = self.api_url("/users/me/transactions?limit=1000");
-        let mut all = Vec::new();
-        // Bounded so a provider bug cannot spin forever: 1000 rows/page.
-        for _ in 0..100 {
+        endpoint: &str,
+    ) -> Result<Vec<P::Item>, ProviderError> {
+        let base = self.api_url(&format!("{endpoint}?limit={PAGE_LIMIT}"));
+        let mut url = base.clone();
+        let mut all: Vec<P::Item> = Vec::new();
+
+        for _ in 0..MAX_PAGES {
             let resp = self
                 .http
                 .get(&url)
@@ -88,22 +130,43 @@ impl PowensProvider {
                 .map_err(|e| ProviderError::Other(e.to_string()))?;
             if !resp.status().is_success() {
                 return Err(ProviderError::Other(format!(
-                    "GET /users/me/transactions failed: {}",
+                    "GET {endpoint} failed: {}",
                     resp.status()
                 )));
             }
-            let page: model::TransactionsResponse = resp
-                .json()
+            let body = resp
+                .text()
                 .await
-                .map_err(|e| ProviderError::Other(format!("transactions decode error: {e}")))?;
-            all.extend(page.transactions);
-            match page.links.next {
-                Some(next) => url = next.href,
+                .map_err(|e| ProviderError::Other(e.to_string()))?;
+            let page: P = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("powens {endpoint} decode error: {e}");
+                    tracing::debug!(
+                        "powens {endpoint} raw body: {}",
+                        body.chars().take(500).collect::<String>()
+                    );
+                    return Err(ProviderError::Other(format!(
+                        "{endpoint} decode error: {e}"
+                    )));
+                }
+            };
+
+            let (items, next) = page.into_parts();
+            let full_page = items.len() >= PAGE_LIMIT;
+            all.extend(items);
+            match next {
+                Some(href) => url = href,
+                None if full_page => url = format!("{base}&offset={}", all.len()),
                 None => return Ok(all),
             }
         }
-        tracing::warn!("powens transactions: page limit hit, history may be truncated");
-        Ok(all)
+
+        Err(ProviderError::Other(format!(
+            "GET {endpoint}: pagination did not terminate after {MAX_PAGES} pages ({} rows); \
+             refusing to ingest a partial view",
+            all.len()
+        )))
     }
 }
 
@@ -214,79 +277,16 @@ impl AccountProvider for PowensProvider {
     }
 
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError> {
-        use model::{AccountsResponse, InvestmentsResponse};
-
         let auth_token = credentials["auth_token"]
             .as_str()
             .ok_or_else(|| ProviderError::Other("missing auth_token in credentials".into()))?;
 
-        let accounts_resp = self
-            .http
-            .get(self.api_url("/users/me/accounts"))
-            .bearer_auth(auth_token)
-            .send()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
-
-        if !accounts_resp.status().is_success() {
-            return Err(ProviderError::Other(format!(
-                "GET /users/me/accounts failed: {}",
-                accounts_resp.status()
-            )));
-        }
-
-        let accounts_text = accounts_resp
-            .text()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
-        let accounts: AccountsResponse = match serde_json::from_str(&accounts_text) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("powens accounts decode error: {e}");
-                tracing::debug!(
-                    "powens accounts raw body: {}",
-                    accounts_text.chars().take(500).collect::<String>()
-                );
-                return Err(ProviderError::Other(format!(
-                    "accounts decode error: {}",
-                    e
-                )));
-            }
-        };
-
-        let investments_resp = self
-            .http
-            .get(self.api_url("/users/me/investments"))
-            .bearer_auth(auth_token)
-            .send()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
-
-        if !investments_resp.status().is_success() {
-            return Err(ProviderError::Other(format!(
-                "GET /users/me/investments failed: {}",
-                investments_resp.status()
-            )));
-        }
-
-        let investments_text = investments_resp
-            .text()
-            .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
-        let investments: InvestmentsResponse = match serde_json::from_str(&investments_text) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("powens investments decode error: {e}");
-                tracing::debug!(
-                    "powens investments raw body: {}",
-                    investments_text.chars().take(500).collect::<String>()
-                );
-                return Err(ProviderError::Other(format!(
-                    "investments decode error: {}",
-                    e
-                )));
-            }
-        };
+        let accounts = self
+            .fetch_all::<model::AccountsResponse>(auth_token, "/users/me/accounts")
+            .await?;
+        let investments = self
+            .fetch_all::<model::InvestmentsResponse>(auth_token, "/users/me/investments")
+            .await?;
 
         // Connections carry the institution (one connector per connection).
         // Failure here is non-fatal: leave institution empty rather than fail
@@ -309,9 +309,18 @@ impl AccountProvider for PowensProvider {
             }
         };
 
-        let transactions = self.fetch_transactions(auth_token).await?;
+        // Full history, every sync. Powens' `last_update` filter returns only
+        // rows edited since a timestamp and therefore cannot backfill, so
+        // incremental is unsafe; full-fetch + external_id dedup is idempotent
+        // instead (§6.1).
+        //
+        // ponytail: fetches the whole history; add a min_date window if
+        // payloads grow past a few thousand rows (largest observed: 2,111).
+        let transactions = self
+            .fetch_all::<model::TransactionsResponse>(auth_token, "/users/me/transactions")
+            .await?;
 
-        let mut result = map::map_sync(&accounts.accounts, &investments.investments, &transactions);
+        let mut result = map::map_sync(&accounts, &investments, &transactions);
         result.institution = map::map_institution(&connections);
         Ok(result)
     }
