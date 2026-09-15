@@ -54,7 +54,7 @@
 
 ### v1.4.2
 - [x] Private mode
-- [ ] Audit fixes
+- [x] Audit fixes
 - [ ] By account view
 - [ ] Screenshot in readme
 
