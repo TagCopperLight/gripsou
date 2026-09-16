@@ -55,14 +55,12 @@
 ### v1.4.2
 - [x] Private mode
 - [x] Audit fixes
-- [ ] By account view
 - [x] Screenshot in readme
-
+- [x] /accounts performances
 
 ### Future
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] Budget page (@TRANSACTION.md phase 2)
     - [ ] Transactions reconciliation
-- [ ] Infer lots
-- [ ] /accounts performances
+    - [ ] Infer lots
