@@ -56,7 +56,7 @@
 - [x] Private mode
 - [x] Audit fixes
 - [ ] By account view
-- [ ] Screenshot in readme
+- [x] Screenshot in readme
 
 
 ### Future
@@ -65,3 +65,4 @@
 - [ ] Budget page (@TRANSACTION.md phase 2)
     - [ ] Transactions reconciliation
 - [ ] Infer lots
+- [ ] /accounts performances

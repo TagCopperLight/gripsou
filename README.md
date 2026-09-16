@@ -3,6 +3,8 @@
 Self-hosted personal finance dashboard. Connect bank/broker/crypto providers,
 sync transactions and holdings, and see net worth and its distribution over time.
 
+![Dashboard](docs/screenshots/dashboard.png)
+
 ## Inspirations
 
 This project is the result of multiple iterations. I've built this "same" personal finance project before, learned from those attempts, and started from scratch again to build it right.
@@ -10,16 +12,6 @@ This project is the result of multiple iterations. I've built this "same" person
 The initial inspiration came from [Finary](https://finary.com/). Later, I discovered [Zoeille/picsou-finance](https://github.com/Zoeille/picsou-finance), which gave me a fresh wave of inspiration (and heavily influenced the project's name, `gripsou`).
 
 The current interface and workflow are a mix of my own ideas, concepts from Picsou, and Finary.
-
-## Layout
-
-```
-backend/    Rust workspace — core (domain + DTOs + provider ports),
-            providers (adapters), jobs (scheduler), api (axum bin)
-backend/migrations/  sqlx migrations (applied on startup)
-frontend/   Vite + React + TypeScript SPA (bun)
-docker/     Dockerfile + docker-compose.yml
-```
 
 ## Develop
 
