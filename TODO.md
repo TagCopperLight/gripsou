@@ -52,7 +52,7 @@
 - [x] yahoo price gaps fix (and tool to fix existing database)
 - [x] Better charts tooltips, fix % charts meaning nothing
 
-### v1.4.2
+### v1.4.2 - pushed
 - [x] Private mode
 - [x] Audit fixes
 - [x] Screenshot in readme

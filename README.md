@@ -80,6 +80,15 @@ cargo run -p gripsou-core --example perf -- ... --compare baseline.json # diff
 ## Changelog
 
 <details>
+<summary><strong>v1.4.2</strong> — privacy & fixes</summary>
+
+- Private mode
+- Audit fixes
+- Screenshot in the README
+- Account performance on /accounts
+</details>
+
+<details>
 <summary><strong>v1.4.1</strong> — performance</summary>
 
 - Performance optimizations
