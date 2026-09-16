@@ -490,32 +490,64 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
     let rows = sqlx::query_as!(
         AccountRow,
         r#"
-        -- Value each holding from its latest snapshot's quantity and
-        -- unit_value_asof (FX included), falling back to the provider valuation
-        -- converted at the same rate — the same rule as net_worth_series, so the
-        -- accounts grid sums to the chart's current figure. `hs.value` is
-        -- amount-domain (the provider denominates it in the account's currency),
-        -- hence fx_asof(a.currency, …) — not the instrument's quote currency.
-        -- fx_missing flags the actual failure (neither branch resolved) on a
-        -- still-held position, matching holdings()'s `h.quantity <> 0`.
+        -- Value each holding from its latest snapshot's quantity and the
+        -- instrument's unit value (FX included), falling back to the provider
+        -- valuation converted at the account-currency rate — the same rule as
+        -- net_worth_series, so the accounts grid sums to the chart's current
+        -- figure. `hs.value` is amount-domain (the provider denominates it in
+        -- the account's currency), hence the afx join — not the instrument's
+        -- quote currency. fx_missing flags the actual failure (neither branch
+        -- resolved) on a still-held position, matching holdings()'s
+        -- `h.quantity <> 0`.
+        --
+        -- Valued through `valuation_grid` rather than the scalar
+        -- unit_value_asof/fx_asof/reporting_fx_asof functions, for the reason
+        -- spelled out on distribution() — with one extra twist that made this
+        -- query the worst of the three. The scalars sit in the select list of a
+        -- `distinct on`, and Postgres projects *before* it uniquifies: every
+        -- historical snapshot row got priced (four lookups each), then all but
+        -- the newest per holding was discarded. That cost grows by one row per
+        -- holding per day forever while the result stays the same size. Joining
+        -- the grid instead makes the per-row work a hash probe, so the pricing
+        -- is proportional to what is owned, not to how long it has been owned.
+        --
+        -- Measured on the dev database (13 holdings, 197 snapshots): 58.7 ms ->
+        -- 2.9 ms, byte-identical output.
+        --
+        -- The grid joins are LEFT on purpose: a missing row must leave
+        -- unit_value NULL so the coalesce falls through to the provider
+        -- valuation, exactly as a NULL from unit_value_asof did. `rep`
+        -- reproduces reporting_fx_asof's own coalesce(nullif(rate, 0), 1) —
+        -- no usable rate means report in the pivot rather than 500 on a
+        -- division by zero.
         with today as (select (now() at time zone 'utc')::date as d),
+        grid as materialized (
+            select * from valuation_grid($1, array[(select d from today)]::date[])
+        ),
+        fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
+        rep as materialized (
+            select unit_value from fx
+            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+        ),
         latest as (
             select distinct on (hs.holding_id)
                    hs.holding_id,
                    coalesce(
-                       hs.quantity * unit_value_asof(i.id, (select d from today)),
-                       hs.value * fx_asof(a.currency, (select d from today)),
+                       hs.quantity * uv.unit_value,
+                       hs.value * afx.unit_value,
                        0
                    ) as value,
                    h.quantity <> 0
-                   and unit_value_asof(i.id, (select d from today)) is null
-                   and coalesce(hs.value * fx_asof(a.currency, (select d from today)), 0) = 0
+                   and uv.unit_value is null
+                   and coalesce(hs.value * afx.unit_value, 0) = 0
                        as fx_missing
             from holding_snapshot hs
             join holding h    on h.id = hs.holding_id
             join account a    on a.id = h.account_id
             join connection c on c.id = a.connection_id
             join instrument i on i.id = h.instrument_id
+            left join grid uv on uv.instrument_id = i.id
+            left join fx afx  on afx.currency = a.currency
             where c.user_id = $1
             order by hs.holding_id, hs.as_of desc
         )
@@ -524,7 +556,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.color,
                a.type_key as "type_key!",
                t.label as "type_label!",
-               sum(l.value) / reporting_fx_asof($1, (select d from today)) as "value!",
+               sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
