@@ -3,6 +3,7 @@
 //! transaction. All queries use sqlx's compile-time-checked macros.
 
 pub mod account;
+pub mod budget;
 pub mod connection;
 pub mod holding;
 pub mod instrument;

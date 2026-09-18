@@ -348,10 +348,38 @@ pub struct Transaction {
     pub unit_price: Option<String>,
     /// Decimal string, never a float.
     pub fee: Option<String>,
+
+    // ── Budget ──────────────────────────────────────────────────────────────
+    pub category_id: Option<String>,
+    pub category_name: Option<String>,
+    /// Translate this when present; fall back to `category_name`.
+    pub category_default_key: Option<String>,
+    pub category_color: Option<String>,
+    pub category_icon: Option<String>,
+    pub category_kind: Option<String>,
+    pub category_source: Option<String>,
+    /// Decimal string, never a float.
+    pub category_confidence: Option<String>,
+    pub needs_review: bool,
+    pub checked: bool,
+    /// One half of an auto-paired internal transfer.
+    pub is_transfer: bool,
+    pub tags: Vec<TagDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagDto {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
 }
 
 impl Transaction {
-    pub fn from_row(r: gripsou_core::repo::query::TransactionListRow) -> Self {
+    pub fn from_row(
+        r: gripsou_core::repo::query::TransactionListRow,
+        tags: Vec<gripsou_core::repo::query::TagRef>,
+    ) -> Self {
         Transaction {
             id: r.id.to_string(),
             t: r.ts.timestamp_millis(),
@@ -367,6 +395,25 @@ impl Transaction {
             quantity: r.quantity.map(|d| d.to_string()),
             unit_price: r.unit_price.map(|d| d.to_string()),
             fee: r.fee.map(|d| d.to_string()),
+            category_id: r.category_id.map(|id| id.to_string()),
+            category_name: r.category_name,
+            category_default_key: r.category_default_key,
+            category_color: r.category_color,
+            category_icon: r.category_icon,
+            category_kind: r.category_kind,
+            category_source: r.category_source,
+            category_confidence: r.category_confidence.map(|d| d.to_string()),
+            needs_review: r.needs_review,
+            checked: r.checked,
+            is_transfer: r.is_transfer,
+            tags: tags
+                .into_iter()
+                .map(|t| TagDto {
+                    id: t.id.to_string(),
+                    name: t.name,
+                    color: t.color,
+                })
+                .collect(),
         }
     }
 }

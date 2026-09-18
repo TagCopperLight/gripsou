@@ -826,6 +826,55 @@ pub struct TransactionListRow {
     pub account_name: String,
     pub account_color: Option<String>,
     pub account_currency: String,
+
+    // ── Budget ──────────────────────────────────────────────────────────────
+    // All null/false on a lot row: a purchase is an investment record, not a
+    // budget item (spec §5.2).
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    pub category_default_key: Option<String>,
+    pub category_color: Option<String>,
+    pub category_icon: Option<String>,
+    pub category_kind: Option<String>,
+    pub category_source: Option<String>,
+    pub category_confidence: Option<Decimal>,
+    /// Derived, never stored: an AI guess under the threshold that nobody has
+    /// confirmed.
+    pub needs_review: bool,
+    pub checked: bool,
+    /// The row is one half of an auto-paired internal transfer.
+    pub is_transfer: bool,
+}
+
+/// The TYPE control on the filter panel: one value, always one selected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TypeBucket {
+    #[default]
+    All,
+    MoneyIn,
+    MoneyOut,
+    Lots,
+}
+
+impl TypeBucket {
+    /// Wire form, as the API query parameter spells it.
+    pub fn from_param(s: &str) -> Self {
+        match s {
+            "in" => Self::MoneyIn,
+            "out" => Self::MoneyOut,
+            "lots" => Self::Lots,
+            _ => Self::All,
+        }
+    }
+
+    fn as_sql(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::MoneyIn => "in",
+            Self::MoneyOut => "out",
+            Self::Lots => "lots",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -834,11 +883,44 @@ pub struct TransactionFilters {
     /// (lot rows).
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
+    /// The old per-type filter (`deposit`, `withdrawal`, …). Kept until the
+    /// frontend stops sending it; `bucket` is what the Budget UI uses.
     pub kind: Option<String>,
+    pub bucket: TypeBucket,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
+    /// Empty means no filter. Several categories mean *either* of them.
+    pub category_ids: Vec<Uuid>,
+    /// Empty means no filter. Several tags mean *all* of them.
+    pub tag_ids: Vec<Uuid>,
+    pub uncategorized: bool,
+    pub needs_review: bool,
+    /// Below this, an AI guess is in the review queue. A parameter rather than
+    /// a constant so moving it reshapes the queue instantly (spec §3.1).
+    pub review_threshold: Decimal,
     pub limit: i64,
     pub offset: i64,
+}
+
+impl TransactionFilters {
+    /// Everything, unfiltered — the base a caller mutates.
+    pub fn unfiltered() -> Self {
+        Self {
+            search: None,
+            account_id: None,
+            kind: None,
+            bucket: TypeBucket::All,
+            from: None,
+            to: None,
+            category_ids: vec![],
+            tag_ids: vec![],
+            uncategorized: false,
+            needs_review: false,
+            review_threshold: Decimal::new(80, 2),
+            limit: 200,
+            offset: 0,
+        }
+    }
 }
 
 /// The Transactions page (§10). Every filter is optional and applied with the
@@ -858,10 +940,25 @@ pub async fn transactions(
                    null::text as ticker, null::numeric as quantity,
                    null::numeric as unit_price, null::numeric as fee,
                    a.id as account_id, a.name as account_name,
-                   a.color as account_color, a.currency as account_currency
+                   a.color as account_color, a.currency as account_currency,
+                   t.budget_category_id as category_id,
+                   bc.name as category_name,
+                   bc.default_key as category_default_key,
+                   bc.color as category_color,
+                   bc.icon as category_icon,
+                   bc.kind as category_kind,
+                   t.category_source,
+                   t.category_confidence,
+                   coalesce(t.category_source = 'ai'
+                    and t.category_reviewed_at is null
+                    and (t.category_confidence is null
+                         or t.category_confidence < $7), false) as needs_review,
+                   (t.checked_at is not null) as checked,
+                   (t.transfer_pair_id is not null) as is_transfer
             from transaction t
             join account a    on a.id = t.account_id
             join connection c on c.id = a.connection_id
+            left join budget_category bc on bc.id = t.budget_category_id
             where c.user_id = $1
               -- Mirrors §8.1's cash-walk exclusion, for the same reason: a
               -- transfer into the PEA is the other half of an outflow already
@@ -899,7 +996,11 @@ pub async fn transactions(
                    -- short, identifying label rather than "Apple Inc.".
                    coalesce(i.symbol, i.isin, i.name) as ticker,
                    l.quantity, l.unit_price, l.fee,
-                   a.id, a.name, a.color, a.currency
+                   a.id, a.name, a.color, a.currency,
+                   -- Lot rows carry no budget: a purchase is an investment
+                   -- record, not a budget item (spec §5.2).
+                   null::uuid, null::text, null::text, null::text, null::text, null::text,
+                   null::text, null::numeric, false, false, false
             from lot l
             join holding h    on h.id = l.holding_id
             join instrument i on i.id = h.instrument_id
@@ -910,7 +1011,11 @@ pub async fn transactions(
         select id as "id!", ts as "ts!", kind as "kind!", description, amount as "amount!",
                source as "source!", ticker, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
-               account_color, account_currency as "account_currency!"
+               account_color, account_currency as "account_currency!",
+               category_id, category_name, category_default_key, category_color,
+               category_icon, category_kind, category_source, category_confidence,
+               needs_review as "needs_review!", checked as "checked!",
+               is_transfer as "is_transfer!"
         from rows
         where ($2::text is null
                or description ilike '%' || $2 || '%'
@@ -924,8 +1029,20 @@ pub async fn transactions(
           and ($4::text is null or kind = $4)
           and ($5::date is null or (ts at time zone 'utc')::date >= $5)
           and ($6::date is null or (ts at time zone 'utc')::date <= $6)
+          and ($8::text = 'all'
+               or ($8 = 'in'   and source = 'cash' and amount > 0)
+               or ($8 = 'out'  and source = 'cash' and amount < 0)
+               or ($8 = 'lots' and source = 'lot'))
+          and (cardinality($9::uuid[]) = 0 or category_id = any($9))
+          and (not $10::boolean or (source = 'cash' and category_id is null))
+          and (not $11::boolean or needs_review)
+          and (cardinality($12::uuid[]) = 0
+               or (select count(distinct tt.tag_id)
+                     from budget_transaction_tag tt
+                    where tt.transaction_id = rows.id
+                      and tt.tag_id = any($12)) = cardinality($12))
         order by ts desc, id
-        limit $7 offset $8
+        limit $13 offset $14
         "#,
         user_id,
         f.search,
@@ -933,12 +1050,258 @@ pub async fn transactions(
         f.kind,
         f.from,
         f.to,
+        f.review_threshold,
+        f.bucket.as_sql(),
+        &f.category_ids,
+        f.uncategorized,
+        f.needs_review,
+        &f.tag_ids,
         f.limit,
         f.offset,
     )
     .fetch_all(pool)
     .await?;
     Ok(rows)
+}
+
+#[derive(Debug, Clone)]
+pub struct TagRef {
+    pub id: Uuid,
+    pub name: String,
+    pub color: Option<String>,
+}
+
+/// Tags for a page of transactions, in one round trip. Untagged rows are absent
+/// from the map rather than present with an empty vector.
+pub async fn tags_for_transactions(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, Vec<TagRef>>, CoreError> {
+    let rows = sqlx::query!(
+        r#"
+        select tt.transaction_id as "transaction_id!",
+               g.id   as "id!",
+               g.name as "name!",
+               g.color
+        from budget_transaction_tag tt
+        join budget_tag g on g.id = tt.tag_id
+        join transaction t on t.id = tt.transaction_id
+        join account a     on a.id = t.account_id
+        join connection k  on k.id = a.connection_id
+        where tt.transaction_id = any($1)
+          and k.user_id = $2
+        order by g.name
+        "#,
+        ids,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::HashMap<Uuid, Vec<TagRef>> = std::collections::HashMap::new();
+    for r in rows {
+        map.entry(r.transaction_id).or_default().push(TagRef {
+            id: r.id,
+            name: r.name,
+            color: r.color,
+        });
+    }
+    Ok(map)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TransactionCounts {
+    /// Rows under the active filters — the left half of "matching / total".
+    pub matching: i64,
+    /// Every cash and lot row this user has, filters ignored.
+    pub total: i64,
+    /// Cash rows with no category, filters ignored — the list header's second
+    /// number, and the one that starts out enormous.
+    pub uncategorized: i64,
+}
+
+/// `matching` mirrors `transactions()`'s own cash+lot union and filter
+/// predicates exactly (same `rows` CTE shape, same `where`, same bind order
+/// minus `limit`/`offset`) so the header can never drift from what the list
+/// below it actually shows — under `bucket: All` that includes lot rows,
+/// unlike `matching_transaction_ids`, which is a different, lot-free contract
+/// for bulk actions (see its own doc comment).
+pub async fn transaction_counts(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    f: &TransactionFilters,
+) -> Result<TransactionCounts, CoreError> {
+    let row = sqlx::query!(
+        r#"
+        with rows as (
+            select t.id, t.ts, t.type as kind, t.description, t.amount,
+                   'cash'::text as source, null::text as ticker,
+                   a.id as account_id,
+                   t.budget_category_id as category_id,
+                   coalesce(t.category_source = 'ai'
+                    and t.category_reviewed_at is null
+                    and (t.category_confidence is null
+                         or t.category_confidence < $7), false) as needs_review
+            from transaction t
+            join account a    on a.id = t.account_id
+            join connection c on c.id = a.connection_id
+            where c.user_id = $1
+              and not (a.type_key = 'pea'
+                       and t.external_id is not null
+                       and t.type in ('transfer', 'buy', 'sell'))
+
+            union all
+
+            select l.id,
+                   (l.acquired_on::timestamp at time zone 'UTC') as ts,
+                   l.side as kind,
+                   null::text as description,
+                   case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
+                        else l.quantity * l.unit_price - l.fee end as amount,
+                   'lot'::text as source,
+                   coalesce(i.symbol, i.isin, i.name) as ticker,
+                   a.id,
+                   null::uuid,
+                   false
+            from lot l
+            join holding h    on h.id = l.holding_id
+            join instrument i on i.id = h.instrument_id
+            join account a    on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            where c.user_id = $1
+        ),
+        matching as (
+            select count(*) as n
+            from rows
+            where ($2::text is null
+                   or description ilike '%' || $2 || '%'
+                   or ticker ilike '%' || $2 || '%')
+              and ($3::uuid is null or account_id = $3)
+              and ($4::text is null or kind = $4)
+              and ($5::date is null or (ts at time zone 'utc')::date >= $5)
+              and ($6::date is null or (ts at time zone 'utc')::date <= $6)
+              and ($8::text = 'all'
+                   or ($8 = 'in'   and source = 'cash' and amount > 0)
+                   or ($8 = 'out'  and source = 'cash' and amount < 0)
+                   or ($8 = 'lots' and source = 'lot'))
+              and (cardinality($9::uuid[]) = 0 or category_id = any($9))
+              and (not $10::boolean or (source = 'cash' and category_id is null))
+              and (not $11::boolean or needs_review)
+              and (cardinality($12::uuid[]) = 0
+                   or (select count(distinct tt.tag_id)
+                         from budget_transaction_tag tt
+                        where tt.transaction_id = rows.id
+                          and tt.tag_id = any($12)) = cardinality($12))
+        )
+        select
+          (select n from matching) as "matching!",
+          (select count(*) from transaction t
+             join account a    on a.id = t.account_id
+             join connection k on k.id = a.connection_id
+            where k.user_id = $1
+              and not (a.type_key = 'pea'
+                       and t.external_id is not null
+                       and t.type in ('transfer', 'buy', 'sell')))
+        + (select count(*) from lot l
+             join holding h    on h.id = l.holding_id
+             join account a    on a.id = h.account_id
+             join connection k on k.id = a.connection_id
+            where k.user_id = $1) as "total!",
+          (select count(*) from transaction t
+             join account a    on a.id = t.account_id
+             join connection k on k.id = a.connection_id
+            where k.user_id = $1 and t.budget_category_id is null
+              and not (a.type_key = 'pea'
+                       and t.external_id is not null
+                       and t.type in ('transfer', 'buy', 'sell'))) as "uncategorized!"
+        "#,
+        user_id,
+        f.search,
+        f.account_id,
+        f.kind,
+        f.from,
+        f.to,
+        f.review_threshold,
+        f.bucket.as_sql(),
+        &f.category_ids,
+        f.uncategorized,
+        f.needs_review,
+        &f.tag_ids,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(TransactionCounts {
+        matching: row.matching,
+        total: row.total,
+        uncategorized: row.uncategorized,
+    })
+}
+
+/// Ids of the **cash** transactions matching the filters — what "select all
+/// shown" means, and what every bulk action runs against. Lot rows are never
+/// included: they carry no budget.
+pub async fn matching_transaction_ids(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    f: &TransactionFilters,
+) -> Result<Vec<Uuid>, CoreError> {
+    if f.bucket == TypeBucket::Lots {
+        return Ok(vec![]);
+    }
+    let ids = sqlx::query_scalar!(
+        r#"
+        select t.id as "id!"
+        from transaction t
+        join account a    on a.id = t.account_id
+        join connection k on k.id = a.connection_id
+        where k.user_id = $1
+          and not (a.type_key = 'pea'
+                   and t.external_id is not null
+                   and t.type in ('transfer', 'buy', 'sell'))
+          and ($2::text is null or t.description ilike '%' || $2 || '%')
+          and ($3::uuid is null or a.id = $3)
+          and ($4::text is null or t.type = $4)
+          and ($5::date is null or (t.ts at time zone 'utc')::date >= $5)
+          and ($6::date is null or (t.ts at time zone 'utc')::date <= $6)
+          and ($7::text = 'all'
+               or ($7 = 'in'  and t.amount > 0)
+               or ($7 = 'out' and t.amount < 0))
+          and (cardinality($8::uuid[]) = 0 or t.budget_category_id = any($8))
+          and (not $9::boolean or t.budget_category_id is null)
+          -- Unlike `transactions()`'s selected `needs_review` column (which
+          -- needs `coalesce(..., false)` because it feeds a not-null-annotated
+          -- output field), this is a `where` predicate: a NULL right-hand side
+          -- here (e.g. `category_source is null`) already behaves like false,
+          -- so no wrapping is needed.
+          and (not $10::boolean
+               or (t.category_source = 'ai'
+                   and t.category_reviewed_at is null
+                   and (t.category_confidence is null or t.category_confidence < $11)))
+          and (cardinality($12::uuid[]) = 0
+               or (select count(distinct tt.tag_id)
+                     from budget_transaction_tag tt
+                    where tt.transaction_id = t.id
+                      and tt.tag_id = any($12)) = cardinality($12))
+        order by t.ts desc, t.id
+        "#,
+        user_id,
+        f.search,
+        f.account_id,
+        f.kind,
+        f.from,
+        f.to,
+        f.bucket.as_sql(),
+        &f.category_ids,
+        f.uncategorized,
+        f.needs_review,
+        f.review_threshold,
+        &f.tag_ids,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(ids)
 }
 
 pub struct PriceEligibleInstrument {
