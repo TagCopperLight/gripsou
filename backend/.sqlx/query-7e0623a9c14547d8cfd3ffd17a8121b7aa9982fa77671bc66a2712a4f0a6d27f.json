@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select user_id from connection where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7e0623a9c14547d8cfd3ffd17a8121b7aa9982fa77671bc66a2712a4f0a6d27f"
+}

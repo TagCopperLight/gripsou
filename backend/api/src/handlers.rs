@@ -412,17 +412,51 @@ pub async fn account_series(
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
     #[serde(rename = "type")]
     pub kind: Option<String>,
+    /// `all` | `in` | `out` | `lots` — the TYPE control on the filter panel.
+    pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
+    /// Comma-separated uuids. Several categories mean *either*.
+    pub category_ids: Option<String>,
+    /// Comma-separated uuids. Several tags mean *all*.
+    pub tag_ids: Option<String>,
+    pub uncategorized: Option<bool>,
+    pub needs_review: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+/// A filter the server cannot fully honour must never be silently narrowed to
+/// a wider one, so an unparseable `categoryIds`/`tagIds` component or an
+/// unrecognised `bucket` is a 400 here, not a dropped id or a fall-through to
+/// `all` — see `budget::parse_ids`/`parse_bucket`.
+pub fn filters_from_params(
+    p: TransactionParams,
+) -> Result<gripsou_core::repo::query::TransactionFilters, (StatusCode, String)> {
+    use gripsou_core::repo::query::TransactionFilters;
+    Ok(TransactionFilters {
+        search: p.search.filter(|s| !s.trim().is_empty()),
+        account_id: p.account_id,
+        kind: p.kind.filter(|s| !s.is_empty()),
+        bucket: crate::budget::parse_bucket(p.bucket.as_deref())?,
+        from: p.from,
+        to: p.to,
+        category_ids: crate::budget::parse_ids(p.category_ids.as_deref())?,
+        tag_ids: crate::budget::parse_ids(p.tag_ids.as_deref())?,
+        uncategorized: p.uncategorized.unwrap_or(false),
+        needs_review: p.needs_review.unwrap_or(false),
+        review_threshold: crate::budget::default_review_threshold(),
+        // Capped so a crafted `limit` cannot ask for the whole ledger at once.
+        limit: p.limit.unwrap_or(200).clamp(1, 500),
+        offset: p.offset.unwrap_or(0).max(0),
+    })
 }
 
 pub async fn transactions(
@@ -430,21 +464,21 @@ pub async fn transactions(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TransactionParams>,
 ) -> Result<Json<Vec<dto::Transaction>>, (StatusCode, String)> {
-    // Capped so a crafted `limit` cannot ask for the whole ledger at once.
-    let filters = gripsou_core::repo::query::TransactionFilters {
-        search: p.search.filter(|s| !s.trim().is_empty()),
-        account_id: p.account_id,
-        kind: p.kind.filter(|s| !s.is_empty()),
-        from: p.from,
-        to: p.to,
-        limit: p.limit.unwrap_or(200).clamp(1, 500),
-        offset: p.offset.unwrap_or(0).max(0),
-    };
+    let filters = filters_from_params(p)?;
     let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters)
         .await
         .map_err(internal)?;
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let mut tags = gripsou_core::repo::query::tags_for_transactions(&pool, user_id, &ids)
+        .await
+        .map_err(internal)?;
     Ok(Json(
-        rows.into_iter().map(dto::Transaction::from_row).collect(),
+        rows.into_iter()
+            .map(|r| {
+                let row_tags = tags.remove(&r.id).unwrap_or_default();
+                dto::Transaction::from_row(r, row_tags)
+            })
+            .collect(),
     ))
 }
 

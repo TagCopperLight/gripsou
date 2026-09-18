@@ -1,4 +1,5 @@
 mod auth;
+mod budget;
 mod dto;
 mod handlers;
 
@@ -89,6 +90,32 @@ async fn main() -> anyhow::Result<()> {
         .route("/accounts/series", get(handlers::account_series))
         .route("/accounts/{id}", patch(handlers::update_account))
         .route("/transactions", get(handlers::transactions))
+        .route(
+            "/transactions/counts",
+            get(budget::transaction_count_summary),
+        )
+        .route("/transactions/{id}", patch(budget::patch_transaction))
+        .route(
+            "/transactions/{id}/apply-to-description",
+            post(budget::apply_to_description),
+        )
+        .route("/transactions/bulk", post(budget::bulk_transactions))
+        .route(
+            "/budget/categories",
+            get(budget::list_categories).post(budget::create_category),
+        )
+        .route(
+            "/budget/categories/{id}",
+            patch(budget::update_category).delete(budget::delete_category),
+        )
+        .route(
+            "/budget/tags",
+            get(budget::list_tags).post(budget::create_tag),
+        )
+        .route(
+            "/budget/tags/{id}",
+            patch(budget::update_tag).delete(budget::delete_tag),
+        )
         .route("/account-types", get(handlers::account_types))
         .route("/connections", get(handlers::connections))
         .route("/connections/{id}/sync", post(handlers::sync_connection))

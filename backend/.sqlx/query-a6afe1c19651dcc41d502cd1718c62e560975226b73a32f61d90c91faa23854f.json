@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into budget_tag (user_id, name, color)\n        values ($1, $2, $3)\n        returning id as \"id!\", name as \"name!\", color, 0::bigint as \"tx_count!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tx_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "a6afe1c19651dcc41d502cd1718c62e560975226b73a32f61d90c91faa23854f"
+}

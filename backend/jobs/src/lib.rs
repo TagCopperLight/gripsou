@@ -216,11 +216,12 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     match gripsou_core::ingest::ingest(&db, connection_id, &result).await {
         Ok(summary) => {
             tracing::info!(
-                "sync ok for {connection_id}: accounts={} holdings={} txns={} closed={}",
+                "sync ok for {connection_id}: accounts={} holdings={} txns={} closed={} transfers_paired={}",
                 summary.accounts,
                 summary.holdings,
                 summary.transactions_inserted,
                 summary.holdings_closed,
+                summary.transfers_paired,
             );
             // Prices are best-effort: a failure here must not fail the sync.
             let pivot = gripsou_core::repo::settings::base_currency(&db)

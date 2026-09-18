@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from budget_tag where id = $1 and user_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f3d5ed8b47c8524b3ecc83fcd8817362bd3a57fd3c7cb53e475a90f7570122d"
+}

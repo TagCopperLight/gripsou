@@ -15,13 +15,9 @@ fn dec(s: &str) -> Decimal {
 
 fn all() -> TransactionFilters {
     TransactionFilters {
-        search: None,
-        account_id: None,
-        kind: None,
-        from: None,
-        to: None,
         limit: 100,
         offset: 0,
+        ..TransactionFilters::unfiltered()
     }
 }
 

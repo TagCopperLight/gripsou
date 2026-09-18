@@ -1,0 +1,145 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update budget_category c\n           set name = $3,\n               color = $4,\n               icon = $5,\n               hint = $6,\n               kind = case when c.system_key is null then $7 else c.kind end,\n               archived_at = case\n                   when c.system_key is not null then null\n                   when $8 then coalesce(c.archived_at, now())\n                   else null\n               end,\n               default_key = case when c.name = $3 then c.default_key else null end\n         where c.id = $1 and c.user_id = $2\n        returning c.id        as \"id!\",\n                  c.name      as \"name!\",\n                  c.default_key,\n                  c.color     as \"color!\",\n                  c.icon,\n                  c.hint,\n                  c.kind      as \"kind!\",\n                  c.system_key,\n                  c.sort_order as \"sort_order!\",\n                  (c.archived_at is not null) as \"archived!\",\n                  (select count(*)\n                     from transaction t\n                     join account a    on a.id = t.account_id\n                     join connection k on k.id = a.connection_id\n                    where k.user_id = $2 and t.budget_category_id = c.id) as \"tx_count!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "default_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "default_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "color!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "icon",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "icon"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "hint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "hint"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "system_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "system_key"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "sort_order!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "archived!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "tx_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "0c13b80cadcf2dc364cc2030b518121bad485e30633dcd370d13834fc993f45d"
+}

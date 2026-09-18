@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transaction t\n               set transfer_pair_id = case when t.id = $1 then $2 else $1 end,\n                   budget_category_id = c.id,\n                   category_source = 'pair'\n              from budget_category c\n             where t.id in ($1, $2)\n               and c.user_id = $3\n               and c.system_key = 'internal_transfer'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a4464da8978f86be297cdc08d4941b663b1d5ba86a28cb0abe1e91961f06c99"
+}

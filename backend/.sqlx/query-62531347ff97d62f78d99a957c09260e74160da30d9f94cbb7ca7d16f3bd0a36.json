@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into budget_transaction_tag (transaction_id, tag_id)\n        select $1, g.id from budget_tag g\n        where g.user_id = $2 and g.id = any($3)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "62531347ff97d62f78d99a957c09260e74160da30d9f94cbb7ca7d16f3bd0a36"
+}

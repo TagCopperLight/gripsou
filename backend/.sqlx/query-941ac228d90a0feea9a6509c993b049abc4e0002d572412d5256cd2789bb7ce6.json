@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select tt.transaction_id as \"transaction_id!\",\n               g.id   as \"id!\",\n               g.name as \"name!\",\n               g.color\n        from budget_transaction_tag tt\n        join budget_tag g on g.id = tt.tag_id\n        join transaction t on t.id = tt.transaction_id\n        join account a     on a.id = t.account_id\n        join connection k  on k.id = a.connection_id\n        where tt.transaction_id = any($1)\n          and k.user_id = $2\n        order by g.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transaction_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_transaction_tag",
+            "name": "transaction_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_tag",
+            "name": "color"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "941ac228d90a0feea9a6509c993b049abc4e0002d572412d5256cd2789bb7ce6"
+}
