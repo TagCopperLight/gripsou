@@ -88,6 +88,15 @@ describe("settings budget route", () => {
   });
 });
 
+describe("legacy transactions route", () => {
+  it("redirects /transactions to /budget/transactions", async () => {
+    const router = renderAt("/transactions", authedUser);
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/budget/transactions"),
+    );
+  });
+});
+
 describe("public invite/reset routes", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

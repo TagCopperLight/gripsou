@@ -22,6 +22,7 @@ import type {
   Session,
   SessionUser,
   Transaction,
+  TransactionCounts,
   TransactionFilterQuery,
   User,
 } from "./types";
@@ -134,16 +135,28 @@ export function useAccountSeries(range: string) {
 // a page shorter than PAGE_SIZE means there is nothing left to fetch.
 export const TRANSACTIONS_PAGE_SIZE = 200;
 
+/** The one place a filter becomes query parameters. An empty value is omitted
+ *  rather than sent blank: the server reads a blank list as "no filter", but an
+ *  omitted one keeps the query key — and therefore the cache — from splitting. */
+export function transactionParams(q: TransactionFilterQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (q.search) params.set("search", q.search);
+  if (q.accountId) params.set("accountId", q.accountId);
+  if (q.bucket && q.bucket !== "all") params.set("bucket", q.bucket);
+  if (q.from) params.set("from", q.from);
+  if (q.to) params.set("to", q.to);
+  if (q.categoryIds?.length) params.set("categoryIds", q.categoryIds.join(","));
+  if (q.tagIds?.length) params.set("tagIds", q.tagIds.join(","));
+  if (q.uncategorized) params.set("uncategorized", "true");
+  if (q.needsReview) params.set("needsReview", "true");
+  return params;
+}
+
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({
     queryKey: keys.transactions(q),
     queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams();
-      if (q.search) params.set("search", q.search);
-      if (q.accountId) params.set("accountId", q.accountId);
-      if (q.type) params.set("type", q.type);
-      if (q.from) params.set("from", q.from);
-      if (q.to) params.set("to", q.to);
+      const params = transactionParams(q);
       params.set("limit", String(TRANSACTIONS_PAGE_SIZE));
       params.set("offset", String(pageParam));
       return getJson<Transaction[]>(`/transactions?${params}`);
@@ -156,6 +169,17 @@ export function useTransactions(q: TransactionFilterQuery) {
     // Changing any filter changes the queryKey, which makes react-query start
     // a fresh page-1 fetch on its own — the reset a filter change needs falls
     // out of this for free, with no extra state to keep in sync.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The header counts and part 3's `matching / total`. Separate from the list so
+ *  paging does not refetch it and so an empty page can still tell "nothing
+ *  ingested" from "nothing matches". */
+export function useTransactionCounts(q: TransactionFilterQuery) {
+  return useQuery({
+    queryKey: keys.transactionCounts(q),
+    queryFn: () => getJson<TransactionCounts>(`/transactions/counts?${transactionParams(q)}`),
     placeholderData: keepPreviousData,
   });
 }

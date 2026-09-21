@@ -2,8 +2,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "accounts": "Accounts",
-    "transactions": "Transactions",
-    "settings": "Settings"
+    "settings": "Settings",
+    "budget": "Budget"
   },
   "common": {
     "loading": "Loading…",
@@ -70,38 +70,6 @@
       "saveError": "Could not save changes. Please try again.",
       "save": "Save changes",
       "saving": "Saving…"
-    }
-  },
-  "transactions": {
-    "search": "Search descriptions",
-    "empty": "No transactions match these filters.",
-    "loadMore": "Load more",
-    "loadingMore": "Loading…",
-    "allAccounts": "All accounts",
-    "allTypes": "All types",
-    "from": "From",
-    "to": "To",
-    "columns": {
-      "date": "Date",
-      "description": "Description",
-      "account": "Account",
-      "amount": "Amount"
-    },
-    "types": {
-      "deposit": "Deposit",
-      "withdrawal": "Withdrawal",
-      "buy": "Buy",
-      "sell": "Sell",
-      "dividend": "Dividend",
-      "fee": "Fee",
-      "interest": "Interest",
-      "transfer": "Transfer"
-    },
-    "shown_one": "Showing {{count}} transaction",
-    "shown_other": "Showing {{count}} transactions",
-    "lot": {
-      "buy": "Bought {{qty}} × {{ticker}}",
-      "sell": "Sold {{qty}} × {{ticker}}"
     }
   },
   "dashboard": {
@@ -435,6 +403,11 @@
         "deleteBody": "{{name}} will be removed from {{count}} transactions. The transactions themselves are kept.",
         "deleteConfirm": "Delete tag",
         "deleteError": "That tag could not be deleted. Please try again."
+      },
+      "listPrefs": {
+        "title": "List preferences",
+        "showChecked": "Checked column",
+        "showCheckedHint": "Adds a tick box to each transaction, for your own bookkeeping. It does not change categories."
       }
     }
   },
@@ -537,6 +510,79 @@
       "utensils": "Utensils",
       "wallet": "Wallet",
       "zap": "Lightning bolt"
-    }
+    },
+    "chooser": {
+      "search": "Search",
+      "noMatch": "Nothing matches.",
+      "categoryTitle": "Choose a category",
+      "tagTitle": "Choose tags",
+      "noCategory": "No category"
+    },
+    "transactions": {
+      "selectRow": "Select this transaction",
+      "setCategory": "Set a category",
+      "addTags": "Add tags",
+      "checked": "Checked",
+      "autoPaired": "Auto paired transfer",
+      "columns": {
+        "transaction": "Transaction",
+        "date": "Date",
+        "account": "Account",
+        "category": "Category",
+        "tags": "Tags",
+        "amount": "Amount",
+        "type": "Type",
+        "others": "Others"
+      },
+      "emptyNothing": "No transactions yet. Connect an account and sync to see them here.",
+      "emptyNoMatch": "No transaction matches these filters.",
+      "clearAll": "Clear all",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…",
+      "search": "Search descriptions",
+      "allAccounts": "All accounts",
+      "account": "Account",
+      "filters": "Filters",
+      "from": "From",
+      "to": "To",
+      "removeFilter": "Remove this filter",
+      "filterByCategory": "Filter by category",
+      "filterByTag": "Filter by tag",
+      "selectedPeriod": "Selected period",
+      "matchingOfTotal": "{{matching}} / {{total}} transactions",
+      "buckets": { "all": "All types", "in": "Money in", "out": "Money out", "lots": "Investment lots" },
+      "timeFrames": {
+        "all": "All time",
+        "thisMonth": "This month",
+        "last3Months": "Last 3 months",
+        "thisYear": "This year",
+        "last12Months": "Last 12 months",
+        "custom": "Custom…"
+      },
+      "rowsSelected_one": "{{count}} row selected",
+      "rowsSelected_other": "{{count}} rows selected",
+      "total": "Total",
+      "assignCategory": "Assign a category",
+      "markChecked": "Mark checked",
+      "clearSelection": "Clear the selection",
+      "title": "Transactions",
+      "headerCounts": "{{total}} transactions · {{uncategorized}} uncategorised",
+      "selectAllShown": "Select all shown",
+      "selectAllShownDisabledLots": "Investment lots carry no budget, so there is nothing to select.",
+      "deselectAll": "Deselect all",
+      "applyToAllTitle": "Apply to similar transactions",
+      "applyToAllBody_one": "{{count}} other transaction has this description. Apply the category to it as well?",
+      "applyToAllBody_other": "{{count}} other transactions have this description. Apply the category to them as well?",
+      "applyToAllConfirm": "Apply to all",
+      "bulkUpdated_one": "{{count}} row updated.",
+      "bulkUpdated_other": "{{count}} rows updated.",
+      "errors": {
+        "duplicate": "That change could not be saved.",
+        "gone": "This transaction no longer exists. Refresh the page.",
+        "saveError": "That change could not be saved. Please try again."
+      }
+    },
+    "modes": { "overview": "Overview", "transactions": "Transactions" },
+    "overviewSoon": "The overview arrives in a later release."
   }
 }

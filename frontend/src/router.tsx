@@ -8,7 +8,9 @@ import {
 import { RootLayout } from "./components/RootLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
-import { Transactions } from "./pages/Transactions";
+import { Budget } from "./pages/Budget";
+import { BudgetOverview } from "./pages/budget/Overview";
+import { TransactionsMode } from "./pages/budget/TransactionsMode";
 import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
@@ -67,10 +69,41 @@ const accountsRoute = createRoute({
   component: Accounts,
 });
 
-const transactionsRoute = createRoute({
+const budgetRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/budget",
+  component: Budget,
+});
+
+// Phase 3 lands on Transactions, the only mode with something in it. Phase 4
+// flips this to /budget/overview once the analysis exists.
+const budgetIndexRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/budget/transactions" });
+  },
+});
+
+const budgetOverviewRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "overview",
+  component: BudgetOverview,
+});
+
+const budgetTransactionsRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "transactions",
+  component: TransactionsMode,
+});
+
+// The page moved; bookmarks and old links must not 404.
+const legacyTransactionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/transactions",
-  component: Transactions,
+  beforeLoad: () => {
+    throw redirect({ to: "/budget/transactions" });
+  },
 });
 
 const settingsRoute = createRoute({
@@ -158,7 +191,8 @@ export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     accountsRoute,
-    transactionsRoute,
+    budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute]),
+    legacyTransactionsRoute,
     settingsRouteWithChildren,
     connectionsCallbackRoute,
   ]),

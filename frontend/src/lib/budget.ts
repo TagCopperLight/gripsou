@@ -6,6 +6,7 @@ import {
   Utensils, Wallet, Zap, type LucideIcon
 } from "lucide-react";
 import type { TFunction } from "i18next";
+import type { ReactNode } from "react";
 
 import type { BudgetCategory, BudgetKind } from "../api/budget";
 import { ApiError } from "../api/client";
@@ -87,7 +88,7 @@ export function budgetIcon(name: string | null): LucideIcon | null {
 
 /** Grey, from the seeded system row — the fallback for a missing or unsafe
  *  colour. A colour reaches an inline `style`, so it is validated, not trusted. */
-const FALLBACK_COLOR = "#aeaaa7";
+export const FALLBACK_COLOR = "#aeaaa7";
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export function safeBudgetColor(color: string | null | undefined): string {
@@ -121,3 +122,13 @@ export function sortCategories(list: BudgetCategory[]): BudgetCategory[] {
     (a, b) => BUDGET_KINDS.indexOf(a.kind) - BUDGET_KINDS.indexOf(b.kind),
   );
 }
+
+/** One line of an `EntityChooser`. `label` is what the search box matches and
+ *  what the keyboard reads; `render` is what the line draws (a chip). */
+export type ChooserItem = {
+  id: string;
+  label: string;
+  /** A group heading key, or undefined for a flat list. */
+  group?: string;
+  render: ReactNode;
+};

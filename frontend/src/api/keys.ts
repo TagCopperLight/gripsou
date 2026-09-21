@@ -40,6 +40,8 @@ export const keys = {
 
   transactions: (q?: TransactionFilterQuery) =>
     (q === undefined ? ["transactions"] : ["transactions", q]) as readonly unknown[],
+  transactionCounts: (q?: TransactionFilterQuery) =>
+    (q === undefined ? ["transaction-counts"] : ["transaction-counts", q]) as readonly unknown[],
 
   budgetCategories: () => ["budget-categories"] as const,
   budgetTags: () => ["budget-tags"] as const,

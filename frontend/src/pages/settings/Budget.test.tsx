@@ -7,6 +7,8 @@ import type { ReactNode } from "react";
 import { SettingsBudget } from "./Budget";
 import type { BudgetCategory, BudgetTag } from "../../api/budget";
 import i18n from "../../i18n";
+import { AuthContext, type AuthValue } from "../../auth/context";
+import { DEFAULT_PREFS } from "../../lib/prefs";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
   return {
@@ -100,12 +102,21 @@ function makeServer(initial: ServerState) {
   return { state, fetch: fetchMock };
 }
 
+const authValue = {
+  prefs: DEFAULT_PREFS,
+  updatePrefs: vi.fn(async () => {}),
+} as unknown as AuthValue;
+
 function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>
+      </QueryClientProvider>
+    );
   }
   return render(<SettingsBudget />, { wrapper: Wrapper });
 }
@@ -194,8 +205,8 @@ describe("SettingsBudget page", () => {
     await screen.findByText("Roadtrip");
 
     // Recolour.
-    fireEvent.click(screen.getByRole("button", { name: "Colour of Roadtrip" }));
-    fireEvent.click(screen.getByRole("button", { name: "Colour #4dd0b1" }));
+    const roadtripRow = screen.getByText("Roadtrip").closest<HTMLElement>("div.flex.flex-col")!;
+    fireEvent.click(within(roadtripRow).getByRole("button", { name: "Colour #4dd0b1" }));
     await waitFor(() =>
       expect(server.state.tags.find((t) => t.name === "Roadtrip")?.color).toBe("#4dd0b1"),
     );
@@ -280,20 +291,18 @@ describe("SettingsBudget page", () => {
     });
   });
 
-  it("shows none of the out-of-scope surfaces for this phase", async () => {
+  it("shows the list-preferences surface but none of the AI-categorisation surfaces out of scope for this phase", async () => {
     const server = makeServer(SEED);
     vi.stubGlobal("fetch", server.fetch);
     renderPage();
     await screen.findByText("Groceries");
     await screen.findByText("Holiday");
 
-    for (const phrase of [
-      /categorise now/i,
-      /confidence threshold/i,
-      /run log/i,
-      /checked.column/i,
-      /rules engine/i,
-    ]) {
+    // §4.4 list preferences is in scope for this phase.
+    expect(await screen.findByText("Checked column")).toBeVisible();
+
+    // §4.3 AI categorisation is a later phase and must stay absent.
+    for (const phrase of [/categorise now/i, /confidence threshold/i, /run log/i, /rules engine/i]) {
       expect(screen.queryByText(phrase)).toBeNull();
     }
   });

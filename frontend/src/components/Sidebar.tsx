@@ -3,12 +3,12 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   Wallet,
-  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../auth/context";
 import { useHealth } from "../api/hooks";
+import { BudgetIcon } from "../lib/budget";
 
 type NavItem = {
   to: string;
@@ -19,7 +19,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/accounts", labelKey: "nav.accounts", icon: Wallet },
-  { to: "/transactions", labelKey: "nav.transactions", icon: ArrowLeftRight },
+  { to: "/budget", labelKey: "nav.budget", icon: BudgetIcon },
 ];
 
 const navLinkClassName =
