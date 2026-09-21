@@ -4,6 +4,9 @@ import { X } from "lucide-react";
 
 type BudgetDialogProps = {
   title: string;
+  /** Visible heading when it differs from the accessible name — e.g. a live
+      preview of what the user is typing, which must not rename the dialog. */
+  heading?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -16,7 +19,7 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function BudgetDialog({
-  title, onClose, children, footer, icon, busy = false, large = false,
+  title, heading, onClose, children, footer, icon, busy = false, large = false,
 }: BudgetDialogProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
@@ -91,7 +94,7 @@ export function BudgetDialog({
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
           <h2 className="flex items-center gap-2.5 text-xl font-semibold text-fg">
             {icon}
-            {title}
+            {heading ?? title}
           </h2>
           <button
             type="button"

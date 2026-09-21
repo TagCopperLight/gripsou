@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        insert into budget_category (user_id, name, color, icon, hint, kind, sort_order)\n        values ($1, $2, $3, $4, $5, $6,\n                coalesce((select max(sort_order) + 10 from budget_category\n                          where user_id = $1 and kind = $6), 10))\n        returning id        as \"id!\",\n                  name      as \"name!\",\n                  default_key,\n                  color     as \"color!\",\n                  icon,\n                  hint,\n                  kind      as \"kind!\",\n                  system_key,\n                  sort_order as \"sort_order!\",\n                  (archived_at is not null) as \"archived!\",\n                  0::bigint as \"tx_count!\"\n        ",
+  "query": "\n        insert into budget_category (user_id, name, color, icon, hint, kind, sort_order)\n        values ($1, $2, $3, $4, $5, $6,\n                coalesce((select max(sort_order) from budget_category\n                          where user_id = $1 and kind = $6), 0) + 1)\n        returning id        as \"id!\",\n                  name      as \"name!\",\n                  default_key,\n                  color     as \"color!\",\n                  icon,\n                  hint,\n                  kind      as \"kind!\",\n                  system_key,\n                  (archived_at is not null) as \"archived!\",\n                  0::bigint as \"tx_count!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -93,23 +93,12 @@
       },
       {
         "ordinal": 8,
-        "name": "sort_order!",
-        "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "budget_category",
-            "name": "sort_order"
-          }
-        }
-      },
-      {
-        "ordinal": 9,
         "name": "archived!",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "tx_count!",
         "type_info": "Int8",
         "origin": "Expression"
@@ -134,10 +123,9 @@
       true,
       false,
       true,
-      false,
       null,
       null
     ]
   },
-  "hash": "429407702b054945b913bb611b01c54206912c679a660166cd8aba9940c44846"
+  "hash": "f9106cd18f5e2681a39cd3be364a489c534ae2a91f0a2ea4cc78dad8a0381169"
 }

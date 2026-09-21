@@ -57,7 +57,7 @@ describe("safeBudgetColor", () => {
 
 describe("budgetIcon", () => {
   it("resolves every seeded icon name and nothing else", () => {
-    expect(BUDGET_ICON_NAMES).toHaveLength(25);
+    expect(BUDGET_ICON_NAMES).toHaveLength(35);
     for (const name of BUDGET_ICON_NAMES) expect(budgetIcon(name)).toBeTruthy();
     expect(budgetIcon(null)).toBeNull();
     expect(budgetIcon("not-an-icon")).toBeNull();
@@ -75,12 +75,14 @@ describe("budgetIcon", () => {
 describe("sortCategories", () => {
   it("orders by kind and keeps the backend's order inside a kind", () => {
     const rows = [
-      cat({ id: "x", kind: "excluded", name: "Ignore" }),
-      cat({ id: "i2", kind: "internal", name: "Savings" }),
-      cat({ id: "e2", kind: "expense", name: "Transport" }),
-      cat({ id: "n1", kind: "income", name: "Salary" }),
-      cat({ id: "e1", kind: "expense", name: "Groceries" }),
+      cat({ id: "x", kind: "excluded", name: "Ignore", defaultKey: null }),
+      cat({ id: "i2", kind: "internal", name: "Savings", defaultKey: null }),
+      cat({ id: "e2", kind: "expense", name: "Transport", defaultKey: null }),
+      cat({ id: "n1", kind: "income", name: "Salary", defaultKey: null }),
+      cat({ id: "e1", kind: "expense", name: "Groceries", defaultKey: null }),
     ];
+    // e2 before e1: the list arrives in the order the user arranged, and only
+    // the kind grouping is re-applied here.
     expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "i2", "x"]);
     expect(BUDGET_KINDS).toEqual(["expense", "income", "internal", "excluded"]);
   });

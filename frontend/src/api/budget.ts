@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { deleteJson, getJson, patchJson, postJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
 import { afterBudgetCategoryChange, afterBudgetTagChange } from "./invalidate";
 
@@ -52,6 +52,34 @@ export function useUpdateBudgetCategory() {
     mutationFn: ({ id, body }: { id: string; body: CategoryBody }) =>
       patchJson<BudgetCategory>(`/budget/categories/${id}`, body),
     onSuccess: () => afterBudgetCategoryChange(qc),
+  });
+}
+
+/** Persists the whole list in display order; the server numbers it. The cache
+ *  is moved optimistically so an arrow click lands at once instead of after a
+ *  round trip, and is rolled back if the write fails. */
+export function useReorderBudgetCategories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => putJson<void>("/budget/categories/order", { ids }),
+    onMutate: async (ids: string[]) => {
+      // An in-flight list refetch would otherwise land on top of the optimistic
+      // order and bounce the row back.
+      await qc.cancelQueries({ queryKey: keys.budgetCategories() });
+      const previous = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
+      if (previous) {
+        const byId = new Map(previous.map((c) => [c.id, c]));
+        const next = ids.map((id) => byId.get(id)).filter((c): c is BudgetCategory => !!c);
+        // Only reorder what we can account for: a list that lost a row is a
+        // sign the cache moved under us, so leave it to the refetch.
+        if (next.length === previous.length) qc.setQueryData(keys.budgetCategories(), next);
+      }
+      return { previous };
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
+    },
+    onSettled: () => afterBudgetCategoryChange(qc),
   });
 }
 

@@ -33,7 +33,15 @@ export function TagsSurface() {
     <div>
       <Surface className="w-full">
         <div className="flex flex-col p-4 md:p-5">
-          <h2 className="text-fg font-semibold text-sm">{t("settings.budget.tags.title")}</h2>
+          <h2 className="text-fg font-semibold text-sm">
+            {t("settings.budget.tags.title")}
+            {!isLoading && !isError && (
+              <span className="text-fg-faint font-normal ml-2">
+                <span className="mr-2">·</span>
+                {t("settings.budget.tags.tagsCount", { count: rows.length })}
+              </span>
+            )}
+          </h2>
 
           {isLoading ? (
             <CardState variant="loading" className="mt-4 h-40" />

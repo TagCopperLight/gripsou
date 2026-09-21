@@ -47,7 +47,7 @@ function renderModal(props: { category?: BudgetCategory; onClose?: () => void } 
 }
 
 describe("CategoryModal — create", () => {
-  it("previews the typed name, refuses a blank one, and POSTs a trimmed body", async () => {
+  it("previews the typed name in the heading, refuses a blank one, and POSTs a trimmed body", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonOnce({ ...cat({ id: "new" }) }, 201)));
     renderModal();                                   // no `category` prop
     expect(screen.getByTestId("category-preview")).toHaveTextContent("New category");
@@ -189,12 +189,19 @@ describe("CategoryModal — edit", () => {
     expect(save).toBeEnabled();
   });
 
-  it("locks the kind of the system category", () => {
+  it("locks the kind and the hint of the system category, but not name, colour or icon", () => {
     renderModal({ category: SYSTEM });
     const kind = screen.getByLabelText("Kind");
     expect(kind).toBeDisabled();
     expect(kind).toHaveValue("internal");
     expect(screen.getByText("This kind is fixed for the system category.")).toBeVisible();
+
+    expect(screen.getByLabelText("Hint for the AI")).toBeDisabled();
+
+    // What is still the user's to change on the system row.
+    expect(screen.getByLabelText("Name")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Colour #4dd0b1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Piggy bank" })).toBeEnabled();
   });
 
   it("explains a 404 as a vanished row", async () => {

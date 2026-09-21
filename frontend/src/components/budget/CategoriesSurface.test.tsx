@@ -67,14 +67,135 @@ describe("CategoriesSurface", () => {
     expect(within(row).getByText("Expense")).toBeVisible();
   });
 
-  it("locks the system row: a SYSTEM badge, a lock instead of actions, an editable name", async () => {
+  it("locks archive and delete on the system row but keeps it editable", async () => {
     renderSurface();
     const row = (await screen.findByText("Internal transfer")).closest("tr")!;
     expect(within(row).getByText("SYSTEM")).toBeVisible();
     expect(within(row).queryByRole("button", { name: "Archive Internal transfer" })).toBeNull();
     expect(within(row).queryByRole("button", { name: "Delete Internal transfer" })).toBeNull();
-    expect(within(row).getByTestId("system-lock")).toBeVisible();
-    expect(within(row).getByRole("button", { name: "Modify Internal transfer" })).toBeVisible();
+    // One lock per refused action, so the row keeps three aligned slots.
+    expect(within(row).getByTestId("system-lock-archive")).toBeVisible();
+    expect(within(row).getByTestId("system-lock-delete")).toBeVisible();
+    expect(within(row).getByRole("button", { name: "Modify Internal transfer" })).toBeEnabled();
+  });
+
+  describe("reordering", () => {
+    const THREE: BudgetCategory[] = [
+      cat({ id: "a", name: "Alpha", kind: "expense" }),
+      cat({ id: "b", name: "Beta", kind: "expense" }),
+      cat({ id: "c", name: "Gamma", kind: "expense" }),
+      cat({ id: "sal", name: "Salary", kind: "income" }),
+    ];
+
+    /** The list, then a 204 for the PUT, then the list again for the refetch. */
+    function mockRows(rows: BudgetCategory[]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init?: RequestInit) =>
+          init?.method === "PUT" ? new Response(null, { status: 204 }) : jsonOnce(rows),
+        ),
+      );
+    }
+
+    function putBody() {
+      const call = vi.mocked(fetch).mock.calls.find((c) => (c[1] as RequestInit)?.method === "PUT")!;
+      return JSON.parse((call[1] as RequestInit).body as string);
+    }
+
+    it("moves a row up and saves every id in the new order", async () => {
+      mockRows(THREE);
+      const { client } = renderSurface();
+      await screen.findByText("Beta");
+      fireEvent.click(screen.getByRole("button", { name: "Move Beta up" }));
+
+      await waitFor(() => expect(putBody()).toEqual({ ids: ["b", "a", "c", "sal"] }));
+      await waitForFullSettle(client);
+    });
+
+    it("moves the row on screen before the server answers", async () => {
+      // The PUT hangs, so what is on screen can only be the optimistic order.
+      let answer: (r: Response) => void = () => {};
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init?: RequestInit) =>
+          init?.method === "PUT"
+            ? new Promise<Response>((res) => {
+                answer = res;
+              })
+            : jsonOnce(THREE),
+        ),
+      );
+      const { client } = renderSurface();
+      await screen.findByText("Beta");
+      fireEvent.click(screen.getByRole("button", { name: "Move Beta up" }));
+
+      await waitFor(() =>
+        expect(screen.getAllByTestId("category-name").map((n) => n.textContent)).toEqual([
+          "Beta", "Alpha", "Gamma", "Salary",
+        ]),
+      );
+      await act(async () => {
+        answer(new Response(null, { status: 204 }));
+      });
+      await waitForFullSettle(client);
+    });
+
+    it("moves a row down", async () => {
+      mockRows(THREE);
+      const { client } = renderSurface();
+      await screen.findByText("Beta");
+      fireEvent.click(screen.getByRole("button", { name: "Move Alpha down" }));
+      await waitFor(() => expect(putBody()).toEqual({ ids: ["b", "a", "c", "sal"] }));
+      await waitForFullSettle(client);
+    });
+
+    it("kills the arrow at each end of a kind, counting kinds separately", async () => {
+      mockRows(THREE);
+      renderSurface();
+      await screen.findByText("Beta");
+      expect(screen.getByRole("button", { name: "Move Alpha up" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Move Gamma down" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Move Beta up" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Move Beta down" })).toBeEnabled();
+      // Salary is alone in its kind, so it cannot move in either direction —
+      // a row never crosses into another kind's block.
+      expect(screen.getByRole("button", { name: "Move Salary up" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Move Salary down" })).toBeDisabled();
+    });
+
+    it("moves one visible place even when an archived row sits in between", async () => {
+      mockRows([
+        cat({ id: "a", name: "Alpha", kind: "expense" }),
+        cat({ id: "hid", name: "Hidden", kind: "expense", archived: true }),
+        cat({ id: "c", name: "Gamma", kind: "expense" }),
+      ]);
+      const { client } = renderSurface();
+      await screen.findByText("Gamma");
+      fireEvent.click(screen.getByRole("button", { name: "Move Gamma up" }));
+      // Gamma passes Alpha, the row it can actually see; Hidden is carried
+      // along rather than being the thing Gamma swaps with.
+      await waitFor(() => expect(putBody()).toEqual({ ids: ["c", "a", "hid"] }));
+      await waitForFullSettle(client);
+    });
+
+    it("puts the list back if the write fails", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init?: RequestInit) =>
+          init?.method === "PUT" ? new Response("nope", { status: 500 }) : jsonOnce(THREE),
+        ),
+      );
+      const { client } = renderSurface();
+      await screen.findByText("Beta");
+      fireEvent.click(screen.getByRole("button", { name: "Move Beta up" }));
+      await screen.findByRole("alert");
+      await waitFor(() =>
+        expect(screen.getAllByTestId("category-name").map((n) => n.textContent)).toEqual([
+          "Alpha", "Beta", "Gamma", "Salary",
+        ]),
+      );
+      await waitForFullSettle(client);
+    });
   });
 
   it("reveals archived rows behind the toggle and restores one with the full stored body", async () => {
@@ -82,6 +203,12 @@ describe("CategoriesSurface", () => {
     await screen.findByText("Groceries");
     fireEvent.click(screen.getByRole("button", { name: "Show archived (1)" }));
     expect(screen.getByText("Old category")).toBeVisible();
+    const archivedRow = screen.getByText("Old category").closest("tr")!;
+    expect(within(archivedRow).getByText("ARCHIVED")).toBeVisible();
+    // The chip marks only the archived row, not every row on screen.
+    expect(
+      within(screen.getByText("Groceries").closest("tr")!).queryByText("ARCHIVED"),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Restore Old category" }));
     await waitFor(() =>

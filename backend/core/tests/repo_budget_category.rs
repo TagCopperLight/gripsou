@@ -15,12 +15,12 @@ async fn lists_seeded_categories_grouped_by_kind(pool: PgPool) -> anyhow::Result
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
 
     let rows = list_categories(&pool, user_id).await?;
-    assert_eq!(rows.len(), 25);
+    assert_eq!(rows.len(), 32);
     // expense first, then income, internal, excluded — the order the settings
     // table renders in.
     let kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
     assert_eq!(kinds[0], "expense");
-    assert_eq!(kinds[24], "excluded");
+    assert_eq!(kinds[31], "excluded");
     assert!(rows.iter().all(|r| r.tx_count == 0));
     Ok(())
 }
@@ -87,7 +87,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
         user_id,
         created.id,
         &CategoryPatch {
-            name: "Pets",
+            name: "Cat supplies",
             color: "#4dd0b1",
             icon: Some("cat"),
             hint: None,
@@ -97,7 +97,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?
     .expect("owned by this user");
-    assert_eq!(patched.name, "Pets");
+    assert_eq!(patched.name, "Cat supplies");
     assert!(patched.archived);
     assert!(patched.hint.is_none());
 
@@ -183,7 +183,7 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     assert!(!renamed.archived, "a system row cannot be archived either");
 
     assert!(!delete_category(&pool, user_id, system.id).await?);
-    assert_eq!(list_categories(&pool, user_id).await?.len(), 25);
+    assert_eq!(list_categories(&pool, user_id).await?.len(), 32);
     Ok(())
 }
 

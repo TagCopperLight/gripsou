@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Dot } from "lucide-react";
+import { Check, Dot, Pencil } from "lucide-react";
 
 import { BudgetDialog } from "./BudgetDialog";
 import { Button } from "../Button";
@@ -15,6 +15,7 @@ import {
   BUDGET_ICONS,
   BUDGET_ICON_NAMES,
   BUDGET_KINDS,
+  BUDGET_PALETTE,
   budgetErrorKey,
   categoryLabel,
   safeBudgetColor,
@@ -79,24 +80,42 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   };
 
   const busy = mutation.isPending;
+  // The system row stays editable for the things that are purely presentation —
+  // name, colour, icon. Its kind is fixed, and its hint would never be read.
+  const locked = Boolean(category?.systemKey);
   const PreviewIcon = icon ? BUDGET_ICONS[icon] : null;
   const previewColor = safeBudgetColor(color);
+  // The picker swatch stands in for "a colour off the palette", so it only
+  // reads as selected when the current colour is not one of the presets.
+  const custom = !BUDGET_PALETTE.includes(color);
 
   return (
     <BudgetDialog
       large
       busy={busy}
       title={t(category ? "settings.budget.categories.editTitle" : "settings.budget.categories.newTitle")}
+      heading={
+        <span data-testid="category-preview" className="truncate">
+          {trimmed ||
+            t(
+              category
+                ? "settings.budget.categories.editTitle"
+                : "settings.budget.categories.newTitle",
+            )}
+        </span>
+      }
       onClose={onClose}
       icon={
+        // Square-to-icon and square-to-text proportions mirror the category
+        // chip in the table (size-7 square, size-4 icon, 14px label).
         <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-xl"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: withAlpha(previewColor, 0.22) }}
         >
           {PreviewIcon ? (
-            <PreviewIcon className="size-4" style={{ color: previewColor }} />
+            <PreviewIcon className="size-5.5" style={{ color: previewColor }} />
           ) : (
-            <Dot className="size-4" style={{ color: previewColor }} />
+            <Dot className="size-5.5" style={{ color: previewColor }} />
           )}
         </span>
       }
@@ -112,15 +131,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       }
     >
       <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between bg-surface-2 rounded-2xl px-4 py-3.5">
-          <span
-            data-testid="category-preview"
-            className="text-fg font-semibold text-[15px] truncate"
-          >
-            {trimmed || t("settings.budget.categories.newTitle")}
-          </span>
-        </div>
-
         <Field label={t("settings.budget.categories.fieldName")} htmlFor="category-name">
           <input
             id="category-name"
@@ -139,7 +149,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <select
             id="category-kind"
             value={kind}
-            disabled={busy || Boolean(category?.systemKey)}
+            disabled={busy || locked}
             onChange={(e) => setKind(e.target.value as BudgetKind)}
             className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
           >
@@ -149,14 +159,14 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
               </option>
             ))}
           </select>
-          {category?.systemKey && (
+          {locked && (
             <p className="text-fg-faint text-xs mt-1">{t("settings.budget.categories.kindLocked")}</p>
           )}
         </Field>
 
         <Field label={t("settings.budget.categories.fieldColor")}>
-          <div className="flex flex-wrap gap-2 items-center">
-            {ACCOUNT_PALETTE.map((c) => (
+          <div className="grid grid-cols-[repeat(18,minmax(0,1fr))] gap-2">
+            {BUDGET_PALETTE.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -164,23 +174,32 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
                 aria-label={t("settings.budget.categories.colorLabel", { color: c })}
                 aria-pressed={c === color}
                 onClick={() => setColor(c)}
-                className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 ${
+                className={`aspect-square w-full rounded-lg flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 ${
                   c === color ? "ring-2 ring-fg" : "hover:scale-105"
                 }`}
                 style={{ background: c }}
               >
-                {c === color && <Check className="size-4 text-black/80" />}
+                {c === color && <Check className="size-3.5 text-black/80" />}
               </button>
             ))}
-            <label className="flex items-center">
+            {/* The native colour input has its own intrinsic height, so it is
+                stretched invisibly over a square of our own rather than being
+                sized directly — that is what keeps it on the swatch grid. */}
+            <label
+              className={`relative aspect-square w-full rounded-lg bg-surface-2 flex items-center justify-center cursor-pointer transition-transform duration-140 ${
+                custom ? "ring-2 ring-fg" : "hover:scale-105"
+              } ${busy ? "opacity-40" : ""}`}
+              style={{ background: custom ? previewColor : undefined }}
+            >
               <span className="sr-only">{t("settings.budget.categories.customColor")}</span>
+              <Pencil className={`size-3.5 ${custom ? "text-black/80" : "text-fg-faint"}`} />
               <input
                 type="color"
                 aria-label={t("settings.budget.categories.customColor")}
                 value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#000000"}
                 disabled={busy}
                 onChange={(e) => setColor(e.target.value)}
-                className="size-8 rounded-xl cursor-pointer disabled:opacity-40"
+                className="absolute inset-0 size-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
               />
             </label>
           </div>
@@ -225,12 +244,11 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <textarea
             id="category-hint"
             value={hint}
-            disabled={busy}
+            disabled={busy || locked}
             onChange={(e) => setHint(e.target.value)}
             rows={3}
             className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
           />
-          <p className="text-fg-faint text-xs mt-1">{t("settings.budget.categories.hintHelp")}</p>
         </Field>
 
         {mutation.isError && (

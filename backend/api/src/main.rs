@@ -10,7 +10,7 @@ use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, FromRef},
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
@@ -104,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
             "/budget/categories",
             get(budget::list_categories).post(budget::create_category),
         )
+        .route("/budget/categories/order", put(budget::reorder_categories))
         .route(
             "/budget/categories/{id}",
             patch(budget::update_category).delete(budget::delete_category),
