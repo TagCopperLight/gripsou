@@ -223,6 +223,8 @@ export type EnabledProvider = {
   description: string | null;
 };
 
+export type TransactionTag = { id: string; name: string; color: string | null };
+
 export type Transaction = {
   id: string;
   t: number;
@@ -242,17 +244,45 @@ export type Transaction = {
   quantity: string | null;
   unitPrice: string | null;
   fee: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** Translate this when present; fall back to `categoryName`. */
+  categoryDefaultKey: string | null;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+  categoryKind: "expense" | "income" | "internal" | "excluded" | null;
+  /** "user" | "ai" | "rule" — who set the category. */
+  categorySource: string | null;
+  /** Decimal string, never a float. */
+  categoryConfidence: string | null;
+  /** Derived server-side: an AI guess under the threshold that nobody confirmed. */
+  needsReview: boolean;
+  checked: boolean;
+  /** One half of an auto-paired internal transfer. */
+  isTransfer: boolean;
+  tags: TransactionTag[];
 };
+
+export type TypeBucket = "all" | "in" | "out" | "lots";
 
 export type TransactionQuery = {
   search?: string;
   accountId?: string;
-  type?: string;
+  /** Replaces the retired per-kind `type` parameter. */
+  bucket?: TypeBucket;
   from?: string;
   to?: string;
+  /** Several ids mean *either* of them (OR), server-side. */
+  categoryIds?: string[];
+  /** Several ids mean *all* of them (AND), server-side. */
+  tagIds?: string[];
+  uncategorized?: boolean;
+  needsReview?: boolean;
   limit?: number;
   offset?: number;
 };
+
+export type TransactionCounts = { matching: number; total: number; uncategorized: number };
 
 /** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the
  * filter set the user picks, which is also what the query key is built from. */

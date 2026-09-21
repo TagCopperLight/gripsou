@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { Mock } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
 import {
@@ -10,8 +11,10 @@ import {
   afterSessionChange,
   afterSyncFinished,
   afterSyncRequested,
+  afterTransactionChange,
   afterUserChange,
 } from "./invalidate";
+import { keys } from "./keys";
 
 // Each group is pinned to its exact key set rather than a "contains" check:
 // the bugs these guard (AUDIT.md C-17, C-18, Z-6) were all keys MISSING from a
@@ -32,6 +35,7 @@ describe("afterSyncFinished", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
     ]);
@@ -53,6 +57,7 @@ describe("afterAccountEdit", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
     ]);
   });
 });
@@ -67,6 +72,7 @@ describe("afterConnectionDeleted", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
     ]);
@@ -101,6 +107,7 @@ describe("budget taxonomy changes", () => {
     expect(invalidatedBy(afterBudgetCategoryChange)).toEqual([
       ["budget-categories"],
       ["transactions"],
+      ["transaction-counts"],
     ]);
   });
 
@@ -108,6 +115,7 @@ describe("budget taxonomy changes", () => {
     expect(invalidatedBy(afterBudgetTagChange)).toEqual([
       ["budget-tags"],
       ["transactions"],
+      ["transaction-counts"],
     ]);
   });
 
@@ -119,8 +127,24 @@ describe("budget taxonomy changes", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
     ]);
   });
+});
+
+it("afterTransactionChange refreshes the list and its counts", () => {
+  const qc = { invalidateQueries: vi.fn() } as unknown as QueryClient;
+  afterTransactionChange(qc);
+  const keysCalled = (qc.invalidateQueries as Mock).mock.calls.map((c) => c[0].queryKey);
+  expect(keysCalled).toContainEqual(keys.transactions());
+  expect(keysCalled).toContainEqual(keys.transactionCounts());
+});
+
+it("a finished sync refreshes the transaction counts too", () => {
+  const qc = { invalidateQueries: vi.fn() } as unknown as QueryClient;
+  afterSyncFinished(qc);
+  const keysCalled = (qc.invalidateQueries as Mock).mock.calls.map((c) => c[0].queryKey);
+  expect(keysCalled).toContainEqual(keys.transactionCounts());
 });

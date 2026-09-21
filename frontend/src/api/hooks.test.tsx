@@ -108,6 +108,7 @@ describe("useUpdateAccount invalidation", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
     ]);
   });
 });
@@ -135,6 +136,7 @@ describe("useDeleteConnection", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
     ]);

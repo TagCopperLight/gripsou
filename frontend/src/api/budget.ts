@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 
 import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
-import { afterBudgetCategoryChange, afterBudgetTagChange } from "./invalidate";
+import { afterBudgetCategoryChange, afterBudgetTagChange, afterTransactionChange } from "./invalidate";
+import type { Transaction, TransactionFilterQuery } from "./types";
 
 export type BudgetKind = "expense" | "income" | "internal" | "excluded";
 
@@ -120,5 +121,100 @@ export function useDeleteBudgetTag() {
   return useMutation({
     mutationFn: (id: string) => deleteJson<void>(`/budget/tags/${id}`),
     onSuccess: () => afterBudgetTagChange(qc),
+  });
+}
+
+export type TransactionPatch = {
+  /** `null` clears the category. Omit the key to leave it untouched. */
+  categoryId?: string | null;
+  /** FULL REPLACE of the row's tag set — the server has no add/remove split,
+   *  so a caller toggling one tag sends the complete resulting list. */
+  tagIds?: string[];
+  checked?: boolean;
+};
+
+export type BulkBody = {
+  /** Explicit rows. Omit and pass `filter` for "select all shown". */
+  ids?: string[];
+  filter?: TransactionFilterQuery;
+  categoryId?: string | null;
+  addTagIds?: string[];
+  checked?: boolean;
+};
+
+/** One row, applied to the cache before the request so the chip swaps at once.
+ *  `optimistic` is the caller's view of the row after the write — the chip
+ *  fields cannot be derived from the patch body, which carries only ids. */
+export function usePatchTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
+      patchJson<{ sameDescriptionCount: number }>(`/transactions/${id}`, body),
+    onMutate: async ({ id, optimistic }) => {
+      if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
+      // Every cached filter combination may hold this row, so patch the whole
+      // family rather than guessing which key the caller is reading.
+      await qc.cancelQueries({ queryKey: keys.transactions() });
+      const previous = qc.getQueriesData({ queryKey: keys.transactions() });
+      qc.setQueriesData<InfiniteData<Transaction[]>>({ queryKey: keys.transactions() }, (data) =>
+        data
+          ? {
+              ...data,
+              pages: data.pages.map((page) =>
+                page.map((row) => (row.id === id ? { ...row, ...optimistic } : row)),
+              ),
+            }
+          : data,
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => afterTransactionChange(qc),
+  });
+}
+
+export function useApplyToDescription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, categoryId }: { id: string; categoryId: string | null }) =>
+      postJson<{ updated: number }>(`/transactions/${id}/apply-to-description`, { categoryId }),
+    onSuccess: () => afterTransactionChange(qc),
+  });
+}
+
+/** The filter as the JSON bulk endpoint parses it. Ids stay comma-joined
+ *  strings (the server's `parse_ids` reads `Option<String>`), but booleans
+ *  must be real JSON booleans: serde_json will not coerce "true". */
+function transactionFilterBody(q: TransactionFilterQuery): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (q.search) body.search = q.search;
+  if (q.accountId) body.accountId = q.accountId;
+  if (q.bucket && q.bucket !== "all") body.bucket = q.bucket;
+  if (q.from) body.from = q.from;
+  if (q.to) body.to = q.to;
+  if (q.categoryIds?.length) body.categoryIds = q.categoryIds.join(",");
+  if (q.tagIds?.length) body.tagIds = q.tagIds.join(",");
+  if (q.uncategorized) body.uncategorized = true;
+  if (q.needsReview) body.needsReview = true;
+  return body;
+}
+
+/** Ids for a hand-picked selection, `filter` for "select all shown" — which
+ *  with no filter set is 3.5 years of rows, far too many to enumerate. The
+ *  filter goes over the wire in the same shape the list is reading, so the
+ *  write and the view can never disagree. */
+export function useBulkTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BulkBody) => {
+      const wire: Omit<BulkBody, "filter"> & { filter?: Record<string, unknown> } = {
+        ...body,
+        filter: body.filter ? transactionFilterBody(body.filter) : undefined,
+      };
+      return postJson<{ updated: number }>("/transactions/bulk", wire);
+    },
+    onSuccess: () => afterTransactionChange(qc),
   });
 }

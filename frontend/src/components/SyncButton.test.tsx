@@ -99,6 +99,7 @@ describe("SyncButton", () => {
       "account-series",
       "holdings",
       "transactions",
+      "transaction-counts",
       "budget-categories",
       "budget-tags",
     ]);

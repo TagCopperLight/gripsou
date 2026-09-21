@@ -29,6 +29,10 @@ pub struct UserPrefs {
     /// pages. Display-only — the API still sends the real amounts.
     #[serde(default)]
     pub private_mode: bool,
+    /// The user's own bookkeeping column in the budget transactions table. It
+    /// confirms nothing and categorises nothing — the pipeline never reads it.
+    #[serde(default)]
+    pub show_checked: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
 }
@@ -70,6 +74,7 @@ impl Default for UserPrefs {
             currency_position: default_currency_position(),
             percent_decimals: default_percent_decimals(),
             private_mode: false,
+            show_checked: false,
             avatar: None,
         }
     }
@@ -123,5 +128,16 @@ mod tests {
         let json = serde_json::to_string(&UserPrefs::default()).unwrap();
         assert!(json.contains("\"uiLanguage\""));
         assert!(json.contains("\"numberGroupSep\""));
+    }
+
+    #[test]
+    fn show_checked_defaults_to_false_and_round_trips() {
+        let p: UserPrefs = serde_json::from_str("{}").unwrap();
+        assert!(!p.show_checked);
+
+        let p: UserPrefs = serde_json::from_str(r#"{"showChecked":true}"#).unwrap();
+        assert!(p.show_checked);
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"showChecked\":true"));
     }
 }

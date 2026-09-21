@@ -23,6 +23,7 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.accountSeries(),
     keys.holdings(),
     keys.transactions(),
+    keys.transactionCounts(),
     keys.budgetCategories(),
     keys.budgetTags(),
   ]);
@@ -46,6 +47,7 @@ export function afterAccountEdit(qc: QueryClient) {
     keys.accountSeries(),
     keys.holdings(),
     keys.transactions(),
+    keys.transactionCounts(),
   ]);
 }
 
@@ -80,9 +82,16 @@ export function afterUserChange(qc: QueryClient) {
 // Editing the taxonomy changes the chips the transactions table draws, so the
 // transaction pages go stale with the category/tag list itself.
 export function afterBudgetCategoryChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetCategories(), keys.transactions()]);
+  invalidateAll(qc, [keys.budgetCategories(), keys.transactions(), keys.transactionCounts()]);
 }
 
 export function afterBudgetTagChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetTags(), keys.transactions()]);
+  invalidateAll(qc, [keys.budgetTags(), keys.transactions(), keys.transactionCounts()]);
+}
+
+// Assigning a category, tagging a row, ticking it, or any bulk write. The
+// counts feed the header and the `matching / total` readout, so they go stale
+// with the list itself — the same omission that was C-17 for the list.
+export function afterTransactionChange(qc: QueryClient) {
+  invalidateAll(qc, [keys.transactions(), keys.transactionCounts()]);
 }

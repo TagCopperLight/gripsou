@@ -2,8 +2,8 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "accounts": "Comptes",
-    "transactions": "Transactions",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "budget": "Budget"
   },
   "common": {
     "loading": "Chargement…",
@@ -70,38 +70,6 @@
       "saveError": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
       "save": "Enregistrer",
       "saving": "Enregistrement…"
-    }
-  },
-  "transactions": {
-    "search": "Rechercher dans les libellés",
-    "empty": "Aucune transaction ne correspond à ces filtres.",
-    "loadMore": "Charger plus",
-    "loadingMore": "Chargement…",
-    "allAccounts": "Tous les comptes",
-    "allTypes": "Tous les types",
-    "from": "Du",
-    "to": "Au",
-    "columns": {
-      "date": "Date",
-      "description": "Libellé",
-      "account": "Compte",
-      "amount": "Montant"
-    },
-    "types": {
-      "deposit": "Dépôt",
-      "withdrawal": "Retrait",
-      "buy": "Achat",
-      "sell": "Vente",
-      "dividend": "Dividende",
-      "fee": "Frais",
-      "interest": "Intérêts",
-      "transfer": "Virement"
-    },
-    "shown_one": "{{count}} transaction affichée",
-    "shown_other": "{{count}} transactions affichées",
-    "lot": {
-      "buy": "Achat de {{qty}} × {{ticker}}",
-      "sell": "Vente de {{qty}} × {{ticker}}"
     }
   },
   "dashboard": {
@@ -435,6 +403,11 @@
         "deleteBody": "{{name}} sera retirée de {{count}} transactions. Les transactions elles-mêmes sont conservées.",
         "deleteConfirm": "Supprimer l'étiquette",
         "deleteError": "Cette étiquette n'a pas pu être supprimée. Réessayez."
+      },
+      "listPrefs": {
+        "title": "Préférences de liste",
+        "showChecked": "Colonne cochée",
+        "showCheckedHint": "Ajoute une case à cocher sur chaque transaction, pour votre propre suivi. Cela ne modifie aucune catégorie."
       }
     }
   },
@@ -537,6 +510,79 @@
       "utensils": "Couverts",
       "wallet": "Portefeuille",
       "zap": "Éclair"
-    }
+    },
+    "chooser": {
+      "search": "Rechercher",
+      "noMatch": "Aucun résultat.",
+      "categoryTitle": "Choisir une catégorie",
+      "tagTitle": "Choisir des étiquettes",
+      "noCategory": "Aucune catégorie"
+    },
+    "transactions": {
+      "selectRow": "Sélectionner cette transaction",
+      "setCategory": "Définir une catégorie",
+      "addTags": "Ajouter des étiquettes",
+      "checked": "Pointée",
+      "autoPaired": "Virement interne apparié",
+      "columns": {
+        "transaction": "Transaction",
+        "date": "Date",
+        "account": "Compte",
+        "category": "Catégorie",
+        "tags": "Étiquettes",
+        "amount": "Montant",
+        "type": "Type",
+        "others": "Autres"
+      },
+      "emptyNothing": "Aucune transaction pour l'instant. Connectez un compte et lancez une synchronisation.",
+      "emptyNoMatch": "Aucune transaction ne correspond à ces filtres.",
+      "clearAll": "Tout effacer",
+      "loadMore": "Charger plus",
+      "loadingMore": "Chargement…",
+      "search": "Rechercher dans les libellés",
+      "allAccounts": "Tous les comptes",
+      "account": "Compte",
+      "filters": "Filtres",
+      "from": "Du",
+      "to": "Au",
+      "removeFilter": "Retirer ce filtre",
+      "filterByCategory": "Filtrer par catégorie",
+      "filterByTag": "Filtrer par étiquette",
+      "selectedPeriod": "Période sélectionnée",
+      "matchingOfTotal": "{{matching}} / {{total}} transactions",
+      "buckets": { "all": "Tous les types", "in": "Entrées", "out": "Sorties", "lots": "Lots d'investissement" },
+      "timeFrames": {
+        "all": "Tout l'historique",
+        "thisMonth": "Ce mois-ci",
+        "last3Months": "3 derniers mois",
+        "thisYear": "Cette année",
+        "last12Months": "12 derniers mois",
+        "custom": "Personnalisé…"
+      },
+      "rowsSelected_one": "{{count}} ligne sélectionnée",
+      "rowsSelected_other": "{{count}} lignes sélectionnées",
+      "total": "Total",
+      "assignCategory": "Attribuer une catégorie",
+      "markChecked": "Marquer comme pointée",
+      "clearSelection": "Annuler la sélection",
+      "title": "Transactions",
+      "headerCounts": "{{total}} transactions · {{uncategorized}} sans catégorie",
+      "selectAllShown": "Tout sélectionner",
+      "selectAllShownDisabledLots": "Les lots d'investissement n'ont pas de budget, il n'y a donc rien à sélectionner.",
+      "deselectAll": "Tout désélectionner",
+      "applyToAllTitle": "Appliquer aux transactions similaires",
+      "applyToAllBody_one": "{{count}} autre transaction porte ce libellé. Lui appliquer aussi la catégorie ?",
+      "applyToAllBody_other": "{{count}} autres transactions portent ce libellé. Leur appliquer aussi la catégorie ?",
+      "applyToAllConfirm": "Tout appliquer",
+      "bulkUpdated_one": "{{count}} ligne mise à jour.",
+      "bulkUpdated_other": "{{count}} lignes mises à jour.",
+      "errors": {
+        "duplicate": "Ce changement n'a pas pu être enregistré.",
+        "gone": "Cette transaction n'existe plus. Actualisez la page.",
+        "saveError": "Ce changement n'a pas pu être enregistré. Veuillez réessayer."
+      }
+    },
+    "modes": { "overview": "Aperçu", "transactions": "Transactions" },
+    "overviewSoon": "L'aperçu arrivera dans une prochaine version."
   }
 }
