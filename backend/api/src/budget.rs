@@ -178,6 +178,42 @@ pub async fn delete_category(
     }
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReorderBody {
+    /// Every category of the user, in the order they should appear.
+    pub ids: Vec<String>,
+}
+
+/// The client sends the whole list in its new order and the server numbers it.
+/// Sending the list rather than "move this row up" keeps the decision where the
+/// rows are actually laid out — the client knows which siblings are hidden
+/// behind the archived toggle, and the server does not need to.
+pub async fn reorder_categories(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(b): Json<ReorderBody>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let ids = b
+        .ids
+        .iter()
+        .map(|i| Uuid::parse_str(i))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid id".to_string()))?;
+    if ids.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "no ids".into()));
+    }
+    let done = category::reorder_categories(&pool, user_id, &ids)
+        .await
+        .map_err(internal)?;
+    // Every id has to be one of this user's rows: a partial write would leave
+    // the list in an order nobody asked for.
+    if done != ids.len() as u64 {
+        return Err(not_found());
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // ── Tags ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]

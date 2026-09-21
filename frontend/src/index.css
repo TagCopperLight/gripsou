@@ -20,11 +20,19 @@
   --color-green: #34d399;
   --color-red: #f87171;
   --color-amber: #f0b35b;
+  --color-blue: #5b9bf0;
+
+  /* Lighter accents — badge text on a tinted ground, where the full-strength
+     accent reads as an alert. */
+  --color-red-light: #fca5a5;
+  --color-green-light: #6ee7b7;
+  --color-blue-light: #9cc0f7;
 
   /* Semi transparents */
   --color-green-soft: rgba(52, 211, 153, 0.16);
   --color-red-soft: rgba(248, 113, 113, 0.16);
   --color-amber-soft: rgba(240, 179, 91, 0.15);
+  --color-blue-soft: rgba(91, 155, 240, 0.16);
 
   --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;

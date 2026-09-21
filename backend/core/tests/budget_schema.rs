@@ -25,9 +25,47 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
         .fetch_one(&pool)
         .await?;
     assert_eq!(
-        total, 25,
-        "seeded taxonomy is 17 expense + 4 income + 3 internal + 1 excluded"
+        total, 32,
+        "seeded taxonomy is 23 expense + 5 income + 3 internal + 1 excluded"
     );
+
+    let per_kind: Vec<(String, i64)> = sqlx::query_as(
+        "select kind, count(*) from budget_category where user_id = $1 group by kind order by 1",
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        per_kind,
+        vec![
+            ("excluded".to_string(), 1),
+            ("expense".to_string(), 23),
+            ("income".to_string(), 5),
+            ("internal".to_string(), 3),
+        ]
+    );
+
+    // Numbering is dense within a kind: 1..n, no gaps, no duplicates.
+    let gaps: i64 = sqlx::query_scalar(
+        "select count(*) from (
+             select kind, sort_order,
+                    row_number() over (partition by kind order by sort_order) as ord
+               from budget_category where user_id = $1
+         ) t where t.sort_order <> t.ord",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(gaps, 0, "sort_order is 1..n within each kind");
+
+    // Nothing ships archived: the taxonomy arrives fully in play.
+    let archived: i64 = sqlx::query_scalar(
+        "select count(*) from budget_category where user_id = $1 and archived_at is not null",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(archived, 0);
 
     let kinds: Vec<String> = sqlx::query_scalar(
         "select distinct kind from budget_category where user_id = $1 order by 1",
@@ -83,7 +121,7 @@ async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
     .bind(b)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(shared, 25, "same names, different rows");
+    assert_eq!(shared, 32, "same names, different rows");
 
     Ok(())
 }

@@ -18,7 +18,6 @@ pub struct BudgetCategoryRow {
     pub hint: Option<String>,
     pub kind: String,
     pub system_key: Option<String>,
-    pub sort_order: i32,
     pub archived: bool,
     /// How many of this user's transactions carry the category, all-time.
     pub tx_count: i64,
@@ -56,7 +55,6 @@ pub async fn list_categories(
                c.hint,
                c.kind        as "kind!",
                c.system_key,
-               c.sort_order  as "sort_order!",
                (c.archived_at is not null) as "archived!",
                coalesce(n.cnt, 0) as "tx_count!"
         from budget_category c
@@ -75,7 +73,7 @@ pub async fn list_categories(
                      when 'internal' then 2
                      else 3
                  end,
-                 c.sort_order, c.name
+                 c.sort_order, lower(c.name)
         "#,
         user_id,
     )
@@ -94,8 +92,8 @@ pub async fn create_category(
         r#"
         insert into budget_category (user_id, name, color, icon, hint, kind, sort_order)
         values ($1, $2, $3, $4, $5, $6,
-                coalesce((select max(sort_order) + 10 from budget_category
-                          where user_id = $1 and kind = $6), 10))
+                coalesce((select max(sort_order) from budget_category
+                          where user_id = $1 and kind = $6), 0) + 1)
         returning id        as "id!",
                   name      as "name!",
                   default_key,
@@ -104,7 +102,6 @@ pub async fn create_category(
                   hint,
                   kind      as "kind!",
                   system_key,
-                  sort_order as "sort_order!",
                   (archived_at is not null) as "archived!",
                   0::bigint as "tx_count!"
         "#,
@@ -152,7 +149,6 @@ pub async fn update_category(
                   c.hint,
                   c.kind      as "kind!",
                   c.system_key,
-                  c.sort_order as "sort_order!",
                   (c.archived_at is not null) as "archived!",
                   (select count(*)
                      from transaction t
@@ -182,12 +178,79 @@ pub async fn delete_category(
     user_id: Uuid,
     id: Uuid,
 ) -> Result<bool, CoreError> {
+    // One transaction: the delete and the renumbering that closes the hole it
+    // leaves have to be one step, or a concurrent reorder could interleave.
+    let mut tx = pool.begin().await?;
     let done = sqlx::query!(
         "delete from budget_category where id = $1 and user_id = $2 and system_key is null",
         id,
         user_id,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(done.rows_affected() > 0)
+    if done.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    compact_sort_order(&mut tx, user_id).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Renumbers every kind back to `1..n`, keeping the order the rows are already
+/// in. Called after a delete so the numbers never grow holes.
+async fn compact_sort_order(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: Uuid,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        r#"
+        update budget_category c
+           set sort_order = r.ord::int
+          from (
+              select id,
+                     row_number() over (partition by kind order by sort_order, lower(name)) as ord
+                from budget_category
+               where user_id = $1
+          ) r
+         where r.id = c.id and c.sort_order <> r.ord::int
+        "#,
+        user_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Rewrites the order of the ids given, numbering each kind `1, 2, 3…` in the
+/// order supplied. The caller sends the whole list, kinds interleaved or not;
+/// the numbering is re-derived per kind here, so two adjacent rows changing
+/// places is exactly their two numbers swapping.
+///
+/// Ids that are not this user's are silently skipped — the caller compares the
+/// returned count against what it sent and refuses a partial write.
+pub async fn reorder_categories(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    ids: &[Uuid],
+) -> Result<u64, CoreError> {
+    let done = sqlx::query!(
+        r#"
+        update budget_category c
+           set sort_order = r.ord::int
+          from (
+              select t.id,
+                     row_number() over (partition by b.kind order by t.ord) as ord
+                from unnest($2::uuid[]) with ordinality as t(id, ord)
+                join budget_category b on b.id = t.id and b.user_id = $1
+          ) r
+         where r.id = c.id
+        "#,
+        user_id,
+        ids,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(done)
 }

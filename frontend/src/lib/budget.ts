@@ -1,8 +1,9 @@
 import {
-  ArrowLeftRight, ChartPie, CircleDashed, CirclePlus, Coins, EyeOff, Fuel,
-  Gamepad2, Gift, GraduationCap, HeartPulse, House, Landmark, Plane, PiggyBank,
-  PlugZap, Receipt, Repeat, Shield, ShoppingBag, ShoppingCart, TrainFront,
-  TrendingUp, Undo2, Utensils, Wallet, type LucideIcon,
+  Activity, ArrowLeftRight, Banknote, BookOpen, ChartColumn, CircleDashed, CirclePlus,
+  Coins, EyeOff, Film, Fuel, Gamepad2, Gift, GraduationCap, HeartPulse, House, Lamp,
+  Landmark, PawPrint, Percent, PiggyBank, Plane, PlugZap, Receipt, Repeat, Shield,
+  Shirt, ShoppingBag, ShoppingCart, Smartphone, TrainFront, TrendingUp, Undo2,
+  Utensils, Wallet, Zap, type LucideIcon
 } from "lucide-react";
 import type { TFunction } from "i18next";
 
@@ -10,39 +11,72 @@ import type { BudgetCategory, BudgetKind } from "../api/budget";
 import { ApiError } from "../api/client";
 
 /** Display order of the four kinds; also the grouping order of every list. */
+// Swatches offered in the category/tag colour picker: the account palette's
+// hues plus enough extras to fill one row, ordered around the colour wheel.
+export const BUDGET_PALETTE: readonly string[] = [
+  "#e0605f",
+  "#e88a5f",
+  "#f0b952",
+  "#c9a26b",
+  "#8fd05f",
+  "#9bb06b",
+  "#5fcf9e",
+  "#4dd0b1",
+  "#55c2d8",
+  "#5b9bf0",
+  "#6aa0e0",
+  "#7f8cf0",
+  "#b8a8f0",
+  "#b07ef0",
+  "#d97ec4",
+  "#f08fb0",
+  "#9aa4b2",
+];
+
 export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "internal", "excluded"];
 
 /** The page/sidebar glyph, named once so Settings and later phases agree. */
-export const BudgetIcon: LucideIcon = ChartPie;
+export const BudgetIcon: LucideIcon = ChartColumn;
 
-/** Every icon name the seed in `0028_budget.sql` uses, statically imported —
+/** Every icon the seed in `0028_budget.sql` uses plus the rest of the pickable
+ *  set, statically imported —
  *  lucide's dynamic index would pull the whole icon set into the bundle. */
 export const BUDGET_ICONS: Record<string, LucideIcon> = {
-  "shopping-cart": ShoppingCart,
-  utensils: Utensils,
-  "train-front": TrainFront,
-  fuel: Fuel,
-  house: House,
-  "plug-zap": PlugZap,
-  shield: Shield,
-  "heart-pulse": HeartPulse,
-  repeat: Repeat,
-  "shopping-bag": ShoppingBag,
-  "gamepad-2": Gamepad2,
-  plane: Plane,
-  "graduation-cap": GraduationCap,
-  receipt: Receipt,
-  landmark: Landmark,
-  gift: Gift,
-  "circle-dashed": CircleDashed,
-  wallet: Wallet,
-  coins: Coins,
-  "undo-2": Undo2,
-  "circle-plus": CirclePlus,
+  activity: Activity,
   "arrow-left-right": ArrowLeftRight,
-  "piggy-bank": PiggyBank,
-  "trending-up": TrendingUp,
+  banknote: Banknote,
+  "book-open": BookOpen,
+  "circle-dashed": CircleDashed,
+  "circle-plus": CirclePlus,
+  coins: Coins,
   "eye-off": EyeOff,
+  film: Film,
+  fuel: Fuel,
+  "gamepad-2": Gamepad2,
+  gift: Gift,
+  "graduation-cap": GraduationCap,
+  "heart-pulse": HeartPulse,
+  house: House,
+  lamp: Lamp,
+  landmark: Landmark,
+  "paw-print": PawPrint,
+  percent: Percent,
+  "piggy-bank": PiggyBank,
+  plane: Plane,
+  "plug-zap": PlugZap,
+  receipt: Receipt,
+  repeat: Repeat,
+  shield: Shield,
+  shirt: Shirt,
+  "shopping-bag": ShoppingBag,
+  "shopping-cart": ShoppingCart,
+  smartphone: Smartphone,
+  "train-front": TrainFront,
+  "trending-up": TrendingUp,
+  "undo-2": Undo2,
+  utensils: Utensils,
+  wallet: Wallet,
+  zap: Zap,
 };
 
 export const BUDGET_ICON_NAMES: readonly string[] = Object.keys(BUDGET_ICONS);
@@ -79,8 +113,9 @@ export function budgetErrorKey(err: unknown): "duplicate" | "gone" | "saveError"
   return "saveError";
 }
 
-/** Kind-major order; `Array.prototype.sort` is stable, so the backend's
- *  `sort_order` inside each kind survives. */
+/** Kind-major, and nothing more: inside a kind the backend's `sort_order` is
+ *  the order the user arranged by hand, and `Array.prototype.sort` is stable,
+ *  so it survives. */
 export function sortCategories(list: BudgetCategory[]): BudgetCategory[] {
   return [...list].sort(
     (a, b) => BUDGET_KINDS.indexOf(a.kind) - BUDGET_KINDS.indexOf(b.kind),
