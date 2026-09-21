@@ -156,10 +156,9 @@ describe("TagsSurface", () => {
   it("changes a colour without renaming, and clears it with null", async () => {
     renderSurface();
     await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Colour of Holiday" }));
     expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method)).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Colour #4dd0b1" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Colour #4dd0b1" })[0]);
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/budget/tags/t1",
@@ -167,8 +166,7 @@ describe("TagsSurface", () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Colour of Holiday" }));
-    fireEvent.click(screen.getByRole("button", { name: "No colour" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "No colour" })[0]);
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/budget/tags/t1",

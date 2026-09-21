@@ -427,6 +427,7 @@
         "colorLabel": "Couleur de {{name}}",
         "paletteLabel": "Couleur {{color}}",
         "clearColor": "Aucune couleur",
+        "customColor": "Couleur personnalisée",
         "duplicate": "Une étiquette porte déjà ce nom.",
         "gone": "Cette étiquette n'existe plus. Actualisez la page.",
         "saveError": "Cette étiquette n'a pas pu être enregistrée. Réessayez.",

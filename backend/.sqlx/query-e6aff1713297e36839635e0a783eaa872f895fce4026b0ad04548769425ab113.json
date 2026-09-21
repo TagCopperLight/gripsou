@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select g.id   as \"id!\",\n               g.name as \"name!\",\n               g.color,\n               (select count(*) from budget_transaction_tag tt where tt.tag_id = g.id) as \"tx_count!\"\n        from budget_tag g\n        where g.user_id = $1\n        order by g.name\n        ",
+  "query": "\n        select g.id   as \"id!\",\n               g.name as \"name!\",\n               g.color,\n               (select count(*) from budget_transaction_tag tt where tt.tag_id = g.id) as \"tx_count!\"\n        from budget_tag g\n        where g.user_id = $1\n        order by g.created_at, g.name\n        ",
   "describe": {
     "columns": [
       {
@@ -55,5 +55,5 @@
       null
     ]
   },
-  "hash": "a8a6ca48bcd4e0a31a1cea68bd1a0972d8e6ae0a2e90f2bcaf19c5c4b6a977a2"
+  "hash": "e6aff1713297e36839635e0a783eaa872f895fce4026b0ad04548769425ab113"
 }

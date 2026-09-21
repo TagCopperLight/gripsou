@@ -27,11 +27,15 @@ create table budget_category (
 create unique index budget_category_system_uq
     on budget_category (user_id, system_key) where system_key is not null;
 
+-- Listed in creation order, not alphabetically: the list is short and personal,
+-- and a tag just added belongs at the end where it was typed rather than
+-- somewhere in the middle of the alphabet.
 create table budget_tag (
-    id      uuid primary key default gen_random_uuid(),
-    user_id uuid not null references users (id) on delete cascade,
-    name    text not null,
-    color   text,
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references users (id) on delete cascade,
+    name       text not null,
+    color      text,
+    created_at timestamptz not null default now(),
     unique (user_id, name)
 );
 
