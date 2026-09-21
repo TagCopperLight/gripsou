@@ -23,6 +23,8 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.accountSeries(),
     keys.holdings(),
     keys.transactions(),
+    keys.budgetCategories(),
+    keys.budgetTags(),
   ]);
 }
 
@@ -73,4 +75,14 @@ export function afterSessionChange(qc: QueryClient) {
 
 export function afterUserChange(qc: QueryClient) {
   invalidateAll(qc, [keys.users()]);
+}
+
+// Editing the taxonomy changes the chips the transactions table draws, so the
+// transaction pages go stale with the category/tag list itself.
+export function afterBudgetCategoryChange(qc: QueryClient) {
+  invalidateAll(qc, [keys.budgetCategories(), keys.transactions()]);
+}
+
+export function afterBudgetTagChange(qc: QueryClient) {
+  invalidateAll(qc, [keys.budgetTags(), keys.transactions()]);
 }

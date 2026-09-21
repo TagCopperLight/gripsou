@@ -99,6 +99,8 @@ describe("SyncButton", () => {
       "account-series",
       "holdings",
       "transactions",
+      "budget-categories",
+      "budget-tags",
     ]);
   });
 });

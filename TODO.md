@@ -64,3 +64,4 @@
 - [ ] Budget page (@TRANSACTION.md phase 2)
     - [ ] Transactions reconciliation
     - [ ] Infer lots
+- [ ] reorganize files

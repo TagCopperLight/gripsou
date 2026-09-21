@@ -135,6 +135,8 @@ describe("useDeleteConnection", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["budget-categories"],
+      ["budget-tags"],
     ]);
   });
 });
