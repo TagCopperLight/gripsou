@@ -427,6 +427,7 @@
         "colorLabel": "Colour of {{name}}",
         "paletteLabel": "Colour {{color}}",
         "clearColor": "No colour",
+        "customColor": "Custom colour",
         "duplicate": "A tag with this name already exists.",
         "gone": "This tag no longer exists. Refresh the page.",
         "saveError": "That tag could not be saved. Please try again.",

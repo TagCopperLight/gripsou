@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 
 import { Surface } from "../Surface";
-import { Button } from "../Button";
 import { CardState } from "../CardState";
 import { useBudgetTags, useCreateBudgetTag, type BudgetTag } from "../../api/budget";
 import { budgetErrorKey } from "../../lib/budget";
@@ -59,7 +58,7 @@ export function TagsSurface() {
                 </div>
               )}
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-4">
                 <input
                   id="new-tag-name"
                   type="text"
@@ -71,17 +70,19 @@ export function TagsSurface() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") submit();
                   }}
-                  className="flex-1 min-w-40 bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+                  className="w-112 max-w-full bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
                 />
-                <Button
+                {/* Padding and text size mirror the field beside it, so the
+                    two share a baseline and a height. */}
+                <button
+                  type="button"
                   onClick={submit}
                   disabled={!draft.trim() || create.isPending}
-                  padded={false}
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-surface-3 px-3 py-2 text-sm font-medium text-fg cursor-pointer transition-colors duration-140 hover:bg-surface-3/70 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="size-4" />
                   {t("settings.budget.tags.add")}
-                </Button>
+                </button>
               </div>
 
               {create.isError && (
