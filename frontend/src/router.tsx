@@ -14,6 +14,7 @@ import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
 import { SettingsAccount } from "./pages/settings/Account";
 import { SettingsConnections } from "./pages/settings/Connections";
+import { SettingsBudget } from "./pages/settings/Budget";
 import { SettingsUsers } from "./pages/settings/Users";
 import { SettingsServer } from "./pages/settings/Server";
 import { ConnectionCallback } from "./pages/ConnectionCallback";
@@ -104,6 +105,12 @@ const settingsConnectionsRoute = createRoute({
   component: SettingsConnections,
 });
 
+const settingsBudgetRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "budget",
+  component: SettingsBudget,
+});
+
 const settingsUsersRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "users",
@@ -139,6 +146,7 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsGeneralRoute,
   settingsAccountRoute,
   settingsConnectionsRoute,
+  settingsBudgetRoute,
   settingsUsersRoute,
   settingsServerRoute,
 ]);

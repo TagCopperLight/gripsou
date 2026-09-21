@@ -3,6 +3,8 @@ import { QueryClient } from "@tanstack/react-query";
 
 import {
   afterAccountEdit,
+  afterBudgetCategoryChange,
+  afterBudgetTagChange,
   afterConnectionDeleted,
   afterLotsSaved,
   afterSessionChange,
@@ -30,6 +32,8 @@ describe("afterSyncFinished", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["budget-categories"],
+      ["budget-tags"],
     ]);
   });
 });
@@ -63,6 +67,8 @@ describe("afterConnectionDeleted", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["budget-categories"],
+      ["budget-tags"],
     ]);
   });
 });
@@ -87,5 +93,34 @@ describe("the single-key groups", () => {
 
   it("afterUserChange refreshes users", () => {
     expect(invalidatedBy(afterUserChange)).toEqual([["users"]]);
+  });
+});
+
+describe("budget taxonomy changes", () => {
+  it("refreshes categories and the transactions that render their chips", () => {
+    expect(invalidatedBy(afterBudgetCategoryChange)).toEqual([
+      ["budget-categories"],
+      ["transactions"],
+    ]);
+  });
+
+  it("refreshes tags and the transactions that render their chips", () => {
+    expect(invalidatedBy(afterBudgetTagChange)).toEqual([
+      ["budget-tags"],
+      ["transactions"],
+    ]);
+  });
+
+  it("a finished sync refreshes both budget families, whose txCounts it moves", () => {
+    expect(invalidatedBy(afterSyncFinished)).toEqual([
+      ["net-worth"],
+      ["distribution"],
+      ["accounts"],
+      ["account-series"],
+      ["holdings"],
+      ["transactions"],
+      ["budget-categories"],
+      ["budget-tags"],
+    ]);
   });
 });

@@ -45,12 +45,23 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 
 type HandleOptions = { skipGlobalUnauthorized?: boolean };
 
+/** An HTTP failure with its status attached, so callers can branch on 409/404
+ *  instead of parsing the message. Thrown by every helper in this module. */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 function handle(res: Response, path: string, method: string, opts?: HandleOptions): void {
   if (res.status === 401) {
     if (!opts?.skipGlobalUnauthorized) onUnauthorized?.();
-    throw new Error(`${method} ${path} unauthorized`);
+    throw new ApiError(`${method} ${path} unauthorized`, 401);
   }
-  if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, res.status);
 }
 
 export type GetJsonOptions = { skipGlobalUnauthorized?: boolean };

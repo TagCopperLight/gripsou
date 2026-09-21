@@ -16,4 +16,9 @@ describe("parameterised keys", () => {
     expect(keys.holdingPrices("h1")).toEqual(["holding-prices", "h1"]);
     expect(keys.providersEnabled()).toEqual(["providers-enabled"]);
   });
+
+  it("names the budget families", () => {
+    expect(keys.budgetCategories()).toEqual(["budget-categories"]);
+    expect(keys.budgetTags()).toEqual(["budget-tags"]);
+  });
 });

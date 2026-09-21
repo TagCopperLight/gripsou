@@ -56,6 +56,38 @@ describe("route guard", () => {
   });
 });
 
+const authedUser: AuthValue = {
+  isAuthenticated: true,
+  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS },
+  isBootstrapping: false,
+  prefs: DEFAULT_PREFS,
+  login: async () => {},
+  adoptSession: () => {},
+  logout: async () => {},
+  updateUser: () => {},
+  updatePrefs: async () => {},
+};
+
+describe("settings budget route", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("resolves /settings/budget for an ordinary authenticated user and renders the Categories heading", async () => {
+    const router = renderAt("/settings/budget", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/budget"));
+    expect(await screen.findByText("Categories")).toBeInTheDocument();
+  });
+});
+
 describe("public invite/reset routes", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
