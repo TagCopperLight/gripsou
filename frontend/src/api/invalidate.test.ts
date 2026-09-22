@@ -38,6 +38,8 @@ describe("afterSyncFinished", () => {
       ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
+      ["budget-summary"],
+      ["budget-trend"],
     ]);
   });
 });
@@ -75,6 +77,8 @@ describe("afterConnectionDeleted", () => {
       ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
+      ["budget-summary"],
+      ["budget-trend"],
     ]);
   });
 });
@@ -108,6 +112,8 @@ describe("budget taxonomy changes", () => {
       ["budget-categories"],
       ["transactions"],
       ["transaction-counts"],
+      ["budget-summary"],
+      ["budget-trend"],
     ]);
   });
 
@@ -117,6 +123,10 @@ describe("budget taxonomy changes", () => {
       ["transactions"],
       ["transaction-counts"],
     ]);
+  });
+
+  it("leaves the Overview alone — no surface there renders a tag", () => {
+    expect(invalidatedBy(afterBudgetTagChange)).not.toContainEqual(["budget-summary"]);
   });
 
   it("a finished sync refreshes both budget families, whose txCounts it moves", () => {
@@ -130,6 +140,8 @@ describe("budget taxonomy changes", () => {
       ["transaction-counts"],
       ["budget-categories"],
       ["budget-tags"],
+      ["budget-summary"],
+      ["budget-trend"],
     ]);
   });
 });
@@ -140,6 +152,8 @@ it("afterTransactionChange refreshes the list and its counts", () => {
   const keysCalled = (qc.invalidateQueries as Mock).mock.calls.map((c) => c[0].queryKey);
   expect(keysCalled).toContainEqual(keys.transactions());
   expect(keysCalled).toContainEqual(keys.transactionCounts());
+  expect(keysCalled).toContainEqual(keys.budgetSummary());
+  expect(keysCalled).toContainEqual(keys.budgetTrend());
 });
 
 it("a finished sync refreshes the transaction counts too", () => {

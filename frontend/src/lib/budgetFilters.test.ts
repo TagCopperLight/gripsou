@@ -102,6 +102,15 @@ describe("budgetFilters", () => {
     });
   });
 
+  it("clears a stale `periodLabel` when a new time frame is picked (I2)", () => {
+    // Without this, `activeFilters` hides the time-frame chip (it only shows
+    // when `periodLabel` is unset) while the picked range silently applies —
+    // the "Selected period" chip keeps showing the OLD Overview period.
+    const withLabel = { ...EMPTY_FILTERS, periodLabel: "September 2026" };
+    const next = withTimeFrame(withLabel, "thisMonth", new Date(2026, 8, 21));
+    expect(next.periodLabel).toBeUndefined();
+  });
+
   it("clearing the period chip drops phase 4's label with its dates", () => {
     const f = { ...EMPTY_FILTERS, periodLabel: "September 2026", from: "2026-09-01", to: "2026-09-30" };
     expect(activeFilters(f)[0]).toEqual({ kind: "period" });

@@ -7,7 +7,7 @@ import type { Transaction } from "../../api/types";
 function tx(over: Partial<Transaction>): Transaction {
   return {
     id: "t1", t: Date.UTC(2026, 8, 12, 12), type: "withdrawal", description: "ALDI",
-    amount: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
+    amount: "-12.40", amountReporting: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
     accountColor: null, source: "cash", ticker: null, quantity: null, unitPrice: null,
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
@@ -27,7 +27,7 @@ class NoopObserver {
 const BASE = {
   rows: [tx({})],
   showChecked: false,
-  counts: { matching: 1, total: 400, uncategorized: 300 },
+  counts: { matching: 1, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false },
   filtered: false,
   loading: false,
   error: false,
@@ -64,7 +64,7 @@ describe("TransactionsTable", () => {
       <TransactionsTable
         {...BASE}
         rows={[]}
-        counts={{ matching: 0, total: 0, uncategorized: 0 }}
+        counts={{ matching: 0, total: 0, uncategorized: 0, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-nothing")).toBeVisible();
@@ -74,7 +74,7 @@ describe("TransactionsTable", () => {
         {...BASE}
         rows={[]}
         filtered
-        counts={{ matching: 0, total: 400, uncategorized: 300 }}
+        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-no-match")).toBeVisible();
@@ -100,7 +100,7 @@ describe("TransactionsTable", () => {
         {...BASE}
         rows={[]}
         filtered={false}
-        counts={{ matching: 0, total: 400, uncategorized: 300 }}
+        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-no-match")).toBeVisible();

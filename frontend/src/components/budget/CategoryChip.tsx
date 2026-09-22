@@ -1,13 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { Dot, X } from "lucide-react";
 
-import type { BudgetCategory } from "../../api/budget";
-import { BUDGET_ICONS, categoryLabel, safeBudgetColor } from "../../lib/budget";
+import { BUDGET_ICONS, categoryLabel, safeBudgetColor, type CategoryLike } from "../../lib/budget";
 import { tint } from "../../lib/color";
 
 type CategoryChipProps = {
   /** `null` is the "no category" state, not a missing prop. */
-  category: BudgetCategory | null;
+  category: CategoryLike | null;
   /** An unreviewed AI guess: outline instead of fill (spec §5). */
   needsReview?: boolean;
   /** The chip sits inside something that removes it when clicked: on hover of

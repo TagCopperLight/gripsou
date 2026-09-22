@@ -6,10 +6,15 @@ import { useBudget } from "./budgetContext";
 import { CategoryChooser } from "./CategoryChooser";
 import { TagChooser } from "./TagChooser";
 import { Button } from "../Button";
+import { Money } from "../Money";
 
 type SelectionBarProps = {
   /** The server's `matching` count — what "all shown" actually covers. */
   matching: number;
+  /** The selection's value in the reporting currency. "all shown" is the
+   *  server's `matchingTotal`; an explicit id selection is summed from the
+   *  loaded rows, which always contain it. */
+  total: string;
   showChecked: boolean;
   busy: boolean;
   onAssignCategory: (categoryId: string | null) => void;
@@ -40,7 +45,7 @@ function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
 
 /** §2.4 — floats over the surface, stuck to the bottom of the page column. */
 export function SelectionBar({
-  matching, showChecked, busy, onAssignCategory, onAddTags, onMarkChecked,
+  matching, total, showChecked, busy, onAssignCategory, onAddTags, onMarkChecked,
 }: SelectionBarProps) {
   const { t } = useTranslation();
   const { selection, anySelected, clearSelection } = useBudget();
@@ -81,13 +86,8 @@ export function SelectionBar({
           <span data-testid="selection-count" className="text-sm text-fg pr-1">
             {t("budget.transactions.rowsSelected", { count })}
           </span>
-          {/* Phase 4 fills this in: a cross-currency total needs FX at the
-              transaction's date, which lands with the aggregation endpoints. */}
-          <span
-            data-testid="selection-total"
-            className="text-xs tabular-nums text-fg-dim font-mono"
-          >
-           -21,48 €
+          <span data-testid="selection-total" className="text-xs text-fg-dim">
+            <Money value={total} signed className="text-xs" />
           </span>
         </span>
         <span className="mx-1 h-5 w-px bg-fg/12" />

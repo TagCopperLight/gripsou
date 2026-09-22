@@ -73,8 +73,11 @@ export function withTimeFrame(
   timeFrame: TimeFrame,
   today: Date = new Date(),
 ): BudgetFilters {
-  if (timeFrame === "custom") return { ...f, timeFrame };
-  if (timeFrame === "all") return { ...f, timeFrame, from: "", to: "" };
+  // Picking any time frame here supersedes Overview's "Selected period" chip
+  // (I2): leaving `periodLabel` set would keep showing the OLD period's
+  // label while `activeFilters` hides the real time-frame chip underneath it.
+  if (timeFrame === "custom") return { ...f, timeFrame, periodLabel: undefined };
+  if (timeFrame === "all") return { ...f, timeFrame, from: "", to: "", periodLabel: undefined };
 
   const y = today.getFullYear();
   const m = today.getMonth();
@@ -85,7 +88,7 @@ export function withTimeFrame(
     last12Months: [monthsBack(today, 12), today],
   };
   const [from, to] = ranges[timeFrame];
-  return { ...f, timeFrame, from: isoDay(from), to: isoDay(to) };
+  return { ...f, timeFrame, from: isoDay(from), to: isoDay(to), periodLabel: undefined };
 }
 
 /** The filter set as the API reads it. Empty values are omitted so the query

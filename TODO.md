@@ -62,6 +62,11 @@
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
 - [ ] Budget page (@TRANSACTION.md phase 2)
+    - [x] Overview mode (figures, Sankey, category breakdown, last 12 months)
+    - [x] Transactions mode
+    - [ ] AI categorisation and the review queue
+    - [ ] Merchant logos and the memo
+    - [ ] Rules engine
     - [ ] Transactions reconciliation
     - [ ] Infer lots
 - [ ] reorganize files

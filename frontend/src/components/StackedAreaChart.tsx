@@ -3,6 +3,7 @@ import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
 import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/date";
+import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
 export type StackedSeries = {
   name: string;
@@ -10,30 +11,6 @@ export type StackedSeries = {
   /** [epoch-ms, value] points; all series share the same timestamps. */
   data: [number, number][];
 };
-
-const GRID = "#262321"; // surface-3
-const FAINT = "#777471"; // fg-faint
-const DIM = "#aeaaa7"; // fg-dim
-const WHITE = "#f4f1ef"; // fg
-const MONO = '"Geist Mono Variable", ui-monospace, monospace';
-
-function rgba(hex: string, alpha: number): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
-
-function tooltipRow(color: string, label: string, value: string, strong = false): string {
-  const swatch = color === "transparent"
-    ? ""
-    : `<span style="width:9px;height:9px;border-radius:3px;background:${color};"></span>`;
-  const labelColor = strong ? WHITE : DIM;
-  return `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-      ${swatch}
-      <span style="color:${labelColor};font-size:12px;${strong ? "font-weight:600;" : ""}">${label}</span>
-      <span style="margin-left:auto;padding-left:12px;color:${WHITE};font-size:12px;font-weight:600;">${value}</span>
-    </div>`;
-}
 
 type TooltipParam = { axisValue: number; seriesName: string; value: [number, number] };
 

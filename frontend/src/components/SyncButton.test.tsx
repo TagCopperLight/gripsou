@@ -102,6 +102,8 @@ describe("SyncButton", () => {
       "transaction-counts",
       "budget-categories",
       "budget-tags",
+      "budget-summary",
+      "budget-trend",
     ]);
   });
 });

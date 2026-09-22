@@ -76,13 +76,13 @@ const budgetRoute = createRoute({
   component: Budget,
 });
 
-// Phase 3 lands on Transactions, the only mode with something in it. Phase 4
-// flips this to /budget/overview once the analysis exists.
+// Overview is the landing mode: the analysis is what the page is for, and the
+// Transactions list is where you go to act on what it shows.
 const budgetIndexRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/budget/transactions" });
+    throw redirect({ to: "/budget/overview" });
   },
 });
 

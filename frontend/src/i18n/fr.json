@@ -592,7 +592,58 @@
         "saveError": "Ce changement n'a pas pu être enregistré. Veuillez réessayer."
       }
     },
-    "modes": { "overview": "Aperçu", "transactions": "Transactions" },
-    "overviewSoon": "L'aperçu arrivera dans une prochaine version."
+    "overview": {
+      "other": "Autres",
+      "transactionCount_one": "{{count}} transaction",
+      "transactionCount_other": "{{count}} transactions",
+      "prevMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "range": "Période",
+      "customRange": "Période personnalisée",
+      "clearRange": "Revenir à la vue mensuelle",
+      "presets": {
+        "last3Months": "3 derniers mois",
+        "last6Months": "6 derniers mois",
+        "last12Months": "12 derniers mois",
+        "thisYear": "Cette année",
+        "lastYear": "L’an dernier",
+        "custom": "Période personnalisée"
+      },
+      "from": "Du",
+      "to": "Au",
+      "apply": "Appliquer",
+      "figures": {
+        "income": "Revenus",
+        "expenses": "Dépenses",
+        "net": "Solde",
+        "saved": "Épargné et investi"
+      },
+      "vsPrevMonth": "vs mois précédent",
+      "vsAvg12": "vs moyenne sur 12 mois",
+      "sankey": {
+        "title": "Où est allé l’argent",
+        "seeTransactions": "Voir les transactions",
+        "notSpent": "Non dépensé",
+        "drawnFromSavings": "Puisé dans l’épargne"
+      },
+      "breakdown": {
+        "title": "Catégories",
+        "category": "Catégorie",
+        "amount": "Montant",
+        "share": "Part",
+        "vsAvg12": "vs moy. 12 mois",
+        "open": "Ouvrir ces transactions"
+      },
+      "trend": {
+        "title": "12 derniers mois",
+        "total": "Total"
+      },
+      "empty": {
+        "title": "Rien dans cette période",
+        "body": "Aucune transaction ne tombe dans la période sélectionnée : il n’y a donc rien à détailler.",
+        "earlier": "Chercher plus tôt"
+      }
+    },
+    "modes": { "overview": "Aperçu", "transactions": "Transactions" }
   }
 }
