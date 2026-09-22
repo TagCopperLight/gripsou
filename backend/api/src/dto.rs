@@ -334,6 +334,9 @@ pub struct Transaction {
     pub description: Option<String>,
     /// Decimal string in `currency` — never a float.
     pub amount: String,
+    /// The same movement in the reader's reporting currency, converted at the
+    /// transaction's own date. Decimal string, never a float.
+    pub amount_reporting: String,
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
@@ -389,6 +392,7 @@ impl Transaction {
             kind: r.kind,
             description: r.description,
             amount: r.amount.to_string(),
+            amount_reporting: r.amount_reporting.to_string(),
             currency: r.account_currency,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,

@@ -113,6 +113,8 @@ async fn main() -> anyhow::Result<()> {
             "/budget/tags",
             get(budget::list_tags).post(budget::create_tag),
         )
+        .route("/budget/summary", get(budget::summary))
+        .route("/budget/trend", get(budget::trend_handler))
         .route(
             "/budget/tags/{id}",
             patch(budget::update_tag).delete(budget::delete_tag),

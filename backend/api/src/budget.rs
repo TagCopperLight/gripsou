@@ -15,6 +15,14 @@ use crate::auth::AuthUser;
 use gripsou_core::repo::budget::{assign, category, tag};
 use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transaction_counts};
 
+use chrono::NaiveDate;
+use gripsou_core::budget::overview::{
+    BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline, baseline_figures,
+    breakdown, figures, rows_in, sankey,
+};
+
+use gripsou_core::repo::budget::summary::{DayCategoryRow, day_category_totals};
+
 fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
     tracing::error!("{e}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
@@ -296,6 +304,350 @@ pub async fn delete_tag(
     }
 }
 
+// ── Overview ────────────────────────────────────────────────────────────────
+
+/// The category fields a chip needs, and no more. Same shape the transactions
+/// list already sends, so the frontend's `CategoryChip` is reused verbatim.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryRefDto {
+    pub id: String,
+    pub name: String,
+    pub default_key: Option<String>,
+    pub color: String,
+    pub icon: Option<String>,
+    pub kind: String,
+}
+
+/// One discriminated union for the Sankey's nodes, the breakdown's rows and
+/// the trend's series, so the chip has a single input shape everywhere.
+#[derive(Serialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SliceDto {
+    Category { category: CategoryRefDto },
+    Uncategorised,
+    Other,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SliceAmountDto {
+    pub slice: SliceDto,
+    pub amount: String,
+}
+
+/// A headline figure and its two comparisons. Amounts, never percentages: the
+/// frontend owns the formatting and the arrow/colour logic.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FigureDto {
+    pub amount: String,
+    /// Absent, not null, under a custom range or with too little history.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_month: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg12: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BreakdownRowDto {
+    pub slice: SliceDto,
+    pub amount: String,
+    pub txn_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg12: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SankeyDto {
+    pub sources: Vec<SliceAmountDto>,
+    pub destinations: Vec<SliceAmountDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_spent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drawn_from_savings: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiguresDto {
+    pub income: FigureDto,
+    pub expenses: FigureDto,
+    pub net: FigureDto,
+    pub saved: FigureDto,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryDto {
+    pub currency: String,
+    /// Sum of `txn_count` across every `(day, category)` row in the period —
+    /// NOT the count on the Transactions list header for the same month.
+    /// The two differ in both directions: this includes `internal`-kind rows
+    /// (paired transfers), which the list hides by default, and excludes lot
+    /// rows (purchases/sales), which the list includes. Both are correct for
+    /// what they each report; they are simply not counting the same set.
+    pub txn_count: i64,
+    pub fx_missing: bool,
+    /// Nothing is missing from these figures — the whole sum is in the
+    /// pivot currency, because the reader's reporting currency had no rate.
+    pub reporting_fx_missing: bool,
+    /// True exactly when the period was given as a month. A custom range's
+    /// comparisons are month-shaped and meaningless, so the frontend hides
+    /// those cells rather than rendering an absent value as a dash.
+    pub comparable: bool,
+    pub figures: FiguresDto,
+    pub sankey: SankeyDto,
+    pub breakdown: Vec<BreakdownRowDto>,
+    /// So SHARE is arithmetic the frontend does, not a second server opinion
+    /// that can round differently from the column beside it.
+    pub expenses_total: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryParams {
+    pub month: Option<String>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+}
+
+/// The period, and whether it is comparable against neighbouring months.
+///
+/// `from`/`to` alone cannot express the distinction: "September 2026" and "a
+/// custom range that happens to run 1-30 September" are the same two dates and
+/// must produce different payloads.
+fn period_from(
+    p: &SummaryParams,
+) -> Result<(NaiveDate, NaiveDate, Option<Month>), (StatusCode, String)> {
+    match (&p.month, p.from, p.to) {
+        (Some(m), None, None) => {
+            let month =
+                Month::parse(m).ok_or((StatusCode::BAD_REQUEST, format!("invalid month: {m}")))?;
+            let (from, to) = month.bounds();
+            Ok((from, to, Some(month)))
+        }
+        (None, Some(from), Some(to)) if from <= to => Ok((from, to, None)),
+        (None, Some(from), Some(to)) => Err((
+            StatusCode::BAD_REQUEST,
+            format!("from {from} is after to {to}"),
+        )),
+        // Same loud-failure rule as parse_ids/parse_bucket: an ambiguous
+        // period must never be silently resolved to one reading.
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            "pass either month, or both from and to".into(),
+        )),
+    }
+}
+
+/// Build the chip payload for a slice. Categories the user has since deleted
+/// cannot appear — the column is `on delete set null`, so their rows are
+/// already uncategorised by the time they are read.
+fn slice_dto(slice: Slice, refs: &[CategoryRefDto]) -> SliceDto {
+    match slice {
+        Slice::Uncategorised => SliceDto::Uncategorised,
+        Slice::Other => SliceDto::Other,
+        Slice::Category(id) => match refs.iter().find(|r| r.id == id.to_string()) {
+            Some(r) => SliceDto::Category {
+                category: r.clone(),
+            },
+            None => SliceDto::Uncategorised,
+        },
+    }
+}
+
+async fn category_refs(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<CategoryRefDto>, (StatusCode, String)> {
+    let rows = category::list_categories(pool, user_id)
+        .await
+        .map_err(internal)?;
+    Ok(rows
+        .into_iter()
+        .map(|r| CategoryRefDto {
+            id: r.id.to_string(),
+            name: r.name,
+            default_key: r.default_key,
+            color: r.color,
+            icon: r.icon,
+            kind: r.kind,
+        })
+        .collect())
+}
+
+fn figure(amount: Decimal, prev: Option<Decimal>, avg: Option<Decimal>) -> FigureDto {
+    FigureDto {
+        amount: amount.to_string(),
+        prev_month: prev.map(|d| d.to_string()),
+        avg12: avg.map(|d| d.to_string()),
+    }
+}
+
+pub async fn summary(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Query(p): Query<SummaryParams>,
+) -> Result<Json<SummaryDto>, (StatusCode, String)> {
+    let (from, to, month) = period_from(&p)?;
+
+    // One fetch wide enough for the period AND its baseline, so nothing here
+    // can disagree with anything else on the page. The baseline is the twelve
+    // months before the selected one, hence `minus(12)`.
+    let window_from = match month {
+        Some(m) => m.minus(BASELINE_MONTHS).bounds().0,
+        None => from,
+    };
+    let all = day_category_totals(&pool, user_id, window_from, to)
+        .await
+        .map_err(internal)?;
+
+    let period: Vec<DayCategoryRow> = rows_in(&all, from, to).into_iter().cloned().collect();
+    let f = figures(&period);
+    let refs = category_refs(&pool, user_id).await?;
+
+    // Comparisons exist only for a month period with enough history behind it.
+    let base: Option<Baseline> = month.and_then(|m| baseline(&all, m));
+    let base_f: Option<Figures> = base.as_ref().map(baseline_figures);
+    let prev_f: Option<Figures> = month.filter(|_| base.is_some()).map(|m| {
+        let (pf, pt) = m.prev().bounds();
+        let prev: Vec<DayCategoryRow> = rows_in(&all, pf, pt).into_iter().cloned().collect();
+        figures(&prev)
+    });
+
+    // `sankey()` computes `figures(rows)` internally for the balancing
+    // remainder — it takes only the rows, never a caller-supplied total.
+    let s = sankey(&period);
+    let rows = breakdown(&period, base.as_ref());
+
+    Ok(Json(SummaryDto {
+        currency: gripsou_core::repo::prefs::reporting_currency(&pool, user_id)
+            .await
+            .map_err(internal)?,
+        txn_count: period.iter().map(|r| r.txn_count).sum(),
+        fx_missing: period.iter().any(|r| r.fx_missing),
+        reporting_fx_missing: period.iter().any(|r| r.reporting_fx_missing),
+        comparable: month.is_some(),
+        figures: FiguresDto {
+            income: figure(f.income, prev_f.map(|x| x.income), base_f.map(|x| x.income)),
+            expenses: figure(
+                f.expenses,
+                prev_f.map(|x| x.expenses),
+                base_f.map(|x| x.expenses),
+            ),
+            net: figure(f.net, prev_f.map(|x| x.net), base_f.map(|x| x.net)),
+            saved: figure(f.saved, prev_f.map(|x| x.saved), base_f.map(|x| x.saved)),
+        },
+        sankey: SankeyDto {
+            sources: s
+                .sources
+                .iter()
+                .map(|x| SliceAmountDto {
+                    slice: slice_dto(x.slice, &refs),
+                    amount: x.amount.to_string(),
+                })
+                .collect(),
+            destinations: s
+                .destinations
+                .iter()
+                .map(|x| SliceAmountDto {
+                    slice: slice_dto(x.slice, &refs),
+                    amount: x.amount.to_string(),
+                })
+                .collect(),
+            not_spent: s.not_spent.map(|d| d.to_string()),
+            drawn_from_savings: s.drawn_from_savings.map(|d| d.to_string()),
+        },
+        breakdown: rows
+            .into_iter()
+            .map(|e: BreakdownEntry| BreakdownRowDto {
+                slice: slice_dto(e.slice, &refs),
+                amount: e.amount.to_string(),
+                txn_count: e.txn_count,
+                avg12: e.avg12.map(|d| d.to_string()),
+            })
+            .collect(),
+        expenses_total: f.expenses.to_string(),
+    }))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrendSeriesDto {
+    pub slice: SliceDto,
+    pub values: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrendDto {
+    /// `["2025-10", ..., "2026-09"]` — `months` entries ending at `anchor`.
+    pub months: Vec<String>,
+    pub series: Vec<TrendSeriesDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrendParams {
+    /// `"2026-09"`. Required: stepping back to March 2024 must compare against
+    /// 2024, not against whenever the request happened to be made.
+    pub anchor: String,
+    pub months: Option<u32>,
+}
+
+/// More than this and the chart is unreadable and the window pointlessly wide.
+const MAX_TREND_MONTHS: u32 = 24;
+
+/// The trend chart's own default width, deliberately not `BASELINE_MONTHS`
+/// even though both happen to be 12 today: spec §4.4 draws the chart and the
+/// baseline as different windows on purpose — the chart's default bars end
+/// with the anchor month included, while the baseline that `summary()` mixes
+/// in explicitly excludes it. Sharing one constant would make that
+/// distinction a coincidence instead of a rule, and the two must be free to
+/// diverge without one silently dragging the other along.
+const TREND_DEFAULT_MONTHS: u32 = 12;
+
+pub async fn trend_handler(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Query(p): Query<TrendParams>,
+) -> Result<Json<TrendDto>, (StatusCode, String)> {
+    let anchor = Month::parse(&p.anchor).ok_or((
+        StatusCode::BAD_REQUEST,
+        format!("invalid anchor: {}", p.anchor),
+    ))?;
+    let months = p.months.unwrap_or(TREND_DEFAULT_MONTHS);
+    if months == 0 || months > MAX_TREND_MONTHS {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("months must be 1..={MAX_TREND_MONTHS}"),
+        ));
+    }
+
+    let from = anchor.minus(months - 1).bounds().0;
+    let to = anchor.bounds().1;
+    let rows = day_category_totals(&pool, user_id, from, to)
+        .await
+        .map_err(internal)?;
+
+    let (axis, series) = gripsou_core::budget::overview::trend(&rows, anchor, months);
+    let refs = category_refs(&pool, user_id).await?;
+
+    Ok(Json(TrendDto {
+        months: axis.iter().map(|m| m.label()).collect(),
+        series: series
+            .into_iter()
+            .map(|s| TrendSeriesDto {
+                slice: slice_dto(s.slice, &refs),
+                values: s.values.iter().map(|v| v.to_string()).collect(),
+            })
+            .collect(),
+    }))
+}
+
 // ── Assignment ──────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -468,6 +820,17 @@ pub struct CountsDto {
     pub matching: i64,
     pub total: i64,
     pub uncategorized: i64,
+    /// Decimal as a string, per the project convention.
+    pub matching_total: String,
+    /// At least one matching row's account leg could not be valued, so
+    /// `matchingTotal` is understated by whatever that row was worth. Same
+    /// convention as `SummaryDto.fxMissing`.
+    pub fx_missing: bool,
+    /// Nothing is missing from `matchingTotal` — the reader's reporting
+    /// currency had no rate on at least one matching row's day, so that
+    /// row's contribution is in the pivot currency instead. Same convention
+    /// as `SummaryDto.reportingFxMissing`.
+    pub reporting_fx_missing: bool,
 }
 
 pub async fn transaction_count_summary(
@@ -483,6 +846,9 @@ pub async fn transaction_count_summary(
         matching: c.matching,
         total: c.total,
         uncategorized: c.uncategorized,
+        matching_total: c.matching_total.to_string(),
+        fx_missing: c.fx_missing,
+        reporting_fx_missing: c.reporting_fx_missing,
     }))
 }
 

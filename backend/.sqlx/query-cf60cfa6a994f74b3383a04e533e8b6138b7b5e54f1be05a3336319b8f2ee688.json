@@ -1,0 +1,219 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with rows as (\n            select t.id, t.ts, t.type as kind, t.description, t.amount,\n                   'cash'::text as source,\n                   null::text as ticker, null::numeric as quantity,\n                   null::numeric as unit_price, null::numeric as fee,\n                   a.id as account_id, a.name as account_name,\n                   a.color as account_color, a.currency as account_currency,\n                   t.budget_category_id as category_id,\n                   bc.name as category_name,\n                   bc.default_key as category_default_key,\n                   bc.color as category_color,\n                   bc.icon as category_icon,\n                   bc.kind as category_kind,\n                   t.category_source,\n                   t.category_confidence,\n                   coalesce(t.category_source = 'ai'\n                    and t.category_reviewed_at is null\n                    and (t.category_confidence is null\n                         or t.category_confidence < $7), false) as needs_review,\n                   (t.checked_at is not null) as checked,\n                   (t.transfer_pair_id is not null) as is_transfer,\n                   -- `coalesce`, because a null `category_source` makes the\n                   -- comparison null rather than false, and the column is\n                   -- decoded as a plain bool.\n                   coalesce(t.category_source = 'pair'\n                    and t.transfer_pair_id is null, false) as is_orphan_transfer,\n                   -- Filtered on below, never selected: the list has no use\n                   -- for it beyond deciding whether the row is hidden.\n                   coalesce(bc.system_key = 'internal_transfer', false)\n                     as is_internal_transfer\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection c on c.id = a.connection_id\n            left join budget_category bc on bc.id = t.budget_category_id\n            where c.user_id = $1\n              -- Mirrors §8.1's cash-walk exclusion, for the same reason: a\n              -- transfer into the PEA is the other half of an outflow already\n              -- listed on the checking account, and a provider buy is the\n              -- cash leg of a purchase the lot branch below already lists.\n              -- Unconditional — these rows are not filterable, they are\n              -- unreachable through this endpoint.\n              --\n              -- Scoped to provider rows via `external_id is not null`: there\n              -- are no manual buy/sell rows in `transaction` any more (they\n              -- moved to `lot`), so the user's own purchases now arrive\n              -- through the lot branch of the union instead.\n              and not (a.type_key = 'pea'\n                       and t.external_id is not null\n                       and t.type in ('transfer', 'buy', 'sell'))\n\n            union all\n\n            -- Lots reach the list as structured rows, not pre-built sentences,\n            -- so the frontend's i18n and per-user number formatting render them.\n            -- A buy's amount is -(qty x price + fee); a sale's is\n            -- +(qty x price - fee). That is the real cash impact either way.\n            select l.id,\n                   (l.acquired_on::timestamp at time zone 'UTC') as ts,\n                   l.side as kind,\n                   null::text as description,\n                   case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)\n                        else l.quantity * l.unit_price - l.fee end as amount,\n                   'lot'::text as source,\n                   -- `resolve_instrument` stores `symbol` as null whenever an\n                   -- ISIN identifies the row (ISINs are the identity there;\n                   -- ticker symbols collide across exchanges), which is the\n                   -- common case for PEA holdings. Fall back through isin\n                   -- before the instrument name so the list still shows a\n                   -- short, identifying label rather than \"Apple Inc.\".\n                   coalesce(i.symbol, i.isin, i.name) as ticker,\n                   l.quantity, l.unit_price, l.fee,\n                   a.id, a.name, a.color, a.currency,\n                   -- Lot rows carry no budget: a purchase is an investment\n                   -- record, not a budget item (spec §5.2).\n                   null::uuid, null::text, null::text, null::text, null::text, null::text,\n                   null::text, null::numeric, false, false, false, false, false\n            from lot l\n            join holding h    on h.id = l.holding_id\n            join instrument i on i.id = h.instrument_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            where c.user_id = $1\n        ),\n        -- The filter/sort/page cut happens against `rows` directly, BEFORE\n        -- any valuation. `filtered` is at most `limit` rows, so the grid\n        -- built from it below prices only the days this page actually needs\n        -- — not the user's entire history. Building the grid from the\n        -- unfiltered `rows` (as this used to) forced a distinct-day scan\n        -- across every transaction ever synced just to serve one page; a\n        -- day this page doesn't touch has no business being on the axis.\n        filtered as (\n            select *\n            from rows\n            where ($2::text is null\n                   or description ilike '%' || $2 || '%'\n                   -- Lot rows carry no `description` (it's null, see the union\n                   -- above) but the list shows their `ticker`, and that's what a\n                   -- user searching for a purchase naturally types. Both sides\n                   -- stay nullable-safe: `ilike` against a null column is null,\n                   -- which the `or` just drops.\n                   or ticker ilike '%' || $2 || '%')\n              and ($3::uuid is null or account_id = $3)\n              and ($4::text is null or kind = $4)\n              and ($5::date is null or (ts at time zone 'utc')::date >= $5)\n              and ($6::date is null or (ts at time zone 'utc')::date <= $6)\n              and ($8::text = 'all'\n                   or ($8 = 'in'   and source = 'cash' and amount > 0)\n                   or ($8 = 'out'  and source = 'cash' and amount < 0)\n                   or ($8 = 'lots' and source = 'lot'))\n              and (cardinality($9::uuid[]) = 0 or category_id = any($9))\n              and (not $10::boolean or (source = 'cash' and category_id is null))\n              and (not $11::boolean or needs_review)\n              and (cardinality($12::uuid[]) = 0\n                   or (select count(distinct tt.tag_id)\n                         from budget_transaction_tag tt\n                        where tt.transaction_id = rows.id\n                          and tt.tag_id = any($12)) = cardinality($12))\n              and ($15::boolean or not is_internal_transfer)\n            order by ts desc, id\n            limit $13 offset $14\n        ),\n        days as (select distinct (ts at time zone 'utc')::date as day from filtered),\n        grid as materialized (\n            select as_of, currency, unit_value\n            from valuation_grid($1, array(select day from days)::date[])\n            where kind = 'cash'\n        ),\n        reporting as (\n            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code\n        )\n        select id as \"id!\", ts as \"ts!\", kind as \"kind!\", description, amount as \"amount!\",\n               -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare\n               -- `nullif`: when the reporting currency has no rate on this\n               -- day the whole expression must still degrade to the pivot\n               -- currency (divide by 1) rather than yield NULL, which\n               -- `coalesce(..., 0)` around the multiplication would then\n               -- silently turn into a zeroed amount indistinguishable from a\n               -- genuinely unrateable account leg. Do not \"simplify\" this to\n               -- a bare `nullif` — see the doc comment on this field above.\n               coalesce(filtered.amount * afx.unit_value\n                        / coalesce(nullif(rfx.unit_value, 0), 1), 0)\n                   as \"amount_reporting!\",\n               source as \"source!\", ticker, quantity, unit_price, fee,\n               account_id as \"account_id!\", account_name as \"account_name!\",\n               account_color, account_currency as \"account_currency!\",\n               category_id, category_name, category_default_key, category_color,\n               category_icon, category_kind, category_source, category_confidence,\n               needs_review as \"needs_review!\", checked as \"checked!\",\n               is_transfer as \"is_transfer!\",\n               is_orphan_transfer as \"is_orphan_transfer!\"\n        from filtered\n        left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date\n                          and afx.currency = filtered.account_currency\n        left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date\n                          and rfx.currency = (select code from reporting)\n        order by ts desc, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "amount_reporting!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "ticker",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "quantity",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "unit_price",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "fee",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "account_name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "account_color",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "account_currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 15,
+        "name": "category_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "category_name",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "category_default_key",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "category_color",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "category_icon",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 20,
+        "name": "category_kind",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 21,
+        "name": "category_source",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 22,
+        "name": "category_confidence",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 23,
+        "name": "needs_review!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 24,
+        "name": "checked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
+        "name": "is_transfer!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 26,
+        "name": "is_orphan_transfer!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Date",
+        "Date",
+        "Numeric",
+        "Text",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "UuidArray",
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cf60cfa6a994f74b3383a04e533e8b6138b7b5e54f1be05a3336319b8f2ee688"
+}

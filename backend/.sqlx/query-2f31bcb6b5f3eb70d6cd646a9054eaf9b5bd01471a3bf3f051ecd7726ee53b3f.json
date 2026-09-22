@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select prefs->>'currency' from users where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2f31bcb6b5f3eb70d6cd646a9054eaf9b5bd01471a3bf3f051ecd7726ee53b3f"
+}

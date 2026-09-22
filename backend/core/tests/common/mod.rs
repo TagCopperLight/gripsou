@@ -151,6 +151,38 @@ pub fn txn_on(
     }
 }
 
+/// An account in a given currency. `checking_account` hardcodes EUR, and the
+/// budget aggregates exist to convert across currencies.
+pub fn checking_account_in(external_id: &str, currency: &str) -> CanonicalAccount {
+    CanonicalAccount {
+        currency: currency.to_string(),
+        ..checking_account(external_id)
+    }
+}
+
+/// A transaction on a specific day with a description, for the budget
+/// aggregates. `txn_on` drops the description and `txn` drops the day; the
+/// summary tests need both.
+pub fn txn_on_day(
+    account_external_id: &str,
+    external_id: &str,
+    kind: &str,
+    amount: Decimal,
+    day: NaiveDate,
+    description: &str,
+) -> CanonicalTransaction {
+    CanonicalTransaction {
+        ts: day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        ..txn(
+            account_external_id,
+            external_id,
+            kind,
+            amount,
+            Some(description),
+        )
+    }
+}
+
 /// Insert one price point for an instrument.
 pub async fn insert_price_on(
     pool: &PgPool,

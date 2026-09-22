@@ -5,4 +5,5 @@
 
 pub mod assign;
 pub mod category;
+pub mod summary;
 pub mod tag;
