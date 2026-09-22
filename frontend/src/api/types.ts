@@ -233,6 +233,10 @@ export type Transaction = {
   /** Decimal string, denominated in the ACCOUNT's own currency (see `currency`),
    *  never the user's reporting currency — do not relabel it. */
   amount: string;
+  /** `amount` converted to the reader's reporting currency at the
+   *  transaction's own date. The list is capped at 200 rows, so summing these
+   *  client-side for an explicit selection is cheap. */
+  amountReporting: string;
   currency: string;
   accountId: string;
   accountName: string;
@@ -289,7 +293,16 @@ export type TransactionQuery = {
   offset?: number;
 };
 
-export type TransactionCounts = { matching: number; total: number; uncategorized: number };
+export type TransactionCounts = {
+  matching: number;
+  total: number;
+  uncategorized: number;
+  /** Signed sum of `matching`'s rows in the reader's reporting currency, from
+   *  a query that mirrors `matching`'s predicates exactly. */
+  matchingTotal: string;
+  fxMissing: boolean;
+  reportingFxMissing: boolean;
+};
 
 /** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the
  * filter set the user picks, which is also what the query key is built from. */

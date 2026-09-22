@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 
 import type { BudgetFilters } from "../../lib/budgetFilters";
+import type { Period } from "../../lib/period";
 
 /** "All shown" is a *mode*, never an expanded id list: §2.1 defines it as
  *  everything matching the active filters, which with no filter is 3.5 years
@@ -15,6 +16,10 @@ export type BudgetContextValue = {
   patchFilters: (
     patch: Partial<BudgetFilters> | ((prev: BudgetFilters) => Partial<BudgetFilters>),
   ) => void;
+  /** Overview's period. Beside the filters, not in the URL, so it survives a
+   *  mode switch within a visit (UI-design §2.5) and resets on leaving. */
+  period: Period;
+  setPeriod: (p: Period) => void;
   selection: Selection;
   isSelected: (id: string) => boolean;
   toggleRow: (id: string) => void;

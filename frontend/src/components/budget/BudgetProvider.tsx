@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import { BudgetContext, type Selection } from "./budgetContext";
 import { EMPTY_FILTERS, type BudgetFilters } from "../../lib/budgetFilters";
+import { currentMonth, type Period } from "../../lib/period";
 
 const NOTHING: Selection = { mode: "ids", ids: new Set<string>() };
 
@@ -10,6 +11,10 @@ const NOTHING: Selection = { mode: "ids", ids: new Set<string>() };
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const [filters, setFiltersState] = useState<BudgetFilters>(EMPTY_FILTERS);
   const [selection, setSelection] = useState<Selection>(NOTHING);
+  const [period, setPeriod] = useState<Period>(() => ({
+    mode: "month",
+    month: currentMonth(),
+  }));
 
   // Any filter change clears the selection. Without this, "all shown" would
   // silently retarget a different set between the user selecting and acting —
@@ -55,6 +60,8 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       filters,
       setFilters,
       patchFilters,
+      period,
+      setPeriod,
       selection,
       isSelected: (id: string) =>
         selection.mode === "allShown" || selection.ids.has(id),
@@ -63,7 +70,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       clearSelection: () => setSelection(NOTHING),
       anySelected: selection.mode === "allShown" || selection.ids.size > 0,
     }),
-    [filters, setFilters, patchFilters, selection, toggleRow],
+    [filters, setFilters, patchFilters, period, selection, toggleRow],
   );
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>;

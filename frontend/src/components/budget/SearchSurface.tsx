@@ -88,14 +88,14 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             type="date"
             aria-label={t("budget.transactions.from")}
             value={filters.from}
-            onChange={(e) => patchFilters({ from: e.target.value })}
+            onChange={(e) => patchFilters({ from: e.target.value, periodLabel: undefined })}
             className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
           <input
             type="date"
             aria-label={t("budget.transactions.to")}
             value={filters.to}
-            onChange={(e) => patchFilters({ to: e.target.value })}
+            onChange={(e) => patchFilters({ to: e.target.value, periodLabel: undefined })}
             className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
         </div>

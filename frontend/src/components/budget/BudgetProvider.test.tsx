@@ -120,3 +120,74 @@ describe("BudgetProvider", () => {
     expect(screen.getByTestId("categoryIds")).toHaveTextContent("cat-1,cat-2");
   });
 });
+
+describe("period", () => {
+  function PeriodProbe() {
+    const { period, setPeriod } = useBudget();
+    return (
+      <>
+        <span data-testid="period">{JSON.stringify(period)}</span>
+        <button onClick={() => setPeriod({ mode: "month", month: "2024-03" })}>to-march</button>
+        <button
+          onClick={() => setPeriod({ mode: "range", from: "2024-01-01", to: "2024-03-31" })}
+        >
+          to-range
+        </button>
+      </>
+    );
+  }
+
+  it("starts on the current month", () => {
+    render(
+      <BudgetProvider>
+        <PeriodProbe />
+      </BudgetProvider>,
+    );
+    const now = new Date();
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    expect(screen.getByTestId("period")).toHaveTextContent(`"month":"${expected}"`);
+  });
+
+  it("steps to another month", () => {
+    render(
+      <BudgetProvider>
+        <PeriodProbe />
+      </BudgetProvider>,
+    );
+    fireEvent.click(screen.getByText("to-march"));
+    expect(screen.getByTestId("period")).toHaveTextContent('"month":"2024-03"');
+  });
+
+  it("switches to a range", () => {
+    render(
+      <BudgetProvider>
+        <PeriodProbe />
+      </BudgetProvider>,
+    );
+    fireEvent.click(screen.getByText("to-range"));
+    expect(screen.getByTestId("period")).toHaveTextContent('"mode":"range"');
+  });
+
+  it("leaves the selection alone — a period is not a transactions filter", () => {
+    // Filters clear the selection because "all shown" would silently retarget.
+    // The period does not touch the transactions query at all, so it must not.
+    function Probe() {
+      const { setPeriod, toggleRow, anySelected } = useBudget();
+      return (
+        <>
+          <button onClick={() => toggleRow("a")}>pick</button>
+          <button onClick={() => setPeriod({ mode: "month", month: "2024-03" })}>move</button>
+          <span data-testid="any">{String(anySelected)}</span>
+        </>
+      );
+    }
+    render(
+      <BudgetProvider>
+        <Probe />
+      </BudgetProvider>,
+    );
+    fireEvent.click(screen.getByText("pick"));
+    fireEvent.click(screen.getByText("move"));
+    expect(screen.getByTestId("any")).toHaveTextContent("true");
+  });
+});

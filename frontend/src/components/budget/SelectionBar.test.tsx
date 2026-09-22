@@ -30,7 +30,7 @@ function renderBar(props: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
   render(
     <BudgetProvider>
       <Controls />
-      <SelectionBar matching={57} showChecked={false} busy={false} {...handlers} {...props} />
+      <SelectionBar matching={57} total="-21.48" showChecked={false} busy={false} {...handlers} {...props} />
     </BudgetProvider>,
     { wrapper: Wrapper },
   );
@@ -55,10 +55,14 @@ describe("SelectionBar", () => {
     expect(screen.getByTestId("selection-count")).toHaveTextContent("57");
   });
 
-  it("holds phase 4's total slot with a placeholder", () => {
-    renderBar();
+  // The sum itself is computed by the caller (`TransactionsMode`); this bar
+  // only renders whatever `total` it is passed — renamed from "totals... from
+  // the rows it was given" (M9), which claimed a computation this component
+  // does not do.
+  it("renders the total it is passed", () => {
+    renderBar({ total: "-21.48" });
     fireEvent.click(screen.getByText("pick-a"));
-    expect(screen.getByTestId("selection-total")).toHaveTextContent("-21,48 €");
+    expect(screen.getByTestId("selection-total")).toHaveTextContent("21,48");
   });
 
   it("shows mark-checked only when the preference is on", () => {

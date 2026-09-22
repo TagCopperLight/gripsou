@@ -19,7 +19,7 @@ const CATEGORIES = [
 function tx(over: Partial<Transaction>): Transaction {
   return {
     id: "t1", t: Date.UTC(2026, 8, 12, 12), type: "withdrawal", description: "ALDI",
-    amount: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
+    amount: "-12.40", amountReporting: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
     accountColor: null, source: "cash", ticker: null, quantity: null, unitPrice: null,
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
@@ -77,7 +77,9 @@ function stubFetch() {
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       if (u.includes("/budget/categories")) return json(CATEGORIES);
       if (u.includes("/budget/tags")) return json(TAGS);
-      if (u.includes("/transactions/counts")) return json({ matching: 2, total: 2, uncategorized: 2 });
+      if (u.includes("/transactions/counts")) {
+        return json({ matching: 2, total: 2, uncategorized: 2, matchingTotal: "-999.00" });
+      }
       if (u.includes("/apply-to-description")) {
         applyBodies.push(body);
         const confirmed = (body as { confirmBreakPairs?: boolean } | undefined)?.confirmBreakPairs;
@@ -256,6 +258,31 @@ describe("TransactionsMode", () => {
     expect(bulkBodies[0]).toMatchObject({ categoryId: "gro" });
     expect(bulkBodies[0]).toHaveProperty("filter");
     expect(bulkBodies[0]).not.toHaveProperty("ids");
+    await settle(client);
+  });
+
+  it("wires the selection bar's total to the server's matchingTotal for select-all-shown (M9)", async () => {
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getByTestId("select-all-shown"));
+    await waitFor(() =>
+      expect(screen.getByTestId("selection-total")).toHaveTextContent("999,00"),
+    );
+    await settle(client);
+  });
+
+  it("wires the selection bar's total to the exact sum of the id-selected rows (M9)", async () => {
+    // Both fixture rows carry amountReporting "-12.40" — a hand-picked
+    // selection of both must show their exact sum, not the server's
+    // matchingTotal (which the stub sets to a different, unrelated value).
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("tx-select")[0]);
+    fireEvent.click(screen.getAllByTestId("tx-select")[1]);
+    await waitFor(() =>
+      expect(screen.getByTestId("selection-total")).toHaveTextContent("24,80"),
+    );
+    expect(screen.getByTestId("selection-total")).not.toHaveTextContent("999");
     await settle(client);
   });
 

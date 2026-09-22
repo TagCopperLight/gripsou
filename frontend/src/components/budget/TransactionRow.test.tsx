@@ -7,7 +7,7 @@ import type { Transaction } from "../../api/types";
 function tx(over: Partial<Transaction>): Transaction {
   return {
     id: "t1", t: Date.UTC(2026, 8, 12, 12), type: "withdrawal", description: "ALDI SARL 1234",
-    amount: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
+    amount: "-12.40", amountReporting: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
     accountColor: "#5b9bf0", source: "cash", ticker: null, quantity: null, unitPrice: null,
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,

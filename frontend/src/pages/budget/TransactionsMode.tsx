@@ -19,6 +19,7 @@ import { useAuth } from "../../auth/context";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { EMPTY_FILTERS, isFiltered, toQuery } from "../../lib/budgetFilters";
 import { budgetErrorKey } from "../../lib/budget";
+import { sumDecimals } from "../../lib/money";
 import type { BulkBody } from "../../api/budget";
 import type { Transaction } from "../../api/types";
 
@@ -94,6 +95,14 @@ export function TransactionsMode() {
   const [bulkUpdated, setBulkUpdated] = useState<number | null>(null);
 
   const rows = list.data?.pages.flat() ?? [];
+
+  // Two shapes, mirroring `count`: "all shown" is a set the client never
+  // enumerates, so only the server can total it; an explicit id selection is
+  // always a subset of the loaded rows, so it is summed here.
+  const selectionTotal =
+    selection.mode === "allShown"
+      ? (counts.data?.matchingTotal ?? "0")
+      : sumDecimals(rows.filter((r) => selection.ids.has(r.id)).map((r) => r.amountReporting));
   const tagsFor = tagsForId ? (rows.find((r) => r.id === tagsForId) ?? null) : null;
 
   const onWriteError = (err: unknown) => setWriteErrorKey(budgetErrorKey(err));
@@ -293,6 +302,7 @@ export function TransactionsMode() {
 
       <SelectionBar
         matching={counts.data?.matching ?? 0}
+        total={selectionTotal}
         showChecked={prefs.showChecked}
         busy={bulk.isPending}
         onAssignCategory={(categoryId) => runBulk({ categoryId })}

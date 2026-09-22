@@ -168,6 +168,12 @@ export function categoryLabel(
   return c.defaultKey ? t(`budget.defaults.${c.defaultKey}`, { defaultValue: c.name }) : c.name;
 }
 
+/** Everything `CategoryChip` reads, and nothing more — so a full
+ *  `BudgetCategory` and the leaner `CategoryRef` the Overview endpoints send
+ *  both satisfy it. Declared here rather than in the component file: eslint's
+ *  react-refresh rule forbids a non-component export from a `.tsx`. */
+export type CategoryLike = Pick<BudgetCategory, "name" | "defaultKey" | "color" | "icon">;
+
 /** The one place that turns a failed budget write into a translation key.
  *  Branches on `ApiError.status`, never on message text. */
 export function budgetErrorKey(err: unknown): "duplicate" | "gone" | "saveError" {

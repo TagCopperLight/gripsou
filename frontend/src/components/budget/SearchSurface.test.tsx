@@ -53,7 +53,7 @@ function renderSurface() {
   }
   render(
     <BudgetProvider>
-      <SearchSurface counts={{ matching: 12, total: 400, uncategorized: 300 }} />
+      <SearchSurface counts={{ matching: 12, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }} />
       <Probe />
     </BudgetProvider>,
     { wrapper: Wrapper },

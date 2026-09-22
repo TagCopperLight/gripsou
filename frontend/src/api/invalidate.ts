@@ -26,6 +26,8 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.transactionCounts(),
     keys.budgetCategories(),
     keys.budgetTags(),
+    keys.budgetSummary(),
+    keys.budgetTrend(),
   ]);
 }
 
@@ -82,7 +84,13 @@ export function afterUserChange(qc: QueryClient) {
 // Editing the taxonomy changes the chips the transactions table draws, so the
 // transaction pages go stale with the category/tag list itself.
 export function afterBudgetCategoryChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetCategories(), keys.transactions(), keys.transactionCounts()]);
+  invalidateAll(qc, [
+    keys.budgetCategories(),
+    keys.transactions(),
+    keys.transactionCounts(),
+    keys.budgetSummary(),
+    keys.budgetTrend(),
+  ]);
 }
 
 export function afterBudgetTagChange(qc: QueryClient) {
@@ -93,5 +101,10 @@ export function afterBudgetTagChange(qc: QueryClient) {
 // counts feed the header and the `matching / total` readout, so they go stale
 // with the list itself — the same omission that was C-17 for the list.
 export function afterTransactionChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.transactions(), keys.transactionCounts()]);
+  invalidateAll(qc, [
+    keys.transactions(),
+    keys.transactionCounts(),
+    keys.budgetSummary(),
+    keys.budgetTrend(),
+  ]);
 }

@@ -592,7 +592,58 @@
         "saveError": "That change could not be saved. Please try again."
       }
     },
-    "modes": { "overview": "Overview", "transactions": "Transactions" },
-    "overviewSoon": "The overview arrives in a later release."
+    "overview": {
+      "other": "Other",
+      "transactionCount_one": "{{count}} transaction",
+      "transactionCount_other": "{{count}} transactions",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "range": "Range",
+      "customRange": "Custom range",
+      "clearRange": "Back to monthly view",
+      "presets": {
+        "last3Months": "Last 3 months",
+        "last6Months": "Last 6 months",
+        "last12Months": "Last 12 months",
+        "thisYear": "This year",
+        "lastYear": "Last year",
+        "custom": "Custom range"
+      },
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "figures": {
+        "income": "Income",
+        "expenses": "Expenses",
+        "net": "Net",
+        "saved": "Saved & invested"
+      },
+      "vsPrevMonth": "vs previous month",
+      "vsAvg12": "vs 12-month average",
+      "sankey": {
+        "title": "Where the money went",
+        "seeTransactions": "See transactions",
+        "notSpent": "Not spent",
+        "drawnFromSavings": "Drawn from savings"
+      },
+      "breakdown": {
+        "title": "Categories",
+        "category": "Category",
+        "amount": "Amount",
+        "share": "Share",
+        "vsAvg12": "vs 12 month avg",
+        "open": "Open these transactions"
+      },
+      "trend": {
+        "title": "Last 12 months",
+        "total": "Total"
+      },
+      "empty": {
+        "title": "Nothing in this period",
+        "body": "No transaction falls in the selected period, so there is nothing to break down yet.",
+        "earlier": "Keep looking earlier"
+      }
+    },
+    "modes": { "overview": "Overview", "transactions": "Transactions" }
   }
 }
