@@ -23,6 +23,7 @@ import { ConnectionCallback } from "./pages/ConnectionCallback";
 import { Invite } from "./pages/Invite";
 import { Reset } from "./pages/Reset";
 import type { AuthValue } from "./auth/context";
+import { scrollRestorationOptions } from "./lib/scroll";
 
 type RouterContext = { auth: AuthValue };
 
@@ -201,6 +202,7 @@ export const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { auth: undefined! },
+  ...scrollRestorationOptions,
 });
 
 declare module "@tanstack/react-router" {
