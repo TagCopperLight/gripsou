@@ -80,6 +80,21 @@ impl Default for UserPrefs {
     }
 }
 
+/// The currency the reader wants figures in. `EUR` when unset — the same
+/// default every valuation query already applies inline.
+pub async fn reporting_currency(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<String, crate::error::CoreError> {
+    let code: Option<String> = sqlx::query_scalar!(
+        "select prefs->>'currency' from users where id = $1",
+        user_id
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(code.unwrap_or_else(|| "EUR".to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

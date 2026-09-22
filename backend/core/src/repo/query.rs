@@ -814,6 +814,15 @@ pub struct TransactionListRow {
     /// In `account_currency` — the amount domain, as the provider sent it. Not
     /// converted: the list shows what actually moved in the account.
     pub amount: Decimal,
+    /// The same movement in the reader's reporting currency, converted at the
+    /// transaction's own date. The list renders `amount`; this exists so an
+    /// explicit multi-row selection can be totalled without a round trip.
+    /// Zero when the ACCOUNT leg's rate was unknown — see `fx_missing` on the
+    /// sibling summary types for the analogous flag. When only the REPORTING
+    /// leg's rate is unknown, this is NOT zero: it silently degrades to the
+    /// pivot currency instead (see the divisor comment on the query below),
+    /// so nothing here flags that case for a caller of this row type.
+    pub amount_reporting: Decimal,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale that now
     /// lives in the `lot` table. Structured, not a pre-built sentence: the
     /// frontend's i18n and per-user number formatting render the lot fields.
@@ -825,6 +834,15 @@ pub struct TransactionListRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: Option<String>,
+    /// Also the currency `amount_reporting` converts FROM for a lot row —
+    /// an inherited assumption, not one this phase introduced. A lot's
+    /// `amount` is `quantity * unit_price ± fee` in the INSTRUMENT'S LISTING
+    /// currency, which can differ from the holding account's currency (a EUR
+    /// account holding a USD-listed line). The pairing predates this phase;
+    /// this phase is only the first to actually run a conversion over it, so
+    /// `amount_reporting` on such a row is converted at the wrong FX rate.
+    /// Left as-is — fixing it means threading the listing currency through,
+    /// which is a bigger change than this fix pass.
     pub account_currency: String,
 
     // ── Budget ──────────────────────────────────────────────────────────────
@@ -1033,8 +1051,66 @@ pub async fn transactions(
             join account a    on a.id = h.account_id
             join connection c on c.id = a.connection_id
             where c.user_id = $1
+        ),
+        -- The filter/sort/page cut happens against `rows` directly, BEFORE
+        -- any valuation. `filtered` is at most `limit` rows, so the grid
+        -- built from it below prices only the days this page actually needs
+        -- — not the user's entire history. Building the grid from the
+        -- unfiltered `rows` (as this used to) forced a distinct-day scan
+        -- across every transaction ever synced just to serve one page; a
+        -- day this page doesn't touch has no business being on the axis.
+        filtered as (
+            select *
+            from rows
+            where ($2::text is null
+                   or description ilike '%' || $2 || '%'
+                   -- Lot rows carry no `description` (it's null, see the union
+                   -- above) but the list shows their `ticker`, and that's what a
+                   -- user searching for a purchase naturally types. Both sides
+                   -- stay nullable-safe: `ilike` against a null column is null,
+                   -- which the `or` just drops.
+                   or ticker ilike '%' || $2 || '%')
+              and ($3::uuid is null or account_id = $3)
+              and ($4::text is null or kind = $4)
+              and ($5::date is null or (ts at time zone 'utc')::date >= $5)
+              and ($6::date is null or (ts at time zone 'utc')::date <= $6)
+              and ($8::text = 'all'
+                   or ($8 = 'in'   and source = 'cash' and amount > 0)
+                   or ($8 = 'out'  and source = 'cash' and amount < 0)
+                   or ($8 = 'lots' and source = 'lot'))
+              and (cardinality($9::uuid[]) = 0 or category_id = any($9))
+              and (not $10::boolean or (source = 'cash' and category_id is null))
+              and (not $11::boolean or needs_review)
+              and (cardinality($12::uuid[]) = 0
+                   or (select count(distinct tt.tag_id)
+                         from budget_transaction_tag tt
+                        where tt.transaction_id = rows.id
+                          and tt.tag_id = any($12)) = cardinality($12))
+              and ($15::boolean or not is_internal_transfer)
+            order by ts desc, id
+            limit $13 offset $14
+        ),
+        days as (select distinct (ts at time zone 'utc')::date as day from filtered),
+        grid as materialized (
+            select as_of, currency, unit_value
+            from valuation_grid($1, array(select day from days)::date[])
+            where kind = 'cash'
+        ),
+        reporting as (
+            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
         )
         select id as "id!", ts as "ts!", kind as "kind!", description, amount as "amount!",
+               -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
+               -- `nullif`: when the reporting currency has no rate on this
+               -- day the whole expression must still degrade to the pivot
+               -- currency (divide by 1) rather than yield NULL, which
+               -- `coalesce(..., 0)` around the multiplication would then
+               -- silently turn into a zeroed amount indistinguishable from a
+               -- genuinely unrateable account leg. Do not "simplify" this to
+               -- a bare `nullif` — see the doc comment on this field above.
+               coalesce(filtered.amount * afx.unit_value
+                        / coalesce(nullif(rfx.unit_value, 0), 1), 0)
+                   as "amount_reporting!",
                source as "source!", ticker, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color, account_currency as "account_currency!",
@@ -1043,34 +1119,12 @@ pub async fn transactions(
                needs_review as "needs_review!", checked as "checked!",
                is_transfer as "is_transfer!",
                is_orphan_transfer as "is_orphan_transfer!"
-        from rows
-        where ($2::text is null
-               or description ilike '%' || $2 || '%'
-               -- Lot rows carry no `description` (it's null, see the union
-               -- above) but the list shows their `ticker`, and that's what a
-               -- user searching for a purchase naturally types. Both sides
-               -- stay nullable-safe: `ilike` against a null column is null,
-               -- which the `or` just drops.
-               or ticker ilike '%' || $2 || '%')
-          and ($3::uuid is null or account_id = $3)
-          and ($4::text is null or kind = $4)
-          and ($5::date is null or (ts at time zone 'utc')::date >= $5)
-          and ($6::date is null or (ts at time zone 'utc')::date <= $6)
-          and ($8::text = 'all'
-               or ($8 = 'in'   and source = 'cash' and amount > 0)
-               or ($8 = 'out'  and source = 'cash' and amount < 0)
-               or ($8 = 'lots' and source = 'lot'))
-          and (cardinality($9::uuid[]) = 0 or category_id = any($9))
-          and (not $10::boolean or (source = 'cash' and category_id is null))
-          and (not $11::boolean or needs_review)
-          and (cardinality($12::uuid[]) = 0
-               or (select count(distinct tt.tag_id)
-                     from budget_transaction_tag tt
-                    where tt.transaction_id = rows.id
-                      and tt.tag_id = any($12)) = cardinality($12))
-          and ($15::boolean or not is_internal_transfer)
+        from filtered
+        left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date
+                          and afx.currency = filtered.account_currency
+        left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date
+                          and rfx.currency = (select code from reporting)
         order by ts desc, id
-        limit $13 offset $14
         "#,
         user_id,
         f.search,
@@ -1154,6 +1208,21 @@ pub struct TransactionCounts {
     /// Cash rows with no category, filters ignored — the list header's second
     /// number, and the one that starts out enormous.
     pub uncategorized: i64,
+    /// The selection bar's figure: `matching`'s rows summed in the reader's
+    /// reporting currency, each converted at its own date. It must track the
+    /// same set as `matching` — a total over a different set than the count
+    /// beside it is the drift this function's doc comment exists to prevent.
+    pub matching_total: Decimal,
+    /// At least one matching row's ACCOUNT leg had no rate on its day, so
+    /// `matching_total` is understated by whatever that row was worth.
+    /// Mirrors `SummaryDto.fxMissing` — same convention, same meaning.
+    pub fx_missing: bool,
+    /// The reader's reporting currency had no rate on at least one matching
+    /// row's day, so that row's contribution to `matching_total` is in the
+    /// pivot currency, not the reporting one — nothing is missing from the
+    /// sum, but part of it may be in a different currency than the rest.
+    /// Mirrors `SummaryDto.reportingFxMissing`.
+    pub reporting_fx_missing: bool,
 }
 
 /// `matching` mirrors `transactions()`'s own cash+lot union and filter
@@ -1179,7 +1248,8 @@ pub async fn transaction_counts(
                     and (t.category_confidence is null
                          or t.category_confidence < $7), false) as needs_review,
                    coalesce(bc.system_key = 'internal_transfer', false)
-                     as is_internal_transfer
+                     as is_internal_transfer,
+                   a.currency as account_currency
             from transaction t
             join account a    on a.id = t.account_id
             join connection c on c.id = a.connection_id
@@ -1202,7 +1272,8 @@ pub async fn transaction_counts(
                    a.id,
                    null::uuid,
                    false,
-                   false
+                   false,
+                   a.currency
             from lot l
             join holding h    on h.id = l.holding_id
             join instrument i on i.id = h.instrument_id
@@ -1210,9 +1281,49 @@ pub async fn transaction_counts(
             join connection c on c.id = a.connection_id
             where c.user_id = $1
         ),
+        -- The whole matching set is priced, not a `limit`-sized page: unlike
+        -- `transactions()`, this total is over every row the filters admit,
+        -- so there is no smaller day axis to sample down to (see this
+        -- function's own doc comment on why that's inherent, not
+        -- accidental). A day here that drifts from the grid's own axis
+        -- reads as zero rather than failing — migration 0019's header.
+        days as (select distinct (ts at time zone 'utc')::date as day from rows),
+        grid as materialized (
+            select as_of, currency, unit_value
+            from valuation_grid($1, array(select day from days)::date[])
+            where kind = 'cash'
+        ),
+        reporting as (
+            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+        ),
+        -- `rows` plus the reporting-currency amount, so `matching` can sum
+        -- without repeating a single predicate.
+        conv as (
+            select r.*,
+                   coalesce(r.amount * afx.unit_value
+                            / coalesce(nullif(rfx.unit_value, 0), 1), 0) as amount_reporting,
+                   -- Keyed on the account leg only, same convention as
+                   -- `summary.rs`'s `fx_missing!`: a missing reporting rate
+                   -- degrades to the pivot currency below rather than
+                   -- dropping anything from the sum, so it must not set this.
+                   (afx.unit_value is null) as fx_missing_row,
+                   -- Mirrors `reporting_fx_degraded()`'s own guard (migration
+                   -- 0026) and `summary.rs`'s `reporting_fx_missing!`, so this
+                   -- can never disagree with the Overview about whether the
+                   -- reporting-currency fallback fired on a given day.
+                   reporting_fx_degraded($1, (r.ts at time zone 'utc')::date) as reporting_fx_missing_row
+            from rows r
+            left join grid afx on afx.as_of = (r.ts at time zone 'utc')::date
+                              and afx.currency = r.account_currency
+            left join grid rfx on rfx.as_of = (r.ts at time zone 'utc')::date
+                              and rfx.currency = (select code from reporting)
+        ),
         matching as (
-            select count(*) as n
-            from rows
+            select count(*) as n,
+                   coalesce(sum(amount_reporting), 0) as total,
+                   coalesce(bool_or(fx_missing_row), false) as fx_missing,
+                   coalesce(bool_or(reporting_fx_missing_row), false) as reporting_fx_missing
+            from conv
             where ($2::text is null
                    or description ilike '%' || $2 || '%'
                    or ticker ilike '%' || $2 || '%')
@@ -1230,12 +1341,15 @@ pub async fn transaction_counts(
               and (cardinality($12::uuid[]) = 0
                    or (select count(distinct tt.tag_id)
                          from budget_transaction_tag tt
-                        where tt.transaction_id = rows.id
+                        where tt.transaction_id = conv.id
                           and tt.tag_id = any($12)) = cardinality($12))
               and ($13::boolean or not is_internal_transfer)
         )
         select
           (select n from matching) as "matching!",
+          (select total from matching) as "matching_total!",
+          (select fx_missing from matching) as "fx_missing!",
+          (select reporting_fx_missing from matching) as "reporting_fx_missing!",
           (select count(*) from transaction t
              join account a    on a.id = t.account_id
              join connection k on k.id = a.connection_id
@@ -1277,6 +1391,9 @@ pub async fn transaction_counts(
         matching: row.matching,
         total: row.total,
         uncategorized: row.uncategorized,
+        matching_total: row.matching_total,
+        fx_missing: row.fx_missing,
+        reporting_fx_missing: row.reporting_fx_missing,
     })
 }
 
