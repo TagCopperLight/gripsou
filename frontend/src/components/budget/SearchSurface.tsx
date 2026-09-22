@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ChevronUp, Funnel, Search } from "lucide-react";
 
 import { useBudget } from "./budgetContext";
 import { FilterPanel } from "./FilterPanel";
@@ -11,7 +11,12 @@ import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../lib/budgetFilters"
 import type { TransactionCounts } from "../../api/types";
 
 /** The nested surface of §2.2: three parts, each rendered only when it has
- *  something to show. */
+ *  something to show.
+ *
+ *  Three elevation steps, outward in: the page background is darkest, the
+ *  Transactions surface above it is `surface`, this whole search surface —
+ *  all three parts — is `surface-2`, and every control sitting on it drops
+ *  back to `surface` so it reads as a control and not as more panel. */
 export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
@@ -19,7 +24,7 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
   const accounts = useAccounts().data ?? [];
 
   return (
-    <div className="relative rounded-xl bg-surface-2/40 p-3">
+    <div className="relative rounded-xl bg-surface-2 p-3">
       {/* Part 1 — always. */}
       <div className="flex flex-wrap items-center gap-2">
         <label className="relative min-w-48 flex-1">
@@ -29,12 +34,13 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             value={filters.search}
             onChange={(e) => patchFilters({ search: e.target.value })}
             placeholder={t("budget.transactions.search")}
-            className="w-full rounded-xl bg-surface-2 py-2 pl-8 pr-3 text-sm text-fg"
+            className="w-full rounded-xl bg-surface py-2 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint outline-none"
           />
         </label>
         <Select
           value={filters.accountId}
           onChange={(v) => patchFilters({ accountId: v })}
+          tone="sunken"
           options={[
             { value: "", label: t("budget.transactions.allAccounts") },
             ...accounts.map((a) => ({ value: a.id, label: a.name })),
@@ -47,6 +53,7 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
         <div data-testid="time-frame" className="w-44">
           <Select
             value={filters.timeFrame}
+            tone="sunken"
             onChange={(v) =>
               // Updater form, not `withTimeFrame(filters, v)` off the render
               // snapshot (finding 6/MINOR) — `patchFilters` re-reads the
@@ -65,12 +72,13 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
           type="button"
           data-testid="filters-toggle"
           onClick={() => setPanelOpen((v) => !v)}
-          className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm ${
-            panelOpen ? "bg-surface-3 text-fg" : "bg-surface-2 text-fg-dim hover:text-fg"
+          className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-fg transition-colors duration-140 ${
+            panelOpen ? "bg-surface-3" : "hover:bg-surface-3"
           }`}
         >
-          <SlidersHorizontal className="size-4" />
+          <Funnel className="size-4" />
           {t("budget.transactions.filters")}
+          {panelOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </button>
       </div>
 
@@ -81,14 +89,14 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             aria-label={t("budget.transactions.from")}
             value={filters.from}
             onChange={(e) => patchFilters({ from: e.target.value })}
-            className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-fg"
+            className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
           <input
             type="date"
             aria-label={t("budget.transactions.to")}
             value={filters.to}
             onChange={(e) => patchFilters({ to: e.target.value })}
-            className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-fg"
+            className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
         </div>
       )}
@@ -96,7 +104,7 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
       {/* Part 2 — the filter panel. */}
       {panelOpen && (
         <>
-          <div className="mt-3 h-px bg-surface-2" />
+          <div className="mt-3 h-px bg-surface-3" />
           <FilterPanel />
         </>
       )}
@@ -104,7 +112,7 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
       {/* Part 3 — active filters, with the readout pinned top-right. */}
       {isFiltered(filters) && (
         <>
-          <div className="mt-3 h-px bg-surface-2" />
+          <div className="mt-3 h-px bg-surface-3" />
           <div className="relative pt-3">
             <ActiveFilterChips />
             {counts && (

@@ -111,6 +111,41 @@ describe("SearchSurface", () => {
     expect(filters().bucket).toBe("lots");
   });
 
+  /** Colour is a fixed property of a bucket, not a selection state: the icon
+   *  is always tinted — green for money arriving, red for leaving, blue for
+   *  securities, neutral for `all` — and selection is drawn in the panel's own
+   *  greys. A row must never announce itself by turning green. */
+  it("tints the bucket icons and draws selection in grey", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+
+    const iconClass = (b: string) =>
+      screen.getByTestId(`bucket-${b}`).querySelector("svg")?.getAttribute("class") ?? "";
+
+    expect(iconClass("in")).toContain("text-green");
+    expect(iconClass("out")).toContain("text-red");
+    expect(iconClass("lots")).toContain("text-blue");
+    expect(iconClass("all")).toContain("text-fg-faint");
+
+    // Unselected now, and still its own colour.
+    expect(screen.getByTestId("bucket-in").className).not.toContain("bg-surface-3");
+    fireEvent.click(screen.getByTestId("bucket-in"));
+    expect(screen.getByTestId("bucket-in").className).toContain("bg-surface-3");
+    expect(screen.getByTestId("bucket-in").className).not.toContain("green");
+    expect(iconClass("in")).toContain("text-green");
+    expect(screen.getByTestId("bucket-all").className).not.toContain("bg-surface-3");
+  });
+
+  it("gives a bucket chip the same tinted icon as its row", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    fireEvent.click(screen.getByTestId("bucket-out"));
+
+    const chip = screen.getByTestId("chip-clear-bucket");
+    // The X is a child too, so match the leading icon specifically.
+    expect(chip.querySelector("svg")?.getAttribute("class")).toContain("text-red");
+  });
+
   it("writes the two other toggles", () => {
     renderSurface();
     fireEvent.click(screen.getByTestId("filters-toggle"));

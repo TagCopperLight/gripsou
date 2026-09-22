@@ -67,9 +67,15 @@ describe("TransactionRow", () => {
   });
 
   it("dims an internal transfer and says it was auto paired", () => {
-    renderRow({ isTransfer: true });
-    expect(screen.getByTestId("tx-row").className).toContain("opacity-60");
+    renderRow({ isTransfer: true, categoryId: "c1", categoryName: "Groceries", categoryColor: "#9bb06b" });
     expect(screen.getByTestId("tx-transfer-note")).toBeVisible();
+    // Dimmed cell by cell, so the two colour-bearing ones keep full strength.
+    expect(screen.getByTestId("tx-amount").className).toContain("opacity-60");
+    // The cell itself is never dimmed: its background is the selection/hover colour.
+    expect(screen.getByTestId("tx-amount").closest("td")!.className).not.toContain("opacity-60");
+    expect(screen.getByTestId("tx-avatar").closest("td")!.className).not.toContain("opacity-60");
+    expect(screen.getByTestId("category-chip").closest("td")!.className).not.toContain("opacity-60");
+    expect(screen.getByTestId("tx-tags").className).not.toContain("opacity-60");
   });
 
   it("renders a lot row with its instrument line and no budget affordances", () => {
@@ -121,7 +127,9 @@ describe("TransactionRow", () => {
 
   it("lists the row's tags and offers adding one", () => {
     const h = renderRow({ tags: [{ id: "g1", name: "holiday", color: "#f0b952" }] });
-    expect(within(screen.getByTestId("tx-tags")).getByText("holiday")).toBeVisible();
+    // Two matches: the chip on the line, and the invisible twin `TagCell`
+    // measures the full line with. The first one is the visible one.
+    expect(within(screen.getByTestId("tx-tags")).getAllByText("holiday")[0]).toBeVisible();
     fireEvent.click(screen.getByTestId("tx-add-tag"));
     expect(h.onOpenTags).toHaveBeenCalled();
   });

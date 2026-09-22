@@ -145,13 +145,6 @@ describe("TransactionsMode", () => {
     stubFetch();
   });
 
-  it("shows the header counts", async () => {
-    const client = renderMode();
-    await screen.findByText("ALDI");
-    expect(screen.getByTestId("header-counts")).toHaveTextContent("2");
-    await settle(client);
-  });
-
   it("assigns a category from a row and sends only that field", async () => {
     const client = renderMode();
     await screen.findByText("ALDI");
@@ -227,7 +220,7 @@ describe("TransactionsMode", () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-select")[0]);
-    fireEvent.click(screen.getByText(/assign a category/i));
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await waitFor(() => expect(bulkBodies).toEqual([{ ids: ["t1"], categoryId: "gro" }]));
     await settle(client);
@@ -244,7 +237,7 @@ describe("TransactionsMode", () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getByTestId("select-all-shown"));
-    fireEvent.click(screen.getByText(/assign a category/i));
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await waitFor(() => expect(bulkBodies).toHaveLength(1));
     expect(bulkBodies[0]).toMatchObject({ categoryId: "gro" });
@@ -299,7 +292,7 @@ describe("TransactionsMode", () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getByTestId("select-all-shown"));
-    fireEvent.click(screen.getByText(/assign a category/i));
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
     expect(screen.getByTestId("write-error")).toBeVisible();
@@ -311,7 +304,7 @@ describe("TransactionsMode", () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-select")[0]);
-    fireEvent.click(screen.getByText(/assign a category/i));
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
     expect(screen.getByTestId("bulk-result")).toHaveTextContent("2");

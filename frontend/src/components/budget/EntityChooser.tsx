@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Search } from "lucide-react";
 
-import { BudgetDialog } from "./BudgetDialog";
+import { Popover } from "./Popover";
 import type { ChooserItem } from "../../lib/budget";
 
 type EntityChooserProps = {
@@ -18,14 +18,25 @@ type EntityChooserProps = {
   onClose: () => void;
   /** `pick` only: the label of the line that clears the value. */
   noneLabel?: string;
+  /** The control that opened the chooser — the panel hangs under it. */
+  anchor?: HTMLElement | null;
+  /** An optional band below the list, mirroring the search header: it stays
+   *  put while the middle scrolls. Used by callers whose toggles are pending
+   *  until confirmed (the bulk tag chooser and its Save button). */
+  footer?: ReactNode;
 };
 
 export function EntityChooser({
-  title, items, groups, mode, selectedIds, onToggle, onPick, onClose, noneLabel,
+  title, items, groups, mode, selectedIds, onToggle, onPick, onClose, noneLabel, anchor, footer,
 }: EntityChooserProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  // `active` is where Enter would land — it is 0 from the start so a bare
+  // Enter applies the first line. `navigated` is whether the user has *aimed*
+  // at anything yet (an arrow key, or the pointer over a line): until then
+  // nothing is painted, so no line looks hovered under a motionless cursor.
   const [active, setActive] = useState(0);
+  const [navigated, setNavigated] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => {
@@ -61,6 +72,7 @@ export function EntityChooser({
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
+      setNavigated(true);
       setActive((i) => {
         const next = e.key === "ArrowDown" ? i + 1 : i - 1;
         return Math.max(0, Math.min(lastIndex, next));
@@ -83,9 +95,12 @@ export function EntityChooser({
         aria-selected={selectedIds.includes(item.id)}
         data-testid={`chooser-option-${item.id}`}
         onClick={() => apply(item.id)}
-        onMouseEnter={() => setActive(sequenceIndex)}
+        onMouseEnter={() => {
+          setNavigated(true);
+          setActive(sequenceIndex);
+        }}
         className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left cursor-pointer ${
-          sequenceIndex === active ? "bg-hover" : ""
+          navigated && sequenceIndex === active ? "bg-hover" : ""
         }`}
       >
         {item.render}
@@ -97,10 +112,13 @@ export function EntityChooser({
   };
 
   return (
-    <BudgetDialog title={title} onClose={onClose}>
-      <div className="flex flex-col gap-2">
-        <label className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-fg-faint" />
+    <Popover title={title} anchor={anchor} onClose={onClose}>
+      <div className="flex flex-col">
+        {/* Set into the top of the panel rather than floating on it: the field
+         *  carries no surface of its own, its top edge *is* the panel's, and
+         *  the rule under it is its only boundary. */}
+        <label className="relative block">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-fg-faint" />
           <input
             type="search"
             autoFocus
@@ -108,19 +126,21 @@ export function EntityChooser({
             onChange={(e) => {
               setQuery(e.target.value);
               setActive(0);
+              setNavigated(false);
             }}
             onKeyDown={onKeyDown}
             placeholder={t("budget.chooser.search")}
-            className="w-full rounded-xl bg-surface-2 py-2 pl-8 pr-3 text-sm text-fg"
+            className="w-full bg-transparent py-2.5 pl-9 pr-3 text-sm text-fg outline-none"
           />
         </label>
-        <div className="h-px bg-surface-2" />
+        <div className="h-px bg-surface-3" />
         <div
           ref={listRef}
           role="listbox"
           tabIndex={-1}
           onKeyDown={onKeyDown}
-          className="flex max-h-80 flex-col gap-0.5 overflow-y-auto"
+          onMouseLeave={() => setNavigated(false)}
+          className="flex max-h-80 flex-col gap-0.5 overflow-y-auto p-2"
         >
           {hasNone && (
             <button
@@ -129,9 +149,12 @@ export function EntityChooser({
               aria-selected={selectedIds.length === 0}
               data-testid="chooser-option-none"
               onClick={() => apply(null)}
-              onMouseEnter={() => setActive(0)}
+              onMouseEnter={() => {
+                setNavigated(true);
+                setActive(0);
+              }}
               className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-fg-dim cursor-pointer ${
-                active === 0 ? "bg-hover" : "hover:bg-hover"
+                navigated && active === 0 ? "bg-hover" : "hover:bg-hover"
               }`}
             >
               {noneLabel}
@@ -145,7 +168,7 @@ export function EntityChooser({
                   <div key={g.key} className="flex flex-col gap-0.5">
                     <p
                       data-testid="chooser-group"
-                      className="px-2 pt-2 text-[11px] font-medium tracking-wide text-fg-faint"
+                      className="px-2 pb-1 pt-2 font-mono text-[11px] font-medium tracking-wide text-fg-faint"
                     >
                       {g.label}
                     </p>
@@ -158,7 +181,15 @@ export function EntityChooser({
             <p className="px-2 py-4 text-sm text-fg-faint">{t("budget.chooser.noMatch")}</p>
           )}
         </div>
+        {footer && (
+          <>
+            <div className="h-px bg-surface-3" />
+            <div data-testid="chooser-footer" className="flex justify-end p-2">
+              {footer}
+            </div>
+          </>
+        )}
       </div>
-    </BudgetDialog>
+    </Popover>
   );
 }

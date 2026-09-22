@@ -58,7 +58,7 @@ describe("SelectionBar", () => {
   it("holds phase 4's total slot with a placeholder", () => {
     renderBar();
     fireEvent.click(screen.getByText("pick-a"));
-    expect(screen.getByTestId("selection-total")).toHaveTextContent("—");
+    expect(screen.getByTestId("selection-total")).toHaveTextContent("-21,48 €");
   });
 
   it("shows mark-checked only when the preference is on", () => {
@@ -97,26 +97,41 @@ describe("SelectionBar", () => {
       );
     });
 
-    it("flushes accumulated tags once on close, and never leaks into the next session", async () => {
+    it("discards the pending tags when the chooser is dismissed without saving", async () => {
       const handlers = renderBar();
       fireEvent.click(screen.getByText("pick-a"));
 
-      // First session: open, toggle both tags, close — a single flush with both ids.
-      fireEvent.click(screen.getByText("Add tags"));
+      fireEvent.click(screen.getByLabelText("Add tags"));
       fireEvent.click(await screen.findByTestId("chooser-option-t1"));
       fireEvent.click(await screen.findByTestId("chooser-option-t2"));
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      // The chooser is a popover, not a modal: Escape is how it closes.
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(handlers.onAddTags).not.toHaveBeenCalled();
+    });
+
+    it("flushes accumulated tags once on save, and never leaks into the next session", async () => {
+      const handlers = renderBar();
+      fireEvent.click(screen.getByText("pick-a"));
+
+      // First session: open, toggle both tags, save — a single flush with both ids.
+      fireEvent.click(screen.getByLabelText("Add tags"));
+      fireEvent.click(await screen.findByTestId("chooser-option-t1"));
+      fireEvent.click(await screen.findByTestId("chooser-option-t2"));
+      fireEvent.click(screen.getByTestId("chooser-save"));
 
       expect(handlers.onAddTags).toHaveBeenCalledTimes(1);
       expect(handlers.onAddTags).toHaveBeenCalledWith(["t1", "t2"]);
 
-      // Second session: reopen and close without touching anything — the
-      // pending set from the first session must not leak into this one.
-      fireEvent.click(screen.getByText("Add tags"));
+      // Second session: reopen and save is unavailable with nothing pending,
+      // so the first session's set cannot be re-sent.
+      fireEvent.click(screen.getByLabelText("Add tags"));
       await screen.findByTestId("chooser-option-t1");
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.getByTestId("chooser-save")).toBeDisabled();
+      fireEvent.keyDown(document, { key: "Escape" });
 
       expect(handlers.onAddTags).toHaveBeenCalledTimes(1);
     });
+
   });
 });

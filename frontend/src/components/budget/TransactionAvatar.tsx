@@ -1,7 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
 
 import { BUDGET_ICONS, FALLBACK_COLOR, safeBudgetColor } from "../../lib/budget";
-import { withAlpha } from "../../lib/color";
+import { tint } from "../../lib/color";
 import type { Transaction } from "../../api/types";
 
 /** Last resort glyphs, keyed by kind of movement — a static record, indexed
@@ -35,8 +35,13 @@ export function TransactionAvatar({ tx }: { tx: Transaction }) {
     <span
       data-testid="tx-avatar"
       data-variant={hasCategory ? "category" : "generic"}
-      style={{ color, backgroundColor: withAlpha(color, 0.18) }}
-      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg"
+      // A categorised row's avatar is tinted with its category colour; an
+      // uncategorised one has no colour to speak for it, so it sits on the
+      // neutral surface with the faint foreground.
+      style={hasCategory ? { color, backgroundColor: tint(color, 0.18) } : undefined}
+      className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg ${
+        hasCategory ? "" : "bg-surface-2 text-fg-faint"
+      }`}
     >
       <Icon className="size-4" />
     </span>

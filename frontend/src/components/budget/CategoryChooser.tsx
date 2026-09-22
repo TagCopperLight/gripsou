@@ -19,13 +19,15 @@ type CategoryChooserProps = {
    *  and no confirmation (finding 5) — suppressing it outright is the only
    *  option with no legitimate quick path. */
   allowNone?: boolean;
+  /** The control that opened it — the chooser hangs under it. */
+  anchor?: HTMLElement | null;
 };
 
 /** The same chooser serves four call sites (§5): filtering, assigning on a
  *  row, and both again from the selection bar. Archived categories never
  *  appear — they are kept for history, not for picking. */
 export function CategoryChooser({
-  mode, selectedIds, onToggle, onPick, onClose, allowNone = true,
+  mode, selectedIds, onToggle, onPick, onClose, allowNone = true, anchor,
 }: CategoryChooserProps) {
   const { t } = useTranslation();
   const categories = (useBudgetCategories().data ?? []).filter((c) => !c.archived);
@@ -51,6 +53,7 @@ export function CategoryChooser({
       onToggle={onToggle}
       onPick={onPick}
       onClose={onClose}
+      anchor={anchor}
       noneLabel={allowNone ? t("budget.chooser.noCategory") : undefined}
     />
   );

@@ -7,16 +7,15 @@ import { CategoryChooser } from "./CategoryChooser";
 import { TagChooser } from "./TagChooser";
 import { CategoryChip } from "./CategoryChip";
 import { TagChip } from "./TagChip";
-import { Toggle } from "../Toggle";
 import { useBudgetCategories, useBudgetTags } from "../../api/budget";
-import type { TypeBucket } from "../../api/types";
-
-const BUCKETS: TypeBucket[] = ["all", "in", "out", "lots"];
+import { OTHER_FLAGS, TYPE_BUCKETS, categoryLabel } from "../../lib/budget";
 
 function Column({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <p className="text-[11px] font-medium tracking-wide text-fg-faint">{title}</p>
+      {/* The same head treatment as the transactions table: 11px mono, faint,
+       *  wide-tracked — a column heading reads as a heading in both places. */}
+      <p className="font-mono text-[11px] font-medium tracking-wide text-fg-faint">{title}</p>
       {children}
     </div>
   );
@@ -26,7 +25,17 @@ function Column({ title, children }: { title: string; children: ReactNode }) {
 export function FilterPanel() {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
+  // The chooser hangs under the control that opened it, so the "+" that was
+  // clicked is kept alongside the open state.
   const [open, setOpen] = useState<"categories" | "tags" | null>(null);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+
+  const openChooser = (which: "categories" | "tags") => (e: React.MouseEvent<HTMLElement>) => {
+    setAnchor(e.currentTarget);
+    // A second click on the same "+" closes it: `Popover` exempts its anchor
+    // from the outside-click close, so the toggle has to live here.
+    setOpen((prev) => (prev === which ? null : which));
+  };
   const categories = useBudgetCategories().data ?? [];
   const tags = useBudgetTags().data ?? [];
 
@@ -44,19 +53,27 @@ export function FilterPanel() {
     <div data-testid="filter-panel" className="grid grid-cols-2 gap-6 py-3 md:grid-cols-4">
       <div data-testid="column-type">
         <Column title={t("budget.transactions.columns.type").toUpperCase()}>
-          <div className="flex flex-col items-start gap-1">
-            {BUCKETS.map((b) => (
+          {/* Two columns rather than one stack: the four options are not a
+           *  flat list of peers. `all` and `lots` choose *what kind of row* you
+           *  are looking at, `in` and `out` split cash by direction — so the
+           *  grid puts a scope choice beside its cash counterpart instead of
+           *  burying the distinction in a column of four. */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+            {TYPE_BUCKETS.map(({ key, icon: Icon, tint }) => (
               <button
-                key={b}
+                key={key}
                 type="button"
-                data-testid={`bucket-${b}`}
-                aria-pressed={filters.bucket === b}
-                onClick={() => patchFilters({ bucket: b })}
-                className={`cursor-pointer rounded-lg px-2 py-1 text-xs ${
-                  filters.bucket === b ? "bg-surface-3 text-fg" : "text-fg-faint hover:text-fg-dim"
+                data-testid={`bucket-${key}`}
+                aria-pressed={filters.bucket === key}
+                onClick={() => patchFilters({ bucket: key })}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors duration-140 ${
+                  filters.bucket === key
+                    ? "bg-surface-3 font-medium text-fg"
+                    : "text-fg-faint hover:text-fg-dim"
                 }`}
               >
-                {t(`budget.transactions.buckets.${b}`)}
+                <Icon className={`size-3.5 shrink-0 ${tint}`} aria-hidden="true" />
+                <span className="truncate">{t(`budget.transactions.buckets.${key}`)}</span>
               </button>
             ))}
           </div>
@@ -65,7 +82,19 @@ export function FilterPanel() {
 
       <div data-testid="column-categories">
         <Column title={t("budget.transactions.columns.category").toUpperCase()}>
+          {/* The "+" leads, the chips follow: it then keeps its place as the
+           *  selection grows, so the chooser hanging under it does not walk
+           *  across the column with every pick. */}
           <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="add-category-filter"
+              aria-label={t("budget.transactions.filterByCategory")}
+              onClick={openChooser("categories")}
+              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
+            >
+              <Plus className="size-3.5" />
+            </button>
             {filters.categoryIds.map((id) => {
               const c = categories.find((x) => x.id === id);
               return c ? (
@@ -73,22 +102,14 @@ export function FilterPanel() {
                   key={id}
                   type="button"
                   data-testid={`filter-category-${id}`}
+                  aria-label={`${t("budget.transactions.removeFilter")}: ${categoryLabel(t, c)}`}
                   onClick={() => toggleCategory(id)}
-                  className="cursor-pointer"
+                  className="group cursor-pointer opacity-100 transition-opacity duration-140 hover:opacity-70"
                 >
-                  <CategoryChip category={c} />
+                  <CategoryChip category={c} removable />
                 </button>
               ) : null;
             })}
-            <button
-              type="button"
-              data-testid="add-category-filter"
-              aria-label={t("budget.transactions.filterByCategory")}
-              onClick={() => setOpen("categories")}
-              className="cursor-pointer rounded-lg bg-surface-2 p-1 text-fg-faint hover:text-fg"
-            >
-              <Plus className="size-3.5" />
-            </button>
           </div>
         </Column>
       </div>
@@ -96,6 +117,15 @@ export function FilterPanel() {
       <div data-testid="column-tags">
         <Column title={t("budget.transactions.columns.tags").toUpperCase()}>
           <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="add-tag-filter"
+              aria-label={t("budget.transactions.filterByTag")}
+              onClick={openChooser("tags")}
+              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
+            >
+              <Plus className="size-3.5" />
+            </button>
             {filters.tagIds.map((id) => {
               const tag = tags.find((x) => x.id === id);
               return tag ? (
@@ -103,47 +133,49 @@ export function FilterPanel() {
                   key={id}
                   type="button"
                   data-testid={`filter-tag-${id}`}
+                  aria-label={`${t("budget.transactions.removeFilter")}: ${tag.name}`}
                   onClick={() => toggleTag(id)}
-                  className="cursor-pointer"
+                  className="group cursor-pointer opacity-100 transition-opacity duration-140 hover:opacity-70"
                 >
-                  <TagChip tag={tag} />
+                  <TagChip tag={tag} removable />
                 </button>
               ) : null;
             })}
-            <button
-              type="button"
-              data-testid="add-tag-filter"
-              aria-label={t("budget.transactions.filterByTag")}
-              onClick={() => setOpen("tags")}
-              className="cursor-pointer rounded-lg bg-surface-2 p-1 text-fg-faint hover:text-fg"
-            >
-              <Plus className="size-3.5" />
-            </button>
           </div>
         </Column>
       </div>
 
       <div data-testid="column-others">
         <Column title={t("budget.transactions.columns.others").toUpperCase()}>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center justify-between gap-3 text-xs text-fg-dim">
-              {t("budget.uncategorized")}
-              <Toggle
-                checked={filters.uncategorized}
-                onChange={(v) => patchFilters({ uncategorized: v })}
-                aria-label={t("budget.uncategorized")}
-                data-testid="toggle-uncategorized"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-xs text-fg-dim">
-              {t("budget.needsReview")}
-              <Toggle
-                checked={filters.needsReview}
-                onChange={(v) => patchFilters({ needsReview: v })}
-                aria-label={t("budget.needsReview")}
-                data-testid="toggle-needs-review"
-              />
-            </label>
+          {/* The same two-column grid as TYPE, and the same press treatment —
+           *  these read as flags on the same surface, so they should not look
+           *  like a different kind of control. Unlike TYPE they are
+           *  independent and each is free to be off; they carry no icon,
+           *  having no colour or shape of their own to stand for. A third
+           *  flag lands on the second line without any change here. */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+            {OTHER_FLAGS.map(({ key, labelKey, icon: Icon, tint, strokeWidth }) => {
+              const on = filters[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  data-testid={`toggle-${key === "needsReview" ? "needs-review" : key}`}
+                  aria-pressed={on}
+                  onClick={() => patchFilters({ [key]: !on })}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors duration-140 ${
+                    on ? "bg-surface-3 font-medium text-fg" : "text-fg-faint hover:text-fg-dim"
+                  }`}
+                >
+                  <Icon
+                    className={`size-3.5 shrink-0 ${tint}`}
+                    strokeWidth={strokeWidth}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{t(labelKey)}</span>
+                </button>
+              );
+            })}
           </div>
         </Column>
       </div>
@@ -154,6 +186,7 @@ export function FilterPanel() {
           selectedIds={filters.categoryIds}
           onToggle={toggleCategory}
           onClose={() => setOpen(null)}
+          anchor={anchor}
         />
       )}
       {open === "tags" && (
@@ -161,6 +194,7 @@ export function FilterPanel() {
           selectedIds={filters.tagIds}
           onToggle={toggleTag}
           onClose={() => setOpen(null)}
+          anchor={anchor}
         />
       )}
     </div>

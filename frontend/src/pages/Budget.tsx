@@ -19,9 +19,13 @@ export function Budget() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title={t("nav.budget")} />
+        {/* The global SyncButton is pinned at the top-right of the page, outside
+         *  this row; the margin keeps the control clear of its box instead of
+         *  letting the two overlap. */}
         <SegmentedControl<Mode>
+          className="mr-12"
           value={mode}
           onChange={(next) => navigate({ to: `/budget/${next}` })}
           options={[

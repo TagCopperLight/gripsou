@@ -70,3 +70,22 @@ export function withAlpha(hex: string, alpha: number): string {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** The app's base surface, the ground every tinted chip is designed against. */
+const SURFACE = "#13110f";
+
+/**
+ * A tint of `hex` flattened into an opaque colour, as if it were painted at
+ * `alpha` over the app surface. Chips use this rather than a translucent fill
+ * so that whatever the row behind them happens to be — a hover, a green
+ * selection — never bleeds through and shifts their hue.
+ */
+export function tint(hex: string, alpha: number, base = SURFACE): string {
+  const c = hexToRgb(hex);
+  const b = hexToRgb(base);
+  return rgbToHex({
+    r: b.r + (c.r - b.r) * alpha,
+    g: b.g + (c.g - b.g) * alpha,
+    b: b.b + (c.b - b.b) * alpha,
+  });
+}

@@ -9,9 +9,21 @@ type SelectProps = {
   onChange: (value: string) => void;
   options: SelectOption[];
   className?: string;
+  /** `sunken` is for a Select sitting on an already-lighter nested panel: the
+   *  control goes one step darker so it still reads as a control. Its hover
+   *  skips past the panel's own `surface-2` to `surface-3` — hovering onto the
+   *  panel colour would make the control vanish into its background. Passed as
+   *  a prop, not a caller class — two `bg-*` utilities of equal specificity
+   *  resolve by stylesheet order, so a caller-supplied one would lose. */
+  tone?: "default" | "sunken";
 };
 
-export function Select({ value, onChange, options, className = "" }: SelectProps) {
+const TONES = {
+  default: "bg-surface-2 hover:bg-surface-3",
+  sunken: "bg-surface hover:bg-surface-3",
+} as const;
+
+export function Select({ value, onChange, options, className = "", tone = "default" }: SelectProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,7 +44,7 @@ export function Select({ value, onChange, options, className = "" }: SelectProps
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between bg-surface-2 rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        className={`w-full flex items-center justify-between ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140`}
       >
         <span>{selected?.label ?? t("common.select")}</span>
         <ChevronDown
@@ -40,7 +52,11 @@ export function Select({ value, onChange, options, className = "" }: SelectProps
         />
       </button>
       {open && (
-        <div className="absolute z-10 mt-1.5 w-full bg-surface-2 rounded-xl p-1 shadow-xl">
+        <div
+          className={`absolute z-10 mt-1.5 w-full rounded-xl p-1 shadow-xl ${
+            tone === "sunken" ? "bg-surface" : "bg-surface-2"
+          }`}
+        >
           {options.map((o) => (
             <button
               key={o.value}
