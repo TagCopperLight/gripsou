@@ -5,6 +5,7 @@ import { Check, Filter, Inbox } from "lucide-react";
 import { TransactionRow } from "./TransactionRow";
 import { CardState } from "../CardState";
 import { Button } from "../Button";
+import { COL_PAD, MIN_TABLE_WIDTH, gridTemplate } from "./transactionsGrid";
 import type { Transaction, TransactionCounts } from "../../api/types";
 
 type TransactionsTableProps = {
@@ -23,17 +24,28 @@ type TransactionsTableProps = {
   isSelected: (id: string) => boolean;
   anySelected: boolean;
   onToggleSelect: (id: string) => void;
-  onOpenCategory: (tx: Transaction) => void;
-  onOpenTags: (tx: Transaction) => void;
+  onOpenCategory: (tx: Transaction, anchor: HTMLElement) => void;
+  onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
 };
 
-/** Fixed widths so nothing shifts when a filter changes the content (§2.3).
- *  Overflow is handled inside each cell, never by the column. Two sets so the
- *  ✓ column's 6% comes out of "transaction" rather than being added on top —
- *  both must total 100%, or toggling the preference squeezes every column. */
-const WIDTHS = ["w-[34%]", "w-[10%]", "w-[16%]", "w-[16%]", "w-[14%]", "w-[10%]"];
-const WIDTHS_CHECKED = ["w-[28%]", "w-[10%]", "w-[16%]", "w-[16%]", "w-[14%]", "w-[10%]"];
+/** Nothing shifts when a filter changes the content (§2.3): the column tracks
+ *  live in `transactionsGrid`, and none of them is content-derived except the
+ *  amount, which is allowed to widen for a genuinely bigger number. Overflow is
+ *  handled inside each cell, never by the column. */
+
+/** Nearest scrollable ancestor, which is the element an IntersectionObserver
+ *  has to use as its root for `rootMargin` to mean anything. Resolved by
+ *  walking the DOM rather than hard-coding the shell's `<main>`, so moving the
+ *  table somewhere else cannot quietly turn preloading back off. null (no
+ *  scrollable ancestor) is the observer's default: the viewport. */
+function scrollParent(node: Element): Element | null {
+  for (let el = node.parentElement; el; el = el.parentElement) {
+    const overflowY = getComputedStyle(el).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return el;
+  }
+  return null;
+}
 
 export function TransactionsTable(props: TransactionsTableProps) {
   const { t } = useTranslation();
@@ -48,9 +60,12 @@ export function TransactionsTable(props: TransactionsTableProps) {
   useEffect(() => {
     const node = sentinel.current;
     if (!node || !hasNextPage || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting) && !fetchingNextPage) onLoadMore();
-    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && !fetchingNextPage) onLoadMore();
+      },
+      { root: scrollParent(node), rootMargin: "2000px 0px" },
+    );
     observer.observe(node);
     return () => observer.disconnect();
   }, [hasNextPage, fetchingNextPage, onLoadMore]);
@@ -87,57 +102,77 @@ export function TransactionsTable(props: TransactionsTableProps) {
     );
   }
 
-  const widths = showChecked ? WIDTHS_CHECKED : WIDTHS;
-
   return (
     <div className="flex flex-col">
-      <table className="w-full table-fixed text-sm">
-        <thead>
-          <tr className="text-left text-fg-faint">
-            <th className={`py-2 pl-2 font-medium ${widths[0]}`}>
-              {t("budget.transactions.columns.transaction")}
-            </th>
-            <th className={`py-2 font-medium ${widths[1]}`}>
-              {t("budget.transactions.columns.date")}
-            </th>
-            <th className={`py-2 font-medium ${widths[2]}`}>
-              {t("budget.transactions.columns.account")}
-            </th>
-            <th className={`py-2 font-medium ${widths[3]}`}>
-              {t("budget.transactions.columns.category")}
-            </th>
-            <th className={`py-2 font-medium ${widths[4]}`}>
-              {t("budget.transactions.columns.tags")}
-            </th>
-            {showChecked && (
-              <th
-                className="w-[6%] py-2 text-center font-medium"
-                aria-label={t("budget.transactions.checked")}
-              >
-                <Check className="mx-auto size-4" aria-hidden="true" />
+      {/* The tracks have floors, so a narrow viewport scrolls the table rather
+          than crushing a column. The sentinel below stays outside this box:
+          `overflow-x` would make it the sentinel's scroll parent and quietly
+          undo the preloading margin. */}
+      <div className="overflow-x-auto">
+        <table
+          role="table"
+          className="grid w-full text-sm"
+          style={{ gridTemplateColumns: gridTemplate(showChecked), minWidth: MIN_TABLE_WIDTH }}
+        >
+          {/* `display: contents` drops the groups out of the layout so the rows
+              themselves are the grid's items — and, with them, their implicit
+              ARIA roles, which is why every element here names its own. */}
+          <thead role="rowgroup" className="contents">
+            {/* Same head treatment as every other table in the app (holdings,
+             *  users, asset modal): 11px uppercase mono, faint, wide-tracked. */}
+            <tr
+              role="row"
+              className="col-span-full grid grid-cols-subgrid text-left text-[11px] font-mono uppercase tracking-wide text-fg-faint"
+            >
+              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.transaction}`}>
+                {t("budget.transactions.columns.transaction")}
               </th>
-            )}
-            <th className={`py-2 pr-2 text-right font-medium ${widths[5]}`}>
-              {t("budget.transactions.columns.amount")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <TransactionRow
-              key={row.id}
-              tx={row}
-              showChecked={showChecked}
-              selected={props.isSelected(row.id)}
-              anySelected={props.anySelected}
-              onToggleSelect={props.onToggleSelect}
-              onOpenCategory={props.onOpenCategory}
-              onOpenTags={props.onOpenTags}
-              onToggleChecked={props.onToggleChecked}
-            />
-          ))}
-        </tbody>
-      </table>
+              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.date}`}>
+                {t("budget.transactions.columns.date")}
+              </th>
+              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.account}`}>
+                {t("budget.transactions.columns.account")}
+              </th>
+              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.category}`}>
+                {t("budget.transactions.columns.category")}
+              </th>
+              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.tags}`}>
+                {t("budget.transactions.columns.tags")}
+              </th>
+              {showChecked && (
+                <th
+                  role="columnheader"
+                  className={`flex items-center justify-center py-2 font-medium ${COL_PAD.checked}`}
+                  aria-label={t("budget.transactions.checked")}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                </th>
+              )}
+              <th
+                role="columnheader"
+                className={`flex items-center justify-end py-2 font-medium ${COL_PAD.amount}`}
+              >
+                {t("budget.transactions.columns.amount")}
+              </th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup" className="contents">
+            {rows.map((row) => (
+              <TransactionRow
+                key={row.id}
+                tx={row}
+                showChecked={showChecked}
+                selected={props.isSelected(row.id)}
+                anySelected={props.anySelected}
+                onToggleSelect={props.onToggleSelect}
+                onOpenCategory={props.onOpenCategory}
+                onOpenTags={props.onOpenTags}
+                onToggleChecked={props.onToggleChecked}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div ref={sentinel} className="h-px" />
       {hasNextPage && (
         <div className="flex justify-center pt-3">

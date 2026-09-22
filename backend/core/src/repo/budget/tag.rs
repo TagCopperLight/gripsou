@@ -23,7 +23,7 @@ pub async fn list_tags(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<BudgetT
                (select count(*) from budget_transaction_tag tt where tt.tag_id = g.id) as "tx_count!"
         from budget_tag g
         where g.user_id = $1
-        order by g.created_at, g.name
+        order by g.created_at, g.name, g.id
         "#,
         user_id,
     )

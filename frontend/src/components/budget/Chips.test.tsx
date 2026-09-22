@@ -18,7 +18,9 @@ describe("CategoryChip", () => {
     const chip = screen.getByTestId("category-chip");
     expect(chip).toHaveTextContent("Groceries");
     expect(chip).toHaveAttribute("title", "Groceries");
-    expect(chip.style.backgroundColor).toBe("rgba(155, 176, 107, 0.22)");
+    // Opaque: the 22% tint is flattened against the surface, so a selected or
+    // hovered row never shows through and shifts the chip's colour.
+    expect(chip.style.backgroundColor).toBe("rgb(49, 52, 35)");
     expect(chip.style.color).toBe("rgb(155, 176, 107)");
     // The name is to the LEFT of the icon (spec §5).
     expect(chip.querySelector("span")?.textContent).toBe("Groceries");

@@ -1073,6 +1073,12 @@ pub struct TagRef {
 
 /// Tags for a page of transactions, in one round trip. Untagged rows are absent
 /// from the map rather than present with an empty vector.
+///
+/// Ordered exactly like the catalog `list_tags` returns (oldest tag first),
+/// not by name: the row and the tag chooser then read in the same order, and
+/// assigning a tag no longer makes an existing one jump. Where a row's tags
+/// overflow its cell the frontend drops the tail, so "oldest first" also
+/// decides which ones survive.
 pub async fn tags_for_transactions(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -1091,7 +1097,7 @@ pub async fn tags_for_transactions(
         join connection k  on k.id = a.connection_id
         where tt.transaction_id = any($1)
           and k.user_id = $2
-        order by g.name
+        order by g.created_at, g.name, g.id
         "#,
         ids,
         user_id,

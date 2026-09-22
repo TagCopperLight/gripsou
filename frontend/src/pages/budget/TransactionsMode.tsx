@@ -43,6 +43,12 @@ function optimisticCategory(
   };
 }
 
+/** A tag's place in the catalog; unknown tags sort after every known one. */
+function catalogRank(catalog: { id: string }[], id: string): number {
+  const i = catalog.findIndex((tag) => tag.id === id);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
 export function TransactionsMode() {
   const { t } = useTranslation();
   const { prefs } = useAuth();
@@ -69,6 +75,9 @@ export function TransactionsMode() {
   // following toggle recomputes `tagIds` from that stale set, destroying
   // whatever the previous toggle just added (see CRITICAL finding 1).
   const [tagsForId, setTagsForId] = useState<string | null>(null);
+  // The control each chooser hangs under — captured at click time, since the
+  // chooser is now a popover anchored to its trigger rather than a modal.
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [applyOffer, setApplyOffer] = useState<{ id: string; categoryId: string | null; count: number } | null>(null);
   // Spec §5.2/§5.4 — a failed row or bulk write must surface a recoverable
   // inline message, and a successful bulk write must report how many rows it
@@ -130,20 +139,12 @@ export function TransactionsMode() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-full flex-col gap-4">
       <Surface className="flex flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <h2 className="text-lg font-semibold text-fg">{t("budget.transactions.title")}</h2>
-            <p data-testid="header-counts" className="text-xs text-fg-faint">
-              {t("budget.transactions.headerCounts", {
-                total: counts.data?.total ?? 0,
-                uncategorized: counts.data?.uncategorized ?? 0,
-              })}
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-fg">{t("budget.transactions.title")}</h2>
           <Button
-            variant="ghost"
+            variant="ghostStrong"
             data-testid="select-all-shown"
             disabled={!anySelected && lotsBucketSelected}
             title={!anySelected && lotsBucketSelected
@@ -174,8 +175,16 @@ export function TransactionsMode() {
           isSelected={isSelected}
           anySelected={anySelected}
           onToggleSelect={toggleRow}
-          onOpenCategory={setCategoryFor}
-          onOpenTags={(tx) => setTagsForId(tx.id)}
+          // Clicking the same control again puts its chooser away: `Popover`
+          // exempts its anchor from the outside-click close.
+          onOpenCategory={(tx, el) => {
+            setAnchor(el);
+            setCategoryFor((prev) => (prev?.id === tx.id ? null : tx));
+          }}
+          onOpenTags={(tx, el) => {
+            setAnchor(el);
+            setTagsForId((prev) => (prev === tx.id ? null : tx.id));
+          }}
           onToggleChecked={(tx) =>
             patch.mutate(
               { id: tx.id, body: { checked: !tx.checked }, optimistic: { checked: !tx.checked } },
@@ -221,6 +230,7 @@ export function TransactionsMode() {
           selectedIds={categoryFor.categoryId ? [categoryFor.categoryId] : []}
           onPick={(id) => assignToRow(categoryFor, id)}
           onClose={() => setCategoryFor(null)}
+          anchor={anchor}
         />
       )}
 
@@ -235,24 +245,30 @@ export function TransactionsMode() {
             // optimistic result instead of a stale snapshot.
             const has = tagsFor.tags.some((tag) => tag.id === id);
             const current = tagsFor.tags.map((tag) => tag.id);
-            const tagIds = has ? current.filter((x) => x !== id) : [...current, id];
+            const next = has ? current.filter((x) => x !== id) : [...current, id];
+            // Resolved from the tag catalog — same idiom as
+            // `optimisticCategory` — so a newly added tag shows its real name
+            // and color immediately instead of a blank chip.
+            const catalog = tagsCatalog.data ?? [];
+            const tags = next
+              .map(
+                (tid) =>
+                  catalog.find((tag) => tag.id === tid) ??
+                  tagsFor.tags.find((tag) => tag.id === tid) ?? { id: tid, name: "", color: null },
+              )
+              // ...and in the catalog's own order, which is the order the
+              // server sends a row's tags back in. Left in click order, a tag
+              // would sit at the end of the row until the response landed and
+              // then jump. A tag the catalog doesn't know (it always does)
+              // sorts last, keeping its click order — `sort` is stable.
+              .sort((a, b) => catalogRank(catalog, a.id) - catalogRank(catalog, b.id));
             patch.mutate(
-              {
-                id: tagsFor.id,
-                body: { tagIds },
-                // Resolved from the tag catalog — same idiom as
-                // `optimisticCategory` — so a newly added tag shows its real
-                // name and color immediately instead of a blank chip.
-                optimistic: { tags: tagIds.map(
-                  (tid) =>
-                    tagsCatalog.data?.find((tag) => tag.id === tid) ??
-                    tagsFor.tags.find((tag) => tag.id === tid) ?? { id: tid, name: "", color: null },
-                ) },
-              },
+              { id: tagsFor.id, body: { tagIds: tags.map((tag) => tag.id) }, optimistic: { tags } },
               { onError: onWriteError },
             );
           }}
           onClose={() => setTagsForId(null)}
+          anchor={anchor}
         />
       )}
 
