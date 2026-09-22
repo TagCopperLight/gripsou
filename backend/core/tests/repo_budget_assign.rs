@@ -1,10 +1,12 @@
 mod common;
 
+use chrono::{DateTime, Utc};
 use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    apply_category_to_same_description, bulk_add_tags, bulk_set_category, bulk_set_checked,
-    count_same_description, set_category, set_checked, set_tags,
+    BulkChanges, apply_category_to_same_description, bulk_add_tags, bulk_apply, bulk_set_category,
+    bulk_set_checked, count_paired_same_description, count_same_description, set_category,
+    set_checked, set_tags,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -354,5 +356,188 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         "the preview must not count the digit-only sibling"
     );
     assert_eq!(applied, 0, "and the apply must agree: nothing was touched");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Bulk writes and the pair-break guard
+//
+// A category write dissolves any internal-transfer pair it touches, and "select
+// all shown" can sweep up pairs the client has never loaded and so cannot
+// count. The caller therefore confirms: an unconfirmed call that would break
+// pairs writes *nothing* and reports the count instead.
+// ---------------------------------------------------------------------------
+
+/// Seeds a paired internal transfer across two accounts and returns
+/// `(user_id, groceries, outgoing, incoming)`.
+async fn paired_fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid, Uuid)> {
+    let (user_id, groceries, ids) = fixture(pool, &["VIREMENT A", "VIREMENT B"]).await?;
+    sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
+        .bind(ids[0])
+        .bind(ids[1])
+        .execute(pool)
+        .await?;
+    sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
+        .bind(ids[1])
+        .bind(ids[0])
+        .execute(pool)
+        .await?;
+    Ok((user_id, groceries, ids[0], ids[1]))
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unconfirmed_bulk_reports_the_pairs_it_would_break(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, out, _inn) = paired_fixture(&pool).await?;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &[out],
+        BulkChanges {
+            category_id: Some(Some(groceries)),
+            ..BulkChanges::default()
+        },
+        false,
+    )
+    .await?;
+
+    assert_eq!(outcome.pending_pair_breaks, Some(1));
+    assert_eq!(outcome.updated, 0);
+    Ok(())
+}
+
+/// The guard runs before *any* write, so a call carrying tags alongside the
+/// category cannot half-apply while waiting for confirmation.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unconfirmed_bulk_writes_nothing_at_all(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, out, _inn) = paired_fixture(&pool).await?;
+    let tag = create_tag(&pool, user_id, "Holiday", None).await?;
+
+    bulk_apply(
+        &pool,
+        user_id,
+        &[out],
+        BulkChanges {
+            category_id: Some(Some(groceries)),
+            add_tag_ids: Some(&[tag.id]),
+            checked: Some(true),
+        },
+        false,
+    )
+    .await?;
+
+    let (category, checked, tags): (Option<Uuid>, Option<DateTime<Utc>>, i64) = sqlx::query_as(
+        "select t.budget_category_id, t.checked_at,
+                (select count(*) from budget_transaction_tag g where g.transaction_id = t.id)
+           from transaction t where t.id = $1",
+    )
+    .bind(out)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(category, None, "no category written");
+    assert_eq!(checked, None, "not checked");
+    assert_eq!(tags, 0, "no tag written");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_confirmed_bulk_writes_and_unlinks(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, out, inn) = paired_fixture(&pool).await?;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &[out],
+        BulkChanges {
+            category_id: Some(Some(groceries)),
+            ..BulkChanges::default()
+        },
+        true,
+    )
+    .await?;
+
+    assert_eq!(outcome.pending_pair_breaks, None);
+    assert_eq!(outcome.updated, 1);
+    let links: Vec<(Uuid, Option<Uuid>)> =
+        sqlx::query_as("select id, transfer_pair_id from transaction where id = any($1)")
+            .bind(vec![out, inn])
+            .fetch_all(&pool)
+            .await?;
+    assert!(links.iter().all(|(_, pair)| pair.is_none()));
+    Ok(())
+}
+
+/// Nothing to confirm when no pair is involved: the common case stays one
+/// round trip, with no modal in front of it.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC", "SPOTIFY"]).await?;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &ids,
+        BulkChanges {
+            category_id: Some(Some(groceries)),
+            ..BulkChanges::default()
+        },
+        false,
+    )
+    .await?;
+
+    assert_eq!(outcome.pending_pair_breaks, None);
+    assert_eq!(outcome.updated, 2);
+    Ok(())
+}
+
+/// Tags and the checked flag never break a pair, so they are never gated —
+/// even on a row that is half of one.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, out, _inn) = paired_fixture(&pool).await?;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &[out],
+        BulkChanges {
+            checked: Some(true),
+            ..BulkChanges::default()
+        },
+        false,
+    )
+    .await?;
+
+    assert_eq!(outcome.pending_pair_breaks, None);
+    assert_eq!(outcome.updated, 1);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn counts_the_pairs_an_apply_to_description_would_break(pool: PgPool) -> anyhow::Result<()> {
+    // Both rows share a description, and one of them is half of a pair — so
+    // widening the correction to the description sweeps the pair up too.
+    let (user_id, _groceries, ids) = fixture(&pool, &["VIREMENT", "VIREMENT"]).await?;
+    sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
+        .bind(ids[1])
+        .bind(ids[0])
+        .execute(&pool)
+        .await?;
+
+    assert_eq!(
+        count_paired_same_description(&pool, user_id, ids[0]).await?,
+        1
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unpaired_description_counts_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC", "LECLERC"]).await?;
+
+    assert_eq!(
+        count_paired_same_description(&pool, user_id, ids[0]).await?,
+        0
+    );
     Ok(())
 }

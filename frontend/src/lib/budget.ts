@@ -81,10 +81,19 @@ export const OTHER_FLAGS = [
     tint: "text-amber",
     strokeWidth: 1.5,
   },
+  // Not amber: this one flags nothing needing attention, it only widens the
+  // list back to rows hidden by default. Neutral, like the `all` bucket.
+  {
+    key: "transfers",
+    labelKey: "budget.transfers",
+    icon: ArrowLeftRight,
+    tint: "text-fg-dim",
+    strokeWidth: 2,
+  },
 ] as const;
 
 /** Flag lookup for callers that hold a key and want its icon and colour. */
-export const otherFlag = (key: "uncategorized" | "needsReview") =>
+export const otherFlag = (key: "uncategorized" | "needsReview" | "transfers") =>
   OTHER_FLAGS.find((f) => f.key === key) ?? OTHER_FLAGS[0];
 
 /** Bucket lookup for callers that hold a key and want its icon and colour. */

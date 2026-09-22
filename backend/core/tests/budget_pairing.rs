@@ -6,6 +6,9 @@ use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::dto::CanonicalAccount;
 use gripsou_core::error::CoreError;
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::repo::budget::assign::{
+    apply_category_to_same_description, bulk_set_category, count_paired, set_category,
+};
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::transaction::upsert_transaction;
 use rust_decimal::Decimal;
@@ -611,5 +614,199 @@ async fn missing_internal_transfer_category_is_a_hard_error(pool: PgPool) -> any
             .fetch_one(&pool)
             .await?;
     assert_eq!(paired, 0);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Dissolving a pair
+//
+// Spec §4's precedence (`user > rule > pair > ai`) means a user may always
+// overrule the pairing heuristic — it is timid, but it can still false-match
+// two unrelated movements of the same amount. What must not survive that
+// correction is the link itself: a row pointing at a counterpart that is no
+// longer a transfer is a half-transfer that nets against nothing.
+// ---------------------------------------------------------------------------
+
+/// Seeds a paired transfer and returns `(user_id, outgoing, incoming)`.
+async fn seeded_pair(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid)> {
+    let (user_id, a, b) = two_accounts(pool, "EUR").await?;
+    let now = Utc::now();
+    let out = tx_at(pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
+    let inn = tx_at(
+        pool,
+        b,
+        "acct-b",
+        "i1",
+        Decimal::new(50000, 2),
+        now + Duration::hours(4),
+    )
+    .await?;
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    Ok((user_id, out, inn))
+}
+
+async fn a_category(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
+    Ok(list_categories(pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.system_key.is_none() && c.kind == "expense")
+        .expect("the seed ships at least one non-system expense category")
+        .id)
+}
+
+async fn row(pool: &PgPool, id: Uuid) -> anyhow::Result<PairedRow> {
+    Ok(sqlx::query_as(
+        "select id, transfer_pair_id, budget_category_id, category_source from transaction where id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await?)
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn categorising_one_half_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
+
+    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+
+    let touched = row(&pool, out).await?;
+    assert_eq!(touched.1, None, "the touched half keeps no pair link");
+    assert_eq!(touched.2, Some(groceries));
+    assert_eq!(touched.3.as_deref(), Some("user"));
+
+    let other = row(&pool, inn).await?;
+    assert_eq!(
+        other.1, None,
+        "the other half must not be left pointing at a row that is no longer a transfer"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let before = row(&pool, inn).await?;
+    let groceries = a_category(&pool, user_id).await?;
+
+    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+
+    let after = row(&pool, inn).await?;
+    assert_eq!(after.2, before.2, "category untouched");
+    assert_eq!(after.3, before.3, "category_source untouched");
+    assert_eq!(after.3.as_deref(), Some("pair"));
+    Ok(())
+}
+
+/// Clearing is a user category write too: the same dissolution applies, so a
+/// cleared row never keeps a stale link.
+#[sqlx::test(migrations = "../migrations")]
+async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+
+    assert!(set_category(&pool, user_id, out, None).await?);
+
+    assert_eq!(row(&pool, out).await?.1, None);
+    assert_eq!(row(&pool, inn).await?.1, None);
+    Ok(())
+}
+
+/// Another user's transaction is not this user's to unlink.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (_user_id, out, inn) = seeded_pair(&pool).await?;
+    let stranger = Uuid::new_v4();
+
+    assert!(!set_category(&pool, stranger, out, None).await?);
+
+    assert_eq!(row(&pool, out).await?.1, Some(inn));
+    assert_eq!(row(&pool, inn).await?.1, Some(out));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bulk_category_write_unlinks_the_pairs_it_touches(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
+
+    assert_eq!(
+        bulk_set_category(&pool, user_id, &[out], Some(groceries)).await?,
+        1
+    );
+
+    assert_eq!(row(&pool, out).await?.1, None);
+    assert_eq!(row(&pool, inn).await?.1, None);
+    Ok(())
+}
+
+/// Both halves in one bulk write: each dissolves the other, and neither is
+/// left half-linked by the order the UPDATE happened to visit them in.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bulk_write_covering_both_halves_unlinks_cleanly(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
+
+    assert_eq!(
+        bulk_set_category(&pool, user_id, &[out, inn], Some(groceries)).await?,
+        2
+    );
+
+    assert_eq!(row(&pool, out).await?.1, None);
+    assert_eq!(row(&pool, inn).await?.1, None);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn applying_to_a_description_unlinks_the_pairs_it_touches(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
+
+    // Both halves are seeded with the same description ("VIREMENT"), so this
+    // sweeps up the counterpart as well as the row it was launched from.
+    assert!(apply_category_to_same_description(&pool, user_id, out, Some(groceries)).await? >= 1);
+
+    assert_eq!(row(&pool, out).await?.1, None);
+    assert_eq!(row(&pool, inn).await?.1, None);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Counting before writing
+//
+// "Select all shown" resolves server-side and may be years of rows the client
+// has never loaded, so it cannot count the pairs it is about to break. The
+// server counts them, and a caller that has not confirmed writes nothing.
+// ---------------------------------------------------------------------------
+
+#[sqlx::test(migrations = "../migrations")]
+async fn counts_the_pairs_a_write_would_break(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+
+    assert_eq!(count_paired(&pool, user_id, &[out]).await?, 1);
+    assert_eq!(
+        count_paired(&pool, user_id, &[out, inn]).await?,
+        2,
+        "both halves count: the modal reports rows affected, not pairs"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unpaired_selection_counts_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, _b) = two_accounts(&pool, "EUR").await?;
+    let lonely = tx_at(&pool, a, "acct-a", "x1", Decimal::new(-1200, 2), Utc::now()).await?;
+
+    assert_eq!(count_paired(&pool, user_id, &[lonely]).await?, 0);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn another_users_pairs_are_not_counted(pool: PgPool) -> anyhow::Result<()> {
+    let (_user_id, out, _inn) = seeded_pair(&pool).await?;
+
+    assert_eq!(count_paired(&pool, Uuid::new_v4(), &[out]).await?, 0);
     Ok(())
 }

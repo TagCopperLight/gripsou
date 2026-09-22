@@ -26,6 +26,10 @@ export type BudgetFilters = {
   tagIds: string[];
   uncategorized: boolean;
   needsReview: boolean;
+  /** Internal transfers are hidden until this is on — they are money moving
+   *  between the user's own accounts, not spending. Unlike every other flag
+   *  here, `false` narrows the list rather than widening it. */
+  transfers: boolean;
   /** Set only by Overview's deep links (phase 4); renders as a "Selected
    *  period" chip and is cleared together with the dates it stands for. */
   periodLabel?: string;
@@ -42,6 +46,7 @@ export const EMPTY_FILTERS: BudgetFilters = {
   tagIds: [],
   uncategorized: false,
   needsReview: false,
+  transfers: false,
 };
 
 /** Local calendar day as `YYYY-MM-DD`. `toISOString()` is wrong here: it
@@ -96,6 +101,7 @@ export function toQuery(f: BudgetFilters): TransactionFilterQuery {
   if (f.tagIds.length) q.tagIds = f.tagIds;
   if (f.uncategorized) q.uncategorized = true;
   if (f.needsReview) q.needsReview = true;
+  if (f.transfers) q.includeTransfers = true;
   return q;
 }
 
@@ -108,7 +114,8 @@ export type ActiveFilter =
   | { kind: "category"; id: string }
   | { kind: "tag"; id: string }
   | { kind: "uncategorized" }
-  | { kind: "needsReview" };
+  | { kind: "needsReview" }
+  | { kind: "transfers" };
 
 /** Part 3 of the search surface: one chip per active filter, account and time
  *  frame included (§2.2). Order is the reading order of the controls above. */
@@ -123,6 +130,7 @@ export function activeFilters(f: BudgetFilters): ActiveFilter[] {
   for (const id of f.tagIds) out.push({ kind: "tag", id });
   if (f.uncategorized) out.push({ kind: "uncategorized" });
   if (f.needsReview) out.push({ kind: "needsReview" });
+  if (f.transfers) out.push({ kind: "transfers" });
   return out;
 }
 
@@ -150,5 +158,7 @@ export function clearFilter(f: BudgetFilters, a: ActiveFilter): BudgetFilters {
       return { ...f, uncategorized: false };
     case "needsReview":
       return { ...f, needsReview: false };
+    case "transfers":
+      return { ...f, transfers: false };
   }
 }

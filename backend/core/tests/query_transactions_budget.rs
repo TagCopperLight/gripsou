@@ -26,6 +26,7 @@ fn filters() -> TransactionFilters {
         tag_ids: vec![],
         uncategorized: false,
         needs_review: false,
+        include_transfers: true,
         review_threshold: Decimal::new(80, 2),
         limit: 200,
         offset: 0,
@@ -417,6 +418,115 @@ async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<(
     assert!(
         !map.contains_key(&ids[0]),
         "untagged rows are simply absent"
+    );
+    Ok(())
+}
+
+/// A row the pairing pass categorised whose link has since been dissolved (by
+/// a user correcting one half, spec §4) still carries `Internal transfer` but
+/// nets against nothing. The list flags it so the reader can see the
+/// consequence rather than having to hunt for it.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = fixture(&pool).await?;
+    sqlx::query("update transaction set category_source = 'pair' where id = $1")
+        .bind(ids[1])
+        .execute(&pool)
+        .await?;
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    let orphan = rows.iter().find(|r| r.id == ids[1]).unwrap();
+    assert!(!orphan.is_transfer);
+    assert!(orphan.is_orphan_transfer);
+    Ok(())
+}
+
+/// A cross-currency transfer the user categorised by hand never had a pair to
+/// lose (spec §5.2's stated limit). Matching on the category would flag it
+/// forever; matching on `category_source = 'pair'` — which only the pairing
+/// pass writes, and which always comes with a link — does not.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = fixture(&pool).await?;
+    let internal = list_categories(&pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
+        .unwrap();
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    let row = rows.iter().find(|r| r.id == ids[1]).unwrap();
+    assert!(!row.is_orphan_transfer);
+    Ok(())
+}
+
+/// A live pair is not an orphan: the two states are mutually exclusive, so the
+/// reader never sees both notes at once.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_still_linked_pair_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = fixture(&pool).await?;
+    sqlx::query(
+        "update transaction set category_source = 'pair', transfer_pair_id = $2 where id = $1",
+    )
+    .bind(ids[1])
+    .bind(ids[2])
+    .execute(&pool)
+    .await?;
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    let row = rows.iter().find(|r| r.id == ids[1]).unwrap();
+    assert!(row.is_transfer);
+    assert!(!row.is_orphan_transfer);
+    Ok(())
+}
+
+/// Internal transfers are noise in a list about spending, so the list hides
+/// them unless asked. The header's `matching` count and "select all shown"
+/// hide them too — all three read the same filter, so the count can never
+/// promise rows the list does not show, and a bulk action can never touch a
+/// row the user cannot see.
+#[sqlx::test(migrations = "../migrations")]
+async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = fixture(&pool).await?;
+    let internal = list_categories(&pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
+        .unwrap();
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+
+    let hidden = TransactionFilters {
+        include_transfers: false,
+        ..filters()
+    };
+
+    let rows = transactions(&pool, user_id, &hidden).await?;
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.id != ids[1]));
+    assert_eq!(
+        transaction_counts(&pool, user_id, &hidden).await?.matching,
+        2
+    );
+    let bulk_ids = matching_transaction_ids(&pool, user_id, &hidden).await?;
+    assert_eq!(bulk_ids.len(), 2);
+    assert!(!bulk_ids.contains(&ids[1]));
+
+    // Asked for, it comes back — and is filtered like any other row.
+    let shown = transactions(&pool, user_id, &filters()).await?;
+    assert_eq!(shown.len(), 3);
+    let out_only = transactions(
+        &pool,
+        user_id,
+        &TransactionFilters {
+            bucket: TypeBucket::MoneyIn,
+            ..filters()
+        },
+    )
+    .await?;
+    assert!(
+        out_only.iter().all(|r| r.id != ids[1]),
+        "still bucket-filtered"
     );
     Ok(())
 }

@@ -41,7 +41,7 @@ export function CategoryChip({
         backgroundColor: needsReview ? undefined : tint(color, 0.22),
       }}
       className={`inline-flex max-w-full items-center gap-1.5 rounded-xl px-2.25 py-1 text-xs font-medium ${
-        needsReview ? "border border-dotted" : ""
+        needsReview ? "outline-2 outline-dashed -outline-offset-2" : ""
       } ${className}`}
     >
       {removable ? (

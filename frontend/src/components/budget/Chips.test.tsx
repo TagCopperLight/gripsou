@@ -41,10 +41,10 @@ describe("CategoryChip", () => {
     expect(chip.querySelector("svg")).toBeTruthy();   // the dot
   });
 
-  it("drops the fill and draws a dotted outline when the guess needs review", () => {
+  it("drops the fill and draws a dashed outline when the guess needs review", () => {
     render(<CategoryChip category={GROCERIES} needsReview />);
     const chip = screen.getByTestId("category-chip");
-    expect(chip.className).toContain("border-dotted");
+    expect(chip.className).toContain("outline-dashed");
     expect(chip.style.backgroundColor).toBe("");
   });
 

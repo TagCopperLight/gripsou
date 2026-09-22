@@ -433,6 +433,7 @@
   "budget": {
     "uncategorized": "Uncategorised",
     "needsReview": "Needs review",
+    "transfers": "Internal transfers",
     "tagLabel": "Tag {{name}}",
     "kinds": {
       "expense": "Expense",
@@ -525,6 +526,13 @@
       "addTags": "Add tags",
       "checked": "Checked",
       "autoPaired": "Auto paired transfer",
+      "orphanTransfer": "Transfer pairing removed — this half no longer nets out",
+      "breakPair": {
+        "title": "Break the transfer pairing?",
+        "body_one": "This transaction is one half of an auto-paired internal transfer. Categorising it unlinks both halves; the other half keeps its Internal transfer category and will no longer net out.",
+        "body_other": "{{count}} of the selected transactions are halves of auto-paired internal transfers. Categorising them unlinks both halves of each pair; the other halves keep their Internal transfer category and will no longer net out.",
+        "confirm": "Break pairing"
+      },
       "columns": {
         "transaction": "Transaction",
         "date": "Date",
