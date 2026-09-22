@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
+import { BreakPairModal } from "../../components/budget/BreakPairModal";
 import { BudgetDialog } from "../../components/budget/BudgetDialog";
 import { SearchSurface } from "../../components/budget/SearchSurface";
 import { TransactionsTable } from "../../components/budget/TransactionsTable";
@@ -79,6 +80,11 @@ export function TransactionsMode() {
   // chooser is now a popover anchored to its trigger rather than a modal.
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [applyOffer, setApplyOffer] = useState<{ id: string; categoryId: string | null; count: number } | null>(null);
+  // A category write held back until the user agrees to dissolve the
+  // internal-transfer pairs it would break. `count` is 1 for a single row —
+  // the row itself says whether it is paired — and the server's figure for the
+  // two multi-row paths, whose target set the client may never have loaded.
+  const [breakPair, setBreakPair] = useState<{ count: number; run: () => void } | null>(null);
   // Spec §5.2/§5.4 — a failed row or bulk write must surface a recoverable
   // inline message, and a successful bulk write must report how many rows it
   // touched. Follows the idiom phase 2 already established next door
@@ -93,9 +99,29 @@ export function TransactionsMode() {
   const onWriteError = (err: unknown) => setWriteErrorKey(budgetErrorKey(err));
 
   const assignToRow = (tx: Transaction, categoryId: string | null) => {
+    // Recategorising half of an auto-paired transfer dissolves the pair on
+    // both sides — confirm before writing, not after.
+    if (tx.isTransfer) {
+      setBreakPair({ count: 1, run: () => writeToRow(tx, categoryId) });
+      return;
+    }
+    writeToRow(tx, categoryId);
+  };
+
+  const writeToRow = (tx: Transaction, categoryId: string | null) => {
     setWriteErrorKey(null);
+    setBreakPair(null);
     patch.mutate(
-      { id: tx.id, body: { categoryId }, optimistic: optimisticCategory(categoryId, categories.data) },
+      {
+        id: tx.id,
+        body: { categoryId },
+        // `isTransfer` goes too: the pair is dissolved by this write, so the
+        // row must stop claiming to be one rather than contradicting its new
+        // category until the refetch lands. The *other* half becomes an
+        // orphan, but the client cannot know which row that is — that one
+        // arrives via the invalidation.
+        optimistic: { ...optimisticCategory(categoryId, categories.data), isTransfer: false },
+      },
       {
         // The row is already saved; this only offers to widen the correction
         // to the rows that share the description (spec §5.4).
@@ -123,13 +149,63 @@ export function TransactionsMode() {
   // that bucket and must not be offered as if it did.
   const lotsBucketSelected = filters.bucket === "lots";
 
-  const runBulk = (body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked">) => {
-    setWriteErrorKey(null);
-    setBulkUpdated(null);
-    bulk.mutate(
-      { ...bulkTarget(), ...body },
+  /** Widens a correction to every row sharing the description. The server
+   *  refuses an unconfirmed write that would dissolve pairs, reporting how
+   *  many; we then ask, and re-send the identical body with the flag. */
+  const runApplyToDescription = (id: string, categoryId: string | null, confirmBreakPairs: boolean) => {
+    applyToDescription.mutate(
+      { id, categoryId, confirmBreakPairs },
       {
         onSuccess: (res) => {
+          if (res.pendingPairBreaks) {
+            setBreakPair({
+              count: res.pendingPairBreaks,
+              run: () => runApplyToDescription(id, categoryId, true),
+            });
+            return;
+          }
+          setBreakPair(null);
+          setApplyOffer(null);
+        },
+        onError: onWriteError,
+      },
+    );
+  };
+
+  const runBulk = (
+    body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked">,
+    confirmBreakPairs = false,
+  ) => {
+    setWriteErrorKey(null);
+    setBulkUpdated(null);
+    // The target is captured once, so the confirmation re-sends the set the
+    // user actually looked at — re-deriving it after the modal could pick up a
+    // selection or filter that moved underneath.
+    const target = bulkTarget();
+    bulk.mutate(
+      { ...target, ...body, ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}) },
+      {
+        onSuccess: (res) => {
+          // Refused, not applied: nothing was written, so the selection stays
+          // and no "N rows updated" is claimed.
+          if (res.pendingPairBreaks) {
+            setBreakPair({
+              count: res.pendingPairBreaks,
+              run: () =>
+                bulk.mutate(
+                  { ...target, ...body, confirmBreakPairs: true },
+                  {
+                    onSuccess: (done) => {
+                      setBreakPair(null);
+                      clearSelection();
+                      setBulkUpdated(done.updated);
+                    },
+                    onError: onWriteError,
+                  },
+                ),
+            });
+            return;
+          }
           clearSelection();
           setBulkUpdated(res.updated);
         },
@@ -272,6 +348,15 @@ export function TransactionsMode() {
         />
       )}
 
+      {breakPair && (
+        <BreakPairModal
+          count={breakPair.count}
+          busy={patch.isPending || bulk.isPending || applyToDescription.isPending}
+          onConfirm={breakPair.run}
+          onClose={() => setBreakPair(null)}
+        />
+      )}
+
       {applyOffer && (
         <BudgetDialog
           title={t("budget.transactions.applyToAllTitle")}
@@ -285,12 +370,7 @@ export function TransactionsMode() {
               <Button
                 data-testid="apply-to-all-confirm"
                 disabled={applyToDescription.isPending}
-                onClick={() =>
-                  applyToDescription.mutate(
-                    { id: applyOffer.id, categoryId: applyOffer.categoryId },
-                    { onSuccess: () => setApplyOffer(null) },
-                  )
-                }
+                onClick={() => runApplyToDescription(applyOffer.id, applyOffer.categoryId, false)}
               >
                 {t("budget.transactions.applyToAllConfirm")}
               </Button>

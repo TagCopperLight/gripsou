@@ -364,6 +364,9 @@ pub struct Transaction {
     pub checked: bool,
     /// One half of an auto-paired internal transfer.
     pub is_transfer: bool,
+    /// The pairing pass categorised this row but its link is gone — a user
+    /// corrected the other half, so this one nets against nothing.
+    pub is_orphan_transfer: bool,
     pub tags: Vec<TagDto>,
 }
 
@@ -406,6 +409,7 @@ impl Transaction {
             needs_review: r.needs_review,
             checked: r.checked,
             is_transfer: r.is_transfer,
+            is_orphan_transfer: r.is_orphan_transfer,
             tags: tags
                 .into_iter()
                 .map(|t| TagDto {

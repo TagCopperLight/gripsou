@@ -433,6 +433,7 @@
   "budget": {
     "uncategorized": "Non catégorisé",
     "needsReview": "À vérifier",
+    "transfers": "Virements internes",
     "tagLabel": "Étiquette {{name}}",
     "kinds": {
       "expense": "Dépense",
@@ -525,6 +526,13 @@
       "addTags": "Ajouter des étiquettes",
       "checked": "Pointée",
       "autoPaired": "Virement interne apparié",
+      "orphanTransfer": "Appairage du virement supprimé — cette moitié ne se compense plus",
+      "breakPair": {
+        "title": "Rompre l'appairage du virement ?",
+        "body_one": "Cette transaction est une moitié d'un virement interne apparié automatiquement. La catégoriser dissocie les deux moitiés ; l'autre conserve sa catégorie Virement interne et ne se compensera plus.",
+        "body_other": "{{count}} des transactions sélectionnées sont des moitiés de virements internes appariés automatiquement. Les catégoriser dissocie les deux moitiés de chaque paire ; les autres moitiés conservent leur catégorie Virement interne et ne se compenseront plus.",
+        "confirm": "Rompre l'appairage"
+      },
       "columns": {
         "transaction": "Transaction",
         "date": "Date",

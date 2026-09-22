@@ -149,6 +149,7 @@ export function transactionParams(q: TransactionFilterQuery): URLSearchParams {
   if (q.tagIds?.length) params.set("tagIds", q.tagIds.join(","));
   if (q.uncategorized) params.set("uncategorized", "true");
   if (q.needsReview) params.set("needsReview", "true");
+  if (q.includeTransfers) params.set("includeTransfers", "true");
   return params;
 }
 

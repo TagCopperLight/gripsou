@@ -140,6 +140,10 @@ export type BulkBody = {
   categoryId?: string | null;
   addTagIds?: string[];
   checked?: boolean;
+  /** The caller has seen how many internal-transfer pairs this write would
+   *  dissolve and wants it applied anyway. Without it, the server refuses such
+   *  a write and reports the count instead of applying it. */
+  confirmBreakPairs?: boolean;
 };
 
 /** One row, applied to the cache before the request so the chip swaps at once.
@@ -175,11 +179,29 @@ export function usePatchTransaction() {
   });
 }
 
+/** A write the server refused pending confirmation reports `pendingPairBreaks`
+ *  — how many internal-transfer pairs it would dissolve — and wrote nothing.
+ *  Kept distinct from `updated: 0`: "wrote no rows" and "awaiting your
+ *  confirmation" are different answers, and conflating them would silently
+ *  swallow the confirmation step. */
+type WriteResult = { updated: number; pendingPairBreaks?: number };
+
 export function useApplyToDescription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, categoryId }: { id: string; categoryId: string | null }) =>
-      postJson<{ updated: number }>(`/transactions/${id}/apply-to-description`, { categoryId }),
+    mutationFn: ({
+      id,
+      categoryId,
+      confirmBreakPairs,
+    }: {
+      id: string;
+      categoryId: string | null;
+      confirmBreakPairs?: boolean;
+    }) =>
+      postJson<WriteResult>(`/transactions/${id}/apply-to-description`, {
+        categoryId,
+        ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}),
+      }),
     onSuccess: () => afterTransactionChange(qc),
   });
 }
@@ -213,7 +235,7 @@ export function useBulkTransactions() {
         ...body,
         filter: body.filter ? transactionFilterBody(body.filter) : undefined,
       };
-      return postJson<{ updated: number }>("/transactions/bulk", wire);
+      return postJson<WriteResult>("/transactions/bulk", wire);
     },
     onSuccess: () => afterTransactionChange(qc),
   });

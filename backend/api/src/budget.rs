@@ -363,12 +363,26 @@ pub async fn patch_transaction(
 #[serde(rename_all = "camelCase")]
 pub struct ApplyToDescriptionBody {
     pub category_id: Option<Uuid>,
+    /// The caller has seen how many internal-transfer pairs this write would
+    /// dissolve and wants it applied anyway. Without it, a write that would
+    /// break one is refused (see `UpdatedResponse::pending_pair_breaks`).
+    #[serde(default)]
+    pub confirm_break_pairs: bool,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatedResponse {
     pub updated: i64,
+    /// Non-null means **nothing was written**: the write would have dissolved
+    /// this many internal-transfer pairs and the caller has not confirmed.
+    /// Re-send the identical body with `confirmBreakPairs` to go ahead.
+    ///
+    /// Kept distinct from `updated: 0` on purpose — "wrote no rows" and
+    /// "refused, awaiting confirmation" are different answers, and a client
+    /// that cannot tell them apart silently swallows the confirmation step.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_pair_breaks: Option<i64>,
 }
 
 pub async fn apply_to_description(
@@ -377,11 +391,23 @@ pub async fn apply_to_description(
     Path(id): Path<Uuid>,
     Json(b): Json<ApplyToDescriptionBody>,
 ) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
+    if !b.confirm_break_pairs {
+        let breaks = assign::count_paired_same_description(&pool, user_id, id)
+            .await
+            .map_err(internal)?;
+        if breaks > 0 {
+            return Ok(Json(UpdatedResponse {
+                updated: 0,
+                pending_pair_breaks: Some(breaks),
+            }));
+        }
+    }
     let updated = assign::apply_category_to_same_description(&pool, user_id, id, b.category_id)
         .await
         .map_err(internal)?;
     Ok(Json(UpdatedResponse {
         updated: updated as i64,
+        pending_pair_breaks: None,
     }))
 }
 
@@ -396,6 +422,9 @@ pub struct BulkBody {
     pub category_id: Option<Option<Uuid>>,
     pub add_tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
+    /// See `ApplyToDescriptionBody::confirm_break_pairs`.
+    #[serde(default)]
+    pub confirm_break_pairs: bool,
 }
 
 pub async fn bulk_transactions(
@@ -414,32 +443,22 @@ pub async fn bulk_transactions(
         (None, None) => return Err((StatusCode::BAD_REQUEST, "ids or filter required".into())),
     };
 
-    let mut updated = 0u64;
-    if let Some(category_id) = b.category_id {
-        updated = updated.max(
-            assign::bulk_set_category(&pool, user_id, &ids, category_id)
-                .await
-                .map_err(internal)?,
-        );
-    }
-    if let Some(tag_ids) = b.add_tag_ids
-        && !tag_ids.is_empty()
-    {
-        updated = updated.max(
-            assign::bulk_add_tags(&pool, user_id, &ids, &tag_ids)
-                .await
-                .map_err(internal)?,
-        );
-    }
-    if let Some(checked) = b.checked {
-        updated = updated.max(
-            assign::bulk_set_checked(&pool, user_id, &ids, checked)
-                .await
-                .map_err(internal)?,
-        );
-    }
+    let outcome = assign::bulk_apply(
+        &pool,
+        user_id,
+        &ids,
+        assign::BulkChanges {
+            category_id: b.category_id,
+            add_tag_ids: b.add_tag_ids.as_deref(),
+            checked: b.checked,
+        },
+        b.confirm_break_pairs,
+    )
+    .await
+    .map_err(internal)?;
     Ok(Json(UpdatedResponse {
-        updated: updated as i64,
+        updated: outcome.updated as i64,
+        pending_pair_breaks: outcome.pending_pair_breaks,
     }))
 }
 

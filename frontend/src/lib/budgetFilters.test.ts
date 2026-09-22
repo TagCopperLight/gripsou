@@ -78,6 +78,15 @@ describe("budgetFilters", () => {
     ]);
   });
 
+  it("asks for internal transfers only when the OTHERS flag is on", () => {
+    // Off is the default and sends nothing: the server hides them already.
+    expect(toQuery(EMPTY_FILTERS).includeTransfers).toBeUndefined();
+    const on = { ...EMPTY_FILTERS, transfers: true };
+    expect(toQuery(on)).toEqual({ includeTransfers: true });
+    expect(activeFilters(on)).toEqual([{ kind: "transfers" }]);
+    expect(clearFilter(on, { kind: "transfers" }).transfers).toBe(false);
+  });
+
   it("removes exactly the chip that was clicked", () => {
     const f = { ...EMPTY_FILTERS, categoryIds: ["c1", "c2"], tagIds: ["t1"] };
     expect(clearFilter(f, { kind: "category", id: "c1" }).categoryIds).toEqual(["c2"]);

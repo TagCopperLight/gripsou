@@ -844,6 +844,16 @@ pub struct TransactionListRow {
     pub checked: bool,
     /// The row is one half of an auto-paired internal transfer.
     pub is_transfer: bool,
+    /// The pairing pass categorised this row, but its link is gone — a user
+    /// corrected the other half (spec §4), so this one still reads as an
+    /// internal transfer while netting against nothing.
+    ///
+    /// Keyed on `category_source = 'pair'` rather than on the category itself:
+    /// only the pairing pass writes that source, and it always writes a link,
+    /// so a missing link means one was removed. A cross-currency transfer the
+    /// user categorised by hand never had a link (spec §5.2) and must not be
+    /// flagged forever.
+    pub is_orphan_transfer: bool,
 }
 
 /// The TYPE control on the filter panel: one value, always one selected.
@@ -895,6 +905,12 @@ pub struct TransactionFilters {
     pub tag_ids: Vec<Uuid>,
     pub uncategorized: bool,
     pub needs_review: bool,
+    /// Internal transfers (the `internal_transfer` system category) are hidden
+    /// unless this is set: they are money moving between the user's own
+    /// accounts, noise in a list about spending. The OTHERS panel's
+    /// "Internal transfers" toggle is the only thing that turns them back on,
+    /// and when it does they are filtered like any other row.
+    pub include_transfers: bool,
     /// Below this, an AI guess is in the review queue. A parameter rather than
     /// a constant so moving it reshapes the queue instantly (spec §3.1).
     pub review_threshold: Decimal,
@@ -916,6 +932,7 @@ impl TransactionFilters {
             tag_ids: vec![],
             uncategorized: false,
             needs_review: false,
+            include_transfers: true,
             review_threshold: Decimal::new(80, 2),
             limit: 200,
             offset: 0,
@@ -954,7 +971,16 @@ pub async fn transactions(
                     and (t.category_confidence is null
                          or t.category_confidence < $7), false) as needs_review,
                    (t.checked_at is not null) as checked,
-                   (t.transfer_pair_id is not null) as is_transfer
+                   (t.transfer_pair_id is not null) as is_transfer,
+                   -- `coalesce`, because a null `category_source` makes the
+                   -- comparison null rather than false, and the column is
+                   -- decoded as a plain bool.
+                   coalesce(t.category_source = 'pair'
+                    and t.transfer_pair_id is null, false) as is_orphan_transfer,
+                   -- Filtered on below, never selected: the list has no use
+                   -- for it beyond deciding whether the row is hidden.
+                   coalesce(bc.system_key = 'internal_transfer', false)
+                     as is_internal_transfer
             from transaction t
             join account a    on a.id = t.account_id
             join connection c on c.id = a.connection_id
@@ -1000,7 +1026,7 @@ pub async fn transactions(
                    -- Lot rows carry no budget: a purchase is an investment
                    -- record, not a budget item (spec §5.2).
                    null::uuid, null::text, null::text, null::text, null::text, null::text,
-                   null::text, null::numeric, false, false, false
+                   null::text, null::numeric, false, false, false, false, false
             from lot l
             join holding h    on h.id = l.holding_id
             join instrument i on i.id = h.instrument_id
@@ -1015,7 +1041,8 @@ pub async fn transactions(
                category_id, category_name, category_default_key, category_color,
                category_icon, category_kind, category_source, category_confidence,
                needs_review as "needs_review!", checked as "checked!",
-               is_transfer as "is_transfer!"
+               is_transfer as "is_transfer!",
+               is_orphan_transfer as "is_orphan_transfer!"
         from rows
         where ($2::text is null
                or description ilike '%' || $2 || '%'
@@ -1041,6 +1068,7 @@ pub async fn transactions(
                      from budget_transaction_tag tt
                     where tt.transaction_id = rows.id
                       and tt.tag_id = any($12)) = cardinality($12))
+          and ($15::boolean or not is_internal_transfer)
         order by ts desc, id
         limit $13 offset $14
         "#,
@@ -1058,6 +1086,7 @@ pub async fn transactions(
         &f.tag_ids,
         f.limit,
         f.offset,
+        f.include_transfers,
     )
     .fetch_all(pool)
     .await?;
@@ -1148,10 +1177,13 @@ pub async fn transaction_counts(
                    coalesce(t.category_source = 'ai'
                     and t.category_reviewed_at is null
                     and (t.category_confidence is null
-                         or t.category_confidence < $7), false) as needs_review
+                         or t.category_confidence < $7), false) as needs_review,
+                   coalesce(bc.system_key = 'internal_transfer', false)
+                     as is_internal_transfer
             from transaction t
             join account a    on a.id = t.account_id
             join connection c on c.id = a.connection_id
+            left join budget_category bc on bc.id = t.budget_category_id
             where c.user_id = $1
               and not (a.type_key = 'pea'
                        and t.external_id is not null
@@ -1169,6 +1201,7 @@ pub async fn transaction_counts(
                    coalesce(i.symbol, i.isin, i.name) as ticker,
                    a.id,
                    null::uuid,
+                   false,
                    false
             from lot l
             join holding h    on h.id = l.holding_id
@@ -1199,6 +1232,7 @@ pub async fn transaction_counts(
                          from budget_transaction_tag tt
                         where tt.transaction_id = rows.id
                           and tt.tag_id = any($12)) = cardinality($12))
+              and ($13::boolean or not is_internal_transfer)
         )
         select
           (select n from matching) as "matching!",
@@ -1234,6 +1268,7 @@ pub async fn transaction_counts(
         f.uncategorized,
         f.needs_review,
         &f.tag_ids,
+        f.include_transfers,
     )
     .fetch_one(pool)
     .await?;
@@ -1262,6 +1297,7 @@ pub async fn matching_transaction_ids(
         from transaction t
         join account a    on a.id = t.account_id
         join connection k on k.id = a.connection_id
+        left join budget_category bc on bc.id = t.budget_category_id
         where k.user_id = $1
           and not (a.type_key = 'pea'
                    and t.external_id is not null
@@ -1290,6 +1326,10 @@ pub async fn matching_transaction_ids(
                      from budget_transaction_tag tt
                     where tt.transaction_id = t.id
                       and tt.tag_id = any($12)) = cardinality($12))
+          -- `is distinct from`, not `<>`: an uncategorised row's `system_key`
+          -- is null, and a null comparison would drop the row instead of
+          -- keeping it.
+          and ($13::boolean or bc.system_key is distinct from 'internal_transfer')
         order by t.ts desc, t.id
         "#,
         user_id,
@@ -1304,6 +1344,7 @@ pub async fn matching_transaction_ids(
         f.needs_review,
         f.review_threshold,
         &f.tag_ids,
+        f.include_transfers,
     )
     .fetch_all(pool)
     .await?;

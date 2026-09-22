@@ -51,6 +51,7 @@ describe("transaction queries", () => {
           tagIds: ["t1"],
           uncategorized: true,
           needsReview: true,
+          includeTransfers: true,
         }),
       { wrapper: wrapper() },
     );
@@ -65,6 +66,7 @@ describe("transaction queries", () => {
     expect(url).toContain("tagIds=t1");
     expect(url).toContain("uncategorized=true");
     expect(url).toContain("needsReview=true");
+    expect(url).toContain("includeTransfers=true");
     expect(url).not.toContain("type=");
   });
 

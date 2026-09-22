@@ -24,7 +24,7 @@ function tx(over: Partial<Transaction>): Transaction {
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
     categoryConfidence: null, needsReview: false, checked: false, isTransfer: false,
-    tags: [], ...over,
+    isOrphanTransfer: false, tags: [], ...over,
   };
 }
 
@@ -40,6 +40,10 @@ let patchBodies: unknown[] = [];
 let bulkBodies: unknown[] = [];
 let applyBodies: unknown[] = [];
 let sameDescriptionCount = 0;
+// What the bulk and apply-to-description endpoints report back as the number
+// of internal-transfer pairs an unconfirmed write would dissolve. 0 means the
+// write goes straight through, which is every other test in this file.
+let pendingPairBreaks = 0;
 // Forces the row-patch endpoint to fail, to exercise `usePatchTransaction`'s
 // rollback — every other test in this file only ever sees a 200.
 let patchShouldFail = false;
@@ -76,11 +80,19 @@ function stubFetch() {
       if (u.includes("/transactions/counts")) return json({ matching: 2, total: 2, uncategorized: 2 });
       if (u.includes("/apply-to-description")) {
         applyBodies.push(body);
+        const confirmed = (body as { confirmBreakPairs?: boolean } | undefined)?.confirmBreakPairs;
+        if (pendingPairBreaks > 0 && !confirmed) {
+          return json({ updated: 0, pendingPairBreaks });
+        }
         return json({ updated: 4 });
       }
       if (u.includes("/transactions/bulk")) {
         bulkBodies.push(body);
         if (bulkShouldFail) return errorJson();
+        const confirmed = (body as { confirmBreakPairs?: boolean } | undefined)?.confirmBreakPairs;
+        if (pendingPairBreaks > 0 && !confirmed) {
+          return json({ updated: 0, pendingPairBreaks });
+        }
         return json({ updated: 2 });
       }
       if (/\/transactions\/[^/?]+$/.test(u) && init?.method === "PATCH") {
@@ -139,6 +151,7 @@ describe("TransactionsMode", () => {
     bulkBodies = [];
     applyBodies = [];
     sameDescriptionCount = 0;
+    pendingPairBreaks = 0;
     patchShouldFail = false;
     bulkShouldFail = false;
     serverRowsState = ROWS.map((r) => ({ ...r, tags: [...r.tags] }));
@@ -308,5 +321,93 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
     expect(screen.getByTestId("bulk-result")).toHaveTextContent("2");
+  });
+
+  // -------------------------------------------------------------------------
+  // Breaking an internal-transfer pair
+  //
+  // Recategorising half of an auto-paired transfer dissolves the pair on both
+  // sides. That is destructive enough to confirm, and the count can only come
+  // from the server for a bulk write, whose target set the client may never
+  // have loaded.
+  // -------------------------------------------------------------------------
+
+  it("confirms before recategorising half of an auto-paired transfer", async () => {
+    serverRowsState = [tx({ id: "t1", isTransfer: true })];
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+
+    await screen.findByTestId("break-pair-modal");
+    expect(patchBodies).toEqual([]);
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro" }]));
+    await settle(client);
+  });
+
+  it("writes nothing when the pair-break confirmation is declined", async () => {
+    serverRowsState = [tx({ id: "t1", isTransfer: true })];
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+    await screen.findByTestId("break-pair-modal");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
+    await settle(client);
+    expect(patchBodies).toEqual([]);
+  });
+
+  it("re-sends a bulk write with confirmation once the server reports pair breaks", async () => {
+    pendingPairBreaks = 3;
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("tx-select")[0]);
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+
+    // The first attempt came back refused, not applied.
+    const modal = await screen.findByTestId("break-pair-modal");
+    expect(modal).toHaveTextContent("3");
+    expect(bulkBodies).toEqual([{ ids: ["t1"], categoryId: "gro" }]);
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    await waitFor(() => expect(bulkBodies).toHaveLength(2));
+    expect(bulkBodies[1]).toEqual({ ids: ["t1"], categoryId: "gro", confirmBreakPairs: true });
+    await settle(client);
+  });
+
+  it("does not report a refused bulk write as rows updated", async () => {
+    pendingPairBreaks = 3;
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("tx-select")[0]);
+    fireEvent.click(screen.getByLabelText(/assign a category/i));
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+    await screen.findByTestId("break-pair-modal");
+
+    expect(screen.queryByTestId("bulk-updated")).toBeNull();
+    await settle(client);
+  });
+
+  it("confirms before an apply-to-description breaks pairs", async () => {
+    sameDescriptionCount = 4;
+    pendingPairBreaks = 2;
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+    fireEvent.click(await screen.findByTestId("apply-to-all-confirm"));
+
+    const modal = await screen.findByTestId("break-pair-modal");
+    expect(modal).toHaveTextContent("2");
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    await waitFor(() => expect(applyBodies).toHaveLength(2));
+    expect(applyBodies[1]).toEqual({ categoryId: "gro", confirmBreakPairs: true });
+    await settle(client);
   });
 });

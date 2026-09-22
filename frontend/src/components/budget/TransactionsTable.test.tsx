@@ -11,7 +11,7 @@ function tx(over: Partial<Transaction>): Transaction {
     accountColor: null, source: "cash", ticker: null, quantity: null, unitPrice: null,
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
-    categoryConfidence: null, needsReview: false, checked: false, isTransfer: false,
+    categoryConfidence: null, needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false,
     tags: [], ...over,
   };
 }

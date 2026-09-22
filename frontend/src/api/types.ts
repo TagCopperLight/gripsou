@@ -260,6 +260,10 @@ export type Transaction = {
   checked: boolean;
   /** One half of an auto-paired internal transfer. */
   isTransfer: boolean;
+  /** The pairing pass categorised this row but the link is gone — someone
+   *  corrected the other half, so this one nets against nothing. Mutually
+   *  exclusive with `isTransfer` by construction. */
+  isOrphanTransfer: boolean;
   tags: TransactionTag[];
 };
 
@@ -278,6 +282,9 @@ export type TransactionQuery = {
   tagIds?: string[];
   uncategorized?: boolean;
   needsReview?: boolean;
+  /** Internal transfers are hidden unless this is set — the only filter here
+   *  whose absence means *less* than everything. */
+  includeTransfers?: boolean;
   limit?: number;
   offset?: number;
 };

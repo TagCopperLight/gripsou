@@ -46,6 +46,8 @@ export function ActiveFilterChips() {
         return t("budget.uncategorized");
       case "needsReview":
         return t("budget.needsReview");
+      case "transfers":
+        return t("budget.transfers");
     }
   };
 
@@ -61,7 +63,8 @@ export function ActiveFilterChips() {
   /** Same reasoning for the two OTHERS flags: they have an icon rather than a
    *  colour, the one the panel draws, in the same amber. */
   const FlagIcon = (a: ActiveFilter) => {
-    if (a.kind !== "uncategorized" && a.kind !== "needsReview") return null;
+    if (a.kind !== "uncategorized" && a.kind !== "needsReview" && a.kind !== "transfers")
+      return null;
     const { icon: Icon, tint, strokeWidth } = otherFlag(a.kind);
     return (
       <Icon className={`size-3 shrink-0 ${tint}`} strokeWidth={strokeWidth} aria-hidden="true" />

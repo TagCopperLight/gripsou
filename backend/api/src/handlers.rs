@@ -429,6 +429,8 @@ pub struct TransactionParams {
     pub tag_ids: Option<String>,
     pub uncategorized: Option<bool>,
     pub needs_review: Option<bool>,
+    /// Absent means hide internal transfers — the list's default.
+    pub include_transfers: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -452,6 +454,9 @@ pub fn filters_from_params(
         tag_ids: crate::budget::parse_ids(p.tag_ids.as_deref())?,
         uncategorized: p.uncategorized.unwrap_or(false),
         needs_review: p.needs_review.unwrap_or(false),
+        // Hidden unless asked for: unlike every other filter here, the
+        // default is *not* "everything".
+        include_transfers: p.include_transfers.unwrap_or(false),
         review_threshold: crate::budget::default_review_threshold(),
         // Capped so a crafted `limit` cannot ask for the whole ledger at once.
         limit: p.limit.unwrap_or(200).clamp(1, 500),

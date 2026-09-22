@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ArrowUpDown, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowUpDown, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
 
 import { TransactionAvatar } from "./TransactionAvatar";
 import { CategoryChip } from "./CategoryChip";
@@ -155,6 +155,16 @@ export function TransactionRow({
               <p data-testid="tx-transfer-note" className="flex items-center gap-1 text-xs text-fg-faint">
                 <ArrowUpDown className="size-3" />
                 {t("budget.transactions.autoPaired")}
+              </p>
+            )}
+            {/* The pair was dissolved when someone recategorised the other
+                half, leaving this one reading as a transfer while netting
+                against nothing. Amber, not faint: unlike the note above it
+                asks for a correction rather than explaining a settled state. */}
+            {tx.isOrphanTransfer && (
+              <p data-testid="tx-orphan-note" className="flex items-center gap-1 text-xs text-amber">
+                <TriangleAlert className="size-3 shrink-0" />
+                {t("budget.transactions.orphanTransfer")}
               </p>
             )}
           </div>

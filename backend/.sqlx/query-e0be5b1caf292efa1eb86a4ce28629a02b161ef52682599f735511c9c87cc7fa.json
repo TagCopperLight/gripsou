@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with victims as (\n            select id, transfer_pair_id\n            from transaction\n            where id = any($1) and transfer_pair_id is not null\n        )\n        update transaction t\n           set transfer_pair_id = null\n         where t.id in (select id from victims)\n            or t.id in (select transfer_pair_id from victims)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0be5b1caf292efa1eb86a4ce28629a02b161ef52682599f735511c9c87cc7fa"
+}

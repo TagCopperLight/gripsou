@@ -12,6 +12,7 @@ function tx(over: Partial<Transaction>): Transaction {
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
     categoryConfidence: null, needsReview: false, checked: false, isTransfer: false,
+    isOrphanTransfer: false,
     tags: [], ...over,
   };
 }
@@ -63,7 +64,7 @@ describe("TransactionRow", () => {
       categoryColor: "#9bb06b", categoryKind: "expense", categorySource: "ai",
       categoryConfidence: "0.42", needsReview: true,
     });
-    expect(screen.getByTestId("category-chip").className).toContain("border-dotted");
+    expect(screen.getByTestId("category-chip").className).toContain("outline-dashed");
   });
 
   it("dims an internal transfer and says it was auto paired", () => {
@@ -171,5 +172,21 @@ describe("TransactionRow", () => {
     });
     expect(screen.queryByTestId("tx-add-tag")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add tags" })).toBeNull();
+  });
+
+  it("warns that an orphaned transfer no longer nets out", () => {
+    renderRow({
+      isOrphanTransfer: true, categoryId: "c1", categoryName: "Internal transfer",
+      categoryColor: "#9bb06b", categorySource: "pair",
+    });
+    expect(screen.getByTestId("tx-orphan-note")).toBeVisible();
+    expect(screen.queryByTestId("tx-transfer-note")).not.toBeInTheDocument();
+  });
+
+  // An orphan is a row that wants attention. Dimming it — which is what marks a
+  // live transfer as already handled — would work against the warning.
+  it("does not dim an orphaned transfer", () => {
+    renderRow({ isOrphanTransfer: true, categorySource: "pair" });
+    expect(screen.getByTestId("tx-description").className).not.toContain("opacity-60");
   });
 });
