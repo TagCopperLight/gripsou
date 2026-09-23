@@ -909,7 +909,11 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
 
     // Both halves are seeded with the same description ("VIREMENT"), so this
     // sweeps up the counterpart as well as the row it was launched from.
-    assert!(apply_category_to_same_description(&pool, user_id, out, Some(groceries)).await? >= 1);
+    assert!(
+        !apply_category_to_same_description(&pool, user_id, out, Some(groceries))
+            .await?
+            .is_empty()
+    );
 
     assert_eq!(row(&pool, out).await?.1, None);
     assert_eq!(row(&pool, inn).await?.1, None);

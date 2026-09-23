@@ -37,7 +37,7 @@ export function Budget() {
       value: "review",
       label: attention ? (
         <span data-testid="review-segment" className="inline-flex items-center gap-1 text-amber">
-          <Sparkles className="size-3.5" aria-hidden />
+          <Sparkles className="size-3.5" strokeWidth={1.5} aria-hidden />
           {reviewCount}
         </span>
       ) : (
