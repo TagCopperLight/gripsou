@@ -176,6 +176,13 @@ async fn run_locked(
                 let decisions = decide(&req.items, out.guesses);
                 let written = repo::write_decisions(pool, &decisions).await?;
                 rec.items += written as i32;
+                // Merchants are best-effort: a logo is decoration, and a
+                // failure here must not undo categories already written.
+                if let Err(e) =
+                    crate::repo::budget::memo::record_ai_merchants(pool, user_id, &decisions).await
+                {
+                    tracing::warn!("merchant memo not recorded for {user_id}: {e}");
+                }
                 // Every row of a chunk is either written or was taken by
                 // someone else meanwhile; neither comes back. Zero written
                 // means something is wrong with the guard — stop rather

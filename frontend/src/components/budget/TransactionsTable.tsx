@@ -27,6 +27,7 @@ type TransactionsTableProps = {
   onOpenCategory: (tx: Transaction, anchor: HTMLElement) => void;
   onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
+  onOpenMerchant?: (tx: Transaction) => void;
 };
 
 /** Nothing shifts when a filter changes the content (§2.3): the column tracks
@@ -168,6 +169,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
                 onOpenCategory={props.onOpenCategory}
                 onOpenTags={props.onOpenTags}
                 onToggleChecked={props.onToggleChecked}
+                onOpenMerchant={props.onOpenMerchant}
               />
             ))}
           </tbody>

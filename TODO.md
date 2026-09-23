@@ -66,7 +66,7 @@
     - [x] Transactions mode
     - [x] AI categorisation and the review queue
     - [ ] Model name list from provider
-    - [ ] Merchant logos and the memo
+    - [x] Merchant logos and the memo
     - [ ] Rules engine
     - [ ] Transactions reconciliation
     - [ ] Infer lots

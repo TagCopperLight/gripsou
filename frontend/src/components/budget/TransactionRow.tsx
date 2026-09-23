@@ -23,6 +23,7 @@ type TransactionRowProps = {
   onOpenCategory: (tx: Transaction, anchor: HTMLElement) => void;
   onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
+  onOpenMerchant?: (tx: Transaction) => void;
 };
 
 /** Everything the row's cells share, applied from the `<tr>`.
@@ -59,7 +60,7 @@ const CELL = [
 
 export function TransactionRow({
   tx, showChecked, selected, anySelected,
-  onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
+  onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked, onOpenMerchant,
 }: TransactionRowProps) {
   const { t } = useTranslation();
   const isLot = tx.source === "lot";
@@ -123,7 +124,20 @@ export function TransactionRow({
           )}
           <div className={`min-w-0 flex-1 ${dim}`}>
             <p data-testid="tx-description" className="truncate uppercase text-fg">
-              {isLot ? (tx.ticker ?? "") : (tx.description ?? "")}
+              {isLot ? (
+                tx.ticker ?? ""
+              ) : onOpenMerchant ? (
+                <button
+                  type="button"
+                  title={t("budget.merchant.edit")}
+                  className="max-w-full truncate text-left uppercase hover:underline"
+                  onClick={() => onOpenMerchant(tx)}
+                >
+                  {tx.description ?? ""}
+                </button>
+              ) : (
+                tx.description ?? ""
+              )}
             </p>
             {isLot && (
               <p data-testid="tx-lot-line" className="flex items-center gap-1 text-xs text-fg-faint">

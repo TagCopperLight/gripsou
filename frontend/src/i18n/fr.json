@@ -464,6 +464,18 @@
     "needsReview": "À vérifier",
     "transfers": "Virements internes",
     "tagLabel": "Étiquette {{name}}",
+    "merchant": {
+      "title": "Commerçant",
+      "edit": "Modifier le commerçant",
+      "name": "Nom",
+      "domain": "Site web",
+      "domainHint": "Le domaine web du commerçant, par ex. leclerc.fr. Il corrige le logo de toutes les transactions ayant ce libellé.",
+      "invalidDomain": "Ce n'est pas un domaine web.",
+      "noIdentity": "Ce libellé ne permet pas d'identifier un commerçant.",
+      "saveFailed": "Impossible d'enregistrer le commerçant.",
+      "save": "Enregistrer",
+      "cancel": "Annuler"
+    },
     "kinds": {
       "expense": "Dépense",
       "income": "Revenu",

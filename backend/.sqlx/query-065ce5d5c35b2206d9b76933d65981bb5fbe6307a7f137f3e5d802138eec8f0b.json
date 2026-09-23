@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into budget_memo (user_id, norm_description, origin, merchant_name, merchant_domain)\n        values ($1, $2, 'user', $3, $4)\n        on conflict (user_id, norm_description) do update\n           set origin = 'user',\n               merchant_name = excluded.merchant_name,\n               merchant_domain = excluded.merchant_domain,\n               updated_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "065ce5d5c35b2206d9b76933d65981bb5fbe6307a7f137f3e5d802138eec8f0b"
+}

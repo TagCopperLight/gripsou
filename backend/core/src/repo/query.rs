@@ -871,6 +871,12 @@ pub struct TransactionListRow {
     /// user categorised by hand never had a link (spec §5.2) and must not be
     /// flagged forever.
     pub is_orphan_transfer: bool,
+
+    /// From `budget_memo`, keyed on the normalised description: the AI's
+    /// answer or the user's correction. Null on lot rows and on rows whose
+    /// description normalises to `''`.
+    pub merchant_name: Option<String>,
+    pub merchant_domain: Option<String>,
 }
 
 /// The TYPE control on the filter panel: one value, always one selected.
@@ -1120,16 +1126,27 @@ pub async fn transactions(
                source as "source!", ticker, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color, account_currency as "account_currency!",
-               category_id, category_name, category_default_key, category_color,
+               filtered.category_id, category_name, category_default_key, category_color,
                category_icon, category_kind, category_source, category_confidence,
                needs_review as "needs_review!", checked as "checked!",
                is_transfer as "is_transfer!",
-               is_orphan_transfer as "is_orphan_transfer!"
+               is_orphan_transfer as "is_orphan_transfer!",
+               bm.merchant_name, bm.merchant_domain
         from filtered
         left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date
                           and afx.currency = filtered.account_currency
         left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date
                           and rfx.currency = (select code from reporting)
+        -- Joined here, after the page cut, not inside `rows`: this way the
+        -- four regexp_replace calls in budget_norm_description run on at
+        -- most `limit` rows instead of the user's whole history. A lot row's
+        -- `description` is null, so `budget_norm_description(null)` is null
+        -- and never matches `<> ''`, leaving merchant_name/domain null there
+        -- too — same as before.
+        left join budget_memo bm
+               on bm.user_id = $1
+              and bm.norm_description = budget_norm_description(filtered.description)
+              and budget_norm_description(filtered.description) <> ''
         order by ts desc, id
         "#,
         user_id,
