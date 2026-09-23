@@ -6,7 +6,7 @@ use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
     BulkChanges, apply_category_to_same_description, bulk_add_tags, bulk_apply, bulk_set_category,
     bulk_set_checked, count_paired_same_description, count_same_description, set_category,
-    set_checked, set_note, set_tags,
+    set_checked, set_tags,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -151,40 +151,6 @@ async fn checked_is_a_timestamp_the_engine_never_reads(pool: PgPool) -> anyhow::
             .fetch_one(&pool)
             .await?;
     assert!(cleared.is_none());
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn set_note_sets_trims_and_clears(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
-
-    assert!(set_note(&pool, user_id, ids[0], Some("  buy milk  ")).await?);
-    let stored: Option<String> = sqlx::query_scalar("select note from transaction where id = $1")
-        .bind(ids[0])
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(stored.as_deref(), Some("buy milk"), "trimmed on write");
-
-    assert!(set_note(&pool, user_id, ids[0], Some("   ")).await?);
-    let cleared: Option<String> = sqlx::query_scalar("select note from transaction where id = $1")
-        .bind(ids[0])
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(cleared, None, "whitespace-only clears it");
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn set_note_is_false_for_another_users_transaction(pool: PgPool) -> anyhow::Result<()> {
-    let (_user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
-    let (stranger, _c) = seed_user_and_connection(&pool).await;
-
-    assert!(!set_note(&pool, stranger, ids[0], Some("not yours")).await?);
-    let stored: Option<String> = sqlx::query_scalar("select note from transaction where id = $1")
-        .bind(ids[0])
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(stored, None, "a stranger's write never lands");
     Ok(())
 }
 

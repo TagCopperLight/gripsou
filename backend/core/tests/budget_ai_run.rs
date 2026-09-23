@@ -83,7 +83,6 @@ fn first_candidate(conf: Decimal) -> Script {
                     key: it.key,
                     category_id: it.candidates.first().copied(),
                     confidence: Some(conf),
-                    merchant: None,
                 })
                 .collect(),
             tokens_in: Some(10),
@@ -102,7 +101,6 @@ fn abstain_all() -> Script {
                     key: it.key,
                     category_id: None,
                     confidence: None,
-                    merchant: None,
                 })
                 .collect(),
             ..Default::default()
@@ -367,36 +365,5 @@ async fn a_held_lock_makes_the_call_a_no_op(pool: PgPool) -> anyhow::Result<()> 
         1
     );
     assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn the_run_records_merchants(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _) = ledger(&pool, &[("CB LECLERC 0412", -1200)]).await?;
-    let with_merchant: Script = Box::new(|req| {
-        Ok(CategorizeOutput {
-            guesses: req
-                .items
-                .iter()
-                .map(|it| Guess {
-                    key: it.key,
-                    category_id: it.candidates.first().copied(),
-                    confidence: Some(Decimal::ONE),
-                    merchant: Some(gripsou_core::categorize::Merchant {
-                        name: Some("Leclerc".into()),
-                        domain: Some("leclerc.fr".into()),
-                    }),
-                })
-                .collect(),
-            ..Default::default()
-        })
-    });
-    run_for_user(&pool, user_id, &Mock::new(50, vec![with_merchant])).await?;
-    let domain: String =
-        sqlx::query_scalar("select merchant_domain from budget_memo where user_id = $1")
-            .bind(user_id)
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(domain, "leclerc.fr");
     Ok(())
 }

@@ -103,7 +103,6 @@ pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Guess, i32, i32) {
             key: item.key,
             category_id,
             confidence,
-            merchant: None,
         },
         tin,
         tout,

@@ -13,7 +13,6 @@ function tx(over: Partial<Transaction>): Transaction {
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
     categoryConfidence: null, needsReview: false, checked: false, isTransfer: false,
     isOrphanTransfer: false,
-    merchantDomain: null, merchantLogoUrl: null, note: null,
     tags: [], ...over,
   };
 }
@@ -24,7 +23,6 @@ function renderRow(over: Partial<Transaction> = {}, props: Record<string, unknow
     onOpenCategory: vi.fn(),
     onOpenTags: vi.fn(),
     onToggleChecked: vi.fn(),
-    onOpenMerchant: vi.fn(),
   };
   render(
     <table>
@@ -176,14 +174,8 @@ describe("TransactionRow", () => {
     expect(screen.queryByRole("button", { name: "Add tags" })).toBeNull();
   });
 
-  it("opens the merchant modal when the description is clicked", () => {
-    const h = renderRow();
-    fireEvent.click(screen.getByText("ALDI SARL 1234"));
-    expect(h.onOpenMerchant).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
-  });
-
-  it("renders the description as plain text when onOpenMerchant is absent", () => {
-    renderRow({}, { onOpenMerchant: undefined });
+  it("renders the description as plain, non-clickable text", () => {
+    renderRow();
     const description = screen.getByText("ALDI SARL 1234");
     expect(description.tagName).not.toBe("BUTTON");
     expect(screen.queryByRole("button", { name: "ALDI SARL 1234" })).toBeNull();

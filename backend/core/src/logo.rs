@@ -75,25 +75,9 @@ pub fn institution_logo_url(institution_key: Option<&str>) -> Option<String> {
     )))
 }
 
-/// Logo URL for a merchant domain (phase 5 spec §7). Same Brandfetch
-/// parameters as institutions, including `fallback/404`, which the frontend
-/// turns into the category icon.
-pub fn merchant_logo_url(domain: &str) -> String {
-    brandfetch_decorate(&format!("https://cdn.brandfetch.io/{domain}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn merchant_logo_uses_the_same_brandfetch_params() {
-        let url = merchant_logo_url("leclerc.fr");
-        assert!(
-            url.starts_with("https://cdn.brandfetch.io/leclerc.fr/fallback/404/theme/light"),
-            "got {url}"
-        );
-    }
 
     #[test]
     fn decorate_uses_instrument_logo_params() {

@@ -71,19 +71,12 @@ impl CategorizeRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Merchant {
-    pub name: Option<String>,
-    pub domain: Option<String>,
-}
-
 /// An adapter's answer for one item. `category_id: None` is an abstention.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Guess {
     pub key: Uuid,
     pub category_id: Option<Uuid>,
     pub confidence: Option<Decimal>,
-    pub merchant: Option<Merchant>,
 }
 
 #[derive(Debug, Clone, Default)]

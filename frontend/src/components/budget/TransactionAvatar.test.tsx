@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import { TransactionAvatar } from "./TransactionAvatar";
 import type { Transaction } from "../../api/types";
@@ -13,7 +13,7 @@ function tx(over: Partial<Transaction> = {}): Transaction {
     categoryId: null, categoryName: null, categoryDefaultKey: null, categoryColor: null,
     categoryIcon: null, categoryKind: null, categorySource: null, categoryConfidence: null,
     needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false,
-    merchantDomain: null, merchantLogoUrl: null, note: null, tags: [], ...over,
+    tags: [], ...over,
   };
 }
 
@@ -41,18 +41,5 @@ describe("TransactionAvatar", () => {
       />,
     );
     expect(screen.getByTestId("tx-avatar").style.color).toBe("rgb(174, 170, 167)");
-  });
-
-  it("shows the merchant logo when there is one", () => {
-    render(<TransactionAvatar tx={{ ...tx(), merchantLogoUrl: "https://cdn.brandfetch.io/leclerc.fr/x" }} />);
-    expect(screen.getByTestId("tx-avatar")).toHaveAttribute("data-variant", "merchant");
-    expect(screen.getByRole("presentation")).toHaveAttribute("src", "https://cdn.brandfetch.io/leclerc.fr/x");
-  });
-
-  it("falls back to the category icon when the logo fails to load", () => {
-    render(<TransactionAvatar tx={{ ...tx({ categoryId: "c1", categoryIcon: "shopping-cart", categoryColor: "#34d399" }),
-      merchantLogoUrl: "https://cdn.brandfetch.io/nope.fr/x" }} />);
-    fireEvent.error(screen.getByRole("presentation"));
-    expect(screen.getByTestId("tx-avatar")).toHaveAttribute("data-variant", "category");
   });
 });

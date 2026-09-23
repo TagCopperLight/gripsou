@@ -1,7 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::categorize::{
     CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example,
-    Merchant,
 };
 use gripsou_providers::gemini::GeminiCategorizer;
 use rust_decimal::Decimal;
@@ -76,13 +75,6 @@ async fn maps_the_answer_array_back_onto_items() {
     assert_eq!(first.key, Uuid::from_u128(1));
     assert_eq!(first.category_id, Some(Uuid::parse_str(GROCERIES).unwrap()));
     assert_eq!(first.confidence, Some(Decimal::new(91, 2)));
-    assert_eq!(
-        first.merchant,
-        Some(Merchant {
-            name: Some("Leclerc".into()),
-            domain: Some("leclerc.fr".into())
-        })
-    );
     assert_eq!(out.guesses[1].key, Uuid::from_u128(2));
     assert_eq!(out.guesses[1].category_id, None);
 }

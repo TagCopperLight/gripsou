@@ -108,7 +108,6 @@ async fn one_choice_request_per_item_keyed_by_candidate_ids() {
         Some(Uuid::parse_str(GROCERIES).unwrap())
     );
     assert_eq!(out.guesses[0].confidence, Some(Decimal::new(9, 1)));
-    assert_eq!(out.guesses[0].merchant, None);
     assert_eq!(out.tokens_in, Some(600));
     assert_eq!(out.tokens_out, Some(60));
 }
