@@ -39,7 +39,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   privateMode: false,
   showChecked: false,
   budgetAiEnabled: false,
-  budgetAiThreshold: 80,
+  budgetAiThreshold: 70,
 };
 
 let current: UserPrefs = DEFAULT_PREFS;

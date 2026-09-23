@@ -32,7 +32,7 @@ async fn an_unknown_provider_is_rejected_by_the_schema(pool: PgPool) -> anyhow::
 #[sqlx::test(migrations = "../migrations")]
 async fn threshold_and_opt_in_come_from_prefs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed_user_and_connection(&pool).await;
-    assert_eq!(review_threshold(&pool, user_id).await?, Decimal::new(80, 2));
+    assert_eq!(review_threshold(&pool, user_id).await?, Decimal::new(70, 2));
     assert!(!budget_ai_enabled(&pool, user_id).await?);
 
     sqlx::query(
