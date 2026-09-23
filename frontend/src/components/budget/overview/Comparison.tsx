@@ -50,18 +50,19 @@ export function Comparison({
   const asPercent = format === "percent" && base !== 0;
 
   return (
-    <span
-      data-testid={testId}
-      data-tone={tone}
-      className={`flex items-center gap-0.5 text-xs ${TONE[tone]}`}
-    >
-      <Icon className="size-3.5 shrink-0" />
-      {asPercent ? (
-        <Percent value={delta / Math.abs(base)} signed />
-      ) : (
-        <Money value={String(delta)} signed />
-      )}
-      <span className="ml-1 truncate text-fg-faint">{label}</span>
+    // `contents`: the delta and the label are the two cells of the parent's
+    // two-column grid, so every "vs …" label in a figure starts at the same x
+    // however wide the delta beside it is.
+    <span data-testid={testId} data-tone={tone} className="contents text-xs">
+      <span className={`flex items-center gap-0.5 ${TONE[tone]}`}>
+        <Icon className="size-3.5 shrink-0" />
+        {asPercent ? (
+          <Percent value={delta / Math.abs(base)} signed />
+        ) : (
+          <Money value={String(delta)} signed />
+        )}
+      </span>
+      <span className="truncate text-fg-faint">{label}</span>
     </span>
   );
 }

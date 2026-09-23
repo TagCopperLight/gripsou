@@ -621,7 +621,7 @@
       "vsPrevMonth": "vs previous month",
       "vsAvg12": "vs 12-month average",
       "sankey": {
-        "title": "Where the money went",
+        "title": "Cash flow",
         "seeTransactions": "See transactions",
         "notSpent": "Not spent",
         "drawnFromSavings": "Drawn from savings"
@@ -631,6 +631,7 @@
         "category": "Category",
         "amount": "Amount",
         "share": "Share",
+        "txnCount": "Transactions",
         "vsAvg12": "vs 12 month avg",
         "open": "Open these transactions"
       },

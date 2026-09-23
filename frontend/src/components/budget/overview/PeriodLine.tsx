@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarRange, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { RangeModal } from "./RangeModal";
 import { useBudget } from "../budgetContext";
@@ -97,15 +97,15 @@ export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps
         type="button"
         data-testid="period-range"
         onClick={() => setRangeOpen(true)}
-        className={`flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors duration-140 ${
-          isRange ? "bg-amber-soft text-amber" : "bg-surface text-fg-dim hover:text-fg"
+        className={`flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-140 ${
+          isRange ? "bg-amber-soft text-amber" : "bg-surface text-fg hover:opacity-80"
         }`}
       >
-        <CalendarRange className="size-4" />
+        <Calendar className="size-4" />
         {t("budget.overview.range")}
       </button>
 
-      <span data-testid="period-count" className="text-sm text-fg-faint">
+      <span data-testid="period-count" className="text-[12.5px] text-fg-faint">
         {t("budget.overview.transactionCount", { count: txnCount })}
       </span>
 

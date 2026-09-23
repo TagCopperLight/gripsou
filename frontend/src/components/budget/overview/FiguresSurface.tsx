@@ -45,7 +45,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
         value={figure.amount}
         className={`text-2xl font-semibold tracking-tight ${spec.tone}`}
       />
-      <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 text-xs">
         <Comparison
           testId={`cmp-${name}-prevMonth`}
           label={t("budget.overview.vsPrevMonth")}

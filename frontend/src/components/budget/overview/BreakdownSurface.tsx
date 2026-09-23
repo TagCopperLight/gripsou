@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Surface } from "../../Surface";
 import { Money } from "../../Money";
@@ -9,7 +9,8 @@ import { CategoryChip } from "../CategoryChip";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
 import type { BreakdownRow, Slice } from "../../../api/overview";
 
-type SortKey = "category" | "amount" | "share" | "avg12";
+type SortKey = "category" | "amount" | "txnCount";
+type ColKey = SortKey | "share" | "avg12";
 
 type BreakdownSurfaceProps = {
   rows: BreakdownRow[];
@@ -38,8 +39,12 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
 
   const total = Number(expensesTotal);
 
+  // Same behaviour as the holdings table: a new column starts in its natural
+  // direction (A→Z for names, largest first for figures), a second click flips.
   const toggle = (key: SortKey) =>
-    setSort((prev) => (prev.key === key ? { key, asc: !prev.asc } : { key, asc: false }));
+    setSort((prev) =>
+      prev.key === key ? { key, asc: !prev.asc } : { key, asc: key === "category" },
+    );
 
   // `other` is a rollup, not a peer: it stays pinned last however the real rows
   // are ordered, so the table always reads "…and everything else".
@@ -50,60 +55,79 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
     const dir = sort.asc ? 1 : -1;
     switch (sort.key) {
       case "category":
-        // Name order is alphabetical, so "ascending" means A→Z; the `dir` flip
-        // would otherwise make the default descending and read backwards.
         // `sliceLabel`, not `sliceChip(...)?.name`: the chip's own name falls
         // back to "" for uncategorised, which would sort it before every real
         // category instead of alongside them by its displayed label.
-        return -dir * sliceLabel(t, a.slice).localeCompare(sliceLabel(t, b.slice));
-      case "avg12": {
-        // `undefined` (no baseline) always sorts last, in EITHER direction —
-        // comparing two `undefined`s as `-Infinity - -Infinity` produced NaN,
-        // which `Array.sort` leaves in an unstable, direction-dependent spot
-        // (M6). Real values still compare (and flip) normally.
-        const va = vsAvg(a);
-        const vb = vsAvg(b);
-        if (va === undefined && vb === undefined) return 0;
-        if (va === undefined) return 1;
-        if (vb === undefined) return -1;
-        return dir * (va - vb);
-      }
+        return dir * sliceLabel(t, a.slice).localeCompare(sliceLabel(t, b.slice));
+      case "txnCount":
+        return dir * (a.txnCount - b.txnCount);
       default:
-        // SHARE is amount divided by one constant, so it orders identically.
         return dir * (Number(a.amount) - Number(b.amount));
     }
   });
 
-  const columns: { key: SortKey; labelKey: string; align: string }[] = [
-    { key: "category", labelKey: "category", align: "text-left" },
-    { key: "amount", labelKey: "amount", align: "text-right" },
-    { key: "share", labelKey: "share", align: "text-left" },
-    { key: "avg12", labelKey: "vsAvg12", align: "text-right" },
+  // CATEGORY is a fixed 40%; the figure columns shrink to their content
+  // (`w-px` grows to fit it); SHARE, the one column left without a width,
+  // takes whatever remains, so its bar grows with the table. `pad` is shared
+  // with the cells below so each head sits over its own column's figures.
+  // SHARE orders exactly like AMOUNT and the 12-month column is a ratio with
+  // gaps, so neither sorts.
+  const columns: { key: ColKey; labelKey: string; right: boolean; cls: string; pad: string; sort?: SortKey }[] = [
+    { key: "category", labelKey: "category", right: false, cls: "w-[40%]", pad: "pr-4", sort: "category" },
+    { key: "amount", labelKey: "amount", right: true, cls: "w-px", pad: "pr-4", sort: "amount" },
+    { key: "share", labelKey: "share", right: false, cls: "", pad: "pr-4" },
+    { key: "txnCount", labelKey: "txnCount", right: true, cls: "w-px", pad: "pr-10", sort: "txnCount" },
+    { key: "avg12", labelKey: "vsAvg12", right: true, cls: "w-px", pad: "" },
   ];
+  const pad = Object.fromEntries(columns.map((c) => [c.key, c.pad])) as Record<ColKey, string>;
 
   return (
     <Surface className="w-full">
       <div className="flex flex-col p-5">
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.breakdown.title")}</h2>
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[520px] border-collapse">
+          <table className="w-full min-w-[600px] border-collapse">
             <thead>
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={`pb-2 text-xs font-medium text-fg-faint uppercase ${c.align}`}
-                  >
-                    <button
-                      type="button"
-                      data-testid={`sort-${c.key}`}
-                      onClick={() => toggle(c.key)}
-                      className="cursor-pointer transition-colors duration-140 hover:text-fg"
+              {/* Same head treatment as every other table in the app: 11px
+               *  uppercase mono, faint, wide-tracked. */}
+              <tr className="font-mono text-[11px] tracking-wide text-fg-faint uppercase">
+                {columns.map((c) => {
+                  const active = c.sort !== undefined && sort.key === c.sort;
+                  return (
+                    <th
+                      key={c.key}
+                      className={`pb-2 font-medium whitespace-nowrap ${c.pad} ${c.cls} ${
+                        c.right ? "text-right" : "text-left"
+                      }`}
                     >
-                      {t(`budget.overview.breakdown.${c.labelKey}`)}
-                    </button>
-                  </th>
-                ))}
+                      {c.sort ? (
+                        <button
+                          type="button"
+                          data-testid={`sort-${c.sort}`}
+                          onClick={() => toggle(c.sort!)}
+                          // `uppercase` on the button itself: the browser's own
+                          // button style resets `text-transform`, so it is not
+                          // inherited from the row.
+                          className={`inline-flex h-4 cursor-pointer items-center gap-1 align-middle uppercase transition-colors duration-140 ${
+                            c.right ? "flex-row-reverse" : ""
+                          } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
+                        >
+                          {t(`budget.overview.breakdown.${c.labelKey}`)}
+                          {active &&
+                            (sort.asc ? (
+                              <ChevronUp className="size-3.5" />
+                            ) : (
+                              <ChevronDown className="size-3.5" />
+                            ))}
+                        </button>
+                      ) : (
+                        <span className="inline-flex h-4 items-center align-middle">
+                          {t(`budget.overview.breakdown.${c.labelKey}`)}
+                        </span>
+                      )}
+                    </th>
+                  );
+                })}
                 <th className="w-8" />
               </tr>
             </thead>
@@ -121,15 +145,19 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
                       linkable ? "cursor-pointer hover:bg-fg/4" : ""
                     }`}
                   >
-                    <td className="py-2 pr-4">
-                      <CategoryChip category={sliceChip(t, row.slice)} />
+                    <td className={`py-2 ${pad.category}`}>
+                      {/* Table cells ignore `min-width`; a block inside one
+                          does not, and holds the column open. */}
+                      <div className="min-w-40">
+                        <CategoryChip category={sliceChip(t, row.slice)} />
+                      </div>
                     </td>
-                    <td className="py-2 pr-4 text-right">
+                    <td className={`py-2 text-right whitespace-nowrap ${pad.amount}`}>
                       <Money value={row.amount} className="text-sm text-fg" />
                     </td>
-                    <td className="py-2 pr-4">
-                      <span className="flex items-center gap-2">
-                        <span className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-fg/10">
+                    <td className={`py-2 ${pad.share}`}>
+                      <span className="flex items-center gap-4">
+                        <span className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-fg/10">
                           <span
                             className="block h-full rounded-full"
                             style={{
@@ -149,7 +177,10 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
                         </span>
                       </span>
                     </td>
-                    <td className="py-2 text-right" data-testid="avg12">
+                    <td className={`py-2 text-right ${pad.txnCount}`} data-testid="txnCount">
+                      <span className="text-sm text-fg-dim">{row.txnCount}</span>
+                    </td>
+                    <td className="py-2 text-right whitespace-nowrap" data-testid="avg12">
                       {diff === undefined ? (
                         <span className="text-sm text-fg-faint">—</span>
                       ) : (

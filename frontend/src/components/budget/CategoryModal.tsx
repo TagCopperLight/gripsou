@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Dot, Pencil } from "lucide-react";
+import { Check, Pencil } from "lucide-react";
 
 import { BudgetDialog } from "./BudgetDialog";
+import { FilledDot } from "./FilledDot";
 import { Button } from "../Button";
 import {
   useCreateBudgetCategory,
@@ -115,7 +116,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           {PreviewIcon ? (
             <PreviewIcon className="size-5.5" style={{ color: previewColor }} />
           ) : (
-            <Dot className="size-5.5" style={{ color: previewColor }} />
+            <FilledDot className="size-5.5" style={{ color: previewColor }} />
           )}
         </span>
       }
@@ -217,7 +218,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
                 icon === null ? "ring-2 ring-fg" : "hover:scale-105"
               }`}
             >
-              <Dot className="size-4 text-fg-faint" />
+              <FilledDot className="size-4 text-fg-faint" />
             </button>
             {BUDGET_ICON_NAMES.map((n) => {
               const IconCmp = BUDGET_ICONS[n];

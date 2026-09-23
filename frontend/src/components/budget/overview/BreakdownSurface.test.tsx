@@ -57,6 +57,18 @@ describe("BreakdownSurface", () => {
     expect(rowIds()[0]).toBe("breakdown-row-cat:c2"); // Groceries
   });
 
+  it("shows each row's transaction count and sorts by it", () => {
+    renderTable();
+    expect(within(screen.getByTestId("breakdown-row-cat:c2")).getByTestId("txnCount")).toHaveTextContent("31");
+    fireEvent.click(screen.getByTestId("sort-txnCount"));
+    expect(rowIds()).toEqual([
+      "breakdown-row-cat:c2",
+      "breakdown-row-uncategorised",
+      "breakdown-row-cat:c1",
+      "breakdown-row-other",
+    ]);
+  });
+
   it("leaves the vs-12-month cell empty where the server sent no baseline", () => {
     renderTable();
     expect(
@@ -96,34 +108,12 @@ describe("BreakdownSurface", () => {
     expect(onOpen).toHaveBeenCalledWith(rows[0].slice);
   });
 
-  it("puts rows with no 12-month baseline last when sorting by vs-avg-12, in either direction (M6)", () => {
-    // Two rows share the "no baseline" state (uncategorised and Groceries,
-    // here given none) — before the fix, comparing two `undefined`s produced
-    // NaN, which Array.sort leaves in place unpredictably.
-    const withTwoBaselineless: BreakdownRow[] = [
-      { slice: cat("c1", "Rent"), amount: "1200.00", txnCount: 1, avg12: "1150.00" },
-      { slice: cat("c2", "Groceries"), amount: "420.00", txnCount: 31 },
-      { slice: { kind: "uncategorised" }, amount: "180.00", txnCount: 9 },
-      { slice: { kind: "other" }, amount: "140.00", txnCount: 12 },
-    ];
-    render(
-      <BreakdownSurface rows={withTwoBaselineless} expensesTotal="1940.00" onOpen={vi.fn()} />,
-    );
-
-    fireEvent.click(screen.getByTestId("sort-avg12"));
-    let ids = rowIds();
-    expect(ids[0]).toBe("breakdown-row-cat:c1");
-    expect(ids.slice(1, 3).sort()).toEqual(
-      ["breakdown-row-cat:c2", "breakdown-row-uncategorised"].sort(),
-    );
-    expect(ids.at(-1)).toBe("breakdown-row-other");
-
-    fireEvent.click(screen.getByTestId("sort-avg12"));
-    ids = rowIds();
-    expect(ids[0]).toBe("breakdown-row-cat:c1");
-    expect(ids.slice(1, 3).sort()).toEqual(
-      ["breakdown-row-cat:c2", "breakdown-row-uncategorised"].sort(),
-    );
-    expect(ids.at(-1)).toBe("breakdown-row-other");
+  it("sorts only by category, amount and transactions", () => {
+    renderTable();
+    expect(screen.getByTestId("sort-category")).toBeInTheDocument();
+    expect(screen.getByTestId("sort-amount")).toBeInTheDocument();
+    expect(screen.getByTestId("sort-txnCount")).toBeInTheDocument();
+    expect(screen.queryByTestId("sort-share")).toBeNull();
+    expect(screen.queryByTestId("sort-avg12")).toBeNull();
   });
 });

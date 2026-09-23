@@ -46,7 +46,8 @@ export function TrendSurface({
       padding: [10, 12],
       extraCssText: "border-radius:12px;box-shadow:none;",
       textStyle: { fontFamily: MONO },
-      axisPointer: { type: "shadow" },
+      // No hover band: the tooltip alone says which month is under the cursor.
+      axisPointer: { type: "none" },
       formatter: (params) => {
         const items = params as unknown as TooltipParam[];
         const dataIndex = items[0]?.dataIndex ?? 0;

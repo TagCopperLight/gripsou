@@ -69,6 +69,10 @@ export function SankeySurface({
           name: n.name,
           itemStyle: { color: n.color, borderWidth: 0 },
           label: {
+            // Destinations sit on the right edge, so their labels go on the
+            // inner side of the bar; on the default outer side they would be
+            // clipped by the chart's edge.
+            position: n.name.startsWith("out:") ? "left" : "right",
             color: n.color,
             fontFamily: MONO,
             fontSize: 11,
