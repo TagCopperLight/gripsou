@@ -190,7 +190,8 @@ export function usePatchTransaction() {
  *  Kept distinct from `updated: 0`: "wrote no rows" and "awaiting your
  *  confirmation" are different answers, and conflating them would silently
  *  swallow the confirmation step. */
-type WriteResult = { updated: number; pendingPairBreaks?: number };
+/** `ids` comes back from apply-to-description only: the rows it wrote. */
+type WriteResult = { updated: number; pendingPairBreaks?: number; ids?: string[] };
 
 export function useApplyToDescription() {
   const qc = useQueryClient();
@@ -307,7 +308,8 @@ export function useRequestCategorize() {
 export function useAcceptReview() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => postJson<void>(`/budget/review/${id}/accept`, {}),
+    mutationFn: (id: string) =>
+      postJson<{ sameDescriptionCount: number }>(`/budget/review/${id}/accept`, {}),
     onSettled: () => afterReviewChange(qc),
   });
 }

@@ -201,11 +201,12 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
     assert_eq!(count_same_description(&pool, user_id, ids[0]).await?, 1);
     assert_eq!(count_same_description(&pool, user_id, ids[2]).await?, 0);
 
-    assert_eq!(
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?,
-        2,
-        "the row itself and its twin"
-    );
+    let mut written =
+        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?;
+    written.sort();
+    let mut twins = vec![ids[0], ids[1]];
+    twins.sort();
+    assert_eq!(written, twins, "the row itself and its twin, by id");
     let categorised: i64 =
         sqlx::query_scalar("select count(*) from transaction where budget_category_id = $1")
             .bind(groceries)
@@ -266,7 +267,9 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
         .id;
 
     assert_eq!(
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?,
+        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+            .await?
+            .len(),
         0,
         "a blank-description anchor applies to nothing, including its blank-description sibling"
     );
@@ -292,8 +295,9 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     let (user_id, groceries, ids) = fixture(&pool, &["12345", "98765", "SPOTIFY"]).await?;
 
     let count = count_same_description(&pool, user_id, ids[0]).await?;
-    let applied =
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?;
+    let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+        .await?
+        .len();
 
     assert_eq!(
         count, 0,
@@ -348,8 +352,9 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         .id;
 
     let count = count_same_description(&pool, user_id, ids[0]).await?;
-    let applied =
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?;
+    let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+        .await?
+        .len();
 
     assert_eq!(
         count, 0,

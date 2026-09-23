@@ -368,8 +368,8 @@ pub async fn count_paired_same_description(
 }
 
 /// Applies the category to the row and to every transaction sharing its
-/// normalised description. Returns how many rows were written, the row itself
-/// included.
+/// normalised description. Returns the ids written, the row itself included —
+/// the review queue needs to know *which* of its lines this resolved.
 ///
 /// Mirrors `count_same_description`'s row set exactly, including its
 /// blank-description exclusion: a description that is null, empty, or
@@ -382,7 +382,7 @@ pub async fn apply_category_to_same_description(
     user_id: Uuid,
     txn_id: Uuid,
     category_id: Option<Uuid>,
-) -> Result<u64, CoreError> {
+) -> Result<Vec<Uuid>, CoreError> {
     let mut tx = pool.begin().await?;
     let written: Vec<Uuid> = sqlx::query_scalar!(
         r#"
@@ -414,10 +414,9 @@ pub async fn apply_category_to_same_description(
     )
     .fetch_all(&mut *tx)
     .await?;
-    let updated = written.len() as u64;
     dissolve_pairs(&mut tx, &written).await?;
     tx.commit().await?;
-    Ok(updated)
+    Ok(written)
 }
 
 /// What a bulk write changes. Every field is optional: a call may set a

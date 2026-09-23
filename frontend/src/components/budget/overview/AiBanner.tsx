@@ -34,7 +34,7 @@ export function AiBanner() {
   if (variant === "review") {
     return (
       <Surface className="flex items-center gap-3 px-5 py-4">
-        <Sparkles className="size-5 shrink-0 text-amber" aria-hidden />
+        <Sparkles className="size-5 shrink-0 text-amber" strokeWidth={1.5} aria-hidden />
         <p className="flex-1 text-sm text-fg">{t("budget.ai.reviewNeeded", { count: status.reviewCount })}</p>
         <Button
           variant="amber"

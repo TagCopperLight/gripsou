@@ -735,6 +735,10 @@ pub struct UpdatedResponse {
     /// that cannot tell them apart silently swallows the confirmation step.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_pair_breaks: Option<i64>,
+    /// The rows written, for apply-to-description only: the review queue
+    /// resolves those of its lines this swept up. A bulk write omits it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ids: Option<Vec<Uuid>>,
 }
 
 pub async fn apply_to_description(
@@ -751,15 +755,17 @@ pub async fn apply_to_description(
             return Ok(Json(UpdatedResponse {
                 updated: 0,
                 pending_pair_breaks: Some(breaks),
+                ids: None,
             }));
         }
     }
-    let updated = assign::apply_category_to_same_description(&pool, user_id, id, b.category_id)
+    let ids = assign::apply_category_to_same_description(&pool, user_id, id, b.category_id)
         .await
         .map_err(internal)?;
     Ok(Json(UpdatedResponse {
-        updated: updated as i64,
+        updated: ids.len() as i64,
         pending_pair_breaks: None,
+        ids: Some(ids),
     }))
 }
 
@@ -814,6 +820,7 @@ pub async fn bulk_transactions(
     Ok(Json(UpdatedResponse {
         updated: outcome.updated as i64,
         pending_pair_breaks: outcome.pending_pair_breaks,
+        ids: None,
     }))
 }
 
@@ -946,14 +953,29 @@ fn review_status(w: review::ReviewWrite) -> StatusCode {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptReviewResponse {
+    /// How many *other* transactions share this row's normalised description —
+    /// what the review line's "apply to N others" offers, as after a patch.
+    pub same_description_count: i64,
+}
+
 pub async fn accept_review(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    Ok(review_status(
-        review::accept(&pool, user_id, id).await.map_err(internal)?,
-    ))
+) -> Result<Json<AcceptReviewResponse>, (StatusCode, String)> {
+    match review::accept(&pool, user_id, id).await.map_err(internal)? {
+        review::ReviewWrite::Done => {}
+        other => return Err((review_status(other), String::new())),
+    }
+    let same_description_count = assign::count_same_description(&pool, user_id, id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(AcceptReviewResponse {
+        same_description_count,
+    }))
 }
 
 pub async fn undo_review(

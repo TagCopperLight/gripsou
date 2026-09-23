@@ -41,16 +41,27 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
           )}
         </p>
       </div>
-      <Money value={tx.amount} currency={tx.currency} signed className="text-fg" />
-      <CategoryChip category={category} needsReview={category !== null} />
-      <span className="w-12 text-right font-mono text-sm text-fg-dim">
+      {/* Fixed-width columns, so amounts, chips and buttons line up down the
+          list whatever the chip's label or whether a guess exists. */}
+      <Money value={tx.amount} currency={tx.currency} signed className="w-28 shrink-0 text-right text-fg" />
+      <div className="flex w-40 shrink-0">
+        <CategoryChip category={category} needsReview={category !== null} />
+      </div>
+      <span className="w-12 shrink-0 text-right font-mono text-sm text-fg-dim">
         {confidence === null ? "—" : `${confidence}%`}
       </span>
-      {category !== null && (
-        <Button variant="ghostStrong" disabled={busy} onClick={onAccept}>
-          {t("budget.review.accept")}
-        </Button>
-      )}
+      {/* A "no guess" row has nothing to accept: keep the button's slot, hidden,
+          so Correct stays in the same column as on every other line. */}
+      <Button
+        variant="ghostStrong"
+        disabled={busy || category === null}
+        onClick={onAccept}
+        className={category === null ? "invisible" : ""}
+        aria-hidden={category === null || undefined}
+        tabIndex={category === null ? -1 : undefined}
+      >
+        {t("budget.review.accept")}
+      </Button>
       <Button variant="ghost" disabled={busy} onClick={(e) => onCorrect(e.currentTarget)}>
         {t("budget.review.correct")}
       </Button>
