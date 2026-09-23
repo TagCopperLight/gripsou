@@ -8,7 +8,7 @@ import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
 import { formatDate } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
-import type { BudgetCategory } from "../../api/budget";
+import { categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
 import type { Transaction } from "../../api/types";
 
@@ -24,24 +24,6 @@ type TransactionRowProps = {
   onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
 };
-
-/** The row's own category, rebuilt from the flat fields the list endpoint
- *  sends, so `CategoryChip` can be reused verbatim from phase 2. */
-function categoryOf(tx: Transaction): BudgetCategory | null {
-  if (!tx.categoryId) return null;
-  return {
-    id: tx.categoryId,
-    name: tx.categoryName ?? "",
-    defaultKey: tx.categoryDefaultKey,
-    color: tx.categoryColor ?? "",
-    icon: tx.categoryIcon,
-    hint: null,
-    kind: tx.categoryKind ?? "expense",
-    systemKey: null,
-    archived: false,
-    txCount: 0,
-  };
-}
 
 /** Everything the row's cells share, applied from the `<tr>`.
  *
@@ -195,7 +177,7 @@ export function TransactionRow({
             className="min-w-0 cursor-pointer"
             aria-label={t("budget.transactions.setCategory")}
           >
-            <CategoryChip category={categoryOf(tx)} needsReview={tx.needsReview} />
+            <CategoryChip category={categoryOfTransaction(tx)} needsReview={tx.needsReview} />
           </button>
         )}
       </td>

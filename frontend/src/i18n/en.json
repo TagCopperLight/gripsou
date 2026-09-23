@@ -309,7 +309,12 @@
       "cors": "CORS origins",
       "corsHint": "Browser origins allowed to call the gripsou API. Add the address you use to reach this dashboard.",
       "corsPlaceholder": "https://gripsou.example.com",
-      "add": "Add"
+      "add": "Add",
+      "budgetAi": "Budget AI",
+      "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
+      "budgetAiProvider": "Provider",
+      "budgetAiModel": "Model",
+      "budgetAiOff": "off"
     },
     "connections": {
       "title": "Connections",
@@ -409,6 +414,14 @@
         "title": "List preferences",
         "showChecked": "Checked column",
         "showCheckedHint": "Adds a tick box to each transaction, for your own bookkeeping. It does not change categories."
+      },
+      "ai": {
+        "title": "AI categorisation",
+        "enable": "Categorise automatically",
+        "enableHint": "New and past transactions are sent to the AI provider your administrator configured.",
+        "threshold": "Review threshold",
+        "thresholdHint": "Guesses below this confidence go to the review queue.",
+        "notConfigured": "Ask your administrator to configure an AI provider."
       }
     }
   },
@@ -645,6 +658,31 @@
         "earlier": "Keep looking earlier"
       }
     },
-    "modes": { "overview": "Overview", "transactions": "Transactions" }
+    "modes": { "overview": "Overview", "transactions": "Transactions", "review": "Review" },
+    "review": {
+      "progress": "{{resolved}} / {{total}} resolved",
+      "title": "Low confidence guesses",
+      "belowThreshold": "below {{threshold}}% confidence",
+      "accept": "Accept",
+      "correct": "Correct",
+      "undo": "Undo",
+      "clearResolved": "Clear resolved",
+      "kept": "kept {{category}}",
+      "correctedTo": "corrected to {{category}}",
+      "noGuess": "no guess",
+      "hidesMoney": "hides money from totals",
+      "emptyTitle": "All caught up",
+      "emptyBody": "Every guess has been reviewed.",
+      "backToOverview": "Back to Overview"
+    },
+    "ai": {
+      "reviewNeeded_one": "{{count}} transaction needs review",
+      "reviewNeeded_other": "{{count}} transactions need review",
+      "reviewCta": "Review {{count}}",
+      "failedTitle": "Automatic categorisation failed",
+      "retry": "Retry",
+      "running_one": "Categorising your history — {{count}} left",
+      "running_other": "Categorising your history — {{count}} left"
+    }
   }
 }

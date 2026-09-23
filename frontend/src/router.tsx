@@ -11,6 +11,7 @@ import { Accounts } from "./pages/Accounts";
 import { Budget } from "./pages/Budget";
 import { BudgetOverview } from "./pages/budget/Overview";
 import { TransactionsMode } from "./pages/budget/TransactionsMode";
+import { ReviewMode } from "./pages/budget/ReviewMode";
 import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
@@ -96,6 +97,12 @@ const budgetTransactionsRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "transactions",
   component: TransactionsMode,
+});
+
+const budgetReviewRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "review",
+  component: ReviewMode,
 });
 
 // The page moved; bookmarks and old links must not 404.
@@ -192,7 +199,7 @@ export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     accountsRoute,
-    budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute]),
+    budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
     legacyTransactionsRoute,
     settingsRouteWithChildren,
     connectionsCallbackRoute,

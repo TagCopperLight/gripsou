@@ -114,6 +114,10 @@ async fn main() -> anyhow::Result<()> {
             get(budget::list_tags).post(budget::create_tag),
         )
         .route("/budget/summary", get(budget::summary))
+        .route("/budget/categorize", post(budget::request_categorize))
+        .route("/budget/categorize/status", get(budget::categorize_status))
+        .route("/budget/review/{id}/accept", post(budget::accept_review))
+        .route("/budget/review/{id}/undo", post(budget::undo_review))
         .route("/budget/trend", get(budget::trend_handler))
         .route(
             "/budget/tags/{id}",
@@ -133,6 +137,10 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/settings/cors",
             get(handlers::cors_origins).patch(handlers::set_cors_origins),
+        )
+        .route(
+            "/settings/budget-ai",
+            get(handlers::budget_ai_settings).patch(handlers::set_budget_ai_settings),
         )
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))

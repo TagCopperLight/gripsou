@@ -8,6 +8,7 @@ import { SankeySurface } from "../../components/budget/overview/SankeySurface";
 import { BreakdownSurface } from "../../components/budget/overview/BreakdownSurface";
 import { TrendSurface } from "../../components/budget/overview/TrendSurface";
 import { EmptyPeriodSurface } from "../../components/budget/overview/EmptyPeriodSurface";
+import { AiBanner } from "../../components/budget/overview/AiBanner";
 import { useBudget } from "../../components/budget/budgetContext";
 import { useBudgetSummary, useBudgetTrend } from "../../api/overview";
 import { addMonths, anchorMonth, periodBounds, periodLabel } from "../../lib/period";
@@ -80,6 +81,8 @@ export function BudgetOverview() {
           {t("dashboard.reportingFxMissing", { currency: getPrefs().currency })}
         </p>
       )}
+
+      <AiBanner />
 
       {data === undefined ? (
         <CardState

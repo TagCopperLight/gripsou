@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select budget_ai_provider, budget_ai_model from app_settings where id = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget_ai_provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "budget_ai_provider"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "budget_ai_model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "budget_ai_model"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "3776efb370700046f672411883b7333c6cf7dd973d957a5e6572d94b986e2f75"
+}

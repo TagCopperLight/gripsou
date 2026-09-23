@@ -20,4 +20,5 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 tokio.workspace = true

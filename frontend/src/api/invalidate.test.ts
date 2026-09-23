@@ -6,6 +6,7 @@ import {
   afterAccountEdit,
   afterBudgetCategoryChange,
   afterBudgetTagChange,
+  afterReviewChange,
   afterConnectionDeleted,
   afterLotsSaved,
   afterSessionChange,
@@ -40,6 +41,7 @@ describe("afterSyncFinished", () => {
       ["budget-tags"],
       ["budget-summary"],
       ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 });
@@ -79,6 +81,7 @@ describe("afterConnectionDeleted", () => {
       ["budget-tags"],
       ["budget-summary"],
       ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 });
@@ -114,6 +117,7 @@ describe("budget taxonomy changes", () => {
       ["transaction-counts"],
       ["budget-summary"],
       ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 
@@ -142,6 +146,7 @@ describe("budget taxonomy changes", () => {
       ["budget-tags"],
       ["budget-summary"],
       ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 });
@@ -154,6 +159,17 @@ it("afterTransactionChange refreshes the list and its counts", () => {
   expect(keysCalled).toContainEqual(keys.transactionCounts());
   expect(keysCalled).toContainEqual(keys.budgetSummary());
   expect(keysCalled).toContainEqual(keys.budgetTrend());
+  expect(keysCalled).toContainEqual(keys.budgetAiStatus());
+});
+
+it("afterReviewChange refreshes the review queue and every figure built on categories", () => {
+  expect(invalidatedBy(afterReviewChange)).toEqual([
+    ["budget-ai-status"],
+    ["transactions"],
+    ["transaction-counts"],
+    ["budget-summary"],
+    ["budget-trend"],
+  ]);
 });
 
 it("a finished sync refreshes the transaction counts too", () => {

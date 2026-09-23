@@ -3,7 +3,9 @@
 //! `transaction -> account -> connection.user_id`; there is no other ownership
 //! path.
 
+pub mod ai;
 pub mod assign;
 pub mod category;
+pub mod review;
 pub mod summary;
 pub mod tag;

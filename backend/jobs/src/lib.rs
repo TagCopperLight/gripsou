@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use gripsou_core::categorize::Categorizer;
 use gripsou_core::db::Db;
 use gripsou_core::provider::{AccountProvider, PriceProvider, ProviderError};
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
+use gripsou_core::repo::settings::BudgetAiSettings;
 use uuid::Uuid;
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
@@ -29,6 +31,13 @@ pub async fn run_scheduler(db: Db) {
         }
         Ok(_) => {}
         Err(e) => tracing::warn!("boot sync-lock sweep failed: {e}"),
+    }
+    match gripsou_core::repo::budget::ai::clear_all_locks(&db).await {
+        Ok(n) if n > 0 => {
+            tracing::warn!("released {n} budget AI lock(s) left behind by a previous process")
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("boot budget-AI-lock sweep failed: {e}"),
     }
     tokio::spawn(prune_sessions(db.clone()));
     tokio::spawn(sync_all_daily(db.clone()));
@@ -132,6 +141,104 @@ fn price_providers(pivot: String) -> Vec<Box<dyn PriceProvider>> {
 
 fn composition_provider() -> gripsou_providers::boursorama::BoursoramaCompositionProvider {
     gripsou_providers::boursorama::BoursoramaCompositionProvider::new_default()
+}
+
+/// Providers whose API key is in the environment — the admin dropdown's
+/// options. A provider without a key is never offered.
+pub fn available_categorizers() -> Vec<&'static str> {
+    let has = |k: &str| std::env::var(k).is_ok_and(|v| !v.trim().is_empty());
+    let mut v = Vec::new();
+    if has("GEMINI_API_KEY") {
+        v.push("gemini");
+    }
+    if has("JEV_API_KEY") {
+        v.push("jev");
+    }
+    v
+}
+
+pub fn default_model(kind: &str) -> Option<&'static str> {
+    match kind {
+        "gemini" => Some(gripsou_providers::gemini::GeminiCategorizer::DEFAULT_MODEL),
+        "jev" => Some(gripsou_providers::jev::JevCategorizer::DEFAULT_MODEL),
+        _ => None,
+    }
+}
+
+/// Pure gate: `(provider, model)` when the server has a provider whose key is
+/// present and the user opted in.
+fn gate(
+    settings: &BudgetAiSettings,
+    user_enabled: bool,
+    available: &[&str],
+) -> Option<(String, String)> {
+    let kind = settings.provider.as_deref()?;
+    if !user_enabled || !available.contains(&kind) {
+        return None;
+    }
+    let model = settings
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .or_else(|| default_model(kind))?;
+    Some((kind.to_string(), model.to_string()))
+}
+
+fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
+    match kind {
+        "gemini" => gripsou_providers::gemini::GeminiCategorizer::from_env(model)
+            .map(|c| Box::new(c) as Box<dyn Categorizer>),
+        "jev" => gripsou_providers::jev::JevCategorizer::from_env(model)
+            .map(|c| Box::new(c) as Box<dyn Categorizer>),
+        _ => None,
+    }
+}
+
+async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
+    let settings = match gripsou_core::repo::settings::budget_ai(db).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("budget AI settings unreadable: {e}");
+            return None;
+        }
+    };
+    settings.provider.as_ref()?;
+    let enabled = match gripsou_core::repo::prefs::budget_ai_enabled(db, user_id).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("budget AI opt-in unreadable for {user_id}: {e}");
+            return None;
+        }
+    };
+    gate(&settings, enabled, &available_categorizers())
+}
+
+/// Whether a run would actually start — the API answers 409 when not.
+pub async fn categorize_ready(db: &Db, user_id: Uuid) -> bool {
+    open_gate(db, user_id).await.is_some()
+}
+
+/// Categorise one user's uncategorised rows. Never fails loudly: a run that
+/// cannot start logs why, and a run that fails records it in `budget_ai_run`
+/// for the banner.
+pub async fn categorize_user(db: Db, user_id: Uuid) {
+    let Some((kind, model)) = open_gate(&db, user_id).await else {
+        return;
+    };
+    let Some(c) = categorizer(&kind, &model) else {
+        tracing::warn!("budget AI provider '{kind}' is configured but its API key is not set");
+        return;
+    };
+    match gripsou_core::budget::ai::run_for_user(&db, user_id, c.as_ref()).await {
+        Ok(outcome) => tracing::info!("budget AI run for {user_id}: {outcome:?}"),
+        Err(e) => tracing::warn!("budget AI run for {user_id} failed: {e}"),
+    }
+}
+
+/// Fire and forget: the run can take minutes.
+pub fn request_categorize(db: Db, user_id: Uuid) {
+    tokio::spawn(categorize_user(db, user_id));
 }
 
 fn encrypt_credentials(
@@ -270,6 +377,14 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
                 tracing::warn!(
                     "sync for {connection_id} succeeded but the lock was not released: {e}"
                 );
+            }
+            // After the lock is released: categorising must never hold a sync.
+            match connection::user_id(&db, connection_id).await {
+                Ok(Some(user_id)) => request_categorize(db.clone(), user_id),
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!("could not start budget AI after sync of {connection_id}: {e}")
+                }
             }
         }
         Err(e) => {
@@ -495,4 +610,44 @@ pub async fn complete_connection(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod categorize_gate_tests {
+    use super::*;
+    use gripsou_core::repo::settings::BudgetAiSettings;
+
+    fn s(p: Option<&str>, m: Option<&str>) -> BudgetAiSettings {
+        BudgetAiSettings {
+            provider: p.map(str::to_string),
+            model: m.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn closed_when_the_server_has_no_provider() {
+        assert_eq!(gate(&s(None, None), true, &["gemini"]), None);
+    }
+
+    #[test]
+    fn closed_when_the_user_has_not_opted_in() {
+        assert_eq!(gate(&s(Some("gemini"), None), false, &["gemini"]), None);
+    }
+
+    #[test]
+    fn closed_when_the_key_is_missing() {
+        assert_eq!(gate(&s(Some("jev"), None), true, &["gemini"]), None);
+    }
+
+    #[test]
+    fn open_with_the_default_model_when_none_is_set() {
+        assert_eq!(
+            gate(&s(Some("gemini"), Some("  ")), true, &["gemini"]),
+            Some(("gemini".to_string(), "gemini-3.5-flash-lite".to_string()))
+        );
+        assert_eq!(
+            gate(&s(Some("jev"), Some("jev-2")), true, &["jev"]),
+            Some(("jev".to_string(), "jev-2".to_string()))
+        );
+    }
 }

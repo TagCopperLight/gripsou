@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from budget_ai_lock",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ada2750ce7e1ab24418577919fcca7f6cc08f6526e57751737b3f3fade6fe00e"
+}

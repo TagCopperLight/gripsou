@@ -1,21 +1,51 @@
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { Sparkles } from "lucide-react";
 
 import { PageHeader } from "../components/PageHeader";
-import { SegmentedControl } from "../components/SegmentedControl";
+import { SegmentedControl, type SegmentedOption } from "../components/SegmentedControl";
 import { BudgetProvider } from "../components/budget/BudgetProvider";
+import { useAiStatus } from "../api/budget";
 
-type Mode = "overview" | "transactions";
+type Mode = "overview" | "transactions" | "review";
+
+function modeOf(pathname: string): Mode {
+  if (pathname.endsWith("/overview")) return "overview";
+  if (pathname.endsWith("/review")) return "review";
+  return "transactions";
+}
 
 /** The one Budget page (§0). Modes live in the URL; the filters and the
  *  selection live in the provider, so they survive a mode switch (§2.5).
- *  The Review segment arrives in phase 5, conditional on a non-empty queue —
- *  the control already takes a variable option list and ReactNode labels. */
+ *  Review appears only while the queue is non-empty — and stays while the
+ *  user is in it, so a queue drained in place can still show its success
+ *  state instead of losing the selected segment. */
 export function Budget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const pathname = useRouterState().location.pathname;
-  const mode: Mode = pathname.endsWith("/overview") ? "overview" : "transactions";
+  const mode = modeOf(pathname);
+  const reviewCount = useAiStatus().data?.reviewCount ?? 0;
+
+  const options: SegmentedOption<Mode>[] = [
+    { value: "overview", label: t("budget.modes.overview") },
+    { value: "transactions", label: t("budget.modes.transactions") },
+  ];
+  if (reviewCount > 0 || mode === "review") {
+    const attention = reviewCount > 0 && mode !== "review";
+    options.push({
+      value: "review",
+      label: attention ? (
+        <span data-testid="review-segment" className="inline-flex items-center gap-1 text-amber">
+          <Sparkles className="size-3.5" aria-hidden />
+          {reviewCount}
+        </span>
+      ) : (
+        t("budget.modes.review")
+      ),
+      className: attention ? "bg-amber-soft" : undefined,
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -28,10 +58,7 @@ export function Budget() {
           className="mr-12"
           value={mode}
           onChange={(next) => navigate({ to: `/budget/${next}` })}
-          options={[
-            { value: "overview", label: t("budget.modes.overview") },
-            { value: "transactions", label: t("budget.modes.transactions") },
-          ]}
+          options={options}
         />
       </div>
       <BudgetProvider>

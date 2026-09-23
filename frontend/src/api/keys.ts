@@ -54,6 +54,8 @@ export const keys = {
     (anchor === undefined
       ? ["budget-trend"]
       : ["budget-trend", anchor, months ?? 12]) as readonly unknown[],
+  budgetAiStatus: () => ["budget-ai-status"] as const,
+  budgetAiSettings: () => ["budget-ai-settings"] as const,
 
   users: () => ["users"] as const,
   sessions: () => ["sessions"] as const,

@@ -64,6 +64,14 @@ function handle(res: Response, path: string, method: string, opts?: HandleOption
   if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, res.status);
 }
 
+/** The body as JSON, or `undefined` when there is none: 204 No Content, and a
+ *  202 Accepted that only says "started" (e.g. POST /budget/categorize). */
+async function bodyOf<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text === "" ? undefined : JSON.parse(text)) as T;
+}
+
 export type GetJsonOptions = { skipGlobalUnauthorized?: boolean };
 
 export async function getJson<T>(path: string, opts?: GetJsonOptions): Promise<T> {
@@ -79,9 +87,8 @@ export async function postJson<T>(path: string, body: unknown, opts?: HandleOpti
     body: JSON.stringify(body),
   });
   handle(res, path, "POST", opts);
-  // 204 No Content (e.g. change-password) has an empty body.
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // 204 No Content (e.g. change-password) and a bare 202 have empty bodies.
+  return bodyOf<T>(res);
 }
 
 export async function putJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
@@ -103,7 +110,8 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   handle(res, path, "PATCH");
-  return res.json() as Promise<T>;
+  // 204 No Content (e.g. /settings/cors, /settings/budget-ai) has an empty body.
+  return bodyOf<T>(res);
 }
 
 export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {

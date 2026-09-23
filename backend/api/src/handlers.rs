@@ -441,6 +441,7 @@ pub struct TransactionParams {
 /// `all` — see `budget::parse_ids`/`parse_bucket`.
 pub fn filters_from_params(
     p: TransactionParams,
+    review_threshold: rust_decimal::Decimal,
 ) -> Result<gripsou_core::repo::query::TransactionFilters, (StatusCode, String)> {
     use gripsou_core::repo::query::TransactionFilters;
     Ok(TransactionFilters {
@@ -457,7 +458,7 @@ pub fn filters_from_params(
         // Hidden unless asked for: unlike every other filter here, the
         // default is *not* "everything".
         include_transfers: p.include_transfers.unwrap_or(false),
-        review_threshold: crate::budget::default_review_threshold(),
+        review_threshold,
         // Capped so a crafted `limit` cannot ask for the whole ledger at once.
         limit: p.limit.unwrap_or(200).clamp(1, 500),
         offset: p.offset.unwrap_or(0).max(0),
@@ -469,7 +470,10 @@ pub async fn transactions(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TransactionParams>,
 ) -> Result<Json<Vec<dto::Transaction>>, (StatusCode, String)> {
-    let filters = filters_from_params(p)?;
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let filters = filters_from_params(p, threshold)?;
     let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters)
         .await
         .map_err(internal)?;
@@ -610,6 +614,51 @@ pub async fn set_cors_origins(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn budget_ai_settings(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<dto::BudgetAiSettingsDto>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let s = gripsou_core::repo::settings::budget_ai(&pool)
+        .await
+        .map_err(internal)?;
+    let defaults = ["gemini", "jev"]
+        .into_iter()
+        .filter_map(|k| gripsou_jobs::default_model(k).map(|m| (k, m)))
+        .collect();
+    Ok(Json(dto::BudgetAiSettingsDto {
+        provider: s.provider,
+        model: s.model,
+        available: gripsou_jobs::available_categorizers(),
+        defaults,
+    }))
+}
+
+pub async fn set_budget_ai_settings(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::SetBudgetAiSettingsReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let provider = body
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
+    if provider.is_some_and(|p| !["gemini", "jev"].contains(&p)) {
+        return Err((StatusCode::BAD_REQUEST, "unknown provider".into()));
+    }
+    let model = body
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty());
+    gripsou_core::repo::settings::set_budget_ai(&pool, provider, model)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn set_provider(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -726,10 +775,22 @@ pub async fn update_prefs(
             return Err((StatusCode::BAD_REQUEST, "avatar too large".to_string()));
         }
     }
+    if !(50..=95).contains(&prefs.budget_ai_threshold) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "budgetAiThreshold must be between 50 and 95".into(),
+        ));
+    }
+    let was_enabled = gripsou_core::repo::prefs::budget_ai_enabled(&pool, user_id)
+        .await
+        .map_err(internal)?;
     let profile = gripsou_core::repo::user::update_prefs(&pool, user_id, &prefs)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    if prefs.budget_ai_enabled && !was_enabled {
+        gripsou_jobs::request_categorize(pool.clone(), user_id);
+    }
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 

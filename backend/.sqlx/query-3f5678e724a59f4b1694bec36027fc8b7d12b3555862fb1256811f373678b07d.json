@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transaction\n               set budget_category_id   = (select id from budget_category where id = $2),\n                   category_source      = 'ai',\n                   category_confidence  = case when exists (select 1 from budget_category where id = $2)\n                                               then $3::numeric end,\n                   category_reviewed_at = null\n             where id = $1\n               and category_source is null\n               and budget_category_id is null\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f5678e724a59f4b1694bec36027fc8b7d12b3555862fb1256811f373678b07d"
+}

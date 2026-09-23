@@ -856,8 +856,7 @@ pub struct TransactionListRow {
     pub category_kind: Option<String>,
     pub category_source: Option<String>,
     pub category_confidence: Option<Decimal>,
-    /// Derived, never stored: an AI guess under the threshold that nobody has
-    /// confirmed.
+    /// Derived, never stored: an unreviewed AI guess that is under the reader's threshold, has no category, or sits in an internal/excluded category.
     pub needs_review: bool,
     pub checked: bool,
     /// The row is one half of an auto-paired internal transfer.
@@ -987,7 +986,11 @@ pub async fn transactions(
                    coalesce(t.category_source = 'ai'
                     and t.category_reviewed_at is null
                     and (t.category_confidence is null
-                         or t.category_confidence < $7), false) as needs_review,
+                         or t.category_confidence < $7
+                         -- A guess into internal/excluded hides money from
+                         -- every total, so it is always reviewed (phase 5
+                         -- spec §2.4), however confident.
+                         or bc.kind in ('internal', 'excluded')), false) as needs_review,
                    (t.checked_at is not null) as checked,
                    (t.transfer_pair_id is not null) as is_transfer,
                    -- `coalesce`, because a null `category_source` makes the
@@ -1249,7 +1252,11 @@ pub async fn transaction_counts(
                    coalesce(t.category_source = 'ai'
                     and t.category_reviewed_at is null
                     and (t.category_confidence is null
-                         or t.category_confidence < $7), false) as needs_review,
+                         or t.category_confidence < $7
+                         -- A guess into internal/excluded hides money from
+                         -- every total, so it is always reviewed (phase 5
+                         -- spec §2.4), however confident.
+                         or bc.kind in ('internal', 'excluded')), false) as needs_review,
                    coalesce(bc.system_key = 'internal_transfer', false)
                      as is_internal_transfer,
                    a.currency as account_currency
@@ -1440,7 +1447,9 @@ pub async fn matching_transaction_ids(
           and (not $10::boolean
                or (t.category_source = 'ai'
                    and t.category_reviewed_at is null
-                   and (t.category_confidence is null or t.category_confidence < $11)))
+                   and (t.category_confidence is null
+                        or t.category_confidence < $11
+                        or bc.kind in ('internal', 'excluded'))))
           and (cardinality($12::uuid[]) = 0
                or (select count(distinct tt.tag_id)
                      from budget_transaction_tag tt

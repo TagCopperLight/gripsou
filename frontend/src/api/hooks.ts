@@ -27,6 +27,7 @@ import type {
   User,
 } from "./types";
 import { hasSyncing } from "./types";
+import type { BudgetAiProvider, BudgetAiSettings } from "./budget";
 import { keys } from "./keys";
 import {
   afterAccountEdit,
@@ -356,6 +357,25 @@ export function useSetCorsOrigins() {
   return useMutation({
     mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.corsOrigins() }),
+  });
+}
+
+export function useBudgetAiSettings() {
+  return useQuery({
+    queryKey: keys.budgetAiSettings(),
+    queryFn: () => getJson<BudgetAiSettings>("/settings/budget-ai"),
+  });
+}
+
+export function useSetBudgetAiSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { provider: BudgetAiProvider | null; model: string | null }) =>
+      patchJson<void>("/settings/budget-ai", body),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: keys.budgetAiSettings() });
+      qc.invalidateQueries({ queryKey: keys.budgetAiStatus() });
+    },
   });
 }
 
