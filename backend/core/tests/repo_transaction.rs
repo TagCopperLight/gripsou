@@ -84,3 +84,60 @@ async fn upsert_ignores_instrument_level_fields(pool: PgPool) -> anyhow::Result<
     assert_eq!(amount, Decimal::new(-21053, 2));
     Ok(())
 }
+
+/// A user-written note is never a field the provider owns: a re-sync of the
+/// same external_id must not clear it, even though every other field on the
+/// row is overwritten with the provider's values.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_resync_never_touches_the_note(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn(
+            "acct-1",
+            "txn-1",
+            "deposit",
+            Decimal::new(5000, 2),
+            Some("SALAIRE"),
+        ),
+    )
+    .await?;
+    sqlx::query("update transaction set note = 'remember to check this' where external_id = $1")
+        .bind("txn-1")
+        .execute(&pool)
+        .await?;
+
+    // Powens corrects the row after the fact: same external_id, new amount.
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn(
+            "acct-1",
+            "txn-1",
+            "deposit",
+            Decimal::new(7500, 2),
+            Some("SALAIRE MARS"),
+        ),
+    )
+    .await?;
+
+    let (amount, note): (Decimal, Option<String>) =
+        sqlx::query_as("select amount, note from transaction where external_id = 'txn-1'")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(
+        amount,
+        Decimal::new(7500, 2),
+        "provider still wins on amount"
+    );
+    assert_eq!(
+        note.as_deref(),
+        Some("remember to check this"),
+        "the note survives a re-sync"
+    );
+    Ok(())
+}

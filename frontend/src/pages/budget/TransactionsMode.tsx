@@ -10,7 +10,7 @@ import { TransactionsTable } from "../../components/budget/TransactionsTable";
 import { SelectionBar } from "../../components/budget/SelectionBar";
 import { CategoryChooser } from "../../components/budget/CategoryChooser";
 import { TagChooser } from "../../components/budget/TagChooser";
-import { MerchantModal } from "../../components/budget/MerchantModal";
+import { TransactionModal } from "../../components/budget/TransactionModal";
 import { useBudget } from "../../components/budget/budgetContext";
 import {
   useApplyToDescription, useBudgetCategories, useBudgetTags, useBulkTransactions, usePatchTransaction,
@@ -396,7 +396,7 @@ export function TransactionsMode() {
         </BudgetDialog>
       )}
 
-      {merchantTx && <MerchantModal tx={merchantTx} onClose={() => setMerchantTx(null)} />}
+      {merchantTx && <TransactionModal tx={merchantTx} onClose={() => setMerchantTx(null)} />}
     </div>
   );
 }

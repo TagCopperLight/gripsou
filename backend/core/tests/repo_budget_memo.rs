@@ -60,6 +60,38 @@ async fn memo(pool: &PgPool, user: Uuid) -> Vec<(String, Option<String>, Option<
     .unwrap()
 }
 
+/// The AI never writes a name any more: `merchant_name` stays null even
+/// though `record_ai_merchants` runs, and a stale name from before this
+/// change is nulled out on the next AI write to the same description.
+#[sqlx::test(migrations = "../migrations")]
+async fn ai_merchants_never_carry_a_name(pool: PgPool) -> anyhow::Result<()> {
+    let (user, ids) = rows(&pool, &["CB LECLERC 0412"]).await?;
+    record_ai_merchants(
+        &pool,
+        user,
+        &[decision(ids[0], "Leclerc", "https://www.leclerc.fr/")],
+    )
+    .await?;
+    let m = memo(&pool, user).await;
+    assert_eq!(m[0].1, None, "no name is ever written");
+
+    // Simulate a stale name left over from before this change, then prove
+    // the next AI write clears it.
+    sqlx::query("update budget_memo set merchant_name = 'Leclerc' where user_id = $1")
+        .bind(user)
+        .execute(&pool)
+        .await?;
+    record_ai_merchants(
+        &pool,
+        user,
+        &[decision(ids[0], "Leclerc", "https://www.leclerc.fr/")],
+    )
+    .await?;
+    let m = memo(&pool, user).await;
+    assert_eq!(m[0].1, None, "a later AI write nulls a stale name");
+    Ok(())
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn an_ai_merchant_is_recorded_per_normalised_description(pool: PgPool) -> anyhow::Result<()> {
     let (user, ids) = rows(&pool, &["CB LECLERC 0412", "CB LECLERC 0999"]).await?;
@@ -80,7 +112,7 @@ async fn an_ai_merchant_is_recorded_per_normalised_description(pool: PgPool) -> 
 async fn an_ai_answer_never_overwrites_a_users_merchant(pool: PgPool) -> anyhow::Result<()> {
     let (user, ids) = rows(&pool, &["PAYPAL *XYZ"]).await?;
     assert_eq!(
-        set_user_merchant(&pool, user, ids[0], Some("XYZ Shop"), Some("xyz.com")).await?,
+        set_user_merchant(&pool, user, ids[0], Some("xyz.com")).await?,
         MerchantWrite::Saved
     );
     record_ai_merchants(&pool, user, &[decision(ids[0], "PayPal", "paypal.com")]).await?;
@@ -124,7 +156,7 @@ async fn no_domain_or_no_identity_records_nothing(pool: PgPool) -> anyhow::Resul
         "digit-only description, and an invalid domain"
     );
     assert_eq!(
-        set_user_merchant(&pool, user, ids[0], Some("X"), Some("x.fr")).await?,
+        set_user_merchant(&pool, user, ids[0], Some("x.fr")).await?,
         MerchantWrite::NoIdentity
     );
     Ok(())
@@ -133,9 +165,9 @@ async fn no_domain_or_no_identity_records_nothing(pool: PgPool) -> anyhow::Resul
 #[sqlx::test(migrations = "../migrations")]
 async fn clearing_both_fields_deletes_the_entry(pool: PgPool) -> anyhow::Result<()> {
     let (user, ids) = rows(&pool, &["LECLERC"]).await?;
-    set_user_merchant(&pool, user, ids[0], Some("Leclerc"), Some("leclerc.fr")).await?;
+    set_user_merchant(&pool, user, ids[0], Some("leclerc.fr")).await?;
     assert_eq!(
-        set_user_merchant(&pool, user, ids[0], None, None).await?,
+        set_user_merchant(&pool, user, ids[0], None).await?,
         MerchantWrite::Cleared
     );
     assert!(memo(&pool, user).await.is_empty());
@@ -147,7 +179,7 @@ async fn another_users_row_is_not_found(pool: PgPool) -> anyhow::Result<()> {
     let (_, ids) = rows(&pool, &["LECLERC"]).await?;
     let (stranger, _) = seed_user_and_connection(&pool).await;
     assert_eq!(
-        set_user_merchant(&pool, stranger, ids[0], Some("X"), Some("x.fr")).await?,
+        set_user_merchant(&pool, stranger, ids[0], Some("x.fr")).await?,
         MerchantWrite::NotFound
     );
     Ok(())

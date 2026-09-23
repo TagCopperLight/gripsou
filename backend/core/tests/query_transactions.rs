@@ -3,7 +3,9 @@ mod common;
 use chrono::NaiveDate;
 use common::{checking_account, seed_connection, txn, txn_on};
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::query::{TransactionFilters, transactions};
+use gripsou_core::repo::query::{
+    TransactionFilters, matching_transaction_ids, transaction_counts, transactions,
+};
 use gripsou_core::repo::transaction::upsert_transaction;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -76,6 +78,38 @@ async fn searches_descriptions_case_insensitively_on_a_substring(
     .await?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].description.as_deref(), Some("LECLERC"));
+    Ok(())
+}
+
+/// Search also matches note text (spec: notes-and-name-drop), and every
+/// place that answers "how many/which rows match this search" — the list,
+/// the header count, and the bulk-selection id list — must agree, or the
+/// header and "select all" would drift from what the list actually shows.
+#[sqlx::test(migrations = "../migrations")]
+async fn search_also_matches_note_text(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _) = seed(&pool).await;
+    let t2: Uuid = sqlx::query_scalar("select id from transaction where external_id = 't2'")
+        .fetch_one(&pool)
+        .await?;
+    sqlx::query("update transaction set note = 'yearly bonus included' where id = $1")
+        .bind(t2)
+        .execute(&pool)
+        .await?;
+
+    let f = TransactionFilters {
+        search: Some("bonus".into()),
+        ..all()
+    };
+
+    let rows = transactions(&pool, user_id, &f).await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, t2);
+
+    let counts = transaction_counts(&pool, user_id, &f).await?;
+    assert_eq!(counts.matching, 1, "the count agrees with the list");
+
+    let ids = matching_transaction_ids(&pool, user_id, &f).await?;
+    assert_eq!(ids, vec![t2], "bulk selection agrees with the list");
     Ok(())
 }
 

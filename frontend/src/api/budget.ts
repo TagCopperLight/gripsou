@@ -137,6 +137,8 @@ export type TransactionPatch = {
    *  so a caller toggling one tag sends the complete resulting list. */
   tagIds?: string[];
   checked?: boolean;
+  /** Per-transaction free text. `""` clears it; omit to leave untouched. */
+  note?: string;
 };
 
 export type BulkBody = {
@@ -332,7 +334,7 @@ export function useRequestCategorize() {
 export function useSetMerchant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { transactionId: string; name: string | null; domain: string | null }) =>
+    mutationFn: (body: { transactionId: string; domain: string | null }) =>
       putJson<void>("/budget/merchants", body),
     onSuccess: () => afterTransactionChange(qc),
   });

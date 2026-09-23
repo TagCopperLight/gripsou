@@ -34,7 +34,7 @@ async fn every_row_sharing_a_description_carries_its_merchant(pool: PgPool) -> a
     let first: Uuid = sqlx::query_scalar("select id from transaction where external_id = 't0'")
         .fetch_one(&pool)
         .await?;
-    set_user_merchant(&pool, user_id, first, Some("Leclerc"), Some("leclerc.fr")).await?;
+    set_user_merchant(&pool, user_id, first, Some("leclerc.fr")).await?;
 
     let rows = transactions(&pool, user_id, &TransactionFilters::unfiltered()).await?;
     let leclerc: Vec<_> = rows
