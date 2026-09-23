@@ -271,6 +271,29 @@ export type BudgetAiSettings = {
   defaults: Record<BudgetAiProvider, string>;
 };
 
+/** One model's spend: token counts are numbers, prices (per million tokens)
+ *  and costs are decimal strings; `cost` is null until the model is priced. */
+export type BudgetAiModelUsage = {
+  model: string;
+  runs: number;
+  runsWithoutUsage: number;
+  tokensIn: number;
+  tokensOut: number;
+  priceIn: string | null;
+  priceOut: string | null;
+  cost: string | null;
+};
+
+export type BudgetAiUsage = {
+  currency: string;
+  models: BudgetAiModelUsage[];
+  /** Sum of the priced models only. */
+  totalCost: string;
+};
+
+/** Full replacement map of every model's prices, per million tokens. */
+export type BudgetAiPrices = Record<string, { in: string; out: string }>;
+
 /** Polled every 5 s only while a run is in progress. When the run moves on
  *  (the queue grows, or the run ends) everything built on categories is
  *  refreshed, so the list and the figures fill in as the backfill works. */
@@ -290,6 +313,7 @@ export function useAiStatus() {
       qc.invalidateQueries({ queryKey: keys.transactions() });
       qc.invalidateQueries({ queryKey: keys.transactionCounts() });
       qc.invalidateQueries({ queryKey: keys.budgetSummary() });
+      qc.invalidateQueries({ queryKey: keys.budgetAiUsage() });
       qc.invalidateQueries({ queryKey: keys.budgetTrend() });
     }
     last.current = stamp;

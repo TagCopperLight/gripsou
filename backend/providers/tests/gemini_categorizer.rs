@@ -87,6 +87,42 @@ async fn maps_the_answer_array_back_onto_items() {
     assert_eq!(out.guesses[1].category_id, None);
 }
 
+/// Thinking tokens are billed as output, so they count toward `tokens_out`.
+#[tokio::test]
+async fn thinking_tokens_count_as_output() {
+    let server = MockServer::start().await;
+    let mut body = fixture();
+    body["usageMetadata"]["thoughtsTokenCount"] = serde_json::json!(100);
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&server)
+        .await;
+    let g = GeminiCategorizer::new("k".into(), "test-model".into()).with_base_url(server.uri());
+
+    let out = g.categorize(&request()).await.unwrap();
+
+    assert_eq!(out.tokens_in, Some(1234));
+    assert_eq!(out.tokens_out, Some(156));
+}
+
+/// No usage at all stays unknown rather than becoming zero.
+#[tokio::test]
+async fn missing_usage_stays_unknown() {
+    let server = MockServer::start().await;
+    let mut body = fixture();
+    body.as_object_mut().unwrap().remove("usageMetadata");
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&server)
+        .await;
+    let g = GeminiCategorizer::new("k".into(), "test-model".into()).with_base_url(server.uri());
+
+    let out = g.categorize(&request()).await.unwrap();
+
+    assert_eq!(out.tokens_in, None);
+    assert_eq!(out.tokens_out, None);
+}
+
 #[tokio::test]
 async fn the_schema_restricts_category_ids_to_the_candidates() {
     let server = MockServer::start().await;

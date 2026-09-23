@@ -1021,6 +1021,39 @@ pub struct SetBudgetAiSettingsReq {
     pub model: Option<String>,
 }
 
+/// AI spend for Settings → Server. Token counts are numbers; money is strings.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiUsageDto {
+    pub currency: &'static str,
+    pub models: Vec<BudgetAiModelUsageDto>,
+    pub total_cost: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiModelUsageDto {
+    pub model: String,
+    pub runs: i64,
+    pub runs_without_usage: i64,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub price_in: Option<String>,
+    pub price_out: Option<String>,
+    /// `None` when the model has no price entered.
+    pub cost: Option<String>,
+}
+
+/// One entry of the `PUT /settings/budget-ai/prices` map, USD per million
+/// tokens as decimal strings. Parsed by the handler so bad values are a 400.
+#[derive(Deserialize)]
+pub struct BudgetAiPriceReq {
+    #[serde(rename = "in")]
+    pub input: String,
+    #[serde(rename = "out")]
+    pub output: String,
+}
+
 #[cfg(test)]
 mod budget_ai_contract_tests {
     use super::*;
@@ -1063,5 +1096,48 @@ mod budget_ai_contract_tests {
             serde_json::from_value(serde_json::json!({"categoryId": null, "confidence": null}))
                 .unwrap();
         assert_eq!(r.confidence, None);
+    }
+
+    #[test]
+    fn usage_numbers_for_tokens_strings_for_money() {
+        let v = serde_json::to_value(BudgetAiUsageDto {
+            currency: "USD",
+            models: vec![BudgetAiModelUsageDto {
+                model: "jev:jev-latest".into(),
+                runs: 3,
+                runs_without_usage: 0,
+                tokens_in: 9495459,
+                tokens_out: 4484808,
+                price_in: Some("0.042".into()),
+                price_out: None,
+                cost: None,
+            }],
+            total_cost: "0".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "currency": "USD",
+                "models": [{
+                    "model": "jev:jev-latest", "runs": 3, "runsWithoutUsage": 0,
+                    "tokensIn": 9495459, "tokensOut": 4484808,
+                    "priceIn": "0.042", "priceOut": null, "cost": null
+                }],
+                "totalCost": "0"
+            })
+        );
+    }
+
+    #[test]
+    fn prices_read_in_and_out_strings() {
+        let r: std::collections::BTreeMap<String, BudgetAiPriceReq> =
+            serde_json::from_value(serde_json::json!({
+                "jev:jev-latest": {"in": "0.042", "out": "0"}
+            }))
+            .unwrap();
+        let p = &r["jev:jev-latest"];
+        assert_eq!(p.input, "0.042");
+        assert_eq!(p.output, "0");
     }
 }

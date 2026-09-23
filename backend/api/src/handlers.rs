@@ -659,6 +659,76 @@ pub async fn set_budget_ai_settings(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn budget_ai_usage(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<dto::BudgetAiUsageDto>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let report = gripsou_core::budget::ai_cost::usage_report(&pool)
+        .await
+        .map_err(internal)?;
+    let money = |d: Decimal| d.round_dp(4).normalize().to_string();
+    Ok(Json(dto::BudgetAiUsageDto {
+        currency: "USD",
+        models: report
+            .models
+            .into_iter()
+            .map(|m| dto::BudgetAiModelUsageDto {
+                model: m.model,
+                runs: m.runs,
+                runs_without_usage: m.runs_without_usage,
+                tokens_in: m.tokens_in,
+                tokens_out: m.tokens_out,
+                price_in: m.price.as_ref().map(|p| p.input.to_string()),
+                price_out: m.price.as_ref().map(|p| p.output.to_string()),
+                cost: m.cost.map(money),
+            })
+            .collect(),
+        total_cost: money(report.total_cost),
+    }))
+}
+
+/// Replaces the whole price map. Every value must be a non-negative decimal
+/// string (USD per million tokens); anything else is a 400 and saves nothing.
+pub async fn set_budget_ai_prices(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<std::collections::BTreeMap<String, dto::BudgetAiPriceReq>>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let parse = |model: &str, v: &str| {
+        v.trim()
+            .parse::<Decimal>()
+            .ok()
+            .filter(|d| *d >= Decimal::ZERO)
+            .map(|d| if d.is_zero() { Decimal::ZERO } else { d })
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid price for {model}: {v:?}"),
+                )
+            })
+    };
+    let mut prices = gripsou_core::repo::settings::ModelPrices::new();
+    for (model, p) in &body {
+        let model = model.trim();
+        if model.is_empty() {
+            return Err((StatusCode::BAD_REQUEST, "empty model key".into()));
+        }
+        prices.insert(
+            model.to_string(),
+            gripsou_core::repo::settings::ModelPrice {
+                input: parse(model, &p.input)?,
+                output: parse(model, &p.output)?,
+            },
+        );
+    }
+    gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn set_provider(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -2980,5 +3050,158 @@ mod auth_tests {
         .await
         .expect("empty batch ok");
         assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+}
+
+#[cfg(test)]
+mod budget_ai_usage_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    async fn seed(pool: &PgPool, role: &str) -> Uuid {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "insert into users (id, email, name, password_hash, role) \
+             values ($1, $2, 'Test', 'x', $3)",
+        )
+        .bind(id)
+        .bind(format!("{id}@t.local"))
+        .bind(role)
+        .execute(pool)
+        .await
+        .unwrap();
+        id
+    }
+
+    fn who(user_id: Uuid) -> AuthUser {
+        AuthUser {
+            user_id,
+            session_id: Uuid::nil(),
+        }
+    }
+
+    fn price(i: &str, o: &str) -> dto::BudgetAiPriceReq {
+        dto::BudgetAiPriceReq {
+            input: i.into(),
+            output: o.into(),
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn prices_then_usage(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        for (tin, tout) in [(Some(9_495_459), Some(4_484_808)), (None, None)] {
+            sqlx::query(
+                "insert into budget_ai_run (user_id, model, tokens_in, tokens_out, outcome) \
+                 values ($1, 'jev:jev-latest', $2, $3, 'ok')",
+            )
+            .bind(admin)
+            .bind(tin)
+            .bind(tout)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "insert into budget_ai_run (user_id, model, tokens_in, tokens_out, outcome) \
+             values ($1, 'gemini:x', 10, 10, 'ok')",
+        )
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let status = set_budget_ai_prices(
+            State(pool.clone()),
+            who(admin),
+            Json(BTreeMap::from([
+                ("jev:jev-latest".to_string(), price("0.042", "0")),
+                ("unused:m".to_string(), price("1", "1")),
+            ])),
+        )
+        .await
+        .expect("prices saved");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let v = serde_json::to_value(
+            budget_ai_usage(State(pool.clone()), who(admin))
+                .await
+                .expect("usage")
+                .0,
+        )
+        .unwrap();
+        // 9.495459 * 0.042 = 0.398809278 → 0.3988
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "currency": "USD",
+                "models": [
+                    {"model": "gemini:x", "runs": 1, "runsWithoutUsage": 0,
+                     "tokensIn": 10, "tokensOut": 10,
+                     "priceIn": null, "priceOut": null, "cost": null},
+                    {"model": "jev:jev-latest", "runs": 2, "runsWithoutUsage": 1,
+                     "tokensIn": 9495459, "tokensOut": 4484808,
+                     "priceIn": "0.042", "priceOut": "0", "cost": "0.3988"}
+                ],
+                "totalCost": "0.3988"
+            })
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn usage_with_no_runs_totals_zero(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        let v = serde_json::to_value(
+            budget_ai_usage(State(pool.clone()), who(admin))
+                .await
+                .expect("usage")
+                .0,
+        )
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"currency": "USD", "models": [], "totalCost": "0"})
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn bad_prices_are_a_400_and_change_nothing(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        for (i, o) in [
+            ("-1", "0"),
+            ("0", "-0.1"),
+            ("abc", "0"),
+            ("", "0"),
+            ("0", "1e3x"),
+        ] {
+            let err = set_budget_ai_prices(
+                State(pool.clone()),
+                who(admin),
+                Json(BTreeMap::from([("m:x".to_string(), price(i, o))])),
+            )
+            .await
+            .expect_err("rejected");
+            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{i} / {o}");
+        }
+        assert!(
+            gripsou_core::repo::settings::budget_ai_prices(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn members_are_forbidden(pool: PgPool) {
+        let member = seed(&pool, "user").await;
+        let err = budget_ai_usage(State(pool.clone()), who(member))
+            .await
+            .err()
+            .expect("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+        let err = set_budget_ai_prices(State(pool.clone()), who(member), Json(BTreeMap::new()))
+            .await
+            .expect_err("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

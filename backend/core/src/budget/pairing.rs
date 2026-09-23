@@ -6,7 +6,10 @@
 //! spending from the Sankey and every total; an unpaired row costs the user one
 //! correction. So: mutual nearest neighbour only, and **a tie pairs nothing**
 //! — unless the tied rows are interchangeable and as many on each side, which
-//! pair one-to-one. Transfers only: see the candidate query.
+//! pair one-to-one. What that leaves gets one more look: a cluster whose rows
+//! can *all* be paired off, and only in one way (a chain through a middle
+//! account), pairs that way — see [`forced_pairs`]. Transfers only: see the
+//! candidate query.
 
 use std::collections::HashMap;
 
@@ -236,6 +239,15 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
         }
     }
 
+    // Nearest-neighbour matching has converged. What it leaves is mostly
+    // chains through a middle account (Livret A → CPT DEPOT → CPT COURANT
+    // the same day): every row ties there, yet only one pairing explains
+    // them all. Tried only once the rounds above stop finding pairs, so the
+    // nearest-in-time preference always gets first say.
+    if pairs.is_empty() {
+        pairs = forced_pairs(&candidates);
+    }
+
     // A globally consistent lock order for the UPDATEs below. Belt and
     // braces alongside the advisory lock taken at the top of
     // `pair_internal_transfers`: that lock only guards this function's own
@@ -285,4 +297,208 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
     }
 
     Ok(written)
+}
+
+/// Pairs that every consistent explanation of a cluster agrees on.
+///
+/// Rows sharing currency and amount are linked when they could be two halves
+/// of one transfer (opposite signs, different accounts, within reach in
+/// time). A cluster of linked rows is acted on only when *every* row in it
+/// can be paired off — a leftover row means one of them is money leaving or
+/// arriving from outside, and nothing says which, so nothing pairs. Within
+/// such a cluster, a link pairs only when no complete pairing of the cluster
+/// can do without it.
+///
+/// Reach grows a day at a time up to [`WINDOW_DAYS`], so same-day chains are
+/// settled before a wider window could tangle them with the next day's.
+///
+/// Rows on one account at one instant are interchangeable (see
+/// [`interchangeable`]), so they are counted as one node of that many rows:
+/// two identical chains the same day pair, where treating each row apart
+/// would see two equally good ways to do it and pair nothing.
+fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
+    let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
+    for c in candidates {
+        groups
+            .entry((c.currency.as_str(), c.amount.abs()))
+            .or_default()
+            .push(c);
+    }
+
+    let mut pairs = vec![];
+    for group in groups.into_values() {
+        // Nodes: interchangeable rows, each list sorted by id so both runs
+        // of a converged pass pick the same rows.
+        let mut outs: Vec<Vec<&Candidate>> = vec![];
+        let mut ins: Vec<Vec<&Candidate>> = vec![];
+        let mut by_key: HashMap<(bool, Uuid, DateTime<Utc>), usize> = HashMap::new();
+        for c in group {
+            let side = if c.amount < Decimal::ZERO {
+                &mut outs
+            } else {
+                &mut ins
+            };
+            let slot = *by_key
+                .entry((c.amount < Decimal::ZERO, c.account_id, c.ts))
+                .or_insert_with(|| {
+                    side.push(vec![]);
+                    side.len() - 1
+                });
+            side[slot].push(c);
+        }
+        for node in outs.iter_mut().chain(ins.iter_mut()) {
+            node.sort_by_key(|c| c.id);
+        }
+
+        for days in 0..=WINDOW_DAYS {
+            let reach = chrono::Duration::days(days).num_seconds();
+            let found = forced_in_group(&outs, &ins, reach);
+            if !found.is_empty() {
+                // The next round re-reads what is left and starts again at
+                // same-day reach.
+                pairs.extend(found);
+                break;
+            }
+        }
+    }
+    pairs
+}
+
+/// [`forced_pairs`] for one currency-and-amount group at one reach.
+fn forced_in_group(
+    outs: &[Vec<&Candidate>],
+    ins: &[Vec<&Candidate>],
+    reach: i64,
+) -> Vec<(Uuid, Uuid)> {
+    let links: Vec<(usize, usize)> = (0..outs.len())
+        .flat_map(|o| (0..ins.len()).map(move |i| (o, i)))
+        .filter(|&(o, i)| {
+            let (a, b) = (outs[o][0], ins[i][0]);
+            a.account_id != b.account_id && (a.ts - b.ts).num_seconds().abs() <= reach
+        })
+        .collect();
+
+    // Clusters: union-find over out nodes 0..n and in nodes n..n+m.
+    let n = outs.len();
+    let mut parent: Vec<usize> = (0..n + ins.len()).collect();
+    fn root(parent: &mut [usize], mut x: usize) -> usize {
+        while parent[x] != x {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        x
+    }
+    for &(o, i) in &links {
+        let (a, b) = (root(&mut parent, o), root(&mut parent, n + i));
+        parent[a] = b;
+    }
+    let mut clusters: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
+    for &(o, i) in &links {
+        clusters
+            .entry(root(&mut parent, o))
+            .or_default()
+            .push((o, i));
+    }
+
+    let mut pairs = vec![];
+    for cluster_links in clusters.into_values() {
+        let mut out_nodes: Vec<usize> = cluster_links.iter().map(|l| l.0).collect();
+        let mut in_nodes: Vec<usize> = cluster_links.iter().map(|l| l.1).collect();
+        out_nodes.sort_unstable();
+        out_nodes.dedup();
+        in_nodes.sort_unstable();
+        in_nodes.dedup();
+        let out_rows: usize = out_nodes.iter().map(|&o| outs[o].len()).sum();
+        let in_rows: usize = in_nodes.iter().map(|&i| ins[i].len()).sum();
+
+        let full = max_pairing(outs, ins, &cluster_links, None);
+        if full != out_rows || full != in_rows {
+            continue;
+        }
+
+        // How many rows a link must carry in every complete pairing: what
+        // the cluster loses when that link is taken away.
+        let mut taken_out = vec![0usize; outs.len()];
+        let mut taken_in = vec![0usize; ins.len()];
+        for (skip, &(o, i)) in cluster_links.iter().enumerate() {
+            let forced = full - max_pairing(outs, ins, &cluster_links, Some(skip));
+            for _ in 0..forced {
+                pairs.push((outs[o][taken_out[o]].id, ins[i][taken_in[i]].id));
+                taken_out[o] += 1;
+                taken_in[i] += 1;
+            }
+        }
+    }
+    pairs
+}
+
+/// The most rows `links` can pair at once, each node pairing at most as many
+/// times as it has rows; `skip` leaves one link out. A max flow by
+/// augmenting paths — clusters are a handful of nodes, so nothing cleverer is
+/// worth it.
+fn max_pairing(
+    outs: &[Vec<&Candidate>],
+    ins: &[Vec<&Candidate>],
+    links: &[(usize, usize)],
+    skip: Option<usize>,
+) -> usize {
+    let mut out_left: Vec<usize> = outs.iter().map(Vec::len).collect();
+    let mut in_left: Vec<usize> = ins.iter().map(Vec::len).collect();
+    // Rows currently sent along each link; undone when a path walks it back.
+    let mut flow = vec![0usize; links.len()];
+    let mut total = 0;
+
+    loop {
+        // Breadth-first from every out node with rows to spare, towards any
+        // in node with room. `came_from` records the link used to reach an
+        // in node (forwards) or an out node (backwards, undoing flow).
+        let mut out_from: Vec<Option<usize>> = vec![None; outs.len()];
+        let mut in_from: Vec<Option<usize>> = vec![None; ins.len()];
+        let mut out_seen: Vec<bool> = out_left.iter().map(|&l| l > 0).collect();
+        let mut queue: Vec<usize> = (0..outs.len()).filter(|&o| out_seen[o]).collect();
+        let mut end = None;
+        let mut head = 0;
+        while head < queue.len() && end.is_none() {
+            let o = queue[head];
+            head += 1;
+            for (k, &(lo, li)) in links.iter().enumerate() {
+                if Some(k) == skip || lo != o || in_from[li].is_some() {
+                    continue;
+                }
+                in_from[li] = Some(k);
+                if in_left[li] > 0 {
+                    end = Some(li);
+                    break;
+                }
+                // Full in node: continue through a link already feeding it.
+                for (k2, &(lo2, li2)) in links.iter().enumerate() {
+                    if li2 == li && flow[k2] > 0 && !out_seen[lo2] {
+                        out_seen[lo2] = true;
+                        out_from[lo2] = Some(k2);
+                        queue.push(lo2);
+                    }
+                }
+            }
+        }
+        let Some(mut i) = end else {
+            return total;
+        };
+        in_left[i] -= 1;
+        loop {
+            let k = in_from[i].expect("reached in node has a link");
+            flow[k] += 1;
+            let o = links[k].0;
+            match out_from[o] {
+                None => {
+                    out_left[o] -= 1;
+                    break;
+                }
+                Some(back) => {
+                    flow[back] -= 1;
+                    i = links[back].1;
+                }
+            }
+        }
+        total += 1;
+    }
 }

@@ -330,3 +330,34 @@ pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastR
     .fetch_optional(pool)
     .await?)
 }
+
+/// Token totals for one model across every user's runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelUsage {
+    pub model: String,
+    pub runs: i64,
+    /// Runs whose provider reported no input or no output count.
+    pub runs_without_usage: i64,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+}
+
+/// Per-model totals over all users, ordered by model key. Sums are bigint:
+/// the int columns overflow i32 once summed.
+pub async fn usage_by_model(pool: &sqlx::PgPool) -> Result<Vec<ModelUsage>, CoreError> {
+    Ok(sqlx::query_as!(
+        ModelUsage,
+        r#"
+        select model,
+               count(*) as "runs!",
+               count(*) filter (where tokens_in is null or tokens_out is null) as "runs_without_usage!",
+               coalesce(sum(tokens_in), 0)::bigint as "tokens_in!",
+               coalesce(sum(tokens_out), 0)::bigint as "tokens_out!"
+        from budget_ai_run
+        group by model
+        order by model
+        "#
+    )
+    .fetch_all(pool)
+    .await?)
+}

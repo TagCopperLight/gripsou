@@ -7,6 +7,7 @@ import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
 import { CardState } from "../../components/CardState";
 import { BudgetAiServerSurface } from "../../components/BudgetAiServerSurface";
+import { BudgetAiCostSurface } from "../../components/BudgetAiCostSurface";
 import { useProviders, useSetProviderEnabled, useCorsOrigins, useSetCorsOrigins, useHealth } from "../../api/hooks";
 
 export function SettingsServer() {
@@ -114,6 +115,7 @@ export function SettingsServer() {
         )}
       </Surface>
       <BudgetAiServerSurface />
+      <BudgetAiCostSurface />
     </div>
   );
 }

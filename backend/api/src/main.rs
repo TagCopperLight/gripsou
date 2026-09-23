@@ -142,6 +142,11 @@ async fn main() -> anyhow::Result<()> {
             "/settings/budget-ai",
             get(handlers::budget_ai_settings).patch(handlers::set_budget_ai_settings),
         )
+        .route("/settings/budget-ai/usage", get(handlers::budget_ai_usage))
+        .route(
+            "/settings/budget-ai/prices",
+            put(handlers::set_budget_ai_prices),
+        )
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))
         .route("/connections/{id}", delete(handlers::delete_connection))
