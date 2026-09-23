@@ -621,7 +621,7 @@
       "vsPrevMonth": "vs mois précédent",
       "vsAvg12": "vs moyenne sur 12 mois",
       "sankey": {
-        "title": "Où est allé l’argent",
+        "title": "Flux de trésorerie",
         "seeTransactions": "Voir les transactions",
         "notSpent": "Non dépensé",
         "drawnFromSavings": "Puisé dans l’épargne"
@@ -631,6 +631,7 @@
         "category": "Catégorie",
         "amount": "Montant",
         "share": "Part",
+        "txnCount": "Transactions",
         "vsAvg12": "vs moy. 12 mois",
         "open": "Ouvrir ces transactions"
       },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarRange } from "lucide-react";
+import { Calendar } from "lucide-react";
 
 import { BudgetDialog } from "../BudgetDialog";
 import { Button } from "../../Button";
@@ -43,7 +43,7 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
   return (
     <BudgetDialog
       title={t("budget.overview.customRange")}
-      icon={<CalendarRange className="size-4" />}
+      icon={<Calendar className="size-4" />}
       onClose={onClose}
       footer={
         <Button disabled={!customValid} onClick={() => onApply({ from, to })}>
@@ -51,7 +51,7 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
         </Button>
       }
     >
-      <div className="flex flex-col gap-1">
+      <div className="grid grid-cols-2 gap-1">
         {PRESETS.map((key) => (
           <button
             key={key}
@@ -64,14 +64,14 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
         ))}
       </div>
       <div className="my-3 h-px bg-fg/8" />
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
           {t("budget.overview.from")}
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
+            className="w-full rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
@@ -80,7 +80,7 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
+            className="w-full rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
           />
         </label>
       </div>

@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { Dot, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { BUDGET_ICONS, categoryLabel, safeBudgetColor, type CategoryLike } from "../../lib/budget";
 import { tint } from "../../lib/color";
+import { FilledDot } from "./FilledDot";
 
 type CategoryChipProps = {
   /** `null` is the "no category" state, not a missing prop. */
@@ -28,7 +29,7 @@ export function CategoryChip({
   const { t } = useTranslation();
   const label = category ? categoryLabel(t, category) : t("budget.uncategorized");
   const color = category ? safeBudgetColor(category.color) : AMBER;
-  const Icon = (category?.icon && BUDGET_ICONS[category.icon]) || Dot;
+  const Icon = (category?.icon && BUDGET_ICONS[category.icon]) || FilledDot;
 
   return (
     <span

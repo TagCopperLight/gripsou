@@ -95,7 +95,7 @@ export function TransactionRow({
       data-testid="tx-row"
       role="row"
       className={`col-span-full grid grid-cols-subgrid text-sm ${CELL} group ${
-        selected ? "[&>td]:bg-green/12" : "hover:[&>td]:bg-hover"
+        selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : "hover:[&>td]:bg-hover"
       }`}
     >
       <td role="cell" className={`py-2.25 ${COL_PAD.transaction}`}>
