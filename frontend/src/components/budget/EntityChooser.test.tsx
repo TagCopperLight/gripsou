@@ -58,6 +58,11 @@ describe("CategoryChooser", () => {
     );
   });
 
+  it("focuses the search field on open, so typing starts at once", () => {
+    renderChooser();
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+  });
+
   it("groups the rows under their kind, in kind order, and hides archived ones", async () => {
     renderChooser();
     await screen.findByText("Groceries");

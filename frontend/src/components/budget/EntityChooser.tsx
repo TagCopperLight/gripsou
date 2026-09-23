@@ -121,7 +121,7 @@ export function EntityChooser({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-fg-faint" />
           <input
             type="search"
-            autoFocus
+            data-autofocus
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
