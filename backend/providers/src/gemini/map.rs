@@ -163,8 +163,17 @@ pub fn parse_response(
         tokens_in: body["usageMetadata"]["promptTokenCount"]
             .as_i64()
             .map(|n| n as i32),
-        tokens_out: body["usageMetadata"]["candidatesTokenCount"]
-            .as_i64()
-            .map(|n| n as i32),
+        tokens_out: output_tokens(&body["usageMetadata"]),
     })
+}
+
+/// Billed output: the answer plus the thinking tokens, which Gemini reports
+/// apart but charges at the output rate. Unknown only when neither is present.
+fn output_tokens(usage: &Value) -> Option<i32> {
+    let candidates = usage["candidatesTokenCount"].as_i64();
+    let thoughts = usage["thoughtsTokenCount"].as_i64();
+    if candidates.is_none() && thoughts.is_none() {
+        return None;
+    }
+    Some((candidates.unwrap_or(0) + thoughts.unwrap_or(0)) as i32)
 }

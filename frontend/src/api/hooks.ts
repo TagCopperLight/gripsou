@@ -27,7 +27,7 @@ import type {
   User,
 } from "./types";
 import { hasSyncing } from "./types";
-import type { BudgetAiProvider, BudgetAiSettings } from "./budget";
+import type { BudgetAiPrices, BudgetAiProvider, BudgetAiSettings, BudgetAiUsage } from "./budget";
 import { keys } from "./keys";
 import {
   afterAccountEdit,
@@ -376,6 +376,21 @@ export function useSetBudgetAiSettings() {
       qc.invalidateQueries({ queryKey: keys.budgetAiSettings() });
       qc.invalidateQueries({ queryKey: keys.budgetAiStatus() });
     },
+  });
+}
+
+export function useBudgetAiUsage() {
+  return useQuery({
+    queryKey: keys.budgetAiUsage(),
+    queryFn: () => getJson<BudgetAiUsage>("/settings/budget-ai/usage"),
+  });
+}
+
+export function useSetBudgetAiPrices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prices: BudgetAiPrices) => putJson<void>("/settings/budget-ai/prices", prices),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.budgetAiUsage() }),
   });
 }
 

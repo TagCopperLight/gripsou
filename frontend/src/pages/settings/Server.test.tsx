@@ -9,10 +9,15 @@ const PROVIDERS: Provider[] = [
   { key: "powens", displayName: "Powens", description: "Bank aggregation.", enabled: true },
 ];
 
-// The Budget AI block reads its own settings; every stub answers it the same way.
-const budgetAiRes = () =>
+// The Budget AI blocks read their own settings and usage; every stub answers
+// them the same way.
+const budgetAiRes = (url: string) =>
   new Response(
-    JSON.stringify({ provider: null, model: null, available: [], defaults: { gemini: "g", jev: "j" } }),
+    JSON.stringify(
+      url.endsWith("/usage")
+        ? { currency: "USD", models: [], totalCost: "0" }
+        : { provider: null, model: null, available: [], defaults: { gemini: "g", jev: "j" } },
+    ),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 
@@ -26,7 +31,7 @@ describe("SettingsServer — data providers", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.includes("/settings/budget-ai")) return budgetAiRes();
+        if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
         if (url.includes("/settings/cors")) {
           return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
         }
@@ -64,7 +69,7 @@ describe("SettingsServer — CORS origins", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.includes("/settings/budget-ai")) return budgetAiRes();
+        if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
         if (url.includes("/settings/cors")) {
           if (init?.method === "PATCH") {
             corsOrigins = JSON.parse(init.body as string) as string[];
@@ -119,7 +124,7 @@ describe("SettingsServer — about", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        if (url.includes("/settings/budget-ai")) return budgetAiRes();
+        if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
         if (url.includes("/health")) {
           return new Response(JSON.stringify({ status: "ok", version: "v1.3.0-9-gd5fd32d" }), {
             status: 200,

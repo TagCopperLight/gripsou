@@ -712,6 +712,124 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
     assert_eq!(far_pair, None);
     Ok(())
 }
+
+/// A savings account whose transfers to the current account pass through a
+/// deposit account (savings → deposit → current account), as seen on
+/// real data. Seeds one such chain of `amount` at `ts`, returning its rows as
+/// (livret out, depot in, depot out, courant in).
+async fn chain_at(
+    pool: &PgPool,
+    [livret, depot, courant]: [Uuid; 3],
+    tag: &str,
+    amount: Decimal,
+    ts: DateTime<Utc>,
+) -> anyhow::Result<[Uuid; 4]> {
+    Ok([
+        tx_at(pool, livret, "livret", &format!("{tag}-lo"), -amount, ts).await?,
+        tx_at(pool, depot, "depot", &format!("{tag}-di"), amount, ts).await?,
+        tx_at(pool, depot, "depot", &format!("{tag}-do"), -amount, ts).await?,
+        tx_at(pool, courant, "courant", &format!("{tag}-ci"), amount, ts).await?,
+    ])
+}
+
+async fn chain_accounts(pool: &PgPool) -> anyhow::Result<(Uuid, [Uuid; 3])> {
+    let (user_id, conn_id) = seed_user_and_connection(pool).await;
+    let mut conn = pool.acquire().await?;
+    let mut ids = [Uuid::nil(); 3];
+    for (slot, ext) in ids.iter_mut().zip(["livret", "depot", "courant"]) {
+        *slot = upsert_account(&mut conn, conn_id, &account(ext, "EUR")).await?;
+    }
+    Ok((user_id, ids))
+}
+
+async fn partner(pool: &PgPool, id: Uuid) -> anyhow::Result<Option<Uuid>> {
+    Ok(
+        sqlx::query_scalar("select transfer_pair_id from transaction where id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
+/// Every row of a same-day chain ties (the Livret outflow is equally near the
+/// depot and current-account inflows), so nearest-neighbour matching alone
+/// pairs nothing. But the depot can't pay itself, so there is only one way
+/// to explain all four rows — and that one is taken.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, accts) = chain_accounts(&pool).await?;
+    let [lo, di, dout, ci] =
+        chain_at(&pool, accts, "c", Decimal::new(10000, 2), Utc::now()).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+    assert_eq!(partner(&pool, lo).await?, Some(di));
+    assert_eq!(partner(&pool, dout).await?, Some(ci));
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    Ok(())
+}
+
+/// One extra same-amount inflow elsewhere means some row in the cluster is
+/// not a movement between the user's accounts, and nothing says which — so
+/// nothing pairs.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, accts) = chain_accounts(&pool).await?;
+    let now = Utc::now();
+    chain_at(&pool, accts, "c", Decimal::new(10000, 2), now).await?;
+    let mut conn = pool.acquire().await?;
+    let (_, conn_id): (Uuid, Uuid) =
+        sqlx::query_as("select k.user_id, k.id from connection k where k.user_id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await?;
+    let other = upsert_account(&mut conn, conn_id, &account("other", "EUR")).await?;
+    tx_at(&pool, other, "other", "stray", Decimal::new(10000, 2), now).await?;
+
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    Ok(())
+}
+
+/// Two identical chains the same day: which Livret row goes with which depot
+/// row makes no difference, so both chains pair.
+#[sqlx::test(migrations = "../migrations")]
+async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, accts) = chain_accounts(&pool).await?;
+    let now = Utc::now();
+    chain_at(&pool, accts, "c1", Decimal::new(10000, 2), now).await?;
+    chain_at(&pool, accts, "c2", Decimal::new(10000, 2), now).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 4);
+    Ok(())
+}
+
+/// Chains two days apart fall inside one three-day window, where a Livret
+/// row could as well go with the other day's depot row. Looking at each day
+/// first keeps each chain to itself.
+#[sqlx::test(migrations = "../migrations")]
+async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, accts) = chain_accounts(&pool).await?;
+    let now = Utc::now();
+    let [lo1, di1, do1, ci1] = chain_at(&pool, accts, "c1", Decimal::new(10000, 2), now).await?;
+    let [lo2, di2, do2, ci2] = chain_at(
+        &pool,
+        accts,
+        "c2",
+        Decimal::new(10000, 2),
+        now + Duration::days(2),
+    )
+    .await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 4);
+    assert_eq!(partner(&pool, lo1).await?, Some(di1));
+    assert_eq!(partner(&pool, do1).await?, Some(ci1));
+    assert_eq!(partner(&pool, lo2).await?, Some(di2));
+    assert_eq!(partner(&pool, do2).await?, Some(ci2));
+    Ok(())
+}
+
 /// If this user's `internal_transfer` budget_category row is missing (it is
 /// trigger-seeded and the repository refuses to delete it, but nothing below
 /// the repository layer enforces that), the pairing UPDATE's join to it
