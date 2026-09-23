@@ -1004,12 +1004,15 @@ pub async fn transactions(
             join connection c on c.id = a.connection_id
             left join budget_category bc on bc.id = t.budget_category_id
             where c.user_id = $1
-              -- Mirrors §8.1's cash-walk exclusion, for the same reason: a
-              -- transfer into the PEA is the other half of an outflow already
-              -- listed on the checking account, and a provider buy is the
-              -- cash leg of a purchase the lot branch below already lists.
-              -- Unconditional — these rows are not filterable, they are
-              -- unreachable through this endpoint.
+              -- A provider buy/sell on the PEA is the cash leg of a purchase
+              -- the lot branch below already lists; showing both would list
+              -- it twice. Unconditional — these rows are not filterable, they
+              -- are unreachable through this endpoint.
+              --
+              -- Transfers into the PEA are NOT hidden: pairing files both
+              -- halves as internal transfer, which is what keeps them from
+              -- double-counting. Hiding one half left its checking-side twin
+              -- paired to a row nobody could find.
               --
               -- Scoped to provider rows via `external_id is not null`: there
               -- are no manual buy/sell rows in `transaction` any more (they
@@ -1017,7 +1020,7 @@ pub async fn transactions(
               -- through the lot branch of the union instead.
               and not (a.type_key = 'pea'
                        and t.external_id is not null
-                       and t.type in ('transfer', 'buy', 'sell'))
+                       and t.type in ('buy', 'sell'))
 
             union all
 
@@ -1257,7 +1260,7 @@ pub async fn transaction_counts(
             where c.user_id = $1
               and not (a.type_key = 'pea'
                        and t.external_id is not null
-                       and t.type in ('transfer', 'buy', 'sell'))
+                       and t.type in ('buy', 'sell'))
 
             union all
 
@@ -1356,7 +1359,7 @@ pub async fn transaction_counts(
             where k.user_id = $1
               and not (a.type_key = 'pea'
                        and t.external_id is not null
-                       and t.type in ('transfer', 'buy', 'sell')))
+                       and t.type in ('buy', 'sell')))
         + (select count(*) from lot l
              join holding h    on h.id = l.holding_id
              join account a    on a.id = h.account_id
@@ -1368,7 +1371,7 @@ pub async fn transaction_counts(
             where k.user_id = $1 and t.budget_category_id is null
               and not (a.type_key = 'pea'
                        and t.external_id is not null
-                       and t.type in ('transfer', 'buy', 'sell'))) as "uncategorized!"
+                       and t.type in ('buy', 'sell'))) as "uncategorized!"
         "#,
         user_id,
         f.search,
@@ -1418,7 +1421,7 @@ pub async fn matching_transaction_ids(
         where k.user_id = $1
           and not (a.type_key = 'pea'
                    and t.external_id is not null
-                   and t.type in ('transfer', 'buy', 'sell'))
+                   and t.type in ('buy', 'sell'))
           and ($2::text is null or t.description ilike '%' || $2 || '%')
           and ($3::uuid is null or a.id = $3)
           and ($4::text is null or t.type = $4)

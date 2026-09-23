@@ -325,14 +325,14 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// `transactions()` hides a PEA's provider `transfer`/`buy`/`sell` rows (the
-/// cash-walk exclusion, §8.1). The counts must agree with it, unfiltered: if
+/// `transactions()` hides a PEA's provider `buy`/`sell` rows (the lot branch
+/// already lists them). The counts must agree with it, unfiltered: if
 /// `total`/`uncategorized` reverted to counting raw `transaction` rows with no
 /// PEA exclusion, `matching` (which does exclude them) could never equal
 /// `total`, and `uncategorized` would count rows the list can never show, so
 /// this would fail on both assertions.
 #[sqlx::test(migrations = "../migrations")]
-async fn counts_hide_pea_transfers_and_trades_like_the_list(pool: PgPool) -> anyhow::Result<()> {
+async fn counts_hide_pea_trades_like_the_list(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _ids) = fixture(&pool).await?;
     let conn_id: Uuid = sqlx::query_scalar("select connection_id from account limit 1")
         .fetch_one(&pool)
@@ -359,15 +359,16 @@ async fn counts_hide_pea_transfers_and_trades_like_the_list(pool: PgPool) -> any
     assert_eq!(
         counts.total,
         all_rows.len() as i64,
-        "total must match the list, which hides the PEA transfer/buy/sell rows"
+        "total must match the list, which hides the PEA buy/sell rows"
     );
     assert_eq!(
         counts.matching, counts.total,
         "unfiltered: matching (already PEA-excluded) must equal total"
     );
-    // 3 checking rows + 1 PEA dividend visible; the PEA transfer/buy/sell are
-    // hidden, so uncategorized (all of these are uncategorized) must match.
-    assert_eq!(counts.uncategorized, 4);
+    // 3 checking rows + the PEA transfer and dividend visible; the PEA
+    // buy/sell are hidden, so uncategorized (all of these are uncategorized)
+    // must match.
+    assert_eq!(counts.uncategorized, 5);
     Ok(())
 }
 

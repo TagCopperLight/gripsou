@@ -45,7 +45,6 @@ pub async fn backfill_connection(
         with scope as (
             select h.id as holding_id, h.account_id, h.instrument_id,
                    i.kind = 'cash' as is_cash,
-                   a.type_key = 'pea' as is_pea,
                    -- Not a cost-basis walk input (that rule is retired from
                    -- this file, 0023). Just the holding's own stored figure,
                    -- carried flat as the last-resort value fallback below when
@@ -120,11 +119,10 @@ pub async fn backfill_connection(
         -- balance reflected it, which drove derived cash negative on 1,753 days.
         -- `coalesce` keeps a provider that reports only one date working as before.
         --
-        -- Cash moves by `amount`; a security
-        -- moves by share count. On a PEA, transfer/buy/sell are excluded from
-        -- the cash walk (§8.1): the PEA's history starts 2026-01-14 while the
-        -- position predates it, so its buys have no matching transfer-in and a
-        -- walk that counted them would drift by the whole unexplained basis.
+        -- Cash moves by `amount`; a security moves by share count. Every
+        -- account counts every type, the PEA included (§8.1): within the PEA's
+        -- own history each provider buy is funded by a transfer-in on record,
+        -- so counting both reproduces the bank's real balances.
         --
         -- `transaction` carries no currency, so `amount` is only meaningful for
         -- the cash holding whose instrument currency matches the account's own
@@ -136,6 +134,10 @@ pub async fn backfill_connection(
         -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
         -- once.
         moves as materialized (
+          -- One row per (holding, day): the cash line can move by a
+          -- transaction and a pre-history lot on the same day, and everything
+          -- downstream joins on the day.
+          select holding_id, day, sum(delta) as delta from (
             -- Cash moves by transaction amount, keyed on the day the BALANCE
             -- moved. Every comment that used to sit above this aggregate still
             -- applies to this branch and should be kept with it.
@@ -144,9 +146,51 @@ pub async fn backfill_connection(
             from scope s
             join transaction t on t.account_id = s.account_id
             where s.is_cash
-              and not (s.is_pea and t.type in ('transfer', 'buy', 'sell'))
               and s.is_account_currency
             group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
+
+            union all
+
+            -- Before the provider's history starts, a purchase has no provider
+            -- buy row to be its cash leg; the lot is the only record of the
+            -- cash leaving. So lots dated before the account's first provider
+            -- transaction move its cash line: a buy by -(qty x price + fee),
+            -- a sale by +(qty x price - fee). From that date on, the provider
+            -- row is the cash leg and the lot would count it twice.
+            --
+            -- Only where the user has also entered cash rows by hand for that
+            -- period. Lots are routinely entered for cost basis alone; counting
+            -- their purchases with no deposits to fund them would inflate the
+            -- cash line going back in time. Hand-entered rows are the signal
+            -- the pre-history record is complete enough to walk.
+            --
+            -- Lot prices are in the instrument's currency, so only lots whose
+            -- instrument matches the account currency move this line.
+            select s.holding_id, l.acquired_on as day,
+                   sum(case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
+                            else l.quantity * l.unit_price - l.fee end) as delta
+            from scope s
+            join holding h    on h.account_id = s.account_id
+            join instrument i on i.id = h.instrument_id
+            join account a    on a.id = s.account_id
+            join lot l        on l.holding_id = h.id
+            cross join lateral (
+                select min(txn_day(s.trust_booked_on, t.booked_on, t.ts)) as day
+                from transaction t
+                where t.account_id = s.account_id and t.external_id is not null
+            ) provider_start
+            where s.is_cash
+              and s.is_account_currency
+              and i.kind <> 'cash'
+              and i.currency = a.currency
+              and l.acquired_on < provider_start.day
+              and exists (
+                  select 1 from transaction t
+                  where t.account_id = s.account_id
+                    and t.external_id is null
+                    and txn_day(s.trust_booked_on, t.booked_on, t.ts) < provider_start.day
+              )
+            group by s.holding_id, l.acquired_on
 
             union all
 
@@ -159,6 +203,8 @@ pub async fn backfill_connection(
             join lot l on l.holding_id = s.holding_id
             where not s.is_cash
             group by l.holding_id, l.acquired_on
+          ) m
+          group by holding_id, day
         ),
         days as (
             select s.holding_id, gs::date as as_of
