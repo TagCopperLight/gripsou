@@ -268,14 +268,6 @@ export type Transaction = {
    *  corrected the other half, so this one nets against nothing. Mutually
    *  exclusive with `isTransfer` by construction. */
   isOrphanTransfer: boolean;
-  /** From the merchant memo, keyed on the normalised description. */
-  merchantDomain: string | null;
-  /** Brandfetch URL. May 404 — the avatar then falls back to the category icon. */
-  merchantLogoUrl: string | null;
-  /** User-written, belongs to this ONE transaction (unlike the merchant memo,
-   *  which applies to every row sharing the normalised description). Shown
-   *  only in the transaction modal, never in the list rows. */
-  note: string | null;
   tags: TransactionTag[];
 };
 

@@ -193,32 +193,6 @@ pub async fn set_checked(
     Ok(done.rows_affected() > 0)
 }
 
-/// User-written, per transaction, never touched by sync. Trimmed; an empty
-/// or whitespace-only note clears it (stored as null).
-pub async fn set_note(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-    note: Option<&str>,
-) -> Result<bool, CoreError> {
-    let note = note.map(str::trim).filter(|s| !s.is_empty());
-    let done = sqlx::query!(
-        r#"
-        update transaction t
-           set note = $3
-          from account a
-          join connection k on k.id = a.connection_id
-         where t.id = $1 and a.id = t.account_id and k.user_id = $2
-        "#,
-        txn_id,
-        user_id,
-        note,
-    )
-    .execute(pool)
-    .await?;
-    Ok(done.rows_affected() > 0)
-}
-
 pub async fn bulk_set_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,

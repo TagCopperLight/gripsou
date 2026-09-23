@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::categorize::{CategorizeError, CategorizeRequest, Categorizer};
-use crate::categorize::{CategorizeItem, CategoryOption, Guess, Merchant};
+use crate::categorize::{CategorizeItem, CategoryOption, Guess};
 use crate::error::CoreError;
 use crate::repo::budget::ai as repo;
 
@@ -19,7 +19,6 @@ pub struct Decision {
     pub txn_id: Uuid,
     pub category_id: Option<Uuid>,
     pub confidence: Option<Decimal>,
-    pub merchant: Option<Merchant>,
 }
 
 /// The ids an item may be given, by the sign of its amount (spec §4.2).
@@ -53,7 +52,6 @@ pub fn decide(items: &[CategorizeItem], guesses: Vec<Guess>) -> Vec<Decision> {
         .map(|item| {
             let mut found = by_key.remove(&item.key).unwrap_or_default();
             let only = if found.len() == 1 { found.pop() } else { None };
-            let merchant = only.as_ref().and_then(|g| g.merchant.clone());
             let valid = only.and_then(|g| {
                 g.category_id
                     .filter(|c| item.candidates.contains(c))
@@ -64,13 +62,11 @@ pub fn decide(items: &[CategorizeItem], guesses: Vec<Guess>) -> Vec<Decision> {
                     txn_id: item.key,
                     category_id: Some(category),
                     confidence: confidence.map(clamp_unit),
-                    merchant,
                 },
                 None => Decision {
                     txn_id: item.key,
                     category_id: None,
                     confidence: None,
-                    merchant,
                 },
             }
         })
@@ -176,13 +172,6 @@ async fn run_locked(
                 let decisions = decide(&req.items, out.guesses);
                 let written = repo::write_decisions(pool, &decisions).await?;
                 rec.items += written as i32;
-                // Merchants are best-effort: a logo is decoration, and a
-                // failure here must not undo categories already written.
-                if let Err(e) =
-                    crate::repo::budget::memo::record_ai_merchants(pool, user_id, &decisions).await
-                {
-                    tracing::warn!("merchant memo not recorded for {user_id}: {e}");
-                }
                 // Every row of a chunk is either written or was taken by
                 // someone else meanwhile; neither comes back. Zero written
                 // means something is wrong with the guard — stop rather
@@ -218,7 +207,7 @@ async fn run_locked(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::categorize::{CategorizeItem, CategoryOption, Guess, Merchant};
+    use crate::categorize::{CategorizeItem, CategoryOption, Guess};
     use chrono::NaiveDate;
     use rust_decimal::Decimal;
     use uuid::Uuid;
@@ -250,7 +239,6 @@ mod tests {
             key,
             category_id: cat,
             confidence: conf,
-            merchant: None,
         }
     }
 
@@ -356,18 +344,5 @@ mod tests {
         );
         assert_eq!(d[0].confidence, Some(Decimal::ONE));
         assert_eq!(d[1].confidence, Some(Decimal::ZERO));
-    }
-
-    #[test]
-    fn the_merchant_survives_an_abstention() {
-        let it = item(vec![Uuid::new_v4()]);
-        let m = Merchant {
-            name: Some("Leclerc".into()),
-            domain: Some("leclerc.fr".into()),
-        };
-        let mut g = guess(it.key, None, None);
-        g.merchant = Some(m.clone());
-        let d = decide(std::slice::from_ref(&it), vec![g]);
-        assert_eq!(d[0].merchant, Some(m));
     }
 }

@@ -6,7 +6,6 @@
 pub mod ai;
 pub mod assign;
 pub mod category;
-pub mod memo;
 pub mod review;
 pub mod summary;
 pub mod tag;

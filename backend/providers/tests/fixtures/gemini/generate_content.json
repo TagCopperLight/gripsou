@@ -5,7 +5,7 @@
         "role": "model",
         "parts": [
           {
-            "text": "[{\"i\":0,\"category_id\":\"11111111-1111-1111-1111-111111111111\",\"confidence\":0.91,\"merchant\":{\"name\":\"Leclerc\",\"domain\":\"leclerc.fr\"}},{\"i\":1,\"category_id\":null,\"confidence\":0.2,\"merchant\":null},{\"i\":7,\"category_id\":\"11111111-1111-1111-1111-111111111111\",\"confidence\":0.5,\"merchant\":null}]"
+            "text": "[{\"i\":0,\"category_id\":\"11111111-1111-1111-1111-111111111111\",\"confidence\":0.91},{\"i\":1,\"category_id\":null,\"confidence\":0.2},{\"i\":7,\"category_id\":\"11111111-1111-1111-1111-111111111111\",\"confidence\":0.5}]"
           }
         ]
       },

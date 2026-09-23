@@ -145,8 +145,8 @@ async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// The normalisation the memo (phase 5) and the "apply to all" prompt
-/// (phase 3) both key on: card masks, dates and digit runs removed.
+/// The normalisation the "apply to all" prompt (phase 3) keys on: card
+/// masks, dates and digit runs removed.
 #[sqlx::test(migrations = "../migrations")]
 async fn norm_description_strips_masks_dates_and_digits(pool: PgPool) -> anyhow::Result<()> {
     let cases = [

@@ -57,10 +57,6 @@ export const keys = {
   budgetAiStatus: () => ["budget-ai-status"] as const,
   budgetAiSettings: () => ["budget-ai-settings"] as const,
   budgetAiUsage: () => ["budget-ai-usage"] as const,
-  merchantLogoPreview: (domain?: string) =>
-    (domain === undefined
-      ? ["merchant-logo-preview"]
-      : ["merchant-logo-preview", domain]) as readonly unknown[],
 
   users: () => ["users"] as const,
   sessions: () => ["sessions"] as const,

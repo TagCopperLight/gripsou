@@ -119,8 +119,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/budget/review/{id}/accept", post(budget::accept_review))
         .route("/budget/review/{id}/undo", post(budget::undo_review))
         .route("/budget/trend", get(budget::trend_handler))
-        .route("/budget/merchants", put(budget::set_merchant))
-        .route("/budget/merchants/logo", get(budget::preview_merchant_logo))
         .route(
             "/budget/tags/{id}",
             patch(budget::update_tag).delete(budget::delete_tag),

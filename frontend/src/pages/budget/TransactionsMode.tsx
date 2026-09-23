@@ -10,7 +10,6 @@ import { TransactionsTable } from "../../components/budget/TransactionsTable";
 import { SelectionBar } from "../../components/budget/SelectionBar";
 import { CategoryChooser } from "../../components/budget/CategoryChooser";
 import { TagChooser } from "../../components/budget/TagChooser";
-import { TransactionModal } from "../../components/budget/TransactionModal";
 import { useBudget } from "../../components/budget/budgetContext";
 import {
   useApplyToDescription, useBudgetCategories, useBudgetTags, useBulkTransactions, usePatchTransaction,
@@ -94,7 +93,6 @@ export function TransactionsMode() {
   // translation key, `role="alert"` + the red text class renders it.
   const [writeErrorKey, setWriteErrorKey] = useState<string | null>(null);
   const [bulkUpdated, setBulkUpdated] = useState<number | null>(null);
-  const [merchantTx, setMerchantTx] = useState<Transaction | null>(null);
 
   const rows = list.data?.pages.flat() ?? [];
 
@@ -278,7 +276,6 @@ export function TransactionsMode() {
               { onError: onWriteError },
             )
           }
-          onOpenMerchant={setMerchantTx}
         />
 
         {writeErrorKey && (
@@ -395,8 +392,6 @@ export function TransactionsMode() {
           </p>
         </BudgetDialog>
       )}
-
-      {merchantTx && <TransactionModal tx={merchantTx} onClose={() => setMerchantTx(null)} />}
     </div>
   );
 }

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use gripsou_core::categorize::{
-    CategorizeError, CategorizeOutput, CategorizeRequest, Example, Guess, Merchant,
+    CategorizeError, CategorizeOutput, CategorizeRequest, Example, Guess,
 };
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
@@ -18,7 +18,6 @@ Never use an id that is not in the item's `allowed` list. \
 Use the confirmed examples: they are the user's own past decisions, and the amount, date and account \
 often distinguish transactions that share a description. \
 Give a confidence between 0 and 1 that reflects how sure you are. \
-When the merchant is recognisable, give its name and its main web domain (e.g. leclerc.fr), else null. \
 Answer with one entry per item, keyed by the item's index `i`.";
 
 fn example_json(req: &CategorizeRequest, e: &Example) -> Value {
@@ -73,15 +72,7 @@ pub fn response_schema(req: &CategorizeRequest) -> Value {
             "properties": {
                 "i": { "type": "INTEGER" },
                 "category_id": category_id,
-                "confidence": { "type": "NUMBER" },
-                "merchant": {
-                    "type": "OBJECT",
-                    "nullable": true,
-                    "properties": {
-                        "name": { "type": "STRING", "nullable": true },
-                        "domain": { "type": "STRING", "nullable": true }
-                    }
-                }
+                "confidence": { "type": "NUMBER" }
             },
             "required": ["i", "category_id", "confidence"]
         }
@@ -110,13 +101,6 @@ fn decimal_of(v: &Value) -> Option<Decimal> {
     }
 }
 
-fn opt_string(v: &Value) -> Option<String> {
-    v.as_str()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
 /// Maps a 2xx body. Entries with an index outside the batch are dropped;
 /// an unparseable id becomes an abstention (the core validates the rest).
 pub fn parse_response(
@@ -141,20 +125,12 @@ pub fn parse_response(
         .filter_map(|a| {
             let i = usize::try_from(a["i"].as_u64()?).ok()?;
             let item = req.items.get(i)?;
-            let merchant = a
-                .get("merchant")
-                .filter(|m| m.is_object())
-                .map(|m| Merchant {
-                    name: opt_string(&m["name"]),
-                    domain: opt_string(&m["domain"]).map(|d| d.to_lowercase()),
-                });
             Some(Guess {
                 key: item.key,
                 category_id: a["category_id"]
                     .as_str()
                     .and_then(|s| Uuid::parse_str(s).ok()),
                 confidence: decimal_of(&a["confidence"]),
-                merchant,
             })
         })
         .collect();

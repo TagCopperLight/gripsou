@@ -57,24 +57,9 @@ create table budget_rule (
     enabled             boolean not null default true,
     condition           jsonb not null,
     set_category_id     uuid references budget_category (id) on delete set null,
-    set_merchant_domain text,
     add_tag_ids         uuid[] not null default '{}',
     created_at          timestamptz not null default now(),
     updated_at          timestamptz not null default now()
-);
-
--- Cache of "what does this description mean", keyed on the normalised string.
--- Written by the AI phase; read by the same phase. Created here with the rest.
-create table budget_memo (
-    user_id          uuid not null references users (id) on delete cascade,
-    norm_description text not null,
-    category_id      uuid references budget_category (id) on delete set null,
-    confidence       numeric,
-    origin           text not null check (origin in ('user', 'ai')),
-    merchant_name    text,
-    merchant_domain  text,
-    updated_at       timestamptz not null default now(),
-    primary key (user_id, norm_description)
 );
 
 create table budget_ai_run (
