@@ -69,6 +69,15 @@ export function Popover({ title, anchor = null, onClose, children, className = "
     };
   }, [anchor]);
 
+  // `autoFocus` cannot do this: at mount the panel is still hidden (see the
+  // style below) and browsers refuse to focus an invisible element. Once it
+  // is placed, the field that asked for it gets focus, so typing starts at
+  // once.
+  const placed = pos !== null;
+  useEffect(() => {
+    if (placed) ref.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, [placed]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
