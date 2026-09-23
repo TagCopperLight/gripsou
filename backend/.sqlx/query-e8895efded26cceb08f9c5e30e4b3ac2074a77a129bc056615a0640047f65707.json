@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select count(*) as \"n!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        left join budget_category bc on bc.id = t.budget_category_id\n        where k.user_id = $1\n          and not (a.type_key = 'pea' and t.external_id is not null and t.type in ('buy', 'sell'))\n          and t.category_source = 'ai'\n          and t.category_reviewed_at is null\n          and (t.category_confidence is null\n               or t.category_confidence < $2\n               or bc.kind in ('internal', 'excluded'))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e8895efded26cceb08f9c5e30e4b3ac2074a77a129bc056615a0640047f65707"
+}

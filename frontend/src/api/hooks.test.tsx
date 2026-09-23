@@ -141,6 +141,7 @@ describe("useDeleteConnection", () => {
       ["budget-tags"],
       ["budget-summary"],
       ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 });

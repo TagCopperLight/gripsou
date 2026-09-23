@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
-use gripsou_core::repo::budget::{assign, category, tag};
+use gripsou_core::repo::budget::{ai as ai_repo, assign, category, review, tag};
 use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transaction_counts};
 
 use chrono::NaiveDate;
@@ -787,7 +787,10 @@ pub async fn bulk_transactions(
     let ids = match (b.ids, b.filter) {
         (Some(ids), _) => ids,
         (None, Some(params)) => {
-            let filters = crate::handlers::filters_from_params(params)?;
+            let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
+                .await
+                .map_err(internal)?;
+            let filters = crate::handlers::filters_from_params(params, threshold)?;
             matching_transaction_ids(&pool, user_id, &filters)
                 .await
                 .map_err(internal)?
@@ -838,7 +841,10 @@ pub async fn transaction_count_summary(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<crate::handlers::TransactionParams>,
 ) -> Result<Json<CountsDto>, (StatusCode, String)> {
-    let filters = crate::handlers::filters_from_params(p)?;
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let filters = crate::handlers::filters_from_params(p, threshold)?;
     let c = transaction_counts(&pool, user_id, &filters)
         .await
         .map_err(internal)?;
@@ -850,13 +856,6 @@ pub async fn transaction_count_summary(
         fx_missing: c.fx_missing,
         reporting_fx_missing: c.reporting_fx_missing,
     }))
-}
-
-/// The confidence below which an AI guess goes to the review queue. A function
-/// rather than a `const` because `Decimal` construction is not const here; it
-/// becomes a server setting in phase 5.
-pub fn default_review_threshold() -> Decimal {
-    Decimal::new(80, 2)
 }
 
 /// Parses the comma-separated id parameters the filter panel sends. A filter
@@ -890,6 +889,93 @@ pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, (StatusCode, String
         Some(s) if ["all", "in", "out", "lots"].contains(&s) => Ok(TypeBucket::from_param(s)),
         Some(s) => Err((StatusCode::BAD_REQUEST, format!("invalid bucket: {s}"))),
     }
+}
+
+pub async fn categorize_status(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<crate::dto::AiStatusDto>, (StatusCode, String)> {
+    let settings = gripsou_core::repo::settings::budget_ai(&pool)
+        .await
+        .map_err(internal)?;
+    let configured = settings
+        .provider
+        .as_deref()
+        .is_some_and(|p| gripsou_jobs::available_categorizers().contains(&p));
+    let enabled = configured && gripsou_jobs::categorize_ready(&pool, user_id).await;
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let last = ai_repo::last_run(&pool, user_id).await.map_err(internal)?;
+    Ok(Json(crate::dto::AiStatusDto {
+        configured,
+        enabled,
+        running: ai_repo::is_locked(&pool, user_id).await.map_err(internal)?,
+        remaining: ai_repo::remaining(&pool, user_id).await.map_err(internal)?,
+        review_count: review::review_count(&pool, user_id, threshold)
+            .await
+            .map_err(internal)?,
+        threshold: rust_decimal::prelude::ToPrimitive::to_u8(
+            &(threshold * Decimal::from(100)).trunc(),
+        )
+        .unwrap_or(80),
+        last_run: last.map(|r| crate::dto::AiLastRunDto {
+            outcome: r.outcome,
+            error: r.error,
+            at: r.started_at.timestamp_millis(),
+        }),
+    }))
+}
+
+pub async fn request_categorize(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> StatusCode {
+    if !gripsou_jobs::categorize_ready(&pool, user_id).await {
+        return StatusCode::CONFLICT;
+    }
+    gripsou_jobs::request_categorize(pool, user_id);
+    StatusCode::ACCEPTED
+}
+
+fn review_status(w: review::ReviewWrite) -> StatusCode {
+    match w {
+        review::ReviewWrite::Done => StatusCode::NO_CONTENT,
+        review::ReviewWrite::NotFound => StatusCode::NOT_FOUND,
+        review::ReviewWrite::Refused => StatusCode::CONFLICT,
+    }
+}
+
+pub async fn accept_review(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    Ok(review_status(
+        review::accept(&pool, user_id, id).await.map_err(internal)?,
+    ))
+}
+
+pub async fn undo_review(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<crate::dto::UndoReviewReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if body
+        .confidence
+        .is_some_and(|c| c < Decimal::ZERO || c > Decimal::ONE)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "confidence must be between 0 and 1".into(),
+        ));
+    }
+    Ok(review_status(
+        review::undo(&pool, user_id, id, body.category_id, body.confidence)
+            .await
+            .map_err(internal)?,
+    ))
 }
 
 #[cfg(test)]

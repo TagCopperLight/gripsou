@@ -1,5 +1,6 @@
-//! Budget pipeline stages that are not persistence: today, internal-transfer
-//! pairing. Later phases add rules, the memo replay and the AI call here.
+//! Budget pipeline stages that are not persistence: internal-transfer
+//! pairing, the AI run, and the Overview arithmetic.
 
+pub mod ai;
 pub mod overview;
 pub mod pairing;

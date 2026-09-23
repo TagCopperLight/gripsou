@@ -28,6 +28,7 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.budgetTags(),
     keys.budgetSummary(),
     keys.budgetTrend(),
+    keys.budgetAiStatus(),
   ]);
 }
 
@@ -90,6 +91,7 @@ export function afterBudgetCategoryChange(qc: QueryClient) {
     keys.transactionCounts(),
     keys.budgetSummary(),
     keys.budgetTrend(),
+    keys.budgetAiStatus(),
   ]);
 }
 
@@ -102,6 +104,19 @@ export function afterBudgetTagChange(qc: QueryClient) {
 // with the list itself — the same omission that was C-17 for the list.
 export function afterTransactionChange(qc: QueryClient) {
   invalidateAll(qc, [
+    keys.transactions(),
+    keys.transactionCounts(),
+    keys.budgetSummary(),
+    keys.budgetTrend(),
+    keys.budgetAiStatus(),
+  ]);
+}
+
+// Accepting, correcting or undoing a review line, and the AI run itself: the
+// queue count and every figure built on categories move together.
+export function afterReviewChange(qc: QueryClient) {
+  invalidateAll(qc, [
+    keys.budgetAiStatus(),
     keys.transactions(),
     keys.transactionCounts(),
     keys.budgetSummary(),

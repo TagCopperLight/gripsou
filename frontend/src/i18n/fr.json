@@ -309,7 +309,12 @@
       "cors": "Origines CORS",
       "corsHint": "Origines de navigateur autorisées à appeler l'API gripsou. Ajoutez l'adresse que vous utilisez pour accéder à ce tableau de bord.",
       "corsPlaceholder": "https://gripsou.example.com",
-      "add": "Ajouter"
+      "add": "Ajouter",
+      "budgetAi": "IA du budget",
+      "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
+      "budgetAiProvider": "Fournisseur",
+      "budgetAiModel": "Modèle",
+      "budgetAiOff": "off"
     },
     "connections": {
       "title": "Connexions",
@@ -409,6 +414,14 @@
         "title": "Préférences de liste",
         "showChecked": "Colonne cochée",
         "showCheckedHint": "Ajoute une case à cocher sur chaque transaction, pour votre propre suivi. Cela ne modifie aucune catégorie."
+      },
+      "ai": {
+        "title": "Catégorisation par IA",
+        "enable": "Catégoriser automatiquement",
+        "enableHint": "Les transactions, nouvelles et passées, sont envoyées au fournisseur d'IA configuré par votre administrateur.",
+        "threshold": "Seuil de revue",
+        "thresholdHint": "Les suggestions sous ce niveau de confiance vont dans la file de revue.",
+        "notConfigured": "Demandez à votre administrateur de configurer un fournisseur d'IA."
       }
     }
   },
@@ -645,6 +658,31 @@
         "earlier": "Chercher plus tôt"
       }
     },
-    "modes": { "overview": "Aperçu", "transactions": "Transactions" }
+    "modes": { "overview": "Aperçu", "transactions": "Transactions", "review": "Revue" },
+    "review": {
+      "progress": "{{resolved}} / {{total}} traitées",
+      "title": "Suggestions peu sûres",
+      "belowThreshold": "sous {{threshold}} % de confiance",
+      "accept": "Accepter",
+      "correct": "Corriger",
+      "undo": "Annuler",
+      "clearResolved": "Effacer les traitées",
+      "kept": "{{category}} conservée",
+      "correctedTo": "corrigée en {{category}}",
+      "noGuess": "aucune suggestion",
+      "hidesMoney": "retire l'argent des totaux",
+      "emptyTitle": "Tout est à jour",
+      "emptyBody": "Toutes les suggestions ont été revues.",
+      "backToOverview": "Retour à la vue d'ensemble"
+    },
+    "ai": {
+      "reviewNeeded_one": "{{count}} transaction à revoir",
+      "reviewNeeded_other": "{{count}} transactions à revoir",
+      "reviewCta": "Revoir {{count}}",
+      "failedTitle": "La catégorisation automatique a échoué",
+      "retry": "Réessayer",
+      "running_one": "Catégorisation de l'historique — {{count}} restante",
+      "running_other": "Catégorisation de l'historique — {{count}} restantes"
+    }
   }
 }

@@ -10,7 +10,7 @@ import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 
 import type { BudgetCategory, BudgetKind } from "../api/budget";
-import type { TypeBucket } from "../api/types";
+import type { Transaction, TypeBucket } from "../api/types";
 import { ApiError } from "../api/client";
 
 /** Display order of the four kinds; also the grouping order of every list. */
@@ -202,3 +202,21 @@ export type ChooserItem = {
   group?: string;
   render: ReactNode;
 };
+
+/** The row's own category, rebuilt from the flat fields the list endpoint
+ *  sends, so `CategoryChip` can be reused verbatim from phase 2. */
+export function categoryOfTransaction(tx: Transaction): BudgetCategory | null {
+  if (!tx.categoryId) return null;
+  return {
+    id: tx.categoryId,
+    name: tx.categoryName ?? "",
+    defaultKey: tx.categoryDefaultKey,
+    color: tx.categoryColor ?? "",
+    icon: tx.categoryIcon,
+    hint: null,
+    kind: tx.categoryKind ?? "expense",
+    systemKey: null,
+    archived: false,
+    txCount: 0,
+  };
+}

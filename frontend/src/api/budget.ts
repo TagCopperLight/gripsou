@@ -1,8 +1,14 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 
 import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
-import { afterBudgetCategoryChange, afterBudgetTagChange, afterTransactionChange } from "./invalidate";
+import {
+  afterBudgetCategoryChange,
+  afterBudgetTagChange,
+  afterReviewChange,
+  afterTransactionChange,
+} from "./invalidate";
 import type { Transaction, TransactionFilterQuery } from "./types";
 
 export type BudgetKind = "expense" | "income" | "internal" | "excluded";
@@ -238,5 +244,86 @@ export function useBulkTransactions() {
       return postJson<WriteResult>("/transactions/bulk", wire);
     },
     onSuccess: () => afterTransactionChange(qc),
+  });
+}
+
+export type AiRunOutcome = "ok" | "partial" | "error";
+
+/** GET /budget/categorize/status. `configured`: the server has a provider with
+ *  its key; `enabled`: that, and this user opted in. `threshold` is a percent. */
+export type AiStatus = {
+  configured: boolean;
+  enabled: boolean;
+  running: boolean;
+  remaining: number;
+  reviewCount: number;
+  threshold: number;
+  lastRun: { outcome: AiRunOutcome; error: string | null; at: number } | null;
+};
+
+export type BudgetAiProvider = "gemini" | "jev";
+
+export type BudgetAiSettings = {
+  provider: BudgetAiProvider | null;
+  model: string | null;
+  available: BudgetAiProvider[];
+  defaults: Record<BudgetAiProvider, string>;
+};
+
+/** Polled every 5 s only while a run is in progress. When the run moves on
+ *  (the queue grows, or the run ends) everything built on categories is
+ *  refreshed, so the list and the figures fill in as the backfill works. */
+export function useAiStatus() {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: keys.budgetAiStatus(),
+    queryFn: () => getJson<AiStatus>("/budget/categorize/status"),
+    refetchInterval: (q) => (q.state.data?.running ? 5000 : false),
+  });
+  const data = query.data;
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const stamp = `${data.running}:${data.reviewCount}:${data.remaining}`;
+    if (last.current !== null && last.current !== stamp) {
+      qc.invalidateQueries({ queryKey: keys.transactions() });
+      qc.invalidateQueries({ queryKey: keys.transactionCounts() });
+      qc.invalidateQueries({ queryKey: keys.budgetSummary() });
+      qc.invalidateQueries({ queryKey: keys.budgetTrend() });
+    }
+    last.current = stamp;
+  }, [data, qc]);
+  return query;
+}
+
+export function useRequestCategorize() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => postJson<void>("/budget/categorize", {}),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.budgetAiStatus() }),
+  });
+}
+
+export function useAcceptReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => postJson<void>(`/budget/review/${id}/accept`, {}),
+    onSettled: () => afterReviewChange(qc),
+  });
+}
+
+export function useUndoReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      categoryId,
+      confidence,
+    }: {
+      id: string;
+      categoryId: string | null;
+      confidence: string | null;
+    }) => postJson<void>(`/budget/review/${id}/undo`, { categoryId, confidence }),
+    onSettled: () => afterReviewChange(qc),
   });
 }

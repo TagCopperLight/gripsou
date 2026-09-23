@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select count(*) as \"n!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.category_source is null\n          and t.budget_category_id is null\n          and t.amount <> 0\n          and not (a.type_key = 'pea' and t.external_id is not null and t.type in ('buy', 'sell'))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "74e87b42dfb73668fb4060298e5741d2d61a1beebf557e3d1f8ee594be661cfb"
+}

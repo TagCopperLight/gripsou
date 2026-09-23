@@ -50,7 +50,7 @@ pub struct Sankey {
 
 /// A side keeps slices at or above this share of the period's expenses (2%).
 /// A function rather than a `const` because `Decimal` construction is not
-/// const here — the same reason `default_review_threshold()` is one.
+/// const here — the same reason a `Decimal` threshold is built at runtime.
 fn sankey_min_share() -> Decimal {
     Decimal::new(2, 2)
 }

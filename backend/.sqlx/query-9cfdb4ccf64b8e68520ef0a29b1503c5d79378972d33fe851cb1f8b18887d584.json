@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select (prefs->>'budgetAiEnabled')::boolean from users where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bool",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9cfdb4ccf64b8e68520ef0a29b1503c5d79378972d33fe851cb1f8b18887d584"
+}

@@ -977,3 +977,91 @@ mod tests {
         assert_eq!(groups[0].connections[0].logo, None);
     }
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiLastRunDto {
+    pub outcome: String,
+    pub error: Option<String>,
+    pub at: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiStatusDto {
+    pub configured: bool,
+    pub enabled: bool,
+    pub running: bool,
+    pub remaining: i64,
+    pub review_count: i64,
+    pub threshold: u8,
+    pub last_run: Option<AiLastRunDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoReviewReq {
+    pub category_id: Option<uuid::Uuid>,
+    pub confidence: Option<Decimal>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiSettingsDto {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub available: Vec<&'static str>,
+    pub defaults: std::collections::BTreeMap<&'static str, &'static str>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetBudgetAiSettingsReq {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+#[cfg(test)]
+mod budget_ai_contract_tests {
+    use super::*;
+
+    #[test]
+    fn status_uses_the_frontend_field_names() {
+        let v = serde_json::to_value(AiStatusDto {
+            configured: true,
+            enabled: false,
+            running: false,
+            remaining: 3,
+            review_count: 2,
+            threshold: 80,
+            last_run: Some(AiLastRunDto {
+                outcome: "ok".into(),
+                error: None,
+                at: 1,
+            }),
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "configured": true, "enabled": false, "running": false,
+                "remaining": 3, "reviewCount": 2, "threshold": 80,
+                "lastRun": {"outcome": "ok", "error": null, "at": 1}
+            })
+        );
+    }
+
+    #[test]
+    fn undo_reads_a_string_confidence_and_nulls() {
+        let r: UndoReviewReq = serde_json::from_value(serde_json::json!({
+            "categoryId": null, "confidence": "0.42"
+        }))
+        .unwrap();
+        assert_eq!(r.category_id, None);
+        assert_eq!(r.confidence, Some(Decimal::new(42, 2)));
+        let r: UndoReviewReq =
+            serde_json::from_value(serde_json::json!({"categoryId": null, "confidence": null}))
+                .unwrap();
+        assert_eq!(r.confidence, None);
+    }
+}

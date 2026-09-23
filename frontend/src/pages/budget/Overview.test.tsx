@@ -52,11 +52,25 @@ const SUMMARY = {
 
 const TREND = { months: ["2026-09"], series: [] };
 
+const AI_STATUS = {
+  configured: false,
+  enabled: false,
+  running: false,
+  remaining: 0,
+  reviewCount: 0,
+  threshold: 80,
+  lastRun: null,
+};
+
 function stubApi(summary: unknown = SUMMARY) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      const body = String(url).includes("/budget/trend") ? TREND : summary;
+      const body = String(url).includes("/budget/trend")
+        ? TREND
+        : String(url).includes("/budget/categorize/status")
+          ? AI_STATUS
+          : summary;
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "content-type": "application/json" },

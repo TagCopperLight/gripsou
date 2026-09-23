@@ -20,6 +20,10 @@ export type UserPrefs = {
   /** Shows the ✓ column in the budget transactions table. The user's own
    *  bookkeeping — it confirms nothing and categorises nothing. */
   showChecked: boolean;
+  /** Opt-in to AI categorisation. Mirrors the backend `budget_ai_enabled`. */
+  budgetAiEnabled: boolean;
+  /** Review threshold, integer percent (50–95). */
+  budgetAiThreshold: number;
   avatar?: string;
 };
 
@@ -34,6 +38,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   percentDecimals: 2,
   privateMode: false,
   showChecked: false,
+  budgetAiEnabled: false,
+  budgetAiThreshold: 80,
 };
 
 let current: UserPrefs = DEFAULT_PREFS;

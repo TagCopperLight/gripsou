@@ -33,6 +33,14 @@ pub struct UserPrefs {
     /// confirms nothing and categorises nothing — the pipeline never reads it.
     #[serde(default)]
     pub show_checked: bool,
+    /// The user's opt-in to AI categorisation. Off by default: the operator
+    /// configuring a provider does not decide for every user of the instance.
+    #[serde(default)]
+    pub budget_ai_enabled: bool,
+    /// Review threshold, as an integer percent. An AI guess below it goes to
+    /// the review queue. The UI offers 50–95; the API enforces that range.
+    #[serde(default = "default_budget_ai_threshold")]
+    pub budget_ai_threshold: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
 }
@@ -61,6 +69,9 @@ fn default_currency_position() -> String {
 fn default_percent_decimals() -> u8 {
     2
 }
+fn default_budget_ai_threshold() -> u8 {
+    80
+}
 
 impl Default for UserPrefs {
     fn default() -> Self {
@@ -75,6 +86,8 @@ impl Default for UserPrefs {
             percent_decimals: default_percent_decimals(),
             private_mode: false,
             show_checked: false,
+            budget_ai_enabled: false,
+            budget_ai_threshold: default_budget_ai_threshold(),
             avatar: None,
         }
     }
@@ -93,6 +106,38 @@ pub async fn reporting_currency(
     .fetch_one(pool)
     .await?;
     Ok(code.unwrap_or_else(|| "EUR".to_string()))
+}
+
+/// The reader's review threshold as a fraction (`0.80`), which is what the
+/// review rule compares `category_confidence` against.
+pub async fn review_threshold(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<rust_decimal::Decimal, crate::error::CoreError> {
+    let pct: Option<i32> = sqlx::query_scalar!(
+        "select (prefs->>'budgetAiThreshold')::int from users where id = $1",
+        user_id
+    )
+    .fetch_one(pool)
+    .await?;
+    let pct = pct
+        .unwrap_or_else(|| default_budget_ai_threshold() as i32)
+        .clamp(1, 99);
+    Ok(rust_decimal::Decimal::new(pct as i64, 2))
+}
+
+/// Whether this user has opted in to AI categorisation.
+pub async fn budget_ai_enabled(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<bool, crate::error::CoreError> {
+    let on: Option<bool> = sqlx::query_scalar!(
+        "select (prefs->>'budgetAiEnabled')::boolean from users where id = $1",
+        user_id
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(on.unwrap_or(false))
 }
 
 #[cfg(test)]
@@ -154,5 +199,23 @@ mod tests {
         assert!(p.show_checked);
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains("\"showChecked\":true"));
+    }
+
+    #[test]
+    fn budget_ai_defaults_off_at_eighty_percent() {
+        let p: UserPrefs = serde_json::from_str("{}").unwrap();
+        assert!(!p.budget_ai_enabled);
+        assert_eq!(p.budget_ai_threshold, 80);
+    }
+
+    #[test]
+    fn budget_ai_round_trips_camelcase() {
+        let p: UserPrefs =
+            serde_json::from_str(r#"{"budgetAiEnabled":true,"budgetAiThreshold":65}"#).unwrap();
+        assert!(p.budget_ai_enabled);
+        assert_eq!(p.budget_ai_threshold, 65);
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"budgetAiEnabled\":true"));
+        assert!(json.contains("\"budgetAiThreshold\":65"));
     }
 }

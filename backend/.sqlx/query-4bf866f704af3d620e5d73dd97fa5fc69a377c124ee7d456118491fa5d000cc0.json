@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select exists(\n          select 1 from transaction t\n          join account a on a.id = t.account_id\n          join connection k on k.id = a.connection_id\n          where t.id = $1 and k.user_id = $2) as \"e!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4bf866f704af3d620e5d73dd97fa5fc69a377c124ee7d456118491fa5d000cc0"
+}

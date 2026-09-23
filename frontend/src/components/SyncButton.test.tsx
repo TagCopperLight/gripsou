@@ -104,6 +104,7 @@ describe("SyncButton", () => {
       "budget-tags",
       "budget-summary",
       "budget-trend",
+      "budget-ai-status",
     ]);
   });
 });

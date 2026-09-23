@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.category_source, t.category_reviewed_at, t.transfer_pair_id\n        from transaction t\n        join account a on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where t.id = $1 and k.user_id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category_source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "category_source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "category_reviewed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "category_reviewed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "transfer_pair_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "transfer_pair_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7968b17bf5c22a183ad32e2ca0897ec0111dd98891fc9a8b7a11e9da20ddc6c6"
+}

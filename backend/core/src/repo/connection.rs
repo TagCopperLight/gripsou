@@ -199,6 +199,15 @@ pub async fn provider_key(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<String
     Ok(key)
 }
 
+/// Who owns a connection — the scheduler needs it to start that user's
+/// categorisation run after a sync. `None` for an unknown id.
+pub async fn user_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Uuid>, CoreError> {
+    let row = sqlx::query_scalar!("select user_id from connection where id = $1", id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row)
+}
+
 /// Fetch the encrypted credentials blob for a connection.
 /// Returns `None` if the connection does not exist or has no credentials yet.
 pub async fn get_credentials(
