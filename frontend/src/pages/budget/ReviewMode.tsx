@@ -142,7 +142,7 @@ export function ReviewMode() {
           <h2 className="text-lg font-semibold text-fg">
             {t("budget.review.title")}
             <span className="ml-3 text-sm font-normal text-fg-faint">
-              {t("budget.review.belowThreshold", { threshold: status?.threshold ?? 80 })}
+              {t("budget.review.belowThreshold", { threshold: status?.threshold ?? 70 })}
             </span>
           </h2>
           {resolvedCount > 0 && (

@@ -950,7 +950,7 @@ impl TransactionFilters {
             uncategorized: false,
             needs_review: false,
             include_transfers: true,
-            review_threshold: Decimal::new(80, 2),
+            review_threshold: Decimal::new(70, 2),
             limit: 200,
             offset: 0,
         }

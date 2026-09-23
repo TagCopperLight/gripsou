@@ -29,6 +29,7 @@ export function SankeySurface({
     return node.label;
   };
   const labelByName = new Map(graph.nodes.map((n) => [n.name, text(n)]));
+  const colorByName = new Map(graph.nodes.map((n) => [n.name, n.color]));
 
   const option: EChartsOption = {
     backgroundColor: "transparent",
@@ -83,7 +84,12 @@ export function SankeySurface({
           source: l.source,
           target: l.target,
           value: l.value,
-          lineStyle: { color: "gradient", opacity: 0.25 },
+          // Solid, in the category's colour (the non-hub end): a gradient
+          // would fade every link into the hub's grey in the middle.
+          lineStyle: {
+            color: colorByName.get(l.target === HUB ? l.source : l.target),
+            opacity: 0.25,
+          },
         })),
       },
     ],

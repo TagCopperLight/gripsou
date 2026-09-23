@@ -70,7 +70,7 @@ fn default_percent_decimals() -> u8 {
     2
 }
 fn default_budget_ai_threshold() -> u8 {
-    80
+    70
 }
 
 impl Default for UserPrefs {
@@ -108,7 +108,7 @@ pub async fn reporting_currency(
     Ok(code.unwrap_or_else(|| "EUR".to_string()))
 }
 
-/// The reader's review threshold as a fraction (`0.80`), which is what the
+/// The reader's review threshold as a fraction (`0.70`), which is what the
 /// review rule compares `category_confidence` against.
 pub async fn review_threshold(
     pool: &sqlx::PgPool,
@@ -205,7 +205,7 @@ mod tests {
     fn budget_ai_defaults_off_at_eighty_percent() {
         let p: UserPrefs = serde_json::from_str("{}").unwrap();
         assert!(!p.budget_ai_enabled);
-        assert_eq!(p.budget_ai_threshold, 80);
+        assert_eq!(p.budget_ai_threshold, 70);
     }
 
     #[test]
