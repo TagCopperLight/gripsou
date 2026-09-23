@@ -2,6 +2,7 @@ mod common;
 
 use chrono::NaiveDate;
 use common::{checking_account, checking_account_in, seed_user_and_connection, txn_on_day};
+use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::set_category;
 use gripsou_core::repo::budget::category::list_categories;
@@ -264,9 +265,10 @@ async fn internal_categories_are_kept(pool: PgPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn pea_provider_rows_are_excluded(pool: PgPool) -> anyhow::Result<()> {
-    // Mirrors query.rs:989 — these are second halves of movements counted
-    // elsewhere, and an aggregate that kept them would double-count.
+async fn pea_provider_trades_are_excluded_but_transfers_kept(pool: PgPool) -> anyhow::Result<()> {
+    // A provider buy is the cash leg of a purchase the lot table already holds,
+    // and buying an ETF is not spending. A transfer is kept: dropping it left
+    // the checking half of a paired transfer standing alone in the Sankey.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let pea = gripsou_core::dto::CanonicalAccount {
@@ -274,41 +276,116 @@ async fn pea_provider_rows_are_excluded(pool: PgPool) -> anyhow::Result<()> {
         ..checking_account("acct-pea")
     };
     let account_id = upsert_account(&mut conn, conn_id, &pea).await?;
+    for (ext, kind, amount, d, desc) in [
+        ("t1", "transfer", eur(50), day(2026, 3, 4), "VIR"),
+        ("t2", "buy", eur(-210), day(2026, 3, 5), "ACHAT COMPTANT"),
+        ("t3", "sell", eur(40), day(2026, 3, 6), "VENTE COMPTANT"),
+        ("t4", "deposit", eur(7), day(2026, 3, 7), "DIVIDENDE"),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn_on_day("acct-pea", ext, kind, amount, d, desc),
+        )
+        .await?;
+    }
+    drop(conn);
+
+    let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
+    let mut amounts: Vec<_> = rows.iter().map(|r| (r.day, r.amount)).collect();
+    amounts.sort();
+    assert_eq!(
+        amounts,
+        vec![(day(2026, 3, 4), eur(50)), (day(2026, 3, 7), eur(7))],
+        "the transfer and dividend are kept, the buy and sell are dropped"
+    );
+    Ok(())
+}
+
+/// The bug this rule change fixed: a paired checking -> PEA transfer must net
+/// to zero, not leave the checking half standing as an internal-transfer
+/// outflow.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let checking = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    let pea = gripsou_core::dto::CanonicalAccount {
+        type_key: "pea".to_string(),
+        ..checking_account("acct-pea")
+    };
+    let pea_id = upsert_account(&mut conn, conn_id, &pea).await?;
     upsert_transaction(
         &mut conn,
-        account_id,
+        checking,
+        &txn_on_day("acct-1", "c1", "transfer", eur(-50), day(2026, 9, 2), "VIR"),
+    )
+    .await?;
+    upsert_transaction(
+        &mut conn,
+        pea_id,
         &txn_on_day(
             "acct-pea",
-            "t1",
+            "p1",
             "transfer",
-            eur(-500),
-            day(2026, 3, 4),
+            eur(50),
+            day(2026, 9, 2),
+            "VIR",
+        ),
+    )
+    .await?;
+    pair_internal_transfers(&mut conn, user_id).await?;
+    drop(conn);
+
+    let paired: i64 =
+        sqlx::query_scalar("select count(*) from transaction where transfer_pair_id is not null")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(paired, 2, "both halves paired");
+    let rows = day_category_totals(&pool, user_id, day(2026, 9, 1), day(2026, 9, 30)).await?;
+    assert!(rows.is_empty(), "the pair left {rows:?}");
+    Ok(())
+}
+
+/// A pair whose halves land in different months must vanish from both, not
+/// leave -x in one month and +x in the other.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let a = upsert_account(&mut conn, conn_id, &checking_account("acct-a")).await?;
+    let b = upsert_account(&mut conn, conn_id, &checking_account("acct-b")).await?;
+    upsert_transaction(
+        &mut conn,
+        a,
+        &txn_on_day(
+            "acct-a",
+            "o1",
+            "transfer",
+            eur(-200),
+            day(2026, 5, 31),
             "VIR",
         ),
     )
     .await?;
     upsert_transaction(
         &mut conn,
-        account_id,
-        &txn_on_day(
-            "acct-pea",
-            "t2",
-            "deposit",
-            eur(40),
-            day(2026, 3, 5),
-            "DIVIDENDE",
-        ),
+        b,
+        &txn_on_day("acct-b", "i1", "transfer", eur(200), day(2026, 6, 1), "VIR"),
     )
     .await?;
+    pair_internal_transfers(&mut conn, user_id).await?;
     drop(conn);
 
-    let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
-    assert_eq!(
-        rows.len(),
-        1,
-        "the transfer is dropped, the dividend is not"
-    );
-    assert_eq!(rows[0].amount, eur(40));
+    for (from, to) in [
+        (day(2026, 5, 1), day(2026, 5, 31)),
+        (day(2026, 6, 1), day(2026, 6, 30)),
+    ] {
+        let rows = day_category_totals(&pool, user_id, from, to).await?;
+        assert!(rows.is_empty(), "{from}..{to} still carries {rows:?}");
+    }
     Ok(())
 }
 

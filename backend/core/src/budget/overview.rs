@@ -213,8 +213,9 @@ pub fn sankey(rows: &[DayCategoryRow]) -> Sankey {
     let sources = collapse(side(rows, true), f.expenses);
     let destinations = collapse(side(rows, false), f.expenses);
 
-    // Internal categories are drawn net, one branch each. A fully paired
-    // transfer nets to zero and disappears on its own — no special case.
+    // Internal categories are drawn net, one branch each. Paired transfers
+    // never reach here (the summary query drops them), so what is left is
+    // money the user filed as internal by hand, e.g. savings.
     let mut internal = net_outflows(rows, "internal")
         .into_iter()
         .map(|(id, amount)| SliceAmount {

@@ -4,7 +4,9 @@
 //!
 //! The matching rule is deliberately timid. A false pair silently deletes real
 //! spending from the Sankey and every total; an unpaired row costs the user one
-//! correction. So: mutual nearest neighbour only, and **a tie pairs nothing**.
+//! correction. So: mutual nearest neighbour only, and **a tie pairs nothing**
+//! — unless the tied rows are interchangeable and as many on each side, which
+//! pair one-to-one. Transfers only: see the candidate query.
 
 use std::collections::HashMap;
 
@@ -24,6 +26,14 @@ struct Candidate {
     ts: DateTime<Utc>,
     amount: Decimal,
     currency: String,
+}
+
+/// Two candidates that could be swapped for each other without changing the
+/// outcome: every candidate is a transfer and callers only compare rows
+/// already sharing currency, amount and sign, so two on the same account are
+/// the same movement as far as any total can tell — whatever their date.
+fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
+    a.account_id == b.account_id
 }
 
 /// Pairs every unpaired internal transfer this user has. A single round of
@@ -92,11 +102,15 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
           -- user/rule categorisation.
           and (t.category_source is null or t.category_source = 'ai')
           and t.amount <> 0
-          -- Only these three types are actual movements of money between
-          -- accounts; a buy/sell/dividend/fee/interest row that happens to be
-          -- equal and opposite to a cash movement is a coincidence, not an
-          -- internal transfer, and must never be filed (and hidden) as one.
-          and t.type in ('deposit', 'withdrawal', 'transfer')
+          -- Transfers only. Matching is by amount and date alone, so any
+          -- other type lets a coincidence through: a card payment to Betclic
+          -- equal to a transfer arriving on another account, or a deposit from a
+          -- friend equal to a transfer leaving. Measured on real data, half
+          -- the card/deposit pairs were such coincidences. A buy/sell/
+          -- dividend/fee/interest row is never a movement between accounts.
+          -- Card top-ups of the user's own accounts are left to a category
+          -- rule rather than bought back with that error rate.
+          and t.type = 'transfer'
         order by t.ts
         "#,
         user_id,
@@ -134,38 +148,83 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
         let ins: Vec<&&Candidate> = group.iter().filter(|c| c.amount > Decimal::ZERO).collect();
 
         // The nearest counterpart of each row, or None when it has no
-        // candidate or when two candidates tie.
-        let nearest = |from: &Candidate, others: &[&&Candidate]| -> Option<Uuid> {
-            let mut best: Option<(i64, Uuid)> = None;
-            let mut tied = false;
-            for other in others {
-                if other.account_id == from.account_id {
-                    continue;
-                }
-                let gap = (other.ts - from.ts).num_seconds().abs();
-                if gap > window.num_seconds() {
-                    continue;
-                }
-                match best {
-                    None => best = Some((gap, other.id)),
-                    Some((best_gap, _)) if gap < best_gap => {
-                        best = Some((gap, other.id));
-                        tied = false;
+        // candidate or when two candidates genuinely tie.
+        //
+        // A tie between interchangeable candidates (see `interchangeable`) is
+        // not ambiguous *when the row choosing has as many twins of its own*
+        // (same account, near the tied group): two transfers out of A and two
+        // into B pair the same way whichever goes with which. Those resolve to
+        // the lowest id, so both sides agree on one pick; the convergence loop
+        // in `pair_internal_transfers` pairs the next one on the next round.
+        //
+        // The group sizes must match. Otherwise a lone row that merely shares
+        // the amount (a -10 transfer to a friend two days before two +10
+        // top-ups) would claim one of them — the tie between them is what
+        // blocks it.
+        let nearest =
+            |from: &Candidate, own: &[&&Candidate], others: &[&&Candidate]| -> Option<Uuid> {
+                let mut best: Option<(i64, &Candidate)> = None;
+                let mut tied = false;
+                let mut tie_size = 0usize;
+                for other in others {
+                    if other.account_id == from.account_id {
+                        continue;
                     }
-                    Some((best_gap, _)) if gap == best_gap => tied = true,
-                    _ => {}
+                    let gap = (other.ts - from.ts).num_seconds().abs();
+                    if gap > window.num_seconds() {
+                        continue;
+                    }
+                    match best {
+                        None => {
+                            best = Some((gap, other));
+                            tie_size = 1;
+                        }
+                        Some((best_gap, _)) if gap < best_gap => {
+                            best = Some((gap, other));
+                            tied = false;
+                            tie_size = 1;
+                        }
+                        Some((best_gap, current)) if gap == best_gap => {
+                            if !interchangeable(current, other) {
+                                tied = true;
+                            } else {
+                                tie_size += 1;
+                                if other.id < current.id {
+                                    best = Some((gap, other));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
-            }
-            if tied { None } else { best.map(|(_, id)| id) }
-        };
+                if tied {
+                    return None;
+                }
+                if tie_size > 1 {
+                    // `from`'s own twins: same account, and close enough to the
+                    // tied group to be one of its counterparts.
+                    let near = best.map(|(_, c)| c.ts).unwrap_or(from.ts);
+                    let twins = own
+                        .iter()
+                        .filter(|c| {
+                            interchangeable(from, c)
+                                && (c.ts - near).num_seconds().abs() <= window.num_seconds()
+                        })
+                        .count();
+                    if twins != tie_size {
+                        return None;
+                    }
+                }
+                best.map(|(_, c)| c.id)
+            };
 
         let out_choice: HashMap<Uuid, Uuid> = outs
             .iter()
-            .filter_map(|o| nearest(o, &ins).map(|pick| (o.id, pick)))
+            .filter_map(|o| nearest(o, &outs, &ins).map(|pick| (o.id, pick)))
             .collect();
         let in_choice: HashMap<Uuid, Uuid> = ins
             .iter()
-            .filter_map(|i| nearest(i, &outs).map(|pick| (i.id, pick)))
+            .filter_map(|i| nearest(i, &ins, &outs).map(|pick| (i.id, pick)))
             .collect();
 
         // Mutual nearest only: both halves must have chosen each other. That is

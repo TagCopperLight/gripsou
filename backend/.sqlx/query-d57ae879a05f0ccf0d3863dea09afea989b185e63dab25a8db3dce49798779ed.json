@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id as \"id!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        left join budget_category bc on bc.id = t.budget_category_id\n        where k.user_id = $1\n          and not (a.type_key = 'pea'\n                   and t.external_id is not null\n                   and t.type in ('buy', 'sell'))\n          and ($2::text is null or t.description ilike '%' || $2 || '%')\n          and ($3::uuid is null or a.id = $3)\n          and ($4::text is null or t.type = $4)\n          and ($5::date is null or (t.ts at time zone 'utc')::date >= $5)\n          and ($6::date is null or (t.ts at time zone 'utc')::date <= $6)\n          and ($7::text = 'all'\n               or ($7 = 'in'  and t.amount > 0)\n               or ($7 = 'out' and t.amount < 0))\n          and (cardinality($8::uuid[]) = 0 or t.budget_category_id = any($8))\n          and (not $9::boolean or t.budget_category_id is null)\n          -- Unlike `transactions()`'s selected `needs_review` column (which\n          -- needs `coalesce(..., false)` because it feeds a not-null-annotated\n          -- output field), this is a `where` predicate: a NULL right-hand side\n          -- here (e.g. `category_source is null`) already behaves like false,\n          -- so no wrapping is needed.\n          and (not $10::boolean\n               or (t.category_source = 'ai'\n                   and t.category_reviewed_at is null\n                   and (t.category_confidence is null or t.category_confidence < $11)))\n          and (cardinality($12::uuid[]) = 0\n               or (select count(distinct tt.tag_id)\n                     from budget_transaction_tag tt\n                    where tt.transaction_id = t.id\n                      and tt.tag_id = any($12)) = cardinality($12))\n          -- `is distinct from`, not `<>`: an uncategorised row's `system_key`\n          -- is null, and a null comparison would drop the row instead of\n          -- keeping it.\n          and ($13::boolean or bc.system_key is distinct from 'internal_transfer')\n        order by t.ts desc, t.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Date",
+        "Date",
+        "Text",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "Numeric",
+        "UuidArray",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d57ae879a05f0ccf0d3863dea09afea989b185e63dab25a8db3dce49798779ed"
+}

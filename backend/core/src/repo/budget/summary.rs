@@ -81,18 +81,29 @@ pub async fn day_category_totals(
             left join budget_category bc on bc.id = t.budget_category_id
             where c.user_id = $1
               and (t.ts at time zone 'utc')::date between $2 and $3
-              -- Mirrors query.rs:989 exactly, including the `external_id`
-              -- scoping: a transfer into the PEA is the other half of an
-              -- outflow already listed on the checking account, and a provider
-              -- buy is the cash leg of a purchase the lot table already holds.
-              -- The list makes these unreachable; an aggregate that kept them
-              -- would double-count the Sankey.
+              -- Mirrors the list's exclusion in query.rs exactly, including
+              -- the `external_id` scoping: a provider buy/sell on the PEA is
+              -- the cash leg of a purchase the lot table already holds, and
+              -- buying an ETF is not spending.
+              --
+              -- PEA transfers are not excluded here: once paired, the pair
+              -- rule below drops both halves together. Dropping only the PEA
+              -- half left the checking half's -x standing alone, drawn as an
+              -- internal-transfer branch every month.
               and not (a.type_key = 'pea'
                        and t.external_id is not null
-                       and t.type in ('transfer', 'buy', 'sell'))
+                       and t.type in ('buy', 'sell'))
+              -- A paired transfer nets to zero by construction, so both halves
+              -- are dropped here rather than left to cancel. Netting only
+              -- works when both halves fall inside the window: a pair
+              -- straddling a month end left -x in one month and +x in the
+              -- next. Dropping is the same answer when they do cancel, and the
+              -- right one when they don't (including cross-currency pairs,
+              -- whose halves convert at different rates).
+              and t.transfer_pair_id is null
               -- Design 6.2: an `excluded` category appears nowhere and counts
-              -- toward nothing. `internal` is NOT dropped — the Sankey needs
-              -- it, because netting it is how a paired transfer disappears.
+              -- toward nothing. `internal` is NOT dropped — the Sankey draws a
+              -- hand-filed internal category (savings) as its own branch.
               and coalesce(bc.kind, '') <> 'excluded'
         ),
         -- The distinct days actually present, not every day in the window.

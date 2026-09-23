@@ -25,7 +25,8 @@ fn account(external_id: &str, currency: &str) -> CanonicalAccount {
     }
 }
 
-/// Inserts a transaction at an explicit instant.
+/// Inserts a `transfer` at an explicit instant — the only type pairing
+/// considers.
 async fn tx_at(
     pool: &PgPool,
     account_id: Uuid,
@@ -34,16 +35,11 @@ async fn tx_at(
     amount: Decimal,
     ts: DateTime<Utc>,
 ) -> anyhow::Result<Uuid> {
-    let kind = if amount < Decimal::ZERO {
-        "withdrawal"
-    } else {
-        "deposit"
-    };
-    tx_at_kind(pool, account_id, account_ext, ext, kind, amount, ts).await
+    tx_at_kind(pool, account_id, account_ext, ext, "transfer", amount, ts).await
 }
 
 /// Same as [`tx_at`], but with an explicit transaction `type` rather than the
-/// deposit/withdrawal default — needed to seed a `buy`, `sell`, `dividend`,
+/// transfer default — needed to seed a `buy`, `sell`, `dividend`,
 /// `fee` or `interest` row.
 async fn tx_at_kind(
     pool: &PgPool,
@@ -147,6 +143,153 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
             .fetch_one(&pool)
             .await?;
     assert_eq!(paired, 0);
+    Ok(())
+}
+
+/// Two identical transfers sent together (same accounts, amount and instant on
+/// each side) tie with each other, but the tie is harmless: whichever way they
+/// pair, the result is the same. So they pair one-to-one instead of not at all.
+#[sqlx::test(migrations = "../migrations")]
+async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    let later = now + Duration::hours(1);
+    let o1 = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-500, 2), now).await?;
+    let o2 = tx_at(&pool, a, "acct-a", "o2", Decimal::new(-500, 2), now).await?;
+    let i1 = tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
+    let i2 = tx_at(&pool, b, "acct-b", "i2", Decimal::new(500, 2), later).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+
+    let pair_of = |id: Uuid| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<Uuid>>(
+                "select transfer_pair_id from transaction where id = $1",
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+        }
+    };
+    let (p1, p2) = (pair_of(o1).await?, pair_of(o2).await?);
+    let mut got = vec![p1.expect("o1 paired"), p2.expect("o2 paired")];
+    got.sort();
+    let mut want = vec![i1, i2];
+    want.sort();
+    assert_eq!(got, want, "each out pairs with a different in");
+    Ok(())
+}
+
+/// Resolving a duplicate tie must not let an unrelated single row claim one of
+/// the duplicates: a lone -10 transfer to a friend two days before two
+/// identical +10 top-ups is not their counterpart. Only a group of k identical rows pairs
+/// with a group of k identical rows.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    tx_at(
+        &pool,
+        a,
+        "acct-a",
+        "o1",
+        Decimal::new(-1000, 2),
+        now - Duration::days(2),
+    )
+    .await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(1000, 2), now).await?;
+    tx_at(&pool, b, "acct-b", "i2", Decimal::new(1000, 2), now).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    Ok(())
+}
+
+/// Only transfers pair. A card payment or cash withdrawal equal to a transfer
+/// arriving elsewhere is money leaving the user (a shop, an ATM), and a
+/// deposit equal to a transfer leaving is money arriving from someone else
+/// ("From Camille R") — neither is a movement between the user's accounts.
+#[sqlx::test(migrations = "../migrations")]
+async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    let later = now + Duration::hours(1);
+    tx_at_kind(
+        &pool,
+        a,
+        "acct-a",
+        "o1",
+        "withdrawal",
+        Decimal::new(-1000, 2),
+        now,
+    )
+    .await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(1000, 2), later).await?;
+    tx_at(&pool, a, "acct-a", "o2", Decimal::new(-2000, 2), now).await?;
+    tx_at_kind(
+        &pool,
+        b,
+        "acct-b",
+        "i2",
+        "deposit",
+        Decimal::new(2000, 2),
+        later,
+    )
+    .await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    Ok(())
+}
+
+/// Two transfers out on different days and two identical transfers in: all
+/// four are between the same two accounts, so whichever pairs with which the
+/// result is the same, and both pairs form.
+#[sqlx::test(migrations = "../migrations")]
+async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    tx_at(
+        &pool,
+        a,
+        "acct-a",
+        "o1",
+        Decimal::new(-5000, 2),
+        now - Duration::days(1),
+    )
+    .await?;
+    tx_at(&pool, a, "acct-a", "o2", Decimal::new(-5000, 2), now).await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(5000, 2), now).await?;
+    tx_at(&pool, b, "acct-b", "i2", Decimal::new(5000, 2), now).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+    Ok(())
+}
+
+/// Same amount and instant is not enough: counterparts on two different
+/// accounts are a real ambiguity, so the tie still pairs nothing.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let conn_id: Uuid = sqlx::query_scalar("select connection_id from account where id = $1")
+        .bind(a)
+        .fetch_one(&pool)
+        .await?;
+    let c = {
+        let mut conn = pool.acquire().await?;
+        upsert_account(&mut conn, conn_id, &account("acct-c", "EUR")).await?
+    };
+    let now = Utc::now();
+    let later = now + Duration::hours(1);
+    tx_at(&pool, a, "acct-a", "o1", Decimal::new(-500, 2), now).await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
+    tx_at(&pool, c, "acct-c", "i2", Decimal::new(500, 2), later).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
     Ok(())
 }
 

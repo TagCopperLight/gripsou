@@ -289,40 +289,26 @@ cost_basis(d) = quantity(d)                     -- matches the sync's convention
 
 Exact wherever transactions exist; flat before the earliest one.
 
-**Not every transaction is counted.** On an account whose `account_type.key` is
-`pea`, rows of type `transfer`, `buy` and `sell` are **excluded from the cash
-walk**. Every other account counts every type (`deposit`, `withdrawal`,
-`dividend`, `fee`, `interest`, and any future one).
+**Every transaction is counted, on every account, the PEA included.**
 
-**Why the PEA specifically.** Its connector exposes only the current year — the
-history starts 2026-02-03 while the position itself predates it. Its buys
-therefore have no matching transfer-in anywhere in the ledger, so a cash walk
-that counted them would drift by the whole unexplained cost basis (900.00 €,
-75.0% of the position, §2.2). Freezing those three types holds the PEA's cash
-line flat and leaves dividends and fees as the only things that move it.
+*Revised 2026-09-23.* This section used to exclude `transfer`, `buy` and `sell`
+from the PEA's cash walk, on the grounds that the PEA's history starts
+2026-02-03 while the position predates it, so its buys had no matching
+transfer-in. That premise does not hold inside the PEA's own history: every
+provider buy there is funded by a transfer-in on record. Measured against the
+real snapshots, counting every row reproduces them exactly (1.20 € on
+the first snapshot day, then 51.20 / 101.20 / 151.20 €), while the exclusion held the line
+at 0 € for months when the real balance ranged 5 – 170 €. Before
+2026-02-03 the PEA has no cash rows at all, so its cash line is held flat there
+either way (§3 rule 3).
 
-On every other account the history is complete, so counting a `buy` is
-*correct*, not a double-count: walking backward, cash rises by the amount while
-the security walk drops the shares, and net worth is conserved across the pair.
-
-The rule is stated as an exclusion of three types rather than an allow-list so a
-type nobody has thought of yet defaults to counting.
-
-`// ponytail: pea-only, hardcoded key; widen when a second invest account with a
-// truncated history appears`
-
-A `dividend` on the PEA still counts, and must: it is new money arriving from
-outside with no counterpart anywhere in the ledger. Same for a fee leaving.
-
-**What this costs.** The PEA's cash line no longer tracks its real balance; it
-holds flat and is corrected only by dividends and fees. Measured against the eight
-months where the real rows do exist: **±45.00 € mean, ±95.00 € worst** against a
-real range of 1.20 – 170.00 € — a couple of percent of net worth at its worst point.
-
-That is the deliberate trade: a uniform, single-rule derivation across the whole
-history, in exchange for ~2% on the fraction of it where the provider happened to
-give us more. It also removes the alternative's seam, where the chart would be
-exact after 2026-02-03 and approximate before it for no visible reason.
+The same exclusion was mirrored by the transactions list and the budget
+aggregate, and is now narrowed there to provider `buy`/`sell` only: those are
+the cash leg of a purchase the `lot` table already lists (and buying an ETF is
+not spending). PEA transfers are no longer hidden — pairing files both halves as
+internal transfer and they net to zero. Hiding the PEA half left the checking
+half standing alone, drawn as a recurring internal-transfer branch in every month's
+Sankey.
 
 ### 8.2 Security holdings
 
