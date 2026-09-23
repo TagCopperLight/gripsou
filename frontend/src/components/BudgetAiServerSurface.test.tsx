@@ -23,7 +23,7 @@ describe("BudgetAiServerSurface", () => {
     render(<QueryClientProvider client={qc}><BudgetAiServerSurface /></QueryClientProvider>);
     await screen.findByText("Budget AI");
     // Every choice is a visible radio segment; a provider without a key is absent.
-    expect(screen.getByRole("radio", { name: "Off" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "off" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("radio", { name: "jev" })).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "gemini" }));
     await waitFor(() => expect(patches.at(-1)).toEqual({ provider: "gemini", model: "gemini-3.5-flash-lite" }));

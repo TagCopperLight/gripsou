@@ -329,6 +329,32 @@ export function useRequestCategorize() {
   });
 }
 
+export function useSetMerchant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { transactionId: string; name: string | null; domain: string | null }) =>
+      putJson<void>("/budget/merchants", body),
+    onSuccess: () => afterTransactionChange(qc),
+  });
+}
+
+type MerchantLogoPreview = { domain: string; logoUrl: string };
+
+/** Previews the logo a domain would resolve to, ahead of saving it — the
+ *  server applies the same normalisation (`clean_domain`) and Brandfetch
+ *  decoration (client-id, `fallback/404`) that the saved logo gets, which a
+ *  bare `cdn.brandfetch.io/<domain>` URL built client-side would lack.
+ *  Disabled for an empty domain; never retried, since a typo is not a
+ *  transient failure. */
+export function useMerchantLogoPreview(domain: string) {
+  return useQuery({
+    queryKey: keys.merchantLogoPreview(domain),
+    queryFn: () => getJson<MerchantLogoPreview>(`/budget/merchants/logo?domain=${encodeURIComponent(domain)}`),
+    enabled: domain.trim().length > 0,
+    retry: false,
+  });
+}
+
 export function useAcceptReview() {
   const qc = useQueryClient();
   return useMutation({

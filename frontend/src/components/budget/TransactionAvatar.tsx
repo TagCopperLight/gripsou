@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
 
 import { BUDGET_ICONS, FALLBACK_COLOR, safeBudgetColor } from "../../lib/budget";
@@ -22,10 +23,35 @@ function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
 }
 
 /** §2.3's three-step fallback, at one size everywhere:
- *  1. the merchant's logo — phase 5, when the AI answers with a domain;
- *  2. the category's icon, tinted with the category colour;
- *  3. a generic glyph for the transaction type. */
+ *  1. the merchant's logo, when the memo has a domain for this description;
+ *  2. (logo missing or 404) the category's icon, tinted with the category colour;
+ *  3. a generic glyph for the transaction type.
+ *  Brandfetch answers an unknown domain with a 404 (`fallback/404`), which
+ *  `onError` turns into step 2 — never a broken image. */
 export function TransactionAvatar({ tx }: { tx: Transaction }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const logo = tx.merchantLogoUrl && tx.merchantLogoUrl !== failedUrl ? tx.merchantLogoUrl : null;
+
+  if (logo) {
+    return (
+      <span
+        data-testid="tx-avatar"
+        data-variant="merchant"
+        className="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white"
+      >
+        <img
+          src={logo}
+          alt=""
+          role="presentation"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="size-full object-contain"
+          onError={() => setFailedUrl(logo)}
+        />
+      </span>
+    );
+  }
+
   const CategoryIcon = (tx.categoryIcon && BUDGET_ICONS[tx.categoryIcon]) || null;
   const hasCategory = Boolean(tx.categoryId && CategoryIcon);
   const Icon = hasCategory && CategoryIcon ? CategoryIcon : GENERIC_ICONS[genericIconKey(tx)];

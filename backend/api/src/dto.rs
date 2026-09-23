@@ -370,6 +370,10 @@ pub struct Transaction {
     /// The pairing pass categorised this row but its link is gone — a user
     /// corrected the other half, so this one nets against nothing.
     pub is_orphan_transfer: bool,
+    pub merchant_name: Option<String>,
+    pub merchant_domain: Option<String>,
+    /// Brandfetch URL, or null. May 404 — the frontend falls back.
+    pub merchant_logo_url: Option<String>,
     pub tags: Vec<TagDto>,
 }
 
@@ -386,6 +390,10 @@ impl Transaction {
         r: gripsou_core::repo::query::TransactionListRow,
         tags: Vec<gripsou_core::repo::query::TagRef>,
     ) -> Self {
+        let merchant_logo_url = r
+            .merchant_domain
+            .as_deref()
+            .map(gripsou_core::logo::merchant_logo_url);
         Transaction {
             id: r.id.to_string(),
             t: r.ts.timestamp_millis(),
@@ -414,6 +422,9 @@ impl Transaction {
             checked: r.checked,
             is_transfer: r.is_transfer,
             is_orphan_transfer: r.is_orphan_transfer,
+            merchant_logo_url,
+            merchant_name: r.merchant_name,
+            merchant_domain: r.merchant_domain,
             tags: tags
                 .into_iter()
                 .map(|t| TagDto {
@@ -1003,6 +1014,29 @@ pub struct AiStatusDto {
 pub struct UndoReviewReq {
     pub category_id: Option<uuid::Uuid>,
     pub confidence: Option<Decimal>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetMerchantReq {
+    pub transaction_id: uuid::Uuid,
+    pub name: Option<String>,
+    pub domain: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct MerchantLogoPreviewParams {
+    pub domain: String,
+}
+
+/// A preview of the logo URL a domain would resolve to, before it is saved —
+/// built with the same `brandfetch_decorate` (client-id, `fallback/404`) as
+/// the saved logo, which a bare `cdn.brandfetch.io/<domain>` URL lacks.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MerchantLogoPreviewDto {
+    pub domain: String,
+    pub logo_url: String,
 }
 
 #[derive(Serialize)]

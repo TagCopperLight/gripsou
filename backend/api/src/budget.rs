@@ -1000,6 +1000,59 @@ pub async fn undo_review(
     ))
 }
 
+pub async fn set_merchant(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<crate::dto::SetMerchantReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    use gripsou_core::repo::budget::memo::{MerchantWrite, clean_domain, set_user_merchant};
+    let domain = body
+        .domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty());
+    if domain.is_some_and(|d| clean_domain(d).is_none()) {
+        return Err((StatusCode::BAD_REQUEST, "not a web domain".into()));
+    }
+    match set_user_merchant(
+        &pool,
+        user_id,
+        body.transaction_id,
+        body.name.as_deref(),
+        domain,
+    )
+    .await
+    .map_err(internal)?
+    {
+        MerchantWrite::Saved | MerchantWrite::Cleared => Ok(StatusCode::NO_CONTENT),
+        MerchantWrite::NotFound => Err(not_found()),
+        MerchantWrite::NoIdentity => Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "this description identifies no merchant".into(),
+        )),
+    }
+}
+
+/// Previews the Brandfetch logo URL for a domain the user is typing into the
+/// merchant modal, before it is saved. No DB access: `clean_domain` is the
+/// same normalisation `set_merchant` applies, so what this returns is exactly
+/// what a save would resolve to.
+pub async fn preview_merchant_logo(
+    AuthUser { .. }: AuthUser,
+    Query(p): Query<crate::dto::MerchantLogoPreviewParams>,
+) -> Result<Json<crate::dto::MerchantLogoPreviewDto>, (StatusCode, String)> {
+    use gripsou_core::repo::budget::memo::clean_domain;
+
+    let Some(domain) = clean_domain(&p.domain) else {
+        return Err((StatusCode::BAD_REQUEST, "not a web domain".into()));
+    };
+    let logo_url = gripsou_core::logo::merchant_logo_url(&domain);
+    Ok(Json(crate::dto::MerchantLogoPreviewDto {
+        domain,
+        logo_url,
+    }))
+}
+
 #[cfg(test)]
 mod parse_tests {
     use super::*;
