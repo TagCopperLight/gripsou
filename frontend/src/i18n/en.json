@@ -465,14 +465,15 @@
     "transfers": "Internal transfers",
     "tagLabel": "Tag {{name}}",
     "merchant": {
-      "title": "Merchant",
+      "title": "Transaction",
       "edit": "Edit merchant",
-      "name": "Name",
-      "domain": "Website",
+      "domain": "Website — all transactions with this description",
       "domainHint": "The merchant's web domain, e.g. leclerc.fr. It fixes the logo of every transaction with this description.",
       "invalidDomain": "That is not a web domain.",
       "noIdentity": "This description can't identify a merchant.",
       "saveFailed": "Could not save the merchant.",
+      "note": "Note — this transaction only",
+      "noteSaveFailed": "Could not save the note.",
       "save": "Save",
       "cancel": "Cancel"
     },

@@ -658,6 +658,8 @@ pub struct PatchTransactionBody {
     pub category_id: Option<Option<Uuid>>,
     pub tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
+    /// Absent leaves it alone. `""` or whitespace-only clears it.
+    pub note: Option<String>,
 }
 
 /// Distinguishes `{"categoryId": null}` (clear it) from `{}` (leave it).
@@ -696,6 +698,14 @@ pub async fn patch_transaction(
     }
     if let Some(checked) = b.checked {
         ok |= assign::set_checked(&pool, user_id, id, checked)
+            .await
+            .map_err(internal)?;
+    }
+    if let Some(note) = &b.note {
+        if note.chars().count() > 2000 {
+            return Err((StatusCode::BAD_REQUEST, "note is too long".into()));
+        }
+        ok |= assign::set_note(&pool, user_id, id, Some(note))
             .await
             .map_err(internal)?;
     }
@@ -1014,15 +1024,9 @@ pub async fn set_merchant(
     if domain.is_some_and(|d| clean_domain(d).is_none()) {
         return Err((StatusCode::BAD_REQUEST, "not a web domain".into()));
     }
-    match set_user_merchant(
-        &pool,
-        user_id,
-        body.transaction_id,
-        body.name.as_deref(),
-        domain,
-    )
-    .await
-    .map_err(internal)?
+    match set_user_merchant(&pool, user_id, body.transaction_id, domain)
+        .await
+        .map_err(internal)?
     {
         MerchantWrite::Saved | MerchantWrite::Cleared => Ok(StatusCode::NO_CONTENT),
         MerchantWrite::NotFound => Err(not_found()),

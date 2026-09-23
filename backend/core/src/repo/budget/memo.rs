@@ -49,7 +49,10 @@ pub enum MerchantWrite {
 }
 
 /// Records the merchants of one chunk's decisions. Only decisions carrying a
-/// valid domain are kept; an entry the user wrote is never replaced.
+/// valid domain are kept; an entry the user wrote is never replaced. The
+/// name is never displayed any more, so it is never written — and a stale
+/// name from before this change is nulled out on conflict, so it doesn't
+/// linger under an AI-owned row.
 pub async fn record_ai_merchants(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -61,25 +64,23 @@ pub async fn record_ai_merchants(
         let Some(domain) = m.domain.as_deref().and_then(clean_domain) else {
             continue;
         };
-        let name = m.name.as_deref().map(str::trim).filter(|s| !s.is_empty());
         n += sqlx::query!(
             r#"
-            insert into budget_memo (user_id, norm_description, origin, merchant_name, merchant_domain)
-            select $1, budget_norm_description(t.description), 'ai', $3, $4
+            insert into budget_memo (user_id, norm_description, origin, merchant_domain)
+            select $1, budget_norm_description(t.description), 'ai', $3
               from transaction t
               join account a    on a.id = t.account_id
               join connection k on k.id = a.connection_id
              where t.id = $2 and k.user_id = $1
                and budget_norm_description(t.description) <> ''
             on conflict (user_id, norm_description) do update
-               set merchant_name = excluded.merchant_name,
+               set merchant_name = null,
                    merchant_domain = excluded.merchant_domain,
                    updated_at = now()
              where budget_memo.origin = 'ai'
             "#,
             user_id,
             d.txn_id,
-            name,
             domain,
         )
         .execute(pool)
@@ -90,13 +91,12 @@ pub async fn record_ai_merchants(
 }
 
 /// The user's correction, keyed on this row's normalised description, so it
-/// fixes every row sharing it. Both fields empty removes the entry. A domain
-/// that is not a domain is stored as none (the name alone is still kept).
+/// fixes every row sharing it. An empty or absent domain removes the entry.
+/// A domain that is not a domain is stored as none.
 pub async fn set_user_merchant(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     txn_id: Uuid,
-    name: Option<&str>,
     domain: Option<&str>,
 ) -> Result<MerchantWrite, CoreError> {
     let norm: Option<Option<String>> = sqlx::query_scalar!(
@@ -119,9 +119,8 @@ pub async fn set_user_merchant(
         return Ok(MerchantWrite::NoIdentity);
     };
 
-    let name = name.map(str::trim).filter(|s| !s.is_empty());
     let domain = domain.and_then(clean_domain);
-    if name.is_none() && domain.is_none() {
+    if domain.is_none() {
         sqlx::query!(
             "delete from budget_memo where user_id = $1 and norm_description = $2",
             user_id,
@@ -134,16 +133,15 @@ pub async fn set_user_merchant(
     sqlx::query!(
         r#"
         insert into budget_memo (user_id, norm_description, origin, merchant_name, merchant_domain)
-        values ($1, $2, 'user', $3, $4)
+        values ($1, $2, 'user', null, $3)
         on conflict (user_id, norm_description) do update
            set origin = 'user',
-               merchant_name = excluded.merchant_name,
+               merchant_name = null,
                merchant_domain = excluded.merchant_domain,
                updated_at = now()
         "#,
         user_id,
         norm,
-        name,
         domain,
     )
     .execute(pool)

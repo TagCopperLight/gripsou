@@ -12,7 +12,7 @@ function tx(over: Partial<Transaction>): Transaction {
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
     categoryConfidence: null, needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false,
-    merchantName: null, merchantDomain: null, merchantLogoUrl: null,
+    merchantDomain: null, merchantLogoUrl: null, note: null,
     tags: [], ...over,
   };
 }

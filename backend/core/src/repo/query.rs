@@ -875,8 +875,10 @@ pub struct TransactionListRow {
     /// From `budget_memo`, keyed on the normalised description: the AI's
     /// answer or the user's correction. Null on lot rows and on rows whose
     /// description normalises to `''`.
-    pub merchant_name: Option<String>,
     pub merchant_domain: Option<String>,
+    /// User-written, per transaction, never touched by sync. Null on lot
+    /// rows: a purchase carries no note.
+    pub note: Option<String>,
 }
 
 /// The TYPE control on the filter panel: one value, always one selected.
@@ -975,7 +977,7 @@ pub async fn transactions(
         TransactionListRow,
         r#"
         with rows as (
-            select t.id, t.ts, t.type as kind, t.description, t.amount,
+            select t.id, t.ts, t.type as kind, t.description, t.amount, t.note,
                    'cash'::text as source,
                    null::text as ticker, null::numeric as quantity,
                    null::numeric as unit_price, null::numeric as fee,
@@ -1043,6 +1045,7 @@ pub async fn transactions(
                    null::text as description,
                    case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                         else l.quantity * l.unit_price - l.fee end as amount,
+                   null::text as note,
                    'lot'::text as source,
                    -- `resolve_instrument` stores `symbol` as null whenever an
                    -- ISIN identifies the row (ISINs are the identity there;
@@ -1081,7 +1084,10 @@ pub async fn transactions(
                    -- user searching for a purchase naturally types. Both sides
                    -- stay nullable-safe: `ilike` against a null column is null,
                    -- which the `or` just drops.
-                   or ticker ilike '%' || $2 || '%')
+                   or ticker ilike '%' || $2 || '%'
+                   -- The note is per-transaction free text; search matches it
+                   -- too, same nullable-safe `ilike` (null on lot rows).
+                   or note ilike '%' || $2 || '%')
               and ($3::uuid is null or account_id = $3)
               and ($4::text is null or kind = $4)
               and ($5::date is null or (ts at time zone 'utc')::date >= $5)
@@ -1131,7 +1137,7 @@ pub async fn transactions(
                needs_review as "needs_review!", checked as "checked!",
                is_transfer as "is_transfer!",
                is_orphan_transfer as "is_orphan_transfer!",
-               bm.merchant_name, bm.merchant_domain
+               bm.merchant_domain, filtered.note
         from filtered
         left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date
                           and afx.currency = filtered.account_currency
@@ -1141,8 +1147,8 @@ pub async fn transactions(
         -- four regexp_replace calls in budget_norm_description run on at
         -- most `limit` rows instead of the user's whole history. A lot row's
         -- `description` is null, so `budget_norm_description(null)` is null
-        -- and never matches `<> ''`, leaving merchant_name/domain null there
-        -- too — same as before.
+        -- and never matches `<> ''`, leaving merchant_domain null there too —
+        -- same as before.
         left join budget_memo bm
                on bm.user_id = $1
               and bm.norm_description = budget_norm_description(filtered.description)
@@ -1262,7 +1268,7 @@ pub async fn transaction_counts(
     let row = sqlx::query!(
         r#"
         with rows as (
-            select t.id, t.ts, t.type as kind, t.description, t.amount,
+            select t.id, t.ts, t.type as kind, t.description, t.amount, t.note,
                    'cash'::text as source, null::text as ticker,
                    a.id as account_id,
                    t.budget_category_id as category_id,
@@ -1294,6 +1300,7 @@ pub async fn transaction_counts(
                    null::text as description,
                    case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                         else l.quantity * l.unit_price - l.fee end as amount,
+                   null::text as note,
                    'lot'::text as source,
                    coalesce(i.symbol, i.isin, i.name) as ticker,
                    a.id,
@@ -1353,7 +1360,8 @@ pub async fn transaction_counts(
             from conv
             where ($2::text is null
                    or description ilike '%' || $2 || '%'
-                   or ticker ilike '%' || $2 || '%')
+                   or ticker ilike '%' || $2 || '%'
+                   or note ilike '%' || $2 || '%')
               and ($3::uuid is null or account_id = $3)
               and ($4::text is null or kind = $4)
               and ($5::date is null or (ts at time zone 'utc')::date >= $5)
@@ -1446,7 +1454,9 @@ pub async fn matching_transaction_ids(
           and not (a.type_key = 'pea'
                    and t.external_id is not null
                    and t.type in ('buy', 'sell'))
-          and ($2::text is null or t.description ilike '%' || $2 || '%')
+          and ($2::text is null
+               or t.description ilike '%' || $2 || '%'
+               or t.note ilike '%' || $2 || '%')
           and ($3::uuid is null or a.id = $3)
           and ($4::text is null or t.type = $4)
           and ($5::date is null or (t.ts at time zone 'utc')::date >= $5)

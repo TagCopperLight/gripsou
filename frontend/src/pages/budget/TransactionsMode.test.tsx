@@ -25,7 +25,7 @@ function tx(over: Partial<Transaction>): Transaction {
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
     categoryConfidence: null, needsReview: false, checked: false, isTransfer: false,
     isOrphanTransfer: false,
-    merchantName: null, merchantDomain: null, merchantLogoUrl: null,
+    merchantDomain: null, merchantLogoUrl: null, note: null,
     tags: [], ...over,
   };
 }

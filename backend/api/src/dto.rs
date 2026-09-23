@@ -370,10 +370,11 @@ pub struct Transaction {
     /// The pairing pass categorised this row but its link is gone — a user
     /// corrected the other half, so this one nets against nothing.
     pub is_orphan_transfer: bool,
-    pub merchant_name: Option<String>,
     pub merchant_domain: Option<String>,
     /// Brandfetch URL, or null. May 404 — the frontend falls back.
     pub merchant_logo_url: Option<String>,
+    /// User-written, per transaction, never touched by sync.
+    pub note: Option<String>,
     pub tags: Vec<TagDto>,
 }
 
@@ -423,8 +424,8 @@ impl Transaction {
             is_transfer: r.is_transfer,
             is_orphan_transfer: r.is_orphan_transfer,
             merchant_logo_url,
-            merchant_name: r.merchant_name,
             merchant_domain: r.merchant_domain,
+            note: r.note,
             tags: tags
                 .into_iter()
                 .map(|t| TagDto {
@@ -1020,7 +1021,6 @@ pub struct UndoReviewReq {
 #[serde(rename_all = "camelCase")]
 pub struct SetMerchantReq {
     pub transaction_id: uuid::Uuid,
-    pub name: Option<String>,
     pub domain: Option<String>,
 }
 

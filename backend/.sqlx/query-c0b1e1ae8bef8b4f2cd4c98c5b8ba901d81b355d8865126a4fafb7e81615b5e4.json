@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into budget_memo (user_id, norm_description, origin, merchant_domain)\n            select $1, budget_norm_description(t.description), 'ai', $3\n              from transaction t\n              join account a    on a.id = t.account_id\n              join connection k on k.id = a.connection_id\n             where t.id = $2 and k.user_id = $1\n               and budget_norm_description(t.description) <> ''\n            on conflict (user_id, norm_description) do update\n               set merchant_name = null,\n                   merchant_domain = excluded.merchant_domain,\n                   updated_at = now()\n             where budget_memo.origin = 'ai'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0b1e1ae8bef8b4f2cd4c98c5b8ba901d81b355d8865126a4fafb7e81615b5e4"
+}
