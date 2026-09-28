@@ -155,7 +155,7 @@ describe("CategoryModal — edit", () => {
     await act(async () => { await i18n.changeLanguage("fr"); });
     // Touch an unrelated field too, so Save has a reason to be enabled — a
     // bare retype of the same-meaning name is otherwise a no-op.
-    fireEvent.change(screen.getByLabelText("Indice pour l'IA"), { target: { value: "Supermarchés" } });
+    fireEvent.change(screen.getByLabelText("Indication pour l'IA"), { target: { value: "Supermarchés" } });
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Courses" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
     await waitFor(() => {
@@ -172,7 +172,7 @@ describe("CategoryModal — edit", () => {
     // The name field genuinely shows the French label at mount — this is
     // what makes the assertion below meaningful, rather than vacuously true.
     expect(screen.getByLabelText("Nom")).toHaveValue("Courses");
-    fireEvent.change(screen.getByLabelText("Indice pour l'IA"), { target: { value: "Supermarchés" } });
+    fireEvent.change(screen.getByLabelText("Indication pour l'IA"), { target: { value: "Supermarchés" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
     await waitFor(() => {
       const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string);
