@@ -151,6 +151,38 @@ pub fn txn_on(
     }
 }
 
+/// An account in a given currency. `checking_account` hardcodes EUR, and the
+/// budget aggregates exist to convert across currencies.
+pub fn checking_account_in(external_id: &str, currency: &str) -> CanonicalAccount {
+    CanonicalAccount {
+        currency: currency.to_string(),
+        ..checking_account(external_id)
+    }
+}
+
+/// A transaction on a specific day with a description, for the budget
+/// aggregates. `txn_on` drops the description and `txn` drops the day; the
+/// summary tests need both.
+pub fn txn_on_day(
+    account_external_id: &str,
+    external_id: &str,
+    kind: &str,
+    amount: Decimal,
+    day: NaiveDate,
+    description: &str,
+) -> CanonicalTransaction {
+    CanonicalTransaction {
+        ts: day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        ..txn(
+            account_external_id,
+            external_id,
+            kind,
+            amount,
+            Some(description),
+        )
+    }
+}
+
 /// Insert one price point for an instrument.
 pub async fn insert_price_on(
     pool: &PgPool,
@@ -226,4 +258,29 @@ pub async fn seed_equity_holding(
     gripsou_core::repo::holding::upsert_holding(&mut conn, account_id, instrument_id, &holding)
         .await
         .unwrap()
+}
+
+/// Insert a cash instrument for a currency and return its id.
+pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
+    sqlx::query_scalar(
+        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
+    )
+    .bind(currency)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// One rate for one currency on one day.
+pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
+    let mut conn = pool.acquire().await.unwrap();
+    gripsou_core::repo::price::insert_price(
+        &mut conn,
+        instrument_id,
+        d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        rate,
+        "EUR",
+    )
+    .await
+    .unwrap();
 }

@@ -12,6 +12,7 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { setAuthToken } from "./api/client";
 import type { AuthValue } from "./auth/context";
 import { DEFAULT_PREFS } from "./lib/prefs";
+import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
 
 // The dashboard mounts ECharts cards that don't render in jsdom; for routing
 // tests we only care that we *land* on it, so stub it to a sentinel.
@@ -24,6 +25,7 @@ function renderAt(path: string, auth: AuthValue) {
     routeTree,
     history: createMemoryHistory({ initialEntries: [path] }),
     context: { auth },
+    ...scrollRestorationOptions,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -53,6 +55,47 @@ describe("route guard", () => {
     const router = renderAt("/accounts", unauth);
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+});
+
+const authedUser: AuthValue = {
+  isAuthenticated: true,
+  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS },
+  isBootstrapping: false,
+  prefs: DEFAULT_PREFS,
+  login: async () => {},
+  adoptSession: () => {},
+  logout: async () => {},
+  updateUser: () => {},
+  updatePrefs: async () => {},
+};
+
+describe("settings budget route", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("resolves /settings/budget for an ordinary authenticated user and renders the Categories heading", async () => {
+    const router = renderAt("/settings/budget", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/budget"));
+    expect(await screen.findByText("Categories")).toBeInTheDocument();
+  });
+});
+
+describe("legacy transactions route", () => {
+  it("redirects /transactions to /budget/transactions", async () => {
+    const router = renderAt("/transactions", authedUser);
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/budget/transactions"),
+    );
   });
 });
 
@@ -122,5 +165,41 @@ describe("login redirect", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+  });
+});
+
+describe("scroll reset on navigation", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setAuthToken(null);
+    vi.restoreAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  // Regression: the app scrolls inside <main>, which belongs to the pathless
+  // `app` route and so survives navigation. Without the router's scroll
+  // restoration naming it, the previous page's scrollTop carried over.
+  it("scrolls the main container back to the top when navigating to a new page", async () => {
+    const router = renderAt("/settings/budget", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/budget"));
+
+    const main = document.querySelector(MAIN_SCROLL_SELECTOR);
+    expect(main).not.toBeNull();
+    const scrollTo = vi.spyOn(main as Element, "scrollTo");
+
+    await router.navigate({ to: "/" });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    expect(scrollTo.mock.calls[0][0]).toMatchObject({ top: 0, left: 0 });
   });
 });

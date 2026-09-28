@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update app_settings set budget_ai_prices = $1 where id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e04f7f62f710389082ee59a82a3374cb30eda95cc76ffba84a66fddc201abea7"
+}

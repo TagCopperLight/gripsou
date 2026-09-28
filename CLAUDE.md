@@ -25,8 +25,8 @@ Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` for ju
 **The database is shaped around gripsou's domain; providers map _into_ it.** Adding a provider must never require a schema migration. This principle drives everything below.
 
 **Backend crate split enforces an anti-corruption layer at compile time:**
-- `core` — canonical DTOs (`dto.rs`) and provider ports (`provider.rs`: `AccountProvider`, `PriceProvider` traits), plus DB wiring. The domain boundary.
-- `providers` — adapters (`powens`, `marketdata`) that translate native payloads into canonical DTOs. **Depends on `core` only, never the reverse** — that direction is what keeps the schema gripsou-shaped. Never import a provider's native types into `core`.
+- `core` — canonical DTOs (`dto.rs`) and provider ports (`provider.rs`: `AccountProvider`, `PriceProvider` traits; `categorize.rs`: the budget `Categorizer` trait), plus DB wiring and the budget pipeline (`budget/`: pairing, AI run, Overview math). The domain boundary.
+- `providers` — adapters (`powens`, `yahoo`, `boursorama`; `gemini`, `jev` for categorisation) that translate native payloads into canonical DTOs. **Depends on `core` only, never the reverse** — that direction is what keeps the schema gripsou-shaped. Never import a provider's native types into `core`.
 - `jobs` — the in-process tokio scheduler / sync orchestration (daily sync fans out per-connection tasks, one lock each).
 - `api` — the axum binary; handlers, auth, routing, static-file serving.
 
@@ -36,13 +36,15 @@ Currency is part of the same idea: an FX rate is just a price of a cash instrume
 
 **Snapshots are written by the core, not providers.** After each sync the core stamps `holding_snapshot` per holding (idempotent on `(holding_id, as_of)`), so a net-worth time series exists even for a provider that only reports current balances. Net worth at instant `t` = Σ `quantity(last snapshot)` × `unit_value_asof(t)`, where `unit_value_asof` folds in the FX rate — so the sum is in the pivot currency, then divided once into the reader's reporting currency.
 
+**Budget** (ARCHITECTURE.md §12): per-user categories and tags on `transaction`. `category_source` (`user` > `pair` > `ai`) decides who may overwrite a category; a pairing pass runs inside every ingest, then an optional AI run per user after sync. Budget readers go through the SQL functions `budget_transaction_rows` / `budget_transaction_matches` so the list, counts and bulk writes agree.
+
 ## Conventions that bite if missed
 
 - **Money is `rust_decimal::Decimal` ↔ Postgres `NUMERIC`, never floats.** The API sends decimals as **strings**; the frontend formats them.
 - **New account types are data inserts** into the `account_type` reference table (see `migrations/0002_seed_reference.sql`), **not migrations**.
 - **Escape hatches:** `*_meta` JSONB columns and `external_id` (for idempotent provider upserts/dedup) let adapters absorb provider-specific weirdness without schema churn.
 - **sqlx is compile-time-checked.** Once `query!`/`query_as!` macros are added, `cargo build` requires a reachable `DATABASE_URL` or committed `.sqlx/` offline data (`cargo sqlx prepare`). The current scaffold has no such queries yet, so it builds without a DB.
-- **Config split:** secrets/infra via env (`DATABASE_URL`, `ENCRYPTION_KEY`, `POWENS_*` — see `.env.example`); runtime/admin-tunable values (`cors_origins`, `enabled_providers`) live in the `app_settings` DB row, not env.
+- **Config split:** secrets/infra via env (`DATABASE_URL`, `ENCRYPTION_KEY`, `POWENS_*`, `GEMINI_API_KEY`/`JEV_API_KEY` — see `.env.example`); runtime/admin-tunable values (`cors_origins`, `enabled_providers`, `budget_ai_*`) live in the `app_settings` DB row, not env.
 - **Env files live at the repo root.** Copy `.env.example` → `.env` at the root. The backend, even when run from `backend/`, loads the root `.env` via dotenvy's parent-directory search — do not create `backend/.env` (it would shadow the root file). dotenvy only runs at `cargo run`/`seed`, **not** under `cargo test` or `cargo build`/sqlx macros, so those need `DATABASE_URL` exported in the shell.
 - **Credentials at rest** are encrypted with AES-GCM using `ENCRYPTION_KEY`; plaintext secrets never hit the DB.
 - Frontend stack: React 19 + TanStack Router (code-based route tree in `router.tsx`) + TanStack Query, ECharts for charts, react-i18next (en/fr in `src/i18n/`). Per-user formatting prefs drive `Intl` with explicit options.

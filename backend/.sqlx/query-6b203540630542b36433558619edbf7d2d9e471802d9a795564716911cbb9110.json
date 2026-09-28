@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with matching as (\n            select amount, account_currency, (ts at time zone 'utc')::date as day\n            from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n        ),\n        -- Only the days the filter kept are priced: a one-month filter does\n        -- not pay for the whole history.\n        days as (select distinct day from matching),\n        grid as materialized (\n            select as_of, currency, unit_value\n            from valuation_grid($1, array(select day from days)::date[])\n            where kind = 'cash'\n        ),\n        reporting as (\n            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code\n        ),\n        totals as (\n            select count(*) as n,\n                   coalesce(sum(m.amount * afx.unit_value\n                                / coalesce(nullif(rfx.unit_value, 0), 1)), 0) as total,\n                   -- Keyed on the account leg only: a missing reporting rate\n                   -- degrades to the pivot rather than dropping anything from\n                   -- the sum, so it must not set this.\n                   coalesce(bool_or(afx.unit_value is null), false) as fx_missing,\n                   -- Read off the same divisor the sum just used, so the flag\n                   -- is set exactly when that divisor fell back to 1.\n                   coalesce(bool_or(coalesce(rfx.unit_value, 0) = 0), false)\n                       as reporting_fx_missing\n            from matching m\n            left join grid afx on afx.as_of = m.day and afx.currency = m.account_currency\n            left join grid rfx on rfx.as_of = m.day\n                              and rfx.currency = (select code from reporting)\n        ),\n        everything as (\n            select count(*) as n,\n                   count(*) filter (where source = 'cash' and category_id is null)\n                       as uncategorized\n            from budget_transaction_rows($1, $2)\n        )\n        select t.n as \"matching!\", t.total as \"matching_total!\",\n               t.fx_missing as \"fx_missing!\",\n               t.reporting_fx_missing as \"reporting_fx_missing!\",\n               e.n as \"total!\", e.uncategorized as \"uncategorized!\"\n        from totals t, everything e\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "matching!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "matching_total!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "reporting_fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "uncategorized!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric",
+        "Text",
+        "Uuid",
+        "Date",
+        "Date",
+        "Text",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "6b203540630542b36433558619edbf7d2d9e471802d9a795564716911cbb9110"
+}

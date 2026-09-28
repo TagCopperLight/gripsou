@@ -102,7 +102,7 @@ mod tests {
             let days = sample_days(from, to, target);
 
             // The honest general cap: at most target+1 points. The +1 covers
-            // Finding 4's prepended `from`, needed when the backward walk
+            // the prepended `from`, needed when the backward walk
             // from `to` doesn't already land exactly on `from`.
             assert!(
                 days.len() <= target + 1,
@@ -110,7 +110,7 @@ mod tests {
                 days.len()
             );
 
-            // `from` is always exactly the first point (Finding 4).
+            // `from` is always exactly the first point.
             assert_eq!(*days.first().unwrap(), from, "span {span}");
 
             // Independently recompute the step sample_days uses, and the
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn a_target_of_zero_does_not_divide_by_zero() {
         // target 0 still walks to a single point at `to` — but `from` gets
-        // prepended per Finding 4, same as any other target.
+        // prepended, same as for any other target.
         let days = sample_days(d(2026, 1, 1), d(2026, 12, 31), 0);
         assert_eq!(days, vec![d(2026, 1, 1), d(2026, 12, 31)]);
     }

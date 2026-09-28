@@ -334,6 +334,9 @@ pub struct Transaction {
     pub description: Option<String>,
     /// Decimal string in `currency` — never a float.
     pub amount: String,
+    /// The same movement in the reader's reporting currency, converted at the
+    /// transaction's own date. Decimal string, never a float.
+    pub amount_reporting: String,
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
@@ -348,16 +351,48 @@ pub struct Transaction {
     pub unit_price: Option<String>,
     /// Decimal string, never a float.
     pub fee: Option<String>,
+
+    // ── Budget ──────────────────────────────────────────────────────────────
+    pub category_id: Option<String>,
+    pub category_name: Option<String>,
+    /// Translate this when present; fall back to `category_name`.
+    pub category_default_key: Option<String>,
+    pub category_color: Option<String>,
+    pub category_icon: Option<String>,
+    pub category_kind: Option<String>,
+    pub category_source: Option<String>,
+    /// Decimal string, never a float.
+    pub category_confidence: Option<String>,
+    pub needs_review: bool,
+    pub checked: bool,
+    /// One half of an auto-paired internal transfer.
+    pub is_transfer: bool,
+    /// The pairing pass categorised this row but its link is gone — a user
+    /// corrected the other half, so this one nets against nothing.
+    pub is_orphan_transfer: bool,
+    pub tags: Vec<TagDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagDto {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
 }
 
 impl Transaction {
-    pub fn from_row(r: gripsou_core::repo::query::TransactionListRow) -> Self {
+    pub fn from_row(
+        r: gripsou_core::repo::query::TransactionListRow,
+        tags: Vec<gripsou_core::repo::query::TagRef>,
+    ) -> Self {
         Transaction {
             id: r.id.to_string(),
             t: r.ts.timestamp_millis(),
             kind: r.kind,
             description: r.description,
             amount: r.amount.to_string(),
+            amount_reporting: r.amount_reporting.to_string(),
             currency: r.account_currency,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
@@ -367,6 +402,26 @@ impl Transaction {
             quantity: r.quantity.map(|d| d.to_string()),
             unit_price: r.unit_price.map(|d| d.to_string()),
             fee: r.fee.map(|d| d.to_string()),
+            category_id: r.category_id.map(|id| id.to_string()),
+            category_name: r.category_name,
+            category_default_key: r.category_default_key,
+            category_color: r.category_color,
+            category_icon: r.category_icon,
+            category_kind: r.category_kind,
+            category_source: r.category_source,
+            category_confidence: r.category_confidence.map(|d| d.to_string()),
+            needs_review: r.needs_review,
+            checked: r.checked,
+            is_transfer: r.is_transfer,
+            is_orphan_transfer: r.is_orphan_transfer,
+            tags: tags
+                .into_iter()
+                .map(|t| TagDto {
+                    id: t.id.to_string(),
+                    name: t.name,
+                    color: t.color,
+                })
+                .collect(),
         }
     }
 }
@@ -920,5 +975,163 @@ mod tests {
     fn connection_logo_none_without_institution_key() {
         let groups = ProviderGroup::tree(vec![conn_row(None)], vec![]);
         assert_eq!(groups[0].connections[0].logo, None);
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiLastRunDto {
+    pub outcome: String,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiStatusDto {
+    pub configured: bool,
+    pub running: bool,
+    pub remaining: i64,
+    pub review_count: i64,
+    pub last_run: Option<AiLastRunDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoReviewReq {
+    pub category_id: Option<uuid::Uuid>,
+    pub confidence: Option<Decimal>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiSettingsDto {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub available: Vec<&'static str>,
+    pub defaults: std::collections::BTreeMap<&'static str, &'static str>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetBudgetAiSettingsReq {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+/// AI spend for Settings → Server. Token counts are numbers; money is strings.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiUsageDto {
+    pub currency: &'static str,
+    pub models: Vec<BudgetAiModelUsageDto>,
+    pub total_cost: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAiModelUsageDto {
+    pub model: String,
+    pub runs: i64,
+    pub runs_without_usage: i64,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub price_in: Option<String>,
+    pub price_out: Option<String>,
+    /// `None` when the model has no price entered.
+    pub cost: Option<String>,
+}
+
+/// One entry of the `PUT /settings/budget-ai/prices` map, USD per million
+/// tokens as decimal strings. Parsed by the handler so bad values are a 400.
+#[derive(Deserialize)]
+pub struct BudgetAiPriceReq {
+    #[serde(rename = "in")]
+    pub input: String,
+    #[serde(rename = "out")]
+    pub output: String,
+}
+
+#[cfg(test)]
+mod budget_ai_contract_tests {
+    use super::*;
+
+    #[test]
+    fn status_uses_the_frontend_field_names() {
+        let v = serde_json::to_value(AiStatusDto {
+            configured: true,
+            running: false,
+            remaining: 3,
+            review_count: 2,
+            last_run: Some(AiLastRunDto {
+                outcome: "ok".into(),
+                error: None,
+            }),
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "configured": true, "running": false,
+                "remaining": 3, "reviewCount": 2,
+                "lastRun": {"outcome": "ok", "error": null}
+            })
+        );
+    }
+
+    #[test]
+    fn undo_reads_a_string_confidence_and_nulls() {
+        let r: UndoReviewReq = serde_json::from_value(serde_json::json!({
+            "categoryId": null, "confidence": "0.42"
+        }))
+        .unwrap();
+        assert_eq!(r.category_id, None);
+        assert_eq!(r.confidence, Some(Decimal::new(42, 2)));
+        let r: UndoReviewReq =
+            serde_json::from_value(serde_json::json!({"categoryId": null, "confidence": null}))
+                .unwrap();
+        assert_eq!(r.confidence, None);
+    }
+
+    #[test]
+    fn usage_numbers_for_tokens_strings_for_money() {
+        let v = serde_json::to_value(BudgetAiUsageDto {
+            currency: "USD",
+            models: vec![BudgetAiModelUsageDto {
+                model: "jev:jev-latest".into(),
+                runs: 3,
+                runs_without_usage: 0,
+                tokens_in: 9495459,
+                tokens_out: 4484808,
+                price_in: Some("0.042".into()),
+                price_out: None,
+                cost: None,
+            }],
+            total_cost: "0".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "currency": "USD",
+                "models": [{
+                    "model": "jev:jev-latest", "runs": 3, "runsWithoutUsage": 0,
+                    "tokensIn": 9495459, "tokensOut": 4484808,
+                    "priceIn": "0.042", "priceOut": null, "cost": null
+                }],
+                "totalCost": "0"
+            })
+        );
+    }
+
+    #[test]
+    fn prices_read_in_and_out_strings() {
+        let r: std::collections::BTreeMap<String, BudgetAiPriceReq> =
+            serde_json::from_value(serde_json::json!({
+                "jev:jev-latest": {"in": "0.042", "out": "0"}
+            }))
+            .unwrap();
+        let p = &r["jev:jev-latest"];
+        assert_eq!(p.input, "0.042");
+        assert_eq!(p.output, "0");
     }
 }

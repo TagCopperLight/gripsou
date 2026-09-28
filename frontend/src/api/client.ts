@@ -45,12 +45,31 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 
 type HandleOptions = { skipGlobalUnauthorized?: boolean };
 
+/** An HTTP failure with its status attached, so callers can branch on 409/404
+ *  instead of parsing the message. Thrown by every helper in this module. */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 function handle(res: Response, path: string, method: string, opts?: HandleOptions): void {
   if (res.status === 401) {
     if (!opts?.skipGlobalUnauthorized) onUnauthorized?.();
-    throw new Error(`${method} ${path} unauthorized`);
+    throw new ApiError(`${method} ${path} unauthorized`, 401);
   }
-  if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, res.status);
+}
+
+/** The body as JSON, or `undefined` when there is none: 204 No Content, and a
+ *  202 Accepted that only says "started" (e.g. POST /budget/categorize). */
+async function bodyOf<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text === "" ? undefined : JSON.parse(text)) as T;
 }
 
 export type GetJsonOptions = { skipGlobalUnauthorized?: boolean };
@@ -68,9 +87,8 @@ export async function postJson<T>(path: string, body: unknown, opts?: HandleOpti
     body: JSON.stringify(body),
   });
   handle(res, path, "POST", opts);
-  // 204 No Content (e.g. change-password) has an empty body.
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // 204 No Content (e.g. change-password) and a bare 202 have empty bodies.
+  return bodyOf<T>(res);
 }
 
 export async function putJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
@@ -92,7 +110,8 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   handle(res, path, "PATCH");
-  return res.json() as Promise<T>;
+  // 204 No Content (e.g. /settings/cors, /settings/budget-ai) has an empty body.
+  return bodyOf<T>(res);
 }
 
 export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {

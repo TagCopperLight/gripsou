@@ -4,6 +4,8 @@ import type { SessionUser } from "../api/types";
 import { AuthContext, type AuthValue } from "./context";
 import i18n from "../i18n";
 import { DEFAULT_PREFS, setPrefs, type UserPrefs } from "../lib/prefs";
+import { afterReviewThresholdChange } from "../api/invalidate";
+import { queryClient } from "../queryClient";
 
 type LoginResponse = { token: string; user: SessionUser };
 
@@ -99,6 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updated = await patchJson<SessionUser>("/auth/prefs", next);
         setUser(updated);
         setPrefs(updated.prefs);
+        if (updated.prefs.budgetAiThreshold !== prev?.prefs.budgetAiThreshold)
+          afterReviewThresholdChange(queryClient);
       } catch (e) {
         // Revert to the last known-good prefs on failure.
         if (prev) {

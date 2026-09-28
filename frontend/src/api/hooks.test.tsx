@@ -3,7 +3,6 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import {
-  TRANSACTIONS_PAGE_SIZE,
   useSaveLots,
   useChangePassword,
   useHealth,
@@ -12,6 +11,9 @@ import {
   useUpdateAccount,
   useDeleteConnection,
 } from "./hooks";
+
+// The page size the list asks the server for.
+const TRANSACTIONS_PAGE_SIZE = 200;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -108,6 +110,7 @@ describe("useUpdateAccount invalidation", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
     ]);
   });
 });
@@ -135,6 +138,12 @@ describe("useDeleteConnection", () => {
       ["account-series"],
       ["holdings"],
       ["transactions"],
+      ["transaction-counts"],
+      ["budget-categories"],
+      ["budget-tags"],
+      ["budget-summary"],
+      ["budget-trend"],
+      ["budget-ai-status"],
     ]);
   });
 });
@@ -159,6 +168,7 @@ describe("useSaveLots", () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["holdings"]);
     expect(invalidatedKeys).toContainEqual(["transactions"]);
+    expect(invalidatedKeys).toContainEqual(["transaction-counts"]);
     expect(invalidatedKeys).toContainEqual(["net-worth"]);
     expect(invalidatedKeys).toContainEqual(["account-series"]);
     expect(invalidatedKeys).toContainEqual(["holding-lots", "h1"]);

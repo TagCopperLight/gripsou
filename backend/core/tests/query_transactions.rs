@@ -15,13 +15,9 @@ fn dec(s: &str) -> Decimal {
 
 fn all() -> TransactionFilters {
     TransactionFilters {
-        search: None,
-        account_id: None,
-        kind: None,
-        from: None,
-        to: None,
         limit: 100,
         offset: 0,
+        ..TransactionFilters::unfiltered()
     }
 }
 
@@ -84,19 +80,8 @@ async fn searches_descriptions_case_insensitively_on_a_substring(
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn filters_by_type_and_date_range(pool: PgPool) -> anyhow::Result<()> {
+async fn filters_by_date_range(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await;
-
-    let fees = transactions(
-        &pool,
-        user_id,
-        &TransactionFilters {
-            kind: Some("fee".into()),
-            ..all()
-        },
-    )
-    .await?;
-    assert_eq!(fees.len(), 1);
 
     let old = transactions(
         &pool,
@@ -173,12 +158,11 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// §8.1 already excludes these three types on a PEA from the cash walk: a
-/// transfer into the PEA is the mirror of an outflow from the checking account,
-/// and a buy converts cash into an asset already counted as a holding. The list
-/// showed both sides of the same movement.
+/// A provider buy/sell on the PEA is the cash leg of a purchase the lot branch
+/// already lists, so it is hidden. A transfer is shown: pairing, not hiding, is
+/// what keeps it from double-counting.
 #[sqlx::test(migrations = "../migrations")]
-async fn hides_provider_pea_transfers_and_trades(pool: PgPool) -> anyhow::Result<()> {
+async fn hides_provider_pea_trades_but_shows_transfers(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
@@ -225,9 +209,13 @@ async fn hides_provider_pea_transfers_and_trades(pool: PgPool) -> anyhow::Result
     assert!(
         !rows
             .iter()
-            .any(|r| r.account_id == pea_id
-                && matches!(r.kind.as_str(), "transfer" | "buy" | "sell")),
-        "PEA transfer/buy/sell are hidden, got {ids:?}"
+            .any(|r| r.account_id == pea_id && matches!(r.kind.as_str(), "buy" | "sell")),
+        "PEA buy/sell are hidden, got {ids:?}"
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r.account_id == pea_id && r.kind == "transfer"),
+        "the PEA side of a transfer is shown, got {ids:?}"
     );
     assert!(
         rows.iter()
@@ -242,12 +230,10 @@ async fn hides_provider_pea_transfers_and_trades(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// Unreachable, not merely hidden: an explicit type filter must not resurrect
-/// a provider-supplied PEA transfer.
+/// Unreachable, not merely hidden: searching for it must not resurrect a
+/// provider-supplied PEA buy.
 #[sqlx::test(migrations = "../migrations")]
-async fn an_explicit_type_filter_does_not_resurrect_pea_transfers(
-    pool: PgPool,
-) -> anyhow::Result<()> {
+async fn a_search_does_not_resurrect_pea_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
@@ -258,7 +244,7 @@ async fn an_explicit_type_filter_does_not_resurrect_pea_transfers(
     upsert_transaction(
         &mut conn,
         pea_id,
-        &txn("pea-1", "p1", "transfer", dec("50.00"), Some("Virement")),
+        &txn("pea-1", "p1", "buy", dec("-197.79"), Some("ACHAT COMPTANT")),
     )
     .await?;
 
@@ -266,7 +252,7 @@ async fn an_explicit_type_filter_does_not_resurrect_pea_transfers(
         &pool,
         user_id,
         &TransactionFilters {
-            kind: Some("transfer".into()),
+            search: Some("ACHAT".into()),
             ..all()
         },
     )

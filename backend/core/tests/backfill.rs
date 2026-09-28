@@ -147,14 +147,14 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// §8.1: on a PEA, transfer/buy/sell do not move the cash line — the money they
-/// represent is already accounted for in the checking account or in the
-/// security holding, and the PEA's history is too short to reconcile.
+/// §8.1: a PEA counts every type like any other account. Within its own
+/// history each provider buy is funded by a transfer-in on record, so counting
+/// both walks back to the bank's real balances.
 #[sqlx::test(migrations = "../migrations")]
-async fn pea_cash_ignores_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
+async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = pea_account("pea-1");
-    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("50"), d(2026, 1, 10)).await;
+    let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("150"), d(2026, 1, 10)).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
@@ -168,24 +168,155 @@ async fn pea_cash_ignores_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<
     }
     backfill_connection(&mut conn, conn_id).await?;
 
-    // Only the dividend moves the line: 50 today, 38 before it arrived.
+    // Walking back from 150: -12 dividend, -100 sell, +480 buy, -500 transfer.
+    for (day, want) in [(8, "150"), (7, "138"), (6, "38"), (5, "518"), (4, "18")] {
+        assert_eq!(
+            quantity_on(&pool, holding_id, d(2026, 1, day)).await,
+            Some(dec(want)),
+            "2026-01-{day:02}"
+        );
+    }
+    Ok(())
+}
+
+/// Seed a EUR security holding on `account_id` and one lot on it.
+async fn seed_lot(
+    pool: &PgPool,
+    account_id: Uuid,
+    isin: &str,
+    day: NaiveDate,
+    (quantity, unit_price, fee): (&str, &str, &str),
+) {
+    let mut conn = pool.acquire().await.unwrap();
+    let mut h = equity_holding("pea-1", isin, dec(quantity), dec("0"), None);
+    h.instrument.currency = "EUR".into();
+    let instrument_id = resolve_instrument(&mut conn, &h.instrument).await.unwrap();
+    let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h)
+        .await
+        .unwrap();
+    sqlx::query(
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
+         values ($1, 'buy', $2, $3, $4, $5, 'manual')",
+    )
+    .bind(holding_id)
+    .bind(day)
+    .bind(dec(quantity))
+    .bind(dec(unit_price))
+    .bind(dec(fee))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// A cash row entered by hand: no `external_id`.
+async fn manual_txn(pool: &PgPool, account_id: Uuid, kind: &str, amount: &str, day: NaiveDate) {
+    sqlx::query(
+        "insert into transaction (account_id, ts, booked_on, type, amount, description) \
+         values ($1, $2, $2, $3, $4, 'manual')",
+    )
+    .bind(account_id)
+    .bind(day.and_hms_opt(0, 0, 0).unwrap().and_utc())
+    .bind(kind)
+    .bind(dec(amount))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Before the provider's history starts, the user's own record is the only one
+/// there is: hand-entered deposits bring cash in and lots take it out. After
+/// it starts, the provider's buy row is the cash leg and the lot must not count
+/// a second time.
+#[sqlx::test(migrations = "../migrations")]
+async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = pea_account("pea-1");
+    let (account_id, cash_id) = seed_cash(&pool, conn_id, &acct, dec("4.35"), d(2026, 1, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    for t in [
+        txn_on("pea-1", "t1", "transfer", dec("50"), d(2026, 1, 14)),
+        txn_on("pea-1", "t2", "buy", dec("-108.25"), d(2026, 1, 16)),
+    ] {
+        upsert_transaction(&mut conn, account_id, &t).await?;
+    }
+    // Covered by the provider's buy row above: must not move cash again.
+    seed_lot(
+        &pool,
+        account_id,
+        "FR0000000001",
+        d(2026, 1, 16),
+        ("6", "17.95", "0.55"),
+    )
+    .await;
+    // Before the provider history: only the user's record explains the cash.
+    manual_txn(&pool, account_id, "transfer", "55", d(2025, 12, 2)).await;
+    seed_lot(
+        &pool,
+        account_id,
+        "FR0000000002",
+        d(2025, 12, 2),
+        ("19", "5.316", "0.51"),
+    )
+    .await;
+
+    backfill_connection(&mut conn, conn_id).await?;
+
+    for (day, want) in [
+        (d(2026, 1, 15), "112.60"),
+        (d(2026, 1, 13), "62.60"),
+        (d(2025, 12, 2), "62.60"),
+        // +55 deposit, -(19 x 5.316 + 0.51) = -101.514 purchase.
+        (d(2025, 12, 1), "109.114"),
+    ] {
+        assert_eq!(
+            quantity_on(&pool, cash_id, day).await,
+            Some(dec(want)),
+            "{day}"
+        );
+    }
+    Ok(())
+}
+
+/// Lots alone, with no hand-entered deposits, leave the pre-history cash flat:
+/// counting only the purchases would inflate cash going back in time.
+#[sqlx::test(migrations = "../migrations")]
+async fn lots_alone_do_not_move_cash_before_the_provider_history(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let acct = pea_account("pea-1");
+    let (account_id, cash_id) =
+        seed_cash(&pool, conn_id, &acct, dec("54.40"), d(2026, 1, 20)).await;
+
+    let mut conn = pool.acquire().await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on("pea-1", "t1", "transfer", dec("50"), d(2026, 1, 14)),
+    )
+    .await?;
+    seed_lot(
+        &pool,
+        account_id,
+        "FR0000000002",
+        d(2025, 12, 2),
+        ("19", "5.316", "0.51"),
+    )
+    .await;
+
+    backfill_connection(&mut conn, conn_id).await?;
+
     assert_eq!(
-        quantity_on(&pool, holding_id, d(2026, 1, 8)).await,
-        Some(dec("50"))
-    );
-    assert_eq!(
-        quantity_on(&pool, holding_id, d(2026, 1, 7)).await,
-        Some(dec("38"))
-    );
-    assert_eq!(
-        quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
-        Some(dec("38"))
+        quantity_on(&pool, cash_id, d(2025, 12, 1)).await,
+        Some(dec("4.40"))
     );
     Ok(())
 }
 
-/// The same three types on a non-PEA account count normally: there the history
-/// is complete, so a buy really did move cash out.
+/// A non-PEA account counts a transfer the same way.
 #[sqlx::test(migrations = "../migrations")]
 async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;

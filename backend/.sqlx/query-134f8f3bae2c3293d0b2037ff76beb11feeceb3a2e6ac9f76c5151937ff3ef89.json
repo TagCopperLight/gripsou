@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with owned as (\n            select t.id\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection k on k.id = a.connection_id\n            where t.id = any($1) and k.user_id = $2\n        ), mine as (\n            select id from budget_tag where user_id = $2 and id = any($3)\n        ), ins as (\n            insert into budget_transaction_tag (transaction_id, tag_id)\n            select owned.id, mine.id from owned cross join mine\n            on conflict do nothing\n            returning transaction_id\n        )\n        select count(*) as \"n!\" from owned\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "134f8f3bae2c3293d0b2037ff76beb11feeceb3a2e6ac9f76c5151937ff3ef89"
+}

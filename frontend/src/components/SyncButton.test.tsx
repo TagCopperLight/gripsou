@@ -99,6 +99,12 @@ describe("SyncButton", () => {
       "account-series",
       "holdings",
       "transactions",
+      "transaction-counts",
+      "budget-categories",
+      "budget-tags",
+      "budget-summary",
+      "budget-trend",
+      "budget-ai-status",
     ]);
   });
 });

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update budget_ai_run set outcome = $2, error = $3 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cfed733dcf45706ee0c372d4c76f54360277c941ca1fca7e0407e54cbabbdae0"
+}

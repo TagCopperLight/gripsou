@@ -1,4 +1,5 @@
 import type { TransactionFilterQuery } from "./types";
+import type { Period } from "../lib/period";
 
 // The one definition of every react-query key.
 //
@@ -40,6 +41,23 @@ export const keys = {
 
   transactions: (q?: TransactionFilterQuery) =>
     (q === undefined ? ["transactions"] : ["transactions", q]) as readonly unknown[],
+  transactionCounts: (q?: TransactionFilterQuery) =>
+    (q === undefined ? ["transaction-counts"] : ["transaction-counts", q]) as readonly unknown[],
+
+  budgetCategories: () => ["budget-categories"] as const,
+  budgetTags: () => ["budget-tags"] as const,
+  // Parameterised like the others: the read sites pass the parameter, the
+  // invalidation sites omit it and get the family prefix.
+  budgetSummary: (period?: Period) =>
+    (period === undefined ? ["budget-summary"] : ["budget-summary", period]) as readonly unknown[],
+  // Under the summary's prefix on purpose: whatever refreshes the figures
+  // (a sync above all) also refreshes where the data ends.
+  budgetLatestMonth: () => ["budget-summary", "latest-month"] as const,
+  budgetTrend: (anchor?: string) =>
+    (anchor === undefined ? ["budget-trend"] : ["budget-trend", anchor]) as readonly unknown[],
+  budgetAiStatus: () => ["budget-ai-status"] as const,
+  budgetAiSettings: () => ["budget-ai-settings"] as const,
+  budgetAiUsage: () => ["budget-ai-usage"] as const,
 
   users: () => ["users"] as const,
   sessions: () => ["sessions"] as const,

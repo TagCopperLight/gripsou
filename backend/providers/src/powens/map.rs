@@ -300,8 +300,8 @@ pub fn map_sync(
 }
 
 /// Powens appends the card's last four digits to the wording on ~77% of card
-/// rows (§2.1). It carries no information the app uses, and it defeats both
-/// search and Phase 2 merchant matching.
+/// rows (§2.1). It carries no information the app uses, and it defeats
+/// search.
 pub fn strip_card_mask(wording: &str) -> &str {
     let Some(idx) = wording.rfind("CB*") else {
         return wording;

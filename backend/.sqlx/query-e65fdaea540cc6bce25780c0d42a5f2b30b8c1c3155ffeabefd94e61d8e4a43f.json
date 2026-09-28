@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select budget_ai_prices as \"prices: sqlx::types::Json<ModelPrices>\" from app_settings where id = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "prices: sqlx::types::Json<ModelPrices>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "budget_ai_prices"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e65fdaea540cc6bce25780c0d42a5f2b30b8c1c3155ffeabefd94e61d8e4a43f"
+}

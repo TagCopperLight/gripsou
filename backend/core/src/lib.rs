@@ -1,4 +1,6 @@
 pub mod backfill;
+pub mod budget;
+pub mod categorize;
 pub mod composition_sync;
 pub mod crypto;
 pub mod db;

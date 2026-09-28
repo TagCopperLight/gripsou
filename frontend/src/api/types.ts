@@ -223,6 +223,8 @@ export type EnabledProvider = {
   description: string | null;
 };
 
+export type TransactionTag = { id: string; name: string; color: string | null };
+
 export type Transaction = {
   id: string;
   t: number;
@@ -231,6 +233,10 @@ export type Transaction = {
   /** Decimal string, denominated in the ACCOUNT's own currency (see `currency`),
    *  never the user's reporting currency — do not relabel it. */
   amount: string;
+  /** `amount` converted to the reader's reporting currency at the
+   *  transaction's own date. The list is capped at 200 rows, so summing these
+   *  client-side for an explicit selection is cheap. */
+  amountReporting: string;
   currency: string;
   accountId: string;
   accountName: string;
@@ -242,16 +248,60 @@ export type Transaction = {
   quantity: string | null;
   unitPrice: string | null;
   fee: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** Translate this when present; fall back to `categoryName`. */
+  categoryDefaultKey: string | null;
+  categoryColor: string | null;
+  categoryIcon: string | null;
+  categoryKind: "expense" | "income" | "internal" | "excluded" | null;
+  /** Who set the category: the user, the AI, or the transfer-pairing pass. */
+  categorySource: "user" | "ai" | "pair" | null;
+  /** Decimal string, never a float. */
+  categoryConfidence: string | null;
+  /** Derived server-side: an AI guess under the threshold that nobody confirmed. */
+  needsReview: boolean;
+  checked: boolean;
+  /** One half of an auto-paired internal transfer. */
+  isTransfer: boolean;
+  /** The pairing pass categorised this row but the link is gone — someone
+   *  corrected the other half, so this one nets against nothing. Mutually
+   *  exclusive with `isTransfer` by construction. */
+  isOrphanTransfer: boolean;
+  tags: TransactionTag[];
 };
+
+export type TypeBucket = "all" | "in" | "out" | "lots";
 
 export type TransactionQuery = {
   search?: string;
   accountId?: string;
-  type?: string;
+  /** Replaces the retired per-kind `type` parameter. */
+  bucket?: TypeBucket;
   from?: string;
   to?: string;
+  /** Several ids mean *either* of them (OR), server-side. */
+  categoryIds?: string[];
+  /** Several ids mean *all* of them (AND), server-side. */
+  tagIds?: string[];
+  uncategorized?: boolean;
+  needsReview?: boolean;
+  /** Internal transfers are hidden unless this is set — the only filter here
+   *  whose absence means *less* than everything. */
+  includeTransfers?: boolean;
   limit?: number;
   offset?: number;
+};
+
+export type TransactionCounts = {
+  matching: number;
+  total: number;
+  uncategorized: number;
+  /** Signed sum of `matching`'s rows in the reader's reporting currency, from
+   *  a query that mirrors `matching`'s predicates exactly. */
+  matchingTotal: string;
+  fxMissing: boolean;
+  reportingFxMissing: boolean;
 };
 
 /** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the

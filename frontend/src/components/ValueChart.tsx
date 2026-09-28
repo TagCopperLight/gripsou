@@ -3,6 +3,7 @@ import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
 import { formatDate } from "../lib/date";
 import { windowReturn } from "../lib/assetSeries";
+import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
 export type ChartUnit = "value" | "percent";
 
@@ -17,13 +18,8 @@ export type ChartSeries = {
   area?: boolean;
 };
 
-const GRID = "#262321"; // surface-3
-const FAINT = "#777471"; // fg-faint
-const DIM = "#aeaaa7"; // fg-dim
-const WHITE = "#f4f1ef"; // fg
 const RED = "#f87171"; // color-red
 const SURFACE_2 = "#1c1916"; // default host surface (hollow symbol center)
-const MONO = '"Geist Mono Variable", ui-monospace, monospace';
 
 type TooltipParam = {
   axisValue: number;
@@ -31,15 +27,6 @@ type TooltipParam = {
   value: [number, number];
   color: string;
 };
-
-function tooltipRow(color: string, label: string, value: string): string {
-  return `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-      <span style="width:9px;height:9px;border-radius:3px;background:${color};"></span>
-      <span style="color:${DIM};font-size:12px;">${label}</span>
-      <span style="margin-left:auto;padding-left:12px;color:${WHITE};font-size:12px;font-weight:600;">${value}</span>
-    </div>`;
-}
 
 type ValueChartProps = {
   series: ChartSeries[];
@@ -66,11 +53,6 @@ type ValueChartProps = {
 
 // To draw cleanly on top, area/solid lines should come last; callers pass them
 // in the order they want stacked (e.g. dashed invested first, value second).
-function rgba(hex: string, alpha: number): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
-
 export function ValueChart({
   series,
   height = 320,

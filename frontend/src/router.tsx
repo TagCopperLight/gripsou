@@ -8,18 +8,23 @@ import {
 import { RootLayout } from "./components/RootLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
-import { Transactions } from "./pages/Transactions";
+import { Budget } from "./pages/Budget";
+import { BudgetOverview } from "./pages/budget/Overview";
+import { TransactionsMode } from "./pages/budget/TransactionsMode";
+import { ReviewMode } from "./pages/budget/ReviewMode";
 import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
 import { SettingsAccount } from "./pages/settings/Account";
 import { SettingsConnections } from "./pages/settings/Connections";
+import { SettingsBudget } from "./pages/settings/Budget";
 import { SettingsUsers } from "./pages/settings/Users";
 import { SettingsServer } from "./pages/settings/Server";
 import { ConnectionCallback } from "./pages/ConnectionCallback";
 import { Invite } from "./pages/Invite";
 import { Reset } from "./pages/Reset";
 import type { AuthValue } from "./auth/context";
+import { scrollRestorationOptions } from "./lib/scroll";
 
 type RouterContext = { auth: AuthValue };
 
@@ -66,10 +71,47 @@ const accountsRoute = createRoute({
   component: Accounts,
 });
 
-const transactionsRoute = createRoute({
+const budgetRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/budget",
+  component: Budget,
+});
+
+// Overview is the landing mode: the analysis is what the page is for, and the
+// Transactions list is where you go to act on what it shows.
+const budgetIndexRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/budget/overview" });
+  },
+});
+
+const budgetOverviewRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "overview",
+  component: BudgetOverview,
+});
+
+const budgetTransactionsRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "transactions",
+  component: TransactionsMode,
+});
+
+const budgetReviewRoute = createRoute({
+  getParentRoute: () => budgetRoute,
+  path: "review",
+  component: ReviewMode,
+});
+
+// The page moved; bookmarks and old links must not 404.
+const legacyTransactionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/transactions",
-  component: Transactions,
+  beforeLoad: () => {
+    throw redirect({ to: "/budget/transactions" });
+  },
 });
 
 const settingsRoute = createRoute({
@@ -102,6 +144,12 @@ const settingsConnectionsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "connections",
   component: SettingsConnections,
+});
+
+const settingsBudgetRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "budget",
+  component: SettingsBudget,
 });
 
 const settingsUsersRoute = createRoute({
@@ -139,6 +187,7 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsGeneralRoute,
   settingsAccountRoute,
   settingsConnectionsRoute,
+  settingsBudgetRoute,
   settingsUsersRoute,
   settingsServerRoute,
 ]);
@@ -150,7 +199,8 @@ export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     accountsRoute,
-    transactionsRoute,
+    budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
+    legacyTransactionsRoute,
     settingsRouteWithChildren,
     connectionsCallbackRoute,
   ]),
@@ -159,6 +209,7 @@ export const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { auth: undefined! },
+  ...scrollRestorationOptions,
 });
 
 declare module "@tanstack/react-router" {

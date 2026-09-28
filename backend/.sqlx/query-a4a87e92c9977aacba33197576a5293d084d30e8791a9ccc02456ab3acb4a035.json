@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id          as \"id!\",\n               t.account_id  as \"account_id!\",\n               t.ts          as \"ts!\",\n               t.amount      as \"amount!\",\n               a.currency    as \"currency!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.transfer_pair_id is null\n          -- Pairing may fill an empty slot, replace an AI guess nobody has\n          -- looked at yet, or re-pair a row whose partner went away. It never\n          -- replaces a category the user chose: one they set themselves, or an\n          -- AI guess they accepted in review.\n          and (t.category_source is null\n               or t.category_source = 'pair'\n               or (t.category_source = 'ai' and t.category_reviewed_at is null))\n          and t.amount <> 0\n          -- Transfers only. Matching is by amount and date alone, so any\n          -- other type lets a coincidence through: a card payment to Betclic\n          -- equal to a transfer arriving on another account, or a deposit from a\n          -- friend equal to a transfer leaving. Measured on real data, half\n          -- the card/deposit pairs were such coincidences. A buy/sell/\n          -- dividend/fee/interest row is never a movement between accounts.\n          -- Card top-ups of the user's own accounts are left for the user to\n          -- file rather than bought back with that error rate.\n          and t.type = 'transfer'\n        order by t.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "amount"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a4a87e92c9977aacba33197576a5293d084d30e8791a9ccc02456ab3acb4a035"
+}

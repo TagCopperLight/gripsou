@@ -412,17 +412,54 @@ pub async fn account_series(
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
-    #[serde(rename = "type")]
-    pub kind: Option<String>,
+    /// `all` | `in` | `out` | `lots` — the TYPE control on the filter panel.
+    pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
+    /// Comma-separated uuids. Several categories mean *either*.
+    pub category_ids: Option<String>,
+    /// Comma-separated uuids. Several tags mean *all*.
+    pub tag_ids: Option<String>,
+    pub uncategorized: Option<bool>,
+    pub needs_review: Option<bool>,
+    /// Absent means hide internal transfers — the list's default.
+    pub include_transfers: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+/// A filter the server cannot fully honour must never be silently narrowed to
+/// a wider one, so an unparseable `categoryIds`/`tagIds` component or an
+/// unrecognised `bucket` is a 400 here, not a dropped id or a fall-through to
+/// `all` — see `budget::parse_ids`/`parse_bucket`.
+pub fn filters_from_params(
+    p: TransactionParams,
+    review_threshold: rust_decimal::Decimal,
+) -> Result<gripsou_core::repo::query::TransactionFilters, (StatusCode, String)> {
+    use gripsou_core::repo::query::TransactionFilters;
+    Ok(TransactionFilters {
+        search: p.search.filter(|s| !s.trim().is_empty()),
+        account_id: p.account_id,
+        bucket: crate::budget::parse_bucket(p.bucket.as_deref())?,
+        from: p.from,
+        to: p.to,
+        category_ids: crate::budget::parse_ids(p.category_ids.as_deref())?,
+        tag_ids: crate::budget::parse_ids(p.tag_ids.as_deref())?,
+        uncategorized: p.uncategorized.unwrap_or(false),
+        needs_review: p.needs_review.unwrap_or(false),
+        // Hidden unless asked for: unlike every other filter here, the
+        // default is *not* "everything".
+        include_transfers: p.include_transfers.unwrap_or(false),
+        review_threshold,
+        // Capped so a crafted `limit` cannot ask for the whole ledger at once.
+        limit: p.limit.unwrap_or(200).clamp(1, 500),
+        offset: p.offset.unwrap_or(0).max(0),
+    })
 }
 
 pub async fn transactions(
@@ -430,21 +467,24 @@ pub async fn transactions(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TransactionParams>,
 ) -> Result<Json<Vec<dto::Transaction>>, (StatusCode, String)> {
-    // Capped so a crafted `limit` cannot ask for the whole ledger at once.
-    let filters = gripsou_core::repo::query::TransactionFilters {
-        search: p.search.filter(|s| !s.trim().is_empty()),
-        account_id: p.account_id,
-        kind: p.kind.filter(|s| !s.is_empty()),
-        from: p.from,
-        to: p.to,
-        limit: p.limit.unwrap_or(200).clamp(1, 500),
-        offset: p.offset.unwrap_or(0).max(0),
-    };
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let filters = filters_from_params(p, threshold)?;
     let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters)
         .await
         .map_err(internal)?;
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let mut tags = gripsou_core::repo::query::tags_for_transactions(&pool, user_id, &ids)
+        .await
+        .map_err(internal)?;
     Ok(Json(
-        rows.into_iter().map(dto::Transaction::from_row).collect(),
+        rows.into_iter()
+            .map(|r| {
+                let row_tags = tags.remove(&r.id).unwrap_or_default();
+                dto::Transaction::from_row(r, row_tags)
+            })
+            .collect(),
     ))
 }
 
@@ -571,6 +611,121 @@ pub async fn set_cors_origins(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn budget_ai_settings(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<dto::BudgetAiSettingsDto>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let s = gripsou_core::repo::settings::budget_ai(&pool)
+        .await
+        .map_err(internal)?;
+    let defaults = gripsou_jobs::categorizer_keys()
+        .into_iter()
+        .filter_map(|k| gripsou_jobs::default_model(k).map(|m| (k, m)))
+        .collect();
+    Ok(Json(dto::BudgetAiSettingsDto {
+        provider: s.provider,
+        model: s.model,
+        available: gripsou_jobs::available_categorizers(),
+        defaults,
+    }))
+}
+
+pub async fn set_budget_ai_settings(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::SetBudgetAiSettingsReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let provider = body
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
+    if provider.is_some_and(|p| !gripsou_jobs::categorizer_keys().contains(&p)) {
+        return Err((StatusCode::BAD_REQUEST, "unknown provider".into()));
+    }
+    let model = body
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty());
+    gripsou_core::repo::settings::set_budget_ai(&pool, provider, model)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn budget_ai_usage(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<dto::BudgetAiUsageDto>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let report = gripsou_core::budget::ai_cost::usage_report(&pool)
+        .await
+        .map_err(internal)?;
+    let money = |d: Decimal| d.round_dp(4).normalize().to_string();
+    Ok(Json(dto::BudgetAiUsageDto {
+        currency: "USD",
+        models: report
+            .models
+            .into_iter()
+            .map(|m| dto::BudgetAiModelUsageDto {
+                model: m.model,
+                runs: m.runs,
+                runs_without_usage: m.runs_without_usage,
+                tokens_in: m.tokens_in,
+                tokens_out: m.tokens_out,
+                price_in: m.price.as_ref().map(|p| p.input.to_string()),
+                price_out: m.price.as_ref().map(|p| p.output.to_string()),
+                cost: m.cost.map(money),
+            })
+            .collect(),
+        total_cost: money(report.total_cost),
+    }))
+}
+
+/// Replaces the whole price map. Every value must be a non-negative decimal
+/// string (USD per million tokens); anything else is a 400 and saves nothing.
+pub async fn set_budget_ai_prices(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<std::collections::BTreeMap<String, dto::BudgetAiPriceReq>>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    let parse = |model: &str, v: &str| {
+        v.trim()
+            .parse::<Decimal>()
+            .ok()
+            .filter(|d| *d >= Decimal::ZERO)
+            .map(|d| if d.is_zero() { Decimal::ZERO } else { d })
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid price for {model}: {v:?}"),
+                )
+            })
+    };
+    let mut prices = gripsou_core::repo::settings::ModelPrices::new();
+    for (model, p) in &body {
+        let model = model.trim();
+        if model.is_empty() {
+            return Err((StatusCode::BAD_REQUEST, "empty model key".into()));
+        }
+        prices.insert(
+            model.to_string(),
+            gripsou_core::repo::settings::ModelPrice {
+                input: parse(model, &p.input)?,
+                output: parse(model, &p.output)?,
+            },
+        );
+    }
+    gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn set_provider(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -687,10 +842,28 @@ pub async fn update_prefs(
             return Err((StatusCode::BAD_REQUEST, "avatar too large".to_string()));
         }
     }
-    let profile = gripsou_core::repo::user::update_prefs(&pool, user_id, &prefs)
+    let range = gripsou_core::repo::prefs::BUDGET_AI_THRESHOLD_RANGE;
+    if !range.contains(&prefs.budget_ai_threshold) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "budgetAiThreshold must be between {} and {}",
+                range.start(),
+                range.end()
+            ),
+        ));
+    }
+    let was_enabled = gripsou_core::repo::prefs::replace_prefs(&pool, user_id, &prefs)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    if prefs.budget_ai_enabled && !was_enabled {
+        gripsou_jobs::request_categorize(pool.clone(), user_id);
+    }
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
@@ -2880,5 +3053,160 @@ mod auth_tests {
         .await
         .expect("empty batch ok");
         assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+}
+
+#[cfg(test)]
+mod budget_ai_usage_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    async fn seed(pool: &PgPool, role: &str) -> Uuid {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "insert into users (id, email, name, password_hash, role) \
+             values ($1, $2, 'Test', 'x', $3)",
+        )
+        .bind(id)
+        .bind(format!("{id}@t.local"))
+        .bind(role)
+        .execute(pool)
+        .await
+        .unwrap();
+        id
+    }
+
+    fn who(user_id: Uuid) -> AuthUser {
+        AuthUser {
+            user_id,
+            session_id: Uuid::nil(),
+        }
+    }
+
+    fn price(i: &str, o: &str) -> dto::BudgetAiPriceReq {
+        dto::BudgetAiPriceReq {
+            input: i.into(),
+            output: o.into(),
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn prices_then_usage(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        for (tin, tout, complete) in [(9_495_459_i64, 4_484_808_i64, true), (0, 0, false)] {
+            sqlx::query(
+                "insert into budget_ai_run \
+                 (user_id, model, tokens_in, tokens_out, usage_complete, outcome) \
+                 values ($1, 'jev:jev-latest', $2, $3, $4, 'ok')",
+            )
+            .bind(admin)
+            .bind(tin)
+            .bind(tout)
+            .bind(complete)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "insert into budget_ai_run (user_id, model, tokens_in, tokens_out, outcome) \
+             values ($1, 'gemini:x', 10, 10, 'ok')",
+        )
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let status = set_budget_ai_prices(
+            State(pool.clone()),
+            who(admin),
+            Json(BTreeMap::from([
+                ("jev:jev-latest".to_string(), price("0.042", "0")),
+                ("unused:m".to_string(), price("1", "1")),
+            ])),
+        )
+        .await
+        .expect("prices saved");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let v = serde_json::to_value(
+            budget_ai_usage(State(pool.clone()), who(admin))
+                .await
+                .expect("usage")
+                .0,
+        )
+        .unwrap();
+        // 9.495459 * 0.042 = 0.398809278 → 0.3988
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "currency": "USD",
+                "models": [
+                    {"model": "gemini:x", "runs": 1, "runsWithoutUsage": 0,
+                     "tokensIn": 10, "tokensOut": 10,
+                     "priceIn": null, "priceOut": null, "cost": null},
+                    {"model": "jev:jev-latest", "runs": 2, "runsWithoutUsage": 1,
+                     "tokensIn": 9495459, "tokensOut": 4484808,
+                     "priceIn": "0.042", "priceOut": "0", "cost": "0.3988"}
+                ],
+                "totalCost": "0.3988"
+            })
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn usage_with_no_runs_totals_zero(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        let v = serde_json::to_value(
+            budget_ai_usage(State(pool.clone()), who(admin))
+                .await
+                .expect("usage")
+                .0,
+        )
+        .unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"currency": "USD", "models": [], "totalCost": "0"})
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn bad_prices_are_a_400_and_change_nothing(pool: PgPool) {
+        let admin = seed(&pool, "admin").await;
+        for (i, o) in [
+            ("-1", "0"),
+            ("0", "-0.1"),
+            ("abc", "0"),
+            ("", "0"),
+            ("0", "1e3x"),
+        ] {
+            let err = set_budget_ai_prices(
+                State(pool.clone()),
+                who(admin),
+                Json(BTreeMap::from([("m:x".to_string(), price(i, o))])),
+            )
+            .await
+            .expect_err("rejected");
+            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{i} / {o}");
+        }
+        assert!(
+            gripsou_core::repo::settings::budget_ai_prices(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn members_are_forbidden(pool: PgPool) {
+        let member = seed(&pool, "user").await;
+        let err = budget_ai_usage(State(pool.clone()), who(member))
+            .await
+            .err()
+            .expect("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+        let err = set_budget_ai_prices(State(pool.clone()), who(member), Json(BTreeMap::new()))
+            .await
+            .expect_err("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

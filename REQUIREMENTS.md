@@ -15,7 +15,7 @@ The goal is to have a general enough interface/database structure so that adding
 
 - Dashboard
 - Accounts
-- Transactions
+- Budget (Overview / Transactions / Review)
 - Settings
 
 ### Format
@@ -109,9 +109,14 @@ Each account have a color, it's used in the charts and when showing holdings.
 
 At the top of the account item (in the list), there's an edit button, that opens a modal to edit the account settings (name, type, color).
 
-## Transactions
+## Budget
 
-For now it's a blank page, but the goal is to show all transactions, searchable and filterable by account, date range, etc ...
+The Transactions page became the Budget page (`/budget`; the old `/transactions` URL redirects). It has three modes:
+- Overview: income, expenses, net and savings for a month or a custom range, a Sankey of where the money went, a per-category breakdown and a trend.
+- Transactions: every transaction (and every recorded buy/sell lot), searchable and filterable by account, date range, direction, category, tag, uncategorised, needs review and internal transfers. Rows can be categorised, tagged and ticked one by one or in bulk.
+- Review: the AI's low-confidence guesses, to accept or correct.
+
+Categories are the user's own (a default set is created for every user and can be renamed, reordered, archived or deleted). Transfers between the user's own accounts are paired automatically and filed as internal transfers. An optional AI, enabled by the admin and opted into by each user, categorises the rest. See ARCHITECTURE.md §12.
 
 ## Settings
 
@@ -138,7 +143,6 @@ When creating an account with the link, the new user is told that whoever owns t
 
 ## Features to implement in future
 
-- Transactions page
 - Allow manual transaction entry, and manual accounts
 - Support multiple currencies (not only what's shown, but also allow people to have accounts in different currencies and convert them to a base currency)
 - For ETFs, add two lines in the modal, one for countries and one for sectors. Show distribution (e.g. 50% US, 40% EU, 10% Asia).

@@ -58,9 +58,18 @@
 - [x] Screenshot in readme
 - [x] /accounts performances
 
+### v1.5.0
+- [x] Budget page
+    - [x] Overview mode (figures, Sankey, category breakdown, last 12 months)
+    - [x] Transactions mode
+    - [x] AI categorisation and the review queue
+
 ### Future
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
-- [ ] Budget page (@TRANSACTION.md phase 2)
+- [ ] Budget v2
+    - [ ] Model name list from provider
+    - [ ] Rules engine
     - [ ] Transactions reconciliation
     - [ ] Infer lots
+- [ ] reorganize files

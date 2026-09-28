@@ -127,31 +127,6 @@ pub async fn update_profile(
     }))
 }
 
-/// Replace the user's prefs blob, returning the refreshed profile (or `None`
-/// when the user no longer exists).
-pub async fn update_prefs(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    prefs: &UserPrefs,
-) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query!(
-        r#"update users set prefs = $2 where id = $1
-           returning id, name, email, role,
-                     prefs as "prefs!: sqlx::types::Json<UserPrefs>""#,
-        user_id,
-        sqlx::types::Json(prefs) as _,
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|r| UserProfile {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        role: r.role,
-        prefs: r.prefs.0,
-    }))
-}
-
 /// Returns true when a row was updated (the user exists).
 pub async fn update_password(
     pool: &sqlx::PgPool,

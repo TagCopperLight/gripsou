@@ -3,6 +3,9 @@ import { useState, type ReactNode } from "react";
 export type SegmentedOption<T extends string> = {
   value: T;
   label: ReactNode;
+  /** Extra classes while this option is NOT selected — an attention state,
+   *  not a selection state (the Budget page's amber Review segment). */
+  className?: string;
 };
 
 type SegmentedControlProps<T extends string> = {
@@ -47,7 +50,7 @@ export function SegmentedControl<T extends string>({
             className={`px-2.5 py-1 rounded-lg text-[12.5px] font-medium cursor-pointer transition-colors duration-140 ${
               isSelected
                 ? "bg-surface-3 text-fg"
-                : "text-fg-faint hover:text-fg-dim"
+                : `text-fg-faint hover:text-fg-dim ${option.className ?? ""}`
             }`}
           >
             {option.label}

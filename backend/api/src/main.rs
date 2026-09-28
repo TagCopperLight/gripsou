@@ -1,4 +1,5 @@
 mod auth;
+mod budget;
 mod dto;
 mod handlers;
 
@@ -9,7 +10,7 @@ use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, FromRef},
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
@@ -89,6 +90,39 @@ async fn main() -> anyhow::Result<()> {
         .route("/accounts/series", get(handlers::account_series))
         .route("/accounts/{id}", patch(handlers::update_account))
         .route("/transactions", get(handlers::transactions))
+        .route(
+            "/transactions/counts",
+            get(budget::transaction_count_summary),
+        )
+        .route("/transactions/{id}", patch(budget::patch_transaction))
+        .route(
+            "/transactions/{id}/apply-to-description",
+            post(budget::apply_to_description),
+        )
+        .route("/transactions/bulk", post(budget::bulk_transactions))
+        .route(
+            "/budget/categories",
+            get(budget::list_categories).post(budget::create_category),
+        )
+        .route("/budget/categories/order", put(budget::reorder_categories))
+        .route(
+            "/budget/categories/{id}",
+            patch(budget::update_category).delete(budget::delete_category),
+        )
+        .route(
+            "/budget/tags",
+            get(budget::list_tags).post(budget::create_tag),
+        )
+        .route("/budget/summary", get(budget::summary))
+        .route("/budget/categorize", post(budget::request_categorize))
+        .route("/budget/categorize/status", get(budget::categorize_status))
+        .route("/budget/review/{id}/accept", post(budget::accept_review))
+        .route("/budget/review/{id}/undo", post(budget::undo_review))
+        .route("/budget/trend", get(budget::trend_handler))
+        .route(
+            "/budget/tags/{id}",
+            patch(budget::update_tag).delete(budget::delete_tag),
+        )
         .route("/account-types", get(handlers::account_types))
         .route("/connections", get(handlers::connections))
         .route("/connections/{id}/sync", post(handlers::sync_connection))
@@ -103,6 +137,15 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/settings/cors",
             get(handlers::cors_origins).patch(handlers::set_cors_origins),
+        )
+        .route(
+            "/settings/budget-ai",
+            get(handlers::budget_ai_settings).patch(handlers::set_budget_ai_settings),
+        )
+        .route("/settings/budget-ai/usage", get(handlers::budget_ai_usage))
+        .route(
+            "/settings/budget-ai/prices",
+            put(handlers::set_budget_ai_prices),
         )
         .route("/connections/init", post(handlers::init_connection))
         .route("/connections/complete", post(handlers::complete_connection))

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t\n           set budget_category_id   = c.id,\n               category_source      = 'ai',\n               category_confidence  = case when c.id is not null then d.confidence end,\n               category_reviewed_at = null\n          from unnest($2::uuid[], $3::uuid[], $4::numeric[]) as d (txn_id, category_id, confidence)\n          left join budget_category c on c.id = d.category_id and c.user_id = $1\n         where t.id = d.txn_id\n           and t.category_source is null\n           and t.budget_category_id is null\n           and exists (select 1\n                         from account a\n                         join connection k on k.id = a.connection_id\n                        where a.id = t.account_id and k.user_id = $1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "UuidArray",
+        "NumericArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3de6c1e1e579eff04e7c2a75da7bd0eb48b1468b89a2e67c482ccb651748b63a"
+}

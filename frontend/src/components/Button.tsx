@@ -1,11 +1,15 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-type ButtonVariant = "primary" | "ghost" | "danger" | "amber";
+type ButtonVariant = "primary" | "ghost" | "ghostStrong" | "danger" | "amber";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-green text-black font-semibold transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed",
   ghost: "text-fg-dim hover:text-fg font-medium transition-colors duration-140",
+  // Same shape as `ghost` but already at full contrast — for a bare action that
+  // is the primary thing to do in its row (see the `amber` note below on why
+  // this is a variant and not a caller-supplied `text-fg`).
+  ghostStrong: "text-fg font-medium transition-opacity duration-140 hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed",
   danger:
     "bg-red text-black font-semibold transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed",
   // A variant rather than classes passed by the caller: `ghost` sets its own
