@@ -91,7 +91,7 @@ describe("TransactionRow", () => {
 
   it("exposes no selection checkbox and no checked checkbox on a lot row", () => {
     // The server's assignment/bulk endpoints only ever touch the `transaction`
-    // table (see CRITICAL/IMPORTANT finding 3), so a lot row must offer
+    // table, so a lot row must offer
     // neither control — not even a disabled one — the way its category and
     // tag cells already behave. The avatar stays visible in their place.
     renderRow(
@@ -143,7 +143,7 @@ describe("TransactionRow", () => {
     // `hidden` class, and that a plain click (no hover) still fires the
     // handler — not that it is visually revealed on hover/focus.
     const h = renderRow({}, { anySelected: false, selected: false });
-    const box = screen.getByRole("checkbox", { name: "Select this transaction" });
+    const box = screen.getByRole("checkbox", { name: "Select this transaction: ALDI SARL 1234" });
     expect(box).toBe(screen.getByTestId("tx-select"));
     expect(box.className).not.toMatch(/(^|\s)hidden(\s|$)/);
     fireEvent.click(box);
@@ -157,7 +157,7 @@ describe("TransactionRow", () => {
     // absence of the `hidden` class, and that a plain click (no hover) still
     // fires the handler — not that it is visually revealed on hover/focus.
     const h = renderRow({ tags: [{ id: "g1", name: "holiday", color: "#f0b952" }] });
-    const addTag = screen.getByRole("button", { name: "Add tags" });
+    const addTag = screen.getByRole("button", { name: "Add tags: ALDI SARL 1234" });
     expect(addTag).toBe(screen.getByTestId("tx-add-tag"));
     expect(addTag.className).not.toMatch(/(^|\s)hidden(\s|$)/);
     fireEvent.click(addTag);
@@ -171,14 +171,21 @@ describe("TransactionRow", () => {
       quantity: "3", unitPrice: "512.30", amount: "-1536.90",
     });
     expect(screen.queryByTestId("tx-add-tag")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add tags" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add tags/ })).toBeNull();
   });
 
-  it("renders the description as plain, non-clickable text", () => {
-    renderRow();
-    const description = screen.getByText("ALDI SARL 1234");
-    expect(description.tagName).not.toBe("BUTTON");
-    expect(screen.queryByRole("button", { name: "ALDI SARL 1234" })).toBeNull();
+  it("names each control after its own row, so a screen reader can tell them apart", () => {
+    renderRow({}, { showChecked: true });
+    expect(screen.getByRole("checkbox", { name: "Select this transaction: ALDI SARL 1234" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set a category: ALDI SARL 1234" })).toHaveAttribute(
+      "aria-haspopup",
+      "dialog",
+    );
+    expect(screen.getByRole("button", { name: "Add tags: ALDI SARL 1234" })).toHaveAttribute(
+      "aria-haspopup",
+      "dialog",
+    );
+    expect(screen.getByRole("checkbox", { name: "Checked: ALDI SARL 1234" })).toBeInTheDocument();
   });
 
   it("warns that an orphaned transfer no longer nets out", () => {

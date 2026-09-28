@@ -6,29 +6,29 @@ import { useBudgetCategories } from "../../api/budget";
 import { BUDGET_KINDS, categoryLabel, type ChooserItem } from "../../lib/budget";
 
 type CategoryChooserProps = {
-  mode: "multi" | "pick";
   selectedIds: string[];
-  onToggle?: (id: string) => void;
-  onPick?: (id: string | null) => void;
   onClose: () => void;
-  /** `pick` mode only: whether the "no category" line is offered at all.
-   *  Defaults to `true` — today's behaviour for the row-assignment path,
-   *  which has a legitimate one-click "clear this row" use. The bulk path
-   *  (`SelectionBar`) passes `false`: with "all shown" and no filters, that
-   *  same line would clear the category on the entire ledger with one click
-   *  and no confirmation (finding 5) — suppressing it outright is the only
-   *  option with no legitimate quick path. */
-  allowNone?: boolean;
   /** The control that opened it — the chooser hangs under it. */
   anchor?: HTMLElement | null;
-};
+} & (
+  | { mode: "multi"; onToggle: (id: string) => void }
+  | {
+      mode: "pick";
+      onPick: (id: string | null) => void;
+      /** Whether the "no category" line is offered at all. Defaults to `true`
+       *  — the row-assignment path has a legitimate one-click "clear this row"
+       *  use. The bulk path passes `false`: with "all shown" and no filters,
+       *  that same line would clear the category on the entire ledger with
+       *  one click and no confirmation. */
+      allowNone?: boolean;
+    }
+);
 
-/** The same chooser serves four call sites (§5): filtering, assigning on a
- *  row, and both again from the selection bar. Archived categories never
- *  appear — they are kept for history, not for picking. */
-export function CategoryChooser({
-  mode, selectedIds, onToggle, onPick, onClose, allowNone = true, anchor,
-}: CategoryChooserProps) {
+/** The same chooser serves every call site: filtering, assigning on a row,
+ *  and both again from the selection bar. Archived categories never appear —
+ *  they are kept for history, not for picking. */
+export function CategoryChooser(props: CategoryChooserProps) {
+  const { selectedIds, onClose, anchor } = props;
   const { t } = useTranslation();
   const categories = (useBudgetCategories().data ?? []).filter((c) => !c.archived);
 
@@ -43,18 +43,23 @@ export function CategoryChooser({
       })),
   );
 
-  return (
+  const common = {
+    title: t("budget.chooser.categoryTitle"),
+    items,
+    groups: BUDGET_KINDS.map((k) => ({ key: k, label: t(`budget.kinds.${k}`).toUpperCase() })),
+    selectedIds,
+    onClose,
+    anchor,
+  };
+
+  return props.mode === "pick" ? (
     <EntityChooser
-      title={t("budget.chooser.categoryTitle")}
-      items={items}
-      groups={BUDGET_KINDS.map((k) => ({ key: k, label: t(`budget.kinds.${k}`).toUpperCase() }))}
-      mode={mode}
-      selectedIds={selectedIds}
-      onToggle={onToggle}
-      onPick={onPick}
-      onClose={onClose}
-      anchor={anchor}
-      noneLabel={allowNone ? t("budget.chooser.noCategory") : undefined}
+      {...common}
+      mode="pick"
+      onPick={props.onPick}
+      noneLabel={props.allowNone === false ? undefined : t("budget.chooser.noCategory")}
     />
+  ) : (
+    <EntityChooser {...common} mode="multi" onToggle={props.onToggle} />
   );
 }

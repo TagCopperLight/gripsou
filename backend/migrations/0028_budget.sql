@@ -47,37 +47,9 @@ create table budget_transaction_tag (
 
 create index budget_transaction_tag_tag_idx on budget_transaction_tag (tag_id);
 
--- Created now, unused until the rules phase. Its shape is settled by the spec
--- and one migration is cheaper than three.
-create table budget_rule (
-    id                  uuid primary key default gen_random_uuid(),
-    user_id             uuid not null references users (id) on delete cascade,
-    name                text not null,
-    priority            int not null,
-    enabled             boolean not null default true,
-    condition           jsonb not null,
-    set_category_id     uuid references budget_category (id) on delete set null,
-    add_tag_ids         uuid[] not null default '{}',
-    created_at          timestamptz not null default now(),
-    updated_at          timestamptz not null default now()
-);
-
-create table budget_ai_run (
-    id         uuid primary key default gen_random_uuid(),
-    user_id    uuid not null references users (id) on delete cascade,
-    started_at timestamptz not null default now(),
-    model      text not null,
-    batches    int not null default 0,
-    items      int not null default 0,
-    tokens_in  int,
-    tokens_out int,
-    outcome    text not null check (outcome in ('ok', 'partial', 'error')),
-    error      text
-);
-
 alter table transaction
     add column budget_category_id   uuid references budget_category (id) on delete set null,
-    add column category_source      text check (category_source in ('user', 'rule', 'pair', 'ai')),
+    add column category_source      text check (category_source in ('user', 'pair', 'ai')),
     add column category_confidence  numeric,
     add column category_reviewed_at timestamptz,
     add column checked_at           timestamptz,
@@ -85,26 +57,191 @@ alter table transaction
 
 create index transaction_budget_category_idx on transaction (budget_category_id);
 
+-- Deleting a transaction clears every link pointing at it; without this each
+-- deleted row scans the whole table to find its partner.
+create index transaction_transfer_pair_idx
+    on transaction (transfer_pair_id) where transfer_pair_id is not null;
+
+-- A paired row whose partner is deleted (its connection removed) no longer
+-- nets against anything, yet it would keep the internal-transfer category and
+-- count as money set aside. Hand it back to the pipeline instead: uncategorised
+-- again, and a candidate for the next pairing pass. A pair the user breaks by
+-- recategorising one half is left alone: its partner still exists, and the
+-- untouched half stays flagged as an orphaned transfer.
+create function transaction_partner_deleted_trg() returns trigger
+language plpgsql as $$
+begin
+    if not exists (select 1 from transaction where id = old.transfer_pair_id) then
+        new.budget_category_id := null;
+        new.category_source := null;
+    end if;
+    return new;
+end
+$$;
+
+create trigger transaction_partner_deleted
+    before update of transfer_pair_id on transaction
+    for each row
+    when (old.transfer_pair_id is not null
+          and new.transfer_pair_id is null
+          and new.category_source = 'pair')
+    execute function transaction_partner_deleted_trg();
+
 create index transaction_needs_review_idx
     on transaction (account_id)
     where category_source = 'ai' and category_reviewed_at is null;
 
--- The identity of "the same description": lowercased, card mask removed, dates
--- removed, digit runs removed, whitespace collapsed. No meaning is attached
--- beyond string identity (spec §5.1). Immutable so it can be indexed.
+-- The identity of "the same description": lowercased, dates removed, digit
+-- runs removed, whitespace collapsed. No meaning is attached beyond string
+-- identity. Card masks are the adapter's to strip at ingest; any left over
+-- lose their digits here like every other number. Immutable so the
+-- generated `transaction.description_norm` column (0029) can use it.
 create function budget_norm_description(p text) returns text
 language sql immutable as $$
     select btrim(regexp_replace(
         regexp_replace(
-            regexp_replace(
-                regexp_replace(lower(coalesce(p, '')), 'cb\*?[0-9]{4}', ' ', 'g'),
+            regexp_replace(lower(coalesce(p, '')),
                 '[0-9]{1,4}[/.-][0-9]{1,2}([/.-][0-9]{1,4})?', ' ', 'g'),
             '[0-9]{2,}', ' ', 'g'),
         '\s+', ' ', 'g'))
 $$;
 
-create index transaction_norm_description_idx
-    on transaction (budget_norm_description(description));
+-- A provider buy/sell on a PEA is the cash leg of a purchase the `lot` table
+-- already holds. Every budget reader leaves it out: the list would show the
+-- purchase twice, and buying an ETF is not spending. Scoped to provider rows
+-- (`external_id is not null`); the user's own purchases live in `lot`.
+--
+-- Transfers into the PEA are NOT covered: pairing files both halves as
+-- internal transfer, which is what keeps them from double-counting.
+--
+-- Plain SQL and immutable, so the planner inlines it into every caller.
+create function budget_hidden_pea_leg(p_account_type text, p_external_id text, p_type text)
+returns boolean
+language sql immutable as $$
+    select p_account_type = 'pea' and p_external_id is not null and p_type in ('buy', 'sell')
+$$;
+
+-- The review rule: an unreviewed AI guess below the reader's threshold, with
+-- no category, or filed as internal/excluded — a guess there hides money from
+-- every total, so it is always reviewed however confident. Null (not false)
+-- when `category_source` is null, like the bare predicate it replaces, so a
+-- `where` clause can still match the partial index on unreviewed AI rows;
+-- a selected column wraps it in `coalesce`.
+create function budget_needs_review(
+    p_source text, p_reviewed_at timestamptz, p_confidence numeric,
+    p_category_kind text, p_threshold numeric)
+returns boolean
+language sql immutable as $$
+    select p_source = 'ai'
+       and p_reviewed_at is null
+       and (p_confidence is null
+            or p_confidence < p_threshold
+            or p_category_kind in ('internal', 'excluded'))
+$$;
+
+-- One row of the Transactions list, cash or lot.
+create type budget_transaction_row as (
+    id uuid, ts timestamptz, kind text, description text, amount numeric,
+    source text, ticker text, quantity numeric, unit_price numeric, fee numeric,
+    account_id uuid, account_name text, account_color text, account_currency text,
+    category_id uuid, category_name text, category_default_key text,
+    category_color text, category_icon text, category_kind text,
+    category_source text, category_confidence numeric,
+    needs_review boolean, checked boolean, is_transfer boolean,
+    -- The pairing pass filed this row but its link is gone: a user corrected
+    -- the other half. Keyed on the source, since only pairing writes 'pair'
+    -- and it always writes a link.
+    is_orphan_transfer boolean,
+    -- Filtered on, never shown: the list hides internal transfers by default.
+    is_internal_transfer boolean);
+
+-- Every row of the Transactions list, unfiltered: the user's cash
+-- transactions (minus the hidden PEA legs) and their lots. Lots reach the
+-- list as structured rows so the frontend's i18n formats them; they carry no
+-- budget. A buy's amount is -(qty x price + fee), a sale's
+-- +(qty x price - fee): the real cash impact either way.
+--
+-- Stable, plain SQL and not strict, so the planner inlines it and pushes the
+-- caller's filters into both branches.
+create function budget_transaction_rows(p_user uuid, p_threshold numeric)
+returns setof budget_transaction_row
+language sql stable as $$
+    select t.id, t.ts, t.type, t.description, t.amount,
+           'cash'::text, null::text, null::numeric, null::numeric, null::numeric,
+           a.id, a.name, a.color, a.currency,
+           t.budget_category_id, bc.name, bc.default_key, bc.color, bc.icon, bc.kind,
+           t.category_source, t.category_confidence,
+           coalesce(budget_needs_review(t.category_source, t.category_reviewed_at,
+                                        t.category_confidence, bc.kind, p_threshold), false),
+           t.checked_at is not null,
+           t.transfer_pair_id is not null,
+           coalesce(t.category_source = 'pair' and t.transfer_pair_id is null, false),
+           coalesce(bc.system_key = 'internal_transfer', false)
+    from transaction t
+    join account a    on a.id = t.account_id
+    join connection c on c.id = a.connection_id
+    left join budget_category bc on bc.id = t.budget_category_id
+    where c.user_id = p_user
+      and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)
+
+    union all
+
+    select l.id, l.acquired_on::timestamp at time zone 'UTC', l.side, null::text,
+           case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
+                else l.quantity * l.unit_price - l.fee end,
+           'lot'::text,
+           -- `symbol` is null whenever an ISIN identifies the instrument, the
+           -- common case on a PEA: fall back to the ISIN before the name.
+           coalesce(i.symbol, i.isin, i.name),
+           l.quantity, l.unit_price, l.fee,
+           a.id, a.name, a.color, a.currency,
+           null::uuid, null::text, null::text, null::text, null::text, null::text,
+           null::text, null::numeric, false, false, false, false, false
+    from lot l
+    join holding h    on h.id = l.holding_id
+    join instrument i on i.id = h.instrument_id
+    join account a    on a.id = h.account_id
+    join connection c on c.id = a.connection_id
+    where c.user_id = p_user
+$$;
+
+-- The Transactions filter, defined once: the list pages it, the header counts
+-- it, and "select all shown" writes to its cash rows. Every argument but the
+-- first two is optional (null, empty, false or 'all' means no filter), except
+-- `p_include_transfers`: internal transfers are hidden unless it is set.
+--
+-- Days are UTC days, matched on `ts` directly so an index on it stays usable.
+create function budget_transaction_matches(
+    p_user uuid, p_threshold numeric,
+    p_search text, p_account uuid, p_from date, p_to date, p_bucket text,
+    p_categories uuid[], p_tags uuid[], p_uncategorized boolean,
+    p_needs_review boolean, p_include_transfers boolean)
+returns setof budget_transaction_row
+language sql stable as $$
+    select r.*
+    from budget_transaction_rows(p_user, p_threshold) r
+    where (p_search is null
+           -- Lot rows have no description; the list shows their ticker.
+           or r.description ilike '%' || p_search || '%'
+           or r.ticker ilike '%' || p_search || '%')
+      and (p_account is null or r.account_id = p_account)
+      and (p_from is null or r.ts >= (p_from::timestamp at time zone 'UTC'))
+      and (p_to is null or r.ts < ((p_to + 1)::timestamp at time zone 'UTC'))
+      and (p_bucket = 'all'
+           or (p_bucket = 'in'   and r.source = 'cash' and r.amount > 0)
+           or (p_bucket = 'out'  and r.source = 'cash' and r.amount < 0)
+           or (p_bucket = 'lots' and r.source = 'lot'))
+      and (cardinality(p_categories) = 0 or r.category_id = any(p_categories))
+      and (not p_uncategorized or (r.source = 'cash' and r.category_id is null))
+      and (not p_needs_review or r.needs_review)
+      -- Several tags mean all of them.
+      and (cardinality(p_tags) = 0
+           or (select count(distinct tt.tag_id)
+                 from budget_transaction_tag tt
+                where tt.transaction_id = r.id
+                  and tt.tag_id = any(p_tags)) = cardinality(p_tags))
+      and (p_include_transfers or not r.is_internal_transfer)
+$$;
 
 -- Seeded taxonomy. Inserted per user rather than as global reference rows: the
 -- user owns these from the first second and may rename or delete any of them.

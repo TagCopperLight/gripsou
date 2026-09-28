@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select 1 as x from users where id = $1 for no key update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "x",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "73d4774f7625d83a0b3dae0e380af2236690dc2c9cfcedc10485535413ae11eb"
+}

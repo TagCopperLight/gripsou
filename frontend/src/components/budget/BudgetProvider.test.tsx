@@ -137,15 +137,13 @@ describe("period", () => {
     );
   }
 
-  it("starts on the current month", () => {
+  it("starts with no period picked, leaving the Overview to open on the latest data", () => {
     render(
       <BudgetProvider>
         <PeriodProbe />
       </BudgetProvider>,
     );
-    const now = new Date();
-    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    expect(screen.getByTestId("period")).toHaveTextContent(`"month":"${expected}"`);
+    expect(screen.getByTestId("period")).toHaveTextContent("null");
   });
 
   it("steps to another month", () => {

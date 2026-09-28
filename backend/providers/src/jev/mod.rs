@@ -1,7 +1,9 @@
-//! Jev (TypeSafe) adapter for the categorisation port (phase 5 spec §3.3):
+//! Jev (TypeSafe) adapter for the categorisation port:
 //! one `choice` question per transaction, since the API evaluates a single
-//! `state` per request. Up to eight requests run at once; any failure fails
-//! the whole batch so a batch is never half-written.
+//! `state` per request. Up to eight requests run at once. The first failure
+//! stops the batch: nothing more is sent, the requests already in flight are
+//! awaited, and every answer received is returned with the failure so none
+//! is paid for twice.
 
 mod map;
 
@@ -9,7 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use gripsou_core::categorize::{CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer};
+use gripsou_core::categorize::{
+    CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Usage,
+};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
@@ -42,11 +46,16 @@ impl JevCategorizer {
         self
     }
 
-    pub fn from_env(model: &str) -> Option<Self> {
-        let key = std::env::var("JEV_API_KEY")
+    /// `JEV_API_KEY`, or `None` when it is absent or blank (the provider is
+    /// then off).
+    pub fn api_key_from_env() -> Option<String> {
+        std::env::var("JEV_API_KEY")
             .ok()
-            .filter(|k| !k.trim().is_empty())?;
-        Some(Self::new(key, model.to_string()))
+            .filter(|k| !k.trim().is_empty())
+    }
+
+    pub fn from_env(model: &str) -> Option<Self> {
+        Some(Self::new(Self::api_key_from_env()?, model.to_string()))
     }
 }
 
@@ -78,60 +87,77 @@ impl Categorizer for JevCategorizer {
                 gate.clone(),
             );
             set.spawn(async move {
-                let _permit = gate.acquire_owned().await.expect("semaphore never closes");
-                let resp = http
-                    .post(&url)
-                    .bearer_auth(&key)
-                    .json(&body)
-                    .send()
-                    .await
-                    .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
-                let status = resp.status();
-                if status.as_u16() == 429 {
-                    return Err(CategorizeError::RateLimited);
+                // Closed after a failure: this item is not sent.
+                let Ok(_permit) = gate.clone().acquire_owned().await else {
+                    return Ok(None);
+                };
+                let answer = ask(&http, &url, &key, &body).await;
+                if answer.is_err() {
+                    // Before the permit is released, so no waiting item
+                    // slips through.
+                    gate.close();
                 }
-                if !status.is_success() {
-                    let text = resp.text().await.unwrap_or_default();
-                    return Err(CategorizeError::Other(format!("jev {status}: {text}")));
-                }
-                let json: serde_json::Value = resp
-                    .json()
-                    .await
-                    .map_err(|e| CategorizeError::Other(format!("jev answer unreadable: {e}")))?;
-                Ok((idx, json))
+                answer.map(|json| Some((idx, json)))
             });
         }
 
         let mut answers = Vec::with_capacity(req.items.len());
+        let mut interrupted = None;
         while let Some(joined) = set.join_next().await {
-            match joined {
-                Ok(Ok(a)) => answers.push(a),
-                Ok(Err(e)) => {
-                    set.abort_all();
-                    return Err(e);
+            let failure = match joined {
+                Ok(Ok(Some(a))) => {
+                    answers.push(a);
+                    continue;
                 }
-                Err(e) => {
-                    set.abort_all();
-                    return Err(CategorizeError::Other(format!("jev task failed: {e}")));
-                }
-            }
+                Ok(Ok(None)) => continue,
+                Ok(Err(e)) => e,
+                Err(e) => CategorizeError::Other(format!("jev task failed: {e}")),
+            };
+            gate.close();
+            interrupted.get_or_insert(failure);
         }
         answers.sort_by_key(|(idx, _)| *idx);
 
-        let (mut tin, mut tout) = (0, 0);
-        let guesses = answers
-            .iter()
-            .map(|(idx, json)| {
-                let (g, i, o) = map::parse_answer(&req.items[*idx], json);
-                tin += i;
-                tout += o;
-                g
-            })
-            .collect();
+        let mut usage = Usage::known(0, 0);
+        let mut guesses = Vec::with_capacity(answers.len());
+        for (idx, json) in &answers {
+            let (guess, u) = match json {
+                Some(json) => map::parse_answer(&req.items[*idx], json),
+                None => (None, Usage::default()),
+            };
+            usage = usage.plus(u);
+            guesses.extend(guess);
+        }
         Ok(CategorizeOutput {
             guesses,
-            tokens_in: Some(tin),
-            tokens_out: Some(tout),
+            usage,
+            interrupted,
         })
     }
+}
+
+/// One item's request. `Ok(None)` is a body that could not be read: the item
+/// is left unanswered (sent again by a later run) and the batch goes on.
+async fn ask(
+    http: &reqwest::Client,
+    url: &str,
+    key: &str,
+    body: &serde_json::Value,
+) -> Result<Option<serde_json::Value>, CategorizeError> {
+    let resp = http
+        .post(url)
+        .bearer_auth(key)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+    let status = resp.status();
+    if status.as_u16() == 429 {
+        return Err(CategorizeError::RateLimited);
+    }
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(CategorizeError::Other(format!("jev {status}: {text}")));
+    }
+    Ok(resp.json().await.ok())
 }

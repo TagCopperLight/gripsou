@@ -34,8 +34,8 @@
 
 ### Phase 2 — sketched only (§13), designed after Phase 1 has been used
 
-Categories, AI category detection with learning, merchant icons, the
-Transactions→Budget tab rename, budget charts.
+Categories, AI category detection with learning, budget charts. Since built,
+as the Budget page: see ARCHITECTURE.md §12.
 
 ### Out of scope, permanently
 
@@ -416,6 +416,10 @@ A list over `transaction`: date, description, amount, account. Text search on
 Deliberately plain. The interesting version of this page is Phase 2, and it should
 be designed after the plain one has been lived with.
 
+*Update:* Phase 2 has since shipped. The page is now the Transactions mode of the
+Budget page (`/budget/transactions`; `/transactions` redirects), with category,
+tag, review and transfer filters and bulk writes. See ARCHITECTURE.md §12.
+
 ---
 
 ## 11. Testing
@@ -452,18 +456,26 @@ be designed after the plain one has been lived with.
 
 ## 13. Phase 2 sketch — budgeting
 
+*Superseded:* Phase 2 has shipped; ARCHITECTURE.md §12 describes what was built.
+This sketch is kept as it was written, with the points that turned out differently
+corrected inline.
+
 Not designed yet, deliberately. Recorded here only to show the Phase 1 schema does
 not block it.
 
 - **Categories** are ours to build: no provider supplies them (§2.1), so a
-  `category_id` on `transaction` plus a user-owned rules/learning layer. Adding a
-  nullable column and a reference table is a migration with no backfill — Phase 1
-  neither helps nor hinders it.
+  `budget_category_id` on `transaction` (plus `category_source`, confidence and
+  review columns) and a per-user `budget_category` table. There is no rules layer:
+  learning is the AI reading the user's confirmed rows as examples. Adding the
+  nullable columns and the tables was a migration with no backfill — Phase 1
+  neither helped nor hindered it.
 - **Auto-detection** works on `description`. The strings are messy but rich —
   `SNCF-VOYAGEURS`, `BURGER KING`, `LECLERC`, `AMAZON EU SARL` — and Powens' 17-char
   truncation (§2.1) is the known ceiling on merchant identification.
-- **Icons** key off the same extracted merchant name.
-- **Budget tab** renames Transactions once there is more on it than a list.
+- **Icons** are per category, chosen by the user. There is no merchant
+  extraction and no merchant icon.
+- **Budget** is a new top-level page whose Transactions mode replaced the
+  Transactions page.
 
 The one thing Phase 2 must not do is re-litigate providers. That research is
 closed: no aggregator exposes lots, and the only provider with better

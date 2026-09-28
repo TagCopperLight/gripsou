@@ -259,3 +259,28 @@ pub async fn seed_equity_holding(
         .await
         .unwrap()
 }
+
+/// Insert a cash instrument for a currency and return its id.
+pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
+    sqlx::query_scalar(
+        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
+    )
+    .bind(currency)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// One rate for one currency on one day.
+pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
+    let mut conn = pool.acquire().await.unwrap();
+    gripsou_core::repo::price::insert_price(
+        &mut conn,
+        instrument_id,
+        d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        rate,
+        "EUR",
+    )
+    .await
+    .unwrap();
+}

@@ -6,8 +6,8 @@ import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Toggle } from "../../components/Toggle";
 import { CardState } from "../../components/CardState";
-import { BudgetAiServerSurface } from "../../components/BudgetAiServerSurface";
-import { BudgetAiCostSurface } from "../../components/BudgetAiCostSurface";
+import { AiServerSurface } from "../../components/budget/AiServerSurface";
+import { AiCostSurface } from "../../components/budget/AiCostSurface";
 import { useProviders, useSetProviderEnabled, useCorsOrigins, useSetCorsOrigins, useHealth } from "../../api/hooks";
 
 export function SettingsServer() {
@@ -114,8 +114,8 @@ export function SettingsServer() {
           </div>
         )}
       </Surface>
-      <BudgetAiServerSurface />
-      <BudgetAiCostSurface />
+      <AiServerSurface />
+      <AiCostSurface />
     </div>
   );
 }

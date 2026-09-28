@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Pencil } from "lucide-react";
 
-import { BudgetDialog } from "./BudgetDialog";
+import { Dialog } from "../Dialog";
 import { FilledDot } from "./FilledDot";
+import { CategoryIcon } from "./CategoryIcon";
 import { Button } from "../Button";
+import { Select } from "../Select";
 import {
   useCreateBudgetCategory,
   useUpdateBudgetCategory,
@@ -84,14 +86,13 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   // The system row stays editable for the things that are purely presentation —
   // name, colour, icon. Its kind is fixed, and its hint would never be read.
   const locked = Boolean(category?.systemKey);
-  const PreviewIcon = icon ? BUDGET_ICONS[icon] : null;
   const previewColor = safeBudgetColor(color);
   // The picker swatch stands in for "a colour off the palette", so it only
   // reads as selected when the current colour is not one of the presets.
   const custom = !BUDGET_PALETTE.includes(color);
 
   return (
-    <BudgetDialog
+    <Dialog
       large
       busy={busy}
       title={t(category ? "settings.budget.categories.editTitle" : "settings.budget.categories.newTitle")}
@@ -113,11 +114,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           className="flex size-10 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: withAlpha(previewColor, 0.22) }}
         >
-          {PreviewIcon ? (
-            <PreviewIcon className="size-5.5" style={{ color: previewColor }} />
-          ) : (
-            <FilledDot className="size-5.5" style={{ color: previewColor }} />
-          )}
+          <CategoryIcon icon={icon} className="size-5.5" style={{ color: previewColor }} />
         </span>
       }
       footer={
@@ -147,19 +144,13 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
         </Field>
 
         <Field label={t("settings.budget.categories.fieldKind")} htmlFor="category-kind">
-          <select
+          <Select
             id="category-kind"
             value={kind}
             disabled={busy || locked}
-            onChange={(e) => setKind(e.target.value as BudgetKind)}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
-          >
-            {BUDGET_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {t(`budget.kinds.${k}`)}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setKind(v as BudgetKind)}
+            options={BUDGET_KINDS.map((k) => ({ value: k, label: t(`budget.kinds.${k}`) }))}
+          />
           {locked && (
             <p className="text-fg-faint text-xs mt-1">{t("settings.budget.categories.kindLocked")}</p>
           )}
@@ -258,7 +249,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           </p>
         )}
       </div>
-    </BudgetDialog>
+    </Dialog>
   );
 }
 

@@ -39,6 +39,18 @@
   --font-wordmark: "Unbounded Variable", system-ui, sans-serif;
 }
 
+/* The global sync button's box, pinned top-right on every page. */
+:root {
+  --sync-button-size: 2rem;
+  --sync-button-inset: 1rem;
+}
+
+/* For a header control that reaches the right edge: clears the sync button's
+   box plus the same gap it keeps from the edge. */
+@utility clear-sync-button {
+  margin-right: calc(var(--sync-button-size) + var(--sync-button-inset));
+}
+
 :root {
   color-scheme: dark;
 }

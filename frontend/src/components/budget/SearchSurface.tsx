@@ -10,7 +10,7 @@ import { useAccounts } from "../../api/hooks";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../lib/budgetFilters";
 import type { TransactionCounts } from "../../api/types";
 
-/** The nested surface of §2.2: three parts, each rendered only when it has
+/** The Transactions search surface: three parts, each rendered only when it has
  *  something to show.
  *
  *  Three elevation steps, outward in: the page background is darkest, the
@@ -56,7 +56,7 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             tone="sunken"
             onChange={(v) =>
               // Updater form, not `withTimeFrame(filters, v)` off the render
-              // snapshot (finding 6/MINOR) — `patchFilters` re-reads the
+              // snapshot — `patchFilters` re-reads the
               // current filters at apply time, the same discipline as every
               // other write in this file.
               patchFilters((prev) => withTimeFrame(prev, v as (typeof TIME_FRAMES)[number]))
@@ -88,14 +88,14 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             type="date"
             aria-label={t("budget.transactions.from")}
             value={filters.from}
-            onChange={(e) => patchFilters({ from: e.target.value, periodLabel: undefined })}
+            onChange={(e) => patchFilters({ from: e.target.value, period: undefined })}
             className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
           <input
             type="date"
             aria-label={t("budget.transactions.to")}
             value={filters.to}
-            onChange={(e) => patchFilters({ to: e.target.value, periodLabel: undefined })}
+            onChange={(e) => patchFilters({ to: e.target.value, period: undefined })}
             className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
           />
         </div>

@@ -120,7 +120,7 @@ async fn basis_walks_backward_through_the_lots(pool: PgPool) {
 }
 
 /// When the lots do NOT explain the position, the provider's figure anchors
-/// today and the unexplained remainder is carried flat backward (spec §8.2).
+/// today and the unexplained remainder is carried flat backward.
 #[sqlx::test(migrations = "../migrations")]
 async fn partial_lots_anchor_on_the_provider_figure(pool: PgPool) {
     let h = seed(&pool, "10", "1200").await;

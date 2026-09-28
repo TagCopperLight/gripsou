@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -10,37 +11,76 @@ import { TrendSurface } from "../../components/budget/overview/TrendSurface";
 import { EmptyPeriodSurface } from "../../components/budget/overview/EmptyPeriodSurface";
 import { AiBanner } from "../../components/budget/overview/AiBanner";
 import { useBudget } from "../../components/budget/budgetContext";
-import { useBudgetSummary, useBudgetTrend } from "../../api/overview";
-import { addMonths, anchorMonth, periodBounds, periodLabel } from "../../lib/period";
+import {
+  useBudgetSummary, useBudgetTrend, useHasDataBefore, useLatestDataMonth,
+} from "../../api/overview";
+import { addMonths, anchorMonth, currentMonth, periodBounds, type Period } from "../../lib/period";
+import { hasFlow } from "../../lib/sankeyGraph";
 import { getPrefs } from "../../lib/prefs";
 import type { Slice } from "../../api/overview";
 
 export function BudgetOverview() {
-  const { t, i18n } = useTranslation();
+  const { period: picked } = useBudget();
+  const latest = useLatestDataMonth();
+
+  // Until the reader picks a period, the page opens on the latest month that
+  // has transactions — not the current month, which stays empty for the first
+  // days of every month until the bank's feed catches up.
+  const lastMonth: string | null = latest.isSuccess ? latest.data : currentMonth();
+  const period: Period | undefined =
+    picked ?? (latest.isPending ? undefined : { mode: "month", month: lastMonth ?? currentMonth() });
+
+  if (period === undefined) return <CardState variant="loading" className="h-40" />;
+  return <OverviewOf period={period} lastMonth={lastMonth} />;
+}
+
+function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string | null }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { period, setPeriod, patchFilters } = useBudget();
+  const { setPeriod, patchFilters } = useBudget();
 
   const summary = useBudgetSummary(period);
-  const trend = useBudgetTrend(anchorMonth(period));
+  const hasBefore = useHasDataBefore(period.mode === "month" ? period.month : undefined);
 
   const data = summary.data;
   const empty = data !== undefined && data.txnCount === 0;
 
-  /** Both deep links share the period half; only the slice half differs.
-   *  `patchFilters` merges, so every deep link must first reset the slice and
-   *  time fields a PREVIOUS deep link may have left behind (mirrors
-   *  `clearFilter`'s "period" case) — otherwise an earlier Uncategorised
-   *  click and a later category click AND together server-side and the list
-   *  comes back always-empty. Search/account/tag filters are untouched. */
+  const month = period.mode === "month" ? period.month : null;
+  // Unknown counts as possible: a caret must not flicker off while the answer
+  // is on its way.
+  const canStepBack = month !== null && hasBefore.data !== false;
+  const canStepForward = month !== null && lastMonth !== null && month < lastMonth;
+  const step = (delta: number) => {
+    if (month !== null) setPeriod({ mode: "month", month: addMonths(month, delta) });
+  };
+  const selectMonth = useCallback(
+    (m: string) => setPeriod({ mode: "month", month: m }),
+    [setPeriod],
+  );
+
+  /** Every deep link shows exactly the rows behind the figure clicked, so it
+   *  resets whatever a previous visit left that would narrow or widen the
+   *  list: the slice and time fields, "needs review", and "internal
+   *  transfers" (the summary leaves paired transfers out, as the list does
+   *  by default). `patchFilters` merges, so without this an earlier
+   *  Uncategorised click and a later category click would AND together and
+   *  the list would come back always-empty. Search, account and tag filters
+   *  are the reader's own narrowing and stay. */
   const openTransactions = (slice?: Slice) => {
     const { from, to } = periodBounds(period);
-    const reset = {
+    const base = {
       categoryIds: [] as string[],
       uncategorized: false,
       bucket: "all" as const,
-      timeFrame: "all" as const,
+      needsReview: false,
+      transfers: false,
+      // `custom`: the time-frame select shows what really applies — these
+      // dates — rather than "All time".
+      timeFrame: "custom" as const,
+      from,
+      to,
+      period,
     };
-    const base = { ...reset, from, to, periodLabel: periodLabel(period, i18n.language) };
     if (slice?.kind === "category") {
       patchFilters({ ...base, categoryIds: [slice.category.id] });
     } else if (slice?.kind === "uncategorised") {
@@ -54,19 +94,15 @@ export function BudgetOverview() {
     void navigate({ to: "/budget/transactions" });
   };
 
-  const stepBack = () => {
-    if (period.mode !== "month") return;
-    setPeriod({ mode: "month", month: addMonths(period.month, -1) });
-  };
-
   return (
     <div className="flex flex-col gap-5">
       <PeriodLine
+        period={period}
         txnCount={data?.txnCount ?? 0}
         fxMissing={data?.fxMissing ?? false}
-        // An empty period is taken as the edge of the data; the empty surface
-        // below carries the way past it.
-        canStepBack={!empty}
+        canStepBack={canStepBack}
+        canStepForward={canStepForward}
+        onStep={step}
       />
 
       {/* Not a tooltip: every figure below is in the app's base currency rather
@@ -95,32 +131,44 @@ export function BudgetOverview() {
       )}
 
       {empty ? (
-        <EmptyPeriodSurface onEarlier={period.mode === "month" ? stepBack : undefined} />
+        <EmptyPeriodSurface onEarlier={canStepBack ? () => step(-1) : undefined} />
       ) : (
-        <>
-          {data && (
-            <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} />
-          )}
-          {data && (
-            <BreakdownSurface
-              rows={data.breakdown}
-              expensesTotal={data.expensesTotal}
-              onOpen={openTransactions}
-            />
-          )}
-          {/* Its own query, so a failing trend degrades one surface rather than
-              the page. */}
-          {trend.data === undefined ? (
-            <CardState
-              variant={trend.isError ? "error" : "loading"}
-              onRetry={() => void trend.refetch()}
-              className="h-60"
-            />
-          ) : (
-            <TrendSurface trend={trend.data} onSelectMonth={(month) => setPeriod({ mode: "month", month })} />
-          )}
-        </>
+        data && (
+          <>
+            {hasFlow(data.sankey) && (
+              <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} />
+            )}
+            {data.breakdown.length > 0 && (
+              <BreakdownSurface
+                rows={data.breakdown}
+                expensesTotal={data.figures.expenses.amount}
+                onOpen={openTransactions}
+              />
+            )}
+            <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} />
+          </>
+        )
       )}
     </div>
+  );
+}
+
+/** Its own component, so the trend is only asked for when it is shown, and its
+ *  own query, so a failing trend degrades one surface rather than the page. */
+function TrendSection({
+  anchor, onSelectMonth,
+}: {
+  anchor: string;
+  onSelectMonth: (month: string) => void;
+}) {
+  const trend = useBudgetTrend(anchor);
+  return trend.data === undefined ? (
+    <CardState
+      variant={trend.isError ? "error" : "loading"}
+      onRetry={() => void trend.refetch()}
+      className="h-60"
+    />
+  ) : (
+    <TrendSurface trend={trend.data} onSelectMonth={onSelectMonth} />
   );
 }

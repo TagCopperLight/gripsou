@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
@@ -6,8 +7,8 @@ import { ChevronRight } from "lucide-react";
 import { Surface } from "../../Surface";
 import { formatMoney } from "../../../lib/money";
 import { sliceLabel } from "../../../lib/slice";
-import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
-import { GRID, MONO, WHITE, escapeHtml } from "../../../lib/chartTheme";
+import { sankeyGraph, HUB, type SankeyNode } from "../../../lib/sankeyGraph";
+import { GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
 import type { Sankey } from "../../../api/overview";
 
 export function SankeySurface({
@@ -18,82 +19,95 @@ export function SankeySurface({
 }) {
   const { t } = useTranslation();
 
-  const graph = sankeyGraph(sankey, (s) => sliceLabel(t, s));
-  const text = (node: { name: string; label: string }) => {
-    if (node.name === HUB) return formatMoney(graph.total);
-    // Keyed off `name` (side-prefixed, e.g. "out:notSpent"), not `label`: a
-    // real category literally named "notSpent" would otherwise be relabelled
-    // (M-T8) — `label` is free-form user text, `name` is the internal id.
-    if (node.name === "out:notSpent") return t("budget.overview.sankey.notSpent");
-    if (node.name === "in:drawnFromSavings") return t("budget.overview.sankey.drawnFromSavings");
-    return node.label;
-  };
-  const labelByName = new Map(graph.nodes.map((n) => [n.name, text(n)]));
-  const colorByName = new Map(graph.nodes.map((n) => [n.name, n.color]));
+  // Memoised on the data and the translations: the option holds closures, so
+  // a fresh object every render would reset the chart and replay its entry
+  // animation whenever the page re-renders for an unrelated reason.
+  const option = useMemo<EChartsOption>(() => {
+    const graph = sankeyGraph(sankey, {
+      slice: (s) => sliceLabel(t, s),
+      notSpent: t("budget.overview.sankey.notSpent"),
+      drawnFromSavings: t("budget.overview.sankey.drawnFromSavings"),
+    });
+    const byName = new Map(graph.nodes.map((n) => [n.name, n]));
+    // The hub is the one node whose text is its amount rather than a name.
+    const text = (n: SankeyNode) => (n.name === HUB ? formatMoney(n.amount) : n.label);
 
-  const option: EChartsOption = {
-    backgroundColor: "transparent",
-    animationDuration: 300,
-    tooltip: {
-      trigger: "item",
-      backgroundColor: GRID,
-      borderWidth: 0,
-      padding: [10, 12],
-      extraCssText: "border-radius:12px;box-shadow:none;",
-      textStyle: { fontFamily: MONO, color: WHITE, fontSize: 12 },
-      formatter: (p) => {
-        const params = p as unknown as { dataType: string; name: string; value: number; data: { source?: string; target?: string } };
-        const name =
-          params.dataType === "edge"
-            ? labelByName.get(params.data.target === HUB ? params.data.source! : params.data.target!)
-            : labelByName.get(params.name);
-        // ECharts renders a tooltip formatter's return as innerHTML; the name
-        // comes from a category label (user-editable text), so it must be
-        // escaped just like `tooltipRow`'s own label (I3).
-        return `${escapeHtml(name ?? "")} — ${formatMoney(String(params.value))}`;
+    return {
+      backgroundColor: "transparent",
+      animationDuration: 300,
+      tooltip: {
+        trigger: "item",
+        backgroundColor: GRID,
+        borderWidth: 0,
+        padding: [10, 12],
+        extraCssText: "border-radius:12px;box-shadow:none;",
+        textStyle: { fontFamily: MONO },
+        formatter: (p) => {
+          const params = p as unknown as {
+            dataType: string;
+            name: string;
+            data: { source?: string; target?: string };
+          };
+          // A link is described by its non-hub end, which it carries whole.
+          const name =
+            params.dataType === "edge"
+              ? params.data.target === HUB
+                ? params.data.source!
+                : params.data.target!
+              : params.name;
+          const node = byName.get(name);
+          if (!node) return "";
+          // The amount is the node's own decimal string, never the float
+          // ECharts summed for it.
+          return tooltipRow(
+            node.name === HUB ? "transparent" : node.color,
+            node.name === HUB ? t("common.total") : node.label,
+            formatMoney(node.amount),
+          );
+        },
       },
-    },
-    series: [
-      {
-        type: "sankey",
-        left: 8,
-        right: 8,
-        top: 8,
-        bottom: 8,
-        nodeGap: 10,
-        nodeWidth: 12,
-        emphasis: { focus: "adjacency" },
-        // Order the payload sent is magnitude order, with `other` last on its
-        // side; keeping it means the diagram reads top-down by size.
-        layoutIterations: 0,
-        data: graph.nodes.map((n) => ({
-          name: n.name,
-          itemStyle: { color: n.color, borderWidth: 0 },
-          label: {
-            // Destinations sit on the right edge, so their labels go on the
-            // inner side of the bar; on the default outer side they would be
-            // clipped by the chart's edge.
-            position: n.name.startsWith("out:") ? "left" : "right",
-            color: n.color,
-            fontFamily: MONO,
-            fontSize: 11,
-            formatter: () => labelByName.get(n.name) ?? "",
-          },
-        })),
-        links: graph.links.map((l) => ({
-          source: l.source,
-          target: l.target,
-          value: l.value,
-          // Solid, in the category's colour (the non-hub end): a gradient
-          // would fade every link into the hub's grey in the middle.
-          lineStyle: {
-            color: colorByName.get(l.target === HUB ? l.source : l.target),
-            opacity: 0.25,
-          },
-        })),
-      },
-    ],
-  };
+      series: [
+        {
+          type: "sankey",
+          left: 8,
+          right: 8,
+          top: 8,
+          bottom: 8,
+          nodeGap: 10,
+          nodeWidth: 12,
+          emphasis: { focus: "adjacency" },
+          // Order the payload sent is magnitude order, with `other` last on its
+          // side; keeping it means the diagram reads top-down by size.
+          layoutIterations: 0,
+          data: graph.nodes.map((n) => ({
+            name: n.name,
+            itemStyle: { color: n.color, borderWidth: 0 },
+            label: {
+              // Destinations sit on the right edge, so their labels go on the
+              // inner side of the bar; on the default outer side they would be
+              // clipped by the chart's edge.
+              position: n.name.startsWith("out:") ? "left" : "right",
+              color: n.color,
+              fontFamily: MONO,
+              fontSize: 11,
+              formatter: () => text(n),
+            },
+          })),
+          links: graph.links.map((l) => ({
+            source: l.source,
+            target: l.target,
+            value: l.value,
+            // Solid, in the category's colour (the non-hub end): a gradient
+            // would fade every link into the hub's grey in the middle.
+            lineStyle: {
+              color: byName.get(l.target === HUB ? l.source : l.target)?.color,
+              opacity: 0.25,
+            },
+          })),
+        },
+      ],
+    };
+  }, [sankey, t]);
 
   return (
     <Surface className="w-full">

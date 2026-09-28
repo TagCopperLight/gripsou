@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::categorize::{
-    CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example,
+    CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example, Usage,
 };
 use gripsou_providers::gemini::GeminiCategorizer;
 use rust_decimal::Decimal;
@@ -68,8 +68,7 @@ async fn maps_the_answer_array_back_onto_items() {
 
     let out = g.categorize(&request()).await.unwrap();
 
-    assert_eq!(out.tokens_in, Some(1234));
-    assert_eq!(out.tokens_out, Some(56));
+    assert_eq!(out.usage, Usage::known(1234, 56));
     assert_eq!(out.guesses.len(), 2, "the out-of-range index 7 is dropped");
     let first = &out.guesses[0];
     assert_eq!(first.key, Uuid::from_u128(1));
@@ -93,8 +92,7 @@ async fn thinking_tokens_count_as_output() {
 
     let out = g.categorize(&request()).await.unwrap();
 
-    assert_eq!(out.tokens_in, Some(1234));
-    assert_eq!(out.tokens_out, Some(156));
+    assert_eq!(out.usage, Usage::known(1234, 156));
 }
 
 /// No usage at all stays unknown rather than becoming zero.
@@ -111,8 +109,7 @@ async fn missing_usage_stays_unknown() {
 
     let out = g.categorize(&request()).await.unwrap();
 
-    assert_eq!(out.tokens_in, None);
-    assert_eq!(out.tokens_out, None);
+    assert!(!out.usage.complete);
 }
 
 #[tokio::test]

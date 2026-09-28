@@ -22,7 +22,7 @@ describe("CategoryChip", () => {
     // hovered row never shows through and shifts the chip's colour.
     expect(chip.style.backgroundColor).toBe("rgb(49, 52, 35)");
     expect(chip.style.color).toBe("rgb(155, 176, 107)");
-    // The name is to the LEFT of the icon (spec §5).
+    // The name is to the LEFT of the icon.
     expect(chip.querySelector("span")?.textContent).toBe("Groceries");
     expect(chip.querySelector("svg")).toBeTruthy();
   });
@@ -37,7 +37,7 @@ describe("CategoryChip", () => {
     const chip = screen.getByTestId("category-chip");
     expect(chip).toHaveTextContent("Uncategorised");
     expect(chip).toHaveAttribute("data-variant", "uncategorized");
-    expect(chip.style.color).toBe("rgb(240, 185, 82)");
+    expect(chip.style.color).toBe("rgb(240, 179, 91)"); // --color-amber, like the "needs review" text
     expect(chip.querySelector("svg")).toBeTruthy();   // the dot
   });
 

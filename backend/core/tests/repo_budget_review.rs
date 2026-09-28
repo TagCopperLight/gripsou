@@ -159,17 +159,85 @@ async fn undo_refuses_a_pending_row(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Same threshold on both sides, and rows on both sides of it: a row at 75 %
+/// is in the queue at 80 % and out of it at 70 %, so a count and a list
+/// reading different thresholds, or different rules, would disagree here.
 #[sqlx::test(migrations = "../migrations")]
 async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _, _) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
-    let f = TransactionFilters {
-        needs_review: true,
-        include_transfers: true,
-        ..TransactionFilters::unfiltered()
-    };
-    assert_eq!(
-        review_count(&pool, user_id, Decimal::new(80, 2)).await?,
-        transaction_counts(&pool, user_id, &f).await?.matching
-    );
+    let (user_id, first, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
+    let acct: Uuid = sqlx::query_scalar("select account_id from transaction where id = $1")
+        .bind(first)
+        .fetch_one(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    for (ext, conf) in [("t1", 75), ("t2", 90), ("t3", 20)] {
+        upsert_transaction(
+            &mut conn,
+            acct,
+            &txn("a", ext, "withdrawal", Decimal::new(-500, 2), Some("Y")),
+        )
+        .await?;
+        sqlx::query(
+            "update transaction set budget_category_id = $2, category_source = 'ai', \
+             category_confidence = $3 where external_id = $1",
+        )
+        .bind(ext)
+        .bind(groceries)
+        .bind(Decimal::new(conf, 2))
+        .execute(&pool)
+        .await?;
+    }
+    // Accepted: out of the queue whatever its confidence.
+    sqlx::query("update transaction set category_reviewed_at = now() where external_id = 't3'")
+        .execute(&pool)
+        .await?;
+
+    for (threshold, expected) in [(Decimal::new(70, 2), 1), (Decimal::new(80, 2), 2)] {
+        let f = TransactionFilters {
+            needs_review: true,
+            include_transfers: true,
+            review_threshold: threshold,
+            ..TransactionFilters::unfiltered()
+        };
+        let listed = transaction_counts(&pool, user_id, &f).await?.matching;
+        assert_eq!(listed, expected, "at {threshold}");
+        assert_eq!(review_count(&pool, user_id, threshold).await?, listed);
+    }
+    Ok(())
+}
+
+/// Undo re-checks the row in the write itself: a row paired since it was
+/// accepted stays a transfer rather than becoming half an AI guess.
+#[sqlx::test(migrations = "../migrations")]
+async fn undo_refuses_a_row_paired_since_it_was_accepted(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
+    accept(&pool, user_id, id).await?;
+    sqlx::query("update transaction set transfer_pair_id = id where id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await?;
+    assert!(matches!(
+        undo(&pool, user_id, id, Some(groceries), None).await?,
+        ReviewWrite::Refused
+    ));
+    assert!(state(&pool, id).await.3, "still reviewed");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn another_user_can_neither_accept_nor_undo(pool: PgPool) -> anyhow::Result<()> {
+    let (owner, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
+    let (stranger, _) = seed_user_and_connection(&pool).await;
+    assert!(matches!(
+        accept(&pool, stranger, id).await?,
+        ReviewWrite::NotFound
+    ));
+    accept(&pool, owner, id).await?;
+    assert!(matches!(
+        undo(&pool, stranger, id, None, None).await?,
+        ReviewWrite::NotFound
+    ));
+    assert_eq!(state(&pool, id).await.0, Some(groceries));
+    assert!(state(&pool, id).await.3, "still reviewed");
     Ok(())
 }

@@ -7,7 +7,7 @@ use chrono::{Duration, Utc};
 use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::budget::ai::{RunOutcome, run_for_user};
 use gripsou_core::categorize::{
-    CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Guess,
+    CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Guess, Usage,
 };
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::ai::{last_run, remaining};
@@ -23,12 +23,14 @@ type Script =
 
 /// Records every request. Call n answers with `scripts[n]`, the last script
 /// repeating. `edit_during_call` categorises one row by hand inside the call,
-/// to simulate a user acting while the model is thinking.
+/// to simulate a user acting while the model is thinking. `sql_on_call` runs a
+/// statement during call n, to break the database under the run.
 struct Mock {
     batch: usize,
     seen: Mutex<Vec<CategorizeRequest>>,
     scripts: Vec<Script>,
     edit_during_call: Option<(PgPool, Uuid, Uuid, Uuid)>, // (pool, user, txn, category)
+    sql_on_call: Option<(PgPool, usize, &'static str)>,
 }
 
 impl Mock {
@@ -38,6 +40,7 @@ impl Mock {
             seen: Mutex::new(vec![]),
             scripts,
             edit_during_call: None,
+            sql_on_call: None,
         }
     }
     fn requests(&self) -> Vec<CategorizeRequest> {
@@ -68,6 +71,11 @@ impl Categorizer for Mock {
             seen.push(req.clone());
             seen.len() - 1
         };
+        if let Some((pool, at, sql)) = &self.sql_on_call
+            && *at == n
+        {
+            sqlx::query(*sql).execute(pool).await.unwrap();
+        }
         (self.scripts[n.min(self.scripts.len() - 1)])(req)
     }
 }
@@ -85,8 +93,8 @@ fn first_candidate(conf: Decimal) -> Script {
                     confidence: Some(conf),
                 })
                 .collect(),
-            tokens_in: Some(10),
-            tokens_out: Some(2),
+            usage: Usage::known(10, 2),
+            ..Default::default()
         })
     })
 }
@@ -155,14 +163,14 @@ async fn guesses_are_written_as_ai_with_their_confidence(pool: PgPool) -> anyhow
     assert_eq!(conf, Some(Decimal::new(91, 2)));
     let run = last_run(&pool, user_id).await?.unwrap();
     assert_eq!(run.outcome, "ok");
-    let (model, items, tin): (String, i32, Option<i32>) =
-        sqlx::query_as("select model, items, tokens_in from budget_ai_run where user_id = $1")
-            .bind(user_id)
-            .fetch_one(&pool)
-            .await?;
+    let (model, tin, tout, complete): (String, i64, i64, bool) = sqlx::query_as(
+        "select model, tokens_in, tokens_out, usage_complete from budget_ai_run where user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
     assert_eq!(model, "mock:m1");
-    assert_eq!(items, 2);
-    assert_eq!(tin, Some(10));
+    assert_eq!((tin, tout, complete), (10, 2, true));
     Ok(())
 }
 
@@ -365,5 +373,165 @@ async fn a_held_lock_makes_the_call_a_no_op(pool: PgPool) -> anyhow::Result<()> 
         1
     );
     assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
+    Ok(())
+}
+
+/// Answers only the first item of each request.
+fn first_item_only() -> Script {
+    Box::new(|req| {
+        Ok(CategorizeOutput {
+            guesses: vec![Guess {
+                key: req.items[0].key,
+                category_id: req.items[0].candidates.first().copied(),
+                confidence: Some(Decimal::ONE),
+            }],
+            usage: Usage::known(10, 2),
+            ..Default::default()
+        })
+    })
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn an_item_the_model_skipped_is_sent_again_by_the_next_run(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, ids) = ledger(&pool, &[("A", -100), ("B", -200), ("C", -300)]).await?;
+    let mock = Mock::new(50, vec![first_item_only()]);
+
+    let out = run_for_user(&pool, user_id, &mock).await?;
+
+    assert!(
+        matches!(out, RunOutcome::Finished { ref outcome, items: 1, batches: 1 } if outcome == "ok")
+    );
+    assert_eq!(mock.requests().len(), 1, "not re-sent within the run");
+    assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
+    assert_eq!(
+        row(&pool, ids[1]).await,
+        (None, None, None),
+        "still pending"
+    );
+    assert_eq!(remaining(&pool, user_id).await?, 2);
+
+    let next = Mock::new(50, vec![abstain_all()]);
+    run_for_user(&pool, user_id, &next).await?;
+    let sent: Vec<Uuid> = next.requests()[0].items.iter().map(|i| i.key).collect();
+    assert_eq!(sent, vec![ids[1], ids[2]]);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn answers_received_before_an_interruption_are_kept(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = ledger(&pool, &[("A", -100), ("B", -200), ("C", -300)]).await?;
+    let cut: Script = Box::new(|req| {
+        let mut out = (first_item_only())(req)?;
+        out.interrupted = Some(CategorizeError::RateLimited);
+        Ok(out)
+    });
+    let mock = Mock::new(50, vec![cut]);
+
+    let out = run_for_user(&pool, user_id, &mock).await?;
+
+    assert!(
+        matches!(out, RunOutcome::Finished { ref outcome, items: 1, .. } if outcome == "partial")
+    );
+    assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
+    assert_eq!(remaining(&pool, user_id).await?, 2);
+    let (tin, outcome): (i64, String) =
+        sqlx::query_as("select tokens_in, outcome from budget_ai_run where user_id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!((tin, outcome.as_str()), (10, "partial"));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, ids) = ledger(&pool, &[("A", -100), ("B", -200), ("C", -300)]).await?;
+    let mut mock = Mock::new(2, vec![first_candidate(Decimal::new(9, 1))]);
+    // From the second call on, writing an AI answer is refused.
+    mock.sql_on_call = Some((
+        pool.clone(),
+        1,
+        "alter table transaction add constraint no_ai check (category_source is distinct from 'ai') not valid",
+    ));
+
+    let before = Utc::now();
+    assert!(run_for_user(&pool, user_id, &mock).await.is_err());
+
+    assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
+    assert_eq!(row(&pool, ids[2]).await.1, None);
+    let (tin, tout, started): (i64, i64, chrono::DateTime<Utc>) = sqlx::query_as(
+        "select tokens_in, tokens_out, started_at from budget_ai_run where user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!((tin, tout), (20, 4), "both paid calls are logged");
+    assert!(started <= before + Duration::seconds(1));
+    let run = last_run(&pool, user_id).await?.unwrap();
+    assert_eq!(run.outcome, "error");
+    assert!(run.error.unwrap().contains("no_ai"));
+    assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_run_left_running_is_closed_by_the_next_one(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
+    let dead = gripsou_core::repo::budget::ai::start_run(&pool, user_id, "mock:m1").await?;
+    assert!(
+        last_run(&pool, user_id).await?.is_none(),
+        "a live run is not the last result"
+    );
+
+    run_for_user(&pool, user_id, &Mock::new(50, vec![abstain_all()])).await?;
+
+    let outcome: String = sqlx::query_scalar("select outcome from budget_ai_run where id = $1")
+        .bind(dead)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(outcome, "error");
+    assert_eq!(last_run(&pool, user_id).await?.unwrap().outcome, "ok");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_stale_lock_is_taken_over(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
+    sqlx::query(
+        "insert into budget_ai_lock (user_id, heartbeat_at) values ($1, now() - interval '2 hours')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await?;
+    let mock = Mock::new(50, vec![abstain_all()]);
+    assert!(matches!(
+        run_for_user(&pool, user_id, &mock).await?,
+        RunOutcome::Finished { .. }
+    ));
+    assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()> {
+    let (alice, ids) = ledger(&pool, &[("A", -100)]).await?;
+    let (bob, _) = ledger(&pool, &[]).await?;
+    let written = gripsou_core::repo::budget::ai::write_decisions(
+        &pool,
+        bob,
+        &[gripsou_core::budget::ai::Decision {
+            txn_id: ids[0],
+            category_id: None,
+            confidence: None,
+        }],
+    )
+    .await?;
+    assert_eq!(written, 0);
+    assert_eq!(row(&pool, ids[0]).await.1, None);
+    let _ = alice;
     Ok(())
 }

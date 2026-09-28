@@ -1,6 +1,10 @@
 mod common;
 
-use common::{checking_account, seed_user_and_connection, txn};
+use chrono::NaiveDate;
+use common::{
+    checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
+    txn, txn_on_day,
+};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{set_category, set_tags};
 use gripsou_core::repo::budget::category::list_categories;
@@ -18,7 +22,6 @@ fn filters() -> TransactionFilters {
     TransactionFilters {
         search: None,
         account_id: None,
-        kind: None,
         bucket: TypeBucket::All,
         from: None,
         to: None,
@@ -424,7 +427,7 @@ async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<(
 }
 
 /// A row the pairing pass categorised whose link has since been dissolved (by
-/// a user correcting one half, spec §4) still carries `Internal transfer` but
+/// a user correcting one half) still carries `Internal transfer` but
 /// nets against nothing. The list flags it so the reader can see the
 /// consequence rather than having to hunt for it.
 #[sqlx::test(migrations = "../migrations")]
@@ -443,7 +446,7 @@ async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> 
 }
 
 /// A cross-currency transfer the user categorised by hand never had a pair to
-/// lose (spec §5.2's stated limit). Matching on the category would flag it
+/// lose: pairing matches one currency only. Matching on the category would flag it
 /// forever; matching on `category_source = 'pair'` — which only the pairing
 /// pass writes, and which always comes with a link — does not.
 #[sqlx::test(migrations = "../migrations")]
@@ -529,5 +532,236 @@ async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow:
         out_only.iter().all(|r| r.id != ids[1]),
         "still bucket-filtered"
     );
+    Ok(())
+}
+
+fn day(y: i32, m: u32, d: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+}
+
+fn eur(units: i64) -> Decimal {
+    Decimal::new(units * 100, 2)
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> anyhow::Result<()> {
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
+    rate_on(&pool, usd, day(2026, 9, 1), Decimal::new(90, 2)).await;
+
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let eur_acct = upsert_account(&mut conn, conn_id, &checking_account("acct-eur")).await?;
+    let usd_acct =
+        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
+    upsert_transaction(
+        &mut conn,
+        eur_acct,
+        &txn_on_day(
+            "acct-eur",
+            "t1",
+            "withdrawal",
+            eur(-10),
+            day(2026, 3, 4),
+            "EUR SPEND",
+        ),
+    )
+    .await?;
+    upsert_transaction(
+        &mut conn,
+        usd_acct,
+        &txn_on_day(
+            "acct-usd",
+            "t2",
+            "withdrawal",
+            eur(-100),
+            day(2026, 3, 5),
+            "US SPEND",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    // -10 EUR, plus -100 USD at March's 0.50 = -50 EUR.
+    let c = transaction_counts(&pool, user_id, &filters()).await?;
+    assert_eq!(c.matching, 2);
+    assert_eq!(c.matching_total, eur(-60));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn list_rows_carry_both_their_own_and_the_reporting_amount(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
+
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let usd_acct =
+        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
+    upsert_transaction(
+        &mut conn,
+        usd_acct,
+        &txn_on_day(
+            "acct-usd",
+            "t1",
+            "withdrawal",
+            eur(-100),
+            day(2026, 3, 4),
+            "US SPEND",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].amount, eur(-100), "the list still shows what moved");
+    assert_eq!(rows[0].amount_reporting, eur(-50));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on_day(
+            "acct-1",
+            "t1",
+            "withdrawal",
+            eur(-10),
+            day(2026, 3, 4),
+            "KEEP",
+        ),
+    )
+    .await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on_day(
+            "acct-1",
+            "t2",
+            "withdrawal",
+            eur(-99),
+            day(2026, 3, 5),
+            "DROP",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    let f = TransactionFilters {
+        search: Some("KEEP".into()),
+        ..filters()
+    };
+    let c = transaction_counts(&pool, user_id, &f).await?;
+    assert_eq!(c.matching, 1);
+    assert_eq!(
+        c.matching_total,
+        eur(-10),
+        "the total tracks the same set as the count"
+    );
+    Ok(())
+}
+
+/// The list, its header count and the bulk target read one filter: under
+/// every combination here the count is the list's length and the bulk target
+/// is the list's cash rows, transfers included when asked for.
+#[sqlx::test(migrations = "../migrations")]
+async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, ids) = fixture(&pool).await?;
+    let internal = list_categories(&pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
+        .unwrap();
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+    let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
+    set_tags(&pool, user_id, ids[2], &[holiday]).await?;
+
+    let cases = [
+        filters(),
+        TransactionFilters {
+            include_transfers: false,
+            ..filters()
+        },
+        TransactionFilters {
+            bucket: TypeBucket::MoneyOut,
+            ..filters()
+        },
+        TransactionFilters {
+            search: Some("spot".into()),
+            ..filters()
+        },
+        TransactionFilters {
+            tag_ids: vec![holiday],
+            ..filters()
+        },
+        TransactionFilters {
+            category_ids: vec![internal.id],
+            ..filters()
+        },
+        TransactionFilters {
+            uncategorized: true,
+            ..filters()
+        },
+    ];
+    for (i, f) in cases.iter().enumerate() {
+        let listed = transactions(&pool, user_id, f).await?;
+        let counted = transaction_counts(&pool, user_id, f).await?.matching;
+        let mut target = matching_transaction_ids(&pool, user_id, f).await?;
+        let mut cash: Vec<Uuid> = listed
+            .iter()
+            .filter(|r| r.source == "cash")
+            .map(|r| r.id)
+            .collect();
+        target.sort();
+        cash.sort();
+        assert_eq!(counted, listed.len() as i64, "case {i}: count");
+        assert_eq!(target, cash, "case {i}: bulk target");
+    }
+    Ok(())
+}
+
+/// Days are UTC days at both edges: the last second of the `to` day is in,
+/// the first second of the next day is out.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_date_range_keeps_whole_utc_days(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    for (ext, ts) in [
+        ("before", "2026-02-28T23:59:59Z"),
+        ("first", "2026-03-01T00:00:00Z"),
+        ("last", "2026-03-31T23:59:59Z"),
+        ("after", "2026-04-01T00:00:00Z"),
+    ] {
+        let mut t = txn("acct-1", ext, "withdrawal", eur(-1), Some(ext));
+        t.ts = ts.parse()?;
+        upsert_transaction(&mut conn, account_id, &t).await?;
+    }
+    drop(conn);
+
+    let rows = transactions(
+        &pool,
+        user_id,
+        &TransactionFilters {
+            from: Some(day(2026, 3, 1)),
+            to: Some(day(2026, 3, 31)),
+            ..filters()
+        },
+    )
+    .await?;
+    let mut kept: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| r.description.as_deref())
+        .collect();
+    kept.sort();
+    assert_eq!(kept, vec!["first", "last"]);
     Ok(())
 }

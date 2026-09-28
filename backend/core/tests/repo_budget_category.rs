@@ -3,7 +3,8 @@ mod common;
 use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::{
-    CategoryPatch, NewCategory, create_category, delete_category, list_categories, update_category,
+    CategoryPatch, DeleteCategory, NewCategory, category_refs, create_category, delete_category,
+    list_categories, reorder_categories, update_category,
 };
 use gripsou_core::repo::transaction::upsert_transaction;
 use rust_decimal::Decimal;
@@ -182,7 +183,10 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     assert_eq!(renamed.kind, "internal", "kind is locked on a system row");
     assert!(!renamed.archived, "a system row cannot be archived either");
 
-    assert!(!delete_category(&pool, user_id, system.id).await?);
+    assert_eq!(
+        delete_category(&pool, user_id, system.id).await?,
+        DeleteCategory::System
+    );
     assert_eq!(list_categories(&pool, user_id).await?.len(), 32);
     Ok(())
 }
@@ -222,7 +226,10 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
         .execute(&pool)
         .await?;
 
-    assert!(delete_category(&pool, user_id, created.id).await?);
+    assert_eq!(
+        delete_category(&pool, user_id, created.id).await?,
+        DeleteCategory::Deleted
+    );
 
     let (left, categorised): (i64, i64) =
         sqlx::query_as("select count(*), count(budget_category_id) from transaction")
@@ -268,8 +275,124 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
         .await?
         .is_none()
     );
-    assert!(!delete_category(&pool, stranger, mine.id).await?);
+    assert_eq!(
+        delete_category(&pool, stranger, mine.id).await?,
+        DeleteCategory::NotFound
+    );
     let uuid_nowhere = Uuid::new_v4();
-    assert!(!delete_category(&pool, owner, uuid_nowhere).await?);
+    assert_eq!(
+        delete_category(&pool, owner, uuid_nowhere).await?,
+        DeleteCategory::NotFound
+    );
+    Ok(())
+}
+
+/// The ids come in the order the user dragged them to; each kind is numbered
+/// `1..n` in that order, and another user's id is skipped so the caller can
+/// refuse the partial write.
+#[sqlx::test(migrations = "../migrations")]
+async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _conn) = seed_user_and_connection(&pool).await;
+    let rows = list_categories(&pool, user_id).await?;
+    let expenses: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "expense")
+        .map(|r| r.id)
+        .collect();
+    let incomes: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.kind == "income")
+        .map(|r| r.id)
+        .collect();
+
+    // Last expense first, kinds interleaved.
+    let mut order = vec![*expenses.last().unwrap(), incomes[1], incomes[0]];
+    order.extend(&expenses[..expenses.len() - 1]);
+    assert_eq!(
+        reorder_categories(&pool, user_id, &order).await?,
+        order.len() as u64
+    );
+
+    let after = list_categories(&pool, user_id).await?;
+    assert_eq!(after[0].id, *expenses.last().unwrap(), "moved to the top");
+    let income_order: Vec<Uuid> = after
+        .iter()
+        .filter(|r| r.kind == "income")
+        .map(|r| r.id)
+        .take(2)
+        .collect();
+    assert_eq!(income_order, vec![incomes[1], incomes[0]]);
+
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let theirs = list_categories(&pool, stranger).await?[0].id;
+    assert_eq!(
+        reorder_categories(&pool, user_id, &[expenses[0], theirs]).await?,
+        1,
+        "the stranger's row is not touched, and the count says so"
+    );
+    Ok(())
+}
+
+/// Created together, two categories still get distinct positions.
+#[sqlx::test(migrations = "../migrations")]
+async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _conn) = seed_user_and_connection(&pool).await;
+    let mut set = tokio::task::JoinSet::new();
+    for i in 0..6 {
+        let pool = pool.clone();
+        set.spawn(async move {
+            create_category(
+                &pool,
+                user_id,
+                &NewCategory {
+                    name: &format!("New {i}"),
+                    color: "#000000",
+                    icon: None,
+                    hint: None,
+                    kind: "expense",
+                },
+            )
+            .await
+        });
+    }
+    while let Some(r) = set.join_next().await {
+        r??;
+    }
+    let positions: Vec<i32> = sqlx::query_scalar(
+        "select sort_order from budget_category where user_id = $1 and kind = 'expense'",
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+    let mut distinct = positions.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert_eq!(distinct.len(), positions.len());
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn chip_refs_cover_every_category(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _conn) = seed_user_and_connection(&pool).await;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let mut listed: Vec<Uuid> = list_categories(&pool, user_id)
+        .await?
+        .into_iter()
+        .map(|r| r.id)
+        .collect();
+    let mut refs: Vec<Uuid> = category_refs(&pool, user_id)
+        .await?
+        .into_iter()
+        .map(|r| r.id)
+        .collect();
+    listed.sort();
+    refs.sort();
+    assert_eq!(refs, listed);
+    assert!(
+        !category_refs(&pool, stranger)
+            .await?
+            .iter()
+            .any(|r| refs.contains(&r.id))
+    );
     Ok(())
 }

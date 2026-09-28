@@ -1,7 +1,10 @@
 mod common;
 
 use chrono::NaiveDate;
-use common::{checking_account, checking_account_in, seed_user_and_connection, txn_on_day};
+use common::{
+    checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
+    txn_on_day,
+};
 use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::set_category;
@@ -29,31 +32,6 @@ async fn cat(pool: &PgPool, user_id: Uuid, key: &str) -> Uuid {
         .find(|c| c.default_key.as_deref() == Some(key))
         .unwrap_or_else(|| panic!("no seeded category {key}"))
         .id
-}
-
-/// Insert a cash instrument for a currency and return its id.
-async fn cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
-    sqlx::query_scalar(
-        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
-    )
-    .bind(currency)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
-
-/// One rate for one currency on one day.
-async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
-    let mut conn = pool.acquire().await.unwrap();
-    gripsou_core::repo::price::insert_price(
-        &mut conn,
-        instrument_id,
-        d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
-        rate,
-        "EUR",
-    )
-    .await
-    .unwrap();
 }
 
 /// Set the user's reporting currency, the same `prefs->>'currency'` the query
@@ -137,7 +115,7 @@ async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyh
 async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyhow::Result<()> {
     // USD was worth 0.50 EUR in March and 0.90 EUR in September. A $100 spend
     // in March is 50 EUR, and must stay 50 EUR when read in September.
-    let usd = cash_instrument(&pool, "USD").await;
+    let usd = seed_cash_instrument(&pool, "USD").await;
     rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
     rate_on(&pool, usd, day(2026, 9, 1), Decimal::new(90, 2)).await;
 
@@ -173,7 +151,7 @@ async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyho
 #[sqlx::test(migrations = "../migrations")]
 async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     // A cash instrument with no price at all: the rate is unknown, never 1.
-    cash_instrument(&pool, "CNY").await;
+    seed_cash_instrument(&pool, "CNY").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id =
@@ -261,6 +239,50 @@ async fn internal_categories_are_kept(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].category_kind.as_deref(), Some("internal"));
     assert_eq!(rows[0].amount, eur(-500));
+    Ok(())
+}
+
+/// A pair the user broke by recategorising the other half leaves this half
+/// filed by the pairing pass with no partner. It moved money with nothing on
+/// the other side, so it counts as uncategorised by its sign, not as Saved.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_pair_half_without_its_partner_counts_as_uncategorised(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    upsert_transaction(
+        &mut conn,
+        account_id,
+        &txn_on_day(
+            "acct-1",
+            "t1",
+            "transfer",
+            eur(-500),
+            day(2026, 3, 4),
+            "VIR EPARGNE",
+        ),
+    )
+    .await?;
+    drop(conn);
+    let internal = cat(&pool, user_id, "internal").await;
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = 'pair', \
+         transfer_pair_id = null",
+    )
+    .bind(internal)
+    .execute(&pool)
+    .await?;
+
+    let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].category_id, None);
+    assert_eq!(rows[0].category_kind, None);
+    assert_eq!(rows[0].amount, eur(-500));
+    let f = gripsou_core::budget::overview::figures(&rows);
+    assert_eq!(f.saved, Decimal::ZERO);
+    assert_eq!(f.expenses, eur(500));
     Ok(())
 }
 
@@ -441,7 +463,7 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
     // Reporting in GBP: 1 GBP = 1.25 EUR in March, 1.00 EUR in April. A 100 EUR
     // spend must become a different GBP figure depending on which day it fell
     // on, not the latest rate — the same own-date rule as the account leg.
-    let gbp = cash_instrument(&pool, "GBP").await;
+    let gbp = seed_cash_instrument(&pool, "GBP").await;
     rate_on(&pool, gbp, day(2026, 3, 1), Decimal::new(125, 2)).await;
     rate_on(&pool, gbp, day(2026, 4, 1), Decimal::new(100, 2)).await;
 
@@ -495,7 +517,7 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
     // No rate at all for CHF: the fallback is "report in the pivot", not zero
     // — a user whose reporting currency has no stored rate must still see
     // their net worth's figures, just unconverted, with a flag saying why.
-    cash_instrument(&pool, "CHF").await;
+    seed_cash_instrument(&pool, "CHF").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     set_reporting_currency(&pool, user_id, "CHF").await;
     let mut conn = pool.acquire().await?;
@@ -532,14 +554,14 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
 ) -> anyhow::Result<()> {
     // Two uncategorised transactions on the same day, one an inflow (valued
     // EUR) and one an outflow (unvalued JPY). Uncategorised rows must split
-    // by sign (Finding 1): a mixed-sign uncategorised day is two buckets, not
+    // by sign: a mixed-sign uncategorised day is two buckets, not
     // one netted one, because `figures()` reads an uncategorised row's own
-    // sign to decide income vs expense (spec 2.2) and a pre-netted row has
+    // sign to decide income vs expense and a pre-netted row has
     // already lost that distinction. This also pins the older "bucket is
     // understated" contract for a partly-unvalued bucket: the unvalued leg's
     // own bucket sums to zero and flags `fx_missing`, rather than dropping
     // out of some other bucket's sum silently.
-    cash_instrument(&pool, "JPY").await; // no rate at all
+    seed_cash_instrument(&pool, "JPY").await; // no rate at all
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let eur_account = upsert_account(&mut conn, conn_id, &checking_account("acct-eur")).await?;
@@ -604,8 +626,8 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
 
 #[sqlx::test(migrations = "../migrations")]
 async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::Result<()> {
-    // The motivating case for Finding 1: on payday, everything is still
-    // uncategorised (spec 2.2 — "nearly all of it" until phase 5). A salary
+    // On payday, everything may still be uncategorised (all of it, without
+    // the AI). A salary
     // and a small same-day outflow must not net into one row, or Income and
     // Expenses collapse into a single signed figure.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -657,152 +679,5 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
         .sum();
     assert_eq!(income, eur(3000));
     assert_eq!(expense, eur(-4));
-    Ok(())
-}
-
-use gripsou_core::repo::query::{TransactionFilters, TypeBucket, transaction_counts, transactions};
-
-fn filters() -> TransactionFilters {
-    TransactionFilters {
-        search: None,
-        account_id: None,
-        kind: None,
-        bucket: TypeBucket::All,
-        from: None,
-        to: None,
-        category_ids: vec![],
-        tag_ids: vec![],
-        uncategorized: false,
-        needs_review: false,
-        include_transfers: true,
-        review_threshold: Decimal::new(80, 2),
-        limit: 200,
-        offset: 0,
-    }
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> anyhow::Result<()> {
-    let usd = cash_instrument(&pool, "USD").await;
-    rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
-    rate_on(&pool, usd, day(2026, 9, 1), Decimal::new(90, 2)).await;
-
-    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
-    let mut conn = pool.acquire().await?;
-    let eur_acct = upsert_account(&mut conn, conn_id, &checking_account("acct-eur")).await?;
-    let usd_acct =
-        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
-    upsert_transaction(
-        &mut conn,
-        eur_acct,
-        &txn_on_day(
-            "acct-eur",
-            "t1",
-            "withdrawal",
-            eur(-10),
-            day(2026, 3, 4),
-            "EUR SPEND",
-        ),
-    )
-    .await?;
-    upsert_transaction(
-        &mut conn,
-        usd_acct,
-        &txn_on_day(
-            "acct-usd",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 5),
-            "US SPEND",
-        ),
-    )
-    .await?;
-    drop(conn);
-
-    // -10 EUR, plus -100 USD at March's 0.50 = -50 EUR.
-    let c = transaction_counts(&pool, user_id, &filters()).await?;
-    assert_eq!(c.matching, 2);
-    assert_eq!(c.matching_total, eur(-60));
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn list_rows_carry_both_their_own_and_the_reporting_amount(
-    pool: PgPool,
-) -> anyhow::Result<()> {
-    let usd = cash_instrument(&pool, "USD").await;
-    rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
-
-    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
-    let mut conn = pool.acquire().await?;
-    let usd_acct =
-        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
-    upsert_transaction(
-        &mut conn,
-        usd_acct,
-        &txn_on_day(
-            "acct-usd",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "US SPEND",
-        ),
-    )
-    .await?;
-    drop(conn);
-
-    let rows = transactions(&pool, user_id, &filters()).await?;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].amount, eur(-100), "the list still shows what moved");
-    assert_eq!(rows[0].amount_reporting, eur(-50));
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
-    let mut conn = pool.acquire().await?;
-    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
-    upsert_transaction(
-        &mut conn,
-        account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-10),
-            day(2026, 3, 4),
-            "KEEP",
-        ),
-    )
-    .await?;
-    upsert_transaction(
-        &mut conn,
-        account_id,
-        &txn_on_day(
-            "acct-1",
-            "t2",
-            "withdrawal",
-            eur(-99),
-            day(2026, 3, 5),
-            "DROP",
-        ),
-    )
-    .await?;
-    drop(conn);
-
-    let f = TransactionFilters {
-        search: Some("KEEP".into()),
-        ..filters()
-    };
-    let c = transaction_counts(&pool, user_id, &f).await?;
-    assert_eq!(c.matching, 1);
-    assert_eq!(
-        c.matching_total,
-        eur(-10),
-        "the total tracks the same set as the count"
-    );
     Ok(())
 }

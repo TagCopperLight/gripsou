@@ -4,8 +4,9 @@ use chrono::{DateTime, Utc};
 use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, apply_category_to_same_description, bulk_add_tags, bulk_apply, bulk_set_category,
-    bulk_set_checked, count_paired_same_description, count_same_description, set_category,
+    BulkChanges, TransactionPatch, WriteOutcome, apply_category_to_same_description,
+    apply_to_description, bulk_add_tags, bulk_apply, bulk_set_category, bulk_set_checked,
+    count_paired_same_description, count_same_description, patch_transaction, set_category,
     set_checked, set_tags,
 };
 use gripsou_core::repo::budget::category::list_categories;
@@ -216,7 +217,7 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
     Ok(())
 }
 
-/// Regression for review finding 1: no tags to add means no transaction was
+/// Regression: no tags to add means no transaction was
 /// touched by any definition, even though every id in `txn_ids` is this
 /// user's own and would otherwise count as "matched".
 #[sqlx::test(migrations = "../migrations")]
@@ -232,7 +233,7 @@ async fn bulk_add_tags_with_no_tags_touches_nothing(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// Regression for review finding 2: `apply_category_to_same_description` must
+/// Regression: `apply_category_to_same_description` must
 /// agree with `count_same_description` on which rows count as "the same
 /// merchant" — a blank (null) description never clusters with other blank
 /// descriptions, and an anchor whose own description is blank applies to
@@ -282,7 +283,7 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
     Ok(())
 }
 
-/// Regression for review finding 2 (round 2): `count_same_description` and
+/// Regression: `count_same_description` and
 /// `apply_category_to_same_description` must agree in both directions, not
 /// just on a blank/null anchor. `budget_norm_description` collapses any run
 /// of 2+ digits, so two *unrelated* digit-only descriptions ("12345",
@@ -310,8 +311,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     Ok(())
 }
 
-/// Regression for review finding 2 (round 2): the specific divergence the
-/// re-review caught — a blank (null) anchor with a digit-only sibling
+/// Regression: a blank (null) anchor with a digit-only sibling
 /// present. Before this fix, `count_same_description`'s anchor subquery had
 /// no normalised-value guard, so it would report the digit-only sibling as
 /// "the same description" (both normalise to `''`) while
@@ -406,8 +406,7 @@ async fn an_unconfirmed_bulk_reports_the_pairs_it_would_break(pool: PgPool) -> a
     )
     .await?;
 
-    assert_eq!(outcome.pending_pair_breaks, Some(1));
-    assert_eq!(outcome.updated, 0);
+    assert_eq!(outcome, WriteOutcome::PendingPairBreaks(1));
     Ok(())
 }
 
@@ -461,8 +460,7 @@ async fn a_confirmed_bulk_writes_and_unlinks(pool: PgPool) -> anyhow::Result<()>
     )
     .await?;
 
-    assert_eq!(outcome.pending_pair_breaks, None);
-    assert_eq!(outcome.updated, 1);
+    assert_eq!(outcome, WriteOutcome::Done(1));
     let links: Vec<(Uuid, Option<Uuid>)> =
         sqlx::query_as("select id, transfer_pair_id from transaction where id = any($1)")
             .bind(vec![out, inn])
@@ -490,8 +488,7 @@ async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<
     )
     .await?;
 
-    assert_eq!(outcome.pending_pair_breaks, None);
-    assert_eq!(outcome.updated, 2);
+    assert_eq!(outcome, WriteOutcome::Done(2));
     Ok(())
 }
 
@@ -513,8 +510,7 @@ async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Resul
     )
     .await?;
 
-    assert_eq!(outcome.pending_pair_breaks, None);
-    assert_eq!(outcome.updated, 1);
+    assert_eq!(outcome, WriteOutcome::Done(1));
     Ok(())
 }
 
@@ -543,6 +539,256 @@ async fn an_unpaired_description_counts_nothing(pool: PgPool) -> anyhow::Result<
     assert_eq!(
         count_paired_same_description(&pool, user_id, ids[0]).await?,
         0
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The checked writes the API calls: all or nothing, and pairs confirmed.
+// ---------------------------------------------------------------------------
+
+async fn row_state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64, Option<Uuid>) {
+    sqlx::query_as(
+        "select t.budget_category_id, t.checked_at is not null,
+                (select count(*) from budget_transaction_tag g where g.transaction_id = t.id),
+                t.transfer_pair_id
+           from transaction t where t.id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// A refused category must not leave the tags and ✓ of the same save
+/// written behind it.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let stranger_category = list_categories(&pool, stranger).await?[0].id;
+
+    let outcome = patch_transaction(
+        &pool,
+        user_id,
+        ids[0],
+        &TransactionPatch {
+            category_id: Some(Some(stranger_category)),
+            tag_ids: Some(&[holiday]),
+            checked: Some(true),
+        },
+        false,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::UnknownCategory);
+    assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let mine = create_tag(&pool, user_id, "Holiday", None).await?.id;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let theirs = create_tag(&pool, stranger, "Work", None).await?.id;
+
+    let outcome = patch_transaction(
+        &pool,
+        user_id,
+        ids[0],
+        &TransactionPatch {
+            category_id: Some(Some(groceries)),
+            tag_ids: Some(&[mine, theirs]),
+            checked: None,
+        },
+        false,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
+
+    // The low-level writer leaves a foreign tag out rather than failing.
+    assert!(set_tags(&pool, user_id, ids[0], &[mine, theirs]).await?);
+    assert_eq!(row_state(&pool, ids[0]).await.2, 1);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_saves_every_field_together(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
+
+    let outcome = patch_transaction(
+        &pool,
+        user_id,
+        ids[0],
+        &TransactionPatch {
+            category_id: Some(Some(groceries)),
+            tag_ids: Some(&[holiday]),
+            checked: Some(true),
+        },
+        false,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::Done(()));
+    assert_eq!(
+        row_state(&pool, ids[0]).await,
+        (Some(groceries), true, 1, None)
+    );
+    Ok(())
+}
+
+/// Tags, ✓ and category on someone else's row: refused, and nothing moves.
+#[sqlx::test(migrations = "../migrations")]
+async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let their_tag = create_tag(&pool, stranger, "Work", None).await?.id;
+    let my_tag = create_tag(&pool, user_id, "Holiday", None).await?.id;
+
+    assert!(!set_tags(&pool, stranger, ids[0], &[their_tag]).await?);
+    assert!(!set_checked(&pool, stranger, ids[0], true).await?);
+    assert_eq!(
+        bulk_add_tags(&pool, stranger, &ids, &[their_tag, my_tag]).await?,
+        0
+    );
+    assert_eq!(
+        patch_transaction(
+            &pool,
+            stranger,
+            ids[0],
+            &TransactionPatch {
+                checked: Some(true),
+                ..TransactionPatch::default()
+            },
+            false,
+        )
+        .await?,
+        WriteOutcome::NotFound
+    );
+    assert_eq!(
+        apply_to_description(&pool, stranger, ids[0], Some(groceries), true).await?,
+        WriteOutcome::NotFound
+    );
+    assert!(
+        apply_category_to_same_description(&pool, stranger, ids[0], None)
+            .await?
+            .is_empty()
+    );
+    assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
+    Ok(())
+}
+
+/// The single-row save guards a pair exactly like the bulk paths: refused
+/// and reported until confirmed, then written and unlinked.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_on_a_paired_row_waits_for_confirmation(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, out, inn) = paired_fixture(&pool).await?;
+    let patch = TransactionPatch {
+        category_id: Some(Some(groceries)),
+        checked: Some(true),
+        ..TransactionPatch::default()
+    };
+
+    assert_eq!(
+        patch_transaction(&pool, user_id, out, &patch, false).await?,
+        WriteOutcome::PendingPairBreaks(1)
+    );
+    assert_eq!(row_state(&pool, out).await, (None, false, 0, Some(inn)));
+
+    assert_eq!(
+        patch_transaction(&pool, user_id, out, &patch, true).await?,
+        WriteOutcome::Done(())
+    );
+    assert_eq!(
+        row_state(&pool, out).await,
+        (Some(groceries), true, 0, None)
+    );
+    assert_eq!(row_state(&pool, inn).await.3, None, "both halves unlinked");
+    Ok(())
+}
+
+/// ✓ and tags break no pair, so a paired row takes them without a question.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
+    assert_eq!(
+        patch_transaction(
+            &pool,
+            user_id,
+            out,
+            &TransactionPatch {
+                checked: Some(true),
+                ..TransactionPatch::default()
+            },
+            false,
+        )
+        .await?,
+        WriteOutcome::Done(())
+    );
+    assert_eq!(row_state(&pool, out).await, (None, true, 0, Some(inn)));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bulk_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["A", "B"]).await?;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let theirs = create_tag(&pool, stranger, "Work", None).await?.id;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &ids,
+        BulkChanges {
+            category_id: Some(Some(groceries)),
+            add_tag_ids: Some(&[theirs]),
+            checked: Some(true),
+        },
+        false,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    for id in &ids {
+        assert_eq!(row_state(&pool, *id).await, (None, false, 0, None));
+    }
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["VIREMENT", "VIREMENT"]).await?;
+    sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
+        .bind(ids[1])
+        .bind(ids[0])
+        .execute(&pool)
+        .await?;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let stranger_category = list_categories(&pool, stranger).await?[0].id;
+
+    assert_eq!(
+        apply_to_description(&pool, user_id, ids[0], Some(stranger_category), true).await?,
+        WriteOutcome::UnknownCategory
+    );
+    assert_eq!(
+        apply_to_description(&pool, user_id, ids[0], Some(groceries), false).await?,
+        WriteOutcome::PendingPairBreaks(1)
+    );
+    assert_eq!(row_state(&pool, ids[1]).await.0, None, "nothing written");
+
+    let WriteOutcome::Done(mut written) =
+        apply_to_description(&pool, user_id, ids[0], Some(groceries), true).await?
+    else {
+        panic!("a confirmed apply writes");
+    };
+    written.sort();
+    let mut both = ids.clone();
+    both.sort();
+    assert_eq!(written, both);
+    assert_eq!(
+        row_state(&pool, ids[1]).await,
+        (Some(groceries), false, 0, None)
     );
     Ok(())
 }

@@ -1,0 +1,218 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- The filter/sort/page cut happens BEFORE any valuation, so the grid\n        -- below prices only the days this page actually needs, not the user's\n        -- entire history.\n        with filtered as (\n            select *\n            from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            order by ts desc, id\n            limit $13 offset $14\n        ),\n        days as (select distinct (ts at time zone 'utc')::date as day from filtered),\n        grid as materialized (\n            select as_of, currency, unit_value\n            from valuation_grid($1, array(select day from days)::date[])\n            where kind = 'cash'\n        ),\n        reporting as (\n            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code\n        )\n        select id as \"id!\", ts as \"ts!\", kind as \"kind!\", description, amount as \"amount!\",\n               -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare\n               -- `nullif`: when the reporting currency has no rate on this\n               -- day the whole expression must still degrade to the pivot\n               -- currency (divide by 1) rather than yield NULL, which\n               -- `coalesce(..., 0)` around the multiplication would then\n               -- silently turn into a zeroed amount indistinguishable from a\n               -- genuinely unrateable account leg. Do not \"simplify\" this to\n               -- a bare `nullif` — see the doc comment on this field above.\n               coalesce(filtered.amount * afx.unit_value\n                        / coalesce(nullif(rfx.unit_value, 0), 1), 0)\n                   as \"amount_reporting!\",\n               source as \"source!\", ticker, quantity, unit_price, fee,\n               account_id as \"account_id!\", account_name as \"account_name!\",\n               account_color, account_currency as \"account_currency!\",\n               filtered.category_id, category_name, category_default_key, category_color,\n               category_icon, category_kind, category_source, category_confidence,\n               needs_review as \"needs_review!\", checked as \"checked!\",\n               is_transfer as \"is_transfer!\",\n               is_orphan_transfer as \"is_orphan_transfer!\"\n        from filtered\n        left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date\n                          and afx.currency = filtered.account_currency\n        left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date\n                          and rfx.currency = (select code from reporting)\n        order by ts desc, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "amount_reporting!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "ticker",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "quantity",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "unit_price",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "fee",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "account_name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "account_color",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "account_currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 15,
+        "name": "category_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "category_name",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "category_default_key",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "category_color",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "category_icon",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 20,
+        "name": "category_kind",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 21,
+        "name": "category_source",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 22,
+        "name": "category_confidence",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 23,
+        "name": "needs_review!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 24,
+        "name": "checked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
+        "name": "is_transfer!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 26,
+        "name": "is_orphan_transfer!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric",
+        "Text",
+        "Uuid",
+        "Date",
+        "Date",
+        "Text",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "44245123bdfb5df4eedffd20c20b48647673d17ff06fb9be4862c68150488db9"
+}

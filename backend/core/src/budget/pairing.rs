@@ -1,4 +1,4 @@
-//! Stage 1 of the pipeline (spec §5.2): find the two halves of a movement
+//! The budget pairing pass, run inside every ingest: find the two halves of a movement
 //! between the user's own accounts and mark them as one internal transfer, so
 //! they stop showing up as income and expense in every chart.
 //!
@@ -11,7 +11,7 @@
 //! account), pairs that way — see [`forced_pairs`]. Transfers only: see the
 //! candidate query.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -31,63 +31,41 @@ struct Candidate {
     currency: String,
 }
 
-/// Two candidates that could be swapped for each other without changing the
-/// outcome: every candidate is a transfer and callers only compare rows
-/// already sharing currency, amount and sign, so two on the same account are
-/// the same movement as far as any total can tell — whatever their date.
+/// Two candidates that could be swapped for each other in a nearest-neighbour
+/// tie without changing the outcome: every candidate is a transfer and callers
+/// only compare rows already sharing currency, amount and sign, so two on the
+/// same account are the same movement as far as any total can tell — whatever
+/// their date. [`forced_pairs`] merges rows on a stricter test (same account
+/// *and* same instant), because it measures reach from one timestamp per node.
 fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
     a.account_id == b.account_id
 }
 
-/// Pairs every unpaired internal transfer this user has. A single round of
-/// mutual-nearest-neighbour matching can leave true pairs on the table: if X's
-/// nearest is Y but Y's own nearest is some other row W, neither X-Y nor X-W
-/// pairs that round, even though removing Y (paired off with W) may make W's
-/// former runner-up X's new, uncontested nearest match. So this repeats the
-/// round — each round strictly shrinks the candidate pool by re-querying rows
-/// still carrying `transfer_pair_id is null`, so it always terminates — until
-/// a round pairs nothing, and returns the total pairs written across all
-/// rounds.
+/// Pairs every unpaired internal transfer this user has, and returns how many
+/// pairs it wrote.
+///
+/// A single round of mutual-nearest-neighbour matching can leave true pairs on
+/// the table: if X's nearest is Y but Y's own nearest is some other row W,
+/// neither X-Y nor X-W pairs that round, even though removing Y (paired off
+/// with W) may make W's former runner-up X's new, uncontested nearest match.
+/// So rounds repeat until one pairs nothing. The candidates are read once and
+/// the rounds run in memory, each removing the rows it paired, so the pool
+/// strictly shrinks and the loop always terminates; every pair is then
+/// written in one statement.
 ///
 /// Idempotent in the sense that matters: a row already carrying
-/// `transfer_pair_id` is never re-paired, repaired, or disturbed by a later
-/// call, and a row a user or a rule has categorised is never touched — an AI
-/// guess is the one category_source pairing is allowed to overwrite, per
-/// spec §4's precedence (`user > rule > pair > ai`). A call that has already
+/// `transfer_pair_id` is never re-paired or disturbed by a later call, and a
+/// category the user chose is never touched. A call that has already
 /// converged writes nothing on a re-run.
 ///
-/// Takes a Postgres advisory transaction lock on `user_id` for the life of
-/// the caller's transaction, serialising this pass across any connections of
-/// the same user syncing concurrently. Without it, two connections' calls can
-/// both read overlapping candidate rows and then issue UPDATEs over the same
-/// rows in different orders, deadlocking Postgres and aborting one sync's
-/// entire ingest transaction.
+/// The caller must hold this user's advisory lock (`ingest` takes it at the
+/// top of its transaction). This pass reads and writes across every account
+/// the user owns, and two connections of one user syncing at once would
+/// otherwise take row locks in opposite orders and deadlock.
 pub async fn pair_internal_transfers(
     conn: &mut sqlx::PgConnection,
     user_id: Uuid,
 ) -> Result<usize, CoreError> {
-    sqlx::query!(
-        "select pg_advisory_xact_lock(hashtext($1))",
-        user_id.to_string()
-    )
-    .execute(&mut *conn)
-    .await?;
-
-    let mut total = 0usize;
-    loop {
-        let paired_this_round = pair_one_round(conn, user_id).await?;
-        if paired_this_round == 0 {
-            break;
-        }
-        total += paired_this_round;
-    }
-    Ok(total)
-}
-
-/// One round: find every mutual-nearest-neighbour pair among currently
-/// unpaired, uncategorised rows, and write them. See
-/// [`pair_internal_transfers`] for why this needs to repeat.
-async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<usize, CoreError> {
     let rows = sqlx::query!(
         r#"
         select t.id          as "id!",
@@ -100,10 +78,13 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
         join connection k on k.id = a.connection_id
         where k.user_id = $1
           and t.transfer_pair_id is null
-          -- Precedence (spec §4): user > rule > pair > ai, so pairing may
-          -- fill an empty slot or overwrite an AI guess, but never a
-          -- user/rule categorisation.
-          and (t.category_source is null or t.category_source = 'ai')
+          -- Pairing may fill an empty slot, replace an AI guess nobody has
+          -- looked at yet, or re-pair a row whose partner went away. It never
+          -- replaces a category the user chose: one they set themselves, or an
+          -- AI guess they accepted in review.
+          and (t.category_source is null
+               or t.category_source = 'pair'
+               or (t.category_source = 'ai' and t.category_reviewed_at is null))
           and t.amount <> 0
           -- Transfers only. Matching is by amount and date alone, so any
           -- other type lets a coincidence through: a card payment to Betclic
@@ -111,8 +92,8 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
           -- friend equal to a transfer leaving. Measured on real data, half
           -- the card/deposit pairs were such coincidences. A buy/sell/
           -- dividend/fee/interest row is never a movement between accounts.
-          -- Card top-ups of the user's own accounts are left to a category
-          -- rule rather than bought back with that error rate.
+          -- Card top-ups of the user's own accounts are left for the user to
+          -- file rather than bought back with that error rate.
           and t.type = 'transfer'
         order by t.ts
         "#,
@@ -121,7 +102,7 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
     .fetch_all(&mut *conn)
     .await?;
 
-    let candidates: Vec<Candidate> = rows
+    let mut candidates: Vec<Candidate> = rows
         .into_iter()
         .map(|r| Candidate {
             id: r.id,
@@ -132,20 +113,86 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
         })
         .collect();
 
+    let mut pairs: Vec<(Uuid, Uuid)> = vec![];
+    loop {
+        let mut round = nearest_pairs(&candidates);
+        // Nearest-neighbour matching has converged. What it leaves is mostly
+        // chains through a middle account (savings → deposit → checking account
+        // the same day): every row ties there, yet only one pairing explains
+        // them all. Tried only once the rounds above stop finding pairs, so
+        // the nearest-in-time preference always gets first say.
+        if round.is_empty() {
+            round = forced_pairs(&candidates);
+        }
+        if round.is_empty() {
+            break;
+        }
+        let taken: HashSet<Uuid> = round.iter().flat_map(|&(o, i)| [o, i]).collect();
+        candidates.retain(|c| !taken.contains(&c.id));
+        pairs.extend(round);
+    }
+    if pairs.is_empty() {
+        return Ok(0);
+    }
+
+    // Both directions of every pair: each row points at its partner.
+    let (ids, partners): (Vec<Uuid>, Vec<Uuid>) =
+        pairs.iter().flat_map(|&(o, i)| [(o, i), (i, o)]).unzip();
+    // The AI's confidence and review stamp described a guess this replaces;
+    // left behind they would read as a reviewed transfer at 27 %.
+    let result = sqlx::query!(
+        r#"
+        update transaction t
+           set transfer_pair_id = p.partner,
+               budget_category_id = c.id,
+               category_source = 'pair',
+               category_confidence = null,
+               category_reviewed_at = null
+          from unnest($1::uuid[], $2::uuid[]) as p(id, partner),
+               budget_category c
+         where t.id = p.id
+           and c.user_id = $3
+           and c.system_key = 'internal_transfer'
+        "#,
+        &ids,
+        &partners,
+        user_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    // A write that doesn't touch every row is a hard error rather than a
+    // half-paired ledger: if the join above matched nothing (this user's
+    // `internal_transfer` category missing), pairs would be reported that
+    // were never written.
+    if result.rows_affected() != ids.len() as u64 {
+        let (out_id, in_id) = pairs[0];
+        return Err(CoreError::TransferPairNotWritten {
+            user_id,
+            out_id,
+            in_id,
+            rows: result.rows_affected(),
+        });
+    }
+    Ok(pairs.len())
+}
+
+/// One round: every mutual-nearest-neighbour pair among `candidates`. See
+/// [`pair_internal_transfers`] for why this needs to repeat.
+fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     // Group by (currency, |amount|): only rows inside one group can ever pair,
     // which keeps the comparison quadratic in the size of a group rather than
     // of the ledger.
-    let mut groups: HashMap<(String, Decimal), Vec<&Candidate>> = HashMap::new();
-    for c in &candidates {
+    let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
+    for c in candidates {
         groups
-            .entry((c.currency.clone(), c.amount.abs()))
+            .entry((c.currency.as_str(), c.amount.abs()))
             .or_default()
             .push(c);
     }
 
     let window = chrono::Duration::days(WINDOW_DAYS);
     let mut pairs: Vec<(Uuid, Uuid)> = vec![];
-
     for (_key, group) in groups {
         let outs: Vec<&&Candidate> = group.iter().filter(|c| c.amount < Decimal::ZERO).collect();
         let ins: Vec<&&Candidate> = group.iter().filter(|c| c.amount > Decimal::ZERO).collect();
@@ -239,64 +286,7 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
         }
     }
 
-    // Nearest-neighbour matching has converged. What it leaves is mostly
-    // chains through a middle account (savings → deposit → checking account
-    // the same day): every row ties there, yet only one pairing explains
-    // them all. Tried only once the rounds above stop finding pairs, so the
-    // nearest-in-time preference always gets first say.
-    if pairs.is_empty() {
-        pairs = forced_pairs(&candidates);
-    }
-
-    // A globally consistent lock order for the UPDATEs below. Belt and
-    // braces alongside the advisory lock taken at the top of
-    // `pair_internal_transfers`: that lock only guards this function's own
-    // critical section, not every other statement the enclosing ingest
-    // transaction runs before and after it, so two concurrent syncs' row
-    // locks could otherwise still be acquired in different orders.
-    pairs.sort_unstable();
-
-    // Counted from what the UPDATE actually wrote, not from `pairs.len()`.
-    // The convergence loop in `pair_internal_transfers` only continues when a
-    // round reports progress, so this count is the thing that has to be
-    // trustworthy: if the join below ever matched nothing (this user's
-    // `internal_transfer` category missing) and this loop just moved on,
-    // `pair_one_round` would report a pair that was never written, the next
-    // round would re-select the same two rows and recompute the same pair,
-    // and the outer loop would spin forever inside the ingest transaction's
-    // lock. So a write that doesn't touch both rows is a hard error instead.
-    let mut written = 0usize;
-    for (out_id, in_id) in &pairs {
-        let result = sqlx::query!(
-            r#"
-            update transaction t
-               set transfer_pair_id = case when t.id = $1 then $2 else $1 end,
-                   budget_category_id = c.id,
-                   category_source = 'pair'
-              from budget_category c
-             where t.id in ($1, $2)
-               and c.user_id = $3
-               and c.system_key = 'internal_transfer'
-            "#,
-            out_id,
-            in_id,
-            user_id,
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        if result.rows_affected() != 2 {
-            return Err(CoreError::TransferPairNotWritten {
-                user_id,
-                out_id: *out_id,
-                in_id: *in_id,
-                rows: result.rows_affected(),
-            });
-        }
-        written += 1;
-    }
-
-    Ok(written)
+    pairs
 }
 
 /// Pairs that every consistent explanation of a cluster agrees on.
@@ -312,10 +302,11 @@ async fn pair_one_round(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<
 /// Reach grows a day at a time up to [`WINDOW_DAYS`], so same-day chains are
 /// settled before a wider window could tangle them with the next day's.
 ///
-/// Rows on one account at one instant are interchangeable (see
-/// [`interchangeable`]), so they are counted as one node of that many rows:
-/// two identical chains the same day pair, where treating each row apart
-/// would see two equally good ways to do it and pair nothing.
+/// Rows on one account at one instant are identical for this purpose, so
+/// they are counted as one node of that many rows: two identical chains the
+/// same day pair, where treating each row apart would see two equally good
+/// ways to do it and pair nothing. Stricter than [`interchangeable`], which
+/// ignores the date: a node's reach is measured from its single timestamp.
 fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
     for c in candidates {
@@ -327,7 +318,7 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
 
     let mut pairs = vec![];
     for group in groups.into_values() {
-        // Nodes: interchangeable rows, each list sorted by id so both runs
+        // Nodes: identical rows, each list sorted by id so both runs
         // of a converged pass pick the same rows.
         let mut outs: Vec<Vec<&Candidate>> = vec![];
         let mut ins: Vec<Vec<&Candidate>> = vec![];
@@ -354,8 +345,8 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
             let reach = chrono::Duration::days(days).num_seconds();
             let found = forced_in_group(&outs, &ins, reach);
             if !found.is_empty() {
-                // The next round re-reads what is left and starts again at
-                // same-day reach.
+                // The next round starts again at same-day reach on what is
+                // left.
                 pairs.extend(found);
                 break;
             }

@@ -291,20 +291,27 @@ describe("SettingsBudget page", () => {
     });
   });
 
-  it("shows the list-preferences surface but none of the AI-categorisation surfaces out of scope for this phase", async () => {
+  it("shows the categories, tags, AI and list-preference surfaces, in that order", async () => {
     const server = makeServer(SEED);
     vi.stubGlobal("fetch", server.fetch);
     renderPage();
     await screen.findByText("Groceries");
     await screen.findByText("Holiday");
 
-    // §4.4 list preferences is in scope for this phase.
-    expect(await screen.findByText("Checked column")).toBeVisible();
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent ?? "");
+    const order = [/^Categories/, /^Tags/, /^AI categorisation$/, /^List/].map((re) =>
+      headings.findIndex((h) => re.test(h)),
+    );
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
 
-    // §4.3 AI categorisation is a later phase and must stay absent.
-    for (const phrase of [/categorise now/i, /confidence threshold/i, /run log/i, /rules engine/i]) {
-      expect(screen.queryByText(phrase)).toBeNull();
-    }
+    // The user half of AI categorisation: opt-in and threshold. With no
+    // provider configured on the server, both are offered but held off.
+    expect(screen.getByRole("switch", { name: "Categorise automatically" })).toBeDisabled();
+    expect(screen.getByRole("slider", { name: "Review threshold" })).toBeDisabled();
+    expect(screen.getByText("Ask your administrator to configure an AI provider.")).toBeVisible();
+
+    expect(screen.getByText("Checked column")).toBeVisible();
   });
 
   it("supports opening, tabbing into, typing, submitting and closing the category modal by keyboard", async () => {
@@ -316,7 +323,8 @@ describe("SettingsBudget page", () => {
 
     await user.click(screen.getByRole("button", { name: "Add category" }));
     await screen.findByRole("dialog", { name: "New category" });
-    await user.tab();
+    // The dialog opens on its first field, so typing starts at once.
+    expect(screen.getByLabelText("Name")).toHaveFocus();
     await user.keyboard("Bakery");
     await user.keyboard("{Enter}");
     await screen.findByText("Bakery", { selector: '[data-testid="category-name"]' });

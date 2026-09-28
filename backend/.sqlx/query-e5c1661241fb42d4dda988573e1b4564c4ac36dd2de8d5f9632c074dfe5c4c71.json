@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t set category_reviewed_at = now()\n          from account a\n          join connection k on k.id = a.connection_id\n         where t.id = $1 and a.id = t.account_id and k.user_id = $2\n           and t.category_source = 'ai'\n           and t.budget_category_id is not null\n           and t.category_reviewed_at is null\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5c1661241fb42d4dda988573e1b4564c4ac36dd2de8d5f9632c074dfe5c4c71"
+}

@@ -1,4 +1,4 @@
-//! The categorisation port (phase 5 spec §3.1). `core` defines it; adapters in
+//! The categorisation port: the budget AI's third provider port. `core` defines it; adapters in
 //! `providers` implement it. No vendor type crosses into `core` — the same
 //! anti-corruption discipline as `provider.rs`.
 //!
@@ -46,9 +46,10 @@ pub struct CategorizeItem {
     pub currency: String,
     pub account_type: String,
     pub date: NaiveDate,
-    /// The category ids this item may be given (spec §4.2).
+    /// The category ids this item may be given: by the amount's sign, plus
+    /// the internal and excluded ones (`budget::ai::candidates_for`).
     pub candidates: Vec<Uuid>,
-    /// Confirmed rows with the same description, then the nearest others (§4.3).
+    /// Confirmed rows with the same description, then the nearest others.
     pub examples: Vec<Example>,
 }
 
@@ -71,7 +72,8 @@ impl CategorizeRequest {
     }
 }
 
-/// An adapter's answer for one item. `category_id: None` is an abstention.
+/// An adapter's answer for one item. `category_id: None` is the model saying
+/// nothing fits: a final answer, unlike an item left without any guess.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Guess {
     pub key: Uuid,
@@ -79,14 +81,48 @@ pub struct Guess {
     pub confidence: Option<Decimal>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct CategorizeOutput {
-    pub guesses: Vec<Guess>,
-    pub tokens_in: Option<i32>,
-    pub tokens_out: Option<i32>,
+/// Tokens billed for a call. `complete: false` when the provider did not
+/// report every count: the numbers are then a floor, never a confident total.
+/// The default is "nothing known".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Usage {
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub complete: bool,
 }
 
-#[derive(Debug, thiserror::Error)]
+impl Usage {
+    pub fn known(tokens_in: i64, tokens_out: i64) -> Self {
+        Self {
+            tokens_in,
+            tokens_out,
+            complete: true,
+        }
+    }
+
+    /// Both calls' tokens; complete only when both were.
+    pub fn plus(self, other: Usage) -> Self {
+        Self {
+            tokens_in: self.tokens_in.saturating_add(other.tokens_in),
+            tokens_out: self.tokens_out.saturating_add(other.tokens_out),
+            complete: self.complete && other.complete,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CategorizeOutput {
+    /// At most one per item that got an answer. An item with no guess at all
+    /// was not answered and stays in the work set for a later run.
+    pub guesses: Vec<Guess>,
+    pub usage: Usage,
+    /// The call stopped before every item was answered. `guesses` still holds
+    /// the answers received (and `usage` their tokens), so they are written
+    /// and paid for once; the run then stops as it would on an `Err`.
+    pub interrupted: Option<CategorizeError>,
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum CategorizeError {
     /// Quota or rate limit. The run stops cleanly as `partial`; the next run
     /// resumes from whatever is still uncategorised.

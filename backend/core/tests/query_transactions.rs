@@ -80,19 +80,8 @@ async fn searches_descriptions_case_insensitively_on_a_substring(
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn filters_by_type_and_date_range(pool: PgPool) -> anyhow::Result<()> {
+async fn filters_by_date_range(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await;
-
-    let fees = transactions(
-        &pool,
-        user_id,
-        &TransactionFilters {
-            kind: Some("fee".into()),
-            ..all()
-        },
-    )
-    .await?;
-    assert_eq!(fees.len(), 1);
 
     let old = transactions(
         &pool,
@@ -241,10 +230,10 @@ async fn hides_provider_pea_trades_but_shows_transfers(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// Unreachable, not merely hidden: an explicit type filter must not resurrect
-/// a provider-supplied PEA buy.
+/// Unreachable, not merely hidden: searching for it must not resurrect a
+/// provider-supplied PEA buy.
 #[sqlx::test(migrations = "../migrations")]
-async fn an_explicit_type_filter_does_not_resurrect_pea_buys(pool: PgPool) -> anyhow::Result<()> {
+async fn a_search_does_not_resurrect_pea_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
@@ -263,7 +252,7 @@ async fn an_explicit_type_filter_does_not_resurrect_pea_buys(pool: PgPool) -> an
         &pool,
         user_id,
         &TransactionFilters {
-            kind: Some("buy".into()),
+            search: Some("ACHAT".into()),
             ..all()
         },
     )

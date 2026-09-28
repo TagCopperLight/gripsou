@@ -3,7 +3,7 @@ import { CalendarX, ChevronLeft } from "lucide-react";
 
 import { Surface } from "../../Surface";
 
-/** UI-design §1.7 — replaces the Sankey, the breakdown and the trend wholesale
+/** Replaces the Sankey, the breakdown and the trend wholesale
  *  when the period has nothing in it. The figures above stay: zero is a true
  *  statement about the period, not a missing one. */
 export function EmptyPeriodSurface({ onEarlier }: { onEarlier?: () => void }) {
@@ -15,10 +15,8 @@ export function EmptyPeriodSurface({ onEarlier }: { onEarlier?: () => void }) {
       <p className="max-w-md text-center text-sm text-fg-faint">
         {t("budget.overview.empty.body")}
       </p>
-      {/* The back caret is disabled here by design: an empty month is taken as
-          the edge of the data. A genuine gap month would otherwise wall off
-          everything before it, so this is the way past — the wall is a default,
-          not a cage (addendum §2). */}
+      {/* Offered only when there is data further back — the same condition
+          as the back caret, repeated here where the reader is looking. */}
       {onEarlier && (
         <button
           type="button"

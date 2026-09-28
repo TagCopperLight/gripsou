@@ -3,7 +3,7 @@
 use std::fmt::Write;
 use std::str::FromStr;
 
-use gripsou_core::categorize::{CategorizeItem, CategorizeRequest, Example, Guess};
+use gripsou_core::categorize::{CategorizeItem, CategorizeRequest, Example, Guess, Usage};
 use rust_decimal::Decimal;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -86,25 +86,47 @@ pub fn build_body(req: &CategorizeRequest, item: &CategorizeItem, model: &str) -
     })
 }
 
-/// One item's answer. `none` or an unparseable option is an abstention.
-pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Guess, i32, i32) {
+/// A token count as the API reports it: a non-negative integer that fits.
+fn tokens(v: &Value) -> Option<i64> {
+    v.as_u64().and_then(|n| i64::try_from(n).ok())
+}
+
+/// The confidence from the number's own text, never through a float.
+fn decimal_of(v: &Value) -> Option<Decimal> {
+    match v {
+        Value::Number(n) => {
+            let s = n.to_string();
+            Decimal::from_str(&s)
+                .or_else(|_| Decimal::from_scientific(&s))
+                .ok()
+        }
+        _ => None,
+    }
+}
+
+/// One item's answer and the tokens it cost. `none` or an option that is not
+/// a category id is an abstention; a body with no choice at all is no answer
+/// (`None`), so the item is sent again later. Usage is unknown unless both
+/// counts are reported.
+pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Option<Guess>, Usage) {
     let a = &body["answers"][QUESTION];
-    let category_id = a["choice"]
-        .as_str()
-        .filter(|c| *c != NONE)
-        .and_then(|c| Uuid::parse_str(c).ok());
-    let confidence = a["confidence"]
-        .as_f64()
-        .and_then(|f| Decimal::from_str(&f.to_string()).ok());
-    let tin = body["usage"]["input_tokens"].as_i64().unwrap_or(0) as i32;
-    let tout = body["usage"]["output_tokens"].as_i64().unwrap_or(0) as i32;
-    (
-        Guess {
-            key: item.key,
-            category_id,
-            confidence,
+    let guess = a["choice"].as_str().map(|choice| Guess {
+        key: item.key,
+        category_id: Some(choice)
+            .filter(|c| *c != NONE)
+            .and_then(|c| Uuid::parse_str(c).ok()),
+        confidence: decimal_of(&a["confidence"]),
+    });
+    let usage = match (
+        tokens(&body["usage"]["input_tokens"]),
+        tokens(&body["usage"]["output_tokens"]),
+    ) {
+        (Some(i), Some(o)) => Usage::known(i, o),
+        (i, o) => Usage {
+            tokens_in: i.unwrap_or(0),
+            tokens_out: o.unwrap_or(0),
+            complete: false,
         },
-        tin,
-        tout,
-    )
+    };
+    (guess, usage)
 }

@@ -6,7 +6,7 @@ import { Toggle } from "../Toggle";
 import { useAuth } from "../../auth/context";
 import { useAiStatus } from "../../api/budget";
 
-/** §4.3 — the per-user half of AI categorisation: opt-in and threshold. The
+/** Settings → Budget: the per-user half of AI categorisation: opt-in and threshold. The
  *  provider, model and key are the operator's (Settings → Server / .env). */
 export function AiSurface() {
   const { t } = useTranslation();

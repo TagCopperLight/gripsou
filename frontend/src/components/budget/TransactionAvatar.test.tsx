@@ -42,4 +42,11 @@ describe("TransactionAvatar", () => {
     );
     expect(screen.getByTestId("tx-avatar").style.color).toBe("rgb(174, 170, 167)");
   });
+
+  it("draws a category without an icon as its coloured dot, not the uncategorised glyph", () => {
+    render(<TransactionAvatar tx={tx({ categoryId: "c1", categoryIcon: null, categoryColor: "#9bb06b" })} />);
+    const el = screen.getByTestId("tx-avatar");
+    expect(el).toHaveAttribute("data-variant", "category");
+    expect(el.style.color).toBe("rgb(155, 176, 107)");
+  });
 });

@@ -1,14 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
-import { BUDGET_ICONS, categoryLabel, safeBudgetColor, type CategoryLike } from "../../lib/budget";
+import { UNCATEGORISED_COLOR, categoryLabel, safeBudgetColor, type CategoryLike } from "../../lib/budget";
 import { tint } from "../../lib/color";
-import { FilledDot } from "./FilledDot";
+import { CategoryIcon } from "./CategoryIcon";
 
 type CategoryChipProps = {
   /** `null` is the "no category" state, not a missing prop. */
   category: CategoryLike | null;
-  /** An unreviewed AI guess: outline instead of fill (spec §5). */
+  /** An unreviewed AI guess: outline instead of fill. */
   needsReview?: boolean;
   /** The chip sits inside something that removes it when clicked: on hover of
    *  that `group`, the icon cross-fades into a cross so the click reads as a
@@ -18,8 +18,6 @@ type CategoryChipProps = {
   className?: string;
 };
 
-const AMBER = "#f0b952";
-
 export function CategoryChip({
   category,
   needsReview = false,
@@ -28,8 +26,8 @@ export function CategoryChip({
 }: CategoryChipProps) {
   const { t } = useTranslation();
   const label = category ? categoryLabel(t, category) : t("budget.uncategorized");
-  const color = category ? safeBudgetColor(category.color) : AMBER;
-  const Icon = (category?.icon && BUDGET_ICONS[category.icon]) || FilledDot;
+  const color = category ? safeBudgetColor(category.color) : UNCATEGORISED_COLOR;
+  const icon = category?.icon ?? null;
 
   return (
     <span
@@ -46,14 +44,17 @@ export function CategoryChip({
     >
       {removable ? (
         <span className="grid size-3.5 shrink-0 place-items-center">
-          <Icon className="col-start-1 row-start-1 size-3.5 transition-opacity duration-140 group-hover:opacity-0" />
+          <CategoryIcon
+            icon={icon}
+            className="col-start-1 row-start-1 size-3.5 transition-opacity duration-140 group-hover:opacity-0"
+          />
           <X
             className="col-start-1 row-start-1 size-3.5 opacity-0 transition-opacity duration-140 group-hover:opacity-100"
             aria-hidden="true"
           />
         </span>
       ) : (
-        <Icon className="size-3.5 shrink-0" />
+        <CategoryIcon icon={icon} className="size-3.5 shrink-0" />
       )}
       <span className="truncate">{label}</span>
     </span>

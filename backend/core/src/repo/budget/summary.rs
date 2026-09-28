@@ -47,11 +47,11 @@ pub async fn day_category_totals(
     let rows = sqlx::query_as!(
         DayCategoryRow,
         r#"
-        -- The day expression is `(ts at time zone 'utc')::date`, byte-identical
-        -- to the transactions list (query.rs:1057). A breakdown row deep-links
-        -- into that list with the period as a filter, so the two must bucket
-        -- days the same way or the Overview says EUR 620 and the list it opens
-        -- shows EUR 580, with nothing on screen to explain the gap.
+        -- Days are UTC days, as in the transactions list's filter
+        -- (`budget_transaction_matches`). A breakdown row deep-links into that
+        -- list with the period as a filter, so the two must bucket days the
+        -- same way or the Overview says EUR 620 and the list it opens shows
+        -- EUR 580, with nothing on screen to explain the gap.
         --
         -- `txn_day()` is deliberately not used: it exists for the balance walk,
         -- the list does not use it, and agreeing with the list is what counts.
@@ -59,40 +59,45 @@ pub async fn day_category_totals(
             select (t.ts at time zone 'utc')::date as day,
                    t.amount,
                    a.currency as account_currency,
-                   t.budget_category_id as category_id,
-                   bc.kind as category_kind,
+                   -- A `pair` row reaching here has lost its partner: the
+                   -- user recategorised the other half. What is left is money
+                   -- that moved with nothing on the other side, so it counts
+                   -- by its sign like any uncategorised row rather than as
+                   -- Saved. Only paired rows carry this source, and the pair
+                   -- rule below has already dropped the live ones.
+                   case when t.category_source = 'pair' then null
+                        else t.budget_category_id end as category_id,
+                   case when t.category_source = 'pair' then null
+                        else bc.kind end as category_kind,
                    -- Uncategorised rows have no category to net within, so
-                   -- `figures()` (spec 2.2) reads the sign of each row
+                   -- `figures()` reads the sign of each row
                    -- directly to decide income vs expense. Grouping only by
                    -- (day, category_id, category_kind) would net an
                    -- uncategorised payday's salary against its coffee before
                    -- Rust ever saw either sign. This discriminator is 0 for
                    -- every categorised row (so their grouping is completely
                    -- unaffected — netting per category is exactly the rule
-                   -- there, spec 4.1) and +1/-1 for an uncategorised row,
+                   -- there) and +1/-1 for an uncategorised row,
                    -- splitting a mixed-sign uncategorised day into two rows
                    -- instead of one netted one. It exists only to widen the
                    -- grouping key; nothing downstream needs its value.
-                   case when t.budget_category_id is null then sign(t.amount)
+                   case when t.budget_category_id is null
+                             or t.category_source = 'pair' then sign(t.amount)
                         else 0 end as uncategorised_sign
             from transaction t
             join account a    on a.id = t.account_id
             join connection c on c.id = a.connection_id
             left join budget_category bc on bc.id = t.budget_category_id
             where c.user_id = $1
-              and (t.ts at time zone 'utc')::date between $2 and $3
-              -- Mirrors the list's exclusion in query.rs exactly, including
-              -- the `external_id` scoping: a provider buy/sell on the PEA is
+              -- On `ts` itself, not on a cast of it, so the (account, ts)
+              -- index bounds the scan.
+              and t.ts >= ($2::date::timestamp at time zone 'UTC')
+              and t.ts < (($3::date + 1)::timestamp at time zone 'UTC')
+              -- The list's own exclusion: a provider buy/sell on the PEA is
               -- the cash leg of a purchase the lot table already holds, and
-              -- buying an ETF is not spending.
-              --
-              -- PEA transfers are not excluded here: once paired, the pair
-              -- rule below drops both halves together. Dropping only the PEA
-              -- half left the checking half's -x standing alone, drawn as an
-              -- internal-transfer branch every month.
-              and not (a.type_key = 'pea'
-                       and t.external_id is not null
-                       and t.type in ('buy', 'sell'))
+              -- buying an ETF is not spending. PEA transfers stay: once
+              -- paired, the pair rule below drops both halves together.
+              and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)
               -- A paired transfer nets to zero by construction, so both halves
               -- are dropped here rather than left to cancel. Netting only
               -- works when both halves fall inside the window: a pair
@@ -133,10 +138,11 @@ pub async fn day_category_totals(
                -- degrades to the pivot (below) rather than dropping anything
                -- from the sum, so it must not set this flag.
                coalesce(bool_or(afx.unit_value is null), false) as "fx_missing!",
-               -- Mirrors reporting_fx_asof()'s own guard (migration 0026), so
-               -- this can never disagree with the net worth dashboard about
-               -- whether the reporting-currency fallback fired.
-               reporting_fx_degraded($1, b.day) as "reporting_fx_missing!"
+               -- Read off the divisor the sum above just used, so the flag
+               -- is set exactly when that divisor fell back to 1. Same zero
+               -- guard as reporting_fx_asof().
+               coalesce(bool_or(coalesce(rfx.unit_value, 0) = 0), false)
+                   as "reporting_fx_missing!"
         from base b
         left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency
         left join grid rfx on rfx.as_of = b.day

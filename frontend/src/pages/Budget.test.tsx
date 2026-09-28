@@ -18,7 +18,7 @@ function status(reviewCount: number) {
     "fetch",
     vi.fn(async () =>
       new Response(
-        JSON.stringify({ configured: true, enabled: true, running: false, remaining: 0, reviewCount, threshold: 80, lastRun: null }),
+        JSON.stringify({ configured: true, running: false, remaining: 0, reviewCount, lastRun: null }),
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     ),
@@ -45,6 +45,14 @@ describe("Budget shell", () => {
     renderShell();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Budget");
     expect(screen.getByTestId("outlet")).toBeVisible();
+  });
+
+  it("reads a bare /budget as Overview, where the router sends it", async () => {
+    pathname = "/budget";
+    status(0);
+    renderShell();
+    await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
+    expect(screen.getByRole("radio", { name: "Overview" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("has no Review segment when the queue is empty", async () => {

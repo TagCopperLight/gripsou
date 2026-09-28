@@ -19,7 +19,7 @@ type PopoverProps = {
 const GAP = 6;
 const MARGIN = 8;
 
-/** A light, non-modal alternative to `BudgetDialog`: no backdrop, no scroll
+/** A light, non-modal alternative to `Dialog`: no backdrop, no scroll
  *  lock, no focus trap — it sits under whatever opened it and closes on
  *  Escape or on a click anywhere outside. Modal weight belongs to writes that
  *  must be finished or abandoned; picking from a list is neither. */
@@ -78,14 +78,26 @@ export function Popover({ title, anchor = null, onClose, children, className = "
     if (placed) ref.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
   }, [placed]);
 
+  // The latest `onClose` and `anchor`, read through refs: callers hand in a
+  // fresh close function on every render, and a multi-select chooser
+  // re-renders its parent on every toggle. Were they dependencies, each toggle
+  // would re-run the cleanup below and throw focus back to the trigger — the
+  // next Enter would then press the trigger instead of picking a line.
+  const onCloseRef = useRef(onClose);
+  const anchorRef = useRef(anchor);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+    anchorRef.current = anchor;
+  }, [onClose, anchor]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
-      if (ref.current?.contains(target) || anchor?.contains(target)) return;
-      onClose();
+      if (ref.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown);
@@ -93,10 +105,10 @@ export function Popover({ title, anchor = null, onClose, children, className = "
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown);
       // Hand focus back to what opened it: the popover is a detour, not a
-      // destination.
-      anchor?.focus?.();
+      // destination. Only on close, never on a re-render.
+      anchorRef.current?.focus?.();
     };
-  }, [anchor, onClose]);
+  }, []);
 
   // Portalled to the body: the panel is `fixed`, and any transformed or
   // backdrop-filtered ancestor (the selection bar is both) would become its

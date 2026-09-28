@@ -7,7 +7,7 @@ import type { BreakdownRow } from "../../../api/overview";
 function cat(id: string, name: string, color = "#8fd05f") {
   return {
     kind: "category" as const,
-    category: { id, name, defaultKey: null, color, icon: null, kind: "expense" as const },
+    category: { id, name, defaultKey: null, color, icon: null },
   };
 }
 
@@ -97,7 +97,7 @@ describe("BreakdownSurface", () => {
     ).toBeNull();
   });
 
-  it("opens a row from its caret button, reachable by keyboard, without double-firing the row's own click handler (M5)", () => {
+  it("opens a row from its caret button, reachable by keyboard, without double-firing the row's own click handler", () => {
     const onOpen = renderTable();
     fireEvent.click(
       within(screen.getByTestId("breakdown-row-cat:c1")).getByRole("button", {
@@ -115,5 +115,25 @@ describe("BreakdownSurface", () => {
     expect(screen.getByTestId("sort-txnCount")).toBeInTheDocument();
     expect(screen.queryByTestId("sort-share")).toBeNull();
     expect(screen.queryByTestId("sort-avg12")).toBeNull();
+  });
+
+  it("compares with the 12-month average by the same rules as the figures above", () => {
+    render(
+      <BreakdownSurface
+        rows={[
+          { slice: cat("c1", "Rent"), amount: "1200.00", txnCount: 1, avg12: "1200.00" },
+          { slice: cat("c2", "Gifts"), amount: "80.00", txnCount: 2, avg12: "0.00" },
+        ]}
+        expensesTotal="1280.00"
+        onOpen={vi.fn()}
+      />,
+    );
+    // Unchanged is neutral, not "good".
+    const same = within(screen.getByTestId("breakdown-row-cat:c1")).getByTestId("avg12");
+    expect(same.querySelector("[data-tone]")).toHaveAttribute("data-tone", "flat");
+    // Against a zero average the change is an amount, not a dash.
+    const fromZero = within(screen.getByTestId("breakdown-row-cat:c2")).getByTestId("avg12");
+    expect(fromZero).toHaveTextContent("+80,00");
+    expect(fromZero.querySelector("[data-tone]")).toHaveAttribute("data-tone", "bad");
   });
 });

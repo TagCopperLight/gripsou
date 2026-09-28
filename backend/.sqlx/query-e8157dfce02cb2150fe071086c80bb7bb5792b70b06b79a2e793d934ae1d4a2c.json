@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t\n           set transfer_pair_id = p.partner,\n               budget_category_id = c.id,\n               category_source = 'pair',\n               category_confidence = null,\n               category_reviewed_at = null\n          from unnest($1::uuid[], $2::uuid[]) as p(id, partner),\n               budget_category c\n         where t.id = p.id\n           and c.user_id = $3\n           and c.system_key = 'internal_transfer'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e8157dfce02cb2150fe071086c80bb7bb5792b70b06b79a2e793d934ae1d4a2c"
+}

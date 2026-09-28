@@ -1894,7 +1894,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
     Ok(())
 }
 
-/// Spec §4.3. `holding.cost_basis` is whatever the provider reported — for a
+/// `holding.cost_basis` is whatever the provider reported — for a
 /// PEA that is often nothing useful. Once the user's own lots explain the
 /// position exactly, they are strictly more truthful, so they win. Read-time
 /// only: nothing is written, so the next sync cannot clobber it.

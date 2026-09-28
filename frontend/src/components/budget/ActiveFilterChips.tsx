@@ -4,14 +4,14 @@ import { X } from "lucide-react";
 import { useBudget } from "./budgetContext";
 import { useAccounts } from "../../api/hooks";
 import { useBudgetCategories, useBudgetTags } from "../../api/budget";
-import { categoryLabel, otherFlag, typeBucket } from "../../lib/budget";
-import { colorForString } from "../../lib/palette";
+import { categoryLabel, otherFlag, safeBudgetColor, typeBucket } from "../../lib/budget";
+import { periodLabel } from "../../lib/period";
 import {
   EMPTY_FILTERS, activeFilters, clearFilter, type ActiveFilter,
 } from "../../lib/budgetFilters";
 
 export function ActiveFilterChips() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { filters, setFilters, patchFilters } = useBudget();
   const accounts = useAccounts().data ?? [];
   const categories = useBudgetCategories().data ?? [];
@@ -33,7 +33,7 @@ export function ActiveFilterChips() {
           ? `${filters.from || "…"} → ${filters.to || "…"}`
           : t(`budget.transactions.timeFrames.${filters.timeFrame}`);
       case "period":
-        return `${t("budget.transactions.selectedPeriod")}: ${filters.periodLabel}`;
+        return `${t("budget.transactions.selectedPeriod")}: ${filters.period ? periodLabel(filters.period, i18n.language) : ""}`;
       case "bucket":
         return t(`budget.transactions.buckets.${a.value}`);
       case "category": {
@@ -74,17 +74,20 @@ export function ActiveFilterChips() {
   /** Accounts, categories and tags each carry a colour of their own, so their
    *  chips lead with it — the same swatch the row shows elsewhere. Every other
    *  filter kind (a search, a time frame, a bucket) has no colour and gets no
-   *  dot. A tag's colour is nullable; fall back the way the rest of the app
-   *  does, on a hash of the name. */
+   *  dot. Category and tag colours go through the same validation and the
+   *  same grey fallback as their chips, so a tag with no colour is grey here
+   *  too rather than a colour of its own. */
   const dot = (a: ActiveFilter): string | null => {
     switch (a.kind) {
       case "account":
         return accounts.find((x) => x.id === a.id)?.color ?? null;
-      case "category":
-        return categories.find((x) => x.id === a.id)?.color ?? null;
+      case "category": {
+        const c = categories.find((x) => x.id === a.id);
+        return c ? safeBudgetColor(c.color) : null;
+      }
       case "tag": {
         const tag = tags.find((x) => x.id === a.id);
-        return tag ? (tag.color ?? colorForString(tag.name)) : null;
+        return tag ? safeBudgetColor(tag.color) : null;
       }
       default:
         return null;

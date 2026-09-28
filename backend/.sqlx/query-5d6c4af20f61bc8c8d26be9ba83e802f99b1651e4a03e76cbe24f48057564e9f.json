@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id as \"id!\", (t.transfer_pair_id is not null) as \"paired!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where t.id = any($1) and k.user_id = $2\n        order by t.id\n        for update of t\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "paired!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "5d6c4af20f61bc8c8d26be9ba83e802f99b1651e4a03e76cbe24f48057564e9f"
+}

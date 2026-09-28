@@ -4,18 +4,22 @@ import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { RangeModal } from "./RangeModal";
 import { useBudget } from "../budgetContext";
-import { addMonths, currentMonth, monthLabel, periodLabel } from "../../../lib/period";
+import { monthLabel, periodLabel, type Period } from "../../../lib/period";
 
 type PeriodLineProps = {
+  /** The period on screen: the one picked, or the default it resolved to. */
+  period: Period;
   /** The summary's own count — deliberately NOT the transactions list's number
-   *  for the same month (handoff trap 7). The two differ; both are correct. */
+   *  for the same month. It leaves out lot rows; both are correct. */
   txnCount: number;
   /** Some row could not be valued, so the figures are understated. */
   fxMissing: boolean;
-  /** False once the loaded period came back empty: the month on screen has
-   *  nothing in it, so the one before it is presumed outside the data. The
-   *  empty-period surface carries the escape hatch (addendum §2). */
+  /** The carets follow the data's own bounds, never whether the month on
+   *  screen happens to be empty: a gap month is not the edge of the data. */
   canStepBack: boolean;
+  canStepForward: boolean;
+  /** Moves a month period by `delta` months. */
+  onStep: (delta: number) => void;
 };
 
 function Caret({
@@ -42,20 +46,16 @@ function Caret({
   );
 }
 
-export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps) {
+export function PeriodLine({
+  period, txnCount, fxMissing, canStepBack, canStepForward, onStep,
+}: PeriodLineProps) {
   const { t, i18n } = useTranslation();
-  const { period, setPeriod } = useBudget();
+  const { setPeriod } = useBudget();
   const [rangeOpen, setRangeOpen] = useState(false);
-
-  const isRange = period.mode === "range";
-  const step = (delta: number) => {
-    if (period.mode !== "month") return;
-    setPeriod({ mode: "month", month: addMonths(period.month, delta) });
-  };
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {isRange ? (
+      {period.mode === "range" ? (
         <span className="flex items-center gap-2 rounded-xl bg-surface px-3 py-2">
           <span className="text-xs text-fg-faint">{t("budget.overview.customRange")}</span>
           <span data-testid="period-label" className="font-mono text-sm text-fg">
@@ -66,7 +66,8 @@ export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps
             data-testid="period-clear"
             aria-label={t("budget.overview.clearRange")}
             title={t("budget.overview.clearRange")}
-            onClick={() => setPeriod({ mode: "month", month: currentMonth() })}
+            // Back to the default: the latest month with data.
+            onClick={() => setPeriod(null)}
             className="cursor-pointer text-fg transition-opacity duration-140 hover:opacity-70"
           >
             <X className="size-4" />
@@ -78,7 +79,7 @@ export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps
             dir="prev"
             label={t("budget.overview.prevMonth")}
             disabled={!canStepBack}
-            onClick={() => step(-1)}
+            onClick={() => onStep(-1)}
           />
           <span data-testid="period-label" className="min-w-40 text-center text-sm font-semibold text-fg">
             {monthLabel(period.month, i18n.language)}
@@ -86,9 +87,8 @@ export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps
           <Caret
             dir="next"
             label={t("budget.overview.nextMonth")}
-            // There is no future to analyse.
-            disabled={period.month >= currentMonth()}
-            onClick={() => step(1)}
+            disabled={!canStepForward}
+            onClick={() => onStep(1)}
           />
         </span>
       )}
@@ -98,7 +98,7 @@ export function PeriodLine({ txnCount, fxMissing, canStepBack }: PeriodLineProps
         data-testid="period-range"
         onClick={() => setRangeOpen(true)}
         className={`flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-140 ${
-          isRange ? "bg-amber-soft text-amber" : "bg-surface text-fg hover:opacity-80"
+          period.mode === "range" ? "bg-amber-soft text-amber" : "bg-surface text-fg hover:opacity-80"
         }`}
       >
         <Calendar className="size-4" />

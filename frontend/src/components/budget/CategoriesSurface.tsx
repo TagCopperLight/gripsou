@@ -15,11 +15,12 @@ import {
   type CategoryBody,
 } from "../../api/budget";
 import {
-  BUDGET_KINDS, budgetIcon, categoryLabel, safeBudgetColor, sortCategories,
+  BUDGET_KINDS, categoryLabel, safeBudgetColor, sortCategories,
 } from "../../lib/budget";
 import { withAlpha } from "../../lib/color";
 import { CategoryModal } from "./CategoryModal";
 import { DeleteCategoryModal } from "./DeleteCategoryModal";
+import { CategoryIcon } from "./CategoryIcon";
 
 const KIND_BADGE: Record<BudgetCategory["kind"], string> = {
   expense: "text-red-light bg-red-light/14",
@@ -96,9 +97,7 @@ export function CategoriesSurface() {
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const [actionError, setActionError] = useState(false);
 
-  // Task 5
   const [editing, setEditing] = useState<BudgetCategory | "new" | null>(null);
-  // Task 5
   const [deleting, setDeleting] = useState<BudgetCategory | null>(null);
 
   const rows = sortCategories(data ?? []);
@@ -243,7 +242,6 @@ export function CategoriesSurface() {
                       const isSystem = c.systemKey !== null;
                       const label = categoryLabel(t, c);
                       const color = safeBudgetColor(c.color);
-                      const Icon = budgetIcon(c.icon);
                       const busy = pendingIds.has(c.id);
                       return (
                         <tr
@@ -278,7 +276,7 @@ export function CategoriesSurface() {
                                 className="flex size-7 shrink-0 items-center justify-center rounded-lg"
                                 style={{ backgroundColor: withAlpha(color, 0.22) }}
                               >
-                                {Icon && <Icon className="size-4" style={{ color }} />}
+                                <CategoryIcon icon={c.icon} className="size-4" style={{ color }} />
                               </span>
                               <span data-testid="category-name" className="text-fg font-medium">
                                 {label}

@@ -2,36 +2,16 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Calendar } from "lucide-react";
 
-import { BudgetDialog } from "../BudgetDialog";
+import { Dialog as BudgetDialog } from "../../Dialog";
 import { Button } from "../../Button";
-import { monthBounds, addMonths, currentMonth } from "../../../lib/period";
+import { presetRange, type RangePreset } from "../../../lib/period";
 
 type RangeModalProps = {
   onApply: (range: { from: string; to: string }) => void;
   onClose: () => void;
 };
 
-/** The presets, resolved at click time rather than at module load so a session
- *  left open overnight does not offer yesterday's "this year". Each returns the
- *  inclusive ISO day bounds the `/summary` range form takes. */
-function presetRange(key: string, today: Date): { from: string; to: string } {
-  const now = currentMonth(today);
-  const year = today.getFullYear();
-  switch (key) {
-    case "last3Months":
-      return { from: monthBounds(addMonths(now, -2)).from, to: monthBounds(now).to };
-    case "last6Months":
-      return { from: monthBounds(addMonths(now, -5)).from, to: monthBounds(now).to };
-    case "last12Months":
-      return { from: monthBounds(addMonths(now, -11)).from, to: monthBounds(now).to };
-    case "thisYear":
-      return { from: `${year}-01-01`, to: `${year}-12-31` };
-    default: // lastYear
-      return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
-  }
-}
-
-const PRESETS = ["last3Months", "last6Months", "last12Months", "thisYear", "lastYear"] as const;
+const PRESETS: RangePreset[] = ["last3Months", "last6Months", "last12Months", "thisYear", "lastYear"];
 
 export function RangeModal({ onApply, onClose }: RangeModalProps) {
   const { t } = useTranslation();
@@ -57,7 +37,7 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
             key={key}
             type="button"
             className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-fg-dim transition-colors duration-140 hover:bg-fg/6 hover:text-fg"
-            onClick={() => onApply(presetRange(key, new Date()))}
+            onClick={() => onApply(presetRange(key))}
           >
             {t(`budget.overview.presets.${key}`)}
           </button>

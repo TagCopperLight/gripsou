@@ -2,6 +2,7 @@ import { ArrowDownRight, ArrowUpRight, Dot } from "lucide-react";
 
 import { Money } from "../../Money";
 import { Percent } from "../../Percent";
+import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 
 type ComparisonProps = {
   /** "vs previous month" / "vs 12-month average". */
@@ -21,45 +22,28 @@ type ComparisonProps = {
   testId: string;
 };
 
-const TONE = {
-  good: "text-green",
-  bad: "text-red",
-  flat: "text-fg-faint",
-} as const;
-
 export function Comparison({
   label, current, baseline, format, goodWhen, testId,
 }: ComparisonProps) {
   if (baseline === undefined) return null;
 
-  const base = Number(baseline);
-  // `Number` is used for the DELTA and the RATIO only — both are derived
-  // display values. The amounts themselves are still rendered from the strings
-  // the server sent, through the money formatter.
-  const delta = Number(current) - base;
-
-  // Below half a cent is no change at the precision anything here is shown at.
-  const flat = Math.abs(delta) < 0.005;
-  const up = delta > 0;
-  const tone = flat ? "flat" : (up ? "up" : "down") === goodWhen ? "good" : "bad";
-
-  const Icon = flat ? Dot : up ? ArrowUpRight : ArrowDownRight;
-
-  // A percentage needs a non-zero base; with one the absolute delta is the only
-  // honest thing to show.
-  const asPercent = format === "percent" && base !== 0;
+  const { tone, direction, delta, ratio } = compareToBaseline(current, baseline, goodWhen);
+  const Icon = direction === "flat" ? Dot : direction === "up" ? ArrowUpRight : ArrowDownRight;
+  // Without a ratio (a zero baseline) the absolute delta is the only honest
+  // thing to show.
+  const asPercent = format === "percent" && ratio !== undefined;
 
   return (
     // `contents`: the delta and the label are the two cells of the parent's
     // two-column grid, so every "vs …" label in a figure starts at the same x
     // however wide the delta beside it is.
     <span data-testid={testId} data-tone={tone} className="contents text-xs">
-      <span className={`flex items-center gap-0.5 ${TONE[tone]}`}>
+      <span className={`flex items-center gap-0.5 ${TONE_CLASS[tone]}`}>
         <Icon className="size-3.5 shrink-0" />
         {asPercent ? (
-          <Percent value={delta / Math.abs(base)} signed />
+          <Percent value={ratio} signed />
         ) : (
-          <Money value={String(delta)} signed />
+          <Money value={delta} signed />
         )}
       </span>
       <span className="truncate text-fg-faint">{label}</span>

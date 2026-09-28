@@ -17,9 +17,10 @@ use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transactio
 
 use chrono::NaiveDate;
 use gripsou_core::budget::overview::{
-    BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline, baseline_figures,
-    breakdown, figures, rows_in, sankey,
+    BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline_figures,
+    baseline_in, breakdown, by_month, figures, month_rows, sankey,
 };
+use std::collections::BTreeMap;
 
 use gripsou_core::repo::budget::summary::{DayCategoryRow, day_category_totals};
 
@@ -168,21 +169,16 @@ pub async fn delete_category(
 ) -> Result<StatusCode, (StatusCode, String)> {
     // A system row is refused with 409, not 404: the UI draws a lock for it,
     // and "not found" would read as a bug.
-    let rows = category::list_categories(&pool, user_id)
+    match category::delete_category(&pool, user_id, id)
         .await
-        .map_err(internal)?;
-    match rows.iter().find(|c| c.id == id) {
-        None => Err(not_found()),
-        Some(c) if c.system_key.is_some() => Err((
+        .map_err(internal)?
+    {
+        category::DeleteCategory::Deleted => Ok(StatusCode::NO_CONTENT),
+        category::DeleteCategory::NotFound => Err(not_found()),
+        category::DeleteCategory::System => Err((
             StatusCode::CONFLICT,
             "this category is written to by internal-transfer pairing and cannot be deleted".into(),
         )),
-        Some(_) => {
-            category::delete_category(&pool, user_id, id)
-                .await
-                .map_err(internal)?;
-            Ok(StatusCode::NO_CONTENT)
-        }
     }
 }
 
@@ -210,6 +206,9 @@ pub async fn reorder_categories(
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid id".to_string()))?;
     if ids.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "no ids".into()));
+    }
+    if ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
+        return Err((StatusCode::BAD_REQUEST, "duplicate id".into()));
     }
     let done = category::reorder_categories(&pool, user_id, &ids)
         .await
@@ -316,7 +315,6 @@ pub struct CategoryRefDto {
     pub default_key: Option<String>,
     pub color: String,
     pub icon: Option<String>,
-    pub kind: String,
 }
 
 /// One discriminated union for the Sankey's nodes, the breakdown's rows and
@@ -382,28 +380,20 @@ pub struct FiguresDto {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SummaryDto {
-    pub currency: String,
     /// Sum of `txn_count` across every `(day, category)` row in the period —
     /// NOT the count on the Transactions list header for the same month.
-    /// The two differ in both directions: this includes `internal`-kind rows
-    /// (paired transfers), which the list hides by default, and excludes lot
-    /// rows (purchases/sales), which the list includes. Both are correct for
-    /// what they each report; they are simply not counting the same set.
+    /// Paired transfers, `excluded` rows and lot rows are all left out here;
+    /// the list shows lots, and excluded rows and (on request) transfers.
+    /// Rows filed by hand under an `internal` category, such as savings, are
+    /// counted by both.
     pub txn_count: i64,
     pub fx_missing: bool,
     /// Nothing is missing from these figures — the whole sum is in the
     /// pivot currency, because the reader's reporting currency had no rate.
     pub reporting_fx_missing: bool,
-    /// True exactly when the period was given as a month. A custom range's
-    /// comparisons are month-shaped and meaningless, so the frontend hides
-    /// those cells rather than rendering an absent value as a dash.
-    pub comparable: bool,
     pub figures: FiguresDto,
     pub sankey: SankeyDto,
     pub breakdown: Vec<BreakdownRowDto>,
-    /// So SHARE is arithmetic the frontend does, not a second server opinion
-    /// that can round differently from the column beside it.
-    pub expenses_total: String,
 }
 
 #[derive(Deserialize)]
@@ -463,7 +453,7 @@ async fn category_refs(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Vec<CategoryRefDto>, (StatusCode, String)> {
-    let rows = category::list_categories(pool, user_id)
+    let rows = category::category_refs(pool, user_id)
         .await
         .map_err(internal)?;
     Ok(rows
@@ -474,16 +464,22 @@ async fn category_refs(
             default_key: r.default_key,
             color: r.color,
             icon: r.icon,
-            kind: r.kind,
         })
         .collect())
+}
+
+/// A twelve-month mean, to the cent: dividing by the month count otherwise
+/// sends up to 28 digits.
+fn mean_to_string(d: Decimal) -> String {
+    d.round_dp_with_strategy(2, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
+        .to_string()
 }
 
 fn figure(amount: Decimal, prev: Option<Decimal>, avg: Option<Decimal>) -> FigureDto {
     FigureDto {
         amount: amount.to_string(),
         prev_month: prev.map(|d| d.to_string()),
-        avg12: avg.map(|d| d.to_string()),
+        avg12: avg.map(mean_to_string),
     }
 }
 
@@ -505,32 +501,36 @@ pub async fn summary(
         .await
         .map_err(internal)?;
 
-    let period: Vec<DayCategoryRow> = rows_in(&all, from, to).into_iter().cloned().collect();
-    let f = figures(&period);
+    // A month period reads its rows, its previous month and its baseline off
+    // one grouping of the window. A custom range fetched exactly its own
+    // days, so the window is the period.
+    let buckets: Option<BTreeMap<Month, Vec<DayCategoryRow>>> = month.map(|_| by_month(&all));
+    let period: &[DayCategoryRow] = match (month, &buckets) {
+        (Some(m), Some(b)) => month_rows(b, m),
+        _ => &all,
+    };
+    let f = figures(period);
     let refs = category_refs(&pool, user_id).await?;
 
     // Comparisons exist only for a month period with enough history behind it.
-    let base: Option<Baseline> = month.and_then(|m| baseline(&all, m));
+    let base: Option<Baseline> = month
+        .zip(buckets.as_ref())
+        .and_then(|(m, b)| baseline_in(b, m));
     let base_f: Option<Figures> = base.as_ref().map(baseline_figures);
-    let prev_f: Option<Figures> = month.filter(|_| base.is_some()).map(|m| {
-        let (pf, pt) = m.prev().bounds();
-        let prev: Vec<DayCategoryRow> = rows_in(&all, pf, pt).into_iter().cloned().collect();
-        figures(&prev)
-    });
+    let prev_f: Option<Figures> = month
+        .zip(buckets.as_ref())
+        .filter(|_| base.is_some())
+        .map(|(m, b)| figures(month_rows(b, m.prev())));
 
     // `sankey()` computes `figures(rows)` internally for the balancing
     // remainder — it takes only the rows, never a caller-supplied total.
-    let s = sankey(&period);
-    let rows = breakdown(&period, base.as_ref());
+    let s = sankey(period);
+    let rows = breakdown(period, base.as_ref());
 
     Ok(Json(SummaryDto {
-        currency: gripsou_core::repo::prefs::reporting_currency(&pool, user_id)
-            .await
-            .map_err(internal)?,
         txn_count: period.iter().map(|r| r.txn_count).sum(),
         fx_missing: period.iter().any(|r| r.fx_missing),
         reporting_fx_missing: period.iter().any(|r| r.reporting_fx_missing),
-        comparable: month.is_some(),
         figures: FiguresDto {
             income: figure(f.income, prev_f.map(|x| x.income), base_f.map(|x| x.income)),
             expenses: figure(
@@ -567,10 +567,9 @@ pub async fn summary(
                 slice: slice_dto(e.slice, &refs),
                 amount: e.amount.to_string(),
                 txn_count: e.txn_count,
-                avg12: e.avg12.map(|d| d.to_string()),
+                avg12: e.avg12.map(mean_to_string),
             })
             .collect(),
-        expenses_total: f.expenses.to_string(),
     }))
 }
 
@@ -602,8 +601,8 @@ pub struct TrendParams {
 const MAX_TREND_MONTHS: u32 = 24;
 
 /// The trend chart's own default width, deliberately not `BASELINE_MONTHS`
-/// even though both happen to be 12 today: spec §4.4 draws the chart and the
-/// baseline as different windows on purpose — the chart's default bars end
+/// even though both happen to be 12 today: the chart and the baseline are
+/// different windows on purpose — the chart's default bars end
 /// with the anchor month included, while the baseline that `summary()` mixes
 /// in explicitly excludes it. Sharing one constant would make that
 /// distinction a coincidence instead of a rule, and the two must be free to
@@ -658,6 +657,10 @@ pub struct PatchTransactionBody {
     pub category_id: Option<Option<Uuid>>,
     pub tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
+    /// See `ApplyToDescriptionBody::confirm_break_pairs`: a category change
+    /// on half of an internal transfer waits for it.
+    #[serde(default)]
+    pub confirm_break_pairs: bool,
 }
 
 /// Distinguishes `{"categoryId": null}` (clear it) from `{}` (leave it).
@@ -668,46 +671,76 @@ where
     serde::Deserialize::deserialize(d).map(Some)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchTransactionResponse {
-    pub ok: bool,
     /// How many *other* transactions share this row's normalised description —
-    /// what the "apply to all?" prompt offers.
-    pub same_description_count: i64,
+    /// what the "apply to all?" prompt offers. Present only when the category
+    /// was written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_description_count: Option<i64>,
+    /// Same meaning as `UpdatedResponse::pending_pair_breaks`: non-null means
+    /// nothing was written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_pair_breaks: Option<i64>,
 }
 
+/// The refusals every assignment write shares.
+fn write_refused<T>(o: assign::WriteOutcome<T>) -> (StatusCode, String) {
+    match o {
+        assign::WriteOutcome::NotFound => not_found(),
+        assign::WriteOutcome::UnknownCategory => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "unknown category".into())
+        }
+        assign::WriteOutcome::UnknownTag => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "unknown tag".into())
+        }
+        assign::WriteOutcome::Done(_) | assign::WriteOutcome::PendingPairBreaks(_) => {
+            internal("write_refused called on an accepted write")
+        }
+    }
+}
+
+/// Category, tags and ✓ are saved together or not at all.
 pub async fn patch_transaction(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(b): Json<PatchTransactionBody>,
 ) -> Result<Json<PatchTransactionResponse>, (StatusCode, String)> {
-    let mut ok = false;
-    if let Some(category_id) = b.category_id {
-        ok |= assign::set_category(&pool, user_id, id, category_id)
-            .await
-            .map_err(internal)?;
+    if b.category_id.is_none() && b.tag_ids.is_none() && b.checked.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "nothing to change".into()));
     }
-    if let Some(tag_ids) = b.tag_ids {
-        ok |= assign::set_tags(&pool, user_id, id, &tag_ids)
-            .await
-            .map_err(internal)?;
-    }
-    if let Some(checked) = b.checked {
-        ok |= assign::set_checked(&pool, user_id, id, checked)
-            .await
-            .map_err(internal)?;
-    }
-    if !ok {
-        return Err(not_found());
-    }
-    let same_description_count = assign::count_same_description(&pool, user_id, id)
+    let patch = assign::TransactionPatch {
+        category_id: b.category_id,
+        tag_ids: b.tag_ids.as_deref(),
+        checked: b.checked,
+    };
+    match assign::patch_transaction(&pool, user_id, id, &patch, b.confirm_break_pairs)
         .await
-        .map_err(internal)?;
+        .map_err(internal)?
+    {
+        assign::WriteOutcome::Done(()) => {}
+        assign::WriteOutcome::PendingPairBreaks(n) => {
+            return Ok(Json(PatchTransactionResponse {
+                same_description_count: None,
+                pending_pair_breaks: Some(n),
+            }));
+        }
+        other => return Err(write_refused(other)),
+    }
+    // Only a category change makes "apply to the others?" a question.
+    let same_description_count = match b.category_id {
+        Some(_) => Some(
+            assign::count_same_description(&pool, user_id, id)
+                .await
+                .map_err(internal)?,
+        ),
+        None => None,
+    };
     Ok(Json(PatchTransactionResponse {
-        ok,
         same_description_count,
+        pending_pair_breaks: None,
     }))
 }
 
@@ -722,7 +755,7 @@ pub struct ApplyToDescriptionBody {
     pub confirm_break_pairs: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatedResponse {
     pub updated: i64,
@@ -747,34 +780,35 @@ pub async fn apply_to_description(
     Path(id): Path<Uuid>,
     Json(b): Json<ApplyToDescriptionBody>,
 ) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
-    if !b.confirm_break_pairs {
-        let breaks = assign::count_paired_same_description(&pool, user_id, id)
-            .await
-            .map_err(internal)?;
-        if breaks > 0 {
-            return Ok(Json(UpdatedResponse {
-                updated: 0,
-                pending_pair_breaks: Some(breaks),
-                ids: None,
-            }));
-        }
-    }
-    let ids = assign::apply_category_to_same_description(&pool, user_id, id, b.category_id)
+    match assign::apply_to_description(&pool, user_id, id, b.category_id, b.confirm_break_pairs)
         .await
-        .map_err(internal)?;
-    Ok(Json(UpdatedResponse {
-        updated: ids.len() as i64,
-        pending_pair_breaks: None,
-        ids: Some(ids),
-    }))
+        .map_err(internal)?
+    {
+        assign::WriteOutcome::Done(ids) => Ok(Json(UpdatedResponse {
+            updated: ids.len() as i64,
+            pending_pair_breaks: None,
+            ids: Some(ids),
+        })),
+        assign::WriteOutcome::PendingPairBreaks(n) => Ok(Json(UpdatedResponse {
+            updated: 0,
+            pending_pair_breaks: Some(n),
+            ids: None,
+        })),
+        other => Err(write_refused(other)),
+    }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkBody {
-    /// Explicit rows. When absent, `filter` decides the target set — that is
-    /// what "select all shown" means with 3.5 years behind an infinite scroll.
+    /// Explicit rows, at most [`MAX_BULK_IDS`]. Exactly one of `ids` and
+    /// `filter` is sent: `filter` targets every row the list shows under the
+    /// same parameters — that is what "select all shown" means with 3.5 years
+    /// behind an infinite scroll.
     pub ids: Option<Vec<Uuid>>,
+    /// The list's own query parameters, decoded by the same
+    /// `filters_from_params`, so an absent `includeTransfers` hides transfers
+    /// here exactly as it does in the list.
     pub filter: Option<crate::handlers::TransactionParams>,
     #[serde(default, deserialize_with = "double_option")]
     pub category_id: Option<Option<Uuid>>,
@@ -785,13 +819,29 @@ pub struct BulkBody {
     pub confirm_break_pairs: bool,
 }
 
+/// More explicit ids than a selection of loaded rows can reach; a larger
+/// target goes through `filter`.
+const MAX_BULK_IDS: usize = 10_000;
+
 pub async fn bulk_transactions(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<BulkBody>,
 ) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
     let ids = match (b.ids, b.filter) {
-        (Some(ids), _) => ids,
+        (Some(_), Some(_)) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "send ids or filter, not both".into(),
+            ));
+        }
+        (Some(ids), None) if ids.len() > MAX_BULK_IDS => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("at most {MAX_BULK_IDS} ids; use a filter"),
+            ));
+        }
+        (Some(ids), None) => ids,
         (None, Some(params)) => {
             let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
                 .await
@@ -804,7 +854,7 @@ pub async fn bulk_transactions(
         (None, None) => return Err((StatusCode::BAD_REQUEST, "ids or filter required".into())),
     };
 
-    let outcome = assign::bulk_apply(
+    match assign::bulk_apply(
         &pool,
         user_id,
         &ids,
@@ -816,12 +866,20 @@ pub async fn bulk_transactions(
         b.confirm_break_pairs,
     )
     .await
-    .map_err(internal)?;
-    Ok(Json(UpdatedResponse {
-        updated: outcome.updated as i64,
-        pending_pair_breaks: outcome.pending_pair_breaks,
-        ids: None,
-    }))
+    .map_err(internal)?
+    {
+        assign::WriteOutcome::Done(n) => Ok(Json(UpdatedResponse {
+            updated: n as i64,
+            pending_pair_breaks: None,
+            ids: None,
+        })),
+        assign::WriteOutcome::PendingPairBreaks(n) => Ok(Json(UpdatedResponse {
+            updated: 0,
+            pending_pair_breaks: Some(n),
+            ids: None,
+        })),
+        other => Err(write_refused(other)),
+    }
 }
 
 #[derive(Serialize)]
@@ -893,8 +951,9 @@ pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, (StatusCode, String
         None => Ok(TypeBucket::default()),
         // A present-but-blank bucket means the same thing as an absent one.
         Some(s) if s.trim().is_empty() => Ok(TypeBucket::default()),
-        Some(s) if ["all", "in", "out", "lots"].contains(&s) => Ok(TypeBucket::from_param(s)),
-        Some(s) => Err((StatusCode::BAD_REQUEST, format!("invalid bucket: {s}"))),
+        Some(s) => {
+            TypeBucket::parse(s).ok_or((StatusCode::BAD_REQUEST, format!("invalid bucket: {s}")))
+        }
     }
 }
 
@@ -909,27 +968,20 @@ pub async fn categorize_status(
         .provider
         .as_deref()
         .is_some_and(|p| gripsou_jobs::available_categorizers().contains(&p));
-    let enabled = configured && gripsou_jobs::categorize_ready(&pool, user_id).await;
     let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
         .await
         .map_err(internal)?;
     let last = ai_repo::last_run(&pool, user_id).await.map_err(internal)?;
     Ok(Json(crate::dto::AiStatusDto {
         configured,
-        enabled,
         running: ai_repo::is_locked(&pool, user_id).await.map_err(internal)?,
         remaining: ai_repo::remaining(&pool, user_id).await.map_err(internal)?,
         review_count: review::review_count(&pool, user_id, threshold)
             .await
             .map_err(internal)?,
-        threshold: rust_decimal::prelude::ToPrimitive::to_u8(
-            &(threshold * Decimal::from(100)).trunc(),
-        )
-        .unwrap_or(80),
         last_run: last.map(|r| crate::dto::AiLastRunDto {
             outcome: r.outcome,
             error: r.error,
-            at: r.started_at.timestamp_millis(),
         }),
     }))
 }
@@ -984,6 +1036,7 @@ pub async fn undo_review(
     Path(id): Path<Uuid>,
     Json(body): Json<crate::dto::UndoReviewReq>,
 ) -> Result<StatusCode, (StatusCode, String)> {
+    // The only range check: the repository stores what it is given.
     if body
         .confidence
         .is_some_and(|c| c < Decimal::ZERO || c > Decimal::ONE)
@@ -1048,5 +1101,312 @@ mod parse_tests {
     fn unrecognised_bucket_is_still_a_400() {
         let err = parse_bucket(Some("bogus")).unwrap_err();
         assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+}
+
+#[cfg(test)]
+mod handler_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn auth(user_id: Uuid) -> AuthUser {
+        AuthUser {
+            user_id,
+            session_id: Uuid::new_v4(),
+        }
+    }
+
+    /// A user with one checking account; returns (user, account).
+    async fn seed_user(pool: &PgPool) -> (Uuid, Uuid) {
+        let user_id: Uuid = sqlx::query_scalar(
+            "insert into users (email, name, password_hash) \
+             values (gen_random_uuid()::text || '@t.local', 'T', 'x') returning id",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        let account_id: Uuid = sqlx::query_scalar(
+            "with c as (insert into connection (user_id, provider_key, display_name) \
+                        values ($1, 'powens', 'C') returning id) \
+             insert into account (connection_id, name, currency, type_key) \
+             select id, 'Current', 'EUR', 'checking' from c returning id",
+        )
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        (user_id, account_id)
+    }
+
+    async fn seed_txn(pool: &PgPool, account_id: Uuid, description: &str) -> Uuid {
+        sqlx::query_scalar(
+            "insert into transaction (account_id, ts, type, amount, description) \
+             values ($1, now(), 'withdrawal', -12, $2) returning id",
+        )
+        .bind(account_id)
+        .bind(description)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn category(pool: &PgPool, user_id: Uuid, key: &str) -> Uuid {
+        sqlx::query_scalar(
+            "select id from budget_category where user_id = $1 \
+             and (default_key = $2 or system_key = $2)",
+        )
+        .bind(user_id)
+        .bind(key)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn row(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64) {
+        sqlx::query_as(
+            "select t.budget_category_id, t.checked_at is not null, \
+                    (select count(*) from budget_transaction_tag g where g.transaction_id = t.id) \
+               from transaction t where t.id = $1",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn patch(
+        pool: &PgPool,
+        user_id: Uuid,
+        id: Uuid,
+        body: serde_json::Value,
+    ) -> Result<PatchTransactionResponse, (StatusCode, String)> {
+        patch_transaction(
+            State(pool.clone()),
+            auth(user_id),
+            Path(id),
+            Json(serde_json::from_value(body).unwrap()),
+        )
+        .await
+        .map(|j| j.0)
+    }
+
+    async fn bulk(
+        pool: &PgPool,
+        user_id: Uuid,
+        body: serde_json::Value,
+    ) -> Result<UpdatedResponse, (StatusCode, String)> {
+        bulk_transactions(
+            State(pool.clone()),
+            auth(user_id),
+            Json(serde_json::from_value(body).unwrap()),
+        )
+        .await
+        .map(|j| j.0)
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_partial_patch_leaves_the_other_fields_alone(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let id = seed_txn(&pool, account, "LECLERC").await;
+        seed_txn(&pool, account, "LECLERC").await;
+        let groceries = category(&pool, user_id, "groceries").await;
+
+        let r = patch(&pool, user_id, id, json!({ "categoryId": groceries }))
+            .await
+            .unwrap();
+        assert_eq!(r.same_description_count, Some(1));
+
+        let r = patch(&pool, user_id, id, json!({ "checked": true }))
+            .await
+            .unwrap();
+        assert_eq!(
+            r.same_description_count, None,
+            "no category change, no question"
+        );
+        assert_eq!(row(&pool, id).await, (Some(groceries), true, 0));
+
+        let err = patch(&pool, user_id, id, json!({})).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_patch_with_a_foreign_category_fails_whole(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let id = seed_txn(&pool, account, "LECLERC").await;
+        let (stranger, _) = seed_user(&pool).await;
+        let theirs = category(&pool, stranger, "groceries").await;
+        let tag = tag::create_tag(&pool, user_id, "Holiday", None)
+            .await
+            .unwrap()
+            .id;
+
+        let err = patch(
+            &pool,
+            user_id,
+            id,
+            json!({ "categoryId": theirs, "tagIds": [tag], "checked": true }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(row(&pool, id).await, (None, false, 0));
+
+        let err = patch(&pool, stranger, id, json!({ "checked": true }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_patch_on_a_paired_row_asks_first(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let out = seed_txn(&pool, account, "VIREMENT").await;
+        let inn = seed_txn(&pool, account, "VIREMENT RECU").await;
+        sqlx::query(
+            "update transaction set transfer_pair_id = case id when $1 then $2 else $1 end \
+             where id in ($1, $2)",
+        )
+        .bind(out)
+        .bind(inn)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let groceries = category(&pool, user_id, "groceries").await;
+
+        let r = patch(&pool, user_id, out, json!({ "categoryId": groceries }))
+            .await
+            .unwrap();
+        assert_eq!(r.pending_pair_breaks, Some(1));
+        assert_eq!(row(&pool, out).await.0, None, "nothing written");
+
+        let r = patch(
+            &pool,
+            user_id,
+            out,
+            json!({ "categoryId": groceries, "confirmBreakPairs": true }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.pending_pair_breaks, None);
+        assert_eq!(row(&pool, out).await.0, Some(groceries));
+    }
+
+    /// A bulk `filter` is the list's own query parameters: an absent
+    /// `includeTransfers` hides transfers, `true` includes them.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_bulk_filter_includes_transfers_only_when_asked(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let spend = seed_txn(&pool, account, "LECLERC").await;
+        let transfer = seed_txn(&pool, account, "VIREMENT").await;
+        let internal = category(&pool, user_id, "internal_transfer").await;
+        assign::set_category(&pool, user_id, transfer, Some(internal))
+            .await
+            .unwrap();
+
+        let r = bulk(
+            &pool,
+            user_id,
+            json!({ "filter": { "bucket": "out" }, "checked": true }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.updated, 1);
+        assert!(row(&pool, spend).await.1);
+        assert!(!row(&pool, transfer).await.1, "hidden, so untouched");
+
+        let r = bulk(
+            &pool,
+            user_id,
+            json!({ "filter": { "bucket": "out", "includeTransfers": true }, "checked": true }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.updated, 2);
+        assert!(row(&pool, transfer).await.1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_bulk_takes_ids_or_a_filter_not_both(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let id = seed_txn(&pool, account, "LECLERC").await;
+
+        let err = bulk(
+            &pool,
+            user_id,
+            json!({ "ids": [id], "filter": {}, "checked": true }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+
+        let too_many: Vec<Uuid> = (0..=MAX_BULK_IDS).map(|_| Uuid::new_v4()).collect();
+        let err = bulk(&pool, user_id, json!({ "ids": too_many, "checked": true }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+
+        let err = bulk(
+            &pool,
+            user_id,
+            json!({ "filter": { "bucket": "sideways" }, "checked": true }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST, "unknown bucket");
+        assert!(!row(&pool, id).await.1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn deleting_a_category_is_404_409_or_204(pool: PgPool) {
+        let (user_id, _) = seed_user(&pool).await;
+        let (stranger, _) = seed_user(&pool).await;
+        let groceries = category(&pool, user_id, "groceries").await;
+        let internal = category(&pool, user_id, "internal_transfer").await;
+
+        let del = |who: Uuid, id: Uuid| {
+            let pool = pool.clone();
+            async move { delete_category(State(pool), auth(who), Path(id)).await }
+        };
+        assert_eq!(
+            del(stranger, groceries).await.unwrap_err().0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            del(user_id, internal).await.unwrap_err().0,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            del(user_id, groceries).await.unwrap(),
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            del(user_id, groceries).await.unwrap_err().0,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_reorder_with_a_duplicate_id_is_refused(pool: PgPool) {
+        let (user_id, _) = seed_user(&pool).await;
+        let groceries = category(&pool, user_id, "groceries").await.to_string();
+        let err = reorder_categories(
+            State(pool.clone()),
+            auth(user_id),
+            Json(ReorderBody {
+                ids: vec![groceries.clone(), groceries],
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn a_twelve_month_mean_is_sent_to_the_cent() {
+        assert_eq!(
+            mean_to_string(Decimal::from(100) / Decimal::from(3)),
+            "33.33"
+        );
+        assert_eq!(mean_to_string(Decimal::new(-5, 3)), "-0.01");
     }
 }

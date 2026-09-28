@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import userEvent from "@testing-library/user-event";
 
 import { CategoryChooser } from "./CategoryChooser";
 import { EntityChooser } from "./EntityChooser";
@@ -22,7 +23,9 @@ const CATS: BudgetCategory[] = [
   cat({ id: "old", name: "Archived one", kind: "expense", archived: true }),
 ];
 
-function renderChooser(props: Partial<Parameters<typeof CategoryChooser>[0]> = {}) {
+type ChooserOptions = { mode?: "multi" | "pick"; selectedIds?: string[]; allowNone?: boolean };
+
+function renderChooser({ mode = "multi", selectedIds = [], allowNone }: ChooserOptions = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -31,14 +34,11 @@ function renderChooser(props: Partial<Parameters<typeof CategoryChooser>[0]> = {
   const onPick = vi.fn();
   const onClose = vi.fn();
   const result = render(
-    <CategoryChooser
-      mode="multi"
-      selectedIds={[]}
-      onToggle={onToggle}
-      onPick={onPick}
-      onClose={onClose}
-      {...props}
-    />,
+    mode === "pick" ? (
+      <CategoryChooser mode="pick" selectedIds={selectedIds} onPick={onPick} onClose={onClose} allowNone={allowNone} />
+    ) : (
+      <CategoryChooser mode="multi" selectedIds={selectedIds} onToggle={onToggle} onClose={onClose} />
+    ),
     { wrapper: Wrapper },
   );
   return { onToggle, onPick, onClose, unmount: result.unmount };
@@ -143,12 +143,68 @@ describe("CategoryChooser", () => {
       fireEvent.keyDown(list, { key: "Enter" });
       expect(onPick).toHaveBeenCalledWith("gro");
     });
+  });
 
-    it("has no effect in multi mode, which never shows the none-line anyway", async () => {
-      renderChooser({ mode: "multi", allowNone: false });
-      await screen.findByText("Groceries");
-      expect(screen.queryByTestId("chooser-option-none")).toBeNull();
-    });
+  it("keeps focus in the search field across keyboard toggles, even as the parent re-renders", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // A parent like the filter panel: every toggle updates its state, and its
+    // close handler reads that state, so each render hands the chooser a new
+    // one (the React Compiler can only reuse closures whose inputs are
+    // unchanged).
+    function Harness() {
+      const [picked, setPicked] = useState<string[]>([]);
+      const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+      return (
+        <>
+          <button ref={setAnchor} type="button">
+            open
+          </button>
+          <span data-testid="picked">{picked.join(",")}</span>
+          {anchor && (
+            <CategoryChooser
+              mode="multi"
+              selectedIds={picked}
+              onToggle={(id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))}
+              onClose={() => onClose(picked)}
+              anchor={anchor}
+            />
+          )}
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Groceries");
+    const search = screen.getByRole("searchbox");
+    expect(search).toHaveFocus();
+
+    await user.keyboard("gro{Enter}");
+    expect(screen.getByTestId("picked").textContent).toBe("gro");
+    expect(search).toHaveFocus();
+
+    // Still in the field, so a second Enter toggles the line off again rather
+    // than pressing the trigger behind the chooser.
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("picked").textContent).toBe("");
+    expect(search).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("tells assistive tech which line Enter would apply, and that several can be chosen", async () => {
+    renderChooser();
+    await screen.findByText("Groceries");
+    const search = screen.getByRole("searchbox", { name: "Search" });
+    const list = screen.getByRole("listbox");
+    expect(list).toHaveAttribute("aria-multiselectable", "true");
+    expect(search).toHaveAttribute("aria-controls", list.id);
+    expect(search.getAttribute("aria-activedescendant")).toBe(screen.getByTestId("chooser-option-gro").id);
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(search.getAttribute("aria-activedescendant")).toBe(screen.getByTestId("chooser-option-fun").id);
   });
 
   describe("footer", () => {
@@ -161,6 +217,7 @@ describe("CategoryChooser", () => {
           items={items}
           mode="multi"
           selectedIds={[]}
+          onToggle={vi.fn()}
           onClose={vi.fn()}
           footer={<button data-testid="chooser-save">Save</button>}
         />,
@@ -172,7 +229,7 @@ describe("CategoryChooser", () => {
 
     it("draws no footer band when the caller passes none", () => {
       render(
-        <EntityChooser title="t" items={items} mode="multi" selectedIds={[]} onClose={vi.fn()} />,
+        <EntityChooser title="t" items={items} mode="multi" selectedIds={[]} onToggle={vi.fn()} onClose={vi.fn()} />,
       );
       expect(screen.queryByTestId("chooser-footer")).toBeNull();
     });

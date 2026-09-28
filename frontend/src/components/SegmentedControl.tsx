@@ -4,7 +4,7 @@ export type SegmentedOption<T extends string> = {
   value: T;
   label: ReactNode;
   /** Extra classes while this option is NOT selected — an attention state,
-   *  not a selection state (budget UI §0's amber Review segment). */
+   *  not a selection state (the Budget page's amber Review segment). */
   className?: string;
 };
 

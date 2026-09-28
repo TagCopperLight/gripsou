@@ -25,9 +25,8 @@ pub enum CoreError {
     /// likely because this user has no `internal_transfer` budget_category
     /// row (it is trigger-seeded on user creation and delete-protected, so
     /// this should never happen). Surfaced as a hard error rather than
-    /// silently doing nothing: the pass loops rounds until a round pairs
-    /// nothing, and a silently-unwritten "pair" would make it recompute and
-    /// resubmit the same pair forever, inside the caller's transaction.
+    /// silently doing nothing, so the sync fails loudly instead of reporting
+    /// pairs it never wrote.
     #[error(
         "pairing transaction {out_id} with {in_id} for user {user_id} affected {rows} rows, expected 2 \
          (does this user have an internal_transfer budget_category row?)"

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into budget_ai_lock (user_id) values ($1)\n        on conflict (user_id) do update set heartbeat_at = now()\n         where budget_ai_lock.heartbeat_at < now() - make_interval(mins => $2)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d892b559d5c6765e80e16b1a70ef38a1ecee0516a4caa985ff7b89f16cf96cb5"
+}

@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 
 import { useTransactions, useTransactionCounts } from "./hooks";
 import { usePatchTransaction, useApplyToDescription, useBulkTransactions } from "./budget";
+import type { TransactionFilterQuery } from "./types";
+import { keys } from "./keys";
 
 function wrapper() {
   const client = new QueryClient({
@@ -158,5 +160,101 @@ describe("transaction mutations", () => {
     expect(body.filter.uncategorized).toBe(true);
     expect(typeof body.filter.uncategorized).toBe("boolean");
     expect(body).toEqual({ filter: { bucket: "out", uncategorized: true }, checked: true });
+  });
+});
+
+describe("the list, the counts and select-all-shown read one filter", () => {
+  // `Required` makes adding a filter field without setting it here a type
+  // error, so a new field cannot slip past this comparison.
+  const EVERY_FIELD: Required<TransactionFilterQuery> = {
+    search: "leclerc",
+    accountId: "acc-1",
+    bucket: "out",
+    from: "2026-01-01",
+    to: "2026-01-31",
+    categoryIds: ["c1", "c2"],
+    tagIds: ["t1"],
+    uncategorized: true,
+    needsReview: true,
+    includeTransfers: true,
+  };
+
+  function queryOf(url: string): Record<string, string> {
+    const params = new URLSearchParams(url.split("?")[1]);
+    params.delete("limit");
+    params.delete("offset");
+    return Object.fromEntries(params);
+  }
+
+  it("sends every list field to bulk, with the same values", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json([])));
+    renderHook(() => useTransactions(EVERY_FIELD), { wrapper: wrapper() });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    const list = queryOf(lastUrl());
+    expect(Object.keys(list)).toHaveLength(Object.keys(EVERY_FIELD).length);
+
+    vi.stubGlobal("fetch", vi.fn(async () => json({ matching: 0, total: 0, uncategorized: 0 })));
+    renderHook(() => useTransactionCounts(EVERY_FIELD), { wrapper: wrapper() });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    expect(queryOf(lastUrl())).toEqual(list);
+
+    vi.stubGlobal("fetch", vi.fn(async () => json({ updated: 0 })));
+    const { result } = renderHook(() => useBulkTransactions(), { wrapper: wrapper() });
+    await result.current.mutateAsync({ filter: EVERY_FIELD, checked: true });
+    const bulk = (lastBody() as { filter: Record<string, unknown> }).filter;
+    const bulkAsQuery = Object.fromEntries(Object.entries(bulk).map(([k, v]) => [k, String(v)]));
+    expect(bulkAsQuery).toEqual(list);
+  });
+
+  it("carries include-transfers into a select-all write", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ updated: 0 })));
+    const { result } = renderHook(() => useBulkTransactions(), { wrapper: wrapper() });
+    await result.current.mutateAsync({ filter: { includeTransfers: true }, categoryId: "c1" });
+    expect(lastBody()).toEqual({ filter: { includeTransfers: true }, categoryId: "c1" });
+  });
+});
+
+describe("what a row write refreshes", () => {
+  function clientWith() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(keys.transactions({}), { pages: [], pageParams: [] });
+    client.setQueryData(keys.transactionCounts({}), {});
+    client.setQueryData(keys.budgetSummary({ mode: "month", month: "2026-09" }), {});
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const stale = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated;
+    return { client, Wrapper, stale };
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ sameDescriptionCount: 0, updated: 1 })));
+  });
+
+  it("a ✓ toggle refreshes the rows only", async () => {
+    const { Wrapper, stale } = clientWith();
+    const { result } = renderHook(() => usePatchTransaction(), { wrapper: Wrapper });
+    await result.current.mutateAsync({ id: "tx-1", body: { checked: true } });
+    expect(stale(keys.transactions({}))).toBe(true);
+    expect(stale(keys.transactionCounts({}))).toBe(false);
+    expect(stale(keys.budgetSummary({ mode: "month", month: "2026-09" }))).toBe(false);
+  });
+
+  it("a bulk ✓ refreshes the rows only", async () => {
+    const { Wrapper, stale } = clientWith();
+    const { result } = renderHook(() => useBulkTransactions(), { wrapper: Wrapper });
+    await result.current.mutateAsync({ ids: ["a"], checked: true });
+    expect(stale(keys.transactions({}))).toBe(true);
+    expect(stale(keys.budgetSummary({ mode: "month", month: "2026-09" }))).toBe(false);
+  });
+
+  it("a category write refreshes the counts and the figures too", async () => {
+    const { Wrapper, stale } = clientWith();
+    const { result } = renderHook(() => usePatchTransaction(), { wrapper: Wrapper });
+    await result.current.mutateAsync({ id: "tx-1", body: { categoryId: "c1", checked: true } });
+    expect(stale(keys.transactionCounts({}))).toBe(true);
+    expect(stale(keys.budgetSummary({ mode: "month", month: "2026-09" }))).toBe(true);
   });
 });
