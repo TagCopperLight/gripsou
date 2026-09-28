@@ -58,7 +58,7 @@
 - [x] Screenshot in readme
 - [x] /accounts performances
 
-### v1.5.0
+### v1.5.0 - pushed
 - [x] Budget page
     - [x] Overview mode (figures, Sankey, category breakdown, last 12 months)
     - [x] Transactions mode
