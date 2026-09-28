@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 
 import { Surface } from "../Surface";
 import { CardState } from "../CardState";
+import { Button } from "../Button";
 import { useBudgetTags, useCreateBudgetTag, type BudgetTag } from "../../api/budget";
 import { budgetErrorKey } from "../../lib/budget";
 import { TagRow } from "./TagRow";
@@ -72,17 +73,18 @@ export function TagsSurface() {
                   }}
                   className="w-112 max-w-full bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
                 />
-                {/* Padding and text size mirror the field beside it, so the
-                    two share a baseline and a height. */}
-                <button
-                  type="button"
+                {/* The same primary action as the category table's Add; the
+                    padding matches the field beside it, so the two share a
+                    baseline and a height. */}
+                <Button
                   onClick={submit}
                   disabled={!draft.trim() || create.isPending}
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-surface-3 px-3 py-2 text-sm font-medium text-fg cursor-pointer transition-colors duration-140 hover:bg-surface-3/70 disabled:opacity-40 disabled:cursor-not-allowed"
+                  padded={false}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2"
                 >
                   <Plus className="size-4" />
                   {t("settings.budget.tags.add")}
-                </button>
+                </Button>
               </div>
 
               {create.isError && (

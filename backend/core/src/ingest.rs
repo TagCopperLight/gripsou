@@ -29,8 +29,8 @@ pub struct IngestSummary {
     pub holdings_closed: usize,
     /// Derived history rows written by the backfill engine (§8).
     pub backfill_rows: usize,
-    /// Internal-transfer pairs written by the budget pipeline's stage 1
-    /// (spec §5.2), counted in pairs, not rows.
+    /// Internal-transfer pairs written by the budget pairing pass, counted in
+    /// pairs, not rows.
     pub transfers_paired: usize,
 }
 
@@ -41,7 +41,7 @@ pub async fn ingest(
 ) -> Result<IngestSummary, CoreError> {
     let mut tx = pool.begin().await?;
 
-    // Serialise this user's whole ingest, not just its pairing pass (spec §5.2).
+    // Serialise this user's whole ingest, not just its pairing pass.
     // The budget pipeline reads and writes across every account the user owns,
     // while a sync runs per connection and the scheduler fans connections out in
     // parallel — so two of one user's connections syncing at once would otherwise
@@ -156,11 +156,12 @@ pub async fn ingest(
     let backfill_rows =
         crate::backfill::backfill_connection(&mut tx, connection_id).await? as usize;
 
-    // Stage 1 of the budget pipeline (spec §5). Inside the same transaction as
+    // The budget pairing pass. Inside the same transaction as
     // everything else, so a failed sync leaves no half-paired ledger. Scoped to
     // the connection's owner, because a transfer's two halves routinely live
     // under two different connections. `user_id` and this user's advisory lock
-    // were both taken at the top of the transaction.
+    // were both taken at the top of the transaction; the pass takes no lock of
+    // its own and relies on this one.
     let transfers_paired =
         crate::budget::pairing::pair_internal_transfers(&mut tx, user_id).await?;
 

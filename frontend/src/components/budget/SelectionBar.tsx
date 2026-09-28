@@ -43,7 +43,7 @@ function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
   );
 }
 
-/** §2.4 — floats over the surface, stuck to the bottom of the page column. */
+/** The bulk-action bar: floats over the surface, stuck to the bottom of the page column. */
 export function SelectionBar({
   matching, total, showChecked, busy, onAssignCategory, onAddTags, onMarkChecked,
 }: SelectionBarProps) {
@@ -97,6 +97,8 @@ export function SelectionBar({
           icon={Folder}
           label={t("budget.transactions.assignCategory")}
           disabled={busy}
+          aria-haspopup="dialog"
+          aria-expanded={open === "categories"}
           onClick={(e) => {
             setAnchor(e.currentTarget);
             // A second click on the control that opened it puts it away —
@@ -109,6 +111,8 @@ export function SelectionBar({
           icon={Tag}
           label={t("budget.transactions.addTags")}
           disabled={busy}
+          aria-haspopup="dialog"
+          aria-expanded={open === "tags"}
           onClick={(e) => {
             setAnchor(e.currentTarget);
             // Closing by the button discards the pending tags, exactly as
@@ -147,7 +151,7 @@ export function SelectionBar({
             selectedIds={[]}
             // Bulk-clearing the category on a whole selection — potentially the
             // entire ledger, with "all shown" and no filters — has no
-            // legitimate one-click path (finding 5): the far smaller per-row
+            // legitimate one-click path: the far smaller per-row
             // correction gets a confirmation dialog, so this one-click line
             // must not exist at all here.
             allowNone={false}

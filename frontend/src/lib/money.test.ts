@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { DEFAULT_PREFS, setPrefs } from "./prefs";
 import { formatMoney, formatPercent, formatQuantity } from "./money";
-import { normaliseDecimal, validateRow, sumDecimals } from "./money";
+import { normaliseDecimal, validateRow, sumDecimals, subtractDecimals } from "./money";
 
 describe("formatMoney (prefs-driven)", () => {
   afterEach(() => setPrefs(DEFAULT_PREFS));
@@ -115,5 +115,14 @@ describe("validateRow", () => {
 
   it("rejects a negative unit price", () => {
     expect(validateRow("1", "-1")).toBe("negativeUnitPrice");
+  });
+});
+
+describe("subtractDecimals", () => {
+  it("subtracts exactly where floats would not", () => {
+    // 0.3 - 0.1 in floats is 0.19999999999999998.
+    expect(subtractDecimals("0.3", "0.1")).toBe("0.2");
+    expect(subtractDecimals("1940.00", "2010.00")).toBe("-70.00");
+    expect(subtractDecimals("5", "-2.5")).toBe("7.5");
   });
 });

@@ -6,13 +6,11 @@ import type { BudgetSummary } from "../../../api/overview";
 import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
 
-function summary(over: Partial<BudgetSummary["figures"]> = {}, comparable = true): BudgetSummary {
+function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
   return {
-    currency: "EUR",
     txnCount: 412,
     fxMissing: false,
     reportingFxMissing: false,
-    comparable,
     figures: {
       income: { amount: "3200.00", prevMonth: "2980.00", avg12: "3050.00" },
       expenses: { amount: "1940.00", prevMonth: "2010.00", avg12: "1870.00" },
@@ -22,7 +20,6 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}, comparable = true
     },
     sankey: { sources: [], destinations: [] },
     breakdown: [],
-    expensesTotal: "1940.00",
   };
 }
 
@@ -88,33 +85,25 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("cmp-saved-prevMonth")).toHaveAttribute("data-tone", "flat");
   });
 
-  it("hides both comparisons under a custom range", () => {
+  it("hides both comparisons when the server sends no baseline", () => {
+    // A date range, or a month with too little history before it: the server
+    // omits both keys together.
     renderSurface(
-      summary(
-        {
-          income: { amount: "3200.00" },
-          expenses: { amount: "1940.00" },
-          net: { amount: "1260.00" },
-          saved: { amount: "800.00" },
-        },
-        false,
-      ),
+      summary({
+        income: { amount: "3200.00" },
+        expenses: { amount: "1940.00" },
+        net: { amount: "1260.00" },
+        saved: { amount: "800.00" },
+      }),
     );
     expect(screen.queryByTestId("cmp-income-prevMonth")).toBeNull();
     expect(screen.queryByTestId("cmp-income-avg12")).toBeNull();
   });
 
-  it("renders one comparison when only one key is present", () => {
-    // A month with under three months of history comes back comparable:true
-    // with prevMonth absent — the two signals are independent (trap 1).
-    renderSurface(summary({ income: { amount: "3200.00", avg12: "3050.00" } }));
-    expect(screen.queryByTestId("cmp-income-prevMonth")).toBeNull();
-    expect(screen.getByTestId("cmp-income-avg12")).toBeVisible();
-  });
-
   it("falls back to an absolute delta when a percentage baseline is zero", () => {
-    renderSurface(summary({ income: { amount: "3200.00", prevMonth: "0.00" } }));
+    renderSurface(summary({ income: { amount: "3200.00", prevMonth: "0.00", avg12: "3050.00" } }));
     expect(screen.getByTestId("cmp-income-prevMonth")).not.toHaveTextContent("%");
+    expect(screen.getByTestId("cmp-income-avg12")).toHaveTextContent("%");
   });
 
   it("masks the four figures in private mode", () => {
@@ -122,7 +111,7 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("figure-income")).toHaveTextContent("*");
   });
 
-  it("scopes the separator to each breakpoint's own siblings instead of a fixed 'not first' rule (M7)", () => {
+  it("scopes the separator to each breakpoint's own siblings instead of a fixed 'not first' rule", () => {
     // Every cell shares one class string — the `sm:even:`/`lg:not-first:`
     // pseudo-selectors are what makes the bar land only where a cell is
     // actually beside a predecessor at that column count. Before the fix,

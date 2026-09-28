@@ -4,22 +4,40 @@ use std::collections::BTreeMap;
 
 use common::seed_user_and_connection;
 use gripsou_core::budget::ai_cost::usage_report;
-use gripsou_core::repo::budget::ai::{RunRecord, insert_run, usage_by_model};
+use gripsou_core::categorize::Usage;
+use gripsou_core::repo::budget::ai::{finish_run, record_usage, start_run, usage_by_model};
 use gripsou_core::repo::settings::{ModelPrice, budget_ai_prices, set_budget_ai_prices};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use std::str::FromStr;
+use uuid::Uuid;
 
-fn run(model: &str, tokens_in: Option<i32>, tokens_out: Option<i32>) -> RunRecord {
-    RunRecord {
-        model: model.into(),
-        batches: 1,
-        items: 1,
+/// A finished run's model and token counts; `None` is a count the provider
+/// did not report.
+struct Run {
+    model: &'static str,
+    tokens_in: Option<i64>,
+    tokens_out: Option<i64>,
+}
+
+fn run(model: &'static str, tokens_in: Option<i64>, tokens_out: Option<i64>) -> Run {
+    Run {
+        model,
         tokens_in,
         tokens_out,
-        outcome: "ok".into(),
-        error: None,
     }
+}
+
+async fn insert_run(pool: &PgPool, user_id: Uuid, r: &Run) -> anyhow::Result<()> {
+    let id = start_run(pool, user_id, r.model).await?;
+    let usage = Usage {
+        tokens_in: r.tokens_in.unwrap_or(0),
+        tokens_out: r.tokens_out.unwrap_or(0),
+        complete: r.tokens_in.is_some() && r.tokens_out.is_some(),
+    };
+    record_usage(pool, id, user_id, usage).await?;
+    finish_run(pool, id, "ok", None).await?;
+    Ok(())
 }
 
 fn d(s: &str) -> Decimal {
@@ -151,5 +169,23 @@ async fn report_prices_known_models_only(pool: PgPool) -> anyhow::Result<()> {
     // 9.495459 * 0.042 + 4.484808 * 0.1 = 0.398809278 + 0.4484808 = 0.847290078
     assert_eq!(jev.cost, Some(d("0.847290078")));
     assert_eq!(report.total_cost, d("0.847290078"));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_run_with_one_unreported_call_counts_as_without_usage(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user, _) = seed_user_and_connection(&pool).await;
+    let id = start_run(&pool, user, "jev:jev-latest").await?;
+    record_usage(&pool, id, user, Usage::known(300, 30)).await?;
+    record_usage(&pool, id, user, Usage::default()).await?;
+    record_usage(&pool, id, user, Usage::known(200, 20)).await?;
+    finish_run(&pool, id, "ok", None).await?;
+
+    let rows = usage_by_model(&pool).await?;
+    assert_eq!(rows[0].runs_without_usage, 1, "a floor, not the bill");
+    assert_eq!(rows[0].tokens_in, 500, "the known calls still count");
+    assert_eq!(rows[0].tokens_out, 50);
     Ok(())
 }

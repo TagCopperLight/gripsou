@@ -1,7 +1,8 @@
 import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
 
-import { BUDGET_ICONS, FALLBACK_COLOR, safeBudgetColor } from "../../lib/budget";
+import { safeBudgetColor } from "../../lib/budget";
 import { tint } from "../../lib/color";
+import { CategoryIcon } from "./CategoryIcon";
 import type { Transaction } from "../../api/types";
 
 /** Last resort glyphs, keyed by kind of movement — a static record, indexed
@@ -21,26 +22,32 @@ function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
   return tx.amount.trim().startsWith("-") ? "out" : "in";
 }
 
-/** §2.3's two-step fallback, at one size everywhere:
- *  1. the category's icon, tinted with the category colour;
- *  2. a generic glyph for the transaction type. */
+/** One size everywhere. A categorised row shows its category's glyph (or, for
+ *  a category without one, the same coloured dot its chip shows), tinted with
+ *  the category colour. Only a row with no category falls back to a neutral
+ *  glyph for its kind of movement. */
 export function TransactionAvatar({ tx }: { tx: Transaction }) {
-  const CategoryIcon = (tx.categoryIcon && BUDGET_ICONS[tx.categoryIcon]) || null;
-  const hasCategory = Boolean(tx.categoryId && CategoryIcon);
-  const Icon = hasCategory && CategoryIcon ? CategoryIcon : GENERIC_ICONS[genericIconKey(tx)];
-  const color = hasCategory ? safeBudgetColor(tx.categoryColor) : FALLBACK_COLOR;
-
+  if (tx.categoryId) {
+    const color = safeBudgetColor(tx.categoryColor);
+    return (
+      <span
+        data-testid="tx-avatar"
+        data-variant="category"
+        style={{ color, backgroundColor: tint(color, 0.18) }}
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg"
+      >
+        <CategoryIcon icon={tx.categoryIcon} className="size-4" />
+      </span>
+    );
+  }
+  const Icon = GENERIC_ICONS[genericIconKey(tx)];
   return (
     <span
       data-testid="tx-avatar"
-      data-variant={hasCategory ? "category" : "generic"}
-      // A categorised row's avatar is tinted with its category colour; an
-      // uncategorised one has no colour to speak for it, so it sits on the
-      // neutral surface with the faint foreground.
-      style={hasCategory ? { color, backgroundColor: tint(color, 0.18) } : undefined}
-      className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg ${
-        hasCategory ? "" : "bg-surface-2 text-fg-faint"
-      }`}
+      data-variant="generic"
+      // No colour to speak for it, so it sits on the neutral surface with the
+      // faint foreground.
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-faint"
     >
       <Icon className="size-4" />
     </span>

@@ -983,18 +983,15 @@ mod tests {
 pub struct AiLastRunDto {
     pub outcome: String,
     pub error: Option<String>,
-    pub at: i64,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiStatusDto {
     pub configured: bool,
-    pub enabled: bool,
     pub running: bool,
     pub remaining: i64,
     pub review_count: i64,
-    pub threshold: u8,
     pub last_run: Option<AiLastRunDto>,
 }
 
@@ -1062,24 +1059,21 @@ mod budget_ai_contract_tests {
     fn status_uses_the_frontend_field_names() {
         let v = serde_json::to_value(AiStatusDto {
             configured: true,
-            enabled: false,
             running: false,
             remaining: 3,
             review_count: 2,
-            threshold: 80,
             last_run: Some(AiLastRunDto {
                 outcome: "ok".into(),
                 error: None,
-                at: 1,
             }),
         })
         .unwrap();
         assert_eq!(
             v,
             serde_json::json!({
-                "configured": true, "enabled": false, "running": false,
-                "remaining": 3, "reviewCount": 2, "threshold": 80,
-                "lastRun": {"outcome": "ok", "error": null, "at": 1}
+                "configured": true, "running": false,
+                "remaining": 3, "reviewCount": 2,
+                "lastRun": {"outcome": "ok", "error": null}
             })
         );
     }

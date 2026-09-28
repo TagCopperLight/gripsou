@@ -7,7 +7,7 @@ import { Button } from "../../Button";
 import { useAiStatus, useRequestCategorize } from "../../../api/budget";
 import { bannerVariant } from "../../../lib/aiBanner";
 
-/** The AI notification surface (UI-design §1.2): only when there is something to do. */
+/** The AI notification surface: only when there is something to do. */
 export function AiBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();

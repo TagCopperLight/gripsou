@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
@@ -31,12 +31,39 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
   const pending = update.isPending;
   // The picker swatch stands in for "a colour off the palette", so it only
   // reads as selected when the stored colour is not one of the presets.
-  const customColor = tag.color !== null && !BUDGET_PALETTE.includes(tag.color);
+  // While the native picker is being dragged, the colour lives here and only
+  // previews: browsers fire an input event per pixel, and saving each one
+  // would send a request and refetch the tags dozens of times a second.
+  const [colorDraft, setColorDraft] = useState<string | null>(null);
+  const shownColor = colorDraft ?? tag.color;
+  const customColor = shownColor !== null && !BUDGET_PALETTE.includes(shownColor);
 
   // Every write is a full body, so a colour change carries the stored name and
   // a rename carries the current colour.
   const save = (body: TagBody, opts?: { onSuccess?: () => void }) =>
     update.mutate({ id: tag.id, body }, opts);
+
+  // Saved once, when the picker commits: the native `change` event (the
+  // picker closed or the value was confirmed), with blur as a fallback.
+  // React's `onChange` is the per-tick `input` event, so it cannot be used.
+  const colorInput = useRef<HTMLInputElement>(null);
+  const commitColor = useRef(() => {});
+  useLayoutEffect(() => {
+    commitColor.current = () => {
+      const value = colorInput.current?.value;
+      setColorDraft(null);
+      // A blur right after the commit finds the save in flight or done.
+      if (!value || pending || value.toLowerCase() === tag.color?.toLowerCase()) return;
+      save({ name: tag.name, color: value });
+    };
+  });
+  useEffect(() => {
+    const el = colorInput.current;
+    if (!el) return;
+    const onCommit = () => commitColor.current();
+    el.addEventListener("change", onCommit);
+    return () => el.removeEventListener("change", onCommit);
+  }, []);
 
   const startEdit = () => {
     setDraft(tag.name);
@@ -82,7 +109,11 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
             {tag.txCount}
           </span>
 
-          <div className="flex items-center gap-1">
+          <div
+            role="group"
+            aria-label={t("settings.budget.tags.colorLabel", { name: tag.name })}
+            className="flex items-center gap-1"
+          >
             {/* "No colour" leads the line, drawn as an empty square struck
                 through — the absence of a colour still needs a swatch to sit
                 in, otherwise the row's colours start at a different x. */}
@@ -122,16 +153,18 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
               className={`${SWATCH} relative ${
                 customColor ? "ring-2 ring-fg" : "bg-surface-2 hover:scale-105"
               } ${pending ? "opacity-40" : ""}`}
-              style={{ background: customColor ? tag.color! : undefined }}
+              style={{ background: customColor ? shownColor! : undefined }}
             >
               <span className="sr-only">{t("settings.budget.tags.customColor")}</span>
               <Pencil className={`size-3 ${customColor ? "text-black/80" : "text-fg-faint"}`} />
               <input
                 type="color"
                 aria-label={t("settings.budget.tags.customColor")}
-                value={/^#[0-9a-fA-F]{6}$/.test(tag.color ?? "") ? tag.color! : "#000000"}
+                ref={colorInput}
+                value={/^#[0-9a-fA-F]{6}$/.test(shownColor ?? "") ? shownColor! : "#000000"}
                 disabled={pending}
-                onChange={(e) => save({ name: tag.name, color: e.target.value })}
+                onChange={(e) => setColorDraft(e.target.value)}
+                onBlur={() => commitColor.current()}
                 className="absolute inset-0 size-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
               />
             </label>

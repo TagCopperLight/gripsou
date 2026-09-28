@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::categorize::{
-    CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example,
+    CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example, Usage,
 };
 use gripsou_providers::jev::JevCategorizer;
 use rust_decimal::Decimal;
@@ -108,8 +108,8 @@ async fn one_choice_request_per_item_keyed_by_candidate_ids() {
         Some(Uuid::parse_str(GROCERIES).unwrap())
     );
     assert_eq!(out.guesses[0].confidence, Some(Decimal::new(9, 1)));
-    assert_eq!(out.tokens_in, Some(600));
-    assert_eq!(out.tokens_out, Some(60));
+    assert_eq!(out.usage, Usage::known(600, 60));
+    assert!(out.interrupted.is_none());
 }
 
 #[tokio::test]
@@ -125,7 +125,7 @@ async fn none_is_an_abstention() {
 }
 
 #[tokio::test]
-async fn one_rate_limited_item_fails_the_batch() {
+async fn a_rate_limit_keeps_the_answers_already_received() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(body_string_contains("BAD"))
@@ -137,10 +137,115 @@ async fn one_rate_limited_item_fails_the_batch() {
         .mount(&server)
         .await;
     let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    let out = j.categorize(&request(&["OK", "BAD", "OK"])).await.unwrap();
+
     assert!(matches!(
-        j.categorize(&request(&["OK", "BAD", "OK"])).await,
-        Err(CategorizeError::RateLimited)
+        out.interrupted,
+        Some(CategorizeError::RateLimited)
     ));
+    // With eight in flight, all three were sent; the two good answers stay.
+    let keys: Vec<Uuid> = out.guesses.iter().map(|g| g.key).collect();
+    assert_eq!(keys, vec![Uuid::from_u128(1), Uuid::from_u128(3)]);
+    assert_eq!(out.usage, Usage::known(600, 60));
+}
+
+#[tokio::test]
+async fn after_a_failure_no_further_item_is_sent() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(429))
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+    let descs: Vec<String> = (0..40).map(|n| format!("T{n}")).collect();
+    let descs: Vec<&str> = descs.iter().map(String::as_str).collect();
+
+    let out = j.categorize(&request(&descs)).await.unwrap();
+
+    assert!(matches!(
+        out.interrupted,
+        Some(CategorizeError::RateLimited)
+    ));
+    assert!(out.guesses.is_empty());
+    let sent = server.received_requests().await.unwrap().len();
+    assert!(
+        sent <= 8,
+        "only the requests already in flight went out, got {sent}"
+    );
+}
+
+#[tokio::test]
+async fn missing_usage_is_unknown_not_zero() {
+    let server = MockServer::start().await;
+    let mut body = answer(GROCERIES, 0.9);
+    body.as_object_mut().unwrap().remove("usage");
+    Mock::given(method("POST"))
+        .and(body_string_contains("NOUSAGE"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer(GROCERIES, 0.9)))
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    let out = j.categorize(&request(&["NOUSAGE"])).await.unwrap();
+    assert!(!out.usage.complete);
+
+    let mixed = j.categorize(&request(&["OK", "NOUSAGE"])).await.unwrap();
+    assert_eq!(mixed.usage.tokens_in, 300, "the known answer still counts");
+    assert!(!mixed.usage.complete, "but the batch is not fully known");
+}
+
+#[tokio::test]
+async fn an_unreadable_answer_leaves_the_item_unanswered() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_string_contains("GARBLED"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("<html>oops</html>"))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_string_contains("NOCHOICE"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"answers": {}})))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer(GROCERIES, 0.9)))
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    let out = j
+        .categorize(&request(&["GARBLED", "NOCHOICE", "OK"]))
+        .await
+        .unwrap();
+
+    assert!(out.interrupted.is_none());
+    let keys: Vec<Uuid> = out.guesses.iter().map(|g| g.key).collect();
+    assert_eq!(keys, vec![Uuid::from_u128(3)]);
+}
+
+#[tokio::test]
+async fn confidence_is_read_from_the_number_text() {
+    let server = MockServer::start().await;
+    let body = format!(
+        r#"{{"answers": {{"category": {{"type": "choice", "choice": "{GROCERIES}",
+            "confidence": 0.12345678901234567891}}}},
+            "usage": {{"input_tokens": 1, "output_tokens": 1}}}}"#
+    );
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(body, "application/json"))
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+    let out = j.categorize(&request(&["X"])).await.unwrap();
+    assert_eq!(
+        out.guesses[0].confidence,
+        Some(Decimal::from_str_exact("0.12345678901234567891").unwrap())
+    );
 }
 
 #[tokio::test]
@@ -151,8 +256,7 @@ async fn a_server_error_is_other() {
         .mount(&server)
         .await;
     let j = JevCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
-    assert!(matches!(
-        j.categorize(&request(&["X"])).await,
-        Err(CategorizeError::Other(_))
-    ));
+    let out = j.categorize(&request(&["X"])).await.unwrap();
+    assert!(matches!(out.interrupted, Some(CategorizeError::Other(_))));
+    assert!(out.guesses.is_empty());
 }

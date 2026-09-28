@@ -219,3 +219,11 @@ export function lotCashAmount(
   const f = Number(fee);
   return side === "buy" ? -(gross + f) : gross - f;
 }
+
+/** `a - b` on decimal strings, exactly — the same arithmetic as `sumDecimals`,
+ *  for a difference that is rendered as an amount. */
+export function subtractDecimals(a: string, b: string): string {
+  const t = b.trim();
+  const negated = t.startsWith("-") ? t.slice(1) : `-${t}`;
+  return sumDecimals([a, negated]);
+}

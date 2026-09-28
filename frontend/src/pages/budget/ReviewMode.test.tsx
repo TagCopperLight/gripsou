@@ -31,14 +31,31 @@ type Server = {
   /** Rows apply-to-description writes; `breaks` makes the first call refuse. */
   applied?: string[];
   breaks?: number;
+  /** A single-row correction the server refuses until the pair break is
+   *  confirmed, as it does for a paired transfer. */
+  paired?: boolean;
+  /** Any write whose url contains this fails with a 500. */
+  fail?: string;
 };
+
+const CATEGORIES = [
+  { id: "c2", name: "Savings", defaultKey: null, color: "#5b9bf0", icon: null, hint: null,
+    kind: "internal", systemKey: null, archived: false, txCount: 0 },
+];
 
 function stubServer(server: Server) {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
-    if (init?.method === "POST") {
+    if (init?.method === "POST" || init?.method === "PATCH") {
       server.calls.push({ url: u, body: init.body ? JSON.parse(String(init.body)) : null });
       const body = init.body ? JSON.parse(String(init.body)) : null;
+      if (server.fail && u.includes(server.fail)) return new Response("boom", { status: 500 });
+      if (init.method === "PATCH") {
+        if (server.paired && !body.confirmBreakPairs) {
+          return Response.json({ sameDescriptionCount: 0, pendingPairBreaks: 1 });
+        }
+        return Response.json({ sameDescriptionCount: 0 });
+      }
       if (u.includes("/accept")) {
         server.pending = server.pending.filter((t) => !u.includes(`/${(t as { id: string }).id}/`));
         return Response.json({ sameDescriptionCount: server.same ?? 0 });
@@ -54,17 +71,19 @@ function stubServer(server: Server) {
       return new Response(null, { status: 204 });
     }
     if (u.includes("/budget/categorize/status")) {
-      return Response.json({ configured: true, enabled: true, running: false, remaining: 0,
-        reviewCount: server.pending.length, threshold: 80, lastRun: null });
+      return Response.json({ configured: true, running: false, remaining: 0,
+        reviewCount: server.pending.length, lastRun: null });
     }
-    if (u.includes("/budget/categories")) return Response.json([]);
+    if (u.includes("/budget/categories")) return Response.json(CATEGORIES);
     return Response.json(server.pending);
   }));
 }
 
 function renderMode() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const auth = { prefs: DEFAULT_PREFS, updatePrefs: vi.fn() } as unknown as AuthValue;
+  // The threshold shown is the reader's own preference.
+  const prefs = { ...DEFAULT_PREFS, budgetAiThreshold: 80 };
+  const auth = { prefs, updatePrefs: vi.fn() } as unknown as AuthValue;
   return render(
     <QueryClientProvider client={qc}>
       <AuthContext.Provider value={auth}>
@@ -167,5 +186,66 @@ describe("Review mode", () => {
     expect(await screen.findByTestId("resolved-line-t3")).toBeVisible();
     expect(server.calls.at(-1)?.body).toEqual({ categoryId: "c1", confirmBreakPairs: true });
     expect(screen.queryByTestId("break-pair-modal")).toBeNull();
+  });
+
+  it("puts an accepted line back and says so when the save fails", async () => {
+    stubServer({ pending: [GUESS, NO_GUESS], calls: [], fail: "/accept" });
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
+    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("review-line-t1")).toBeVisible();
+    expect(screen.queryByTestId("resolved-line-t1")).toBeNull();
+    expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 2 resolved");
+  });
+
+  it("puts a corrected line back and says so when the save fails", async () => {
+    stubServer({ pending: [NO_GUESS], calls: [], fail: "/transactions/t2" });
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
+    fireEvent.click(await screen.findByTestId("chooser-option-c2"));
+    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("review-line-t2")).toBeVisible();
+    expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 1 resolved");
+  });
+
+  it("keeps a line resolved when its Undo fails", async () => {
+    const server: Server = { pending: [GUESS, NO_GUESS], calls: [], fail: "/undo" };
+    stubServer(server);
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
+    const resolved = await screen.findByTestId("resolved-line-t1");
+    fireEvent.click(within(resolved).getByRole("button", { name: "Undo" }));
+    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("resolved-line-t1")).toBeVisible();
+    expect(screen.getByTestId("review-progress")).toHaveTextContent("1 / 2 resolved");
+  });
+
+  it("says so when an apply-to-others fails", async () => {
+    stubServer({ pending: [GUESS, TWIN], calls: [], same: 1, applied: ["t1", "t3"], fail: "/apply-to-description" });
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 other" }));
+    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(screen.queryByTestId("resolved-line-t3")).toBeNull();
+  });
+
+  it("asks before a correction that would break a transfer pair, then sends it confirmed", async () => {
+    const server: Server = { pending: [{ ...NO_GUESS, isTransfer: true }], calls: [], paired: true };
+    stubServer(server);
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
+    fireEvent.click(await screen.findByTestId("chooser-option-c2"));
+
+    // Refused, nothing written: the line is pending again while we ask.
+    expect(await screen.findByTestId("break-pair-modal")).toBeVisible();
+    expect(screen.getByTestId("review-line-t2")).toBeVisible();
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    expect(await screen.findByTestId("resolved-line-t2")).toBeVisible();
+    expect(server.calls.at(-1)).toEqual({
+      url: expect.stringContaining("/transactions/t2"),
+      body: { categoryId: "c2", confirmBreakPairs: true },
+    });
+    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
   });
 });

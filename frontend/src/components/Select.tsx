@@ -16,6 +16,9 @@ type SelectProps = {
    *  a prop, not a caller class — two `bg-*` utilities of equal specificity
    *  resolve by stylesheet order, so a caller-supplied one would lose. */
   tone?: "default" | "sunken";
+  /** Lets a `<label htmlFor>` name the control. */
+  id?: string;
+  disabled?: boolean;
 };
 
 const TONES = {
@@ -23,7 +26,9 @@ const TONES = {
   sunken: "bg-surface hover:bg-surface-3",
 } as const;
 
-export function Select({ value, onChange, options, className = "", tone = "default" }: SelectProps) {
+export function Select({
+  value, onChange, options, className = "", tone = "default", id, disabled = false,
+}: SelectProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -43,15 +48,19 @@ export function Select({ value, onChange, options, className = "", tone = "defau
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
+        id={id}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140`}
+        className={`w-full flex items-center justify-between ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140 disabled:opacity-60 disabled:cursor-not-allowed`}
       >
         <span>{selected?.label ?? t("common.select")}</span>
         <ChevronDown
           className={`size-4 text-fg-faint transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && (
+      {open && !disabled && (
         <div
           className={`absolute z-10 mt-1.5 w-full rounded-xl p-1 shadow-xl ${
             tone === "sunken" ? "bg-surface" : "bg-surface-2"

@@ -50,10 +50,11 @@ export const keys = {
   // invalidation sites omit it and get the family prefix.
   budgetSummary: (period?: Period) =>
     (period === undefined ? ["budget-summary"] : ["budget-summary", period]) as readonly unknown[],
-  budgetTrend: (anchor?: string, months?: number) =>
-    (anchor === undefined
-      ? ["budget-trend"]
-      : ["budget-trend", anchor, months ?? 12]) as readonly unknown[],
+  // Under the summary's prefix on purpose: whatever refreshes the figures
+  // (a sync above all) also refreshes where the data ends.
+  budgetLatestMonth: () => ["budget-summary", "latest-month"] as const,
+  budgetTrend: (anchor?: string) =>
+    (anchor === undefined ? ["budget-trend"] : ["budget-trend", anchor]) as readonly unknown[],
   budgetAiStatus: () => ["budget-ai-status"] as const,
   budgetAiSettings: () => ["budget-ai-settings"] as const,
   budgetAiUsage: () => ["budget-ai-usage"] as const,

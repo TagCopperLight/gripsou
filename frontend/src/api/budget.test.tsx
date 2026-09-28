@@ -11,6 +11,7 @@ import {
   useCreateBudgetCategory,
   useUpdateBudgetCategory,
   useDeleteBudgetCategory,
+  useReorderBudgetCategories,
   useCreateBudgetTag,
   useUpdateBudgetTag,
   useDeleteBudgetTag,
@@ -115,6 +116,24 @@ describe("useCreateBudgetCategory", () => {
   });
 });
 
+describe("useReorderBudgetCategories", () => {
+  it("refreshes the category list only — nothing else reads the order", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    const { client, wrapper } = makeWrapper();
+    client.setQueryData(keys.budgetCategories(), [GROCERIES]);
+    client.setQueryData(keys.transactions(), { pages: [] });
+    client.setQueryData(keys.budgetSummary(), {});
+    const { result } = renderHook(() => useReorderBudgetCategories(), { wrapper });
+
+    result.current.mutate(["c1"]);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(client.getQueryState(keys.budgetCategories())?.isInvalidated).toBe(true);
+    expect(client.getQueryState(keys.transactions())?.isInvalidated).toBe(false);
+    expect(client.getQueryState(keys.budgetSummary())?.isInvalidated).toBe(false);
+  });
+});
+
 describe("useDeleteBudgetCategory", () => {
   it("DELETEs by id and tolerates the 204 empty body", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
@@ -147,7 +166,7 @@ describe("useBudgetTags", () => {
 });
 
 describe("useCreateBudgetTag", () => {
-  it("POSTs the body and invalidates tags and transactions", async () => {
+  it("POSTs the body and refreshes only the tag list — a new tag is on no row", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json(HOLIDAY, 201)));
     const { client, wrapper } = makeWrapper();
     client.setQueryData(keys.budgetTags(), []);
@@ -165,7 +184,7 @@ describe("useCreateBudgetTag", () => {
       }),
     );
     expect(client.getQueryState(keys.budgetTags())?.isInvalidated).toBe(true);
-    expect(client.getQueryState(keys.transactions())?.isInvalidated).toBe(true);
+    expect(client.getQueryState(keys.transactions())?.isInvalidated).toBe(false);
   });
 });
 

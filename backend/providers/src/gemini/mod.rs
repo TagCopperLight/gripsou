@@ -1,4 +1,4 @@
-//! Gemini adapter for the categorisation port (phase 5 spec §3.2): the
+//! Gemini adapter for the categorisation port: the
 //! native `generateContent` API, fifty items per request, with a
 //! `responseSchema` whose enum is the batch's allowed category ids.
 
@@ -38,12 +38,16 @@ impl GeminiCategorizer {
         self
     }
 
-    /// `None` when `GEMINI_API_KEY` is absent or blank.
-    pub fn from_env(model: &str) -> Option<Self> {
-        let key = std::env::var("GEMINI_API_KEY")
+    /// `GEMINI_API_KEY`, or `None` when it is absent or blank (the provider
+    /// is then off).
+    pub fn api_key_from_env() -> Option<String> {
+        std::env::var("GEMINI_API_KEY")
             .ok()
-            .filter(|k| !k.trim().is_empty())?;
-        Some(Self::new(key, model.to_string()))
+            .filter(|k| !k.trim().is_empty())
+    }
+
+    pub fn from_env(model: &str) -> Option<Self> {
+        Some(Self::new(Self::api_key_from_env()?, model.to_string()))
     }
 }
 

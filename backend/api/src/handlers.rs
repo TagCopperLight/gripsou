@@ -417,8 +417,6 @@ pub async fn account_series(
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
-    #[serde(rename = "type")]
-    pub kind: Option<String>,
     /// `all` | `in` | `out` | `lots` — the TYPE control on the filter panel.
     pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
@@ -447,7 +445,6 @@ pub fn filters_from_params(
     Ok(TransactionFilters {
         search: p.search.filter(|s| !s.trim().is_empty()),
         account_id: p.account_id,
-        kind: p.kind.filter(|s| !s.is_empty()),
         bucket: crate::budget::parse_bucket(p.bucket.as_deref())?,
         from: p.from,
         to: p.to,
@@ -622,7 +619,7 @@ pub async fn budget_ai_settings(
     let s = gripsou_core::repo::settings::budget_ai(&pool)
         .await
         .map_err(internal)?;
-    let defaults = ["gemini", "jev"]
+    let defaults = gripsou_jobs::categorizer_keys()
         .into_iter()
         .filter_map(|k| gripsou_jobs::default_model(k).map(|m| (k, m)))
         .collect();
@@ -645,7 +642,7 @@ pub async fn set_budget_ai_settings(
         .as_deref()
         .map(str::trim)
         .filter(|p| !p.is_empty());
-    if provider.is_some_and(|p| !["gemini", "jev"].contains(&p)) {
+    if provider.is_some_and(|p| !gripsou_jobs::categorizer_keys().contains(&p)) {
         return Err((StatusCode::BAD_REQUEST, "unknown provider".into()));
     }
     let model = body
@@ -845,16 +842,22 @@ pub async fn update_prefs(
             return Err((StatusCode::BAD_REQUEST, "avatar too large".to_string()));
         }
     }
-    if !(50..=95).contains(&prefs.budget_ai_threshold) {
+    let range = gripsou_core::repo::prefs::BUDGET_AI_THRESHOLD_RANGE;
+    if !range.contains(&prefs.budget_ai_threshold) {
         return Err((
             StatusCode::BAD_REQUEST,
-            "budgetAiThreshold must be between 50 and 95".into(),
+            format!(
+                "budgetAiThreshold must be between {} and {}",
+                range.start(),
+                range.end()
+            ),
         ));
     }
-    let was_enabled = gripsou_core::repo::prefs::budget_ai_enabled(&pool, user_id)
+    let was_enabled = gripsou_core::repo::prefs::replace_prefs(&pool, user_id, &prefs)
         .await
-        .map_err(internal)?;
-    let profile = gripsou_core::repo::user::update_prefs(&pool, user_id, &prefs)
+        .map_err(internal)?
+        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
@@ -3090,14 +3093,16 @@ mod budget_ai_usage_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn prices_then_usage(pool: PgPool) {
         let admin = seed(&pool, "admin").await;
-        for (tin, tout) in [(Some(9_495_459), Some(4_484_808)), (None, None)] {
+        for (tin, tout, complete) in [(9_495_459_i64, 4_484_808_i64, true), (0, 0, false)] {
             sqlx::query(
-                "insert into budget_ai_run (user_id, model, tokens_in, tokens_out, outcome) \
-                 values ($1, 'jev:jev-latest', $2, $3, 'ok')",
+                "insert into budget_ai_run \
+                 (user_id, model, tokens_in, tokens_out, usage_complete, outcome) \
+                 values ($1, 'jev:jev-latest', $2, $3, $4, 'ok')",
             )
             .bind(admin)
             .bind(tin)
             .bind(tout)
+            .bind(complete)
             .execute(&pool)
             .await
             .unwrap();

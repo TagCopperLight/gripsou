@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -173,6 +173,32 @@ describe("TagsSurface", () => {
         expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: null }) }),
       ),
     );
+  });
+
+  it("saves the custom colour once, when the picker commits, not on every drag tick", async () => {
+    renderSurface();
+    await screen.findByText("Holiday");
+    const picker = within(screen.getByRole("group", { name: "Colour of Holiday" })).getByLabelText(
+      "Custom colour",
+    );
+    const writes = () =>
+      vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === "PATCH");
+
+    // Dragging: one input event per pixel, none of which may reach the server.
+    for (const value of ["#101010", "#202020", "#303030"]) fireEvent.input(picker, { target: { value } });
+    expect(writes()).toHaveLength(0);
+
+    // The picker closes on the last colour: one write, with that colour.
+    fireEvent.change(picker, { target: { value: "#303030" } });
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0][1]).toEqual(
+      expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: "#303030" }) }),
+    );
+
+    // Leaving the field afterwards does not send it again.
+    fireEvent.blur(picker);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writes()).toHaveLength(1);
   });
 
   it("disables one row's controls while that row has a write in flight", async () => {

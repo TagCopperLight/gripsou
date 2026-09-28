@@ -7,7 +7,7 @@ import type { BudgetSummary, Figure } from "../../../api/overview";
 
 type FigureKey = "income" | "expenses" | "net" | "saved";
 
-/** Colour and comparison behaviour per figure (addendum §4). `format` is fixed
+/** Colour and comparison behaviour per figure. `format` is fixed
  *  per figure rather than per value: net and saved can be zero or negative,
  *  where a percentage change is unstable, so they always read as an amount. */
 const SPEC: Record<FigureKey, { tone: string; format: "percent" | "absolute"; goodWhen: "up" | "down" }> = {
@@ -24,7 +24,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
   const spec = SPEC[name];
   return (
     // The separator is the cell's own left border, placed near the preceding
-    // cell's content rather than centred in the gap (UI-design §1.3): `pr-2`
+    // cell's content rather than centred in the gap: `pr-2`
     // (8px) closes up to the bar, `pl-4` (16px) opens up to the following
     // cell's text. There is no grid gap left to add to that — see the grid
     // below. The border only applies from `sm` up, where cells actually sit
@@ -32,7 +32,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
     // stray vertical bar above each cell. At `sm` the grid is 2 columns, so
     // only the SECOND cell of each row (even index) sits beside a
     // predecessor — `not-first` there would wrongly also bar the 3rd cell,
-    // which is the first cell of its own row (M7). At `lg` (4 columns) every
+    // which is the first cell of its own row. At `lg` (4 columns) every
     // cell but the first sits beside one, so `not-first` is right there.
     <div
       data-testid={`figure-${name}`}

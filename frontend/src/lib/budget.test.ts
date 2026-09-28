@@ -7,7 +7,6 @@ import {
   BUDGET_ICON_NAMES,
   BUDGET_ICONS,
   BUDGET_KINDS,
-  budgetIcon,
   categoryLabel,
   safeBudgetColor,
   sortCategories,
@@ -55,12 +54,10 @@ describe("safeBudgetColor", () => {
   });
 });
 
-describe("budgetIcon", () => {
-  it("resolves every seeded icon name and nothing else", () => {
+describe("BUDGET_ICONS", () => {
+  it("resolves every seeded icon name", () => {
     expect(BUDGET_ICON_NAMES).toHaveLength(35);
-    for (const name of BUDGET_ICON_NAMES) expect(budgetIcon(name)).toBeTruthy();
-    expect(budgetIcon(null)).toBeNull();
-    expect(budgetIcon("not-an-icon")).toBeNull();
+    for (const name of BUDGET_ICON_NAMES) expect(BUDGET_ICONS[name]).toBeTruthy();
     expect(Object.keys(BUDGET_ICONS).sort()).toEqual([...BUDGET_ICON_NAMES].sort());
   });
 

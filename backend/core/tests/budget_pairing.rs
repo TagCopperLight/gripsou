@@ -396,10 +396,10 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
     Ok(())
 }
 
-/// Precedence (spec §4, `user > rule > pair > ai`): pairing is allowed to
-/// overwrite an AI guess, since pairing outranks it, but never a `user` or
-/// `rule` categorisation. This would fail (leaving the AI row unpaired) if
-/// the candidate filter reverted to `category_source is null` only.
+/// Pairing is allowed to overwrite an AI guess nobody has reviewed, since
+/// pairing outranks it, but never a category the user chose. This would fail
+/// (leaving the AI row unpaired) if the candidate filter reverted to
+/// `category_source is null` only.
 #[sqlx::test(migrations = "../migrations")]
 async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -421,7 +421,8 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
         .unwrap()
         .id;
     sqlx::query(
-        "update transaction set budget_category_id = $1, category_source = 'ai' where id = $2",
+        "update transaction set budget_category_id = $1, category_source = 'ai', \
+         category_confidence = 0.27 where id = $2",
     )
     .bind(groceries)
     .bind(out)
@@ -430,6 +431,14 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+
+    // The guess is gone, so is its confidence: a pair row carries none.
+    let confidence: Option<Decimal> =
+        sqlx::query_scalar("select category_confidence from transaction where id = $1")
+            .bind(out)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(confidence, None);
 
     let system = list_categories(&pool, user_id)
         .await?
@@ -489,44 +498,121 @@ async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-/// Precedence: a row a rule categorised outranks pairing too, and is never
-/// touched by the pass — same as `user`, unlike `ai`.
+/// An AI guess the user accepted in review is their choice, not a guess any
+/// more: pairing leaves it exactly as accepted, even when a perfect
+/// counterpart exists.
 #[sqlx::test(migrations = "../migrations")]
-async fn a_rule_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
+async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now();
-    let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    tx_at(
+    let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-25000, 2), now).await?;
+    let inn = tx_at(
         &pool,
         b,
         "acct-b",
         "i1",
-        Decimal::new(50000, 2),
+        Decimal::new(25000, 2),
         now + Duration::hours(1),
     )
     .await?;
-    let savings = list_categories(&pool, user_id)
+    let gifts = list_categories(&pool, user_id)
         .await?
         .into_iter()
-        .find(|c| c.default_key.as_deref() == Some("savings"))
+        .find(|c| c.default_key.as_deref() == Some("gifts"))
         .unwrap()
         .id;
     sqlx::query(
-        "update transaction set budget_category_id = $1, category_source = 'rule' where id = $2",
+        "update transaction set budget_category_id = $1, category_source = 'ai', \
+         category_confidence = 0.27, category_reviewed_at = now() where id = $2",
     )
-    .bind(savings)
+    .bind(gifts)
     .bind(out)
     .execute(&pool)
     .await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
-    let still: Option<String> =
-        sqlx::query_scalar("select category_source from transaction where id = $1")
+
+    let accepted = row(&pool, out).await?;
+    assert_eq!(accepted.1, None, "an accepted guess is never paired");
+    assert_eq!(accepted.2, Some(gifts));
+    assert_eq!(accepted.3.as_deref(), Some("ai"));
+    assert_eq!(row(&pool, inn).await?.1, None);
+    Ok(())
+}
+
+/// A paired row whose partner is deleted (its connection removed) would
+/// otherwise keep the internal-transfer category with nothing to net against,
+/// and count as money set aside. It goes back to uncategorised, and the next
+/// pass may pair it again.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let (b, ts): (Uuid, DateTime<Utc>) =
+        sqlx::query_as("select account_id, ts from transaction where id = $1")
+            .bind(inn)
+            .fetch_one(&pool)
+            .await?;
+
+    sqlx::query("delete from transaction where id = $1")
+        .bind(inn)
+        .execute(&pool)
+        .await?;
+
+    let survivor = row(&pool, out).await?;
+    assert_eq!(survivor.1, None);
+    assert_eq!(
+        survivor.2, None,
+        "no internal-transfer category left behind"
+    );
+    assert_eq!(survivor.3, None);
+
+    let fresh = tx_at(
+        &pool,
+        b,
+        "acct-b",
+        "i2",
+        Decimal::new(50000, 2),
+        ts + Duration::hours(1),
+    )
+    .await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(row(&pool, out).await?.1, Some(fresh));
+    Ok(())
+}
+
+/// A pair the user breaks by recategorising one half leaves the other half
+/// flagged as an orphaned transfer. It is still a transfer nobody has matched,
+/// so a later pass may pair it with a better counterpart.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
+    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+
+    let (a, ts): (Uuid, DateTime<Utc>) =
+        sqlx::query_as("select account_id, ts from transaction where id = $1")
             .bind(out)
             .fetch_one(&pool)
             .await?;
-    assert_eq!(still.as_deref(), Some("rule"));
+    let fresh = tx_at(
+        &pool,
+        a,
+        "acct-a",
+        "o2",
+        Decimal::new(-50000, 2),
+        ts + Duration::hours(1),
+    )
+    .await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(row(&pool, inn).await?.1, Some(fresh));
+    let corrected = row(&pool, out).await?;
+    assert_eq!(corrected.1, None, "the user's correction stands");
+    assert_eq!(corrected.3.as_deref(), Some("user"));
     Ok(())
 }
 
@@ -881,8 +967,8 @@ async fn missing_internal_transfer_category_is_a_hard_error(pool: PgPool) -> any
 // ---------------------------------------------------------------------------
 // Dissolving a pair
 //
-// Spec §4's precedence (`user > rule > pair > ai`) means a user may always
-// overrule the pairing heuristic — it is timid, but it can still false-match
+// A user category outranks pairing, so a user may always overrule the
+// pairing heuristic — it is timid, but it can still false-match
 // two unrelated movements of the same amount. What must not survive that
 // correction is the link itself: a row pointing at a counterpart that is no
 // longer a transfer is a half-transfer that nets against nothing.

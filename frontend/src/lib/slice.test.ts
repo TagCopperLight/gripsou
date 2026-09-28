@@ -2,14 +2,12 @@ import { describe, it, expect } from "vitest";
 import i18n from "../i18n";
 
 import {
-  OTHER_COLOR,
-  UNCATEGORISED_COLOR,
-  sliceCategory,
   sliceChip,
   sliceColor,
   sliceKey,
   sliceLabel,
 } from "./slice";
+import { FALLBACK_COLOR, UNCATEGORISED_COLOR } from "./budget";
 import type { Slice } from "../api/overview";
 
 const groceries: Slice = {
@@ -20,7 +18,6 @@ const groceries: Slice = {
     defaultKey: null,
     color: "#8fd05f",
     icon: "ShoppingCart",
-    kind: "expense",
   },
 };
 
@@ -52,9 +49,10 @@ describe("sliceColor", () => {
     ).toBe("#aeaaa7");
   });
 
-  it("paints uncategorised amber and other neutral", () => {
+  it("paints uncategorised in the theme's amber, like the chip, and other neutral", () => {
     expect(sliceColor({ kind: "uncategorised" })).toBe(UNCATEGORISED_COLOR);
-    expect(sliceColor({ kind: "other" })).toBe(OTHER_COLOR);
+    expect(UNCATEGORISED_COLOR).toBe("#f0b35b"); // --color-amber
+    expect(sliceColor({ kind: "other" })).toBe(FALLBACK_COLOR);
   });
 });
 
@@ -66,17 +64,6 @@ describe("sliceLabel", () => {
   it("labels the two singletons from i18n", () => {
     expect(sliceLabel(i18n.t, { kind: "uncategorised" })).toBe(i18n.t("budget.uncategorized"));
     expect(sliceLabel(i18n.t, { kind: "other" })).toBe(i18n.t("budget.overview.other"));
-  });
-});
-
-describe("sliceCategory", () => {
-  it("returns the ref for a category slice", () => {
-    expect(sliceCategory(groceries)?.id).toBe("c1");
-  });
-
-  it("returns null for the singletons, which have no id to deep-link on", () => {
-    expect(sliceCategory({ kind: "uncategorised" })).toBeNull();
-    expect(sliceCategory({ kind: "other" })).toBeNull();
   });
 });
 
@@ -94,6 +81,6 @@ describe("sliceChip", () => {
   it("synthesises a neutral chip for the rollup", () => {
     const chip = sliceChip(i18n.t, { kind: "other" });
     expect(chip?.name).toBe(i18n.t("budget.overview.other"));
-    expect(chip?.color).toBe(OTHER_COLOR);
+    expect(chip?.color).toBe(FALLBACK_COLOR);
   });
 });

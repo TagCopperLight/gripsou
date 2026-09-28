@@ -6,7 +6,7 @@ import { TrendSurface } from "./TrendSurface";
 import type { BudgetTrend } from "../../../api/overview";
 
 // The raw option (functions included — `JSON.stringify` below drops them) so
-// the M4 test can invoke the tooltip formatter directly.
+// the decimal-string tooltip test can invoke the tooltip formatter directly.
 let capturedOption: EChartsOption | undefined;
 
 vi.mock("echarts-for-react", () => ({
@@ -30,7 +30,7 @@ const trend: BudgetTrend = {
     {
       slice: {
         kind: "category",
-        category: { id: "c1", name: "Rent", defaultKey: null, color: "#e0605f", icon: null, kind: "expense" },
+        category: { id: "c1", name: "Rent", defaultKey: null, color: "#e0605f", icon: null },
       },
       values: ["1200.00", "1200.00", "1200.00"],
     },
@@ -64,7 +64,7 @@ describe("TrendSurface", () => {
     expect(screen.getAllByTestId("category-chip")).toHaveLength(2);
   });
 
-  it("renders the tooltip total and rows from the series' own decimal strings, not the axis's numbers (M4)", () => {
+  it("renders the tooltip total and rows from the series' own decimal strings, not the axis's numbers", () => {
     render(<TrendSurface trend={trend} onSelectMonth={vi.fn()} />);
     const tooltip = capturedOption!.tooltip;
     const formatter = (Array.isArray(tooltip) ? tooltip[0] : tooltip)!.formatter as (

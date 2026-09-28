@@ -2,19 +2,16 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import { BudgetContext, type Selection } from "./budgetContext";
 import { EMPTY_FILTERS, type BudgetFilters } from "../../lib/budgetFilters";
-import { currentMonth, type Period } from "../../lib/period";
+import type { Period } from "../../lib/period";
 
 const NOTHING: Selection = { mode: "ids", ids: new Set<string>() };
 
 /** Lives in the `/budget` layout route, above the mode outlet, so filters
- *  survive a mode switch within a visit (§2.5) and reset on leaving the page. */
+ *  survive a mode switch within a visit and reset on leaving the page. */
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const [filters, setFiltersState] = useState<BudgetFilters>(EMPTY_FILTERS);
   const [selection, setSelection] = useState<Selection>(NOTHING);
-  const [period, setPeriod] = useState<Period>(() => ({
-    mode: "month",
-    month: currentMonth(),
-  }));
+  const [period, setPeriod] = useState<Period | null>(null);
 
   // Any filter change clears the selection. Without this, "all shown" would
   // silently retarget a different set between the user selecting and acting —
@@ -55,6 +52,15 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const selectAllShown = useCallback(() => setSelection({ mode: "allShown" }), []);
+  const clearSelection = useCallback(() => setSelection(NOTHING), []);
+  // Changes only with the selection, not with every keystroke in the search
+  // box: the table derives each row's `selected` from it.
+  const isSelected = useCallback(
+    (id: string) => selection.mode === "allShown" || selection.ids.has(id),
+    [selection],
+  );
+
   const value = useMemo(
     () => ({
       filters,
@@ -63,14 +69,13 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       period,
       setPeriod,
       selection,
-      isSelected: (id: string) =>
-        selection.mode === "allShown" || selection.ids.has(id),
+      isSelected,
       toggleRow,
-      selectAllShown: () => setSelection({ mode: "allShown" }),
-      clearSelection: () => setSelection(NOTHING),
+      selectAllShown,
+      clearSelection,
       anySelected: selection.mode === "allShown" || selection.ids.size > 0,
     }),
-    [filters, setFilters, patchFilters, period, selection, toggleRow],
+    [filters, setFilters, patchFilters, period, selection, isSelected, toggleRow, selectAllShown, clearSelection],
   );
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>;

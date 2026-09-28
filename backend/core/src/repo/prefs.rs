@@ -38,7 +38,7 @@ pub struct UserPrefs {
     #[serde(default)]
     pub budget_ai_enabled: bool,
     /// Review threshold, as an integer percent. An AI guess below it goes to
-    /// the review queue. The UI offers 50–95; the API enforces that range.
+    /// the review queue. Always within [`BUDGET_AI_THRESHOLD_RANGE`].
     #[serde(default = "default_budget_ai_threshold")]
     pub budget_ai_threshold: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,8 +69,15 @@ fn default_currency_position() -> String {
 fn default_percent_decimals() -> u8 {
     2
 }
+/// The review threshold a user who never moved the slider gets, in percent.
+pub const DEFAULT_BUDGET_AI_THRESHOLD: u8 = 70;
+
+/// The review thresholds a user may pick, in percent. The API refuses
+/// anything outside it, and a stored value outside it is clamped on read.
+pub const BUDGET_AI_THRESHOLD_RANGE: std::ops::RangeInclusive<u8> = 50..=95;
+
 fn default_budget_ai_threshold() -> u8 {
-    70
+    DEFAULT_BUDGET_AI_THRESHOLD
 }
 
 impl Default for UserPrefs {
@@ -120,10 +127,40 @@ pub async fn review_threshold(
     )
     .fetch_one(pool)
     .await?;
-    let pct = pct
-        .unwrap_or_else(|| default_budget_ai_threshold() as i32)
-        .clamp(1, 99);
+    let pct = pct.unwrap_or(DEFAULT_BUDGET_AI_THRESHOLD as i32).clamp(
+        *BUDGET_AI_THRESHOLD_RANGE.start() as i32,
+        *BUDGET_AI_THRESHOLD_RANGE.end() as i32,
+    );
     Ok(rust_decimal::Decimal::new(pct as i64, 2))
+}
+
+/// Replaces the user's preferences and says whether AI categorisation was on
+/// before, in one statement: the row is locked while it is read, so of two
+/// concurrent requests turning AI on, only one sees it as having been off.
+/// `None` when the user does not exist.
+pub async fn replace_prefs(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    prefs: &UserPrefs,
+) -> Result<Option<bool>, crate::error::CoreError> {
+    let was_enabled = sqlx::query_scalar!(
+        r#"
+        with old as (
+            select id, coalesce((prefs->>'budgetAiEnabled')::boolean, false) as enabled
+            from users where id = $1
+            for update
+        )
+        update users u set prefs = $2
+          from old
+         where u.id = old.id
+        returning old.enabled as "enabled!"
+        "#,
+        user_id,
+        sqlx::types::Json(prefs) as _,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(was_enabled)
 }
 
 /// Whether this user has opted in to AI categorisation.
@@ -202,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn budget_ai_defaults_off_at_eighty_percent() {
+    fn budget_ai_defaults_off_at_seventy_percent() {
         let p: UserPrefs = serde_json::from_str("{}").unwrap();
         assert!(!p.budget_ai_enabled);
         assert_eq!(p.budget_ai_threshold, 70);

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { BreakPairModal } from "../../components/budget/BreakPairModal";
-import { BudgetDialog } from "../../components/budget/BudgetDialog";
+import { Dialog } from "../../components/Dialog";
 import { SearchSurface } from "../../components/budget/SearchSurface";
 import { TransactionsTable } from "../../components/budget/TransactionsTable";
 import { SelectionBar } from "../../components/budget/SelectionBar";
@@ -25,8 +25,7 @@ import type { Transaction } from "../../api/types";
 
 /** What the row should look like the instant a category is picked, before the
  *  server answers. It mirrors what the backend does on a user assignment: the
- *  row becomes `user`-sourced, which clears the confidence and the review flag
- *  (spec §3.1). */
+ *  row becomes `user`-sourced, which clears the confidence and the review flag. */
 function optimisticCategory(
   categoryId: string | null,
   categories: ReturnType<typeof useBudgetCategories>["data"],
@@ -51,6 +50,15 @@ function catalogRank(catalog: { id: string }[], id: string): number {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 }
 
+/** What every write that can dissolve transfer pairs answers: set means the
+ *  server refused it, wrote nothing, and reports how many pairs it would
+ *  break. */
+type PairBreakAnswer = { pendingPairBreaks?: number | null };
+type WriteCallbacks<R> = { onSuccess: (res: R) => void; onError: (err: unknown) => void };
+type AnswerOf<H extends () => { mutateAsync: (...args: never[]) => Promise<unknown> }> = Awaited<
+  ReturnType<ReturnType<H>["mutateAsync"]>
+>;
+
 export function TransactionsMode() {
   const { t } = useTranslation();
   const { prefs } = useAuth();
@@ -68,33 +76,32 @@ export function TransactionsMode() {
   const patch = usePatchTransaction();
   const applyToDescription = useApplyToDescription();
   const bulk = useBulkTransactions();
+  // The stable pieces of the query and mutation results, so the callbacks the
+  // table hands to every row keep their identity across renders.
+  const { fetchNextPage, refetch } = list;
+  const { mutate: patchRow } = patch;
 
-  const [categoryFor, setCategoryFor] = useState<Transaction | null>(null);
-  // Only the id is held: the chooser stays open across several optimistic
-  // writes, so the row it acts on must be re-derived from `rows` on every
-  // render (mirrors `FilterPanel`'s functional `patchFilters`) — a frozen
-  // `Transaction` snapshot goes stale after the first toggle and every
-  // following toggle recomputes `tagIds` from that stale set, destroying
-  // whatever the previous toggle just added (see CRITICAL finding 1).
+  // Both choosers hold the row's id, never a snapshot: they stay open across
+  // optimistic writes, so the row they act on is re-derived from `rows` on
+  // every render. A frozen `Transaction` goes stale after the first write —
+  // a second tag toggle would rebuild `tagIds` from the stale set and undo the
+  // first.
+  const [categoryForId, setCategoryForId] = useState<string | null>(null);
   const [tagsForId, setTagsForId] = useState<string | null>(null);
   // The control each chooser hangs under — captured at click time, since the
-  // chooser is now a popover anchored to its trigger rather than a modal.
+  // chooser is a popover anchored to its trigger rather than a modal.
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [applyOffer, setApplyOffer] = useState<{ id: string; categoryId: string | null; count: number } | null>(null);
-  // A category write held back until the user agrees to dissolve the
-  // internal-transfer pairs it would break. `count` is 1 for a single row —
-  // the row itself says whether it is paired — and the server's figure for the
-  // two multi-row paths, whose target set the client may never have loaded.
+  // A write held back until the user agrees to dissolve the internal-transfer
+  // pairs it would break; `run` re-sends it confirmed.
   const [breakPair, setBreakPair] = useState<{ count: number; run: () => void } | null>(null);
-  // Spec §5.2/§5.4 — a failed row or bulk write must surface a recoverable
-  // inline message, and a successful bulk write must report how many rows it
-  // touched. Follows the idiom phase 2 already established next door
-  // (`TagsSurface`, `CategoriesSurface`, `TagRow`): `budgetErrorKey` picks the
-  // translation key, `role="alert"` + the red text class renders it.
+  // A failed row or bulk write surfaces a recoverable inline message, and a
+  // successful bulk write reports how many rows it touched. Both describe the
+  // last write only, so every new write clears them.
   const [writeErrorKey, setWriteErrorKey] = useState<string | null>(null);
   const [bulkUpdated, setBulkUpdated] = useState<number | null>(null);
 
-  const rows = list.data?.pages.flat() ?? [];
+  const rows = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
 
   // Two shapes, mirroring `count`: "all shown" is a set the client never
   // enumerates, so only the server can total it; an explicit id selection is
@@ -103,45 +110,73 @@ export function TransactionsMode() {
     selection.mode === "allShown"
       ? (counts.data?.matchingTotal ?? "0")
       : sumDecimals(rows.filter((r) => selection.ids.has(r.id)).map((r) => r.amountReporting));
+  const categoryFor = categoryForId ? (rows.find((r) => r.id === categoryForId) ?? null) : null;
   const tagsFor = tagsForId ? (rows.find((r) => r.id === tagsForId) ?? null) : null;
 
-  const onWriteError = (err: unknown) => setWriteErrorKey(budgetErrorKey(err));
+  const startWrite = useCallback(() => {
+    setWriteErrorKey(null);
+    setBulkUpdated(null);
+  }, []);
+  const onWriteError = useCallback((err: unknown) => setWriteErrorKey(budgetErrorKey(err)), []);
 
-  const assignToRow = (tx: Transaction, categoryId: string | null) => {
-    // Recategorising half of an auto-paired transfer dissolves the pair on
-    // both sides — confirm before writing, not after.
-    if (tx.isTransfer) {
-      setBreakPair({ count: 1, run: () => writeToRow(tx, categoryId) });
-      return;
-    }
-    writeToRow(tx, categoryId);
+  /** Every write that can dissolve internal-transfer pairs speaks one
+   *  protocol: sent unconfirmed, the server refuses it if it would break a
+   *  pair, reports how many, and writes nothing; we ask, and `run` re-sends
+   *  the identical write confirmed. Returns the attempt, so a caller that
+   *  already knows the answer can ask first. */
+  const pairBreakAware = <R extends PairBreakAnswer>(
+    send: (confirm: boolean, callbacks: WriteCallbacks<R>) => void,
+    onDone: (res: R) => void,
+  ) => {
+    const attempt = (confirm: boolean) =>
+      send(confirm, {
+        onSuccess: (res) => {
+          if (res?.pendingPairBreaks) {
+            setBreakPair({ count: res.pendingPairBreaks, run: () => attempt(true) });
+            return;
+          }
+          setBreakPair(null);
+          onDone(res);
+        },
+        onError: (err) => {
+          setBreakPair(null);
+          onWriteError(err);
+        },
+      });
+    return attempt;
   };
 
-  const writeToRow = (tx: Transaction, categoryId: string | null) => {
-    setWriteErrorKey(null);
-    setBreakPair(null);
-    patch.mutate(
-      {
-        id: tx.id,
-        body: { categoryId },
-        // `isTransfer` goes too: the pair is dissolved by this write, so the
-        // row must stop claiming to be one rather than contradicting its new
-        // category until the refetch lands. The *other* half becomes an
-        // orphan, but the client cannot know which row that is — that one
-        // arrives via the invalidation.
-        optimistic: { ...optimisticCategory(categoryId, categories.data), isTransfer: false },
-      },
-      {
-        // The row is already saved; this only offers to widen the correction
-        // to the rows that share the description (spec §5.4).
-        onSuccess: (res) => {
-          if (res.sameDescriptionCount > 0) {
-            setApplyOffer({ id: tx.id, categoryId, count: res.sameDescriptionCount });
-          }
-        },
-        onError: onWriteError,
+  const assignToRow = (tx: Transaction, categoryId: string | null) => {
+    startWrite();
+    const attempt = pairBreakAware<AnswerOf<typeof usePatchTransaction>>(
+      (confirm, callbacks) =>
+        patchRow(
+          {
+            id: tx.id,
+            body: { categoryId, ...(confirm ? { confirmBreakPairs: true } : {}) },
+            // `isTransfer` goes too: the pair is dissolved by this write, so
+            // the row must stop claiming to be one rather than contradicting
+            // its new category until the refetch lands. The *other* half
+            // becomes an orphan, but the client cannot know which row that
+            // is — that one arrives via the invalidation.
+            optimistic: { ...optimisticCategory(categoryId, categories.data), isTransfer: false },
+          },
+          callbacks,
+        ),
+      // The row is saved; this only offers to widen the correction to the
+      // rows that share the description.
+      (res) => {
+        if (res.sameDescriptionCount > 0) {
+          setApplyOffer({ id: tx.id, categoryId, count: res.sameDescriptionCount });
+        }
       },
     );
+    // A row the list already shows as paired is asked about before anything
+    // is sent, so its chip never flips to the new category and back while the
+    // server refuses. The server still refuses on its own for a row paired
+    // since the list was loaded.
+    if (tx.isTransfer) setBreakPair({ count: 1, run: () => attempt(true) });
+    else attempt(false);
   };
 
   // Load-bearing: this is the DEBOUNCED `query`, the exact same value the
@@ -152,76 +187,64 @@ export function TransactionsMode() {
   const bulkTarget = () =>
     selection.mode === "allShown" ? { filter: query } : { ids: [...selection.ids] };
 
-  // §4.4/finding 3b: `matching_transaction_ids` returns an empty vec for the
-  // lots bucket even though `counts.matching` still counts lot rows — a lot
-  // row carries no budget, so "select all shown" cannot mean anything in
-  // that bucket and must not be offered as if it did.
+  // `matching_transaction_ids` returns nothing for the lots bucket even though
+  // `counts.matching` still counts lot rows — a lot row carries no budget, so
+  // "select all shown" cannot mean anything in that bucket and must not be
+  // offered as if it did.
   const lotsBucketSelected = filters.bucket === "lots";
 
-  /** Widens a correction to every row sharing the description. The server
-   *  refuses an unconfirmed write that would dissolve pairs, reporting how
-   *  many; we then ask, and re-send the identical body with the flag. */
-  const runApplyToDescription = (id: string, categoryId: string | null, confirmBreakPairs: boolean) => {
-    applyToDescription.mutate(
-      { id, categoryId, confirmBreakPairs },
-      {
-        onSuccess: (res) => {
-          if (res.pendingPairBreaks) {
-            setBreakPair({
-              count: res.pendingPairBreaks,
-              run: () => runApplyToDescription(id, categoryId, true),
-            });
-            return;
-          }
-          setBreakPair(null);
-          setApplyOffer(null);
-        },
-        onError: onWriteError,
-      },
-    );
+  /** Widens a correction to every row sharing the description. */
+  const runApplyToDescription = (id: string, categoryId: string | null) => {
+    startWrite();
+    pairBreakAware<AnswerOf<typeof useApplyToDescription>>(
+      (confirm, callbacks) => applyToDescription.mutate({ id, categoryId, confirmBreakPairs: confirm }, callbacks),
+      () => setApplyOffer(null),
+    )(false);
   };
 
-  const runBulk = (
-    body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked">,
-    confirmBreakPairs = false,
-  ) => {
-    setWriteErrorKey(null);
-    setBulkUpdated(null);
+  const runBulk = (body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked">) => {
+    startWrite();
     // The target is captured once, so the confirmation re-sends the set the
     // user actually looked at — re-deriving it after the modal could pick up a
     // selection or filter that moved underneath.
     const target = bulkTarget();
-    bulk.mutate(
-      { ...target, ...body, ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}) },
-      {
-        onSuccess: (res) => {
-          // Refused, not applied: nothing was written, so the selection stays
-          // and no "N rows updated" is claimed.
-          if (res.pendingPairBreaks) {
-            setBreakPair({
-              count: res.pendingPairBreaks,
-              run: () =>
-                bulk.mutate(
-                  { ...target, ...body, confirmBreakPairs: true },
-                  {
-                    onSuccess: (done) => {
-                      setBreakPair(null);
-                      clearSelection();
-                      setBulkUpdated(done.updated);
-                    },
-                    onError: onWriteError,
-                  },
-                ),
-            });
-            return;
-          }
-          clearSelection();
-          setBulkUpdated(res.updated);
-        },
-        onError: onWriteError,
+    pairBreakAware<AnswerOf<typeof useBulkTransactions>>(
+      (confirm, callbacks) =>
+        bulk.mutate({ ...target, ...body, ...(confirm ? { confirmBreakPairs: true } : {}) }, callbacks),
+      // Only an applied write clears the selection and claims "N rows
+      // updated"; a refused one leaves both as they were.
+      (res) => {
+        clearSelection();
+        setBulkUpdated(res.updated);
       },
-    );
+    )(false);
   };
+
+  const onRetry = useCallback(() => void refetch(), [refetch]);
+  const onLoadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  const onClearFilters = useCallback(() => setFilters({ ...EMPTY_FILTERS }), [setFilters]);
+  // Clicking the same control again puts its chooser away: `Popover` exempts
+  // its anchor from the outside-click close.
+  const onOpenCategory = useCallback((tx: Transaction, el: HTMLElement) => {
+    setAnchor(el);
+    setTagsForId(null);
+    setCategoryForId((prev) => (prev === tx.id ? null : tx.id));
+  }, []);
+  const onOpenTags = useCallback((tx: Transaction, el: HTMLElement) => {
+    setAnchor(el);
+    setCategoryForId(null);
+    setTagsForId((prev) => (prev === tx.id ? null : tx.id));
+  }, []);
+  const onToggleChecked = useCallback(
+    (tx: Transaction) => {
+      startWrite();
+      patchRow(
+        { id: tx.id, body: { checked: !tx.checked }, optimistic: { checked: !tx.checked } },
+        { onError: onWriteError },
+      );
+    },
+    [patchRow, startWrite, onWriteError],
+  );
 
   return (
     <div className="flex min-h-full flex-col gap-4">
@@ -252,30 +275,17 @@ export function TransactionsMode() {
           filtered={isFiltered(filters)}
           loading={list.isPending}
           error={list.isError}
-          onRetry={() => void list.refetch()}
+          onRetry={onRetry}
           hasNextPage={Boolean(list.hasNextPage)}
           fetchingNextPage={list.isFetchingNextPage}
-          onLoadMore={() => void list.fetchNextPage()}
-          onClearFilters={() => setFilters({ ...EMPTY_FILTERS })}
+          onLoadMore={onLoadMore}
+          onClearFilters={onClearFilters}
           isSelected={isSelected}
           anySelected={anySelected}
           onToggleSelect={toggleRow}
-          // Clicking the same control again puts its chooser away: `Popover`
-          // exempts its anchor from the outside-click close.
-          onOpenCategory={(tx, el) => {
-            setAnchor(el);
-            setCategoryFor((prev) => (prev?.id === tx.id ? null : tx));
-          }}
-          onOpenTags={(tx, el) => {
-            setAnchor(el);
-            setTagsForId((prev) => (prev === tx.id ? null : tx.id));
-          }}
-          onToggleChecked={(tx) =>
-            patch.mutate(
-              { id: tx.id, body: { checked: !tx.checked }, optimistic: { checked: !tx.checked } },
-              { onError: onWriteError },
-            )
-          }
+          onOpenCategory={onOpenCategory}
+          onOpenTags={onOpenTags}
+          onToggleChecked={onToggleChecked}
         />
 
         {writeErrorKey && (
@@ -315,7 +325,7 @@ export function TransactionsMode() {
           mode="pick"
           selectedIds={categoryFor.categoryId ? [categoryFor.categoryId] : []}
           onPick={(id) => assignToRow(categoryFor, id)}
-          onClose={() => setCategoryFor(null)}
+          onClose={() => setCategoryForId(null)}
           anchor={anchor}
         />
       )}
@@ -326,9 +336,8 @@ export function TransactionsMode() {
           onToggle={(id) => {
             // `tagIds` is a FULL REPLACE server-side — there is no add/remove
             // split on the row patch — so a toggle sends the whole new set,
-            // read from the LIVE row (`tagsFor`, re-derived from `rows` every
-            // render) so a rapid second toggle builds on the first one's
-            // optimistic result instead of a stale snapshot.
+            // read from the live row so a rapid second toggle builds on the
+            // first one's optimistic result instead of a stale snapshot.
             const has = tagsFor.tags.some((tag) => tag.id === id);
             const current = tagsFor.tags.map((tag) => tag.id);
             const next = has ? current.filter((x) => x !== id) : [...current, id];
@@ -348,7 +357,8 @@ export function TransactionsMode() {
               // then jump. A tag the catalog doesn't know (it always does)
               // sorts last, keeping its click order — `sort` is stable.
               .sort((a, b) => catalogRank(catalog, a.id) - catalogRank(catalog, b.id));
-            patch.mutate(
+            startWrite();
+            patchRow(
               { id: tagsFor.id, body: { tagIds: tags.map((tag) => tag.id) }, optimistic: { tags } },
               { onError: onWriteError },
             );
@@ -368,7 +378,7 @@ export function TransactionsMode() {
       )}
 
       {applyOffer && (
-        <BudgetDialog
+        <Dialog
           title={t("budget.transactions.applyToAllTitle")}
           onClose={() => setApplyOffer(null)}
           busy={applyToDescription.isPending}
@@ -380,7 +390,7 @@ export function TransactionsMode() {
               <Button
                 data-testid="apply-to-all-confirm"
                 disabled={applyToDescription.isPending}
-                onClick={() => runApplyToDescription(applyOffer.id, applyOffer.categoryId, false)}
+                onClick={() => runApplyToDescription(applyOffer.id, applyOffer.categoryId)}
               >
                 {t("budget.transactions.applyToAllConfirm")}
               </Button>
@@ -390,7 +400,7 @@ export function TransactionsMode() {
           <p data-testid="apply-to-all" className="text-sm text-fg-dim">
             {t("budget.transactions.applyToAllBody", { count: applyOffer.count })}
           </p>
-        </BudgetDialog>
+        </Dialog>
       )}
     </div>
   );

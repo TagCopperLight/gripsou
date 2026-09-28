@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use gripsou_core::categorize::{
-    CategorizeError, CategorizeOutput, CategorizeRequest, Example, Guess,
+    CategorizeError, CategorizeOutput, CategorizeRequest, Example, Guess, Usage,
 };
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
@@ -136,20 +136,30 @@ pub fn parse_response(
         .collect();
     Ok(CategorizeOutput {
         guesses,
-        tokens_in: body["usageMetadata"]["promptTokenCount"]
-            .as_i64()
-            .map(|n| n as i32),
-        tokens_out: output_tokens(&body["usageMetadata"]),
+        usage: usage(&body["usageMetadata"]),
+        interrupted: None,
     })
 }
 
-/// Billed output: the answer plus the thinking tokens, which Gemini reports
-/// apart but charges at the output rate. Unknown only when neither is present.
-fn output_tokens(usage: &Value) -> Option<i32> {
-    let candidates = usage["candidatesTokenCount"].as_i64();
-    let thoughts = usage["thoughtsTokenCount"].as_i64();
-    if candidates.is_none() && thoughts.is_none() {
-        return None;
+/// A token count as the API reports it: a non-negative integer that fits.
+fn tokens(v: &Value) -> Option<i64> {
+    v.as_u64().and_then(|n| i64::try_from(n).ok())
+}
+
+/// Billed output is the answer plus the thinking tokens, which Gemini reports
+/// apart but charges at the output rate; it is known when either is present.
+/// Known only when both input and output are.
+fn usage(meta: &Value) -> Usage {
+    let tokens_in = tokens(&meta["promptTokenCount"]);
+    let candidates = tokens(&meta["candidatesTokenCount"]);
+    let thoughts = tokens(&meta["thoughtsTokenCount"]);
+    let tokens_out = match (candidates, thoughts) {
+        (None, None) => None,
+        (c, t) => Some(c.unwrap_or(0).saturating_add(t.unwrap_or(0))),
+    };
+    Usage {
+        tokens_in: tokens_in.unwrap_or(0),
+        tokens_out: tokens_out.unwrap_or(0),
+        complete: tokens_in.is_some() && tokens_out.is_some(),
     }
-    Some((candidates.unwrap_or(0) + thoughts.unwrap_or(0)) as i32)
 }

@@ -25,52 +25,71 @@ vi.mock("echarts-for-react", () => ({
 }));
 
 const SUMMARY = {
-  currency: "EUR",
   txnCount: 412,
   fxMissing: false,
   reportingFxMissing: false,
-  comparable: true,
   figures: {
     income: { amount: "3200.00" },
     expenses: { amount: "1940.00" },
     net: { amount: "1260.00" },
     saved: { amount: "800.00" },
   },
-  sankey: { sources: [], destinations: [] },
+  sankey: { sources: [], destinations: [], notSpent: "1260.00" },
   breakdown: [
     {
       slice: {
         kind: "category",
-        category: { id: "c1", name: "Rent", defaultKey: null, color: "#e0605f", icon: null, kind: "expense" },
+        category: { id: "c1", name: "Rent", defaultKey: null, color: "#e0605f", icon: null },
       },
       amount: "1200.00",
       txnCount: 1,
     },
   ],
-  expensesTotal: "1940.00",
 };
 
 const TREND = { months: ["2026-09"], series: [] };
 
 const AI_STATUS = {
   configured: false,
-  enabled: false,
   running: false,
   remaining: 0,
   reviewCount: 0,
-  threshold: 80,
   lastRun: null,
 };
 
-function stubApi(summary: unknown = SUMMARY) {
+/** A local-noon timestamp in `month`, as a transaction row's `t`. */
+const inMonth = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 15, 12).getTime();
+};
+
+type Data = {
+  /** The newest row's month, or null for no transactions at all. */
+  latest?: string | null;
+  /** How many rows lie before the month asked about. */
+  before?: number;
+};
+
+function stubApi(summary: unknown = SUMMARY, data: Data = {}) {
+  const { latest = currentMonth(), before = 5 } = data;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      const body = String(url).includes("/budget/trend")
+      const u = String(url);
+      const counts = {
+        matching: before, total: before, uncategorized: 0, matchingTotal: "0",
+        fxMissing: false, reportingFxMissing: false,
+      };
+      const rows = latest === null ? [] : [{ id: "x", t: inMonth(latest) }];
+      const body = u.includes("/budget/trend")
         ? TREND
-        : String(url).includes("/budget/categorize/status")
+        : u.includes("/budget/categorize/status")
           ? AI_STATUS
-          : summary;
+          : u.includes("/transactions/counts")
+            ? counts
+            : u.includes("/transactions")
+              ? rows
+              : summary;
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -79,9 +98,22 @@ function stubApi(summary: unknown = SUMMARY) {
   );
 }
 
+const requested = (fragment: string) =>
+  vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes(fragment));
+
 function FilterProbe() {
-  const { filters } = useBudget();
-  return <span data-testid="filters">{JSON.stringify(filters)}</span>;
+  const { filters, patchFilters } = useBudget();
+  return (
+    <>
+      <span data-testid="filters">{JSON.stringify(filters)}</span>
+      <button
+        type="button"
+        onClick={() => patchFilters({ search: "aldi", needsReview: true, transfers: true })}
+      >
+        leftovers
+      </button>
+    </>
+  );
 }
 
 // FiguresSurface renders amounts through PrivateMoney, which calls useAuth —
@@ -136,36 +168,52 @@ describe("BudgetOverview", () => {
     expect(screen.queryByTestId("breakdown-row-cat:c1")).toBeNull();
   });
 
-  it("steps past the disabled back caret from the empty surface", async () => {
+  it("opens on the latest month that has transactions, not the empty current one", async () => {
+    const lastMonth = addMonths(currentMonth(), -1);
+    stubApi(SUMMARY, { latest: lastMonth });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("period-label")).toHaveTextContent(monthLabel(lastMonth, "en")),
+    );
+    expect(requested(`month=${lastMonth}`)).toBe(true);
+    expect(requested(`month=${currentMonth()}`)).toBe(false);
+    // The latest data is the forward edge.
+    expect(screen.getByTestId("period-next")).toBeDisabled();
+  });
+
+  it("keeps the back caret for an empty month with data before it", async () => {
+    stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] }, { before: 12 });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("empty-period")).toBeVisible());
+    await waitFor(() => expect(screen.getByTestId("period-prev")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("period-prev"));
+    const expectedMonth = addMonths(currentMonth(), -1);
+    await waitFor(() =>
+      expect(screen.getByTestId("period-label")).toHaveTextContent(monthLabel(expectedMonth, "en")),
+    );
+    await waitFor(() => expect(requested(`month=${expectedMonth}`)).toBe(true));
+  });
+
+  it("disables the back caret, and offers no way earlier, before the first data", async () => {
+    stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] }, { before: 0 });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("period-prev")).toBeDisabled());
+    expect(screen.queryByTestId("empty-earlier")).toBeNull();
+  });
+
+  it("does not ask for the trend when the empty state hides it", async () => {
     stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] });
     renderPage();
     await waitFor(() => expect(screen.getByTestId("empty-period")).toBeVisible());
-    expect(screen.getByTestId("period-prev")).toBeDisabled();
-    // Was only "the label is visible", true whether or not the click moved
-    // anything (M8) — assert it actually moved to the PREVIOUS month, both by
-    // the label text and by the request that goes out for it.
-    const before = screen.getByTestId("period-label").textContent;
-    fireEvent.click(screen.getByTestId("empty-earlier"));
-    await waitFor(() =>
-      expect(screen.getByTestId("period-label")).not.toHaveTextContent(before!),
-    );
-    const expectedMonth = addMonths(currentMonth(), -1);
-    expect(screen.getByTestId("period-label")).toHaveTextContent(
-      monthLabel(expectedMonth, "en"),
-    );
-    await waitFor(() =>
-      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        expect.stringContaining(`month=${expectedMonth}`),
-        expect.anything(),
-      ),
-    );
+    expect(requested("/budget/trend")).toBe(false);
   });
 
-  it("deep-links a breakdown row with the period and the category", async () => {
+  it("draws no Sankey and no table for a period with nothing to show in them", async () => {
+    stubApi({ ...SUMMARY, sankey: { sources: [], destinations: [] }, breakdown: [] });
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("breakdown-row-cat:c1")).toBeVisible());
-    fireEvent.click(screen.getByTestId("breakdown-row-cat:c1"));
-    expect(navigate).toHaveBeenCalledWith({ to: "/budget/transactions" });
+    await waitFor(() => expect(screen.getByTestId("figure-income")).toBeVisible());
+    expect(screen.queryByTestId("sankey-see-transactions")).toBeNull();
+    expect(screen.queryByText("Categories")).toBeNull();
   });
 
   it("shows the pivot-currency notice when the reporting rate is missing", async () => {
@@ -174,14 +222,31 @@ describe("BudgetOverview", () => {
     await waitFor(() => expect(screen.getByTestId("reporting-fx-missing")).toBeVisible());
   });
 
-  it("writes the period and the category id for a category row", async () => {
+  it("deep-links a category row with the period and the category", async () => {
     renderPage(<FilterProbe />);
     await waitFor(() => expect(screen.getByTestId("breakdown-row-cat:c1")).toBeVisible());
     fireEvent.click(screen.getByTestId("breakdown-row-cat:c1"));
-    const filters = screen.getByTestId("filters").textContent!;
-    expect(filters).toContain('"categoryIds":["c1"]');
-    expect(filters).toContain('"periodLabel"');
-    expect(filters).toContain('"from":"');
+    expect(navigate).toHaveBeenCalledWith({ to: "/budget/transactions" });
+    const filters = JSON.parse(screen.getByTestId("filters").textContent!);
+    expect(filters.categoryIds).toEqual(["c1"]);
+    // The period itself, not a label: the chip is worded at render time, in
+    // whatever language is current then.
+    expect(filters.period).toEqual({ mode: "month", month: currentMonth() });
+    expect(filters.from).toBe(`${currentMonth()}-01`);
+    // The select shows the dates that apply, not "All time".
+    expect(filters.timeFrame).toBe("custom");
+  });
+
+  it("resets the review and transfer filters so the list matches the figure clicked", async () => {
+    renderPage(<FilterProbe />);
+    await waitFor(() => expect(screen.getByTestId("breakdown-row-cat:c1")).toBeVisible());
+    fireEvent.click(screen.getByText("leftovers"));
+    fireEvent.click(screen.getByTestId("breakdown-row-cat:c1"));
+    const filters = JSON.parse(screen.getByTestId("filters").textContent!);
+    expect(filters.needsReview).toBe(false);
+    expect(filters.transfers).toBe(false);
+    // The reader's own narrowing stays.
+    expect(filters.search).toBe("aldi");
   });
 
   it("writes the flag and the outflow bucket for the uncategorised row", async () => {

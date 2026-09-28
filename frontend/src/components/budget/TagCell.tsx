@@ -1,5 +1,4 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 
 import { TagChip } from "./TagChip";
@@ -7,6 +6,8 @@ import type { BudgetTag } from "../../api/budget";
 
 type TagCellProps = {
   tags: Pick<BudgetTag, "id" | "name" | "color">[];
+  /** Accessible name of the add button, naming the row it belongs to. */
+  label: string;
   onOpen: (anchor: HTMLElement) => void;
 };
 
@@ -23,8 +24,7 @@ const GAP = 4;
  *  In jsdom every width is 0, so everything "fits" and the counter never
  *  appears — which is what the row tests expect.
  */
-export function TagCell({ tags, onOpen }: TagCellProps) {
-  const { t } = useTranslation();
+export function TagCell({ tags, label, onOpen }: TagCellProps) {
   const line = useRef<HTMLSpanElement>(null);
   const ghost = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(tags.length);
@@ -70,7 +70,8 @@ export function TagCell({ tags, onOpen }: TagCellProps) {
       type="button"
       data-testid="tx-add-tag"
       onClick={(e) => onOpen(e.currentTarget)}
-      aria-label={t("budget.transactions.addTags")}
+      aria-label={label}
+      aria-haspopup="dialog"
       /* Always mounted (for non-lot rows) and focusable — opacity, not
          `display`, drives visibility so a keyboard-only user can Tab to it and
          reveal it with its own focus, not just row hover. */

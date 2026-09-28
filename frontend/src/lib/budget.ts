@@ -13,7 +13,6 @@ import type { BudgetCategory, BudgetKind } from "../api/budget";
 import type { Transaction, TypeBucket } from "../api/types";
 import { ApiError } from "../api/client";
 
-/** Display order of the four kinds; also the grouping order of every list. */
 // Swatches offered in the category/tag colour picker: the account palette's
 // hues plus enough extras to fill one row, ordered around the colour wheel.
 export const BUDGET_PALETTE: readonly string[] = [
@@ -36,6 +35,7 @@ export const BUDGET_PALETTE: readonly string[] = [
   "#9aa4b2",
 ];
 
+/** Display order of the four kinds; also the grouping order of every list. */
 export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "internal", "excluded"];
 
 /** The TYPE control, shared with the active-filter chips so a bucket looks the
@@ -146,13 +146,14 @@ export const BUDGET_ICONS: Record<string, LucideIcon> = {
 
 export const BUDGET_ICON_NAMES: readonly string[] = Object.keys(BUDGET_ICONS);
 
-export function budgetIcon(name: string | null): LucideIcon | null {
-  return (name && BUDGET_ICONS[name]) || null;
-}
-
 /** Grey, from the seeded system row — the fallback for a missing or unsafe
  *  colour. A colour reaches an inline `style`, so it is validated, not trusted. */
 export const FALLBACK_COLOR = "#aeaaa7";
+/** A row with no category: the theme's amber (`--color-amber`), so the chip
+ *  and the amber "needs review" text beside it are the same colour. A hex
+ *  literal rather than the CSS variable because it is also mixed into tints
+ *  and handed to the charts. */
+export const UNCATEGORISED_COLOR = "#f0b35b";
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export function safeBudgetColor(color: string | null | undefined): string {
@@ -203,20 +204,15 @@ export type ChooserItem = {
   render: ReactNode;
 };
 
-/** The row's own category, rebuilt from the flat fields the list endpoint
- *  sends, so `CategoryChip` can be reused verbatim from phase 2. */
-export function categoryOfTransaction(tx: Transaction): BudgetCategory | null {
+/** The row's own category, as much of it as the chip draws — rebuilt from
+ *  the flat fields the list endpoint sends. Nothing is invented: a row does not
+ *  carry its category's kind, hint or archive flag, so neither does this. */
+export function categoryOfTransaction(tx: Transaction): CategoryLike | null {
   if (!tx.categoryId) return null;
   return {
-    id: tx.categoryId,
     name: tx.categoryName ?? "",
     defaultKey: tx.categoryDefaultKey,
     color: tx.categoryColor ?? "",
     icon: tx.categoryIcon,
-    hint: null,
-    kind: tx.categoryKind ?? "expense",
-    systemKey: null,
-    archived: false,
-    txCount: 0,
   };
 }

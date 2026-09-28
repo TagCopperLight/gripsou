@@ -9,14 +9,15 @@ import { useAiStatus } from "../api/budget";
 
 type Mode = "overview" | "transactions" | "review";
 
+/** A bare `/budget` is Overview, the same default the router redirects to. */
 function modeOf(pathname: string): Mode {
-  if (pathname.endsWith("/overview")) return "overview";
+  if (pathname.endsWith("/transactions")) return "transactions";
   if (pathname.endsWith("/review")) return "review";
-  return "transactions";
+  return "overview";
 }
 
-/** The one Budget page (§0). Modes live in the URL; the filters and the
- *  selection live in the provider, so they survive a mode switch (§2.5).
+/** The one Budget page. Modes live in the URL; the filters and the
+ *  selection live in the provider, so they survive a mode switch.
  *  Review appears only while the queue is non-empty — and stays while the
  *  user is in it, so a queue drained in place can still show its success
  *  state instead of losing the selected segment. */
@@ -52,10 +53,10 @@ export function Budget() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title={t("nav.budget")} />
         {/* The global SyncButton is pinned at the top-right of the page, outside
-         *  this row; the margin keeps the control clear of its box instead of
-         *  letting the two overlap. */}
+         *  this row; `clear-sync-button` keeps the control clear of its box
+         *  instead of letting the two overlap. */}
         <SegmentedControl<Mode>
-          className="mr-12"
+          className="clear-sync-button"
           value={mode}
           onChange={(next) => navigate({ to: `/budget/${next}` })}
           options={options}

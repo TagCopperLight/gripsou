@@ -56,9 +56,7 @@ describe("SelectionBar", () => {
   });
 
   // The sum itself is computed by the caller (`TransactionsMode`); this bar
-  // only renders whatever `total` it is passed — renamed from "totals... from
-  // the rows it was given" (M9), which claimed a computation this component
-  // does not do.
+  // only renders whatever `total` it is passed.
   it("renders the total it is passed", () => {
     renderBar({ total: "-21.48" });
     fireEvent.click(screen.getByText("pick-a"));

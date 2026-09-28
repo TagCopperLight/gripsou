@@ -1,23 +1,17 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Search } from "lucide-react";
 
 import { Popover } from "./Popover";
 import type { ChooserItem } from "../../lib/budget";
 
-type EntityChooserProps = {
+type ChooserBase = {
   title: string;
   items: ChooserItem[];
   /** Group keys in display order; omit for a flat list. */
   groups?: { key: string; label: string }[];
-  /** `multi` checkmarks lines and stays open; `pick` applies and closes. */
-  mode: "multi" | "pick";
   selectedIds: string[];
-  onToggle?: (id: string) => void;
-  onPick?: (id: string | null) => void;
   onClose: () => void;
-  /** `pick` only: the label of the line that clears the value. */
-  noneLabel?: string;
   /** The control that opened the chooser — the panel hangs under it. */
   anchor?: HTMLElement | null;
   /** An optional band below the list, mirroring the search header: it stays
@@ -26,9 +20,20 @@ type EntityChooserProps = {
   footer?: ReactNode;
 };
 
-export function EntityChooser({
-  title, items, groups, mode, selectedIds, onToggle, onPick, onClose, noneLabel, anchor, footer,
-}: EntityChooserProps) {
+/** `multi` checkmarks lines and stays open; `pick` applies one and closes. */
+export type ChooserMode =
+  | { mode: "multi"; onToggle: (id: string) => void }
+  | {
+      mode: "pick";
+      onPick: (id: string | null) => void;
+      /** The label of the line that clears the value; omit for no such line. */
+      noneLabel?: string;
+    };
+
+type EntityChooserProps = ChooserBase & ChooserMode;
+
+export function EntityChooser(props: EntityChooserProps) {
+  const { title, items, groups, mode, selectedIds, onClose, anchor, footer } = props;
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   // `active` is where Enter would land — it is 0 from the start so a bare
@@ -37,7 +42,12 @@ export function EntityChooser({
   // nothing is painted, so no line looks hovered under a motionless cursor.
   const [active, setActive] = useState(0);
   const [navigated, setNavigated] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
+  // Option ids, so the search field can point assistive tech at the line
+  // Enter would apply (`aria-activedescendant`): focus stays in the field
+  // while the arrows move, and without this a screen reader hears nothing.
+  const baseId = useId();
+  const listId = `${baseId}-list`;
+  const optionId = (sequenceIndex: number) => `${baseId}-opt-${sequenceIndex}`;
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -45,18 +55,19 @@ export function EntityChooser({
   }, [items, query]);
 
   const apply = (id: string | null) => {
-    if (mode === "pick") {
-      onPick?.(id);
+    if (props.mode === "pick") {
+      props.onPick(id);
       onClose();
       return;
     }
-    if (id !== null) onToggle?.(id);
+    if (id !== null) props.onToggle(id);
   };
 
   // The "no category" line (pick mode only) is a real, keyboard-reachable
   // option, not a mouse-only extra: it occupies sequence index 0 and every
   // visible item is offset by one behind it.
-  const hasNone = mode === "pick" && !!noneLabel;
+  const noneLabel = props.mode === "pick" ? props.noneLabel : undefined;
+  const hasNone = !!noneLabel;
   const offset = hasNone ? 1 : 0;
   const lastIndex = visible.length - 1 + offset;
 
@@ -92,6 +103,8 @@ export function EntityChooser({
         key={item.id}
         type="button"
         role="option"
+        id={optionId(sequenceIndex)}
+        tabIndex={-1}
         aria-selected={selectedIds.includes(item.id)}
         data-testid={`chooser-option-${item.id}`}
         onClick={() => apply(item.id)}
@@ -129,14 +142,19 @@ export function EntityChooser({
               setNavigated(false);
             }}
             onKeyDown={onKeyDown}
+            aria-label={t("budget.chooser.search")}
+            aria-controls={listId}
+            aria-activedescendant={lastIndex >= 0 ? optionId(Math.min(active, lastIndex)) : undefined}
             placeholder={t("budget.chooser.search")}
             className="w-full bg-transparent py-2.5 pl-9 pr-3 text-sm text-fg outline-none"
           />
         </label>
         <div className="h-px bg-surface-3" />
         <div
-          ref={listRef}
+          id={listId}
           role="listbox"
+          aria-label={title}
+          aria-multiselectable={mode === "multi"}
           tabIndex={-1}
           onKeyDown={onKeyDown}
           onMouseLeave={() => setNavigated(false)}
@@ -146,6 +164,8 @@ export function EntityChooser({
             <button
               type="button"
               role="option"
+              id={optionId(0)}
+              tabIndex={-1}
               aria-selected={selectedIds.length === 0}
               data-testid="chooser-option-none"
               onClick={() => apply(null)}

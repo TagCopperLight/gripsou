@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update budget_ai_lock set heartbeat_at = now() where user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98786e909ea075a277b9cffd9448b709dbb276b44f493c696e7f20b66dd55934"
+}

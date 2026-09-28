@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with old as (\n            select id, coalesce((prefs->>'budgetAiEnabled')::boolean, false) as enabled\n            from users where id = $1\n            for update\n        )\n        update users u set prefs = $2\n          from old\n         where u.id = old.id\n        returning old.enabled as \"enabled!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f0853db3574775a9cfc13402c3d71bbb8ec81236752c94cda39647ddcb21a9a7"
+}

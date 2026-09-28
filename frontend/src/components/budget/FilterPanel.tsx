@@ -21,7 +21,7 @@ function Column({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** Part 2 of the search surface: four columns, no separators (§2.2). */
+/** Part 2 of the search surface: four columns, no separators. */
 export function FilterPanel() {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
@@ -89,6 +89,8 @@ export function FilterPanel() {
             <button
               type="button"
               data-testid="add-category-filter"
+              aria-haspopup="dialog"
+              aria-expanded={open === "categories"}
               aria-label={t("budget.transactions.filterByCategory")}
               onClick={openChooser("categories")}
               className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
@@ -120,6 +122,8 @@ export function FilterPanel() {
             <button
               type="button"
               data-testid="add-tag-filter"
+              aria-haspopup="dialog"
+              aria-expanded={open === "tags"}
               aria-label={t("budget.transactions.filterByTag")}
               onClick={openChooser("tags")}
               className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"

@@ -145,14 +145,16 @@ async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// The normalisation the "apply to all" prompt (phase 3) keys on: card
-/// masks, dates and digit runs removed.
+/// The normalisation the "apply to all" prompt keys on: dates and digit
+/// runs removed. A card mask is the adapter's to strip; one left in the
+/// wording keeps its letters but loses its digits, so the card number never
+/// splits a merchant in two.
 #[sqlx::test(migrations = "../migrations")]
-async fn norm_description_strips_masks_dates_and_digits(pool: PgPool) -> anyhow::Result<()> {
+async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Result<()> {
     let cases = [
         (
             "CARTE 12/03/26 CB*4242 LECLERC PARIS",
-            "carte leclerc paris",
+            "carte cb* leclerc paris",
         ),
         ("VIR SEPA SALAIRE 202603", "vir sepa salaire"),
         ("  Spotify   AB  ", "spotify ab"),

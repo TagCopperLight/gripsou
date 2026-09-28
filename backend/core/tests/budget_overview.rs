@@ -45,7 +45,7 @@ fn income_and_expenses_split_by_kind() {
 
 #[test]
 fn uncategorised_money_counts_by_sign() {
-    // Spec 2.2: the sign stands in for the kind there is no category to read.
+    // The sign stands in for the kind there is no category to read.
     let rows = vec![
         row(day(2026, 3, 1), None, None, eur(200)),
         row(day(2026, 3, 5), None, None, eur(-50)),
@@ -59,7 +59,7 @@ fn uncategorised_money_counts_by_sign() {
 #[test]
 fn uncategorised_money_counts_by_sign_on_the_same_day() {
     // The same rule as `uncategorised_money_counts_by_sign`, but both rows
-    // fall on one day — the payday shape (Finding 1): the SQL layer must
+    // fall on one day — the payday shape: the SQL layer must
     // hand `figures()` two same-day rows, one per sign, rather than one
     // already-netted row, or this test would see near-zero everything.
     let rows = vec![
@@ -209,7 +209,7 @@ fn uncategorised_appears_on_the_side_its_sign_puts_it() {
 
 #[test]
 fn small_slices_roll_into_other() {
-    // Spec 4.3: a side keeps slices at >= 2% of the period's expenses, capped
+    // A side keeps slices at >= 2% of the period's expenses, capped
     // at 8; the remainder becomes Other.
     let big = Uuid::new_v4();
     let mut rows = vec![row(day(2026, 3, 1), Some(big), Some("expense"), eur(-1000))];
@@ -246,7 +246,7 @@ fn a_side_never_exceeds_eight_slices_plus_other() {
 
 #[test]
 fn deficit_does_not_duplicate_the_other_key() {
-    // Finding 1: 9 income categories of 100 each (one gets rolled into Other
+    // 9 income categories of 100 each (one gets rolled into Other
     // by the 8-slice cap) against an expense of 2000. The deficit must not
     // push a second `Slice::Other` onto `sources`.
     let mut rows = vec![];
@@ -289,7 +289,7 @@ fn deficit_does_not_duplicate_the_other_key() {
 
 #[test]
 fn category_net_reversal_keeps_the_diagram_balanced() {
-    // Finding 2: category B's refunds (+200) exceed its spending, so its
+    // Category B's refunds (+200) exceed its spending, so its
     // period net is inward. figures() and side() must agree that only
     // category A (net -500) is an expense; category B contributes to
     // neither income nor expenses.
@@ -328,7 +328,7 @@ fn category_net_reversal_keeps_the_diagram_balanced() {
 
 #[test]
 fn internal_branches_stay_uncapped_and_before_the_trailing_other() {
-    // Finding 3: internal branches are exempt from the 2%/8 cap, but must be
+    // Internal branches are exempt from the 2%/8 cap, but must be
     // inserted before Other so Other stays last.
     let internal_a = Uuid::new_v4();
     let internal_b = Uuid::new_v4();
@@ -421,7 +421,7 @@ fn rows_in_is_inclusive_at_both_edges() {
 
 #[test]
 fn the_breakdown_is_expense_side_only() {
-    // Spec 2.3: SHARE is share of the period's expenses, which is meaningless
+    // SHARE is share of the period's expenses, which is meaningless
     // for an income row.
     let salary = Uuid::new_v4();
     let rent = Uuid::new_v4();
@@ -493,7 +493,7 @@ fn breakdown_rows_carry_their_transaction_count() {
 
 #[test]
 fn the_baseline_excludes_the_selected_month() {
-    // Spec 4.4: excluding it so a spike cannot inflate the average it is being
+    // Excluding it so a spike cannot inflate the average it is being
     // judged against.
     let rent = Uuid::new_v4();
     let mut rows = vec![];
@@ -577,7 +577,7 @@ fn breakdown_rows_carry_their_category_baseline() {
 
 #[test]
 fn the_trend_ends_at_the_anchor_month() {
-    // 12 bars ending at the selected month (UI-design 1.6), unlike the
+    // 12 bars ending at the selected month unlike the
     // baseline, which excludes it.
     let (months, _) = trend(&[], Month::parse("2026-09").unwrap(), 12);
     assert_eq!(months.len(), 12);
@@ -649,7 +649,7 @@ fn a_category_big_in_one_month_only_still_makes_the_top_five() {
 
 #[test]
 fn summary_breakdown_and_trend_agree_on_a_shared_month() {
-    // Spec 9: /summary and /trend must never disagree about a month they
+    // /summary and /trend must never disagree about a month they
     // both cover. Both reduce through `expense_side_amounts` today, so this
     // holds by construction — this test pins that fact so a future change
     // that breaks the invariant fails here, not as a support ticket about

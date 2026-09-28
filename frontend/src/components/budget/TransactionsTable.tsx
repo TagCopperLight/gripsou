@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Filter, Inbox } from "lucide-react";
 
@@ -29,7 +29,7 @@ type TransactionsTableProps = {
   onToggleChecked: (tx: Transaction) => void;
 };
 
-/** Nothing shifts when a filter changes the content (§2.3): the column tracks
+/** Nothing shifts when a filter changes the content: the column tracks
  *  live in `transactionsGrid`, and none of them is content-derived except the
  *  amount, which is allowed to widen for a genuinely bigger number. Overflow is
  *  handled inside each cell, never by the column. */
@@ -53,22 +53,44 @@ export function TransactionsTable(props: TransactionsTableProps) {
     rows, showChecked, counts, filtered, loading, error, onRetry,
     hasNextPage, fetchingNextPage, onLoadMore, onClearFilters,
   } = props;
-  const sentinel = useRef<HTMLDivElement>(null);
-
-  // Infinite scroll (§2.1). The button below stays as the accessible fallback
-  // and is what the tests drive, since jsdom has no IntersectionObserver.
-  useEffect(() => {
-    const node = sentinel.current;
-    if (!node || !hasNextPage || typeof IntersectionObserver === "undefined") return;
+  // Infinite scroll. The button below stays as the accessible fallback
+  // and is what most tests drive, since jsdom has no IntersectionObserver.
+  //
+  // One observer per mounted sentinel, never per render: the table re-renders
+  // on every keystroke and selection click, and a fresh observer reports its
+  // first reading at once — pages would load because something rendered, not
+  // because the user scrolled. The callback reads the latest props through a
+  // ref instead.
+  const latest = useRef({ hasNextPage, fetchingNextPage, onLoadMore });
+  useLayoutEffect(() => {
+    latest.current = { hasNextPage, fetchingNextPage, onLoadMore };
+  });
+  const observed = useRef<{ observer: IntersectionObserver; node: Element } | null>(null);
+  const sentinel = useCallback((node: HTMLDivElement | null) => {
+    if (!node || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting) && !fetchingNextPage) onLoadMore();
+        const { hasNextPage: more, fetchingNextPage: busy, onLoadMore: load } = latest.current;
+        if (entries.some((e) => e.isIntersecting) && more && !busy) load();
       },
       { root: scrollParent(node), rootMargin: "2000px 0px" },
     );
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasNextPage, fetchingNextPage, onLoadMore]);
+    observed.current = { observer, node };
+    return () => {
+      observer.disconnect();
+      observed.current = null;
+    };
+  }, []);
+  // A page just landed: the sentinel may still be in range (a short page, a
+  // tall window), and an observer only reports changes. Observing again asks
+  // for one fresh reading of where it stands now.
+  useEffect(() => {
+    const o = observed.current;
+    if (!o || !hasNextPage || fetchingNextPage) return;
+    o.observer.unobserve(o.node);
+    o.observer.observe(o.node);
+  }, [hasNextPage, fetchingNextPage]);
 
   if (loading || error) {
     return (

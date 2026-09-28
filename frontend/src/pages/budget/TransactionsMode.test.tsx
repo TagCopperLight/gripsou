@@ -45,6 +45,9 @@ let sameDescriptionCount = 0;
 // of internal-transfer pairs an unconfirmed write would dissolve. 0 means the
 // write goes straight through, which is every other test in this file.
 let pendingPairBreaks = 0;
+// The same, for a single-row category change: the server refuses an
+// unconfirmed recategorisation of a row it knows to be paired.
+let patchPendingPairBreaks = 0;
 // Forces the row-patch endpoint to fail, to exercise `usePatchTransaction`'s
 // rollback — every other test in this file only ever sees a 200.
 let patchShouldFail = false;
@@ -101,6 +104,10 @@ function stubFetch() {
       if (/\/transactions\/[^/?]+$/.test(u) && init?.method === "PATCH") {
         patchBodies.push(body);
         if (patchShouldFail) return errorJson();
+        const b = body as { categoryId?: unknown; confirmBreakPairs?: boolean };
+        if (patchPendingPairBreaks > 0 && "categoryId" in b && !b.confirmBreakPairs) {
+          return json({ sameDescriptionCount: 0, pendingPairBreaks: patchPendingPairBreaks });
+        }
         const match = u.match(/\/transactions\/([^/?]+)$/);
         const id = match?.[1];
         if (id && body && typeof body === "object" && "tagIds" in (body as Record<string, unknown>)) {
@@ -155,6 +162,7 @@ describe("TransactionsMode", () => {
     applyBodies = [];
     sameDescriptionCount = 0;
     pendingPairBreaks = 0;
+    patchPendingPairBreaks = 0;
     patchShouldFail = false;
     bulkShouldFail = false;
     serverRowsState = ROWS.map((r) => ({ ...r, tags: [...r.tags] }));
@@ -262,7 +270,7 @@ describe("TransactionsMode", () => {
     await settle(client);
   });
 
-  it("wires the selection bar's total to the server's matchingTotal for select-all-shown (M9)", async () => {
+  it("wires the selection bar's total to the server's matchingTotal for select-all-shown", async () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getByTestId("select-all-shown"));
@@ -272,7 +280,7 @@ describe("TransactionsMode", () => {
     await settle(client);
   });
 
-  it("wires the selection bar's total to the exact sum of the id-selected rows (M9)", async () => {
+  it("wires the selection bar's total to the exact sum of the id-selected rows", async () => {
     // Both fixture rows carry amountReporting "-12.40" — a hand-picked
     // selection of both must show their exact sum, not the server's
     // matchingTotal (which the stub sets to a different, unrelated value).
@@ -291,8 +299,7 @@ describe("TransactionsMode", () => {
     // t1 starts with tag A. Opening the chooser and toggling B then C must
     // each patch against the CURRENT tag set (including whatever the previous
     // toggle's optimistic update just added) — not the row as it looked the
-    // instant the chooser opened. A regression here silently destroys tags:
-    // see CRITICAL finding 1.
+    // instant the chooser opened. A regression here silently destroys tags.
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-add-tag")[0]);
@@ -349,6 +356,28 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
     expect(screen.getByTestId("bulk-result")).toHaveTextContent("2");
+
+    // The line describes that write only: the next one, of any kind, clears it.
+    fireEvent.click(screen.getAllByTestId("tx-add-tag")[1]);
+    fireEvent.click(await screen.findByTestId("chooser-option-B"));
+    expect(screen.queryByTestId("bulk-result")).toBeNull();
+    await settle(client);
+  });
+
+  it("drops an old error once a later write goes through", async () => {
+    patchShouldFail = true;
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+    await settle(client);
+    expect(screen.getByTestId("write-error")).toBeVisible();
+
+    patchShouldFail = false;
+    fireEvent.click(screen.getAllByTestId("tx-add-tag")[1]);
+    fireEvent.click(await screen.findByTestId("chooser-option-B"));
+    await settle(client);
+    expect(screen.queryByTestId("write-error")).toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -371,7 +400,30 @@ describe("TransactionsMode", () => {
     expect(patchBodies).toEqual([]);
 
     fireEvent.click(screen.getByTestId("break-pair-confirm"));
-    await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro" }]));
+    await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro", confirmBreakPairs: true }]));
+    await settle(client);
+  });
+
+  it("asks when the server refuses a single-row change that would break a pair the list did not know about", async () => {
+    // The row was paired after the list loaded: the screen has no reason to
+    // ask, so the server's refusal is what brings the question up.
+    patchPendingPairBreaks = 1;
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-gro"));
+
+    await screen.findByTestId("break-pair-modal");
+    expect(patchBodies).toEqual([{ categoryId: "gro" }]);
+    // Refused means unwritten: the chip goes back while the question is open.
+    await waitFor(() =>
+      expect(screen.getAllByTestId("category-chip")[0]).toHaveAttribute("data-variant", "uncategorized"),
+    );
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    await waitFor(() => expect(patchBodies).toHaveLength(2));
+    expect(patchBodies[1]).toEqual({ categoryId: "gro", confirmBreakPairs: true });
+    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
     await settle(client);
   });
 
@@ -417,7 +469,7 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await screen.findByTestId("break-pair-modal");
 
-    expect(screen.queryByTestId("bulk-updated")).toBeNull();
+    expect(screen.queryByTestId("bulk-result")).toBeNull();
     await settle(client);
   });
 

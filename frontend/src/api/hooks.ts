@@ -27,7 +27,7 @@ import type {
   User,
 } from "./types";
 import { hasSyncing } from "./types";
-import type { BudgetAiPrices, BudgetAiProvider, BudgetAiSettings, BudgetAiUsage } from "./budget";
+import { transactionFilterParams } from "./filter";
 import { keys } from "./keys";
 import {
   afterAccountEdit,
@@ -37,8 +37,6 @@ import {
   afterSyncRequested,
   afterUserChange,
 } from "./invalidate";
-
-export type { TransactionFilterQuery };
 
 export function useNetWorth(range: string) {
   return useQuery({
@@ -130,35 +128,17 @@ export function useAccountSeries(range: string) {
   });
 }
 
-// The Transactions page is deliberately plain (§10): a load-more button over
-// useInfiniteQuery's built-in page tracking, rather than a page-number UI or
-// scroll-triggered fetching. Each page asks for PAGE_SIZE rows at `offset`;
+// The Transactions list pages through useInfiniteQuery's built-in page
+// tracking: the table fetches the next page on scroll, with a load-more button
+// as the accessible fallback. Each page asks for PAGE_SIZE rows at `offset`;
 // a page shorter than PAGE_SIZE means there is nothing left to fetch.
-export const TRANSACTIONS_PAGE_SIZE = 200;
-
-/** The one place a filter becomes query parameters. An empty value is omitted
- *  rather than sent blank: the server reads a blank list as "no filter", but an
- *  omitted one keeps the query key — and therefore the cache — from splitting. */
-export function transactionParams(q: TransactionFilterQuery): URLSearchParams {
-  const params = new URLSearchParams();
-  if (q.search) params.set("search", q.search);
-  if (q.accountId) params.set("accountId", q.accountId);
-  if (q.bucket && q.bucket !== "all") params.set("bucket", q.bucket);
-  if (q.from) params.set("from", q.from);
-  if (q.to) params.set("to", q.to);
-  if (q.categoryIds?.length) params.set("categoryIds", q.categoryIds.join(","));
-  if (q.tagIds?.length) params.set("tagIds", q.tagIds.join(","));
-  if (q.uncategorized) params.set("uncategorized", "true");
-  if (q.needsReview) params.set("needsReview", "true");
-  if (q.includeTransfers) params.set("includeTransfers", "true");
-  return params;
-}
+const TRANSACTIONS_PAGE_SIZE = 200;
 
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({
     queryKey: keys.transactions(q),
     queryFn: ({ pageParam }) => {
-      const params = transactionParams(q);
+      const params = transactionFilterParams(q);
       params.set("limit", String(TRANSACTIONS_PAGE_SIZE));
       params.set("offset", String(pageParam));
       return getJson<Transaction[]>(`/transactions?${params}`);
@@ -181,7 +161,7 @@ export function useTransactions(q: TransactionFilterQuery) {
 export function useTransactionCounts(q: TransactionFilterQuery) {
   return useQuery({
     queryKey: keys.transactionCounts(q),
-    queryFn: () => getJson<TransactionCounts>(`/transactions/counts?${transactionParams(q)}`),
+    queryFn: () => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`),
     placeholderData: keepPreviousData,
   });
 }
@@ -357,40 +337,6 @@ export function useSetCorsOrigins() {
   return useMutation({
     mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.corsOrigins() }),
-  });
-}
-
-export function useBudgetAiSettings() {
-  return useQuery({
-    queryKey: keys.budgetAiSettings(),
-    queryFn: () => getJson<BudgetAiSettings>("/settings/budget-ai"),
-  });
-}
-
-export function useSetBudgetAiSettings() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { provider: BudgetAiProvider | null; model: string | null }) =>
-      patchJson<void>("/settings/budget-ai", body),
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: keys.budgetAiSettings() });
-      qc.invalidateQueries({ queryKey: keys.budgetAiStatus() });
-    },
-  });
-}
-
-export function useBudgetAiUsage() {
-  return useQuery({
-    queryKey: keys.budgetAiUsage(),
-    queryFn: () => getJson<BudgetAiUsage>("/settings/budget-ai/usage"),
-  });
-}
-
-export function useSetBudgetAiPrices() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (prices: BudgetAiPrices) => putJson<void>("/settings/budget-ai/prices", prices),
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.budgetAiUsage() }),
   });
 }
 

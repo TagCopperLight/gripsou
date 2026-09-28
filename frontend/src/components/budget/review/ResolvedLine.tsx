@@ -17,7 +17,7 @@ const OUTCOME_KEY = {
   applied: "budget.review.appliedAs",
 } as const;
 
-/** §3.3 — a resolved line stays in place, collapsed, with Undo. When other
+/** A resolved line stays in place, collapsed, with Undo. When other
  *  rows share its description it offers to widen the category to them, as
  *  the transactions list does after a correction — inline, so the review
  *  flow is never interrupted. */

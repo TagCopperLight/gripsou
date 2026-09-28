@@ -133,6 +133,28 @@ pub async fn backfill_connection(
         -- `materialized` is load-bearing: inlined, this aggregate was re-run once
         -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
         -- once.
+        -- Per cash line that lots may move before the provider's history:
+        -- the day that history starts, and only where the user has also
+        -- entered cash rows by hand for the period before it (see the lot
+        -- branch of `moves`). Computed once per cash line here; inside that
+        -- branch both lookups ran again for every lot row.
+        prehistory as materialized (
+            select s.holding_id, s.account_id, ps.day as provider_start
+            from scope s
+            cross join lateral (
+                select min(txn_day(s.trust_booked_on, t.booked_on, t.ts)) as day
+                from transaction t
+                where t.account_id = s.account_id and t.external_id is not null
+            ) ps
+            where s.is_cash
+              and s.is_account_currency
+              and exists (
+                  select 1 from transaction t
+                  where t.account_id = s.account_id
+                    and t.external_id is null
+                    and txn_day(s.trust_booked_on, t.booked_on, t.ts) < ps.day
+              )
+        ),
         moves as materialized (
           -- One row per (holding, day): the cash line can move by a
           -- transaction and a pre-history lot on the same day, and everything
@@ -166,31 +188,18 @@ pub async fn backfill_connection(
             --
             -- Lot prices are in the instrument's currency, so only lots whose
             -- instrument matches the account currency move this line.
-            select s.holding_id, l.acquired_on as day,
+            select p.holding_id, l.acquired_on as day,
                    sum(case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                             else l.quantity * l.unit_price - l.fee end) as delta
-            from scope s
-            join holding h    on h.account_id = s.account_id
+            from prehistory p
+            join holding h    on h.account_id = p.account_id
             join instrument i on i.id = h.instrument_id
-            join account a    on a.id = s.account_id
+            join account a    on a.id = p.account_id
             join lot l        on l.holding_id = h.id
-            cross join lateral (
-                select min(txn_day(s.trust_booked_on, t.booked_on, t.ts)) as day
-                from transaction t
-                where t.account_id = s.account_id and t.external_id is not null
-            ) provider_start
-            where s.is_cash
-              and s.is_account_currency
-              and i.kind <> 'cash'
+            where i.kind <> 'cash'
               and i.currency = a.currency
-              and l.acquired_on < provider_start.day
-              and exists (
-                  select 1 from transaction t
-                  where t.account_id = s.account_id
-                    and t.external_id is null
-                    and txn_day(s.trust_booked_on, t.booked_on, t.ts) < provider_start.day
-              )
-            group by s.holding_id, l.acquired_on
+              and l.acquired_on < p.provider_start
+            group by p.holding_id, l.acquired_on
 
             union all
 

@@ -25,7 +25,7 @@ afterEach(cleanup);
 describe("TagCell", () => {
   it("shows every tag and no counter when the line is wide enough", () => {
     const restore = stubLayout(40, 1000);
-    render(<TagCell tags={TAGS} onOpen={vi.fn()} />);
+    render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
     expect(screen.getAllByTestId("tag-chip")).toHaveLength(TAGS.length * 2); // + the measuring twin
     expect(screen.queryByTestId("tx-tags-overflow")).toBeNull();
     restore();
@@ -35,7 +35,7 @@ describe("TagCell", () => {
     // 130px of line, less the 40px button and its gap, leaves 86px: one 40px
     // chip plus the gap and the counter (84px) — the other two become "+2".
     const restore = stubLayout(40, 130);
-    render(<TagCell tags={TAGS} onOpen={vi.fn()} />);
+    render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
     const counter = screen.getByTestId("tx-tags-overflow");
     expect(counter).toHaveTextContent("+2");
     expect(counter).toHaveAttribute("title", "Work, Shared");
@@ -50,14 +50,14 @@ describe("TagCell", () => {
 
   it("keeps one chip on the line even when nothing fits", () => {
     const restore = stubLayout(40, 50);
-    render(<TagCell tags={TAGS} onOpen={vi.fn()} />);
+    render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
     expect(screen.getByTestId("tx-tags-overflow")).toHaveTextContent("+2");
     restore();
   });
 
   it("opens the chooser anchored to the add button", () => {
     const onOpen = vi.fn();
-    render(<TagCell tags={TAGS} onOpen={onOpen} />);
+    render(<TagCell tags={TAGS} label="Add tags" onOpen={onOpen} />);
     const button = screen.getByTestId("tx-add-tag");
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledWith(button);

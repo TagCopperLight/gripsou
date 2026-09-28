@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpDown, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
 
@@ -8,7 +9,7 @@ import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
 import { formatDate } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
-import { categoryOfTransaction } from "../../lib/budget";
+import { FALLBACK_COLOR, categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
 import type { Transaction } from "../../api/types";
 
@@ -57,12 +58,20 @@ const CELL = [
   "[&>td:first-child]:rounded-l-xl [&>td:last-child]:rounded-r-xl",
 ].join(" ");
 
-export function TransactionRow({
+/** Memoised: a ledger can hold thousands of mounted rows, and the page above
+ *  re-renders on every search keystroke and selection click. The table hands
+ *  each row plain values and stable callbacks, so only a row whose own data or
+ *  selection changed renders again. */
+export const TransactionRow = memo(function TransactionRow({
   tx, showChecked, selected, anySelected,
   onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
 }: TransactionRowProps) {
   const { t } = useTranslation();
   const isLot = tx.source === "lot";
+  /** Every row's controls would otherwise share one name ("Select row"), so
+   *  each carries the row's own text, the way the settings tables do. */
+  const name = (isLot ? tx.ticker : tx.description) ?? "";
+  const named = (label: string) => (name ? `${label}: ${name}` : label);
   const LotIcon = tx.type === "sell" ? TrendingDown : TrendingUp;
   /** A paired transfer is background noise, so it reads dimmed — but only its
    *  content. Opacity on the `<tr>` or on a `<td>` would drain the row's own
@@ -84,8 +93,7 @@ export function TransactionRow({
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {/* A lot is an investment record, not a budget item: the server's
               assignment/bulk endpoints touch only the `transaction` table, so
-              a lot row can never actually be selected or checked (spec
-              §4.4). It gets no control at all here — not even a disabled
+              a lot row can never actually be selected or checked. It gets no control at all here — not even a disabled
               one — consistent with its category and tag cells below. */}
           {isLot ? (
             <span className="inline-flex size-8 shrink-0 items-center justify-center">
@@ -93,7 +101,7 @@ export function TransactionRow({
             </span>
           ) : (
             // Hovering reveals the checkbox; once anything is selected every row
-            // shows one, so the selected set is readable at a glance (§2.3).
+            // shows one, so the selected set is readable at a glance.
             // Both layers stay in the DOM and are switched with opacity, not
             // `display`/`hidden` — a keyboard-only user can still Tab to and
             // focus the checkbox even on the very first row, before anything
@@ -110,7 +118,7 @@ export function TransactionRow({
               )}
               <Checkbox
                 data-testid="tx-select"
-                label={t("budget.transactions.selectRow")}
+                label={named(t("budget.transactions.selectRow"))}
                 checked={selected}
                 onChange={() => onToggleSelect(tx.id)}
                 className={`absolute inset-0 m-auto transition-opacity ${
@@ -161,7 +169,7 @@ export function TransactionRow({
         <span className={`flex min-w-0 items-center gap-2 ${dim}`}>
           <span
             className="inline-block size-3 rounded"
-            style={{ backgroundColor: tx.accountColor ?? "#aeaaa7" }}
+            style={{ backgroundColor: tx.accountColor ?? FALLBACK_COLOR }}
           />
           <span className="truncate text-fg-dim">{tx.accountName}</span>
         </span>
@@ -169,13 +177,14 @@ export function TransactionRow({
 
       <td role="cell" className={`py-2.25 ${COL_PAD.category}`}>
         {/* A lot is an investment record, not a budget item: no chip, and no
-            way to assign one (spec §5.2). */}
+            way to assign one. */}
         {isLot ? null : (
           <button
             type="button"
             onClick={(e) => onOpenCategory(tx, e.currentTarget)}
             className="min-w-0 cursor-pointer"
-            aria-label={t("budget.transactions.setCategory")}
+            aria-label={named(t("budget.transactions.setCategory"))}
+            aria-haspopup="dialog"
           >
             <CategoryChip category={categoryOfTransaction(tx)} needsReview={tx.needsReview} />
           </button>
@@ -184,7 +193,11 @@ export function TransactionRow({
 
       <td role="cell" data-testid="tx-tags" className={`py-2.25 ${COL_PAD.tags}`}>
         {isLot ? null : (
-          <TagCell tags={tx.tags} onOpen={(anchor) => onOpenTags(tx, anchor)} />
+          <TagCell
+            tags={tx.tags}
+            label={named(t("budget.transactions.addTags"))}
+            onOpen={(anchor) => onOpenTags(tx, anchor)}
+          />
         )}
       </td>
 
@@ -195,7 +208,7 @@ export function TransactionRow({
               data-testid="tx-checked"
               tone="soft"
               className={dim}
-              label={t("budget.transactions.checked")}
+              label={named(t("budget.transactions.checked"))}
               checked={tx.checked}
               onChange={() => onToggleChecked(tx)}
             />
@@ -211,4 +224,4 @@ export function TransactionRow({
       </td>
     </tr>
   );
-}
+});

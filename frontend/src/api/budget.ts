@@ -1,11 +1,28 @@
-import { useEffect, useRef } from "react";
-import { useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useEffect } from "react";
+import {
+  hashKey,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
+import { transactionFilterFields } from "./filter";
 import {
+  afterAiRunFinished,
+  afterAiRunProgress,
+  afterBudgetAiPricesChange,
+  afterBudgetAiSettingsChange,
   afterBudgetCategoryChange,
+  afterBudgetCategoryCreated,
+  afterBudgetCategoryReorder,
   afterBudgetTagChange,
+  afterBudgetTagCreated,
+  afterCategorizeRequested,
+  afterCheckedChange,
   afterReviewChange,
   afterTransactionChange,
 } from "./invalidate";
@@ -49,7 +66,7 @@ export function useCreateBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CategoryBody) => postJson<BudgetCategory>("/budget/categories", body),
-    onSuccess: () => afterBudgetCategoryChange(qc),
+    onSuccess: () => afterBudgetCategoryCreated(qc),
   });
 }
 
@@ -86,7 +103,7 @@ export function useReorderBudgetCategories() {
     onError: (_err, _ids, ctx) => {
       if (ctx?.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
     },
-    onSettled: () => afterBudgetCategoryChange(qc),
+    onSettled: () => afterBudgetCategoryReorder(qc),
   });
 }
 
@@ -109,7 +126,7 @@ export function useCreateBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: TagBody) => postJson<BudgetTag>("/budget/tags", body),
-    onSuccess: () => afterBudgetTagChange(qc),
+    onSuccess: () => afterBudgetTagCreated(qc),
   });
 }
 
@@ -130,14 +147,20 @@ export function useDeleteBudgetTag() {
   });
 }
 
-export type TransactionPatch = {
+type TransactionPatch = {
   /** `null` clears the category. Omit the key to leave it untouched. */
   categoryId?: string | null;
   /** FULL REPLACE of the row's tag set — the server has no add/remove split,
    *  so a caller toggling one tag sends the complete resulting list. */
   tagIds?: string[];
   checked?: boolean;
+  /** See `BulkBody.confirmBreakPairs`: recategorising a paired transfer is
+   *  refused until the caller confirms dissolving the pair. */
+  confirmBreakPairs?: boolean;
 };
+
+/** `pendingPairBreaks` set means refused, nothing written: see `WriteResult`. */
+type PatchResult = { sameDescriptionCount: number; pendingPairBreaks?: number | null };
 
 export type BulkBody = {
   /** Explicit rows. Omit and pass `filter` for "select all shown". */
@@ -152,6 +175,14 @@ export type BulkBody = {
   confirmBreakPairs?: boolean;
 };
 
+/** A write that only ticks or unticks ✓ touches nothing but the rows. */
+function onlyChecked(body: object): boolean {
+  const fields = Object.entries(body)
+    .filter(([k, v]) => v !== undefined && k !== "ids" && k !== "filter")
+    .map(([k]) => k);
+  return fields.length === 1 && fields[0] === "checked";
+}
+
 /** One row, applied to the cache before the request so the chip swaps at once.
  *  `optimistic` is the caller's view of the row after the write — the chip
  *  fields cannot be derived from the patch body, which carries only ids. */
@@ -159,7 +190,7 @@ export function usePatchTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
-      patchJson<{ sameDescriptionCount: number }>(`/transactions/${id}`, body),
+      patchJson<PatchResult>(`/transactions/${id}`, body),
     onMutate: async ({ id, optimistic }) => {
       if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
       // Every cached filter combination may hold this row, so patch the whole
@@ -181,7 +212,14 @@ export function usePatchTransaction() {
     onError: (_err, _vars, ctx) => {
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
-    onSettled: () => afterTransactionChange(qc),
+    // Refused pending confirmation: nothing was written, so the row goes back
+    // to what it was while the caller asks.
+    onSuccess: (res, _vars, ctx) => {
+      if (!res?.pendingPairBreaks) return;
+      for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: (_res, _err, { body }) =>
+      onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
   });
 }
 
@@ -213,53 +251,35 @@ export function useApplyToDescription() {
   });
 }
 
-/** The filter as the JSON bulk endpoint parses it. Ids stay comma-joined
- *  strings (the server's `parse_ids` reads `Option<String>`), but booleans
- *  must be real JSON booleans: serde_json will not coerce "true". */
-function transactionFilterBody(q: TransactionFilterQuery): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
-  if (q.search) body.search = q.search;
-  if (q.accountId) body.accountId = q.accountId;
-  if (q.bucket && q.bucket !== "all") body.bucket = q.bucket;
-  if (q.from) body.from = q.from;
-  if (q.to) body.to = q.to;
-  if (q.categoryIds?.length) body.categoryIds = q.categoryIds.join(",");
-  if (q.tagIds?.length) body.tagIds = q.tagIds.join(",");
-  if (q.uncategorized) body.uncategorized = true;
-  if (q.needsReview) body.needsReview = true;
-  return body;
-}
-
 /** Ids for a hand-picked selection, `filter` for "select all shown" — which
  *  with no filter set is 3.5 years of rows, far too many to enumerate. The
- *  filter goes over the wire in the same shape the list is reading, so the
- *  write and the view can never disagree. */
+ *  filter goes through the same encoder as the list and its counts, so the
+ *  write and the view cannot disagree. */
 export function useBulkTransactions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: BulkBody) => {
       const wire: Omit<BulkBody, "filter"> & { filter?: Record<string, unknown> } = {
         ...body,
-        filter: body.filter ? transactionFilterBody(body.filter) : undefined,
+        filter: body.filter ? transactionFilterFields(body.filter) : undefined,
       };
       return postJson<WriteResult>("/transactions/bulk", wire);
     },
-    onSuccess: () => afterTransactionChange(qc),
+    onSuccess: (_res, body) =>
+      onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
   });
 }
 
 export type AiRunOutcome = "ok" | "partial" | "error";
 
 /** GET /budget/categorize/status. `configured`: the server has a provider with
- *  its key; `enabled`: that, and this user opted in. `threshold` is a percent. */
+ *  its key. The review threshold is the reader's own pref, not part of this. */
 export type AiStatus = {
   configured: boolean;
-  enabled: boolean;
   running: boolean;
   remaining: number;
   reviewCount: number;
-  threshold: number;
-  lastRun: { outcome: AiRunOutcome; error: string | null; at: number } | null;
+  lastRun: { outcome: AiRunOutcome; error: string | null } | null;
 };
 
 export type BudgetAiProvider = "gemini" | "jev";
@@ -294,38 +314,47 @@ export type BudgetAiUsage = {
 /** Full replacement map of every model's prices, per million tokens. */
 export type BudgetAiPrices = Record<string, { in: string; out: string }>;
 
-/** Polled every 5 s only while a run is in progress. When the run moves on
- *  (the queue grows, or the run ends) everything built on categories is
- *  refreshed, so the list and the figures fill in as the backfill works. */
+const AI_STATUS_HASH = hashKey(keys.budgetAiStatus());
+const watchedClients = new WeakSet<QueryClient>();
+
+/** Installed once per client, however many components read the status, so a
+ *  change refreshes once. Only a change seen while a run was in progress
+ *  counts: when nothing was running, the status moved because of the user's
+ *  own write (or a sync), which already refreshed what it touched. */
+function watchAiRun(qc: QueryClient) {
+  if (watchedClients.has(qc)) return;
+  watchedClients.add(qc);
+  let last = qc.getQueryData<AiStatus>(keys.budgetAiStatus());
+  qc.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "success") return;
+    if (event.query.queryHash !== AI_STATUS_HASH) return;
+    const next = event.query.state.data as AiStatus | undefined;
+    const prev = last;
+    last = next;
+    if (!prev?.running || !next) return;
+    if (!next.running) afterAiRunFinished(qc);
+    else if (next.remaining !== prev.remaining || next.reviewCount !== prev.reviewCount)
+      afterAiRunProgress(qc);
+  });
+}
+
+/** Polled every 5 s only while a run is in progress. As the run moves on the
+ *  Overview figures fill in; the transactions list catches up when it ends. */
 export function useAiStatus() {
   const qc = useQueryClient();
-  const query = useQuery({
+  useEffect(() => watchAiRun(qc), [qc]);
+  return useQuery({
     queryKey: keys.budgetAiStatus(),
     queryFn: () => getJson<AiStatus>("/budget/categorize/status"),
     refetchInterval: (q) => (q.state.data?.running ? 5000 : false),
   });
-  const data = query.data;
-  const last = useRef<string | null>(null);
-  useEffect(() => {
-    if (!data) return;
-    const stamp = `${data.running}:${data.reviewCount}:${data.remaining}`;
-    if (last.current !== null && last.current !== stamp) {
-      qc.invalidateQueries({ queryKey: keys.transactions() });
-      qc.invalidateQueries({ queryKey: keys.transactionCounts() });
-      qc.invalidateQueries({ queryKey: keys.budgetSummary() });
-      qc.invalidateQueries({ queryKey: keys.budgetAiUsage() });
-      qc.invalidateQueries({ queryKey: keys.budgetTrend() });
-    }
-    last.current = stamp;
-  }, [data, qc]);
-  return query;
 }
 
 export function useRequestCategorize() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => postJson<void>("/budget/categorize", {}),
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.budgetAiStatus() }),
+    onSettled: () => afterCategorizeRequested(qc),
   });
 }
 
@@ -351,5 +380,36 @@ export function useUndoReview() {
       confidence: string | null;
     }) => postJson<void>(`/budget/review/${id}/undo`, { categoryId, confidence }),
     onSettled: () => afterReviewChange(qc),
+  });
+}
+
+export function useBudgetAiSettings() {
+  return useQuery({
+    queryKey: keys.budgetAiSettings(),
+    queryFn: () => getJson<BudgetAiSettings>("/settings/budget-ai"),
+  });
+}
+
+export function useSetBudgetAiSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { provider: BudgetAiProvider | null; model: string | null }) =>
+      patchJson<void>("/settings/budget-ai", body),
+    onSettled: () => afterBudgetAiSettingsChange(qc),
+  });
+}
+
+export function useBudgetAiUsage() {
+  return useQuery({
+    queryKey: keys.budgetAiUsage(),
+    queryFn: () => getJson<BudgetAiUsage>("/settings/budget-ai/usage"),
+  });
+}
+
+export function useSetBudgetAiPrices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prices: BudgetAiPrices) => putJson<void>("/settings/budget-ai/prices", prices),
+    onSettled: () => afterBudgetAiPricesChange(qc),
   });
 }

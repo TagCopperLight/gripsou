@@ -7,6 +7,7 @@ import { Money } from "../../Money";
 import { Percent } from "../../Percent";
 import { CategoryChip } from "../CategoryChip";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
+import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 import type { BreakdownRow, Slice } from "../../../api/overview";
 
 type SortKey = "category" | "amount" | "txnCount";
@@ -14,24 +15,14 @@ type ColKey = SortKey | "share" | "avg12";
 
 type BreakdownSurfaceProps = {
   rows: BreakdownRow[];
-  /** The period's total expenses, so SHARE is arithmetic here rather than a
-   *  second server opinion that could round differently from the column beside
-   *  it. */
+  /** The period's total expenses (the expenses figure), so SHARE is
+   *  arithmetic here rather than a second server opinion that could round
+   *  differently from the column beside it. */
   expensesTotal: string;
   /** A row was clicked: open Transactions filtered to the period AND this
    *  slice. Never called for the `other` row. */
   onOpen: (slice: Slice) => void;
 };
-
-/** How far a row's amount differs from its 12-month average, as a ratio.
- *  `undefined` when the server sent no baseline — always the case on `other`,
- *  whose membership changes month to month. */
-function vsAvg(row: BreakdownRow): number | undefined {
-  if (row.avg12 === undefined) return undefined;
-  const base = Number(row.avg12);
-  if (base === 0) return undefined;
-  return (Number(row.amount) - base) / Math.abs(base);
-}
 
 export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfaceProps) {
   const { t } = useTranslation();
@@ -135,7 +126,9 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
               {[...sorted, ...rollup].map((row) => {
                 const linkable = row.slice.kind !== "other";
                 const share = total === 0 ? 0 : Number(row.amount) / total;
-                const diff = vsAvg(row);
+                // Absent on `other`, whose membership changes month to month.
+                const vsAvg =
+                  row.avg12 === undefined ? undefined : compareToBaseline(row.amount, row.avg12, "down");
                 return (
                   <tr
                     key={sliceKey(row.slice)}
@@ -181,11 +174,17 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
                       <span className="text-sm text-fg-dim">{row.txnCount}</span>
                     </td>
                     <td className="py-2 text-right whitespace-nowrap" data-testid="avg12">
-                      {diff === undefined ? (
+                      {vsAvg === undefined ? (
                         <span className="text-sm text-fg-faint">—</span>
                       ) : (
-                        <span className={`text-sm ${diff > 0 ? "text-red" : "text-green"}`}>
-                          <Percent value={diff} signed />
+                        <span data-tone={vsAvg.tone} className={`text-sm ${TONE_CLASS[vsAvg.tone]}`}>
+                          {/* Same rule as the figures above: against a zero
+                              average the change is an amount, not a percentage. */}
+                          {vsAvg.ratio === undefined ? (
+                            <Money value={vsAvg.delta} signed />
+                          ) : (
+                            <Percent value={vsAvg.ratio} signed />
+                          )}
                         </span>
                       )}
                     </td>

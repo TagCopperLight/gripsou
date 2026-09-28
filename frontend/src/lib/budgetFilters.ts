@@ -1,4 +1,5 @@
 import type { TransactionFilterQuery, TypeBucket } from "../api/types";
+import { presetRange, type Period } from "./period";
 
 /** The presets the time-frame select offers. `custom` keeps whatever dates the
  *  user typed; `all` means no date bound at all. */
@@ -30,9 +31,10 @@ export type BudgetFilters = {
    *  between the user's own accounts, not spending. Unlike every other flag
    *  here, `false` narrows the list rather than widening it. */
   transfers: boolean;
-  /** Set only by Overview's deep links (phase 4); renders as a "Selected
-   *  period" chip and is cleared together with the dates it stands for. */
-  periodLabel?: string;
+  /** Set only by Overview's deep links; renders as a "Selected period" chip
+   *  (labelled at render time, so it follows a language switch) and is
+   *  cleared together with the dates it stands for. */
+  period?: Period;
 };
 
 export const EMPTY_FILTERS: BudgetFilters = {
@@ -49,46 +51,17 @@ export const EMPTY_FILTERS: BudgetFilters = {
   transfers: false,
 };
 
-/** Local calendar day as `YYYY-MM-DD`. `toISOString()` is wrong here: it
- *  converts to UTC first, which shifts the day for anyone east or west of it. */
-function isoDay(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-/** `d` shifted back `months` months, with the day clamped to the target
- *  month's length. Without the clamp the Date constructor silently rolls
- *  over — 29 Feb minus 12 months would land on 1 March. */
-function monthsBack(d: Date, months: number): Date {
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  // Day 0 of the following month is the last day of the target month.
-  const lastDay = new Date(y, m - months + 1, 0).getDate();
-  return new Date(y, m - months, Math.min(d.getDate(), lastDay));
-}
-
 export function withTimeFrame(
   f: BudgetFilters,
   timeFrame: TimeFrame,
   today: Date = new Date(),
 ): BudgetFilters {
-  // Picking any time frame here supersedes Overview's "Selected period" chip
-  // (I2): leaving `periodLabel` set would keep showing the OLD period's
-  // label while `activeFilters` hides the real time-frame chip underneath it.
-  if (timeFrame === "custom") return { ...f, timeFrame, periodLabel: undefined };
-  if (timeFrame === "all") return { ...f, timeFrame, from: "", to: "", periodLabel: undefined };
-
-  const y = today.getFullYear();
-  const m = today.getMonth();
-  const ranges: Record<Exclude<TimeFrame, "all" | "custom">, [Date, Date]> = {
-    thisMonth: [new Date(y, m, 1), new Date(y, m + 1, 0)],
-    last3Months: [new Date(y, m - 2, 1), new Date(y, m + 1, 0)],
-    thisYear: [new Date(y, 0, 1), new Date(y, 11, 31)],
-    last12Months: [monthsBack(today, 12), today],
-  };
-  const [from, to] = ranges[timeFrame];
-  return { ...f, timeFrame, from: isoDay(from), to: isoDay(to), periodLabel: undefined };
+  // Picking any time frame here supersedes Overview's "Selected period" chip:
+  // leaving `period` set would keep showing the OLD period's label
+  // while `activeFilters` hides the real time-frame chip underneath it.
+  if (timeFrame === "custom") return { ...f, timeFrame, period: undefined };
+  if (timeFrame === "all") return { ...f, timeFrame, from: "", to: "", period: undefined };
+  return { ...f, timeFrame, ...presetRange(timeFrame, today), period: undefined };
 }
 
 /** The filter set as the API reads it. Empty values are omitted so the query
@@ -121,13 +94,13 @@ export type ActiveFilter =
   | { kind: "transfers" };
 
 /** Part 3 of the search surface: one chip per active filter, account and time
- *  frame included (§2.2). Order is the reading order of the controls above. */
+ *  frame included. Order is the reading order of the controls above. */
 export function activeFilters(f: BudgetFilters): ActiveFilter[] {
   const out: ActiveFilter[] = [];
-  if (f.periodLabel) out.push({ kind: "period" });
+  if (f.period) out.push({ kind: "period" });
   if (f.search.trim()) out.push({ kind: "search", value: f.search.trim() });
   if (f.accountId) out.push({ kind: "account", id: f.accountId });
-  if (!f.periodLabel && f.timeFrame !== "all" && (f.from || f.to)) out.push({ kind: "timeFrame" });
+  if (!f.period && f.timeFrame !== "all" && (f.from || f.to)) out.push({ kind: "timeFrame" });
   if (f.bucket !== "all") out.push({ kind: "bucket", value: f.bucket });
   for (const id of f.categoryIds) out.push({ kind: "category", id });
   for (const id of f.tagIds) out.push({ kind: "tag", id });
@@ -150,7 +123,7 @@ export function clearFilter(f: BudgetFilters, a: ActiveFilter): BudgetFilters {
     case "timeFrame":
       return { ...f, timeFrame: "all", from: "", to: "" };
     case "period":
-      return { ...f, periodLabel: undefined, from: "", to: "", timeFrame: "all" };
+      return { ...f, period: undefined, from: "", to: "", timeFrame: "all" };
     case "bucket":
       return { ...f, bucket: "all" };
     case "category":

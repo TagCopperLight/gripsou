@@ -82,11 +82,51 @@ pub async fn list_categories(
     Ok(rows)
 }
 
+/// What a category chip needs, without the per-category transaction count
+/// `list_categories` pays for.
+#[derive(Debug, Clone)]
+pub struct CategoryRef {
+    pub id: Uuid,
+    pub name: String,
+    pub default_key: Option<String>,
+    pub color: String,
+    pub icon: Option<String>,
+}
+
+pub async fn category_refs(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Vec<CategoryRef>, CoreError> {
+    let rows = sqlx::query_as!(
+        CategoryRef,
+        r#"
+        select id, name, default_key, color, icon
+        from budget_category
+        where user_id = $1
+        "#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// The next position within the kind is read and written under a lock on
+/// the user's row, so two categories created at once never share a number.
 pub async fn create_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     new: &NewCategory<'_>,
 ) -> Result<BudgetCategoryRow, CoreError> {
+    let mut tx = pool.begin().await?;
+    // `no key update`: enough to serialise category creation per user, and
+    // unlike `for update` it does not block rows that merely reference the user.
+    sqlx::query!(
+        "select 1 as x from users where id = $1 for no key update",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     let row = sqlx::query_as!(
         BudgetCategoryRow,
         r#"
@@ -112,8 +152,9 @@ pub async fn create_category(
         new.hint,
         new.kind,
     )
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(row)
 }
 
@@ -170,31 +211,51 @@ pub async fn update_category(
     Ok(row)
 }
 
-/// `false` means nothing was deleted: not this user's row, already gone, or the
-/// protected system row. Its transactions survive — `on delete set null` sends
-/// them back to uncategorised.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DeleteCategory {
+    Deleted,
+    /// Not this user's row, or already gone.
+    NotFound,
+    /// The protected system row.
+    System,
+}
+
+/// Deletes one category. Its transactions survive — `on delete set null`
+/// sends them back to uncategorised.
 pub async fn delete_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     id: Uuid,
-) -> Result<bool, CoreError> {
+) -> Result<DeleteCategory, CoreError> {
     // One transaction: the delete and the renumbering that closes the hole it
     // leaves have to be one step, or a concurrent reorder could interleave.
     let mut tx = pool.begin().await?;
-    let done = sqlx::query!(
-        "delete from budget_category where id = $1 and user_id = $2 and system_key is null",
+    let system = sqlx::query_scalar!(
+        r#"
+        select (system_key is not null) as "system!"
+        from budget_category where id = $1 and user_id = $2
+        for update
+        "#,
+        id,
+        user_id,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    match system {
+        None => return Ok(DeleteCategory::NotFound),
+        Some(true) => return Ok(DeleteCategory::System),
+        Some(false) => {}
+    }
+    sqlx::query!(
+        "delete from budget_category where id = $1 and user_id = $2",
         id,
         user_id,
     )
     .execute(&mut *tx)
     .await?;
-    if done.rows_affected() == 0 {
-        tx.rollback().await?;
-        return Ok(false);
-    }
     compact_sort_order(&mut tx, user_id).await?;
     tx.commit().await?;
-    Ok(true)
+    Ok(DeleteCategory::Deleted)
 }
 
 /// Renumbers every kind back to `1..n`, keeping the order the rows are already
@@ -228,7 +289,8 @@ async fn compact_sort_order(
 /// places is exactly their two numbers swapping.
 ///
 /// Ids that are not this user's are silently skipped — the caller compares the
-/// returned count against what it sent and refuses a partial write.
+/// returned count against what it sent and refuses a partial write. The ids
+/// must be distinct; the caller refuses duplicates.
 pub async fn reorder_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,

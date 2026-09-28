@@ -11,8 +11,8 @@ function stub(status: object) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") { calls.push(String(url)); return new Response(null, { status: 202 }); }
-    return Response.json({ configured: true, enabled: true, running: false, remaining: 0, reviewCount: 0,
-      threshold: 80, lastRun: null, ...status });
+    return Response.json({ configured: true, running: false, remaining: 0, reviewCount: 0,
+      lastRun: null, ...status });
   }));
   return calls;
 }
@@ -34,7 +34,7 @@ describe("AiBanner", () => {
   });
 
   it("shows the failure and retries", async () => {
-    const calls = stub({ lastRun: { outcome: "error", error: "API key not valid", at: 0 } });
+    const calls = stub({ lastRun: { outcome: "error", error: "API key not valid" } });
     renderBanner();
     expect(await screen.findByText("API key not valid")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

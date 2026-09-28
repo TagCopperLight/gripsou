@@ -15,7 +15,7 @@ type Props = {
   onCorrect: (anchor: HTMLElement) => void;
 };
 
-/** §3.2 — one pending guess. A "no guess" row (the model abstained) can only
+/** One pending guess in the review queue. A "no guess" row (the model abstained) can only
  *  be corrected. A confident guess into internal/excluded is here because of
  *  its kind, and says so. */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {

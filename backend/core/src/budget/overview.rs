@@ -3,6 +3,8 @@
 //! here — the Sankey's balancing, the collapse rules, the baselines — which is
 //! what makes it testable without a Postgres.
 
+use std::collections::BTreeMap;
+
 use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -98,13 +100,13 @@ fn net_inflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
         .collect()
 }
 
-/// The four headline numbers (spec 4.1).
+/// The four headline numbers: income, expenses, net and saved.
 pub fn figures(rows: &[DayCategoryRow]) -> Figures {
     let income_categorised: Decimal = net_inflows(rows, "income").iter().map(|(_, v)| *v).sum();
     let expenses_categorised: Decimal = net_outflows(rows, "expense").iter().map(|(_, v)| *v).sum();
 
     // No category to net within, so the sign of each row stands in for its
-    // kind (spec 2.2). Without this a freshly synced Overview shows
+    // kind. Without this a freshly synced Overview shows
     // near-zero everything and reads as a broken page.
     let mut income_uncategorised = Decimal::ZERO;
     let mut expenses_uncategorised = Decimal::ZERO;
@@ -186,8 +188,7 @@ fn collapse(mut slices: Vec<SliceAmount>, expenses_total: Decimal) -> Vec<SliceA
 
 /// Insert `internal` branches before the trailing `Other`, if any, so `Other`
 /// stays the last entry on the side. Internal branches are exempt from the
-/// 2%/8 cap: the spec promises one branch per net-outflow `internal`
-/// category, and rolling savings into "Other" would hide the destination a
+/// 2%/8 cap: there is one branch per net-outflow `internal` category, and rolling savings into "Other" would hide the destination a
 /// reader most wants to see.
 fn insert_before_trailing_other(
     mut slices: Vec<SliceAmount>,
@@ -204,7 +205,7 @@ fn insert_before_trailing_other(
     slices
 }
 
-/// The diagram (spec 4.2). No `expenses_total` parameter — `sankey()` already
+/// The Sankey diagram. No `expenses_total` parameter — `sankey()` already
 /// computes `figures(rows)` internally for the balancing remainder, and a
 /// caller-supplied total would be the only way the collapse threshold and the
 /// headline figure could ever disagree.
@@ -247,10 +248,10 @@ pub fn sankey(rows: &[DayCategoryRow]) -> Sankey {
     }
 }
 
-/// The breakdown keeps this many rows before rolling up (UI-design 1.5).
+/// The breakdown keeps this many rows before rolling up into Other.
 const BREAKDOWN_KEEP: usize = 7;
 /// Below this many months of history a comparison is noise dressed as a
-/// number, so it is omitted entirely (spec 4.4).
+/// number, so it is omitted entirely.
 const MIN_BASELINE_MONTHS: usize = 3;
 /// How far back `baseline()` walks, and — via `api::budget::summary`'s use
 /// of this same constant — how wide `/api/budget/summary` fetches to cover
@@ -260,7 +261,8 @@ const MIN_BASELINE_MONTHS: usize = 3;
 pub const BASELINE_MONTHS: u32 = 12;
 
 /// A calendar month. The Overview's period when it is not a custom range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Ordered chronologically: year first, then month.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Month {
     pub year: i32,
     pub month: u32,
@@ -340,32 +342,64 @@ pub fn rows_in(rows: &[DayCategoryRow], from: NaiveDate, to: NaiveDate) -> Vec<&
         .collect()
 }
 
-/// The twelve complete months before the selected one, each with its rows.
-/// Months with no rows are present and empty — dropping them would let a quiet
-/// month silently raise the average.
-pub struct Baseline {
-    pub months: Vec<(Month, Vec<DayCategoryRow>)>,
+/// The rows grouped by calendar month, in one pass. Every per-month figure
+/// on the page reads from this rather than re-scanning the window.
+pub fn by_month(rows: &[DayCategoryRow]) -> BTreeMap<Month, Vec<DayCategoryRow>> {
+    let mut out: BTreeMap<Month, Vec<DayCategoryRow>> = BTreeMap::new();
+    for r in rows {
+        out.entry(Month::containing(r.day))
+            .or_default()
+            .push(r.clone());
+    }
+    out
 }
 
-/// `None` when there is too little history to compare against (spec 4.4).
+/// One month's rows in `by_month`'s grouping; empty when it has none.
+pub fn month_rows(buckets: &BTreeMap<Month, Vec<DayCategoryRow>>, m: Month) -> &[DayCategoryRow] {
+    buckets.get(&m).map_or(&[], Vec::as_slice)
+}
+
+/// One baseline month, reduced to what the comparisons read.
+struct MonthSummary {
+    figures: Figures,
+    expense_side: Vec<SliceAmount>,
+}
+
+/// The twelve complete months before the selected one, each already reduced
+/// to its figures and its expense side. Months with no rows are present and
+/// zero — dropping them would let a quiet month silently raise the average.
+pub struct Baseline {
+    months: Vec<MonthSummary>,
+}
+
+/// `None` when there is too little history to compare against.
 ///
 /// "History" is counted from the earliest row present, not from the window
 /// asked for: a user who connected a bank last month has one month of history
 /// no matter how wide a window the caller fetched.
 pub fn baseline(rows: &[DayCategoryRow], selected: Month) -> Option<Baseline> {
-    let earliest = rows.iter().map(|r| r.day).min()?;
-    let first_month = Month::containing(earliest);
+    baseline_in(&by_month(rows), selected)
+}
 
-    let mut months = vec![];
-    for back in (1..=BASELINE_MONTHS).rev() {
-        let m = selected.minus(back);
+/// [`baseline`] over rows already grouped by [`by_month`].
+pub fn baseline_in(
+    buckets: &BTreeMap<Month, Vec<DayCategoryRow>>,
+    selected: Month,
+) -> Option<Baseline> {
+    let first_month = *buckets.keys().next()?;
+    let months: Vec<MonthSummary> = (1..=BASELINE_MONTHS)
+        .rev()
+        .map(|back| selected.minus(back))
         // Months before the user had any data at all are not part of the mean.
-        if (m.year, m.month) < (first_month.year, first_month.month) {
-            continue;
-        }
-        let (from, to) = m.bounds();
-        months.push((m, rows_in(rows, from, to).into_iter().cloned().collect()));
-    }
+        .filter(|m| *m >= first_month)
+        .map(|m| {
+            let rows = month_rows(buckets, m);
+            MonthSummary {
+                figures: figures(rows),
+                expense_side: expense_side_amounts(rows),
+            }
+        })
+        .collect();
 
     (months.len() >= MIN_BASELINE_MONTHS).then_some(Baseline { months })
 }
@@ -373,8 +407,8 @@ pub fn baseline(rows: &[DayCategoryRow], selected: Month) -> Option<Baseline> {
 /// The mean month of the baseline, as the same four figures.
 pub fn baseline_figures(b: &Baseline) -> Figures {
     let n = Decimal::from(b.months.len().max(1));
-    let each: Vec<Figures> = b.months.iter().map(|(_, rows)| figures(rows)).collect();
-    let sum = |f: fn(&Figures) -> Decimal| each.iter().map(f).sum::<Decimal>() / n;
+    let sum =
+        |f: fn(&Figures) -> Decimal| b.months.iter().map(|m| f(&m.figures)).sum::<Decimal>() / n;
     Figures {
         income: sum(|f| f.income),
         expenses: sum(|f| f.expenses),
@@ -389,13 +423,8 @@ fn baseline_for_slice(b: &Baseline, slice: Slice) -> Decimal {
     let total: Decimal = b
         .months
         .iter()
-        .map(|(_, rows)| {
-            expense_side_amounts(rows)
-                .into_iter()
-                .find(|x| x.slice == slice)
-                .map(|x| x.amount)
-                .unwrap_or(Decimal::ZERO)
-        })
+        .filter_map(|m| m.expense_side.iter().find(|x| x.slice == slice))
+        .map(|x| x.amount)
         .sum();
     total / n
 }
@@ -413,11 +442,11 @@ pub struct BreakdownEntry {
     pub amount: Decimal,
     pub txn_count: i64,
     /// `None` on the `Other` row, whose membership changes month to month, and
-    /// whenever there is too little history (spec 4.4).
+    /// whenever there is too little history.
     pub avg12: Option<Decimal>,
 }
 
-/// The breakdown table (spec 2.3, 4.3): expense-side only, the 7 largest by
+/// The breakdown table: expense-side only, the 7 largest by
 /// magnitude plus an `Other` rollup.
 pub fn breakdown(rows: &[DayCategoryRow], baseline: Option<&Baseline>) -> Vec<BreakdownEntry> {
     let amounts = expense_side_amounts(rows);
@@ -468,7 +497,7 @@ pub fn breakdown(rows: &[DayCategoryRow], baseline: Option<&Baseline>) -> Vec<Br
     out
 }
 
-/// The trend chart keeps this many categories, Other excluded (UI-design 1.6).
+/// The trend chart keeps this many categories, Other excluded.
 const TREND_KEEP: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -479,7 +508,7 @@ pub struct TrendSeries {
     pub values: Vec<Decimal>,
 }
 
-/// `months` bars ending at and including `anchor` (UI-design 1.6). The
+/// `months` bars ending at and including `anchor`. The
 /// baseline excludes the selected month; the chart includes it as its last bar,
 /// because a chart of recent history that stopped before the month you are
 /// looking at would be strange to read.
@@ -490,14 +519,10 @@ pub fn trend(
 ) -> (Vec<Month>, Vec<TrendSeries>) {
     let axis: Vec<Month> = (0..months).rev().map(|back| anchor.minus(back)).collect();
 
+    let buckets = by_month(rows);
     let per_month: Vec<Vec<SliceAmount>> = axis
         .iter()
-        .map(|m| {
-            let (from, to) = m.bounds();
-            let slice_rows: Vec<DayCategoryRow> =
-                rows_in(rows, from, to).into_iter().cloned().collect();
-            expense_side_amounts(&slice_rows)
-        })
+        .map(|m| expense_side_amounts(month_rows(&buckets, *m)))
         .collect();
 
     // Ranked by total across the window, not by any single month, so a stack's

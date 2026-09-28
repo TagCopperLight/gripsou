@@ -32,9 +32,14 @@ describe("budgetFilters", () => {
       from: "2025-09-21",
       to: "2026-09-21",
     });
+    // Up to today, never into months that have not happened yet.
     expect(withTimeFrame(EMPTY_FILTERS, "thisYear", today)).toMatchObject({
       from: "2026-01-01",
-      to: "2026-12-31",
+      to: "2026-09-21",
+    });
+    expect(withTimeFrame(EMPTY_FILTERS, "last3Months", today)).toMatchObject({
+      from: "2026-06-21",
+      to: "2026-09-21",
     });
   });
 
@@ -102,20 +107,25 @@ describe("budgetFilters", () => {
     });
   });
 
-  it("clears a stale `periodLabel` when a new time frame is picked (I2)", () => {
+  it("clears a stale Overview period when a new time frame is picked (I2)", () => {
     // Without this, `activeFilters` hides the time-frame chip (it only shows
-    // when `periodLabel` is unset) while the picked range silently applies —
+    // when `period` is unset) while the picked range silently applies —
     // the "Selected period" chip keeps showing the OLD Overview period.
-    const withLabel = { ...EMPTY_FILTERS, periodLabel: "September 2026" };
-    const next = withTimeFrame(withLabel, "thisMonth", new Date(2026, 8, 21));
-    expect(next.periodLabel).toBeUndefined();
+    const withPeriod = { ...EMPTY_FILTERS, period: { mode: "month" as const, month: "2026-09" } };
+    const next = withTimeFrame(withPeriod, "thisMonth", new Date(2026, 8, 21));
+    expect(next.period).toBeUndefined();
   });
 
-  it("clearing the period chip drops phase 4's label with its dates", () => {
-    const f = { ...EMPTY_FILTERS, periodLabel: "September 2026", from: "2026-09-01", to: "2026-09-30" };
+  it("clearing the period chip drops Overview's period with its dates", () => {
+    const f = {
+      ...EMPTY_FILTERS,
+      period: { mode: "month" as const, month: "2026-09" },
+      from: "2026-09-01",
+      to: "2026-09-30",
+    };
     expect(activeFilters(f)[0]).toEqual({ kind: "period" });
     expect(clearFilter(f, { kind: "period" })).toMatchObject({
-      periodLabel: undefined,
+      period: undefined,
       from: "",
       to: "",
     });

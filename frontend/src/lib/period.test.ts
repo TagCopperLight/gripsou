@@ -8,6 +8,7 @@ import {
   monthLabel,
   periodBounds,
   periodLabel,
+  presetRange,
 } from "./period";
 
 describe("currentMonth", () => {
@@ -84,7 +85,7 @@ describe("anchorMonth", () => {
   });
 
   it("is the month containing `to` in range mode", () => {
-    // Spec §5.3: a range has no anchor of its own, so the trend anchors on the
+    // A range has no anchor of its own, so the trend anchors on the
     // month its end date falls in rather than disappearing.
     expect(anchorMonth({ mode: "range", from: "2025-11-04", to: "2026-03-18" })).toBe(
       "2026-03",
@@ -103,5 +104,31 @@ describe("periodLabel", () => {
     expect(periodLabel({ mode: "range", from: "2026-03-14", to: "2026-04-02" }, "en")).toBe(
       "14/03/2026 → 02/04/2026",
     );
+  });
+});
+
+describe("presetRange", () => {
+  const today = new Date(2026, 8, 21); // 21 September 2026, local
+
+  it("makes every 'last N months' a rolling window ending today", () => {
+    expect(presetRange("last3Months", today)).toEqual({ from: "2026-06-21", to: "2026-09-21" });
+    expect(presetRange("last6Months", today)).toEqual({ from: "2026-03-21", to: "2026-09-21" });
+    expect(presetRange("last12Months", today)).toEqual({ from: "2025-09-21", to: "2026-09-21" });
+  });
+
+  it("clamps the start day when the month back is shorter", () => {
+    expect(presetRange("last3Months", new Date(2026, 4, 31))).toEqual({
+      from: "2026-02-28",
+      to: "2026-05-31",
+    });
+  });
+
+  it("runs 'this year' to today and 'last year' over the whole year", () => {
+    expect(presetRange("thisYear", today)).toEqual({ from: "2026-01-01", to: "2026-09-21" });
+    expect(presetRange("lastYear", today)).toEqual({ from: "2025-01-01", to: "2025-12-31" });
+  });
+
+  it("keeps 'this month' as the whole calendar month", () => {
+    expect(presetRange("thisMonth", today)).toEqual({ from: "2026-09-01", to: "2026-09-30" });
   });
 });

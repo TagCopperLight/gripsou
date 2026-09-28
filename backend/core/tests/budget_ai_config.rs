@@ -23,9 +23,12 @@ async fn ai_is_off_until_an_admin_picks_a_provider(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
+/// Which providers exist is the code's business: the schema stores any key,
+/// so adding a provider needs no migration.
 #[sqlx::test(migrations = "../migrations")]
-async fn an_unknown_provider_is_rejected_by_the_schema(pool: PgPool) -> anyhow::Result<()> {
-    assert!(set_budget_ai(&pool, Some("openai"), None).await.is_err());
+async fn the_schema_does_not_list_providers(pool: PgPool) -> anyhow::Result<()> {
+    set_budget_ai(&pool, Some("another"), None).await?;
+    assert_eq!(budget_ai(&pool).await?.provider.as_deref(), Some("another"));
     Ok(())
 }
 
