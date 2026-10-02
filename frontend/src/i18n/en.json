@@ -108,7 +108,7 @@
         "stripTitle": "Incomplete buy/sell history",
         "stripBodyShort": "{{qty}} shares have no recorded buy or sell.",
         "stripBodyExcess": "{{qty}} more shares are recorded than are actually held.",
-        "accounted": "{{recorded}} / {{total}} shares accounted for",
+        "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> shares accounted for",
         "columns": {
           "type": "TYPE",
           "date": "DATE",

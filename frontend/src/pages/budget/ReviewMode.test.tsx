@@ -12,7 +12,7 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 const base = {
   t: Date.UTC(2026, 8, 1), type: "withdrawal", amount: "-12.00", amountReporting: "-12.00",
   currency: "EUR", accountId: "a1", accountName: "Checking", accountColor: "#5b9bf0",
-  source: "cash", ticker: null, quantity: null, unitPrice: null, fee: null,
+  source: "cash", ticker: null, logo: null, quantity: null, unitPrice: null, fee: null,
   categoryDefaultKey: null, categoryIcon: null, categorySource: "ai",
   needsReview: true, checked: false, isTransfer: false, isOrphanTransfer: false, tags: [],
 };

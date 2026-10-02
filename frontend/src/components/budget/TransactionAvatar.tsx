@@ -22,11 +22,22 @@ function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
   return tx.amount.trim().startsWith("-") ? "out" : "in";
 }
 
-/** One size everywhere. A categorised row shows its category's glyph (or, for
+/** One size everywhere. A lot shows its instrument's logo, as on the Holdings
+ *  card. A categorised row shows its category's glyph (or, for
  *  a category without one, the same coloured dot its chip shows), tinted with
  *  the category colour. Only a row with no category falls back to a neutral
  *  glyph for its kind of movement. */
 export function TransactionAvatar({ tx }: { tx: Transaction }) {
+  if (tx.source === "lot" && tx.logo?.startsWith("http")) {
+    return (
+      <span
+        data-testid="tx-avatar"
+        data-variant="logo"
+        style={{ backgroundImage: `url(${tx.logo})` }}
+        className="inline-flex size-8 shrink-0 rounded-lg bg-cover bg-center"
+      />
+    );
+  }
   if (tx.categoryId) {
     const color = safeBudgetColor(tx.categoryColor);
     return (

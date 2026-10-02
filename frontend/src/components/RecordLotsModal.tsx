@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Trash2, X } from "lucide-react";
 
 import { Button } from "./Button";
@@ -270,10 +270,14 @@ export function RecordLotsModal({
           {/* Accounted bar */}
           <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
             <span className="text-fg-dim text-sm">
-              {t("dashboard.holdings.gap.accounted", {
-                recorded: formatQuantity(String(recorded)),
-                total: formatQuantity(holding.qty),
-              })}
+              <Trans
+                i18nKey="dashboard.holdings.gap.accounted"
+                values={{
+                  recorded: formatQuantity(String(recorded)),
+                  total: formatQuantity(holding.qty),
+                }}
+                components={{ num: <span className="font-mono" /> }}
+              />
             </span>
             <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
               <div

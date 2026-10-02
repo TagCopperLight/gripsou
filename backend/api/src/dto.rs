@@ -345,6 +345,8 @@ pub struct Transaction {
     /// frontend picks its rendering (and i18n) off this discriminator.
     pub source: String,
     pub ticker: Option<String>,
+    /// The instrument's logo on a lot row; null on a cash row.
+    pub logo: Option<String>,
     /// Decimal string, never a float.
     pub quantity: Option<String>,
     /// Decimal string, never a float.
@@ -399,6 +401,7 @@ impl Transaction {
             account_color: r.account_color,
             source: r.source,
             ticker: r.ticker,
+            logo: r.logo_url,
             quantity: r.quantity.map(|d| d.to_string()),
             unit_price: r.unit_price.map(|d| d.to_string()),
             fee: r.fee.map(|d| d.to_string()),

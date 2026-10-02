@@ -245,6 +245,8 @@ export type Transaction = {
    *  four instrument fields below and no description. */
   source: "cash" | "lot";
   ticker: string | null;
+  /** The instrument's logo on a lot row; null on a cash row. */
+  logo: string | null;
   quantity: string | null;
   unitPrice: string | null;
   fee: string | null;

@@ -64,6 +64,10 @@
     - [x] Transactions mode
     - [x] AI categorisation and the review queue
 
+### v1.5.2
+- [x] Assets modal, accurate quantity
+- [x] Investments logos transaction page
+
 ### Future
 - [ ] First admin configuration
     - [ ] Parameterize webhooks
@@ -73,3 +77,8 @@
     - [ ] Transactions reconciliation
     - [ ] Infer lots
 - [ ] reorganize files
+- [ ] hover on currencies
+- [ ] Investments detection
+- [ ] Transaction page search bar
+- [ ] Apply to all
+- [ ] Last 12 months chart

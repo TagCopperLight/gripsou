@@ -9,7 +9,7 @@ function tx(over: Partial<Transaction> = {}): Transaction {
     id: "t1", t: 0, type: "withdrawal", description: "ALDI", amount: "-12.00",
     amountReporting: "-12.00",
     currency: "EUR", accountId: "a", accountName: "Current", accountColor: null,
-    source: "cash", ticker: null, quantity: null, unitPrice: null, fee: null,
+    source: "cash", ticker: null, logo: null, quantity: null, unitPrice: null, fee: null,
     categoryId: null, categoryName: null, categoryDefaultKey: null, categoryColor: null,
     categoryIcon: null, categoryKind: null, categorySource: null, categoryConfidence: null,
     needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false,
@@ -48,5 +48,21 @@ describe("TransactionAvatar", () => {
     const el = screen.getByTestId("tx-avatar");
     expect(el).toHaveAttribute("data-variant", "category");
     expect(el.style.color).toBe("rgb(155, 176, 107)");
+  });
+
+  it("draws a lot as its instrument's logo", () => {
+    render(
+      <TransactionAvatar
+        tx={tx({ source: "lot", ticker: "SPCX", logo: "https://cdn.brandfetch.io/isin/US84615Q1031" })}
+      />,
+    );
+    const el = screen.getByTestId("tx-avatar");
+    expect(el).toHaveAttribute("data-variant", "logo");
+    expect(el.style.backgroundImage).toContain("US84615Q1031");
+  });
+
+  it("keeps the generic lot glyph when the instrument has no logo", () => {
+    render(<TransactionAvatar tx={tx({ source: "lot", ticker: "SPCX", logo: null })} />);
+    expect(screen.getByTestId("tx-avatar")).toHaveAttribute("data-variant", "generic");
   });
 });

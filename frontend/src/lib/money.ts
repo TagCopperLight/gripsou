@@ -104,7 +104,9 @@ export function formatQuantity(
     groupSep: options.groupSep ?? p.numberGroupSep,
     decimalSep: options.decimalSep ?? p.numberDecimalSep,
     minFrac: 0,
-    maxFrac: options.fractionDigits ?? 2,
+    // 8 covers fractional shares and satoshis in full, and still hides the
+    // float noise of a quantity summed locally (0.1 + 0.2).
+    maxFrac: options.fractionDigits ?? 8,
     signed: false,
   });
   return `${sign}${body}`;

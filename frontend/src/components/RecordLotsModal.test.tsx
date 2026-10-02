@@ -127,6 +127,13 @@ describe("RecordLotsModal", () => {
     expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
   });
 
+  it("sets the accounted quantities in the mono font", () => {
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    expect(screen.getByText("10")).toHaveClass("font-mono");
+    expect(screen.getByText("20")).toHaveClass("font-mono");
+  });
+
   it("colours the bar amber when short, green on a match, red when over", () => {
     txns = [lot("a", "buy", "10", "20")];
     const { rerender } = render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);

@@ -49,9 +49,18 @@ describe("formatPercent / formatQuantity", () => {
     expect(formatPercent("0.1234")).toBe("12,34%");
   });
 
-  it("drops trailing zeros on quantities (max 2)", () => {
+  it("drops trailing zeros on quantities", () => {
     expect(formatQuantity("10")).toBe("10");
     expect(formatQuantity("1234.5")).toBe("1 234,5");
+  });
+
+  it("keeps a fractional share's full precision", () => {
+    expect(formatQuantity("0.371719")).toBe("0,371719");
+    expect(formatQuantity("0.00012345")).toBe("0,00012345");
+  });
+
+  it("hides float noise from a locally summed quantity", () => {
+    expect(formatQuantity(String(0.1 + 0.2))).toBe("0,3");
   });
 });
 

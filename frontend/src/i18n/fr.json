@@ -108,7 +108,7 @@
         "stripTitle": "Historique d'achats et de ventes incomplet",
         "stripBodyShort": "{{qty}} titres n'ont aucun achat ou vente associé.",
         "stripBodyExcess": "Il y a {{qty}} titres de plus dans l'historique que réellement détenus.",
-        "accounted": "{{recorded}} / {{total}} titres comptabilisés",
+        "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> titres comptabilisés",
         "columns": {
           "type": "TYPE",
           "date": "DATE",

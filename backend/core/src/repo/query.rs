@@ -828,6 +828,8 @@ pub struct TransactionListRow {
     /// frontend's i18n and per-user number formatting render the lot fields.
     pub source: String,
     pub ticker: Option<String>,
+    /// The instrument's logo on a lot row; null on a cash row.
+    pub logo_url: Option<String>,
     pub quantity: Option<Decimal>,
     pub unit_price: Option<Decimal>,
     pub fee: Option<Decimal>,
@@ -1006,7 +1008,7 @@ pub async fn transactions(
                coalesce(filtered.amount * afx.unit_value
                         / coalesce(nullif(rfx.unit_value, 0), 1), 0)
                    as "amount_reporting!",
-               source as "source!", ticker, quantity, unit_price, fee,
+               source as "source!", ticker, logo_url, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color, account_currency as "account_currency!",
                filtered.category_id, category_name, category_default_key, category_color,
