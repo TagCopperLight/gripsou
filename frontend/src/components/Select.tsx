@@ -53,11 +53,11 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`w-full flex items-center justify-between gap-2 ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140 disabled:opacity-60 disabled:cursor-not-allowed`}
       >
-        <span>{selected?.label ?? t("common.select")}</span>
+        <span title={selected?.label} className="min-w-0 truncate">{selected?.label ?? t("common.select")}</span>
         <ChevronDown
-          className={`size-4 text-fg-faint transition-transform duration-140 ${open ? "rotate-180" : ""}`}
+          className={`size-4 shrink-0 text-fg-faint transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && !disabled && (
@@ -74,7 +74,8 @@ export function Select({
                 onChange(o.value);
                 setOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors duration-140 ${
+              title={o.label}
+              className={`w-full truncate text-left px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors duration-140 ${
                 o.value === value
                   ? "bg-surface-3 text-fg"
                   : "text-fg-dim hover:bg-surface-3 hover:text-fg"

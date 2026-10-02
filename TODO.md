@@ -67,6 +67,7 @@
 ### v1.5.2
 - [x] Assets modal, accurate quantity
 - [x] Investments logos transaction page
+- [x] Transaction page search bar
 
 ### Future
 - [ ] First admin configuration
@@ -79,6 +80,5 @@
 - [ ] reorganize files
 - [ ] hover on currencies
 - [ ] Investments detection
-- [ ] Transaction page search bar
 - [ ] Apply to all
 - [ ] Last 12 months chart
