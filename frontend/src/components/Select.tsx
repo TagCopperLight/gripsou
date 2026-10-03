@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -21,6 +22,11 @@ type SelectProps = {
   disabled?: boolean;
 };
 
+/** Gap between the control and its menu, and the margin kept from the
+ *  viewport edges. */
+const GAP = 6;
+const MARGIN = 8;
+
 const TONES = {
   default: "bg-surface-2 hover:bg-surface-3",
   sunken: "bg-surface hover:bg-surface-3",
@@ -32,13 +38,47 @@ export function Select({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const selected = options.find((o) => o.value === value);
 
-  // Close when clicking outside the control.
+  // The menu is portalled and `fixed`, so a Select inside a scrolling or
+  // clipped container (a Dialog) can open past that container's edge instead
+  // of growing it. Measured after layout, and again on any scroll or resize,
+  // so it follows the control; flipped above only when it does not fit below
+  // and there is more room above.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      const menu = menuRef.current?.getBoundingClientRect();
+      if (!rect || !menu) return;
+      const vh = window.innerHeight;
+      const below = rect.bottom + GAP;
+      const fitsBelow = below + menu.height <= vh - MARGIN;
+      const top = fitsBelow || rect.top < vh - rect.bottom
+        ? below
+        : Math.max(MARGIN, rect.top - GAP - menu.height);
+      setPos({ top, left: rect.left, width: rect.width });
+    };
+    place();
+    // Capture phase: the scroll that moves the control is usually on an inner
+    // container, and those do not bubble.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
+  // Close when clicking outside the control and its menu.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -60,9 +100,12 @@ export function Select({
           className={`size-4 shrink-0 text-fg-faint transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && !disabled && (
+      {open && !disabled && createPortal(
         <div
-          className={`absolute z-10 mt-1.5 w-full rounded-xl p-1 shadow-xl ${
+          ref={menuRef}
+          // Hidden until measured, so the first paint is never at the wrong place.
+          style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: pos?.width, visibility: pos ? "visible" : "hidden" }}
+          className={`fixed z-60 rounded-xl p-1 shadow-xl ${
             tone === "sunken" ? "bg-surface" : "bg-surface-2"
           }`}
         >
@@ -84,7 +127,8 @@ export function Select({
               {o.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

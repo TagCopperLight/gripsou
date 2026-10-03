@@ -116,6 +116,7 @@ export type BasisPreview = {
 
 export type Account = {
   id: string;
+  connectionId: string;
   name: string;
   color: string;
   typeKey: string;

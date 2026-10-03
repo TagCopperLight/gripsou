@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Pencil } from "lucide-react";
 
 import { Dialog } from "../Dialog";
+import { ColorSwatchGrid } from "../ColorSwatchGrid";
 import { FilledDot } from "./FilledDot";
 import { CategoryIcon } from "./CategoryIcon";
 import { Button } from "../Button";
@@ -18,7 +18,6 @@ import {
   BUDGET_ICONS,
   BUDGET_ICON_NAMES,
   BUDGET_KINDS,
-  BUDGET_PALETTE,
   budgetErrorKey,
   categoryLabel,
   safeBudgetColor,
@@ -87,9 +86,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   // name, colour, icon. Its kind is fixed, and its hint would never be read.
   const locked = Boolean(category?.systemKey);
   const previewColor = safeBudgetColor(color);
-  // The picker swatch stands in for "a colour off the palette", so it only
-  // reads as selected when the current colour is not one of the presets.
-  const custom = !BUDGET_PALETTE.includes(color);
 
   return (
     <Dialog
@@ -157,44 +153,13 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
         </Field>
 
         <Field label={t("settings.budget.categories.fieldColor")}>
-          <div className="grid grid-cols-[repeat(18,minmax(0,1fr))] gap-2">
-            {BUDGET_PALETTE.map((c) => (
-              <button
-                key={c}
-                type="button"
-                disabled={busy}
-                aria-label={t("settings.budget.categories.colorLabel", { color: c })}
-                aria-pressed={c === color}
-                onClick={() => setColor(c)}
-                className={`aspect-square w-full rounded-lg flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 ${
-                  c === color ? "ring-2 ring-fg" : "hover:scale-105"
-                }`}
-                style={{ background: c }}
-              >
-                {c === color && <Check className="size-3.5 text-black/80" />}
-              </button>
-            ))}
-            {/* The native colour input has its own intrinsic height, so it is
-                stretched invisibly over a square of our own rather than being
-                sized directly — that is what keeps it on the swatch grid. */}
-            <label
-              className={`relative aspect-square w-full rounded-lg bg-surface-2 flex items-center justify-center cursor-pointer transition-transform duration-140 ${
-                custom ? "ring-2 ring-fg" : "hover:scale-105"
-              } ${busy ? "opacity-40" : ""}`}
-              style={{ background: custom ? previewColor : undefined }}
-            >
-              <span className="sr-only">{t("settings.budget.categories.customColor")}</span>
-              <Pencil className={`size-3.5 ${custom ? "text-black/80" : "text-fg-faint"}`} />
-              <input
-                type="color"
-                aria-label={t("settings.budget.categories.customColor")}
-                value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#000000"}
-                disabled={busy}
-                onChange={(e) => setColor(e.target.value)}
-                className="absolute inset-0 size-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-              />
-            </label>
-          </div>
+          <ColorSwatchGrid
+            value={color}
+            onChange={setColor}
+            disabled={busy}
+            swatchLabel={(c) => t("settings.budget.categories.colorLabel", { color: c })}
+            customLabel={t("settings.budget.categories.customColor")}
+          />
         </Field>
 
         <Field label={t("settings.budget.categories.fieldIcon")}>

@@ -462,6 +462,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
+    assert_eq!(rows[0].connection_id, conn_id);
     assert_eq!(rows[0].type_label, "Checking");
     assert_eq!(rows[0].value, Decimal::new(150, 0));
     assert!(

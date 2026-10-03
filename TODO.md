@@ -69,6 +69,7 @@
 - [x] Investments logos transaction page
 - [x] Transaction page search bar
 - [x] Saved and invested don't mean anything
+- [x] Reworked accounts list
 
 ### Future
 - [ ] First admin configuration

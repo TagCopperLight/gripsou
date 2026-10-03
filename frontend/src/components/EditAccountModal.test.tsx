@@ -8,6 +8,7 @@ const ACCOUNT: Account = {
   id: "a1",
   name: "Compte Courant",
   color: "#5b9bf0",
+  connectionId: "c1",
   typeKey: "checking",
   typeLabel: "Checking",
   value: "12480.30",

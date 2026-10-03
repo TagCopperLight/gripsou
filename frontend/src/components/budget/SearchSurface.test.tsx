@@ -69,7 +69,8 @@ function filters(): Record<string, unknown> {
 function pickTimeFrame(label: string) {
   const control = within(screen.getByTestId("time-frame"));
   fireEvent.click(control.getByRole("button"));
-  fireEvent.click(control.getByRole("button", { name: label }));
+  // The menu is portalled to the body, outside the control.
+  fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
 describe("SearchSurface", () => {

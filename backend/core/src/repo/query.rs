@@ -473,6 +473,7 @@ pub async fn holding_prices(
 
 pub struct AccountRow {
     pub account_id: Uuid,
+    pub connection_id: Uuid,
     pub name: String,
     pub color: Option<String>,
     pub type_key: String,
@@ -485,7 +486,7 @@ pub struct AccountRow {
 }
 
 /// One row per account: latest snapshot value per holding, summed, with the
-/// account-type label and the connection's last sync time.
+/// account-type label, its connection, and the connection's last sync time.
 pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountRow,
@@ -552,6 +553,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
             order by hs.holding_id, hs.as_of desc
         )
         select a.id    as "account_id!",
+               c.id    as "connection_id!",
                a.name  as "name!",
                a.color,
                a.type_key as "type_key!",
@@ -567,7 +569,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
         join provider p     on p.key = c.provider_key
-        group by a.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, p.display_name
+        group by a.id, c.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, p.display_name
         order by sum(l.value) desc
         "#,
         user_id,

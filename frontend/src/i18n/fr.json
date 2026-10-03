@@ -57,17 +57,16 @@
     "lastWeek": "la semaine dernière"
   },
   "account": {
-    "totalValue": "Valeur totale",
-    "ofNetWorth": "du patrimoine",
-    "source": "Source",
-    "lastSync": "Dernière synchro",
     "allAccounts": "Tous les comptes",
+    "synced": "synchronisé {{time}}",
+    "unknownSource": "Autre",
     "edit": {
       "title": "Modifier le compte",
       "accountName": "Nom du compte",
       "type": "Type",
       "color": "Couleur",
       "colorLabel": "Couleur {{color}}",
+      "customColor": "Couleur personnalisée",
       "saveError": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
       "save": "Enregistrer",
       "saving": "Enregistrement…"

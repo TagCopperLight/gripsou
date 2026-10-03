@@ -433,6 +433,7 @@ impl Transaction {
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: String,
+    pub connection_id: String,
     pub name: String,
     pub color: String,
     pub type_key: String,
@@ -448,6 +449,7 @@ impl Account {
     pub fn from_row(r: gripsou_core::repo::query::AccountRow) -> Self {
         Account {
             id: r.account_id.to_string(),
+            connection_id: r.connection_id.to_string(),
             name: r.name,
             color: r.color.unwrap_or_else(|| "#888888".to_string()),
             type_key: r.type_key,

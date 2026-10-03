@@ -25,4 +25,21 @@ describe("Select", () => {
     expect(onChange).toHaveBeenCalledWith("savings");
     expect(screen.queryByText("Savings")).not.toBeInTheDocument();
   });
+
+  it("opens its menu outside a clipping container, and closes on a click outside", () => {
+    const { container } = render(
+      <div className="overflow-y-auto">
+        <Select value="checking" onChange={() => {}} options={OPTIONS} />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button"));
+    const option = screen.getByText("Savings");
+    // Portalled to the body, so a scrolling dialog cannot clip it.
+    expect(container.contains(option)).toBe(false);
+    // A click on the menu itself is not "outside".
+    fireEvent.mouseDown(option);
+    expect(screen.getByText("Savings")).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText("Savings")).not.toBeInTheDocument();
+  });
 });

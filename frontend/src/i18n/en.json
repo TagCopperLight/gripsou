@@ -57,17 +57,16 @@
     "lastWeek": "last week"
   },
   "account": {
-    "totalValue": "Total value",
-    "ofNetWorth": "of net worth",
-    "source": "Source",
-    "lastSync": "Last sync",
     "allAccounts": "All accounts",
+    "synced": "synced {{time}}",
+    "unknownSource": "Other",
     "edit": {
       "title": "Edit account",
       "accountName": "Account name",
       "type": "Type",
       "color": "Color",
       "colorLabel": "Color {{color}}",
+      "customColor": "Custom colour",
       "saveError": "Could not save changes. Please try again.",
       "save": "Save changes",
       "saving": "Saving…"
