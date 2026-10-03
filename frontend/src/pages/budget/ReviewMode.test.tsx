@@ -40,7 +40,7 @@ type Server = {
 
 const CATEGORIES = [
   { id: "c2", name: "Savings", defaultKey: null, color: "#5b9bf0", icon: null, hint: null,
-    kind: "internal", systemKey: null, archived: false, txCount: 0 },
+    kind: "neutral", systemKey: null, archived: false, txCount: 0 },
 ];
 
 function stubServer(server: Server) {

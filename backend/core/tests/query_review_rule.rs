@@ -84,7 +84,7 @@ fn review_filter(threshold: Decimal) -> TransactionFilters {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn the_queue_is_low_confidence_no_guess_and_internal_whatever_its_confidence(
+async fn the_queue_is_low_confidence_no_guess_and_neutral_whatever_its_confidence(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let (user_id, ids) = seed(&pool).await?;

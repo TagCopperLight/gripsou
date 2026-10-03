@@ -25,8 +25,7 @@ import { CategoryIcon } from "./CategoryIcon";
 const KIND_BADGE: Record<BudgetCategory["kind"], string> = {
   expense: "text-red-light bg-red-light/14",
   income: "text-green-light bg-green-light/14",
-  internal: "text-blue-light bg-blue-light/14",
-  excluded: "text-fg-faint bg-surface-2",
+  neutral: "text-fg-faint bg-surface-2",
 };
 
 /** Rows have no rules; the hover rectangle is the separator. `border-separate`

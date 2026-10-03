@@ -15,7 +15,6 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
       income: { amount: "3200.00", prevMonth: "2980.00", avg12: "3050.00" },
       expenses: { amount: "1940.00", prevMonth: "2010.00", avg12: "1870.00" },
       net: { amount: "1260.00", prevMonth: "970.00", avg12: "1179.00" },
-      saved: { amount: "800.00", prevMonth: "800.00", avg12: "750.00" },
       ...over,
     },
     sankey: { sources: [], destinations: [] },
@@ -47,12 +46,12 @@ function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
 }
 
 describe("FiguresSurface", () => {
-  it("shows all four figures", () => {
+  it("shows the three figures", () => {
     renderSurface(summary());
     expect(screen.getByTestId("figure-income")).toHaveTextContent("3");
     expect(screen.getByTestId("figure-expenses")).toBeVisible();
     expect(screen.getByTestId("figure-net")).toBeVisible();
-    expect(screen.getByTestId("figure-saved")).toBeVisible();
+    expect(screen.queryByTestId("figure-saved")).not.toBeInTheDocument();
   });
 
   it("renders income's comparison as a percentage", () => {
@@ -80,9 +79,9 @@ describe("FiguresSurface", () => {
   });
 
   it("marks an unchanged figure neutral", () => {
-    renderSurface(summary());
-    // saved: 800 vs 800.
-    expect(screen.getByTestId("cmp-saved-prevMonth")).toHaveAttribute("data-tone", "flat");
+    // net: 1260 vs 1260.
+    renderSurface(summary({ net: { amount: "1260.00", prevMonth: "1260.00", avg12: "1179.00" } }));
+    expect(screen.getByTestId("cmp-net-prevMonth")).toHaveAttribute("data-tone", "flat");
   });
 
   it("hides both comparisons when the server sends no baseline", () => {
@@ -93,7 +92,6 @@ describe("FiguresSurface", () => {
         income: { amount: "3200.00" },
         expenses: { amount: "1940.00" },
         net: { amount: "1260.00" },
-        saved: { amount: "800.00" },
       }),
     );
     expect(screen.queryByTestId("cmp-income-prevMonth")).toBeNull();

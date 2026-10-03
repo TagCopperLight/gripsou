@@ -467,8 +467,7 @@
     "kinds": {
       "expense": "Dépense",
       "income": "Revenu",
-      "internal": "Interne",
-      "excluded": "Exclu"
+      "neutral": "Neutre"
     },
     "defaults": {
       "housing": "Logement",
@@ -646,8 +645,7 @@
       "figures": {
         "income": "Revenus",
         "expenses": "Dépenses",
-        "net": "Solde",
-        "saved": "Épargné et investi"
+        "net": "Solde"
       },
       "vsPrevMonth": "par rapport au mois précédent",
       "vsAvg12": "par rapport à la moyenne sur 12 mois",

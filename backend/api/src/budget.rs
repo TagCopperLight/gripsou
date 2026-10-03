@@ -98,7 +98,7 @@ pub struct CategoryBody {
     pub archived: bool,
 }
 
-const KINDS: [&str; 4] = ["expense", "income", "internal", "excluded"];
+const KINDS: [&str; 3] = ["expense", "income", "neutral"];
 
 pub async fn list_categories(
     State(pool): State<PgPool>,
@@ -374,7 +374,6 @@ pub struct FiguresDto {
     pub income: FigureDto,
     pub expenses: FigureDto,
     pub net: FigureDto,
-    pub saved: FigureDto,
 }
 
 #[derive(Serialize)]
@@ -382,10 +381,8 @@ pub struct FiguresDto {
 pub struct SummaryDto {
     /// Sum of `txn_count` across every `(day, category)` row in the period —
     /// NOT the count on the Transactions list header for the same month.
-    /// Paired transfers, `excluded` rows and lot rows are all left out here;
-    /// the list shows lots, and excluded rows and (on request) transfers.
-    /// Rows filed by hand under an `internal` category, such as savings, are
-    /// counted by both.
+    /// Paired transfers, neutral rows and lot rows are all left out here; the
+    /// list shows lots and neutral rows (internal transfers on request).
     pub txn_count: i64,
     pub fx_missing: bool,
     /// Nothing is missing from these figures — the whole sum is in the
@@ -539,7 +536,6 @@ pub async fn summary(
                 base_f.map(|x| x.expenses),
             ),
             net: figure(f.net, prev_f.map(|x| x.net), base_f.map(|x| x.net)),
-            saved: figure(f.saved, prev_f.map(|x| x.saved), base_f.map(|x| x.saved)),
         },
         sankey: SankeyDto {
             sources: s

@@ -5,19 +5,18 @@ import { Surface } from "../../Surface";
 import { PrivateMoney } from "../../PrivateMoney";
 import type { BudgetSummary, Figure } from "../../../api/overview";
 
-type FigureKey = "income" | "expenses" | "net" | "saved";
+type FigureKey = "income" | "expenses" | "net";
 
 /** Colour and comparison behaviour per figure. `format` is fixed
- *  per figure rather than per value: net and saved can be zero or negative,
+ *  per figure rather than per value: net can be zero or negative,
  *  where a percentage change is unstable, so they always read as an amount. */
 const SPEC: Record<FigureKey, { tone: string; format: "percent" | "absolute"; goodWhen: "up" | "down" }> = {
   income: { tone: "text-green", format: "percent", goodWhen: "up" },
   expenses: { tone: "text-red", format: "percent", goodWhen: "down" },
   net: { tone: "text-fg", format: "absolute", goodWhen: "up" },
-  saved: { tone: "text-green", format: "absolute", goodWhen: "up" },
 };
 
-const ORDER: FigureKey[] = ["income", "expenses", "net", "saved"];
+const ORDER: FigureKey[] = ["income", "expenses", "net"];
 
 function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
   const { t } = useTranslation();
@@ -32,7 +31,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
     // stray vertical bar above each cell. At `sm` the grid is 2 columns, so
     // only the SECOND cell of each row (even index) sits beside a
     // predecessor — `not-first` there would wrongly also bar the 3rd cell,
-    // which is the first cell of its own row. At `lg` (4 columns) every
+    // which is the first cell of its own row. At `lg` (3 columns) every
     // cell but the first sits beside one, so `not-first` is right there.
     <div
       data-testid={`figure-${name}`}
@@ -70,12 +69,12 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
 export function FiguresSurface({ summary }: { summary: BudgetSummary }) {
   return (
     <Surface className="w-full">
-      {/* Four across from `sm` up; stacked on a phone, where four columns of
+      {/* Three across from `lg` up; stacked on a phone, where three columns of
           money would each be two characters wide. No horizontal gap: the
           separator is the cell's own border + padding (see FigureCell), so a
           grid gap would only widen it back out. `gap-y-5` keeps the vertical
           breathing room between stacked cells on a phone. */}
-      <div className="grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
         {ORDER.map((name) => (
           <FigureCell key={name} name={name} figure={summary.figures[name]} />
         ))}

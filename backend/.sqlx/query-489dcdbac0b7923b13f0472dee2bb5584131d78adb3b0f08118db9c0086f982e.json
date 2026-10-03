@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Days are UTC days, as in the transactions list's filter\n        -- (`budget_transaction_matches`). A breakdown row deep-links into that\n        -- list with the period as a filter, so the two must bucket days the\n        -- same way or the Overview says EUR 620 and the list it opens shows\n        -- EUR 580, with nothing on screen to explain the gap.\n        --\n        -- `txn_day()` is deliberately not used: it exists for the balance walk,\n        -- the list does not use it, and agreeing with the list is what counts.\n        with base as (\n            select (t.ts at time zone 'utc')::date as day,\n                   t.amount,\n                   a.currency as account_currency,\n                   -- A `pair` row reaching here has lost its partner: the\n                   -- user recategorised the other half. What is left is money\n                   -- that moved with nothing on the other side, so it counts\n                   -- by its sign like any uncategorised row. Only paired rows\n                   -- carry this source, and the pair rule below has already\n                   -- dropped the live ones.\n                   case when t.category_source = 'pair' then null\n                        else t.budget_category_id end as category_id,\n                   case when t.category_source = 'pair' then null\n                        else bc.kind end as category_kind,\n                   -- Uncategorised rows have no category to net within, so\n                   -- `figures()` reads the sign of each row\n                   -- directly to decide income vs expense. Grouping only by\n                   -- (day, category_id, category_kind) would net an\n                   -- uncategorised payday's salary against its coffee before\n                   -- Rust ever saw either sign. This discriminator is 0 for\n                   -- every categorised row (so their grouping is completely\n                   -- unaffected — netting per category is exactly the rule\n                   -- there) and +1/-1 for an uncategorised row,\n                   -- splitting a mixed-sign uncategorised day into two rows\n                   -- instead of one netted one. It exists only to widen the\n                   -- grouping key; nothing downstream needs its value.\n                   case when t.budget_category_id is null\n                             or t.category_source = 'pair' then sign(t.amount)\n                        else 0 end as uncategorised_sign\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection c on c.id = a.connection_id\n            left join budget_category bc on bc.id = t.budget_category_id\n            where c.user_id = $1\n              -- On `ts` itself, not on a cast of it, so the (account, ts)\n              -- index bounds the scan.\n              and t.ts >= ($2::date::timestamp at time zone 'UTC')\n              and t.ts < (($3::date + 1)::timestamp at time zone 'UTC')\n              -- The list's own exclusion: a buy/sell is the cash leg of an\n              -- investment the lot table records, and buying a security is\n              -- not spending. Transfers stay: once paired, the pair rule\n              -- below drops both halves together.\n              and not budget_investment_leg(t.type)\n              -- A paired transfer nets to zero by construction, so both halves\n              -- are dropped here rather than left to cancel. Netting only\n              -- works when both halves fall inside the window: a pair\n              -- straddling a month end left -x in one month and +x in the\n              -- next. Dropping is the same answer when they do cancel, and the\n              -- right one when they don't (including cross-currency pairs,\n              -- whose halves convert at different rates).\n              and t.transfer_pair_id is null\n              -- A neutral category (Internal transfer, Investments, Savings,\n              -- Ignore — names on one behaviour) counts toward nothing. Except\n              -- a `pair` row that lost its partner: it is read above as\n              -- uncategorised, so it must not be dropped with its old category.\n              and (t.category_source = 'pair' or coalesce(bc.kind, '') <> 'neutral')\n        ),\n        -- The distinct days actually present, not every day in the window.\n        -- 0019 dropped valuation_grid's (uuid, date, date) overload precisely\n        -- so the caller and the grid unnest the same list: the join is on\n        -- equality of as_of, and a self-generated series that disagreed would\n        -- read zero rather than fail.\n        days as (select distinct day from base),\n        grid as materialized (\n            select as_of, currency, unit_value\n            from valuation_grid($1, array(select day from days)::date[])\n            where kind = 'cash'\n        ),\n        reporting as (\n            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code\n        )\n        select b.day as \"day!\",\n               b.category_id as \"category_id?\",\n               b.category_kind as \"category_kind?\",\n               -- Both legs resolve at the transaction's own date: that is what\n               -- keeps budget totals and net worth from disagreeing about what\n               -- a euro was worth on a given day.\n               coalesce(sum(b.amount * afx.unit_value\n                            / coalesce(nullif(rfx.unit_value, 0), 1)), 0) as \"amount!\",\n               count(*) as \"txn_count!\",\n               -- Keyed on the account leg only: a missing reporting rate\n               -- degrades to the pivot (below) rather than dropping anything\n               -- from the sum, so it must not set this flag.\n               coalesce(bool_or(afx.unit_value is null), false) as \"fx_missing!\",\n               -- Read off the divisor the sum above just used, so the flag\n               -- is set exactly when that divisor fell back to 1. Same zero\n               -- guard as reporting_fx_asof().\n               coalesce(bool_or(coalesce(rfx.unit_value, 0) = 0), false)\n                   as \"reporting_fx_missing!\"\n        from base b\n        left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency\n        left join grid rfx on rfx.as_of = b.day\n                          and rfx.currency = (select code from reporting)\n        group by b.day, b.category_id, b.category_kind, b.uncategorised_sign\n        order by b.day, b.category_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "category_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "category_kind?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "txn_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "reporting_fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "489dcdbac0b7923b13f0472dee2bb5584131d78adb3b0f08118db9c0086f982e"
+}

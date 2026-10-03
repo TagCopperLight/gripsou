@@ -21,7 +21,7 @@ const GROCERIES = cat({
 });
 
 const SYSTEM = cat({
-  id: "sys", name: "Internal transfer", defaultKey: "internal", kind: "internal",
+  id: "sys", name: "Internal transfer", defaultKey: "internal", kind: "neutral",
   systemKey: "internal_transfer", color: "#aeaaa7", icon: "arrow-left-right", txCount: 8,
 });
 
@@ -193,7 +193,7 @@ describe("CategoryModal — edit", () => {
     renderModal({ category: SYSTEM });
     const kind = screen.getByLabelText("Kind");
     expect(kind).toBeDisabled();
-    expect(kind).toHaveTextContent("Internal");
+    expect(kind).toHaveTextContent("Neutral");
     expect(screen.getByText("This kind is fixed for the system category.")).toBeVisible();
 
     expect(screen.getByLabelText("Hint for the AI")).toBeDisabled();

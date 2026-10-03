@@ -16,13 +16,13 @@ type Props = {
 };
 
 /** One pending guess in the review queue. A "no guess" row (the model abstained) can only
- *  be corrected. A confident guess into internal/excluded is here because of
- *  its kind, and says so. */
+ *  be corrected. A confident guess into a neutral category is here because it
+ *  hides money from every total, and says so. */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
   const { t } = useTranslation();
   const category = categoryOfTransaction(tx);
   const confidence = tx.categoryConfidence === null ? null : Math.round(Number(tx.categoryConfidence) * 100);
-  const byKind = category !== null && (tx.categoryKind === "internal" || tx.categoryKind === "excluded");
+  const byKind = category !== null && tx.categoryKind === "neutral";
 
   return (
     <div data-testid={`review-line-${tx.id}`} className="flex items-center gap-4 rounded-xl bg-surface-2 px-4 py-3">

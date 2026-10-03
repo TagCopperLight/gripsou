@@ -202,9 +202,9 @@ hand-entered purchases moved to `lot`).
 
 **lot** — one buy or sell of a holding: `holding_id`, `side`, `acquired_on`,
 `quantity`, `unit_price`, `fee`, `source` (`manual` | `provider`),
-`external_id`, `meta`. Lots are the "capital invested" staircase. A provider
-buy/sell on a PEA is the cash leg of a lot and is hidden from every budget
-reader (`budget_hidden_pea_leg`).
+`external_id`, `meta`. Lots are the "capital invested" staircase. A buy/sell
+`transaction` on any account is the cash leg of an investment; the lot is its
+record, so every budget reader leaves the cash leg out (`budget_investment_leg`).
 
 ### 3.3 How each UI element maps onto the model
 
@@ -449,14 +449,15 @@ pipeline reads the canonical `transaction` rows and never an adapter's payload.
 Everything is prefixed `budget_` because "category" already meant the
 account-type grouping once, and the collision was a bug.
 
-### 12.1 Tables and columns (migrations 0028, 0029, 0030)
+### 12.1 Tables and columns (migrations 0028, 0029, 0030, 0032, 0033)
 
 **budget_category** — the per-user taxonomy
 - `id`, `user_id` → users.id (cascade), `name` (unique per user), `color`,
   `icon`, `hint` (English text the AI reads to tell categories apart)
-- `kind` (`expense` | `income` | `internal` | `excluded`): which side of the
-  Overview the category counts on. `internal` is money that stays the user's
-  (transfers, savings, investments); `excluded` is left out of every total.
+- `kind` (`expense` | `income` | `neutral`): which side of the Overview the
+  category counts on. `neutral` counts in no total: internal transfers,
+  investments, savings and ignored rows are names on that one behaviour (0033
+  merged the former `internal` and `excluded`).
 - `default_key` — set on seeded rows so the frontend can translate the name;
   cleared on rename, after which the user's own wording shows verbatim.
 - `system_key` — only `internal_transfer`, the category pairing writes into;
@@ -514,20 +515,20 @@ and bulk writes can never disagree about which rows exist.
   description": lowercased, dates and digit runs removed, whitespace collapsed.
   Immutable so it can back a generated column. No meaning beyond string
   identity; card masks are the adapter's to strip at ingest.
-- **`budget_hidden_pea_leg(account_type, external_id, type)`** — true for a
-  provider buy/sell on a PEA: the cash leg of a purchase `lot` already holds.
-  Every budget reader leaves it out (buying an ETF is not spending, and the
-  list would show the purchase twice). Transfers *into* the PEA are not
-  covered: pairing files both halves as internal transfer.
+- **`budget_investment_leg(type)`** — true for `buy`/`sell`, on any account:
+  the cash leg of an investment whose record is a `lot` (the user's lots
+  outrank imported rows). Every budget reader leaves it out (buying an ETF is
+  not spending, and the list would show the purchase twice). Charts and the
+  backfill still use it. Transfers *into* a brokerage account are not covered:
+  pairing files both halves as internal transfer.
 - **`budget_needs_review(source, reviewed_at, confidence, category_kind,
   threshold)`** — the review rule: an unreviewed AI row whose confidence is
-  missing or below the reader's threshold, or whose guess is `internal` /
-  `excluded` (a guess there hides money from every total, so it is always
-  reviewed). Returns null rather than false for non-AI rows so a `where` clause
+  missing or below the reader's threshold, or whose guess is `neutral` (a
+  guess there hides money from every total, so it is always reviewed). Returns null rather than false for non-AI rows so a `where` clause
   can still use the partial index on unreviewed AI rows.
 - **`budget_transaction_rows(user, threshold)`** → `setof
   budget_transaction_row` — every row of the Transactions list, unfiltered:
-  the user's cash transactions (minus hidden PEA legs) `union all` their lots.
+  the user's cash transactions (minus investment legs) `union all` their lots.
   Lots come through as structured rows (ticker, quantity, unit price, fee,
   signed cash impact) for the frontend to format, and carry no budget. Also
   derives `needs_review`, `is_transfer`, `is_orphan_transfer` (source `pair`
@@ -585,7 +586,7 @@ two: no vendor type crosses into `core`.
   recent corrections shared by every item, and the items. Each
   `CategorizeItem` carries the transaction id (`key`, never sent to the model),
   description, signed amount, currency, account type, date, its `candidates`
-  (expense/income by the amount's sign, plus internal and excluded; none for a
+  (expense/income by the amount's sign, plus neutral; none for a
   zero amount) and its `examples`: up to 20 confirmed rows with the same
   `description_norm`, then up to 5 trigram neighbours. "Confirmed" means set by
   the user or a reviewed AI guess.
@@ -623,7 +624,7 @@ two: no vendor type crosses into `core`.
    task owns them once the lock is held). If the work set is empty, no run row
    is written. Otherwise a `budget_ai_run` row opens as `running`.
 4. **Chunks.** The work set is uncategorised cash rows (source null, category
-   null, non-zero, not a hidden PEA leg), newest first, re-read before every
+   null, non-zero, not an investment leg), newest first, re-read before every
    chunk minus the rows this run already sent. After each call the usage is
    recorded first (which also beats the lock's heartbeat), then the decisions
    are written in one guarded statement that never overwrites a row someone
@@ -704,9 +705,9 @@ redirects to `/budget/transactions`). Period and filters live in a shared
   month that has transactions. One aggregation (`repo::budget::summary`) reads
   day × category buckets already converted to the reporting currency (a bucket
   with a missing rate is flagged, not guessed); `core::budget::overview` does
-  the rest as pure, DB-free functions: figures (income, expenses, net, saved =
-  net outflows into `internal` categories; `excluded` never counts), a Sankey
-  from income to expenses and savings, a per-category breakdown, and a trend
+  the rest as pure, DB-free functions: figures (income, expenses, net; net is the
+  saving, and `neutral` never counts), a Sankey from income to expenses with a
+  single not-spent / drawn-from-savings balance, a per-category breakdown, and a trend
   over months with small categories collapsed into Other. Uncategorised money
   is its own slice. The AI banner shows run status, rows left and the review
   count. Clicking a slice opens the Transactions list filtered on it.

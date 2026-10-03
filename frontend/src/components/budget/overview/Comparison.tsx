@@ -15,7 +15,7 @@ type ComparisonProps = {
   /** Percent for the always-positive magnitudes, absolute for the signed ones.
    *  Fixed per figure, so a cell never changes shape month to month. */
   format: "percent" | "absolute";
-  /** Which direction reads as good: `up` for income, net and saved; `down` for
+  /** Which direction reads as good: `up` for income and net; `down` for
    *  expenses, where spending less is the improvement. */
   goodWhen: "up" | "down";
   /** Completes `cmp-<figure>-<key>` for the test hooks. */

@@ -35,14 +35,13 @@ pub struct Figures {
     /// Positive. Expenses are reported as a magnitude, not as a negative.
     pub expenses: Decimal,
     pub net: Decimal,
-    pub saved: Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sankey {
     pub sources: Vec<SliceAmount>,
     pub destinations: Vec<SliceAmount>,
-    /// `Income - Expenses - Saved`, when that is positive. At most one of
+    /// `Income - Expenses`, when that is positive. At most one of
     /// `not_spent` and `drawn_from_savings` is ever `Some` — both are `None`
     /// when the remainder is exactly zero, so "mutually exclusive" would
     /// overstate it.
@@ -100,7 +99,8 @@ fn net_inflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
         .collect()
 }
 
-/// The four headline numbers: income, expenses, net and saved.
+/// The three headline numbers: income, expenses and net. Net is the saving:
+/// moving money between the user's own accounts is neutral.
 pub fn figures(rows: &[DayCategoryRow]) -> Figures {
     let income_categorised: Decimal = net_inflows(rows, "income").iter().map(|(_, v)| *v).sum();
     let expenses_categorised: Decimal = net_outflows(rows, "expense").iter().map(|(_, v)| *v).sum();
@@ -120,13 +120,11 @@ pub fn figures(rows: &[DayCategoryRow]) -> Figures {
 
     let income = income_categorised + income_uncategorised;
     let expenses = expenses_categorised + expenses_uncategorised;
-    let saved = net_outflows(rows, "internal").iter().map(|(_, v)| *v).sum();
 
     Figures {
         income,
         expenses,
         net: income - expenses,
-        saved,
     }
 }
 
@@ -186,25 +184,6 @@ fn collapse(mut slices: Vec<SliceAmount>, expenses_total: Decimal) -> Vec<SliceA
     slices
 }
 
-/// Insert `internal` branches before the trailing `Other`, if any, so `Other`
-/// stays the last entry on the side. Internal branches are exempt from the
-/// 2%/8 cap: there is one branch per net-outflow `internal` category, and rolling savings into "Other" would hide the destination a
-/// reader most wants to see.
-fn insert_before_trailing_other(
-    mut slices: Vec<SliceAmount>,
-    extra: Vec<SliceAmount>,
-) -> Vec<SliceAmount> {
-    let other = match slices.last() {
-        Some(x) if x.slice == Slice::Other => slices.pop(),
-        _ => None,
-    };
-    slices.extend(extra);
-    if let Some(other) = other {
-        slices.push(other);
-    }
-    slices
-}
-
 /// The Sankey diagram. No `expenses_total` parameter — `sankey()` already
 /// computes `figures(rows)` internally for the balancing remainder, and a
 /// caller-supplied total would be the only way the collapse threshold and the
@@ -214,20 +193,7 @@ pub fn sankey(rows: &[DayCategoryRow]) -> Sankey {
     let sources = collapse(side(rows, true), f.expenses);
     let destinations = collapse(side(rows, false), f.expenses);
 
-    // Internal categories are drawn net, one branch each. Paired transfers
-    // never reach here (the summary query drops them), so what is left is
-    // money the user filed as internal by hand, e.g. savings.
-    let mut internal = net_outflows(rows, "internal")
-        .into_iter()
-        .map(|(id, amount)| SliceAmount {
-            slice: Slice::Category(id),
-            amount,
-        })
-        .collect::<Vec<_>>();
-    internal.sort_by_key(|x| std::cmp::Reverse(x.amount));
-    let destinations = insert_before_trailing_other(destinations, internal);
-
-    let remainder = f.income - f.expenses - f.saved;
+    let remainder = f.income - f.expenses;
     let (not_spent, drawn_from_savings) = if remainder > Decimal::ZERO {
         (Some(remainder), None)
     } else if remainder < Decimal::ZERO {
@@ -404,7 +370,7 @@ pub fn baseline_in(
     (months.len() >= MIN_BASELINE_MONTHS).then_some(Baseline { months })
 }
 
-/// The mean month of the baseline, as the same four figures.
+/// The mean month of the baseline, as the same three figures.
 pub fn baseline_figures(b: &Baseline) -> Figures {
     let n = Decimal::from(b.months.len().max(1));
     let sum =
@@ -413,7 +379,6 @@ pub fn baseline_figures(b: &Baseline) -> Figures {
         income: sum(|f| f.income),
         expenses: sum(|f| f.expenses),
         net: sum(|f| f.net),
-        saved: sum(|f| f.saved),
     }
 }
 

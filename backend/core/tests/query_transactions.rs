@@ -158,11 +158,13 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// A provider buy/sell on the PEA is the cash leg of a purchase the lot branch
-/// already lists, so it is hidden. A transfer is shown: pairing, not hiding, is
-/// what keeps it from double-counting.
+/// A buy/sell is the cash leg of an investment; the lot is the record of it.
+/// Hidden on ANY account — TR's trades land on a checking account — while the
+/// PEA's transfers, dividends and fees, real cash movements, still show.
 #[sqlx::test(migrations = "../migrations")]
-async fn hides_provider_pea_trades_but_shows_transfers(pool: PgPool) -> anyhow::Result<()> {
+async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
+    pool: PgPool,
+) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
@@ -172,18 +174,18 @@ async fn hides_provider_pea_trades_but_shows_transfers(pool: PgPool) -> anyhow::
     let checking_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
 
-    upsert_transaction(
-        &mut conn,
-        checking_id,
-        &txn(
-            "acct-1",
-            "c1",
-            "transfer",
-            dec("-50.00"),
-            Some("Virement vers PEA"),
-        ),
-    )
-    .await?;
+    for (id, kind, amount, desc) in [
+        ("c1", "transfer", "-50.00", "Virement vers PEA"),
+        ("c2", "buy", "-50.00", "SpaceX Ordre d'achat"),
+        ("c3", "sell", "55.63", "Micron Technology Ordre de vente"),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            checking_id,
+            &txn("acct-1", id, kind, dec(amount), Some(desc)),
+        )
+        .await?;
+    }
     for (id, kind, amount, desc) in [
         ("p1", "transfer", "50.00", "Virement depuis Livret"),
         ("p2", "buy", "-197.79", "ACHAT COMPTANT"),
@@ -200,51 +202,49 @@ async fn hides_provider_pea_trades_but_shows_transfers(pool: PgPool) -> anyhow::
     }
 
     let rows = transactions(&pool, user_id, &all()).await?;
-    let ids: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
+    let kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
 
-    assert!(
-        rows.iter().any(|r| r.account_id == checking_id),
-        "the checking-account side of the transfer is still shown"
-    );
     assert!(
         !rows
             .iter()
-            .any(|r| r.account_id == pea_id && matches!(r.kind.as_str(), "buy" | "sell")),
-        "PEA buy/sell are hidden, got {ids:?}"
+            .any(|r| matches!(r.kind.as_str(), "buy" | "sell")),
+        "no buy/sell on any account, got {kinds:?}"
     );
     assert!(
         rows.iter()
-            .any(|r| r.account_id == pea_id && r.kind == "transfer"),
-        "the PEA side of a transfer is shown, got {ids:?}"
+            .any(|r| r.account_id == checking_id && r.kind == "transfer"),
+        "the checking transfer still shows"
     );
-    assert!(
-        rows.iter()
-            .any(|r| r.account_id == pea_id && r.kind == "dividend"),
-        "a PEA dividend is real money arriving and must still show"
-    );
-    assert!(
-        rows.iter()
-            .any(|r| r.account_id == pea_id && r.kind == "fee"),
-        "a PEA fee is real money leaving and must still show"
-    );
+    for kind in ["transfer", "dividend", "fee"] {
+        assert!(
+            rows.iter()
+                .any(|r| r.account_id == pea_id && r.kind == kind),
+            "a PEA {kind} is real cash and must still show, got {kinds:?}"
+        );
+    }
     Ok(())
 }
 
-/// Unreachable, not merely hidden: searching for it must not resurrect a
-/// provider-supplied PEA buy.
+/// Unreachable, not merely hidden: searching must not resurrect a buy.
 #[sqlx::test(migrations = "../migrations")]
-async fn a_search_does_not_resurrect_pea_buys(pool: PgPool) -> anyhow::Result<()> {
+async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
         .bind(conn_id)
         .fetch_one(&pool)
         .await?;
     let mut conn = pool.acquire().await?;
-    let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
+    let checking_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     upsert_transaction(
         &mut conn,
-        pea_id,
-        &txn("pea-1", "p1", "buy", dec("-197.79"), Some("ACHAT COMPTANT")),
+        checking_id,
+        &txn(
+            "acct-1",
+            "c1",
+            "buy",
+            dec("-50.00"),
+            Some("SpaceX Ordre d'achat"),
+        ),
     )
     .await?;
 
@@ -252,7 +252,7 @@ async fn a_search_does_not_resurrect_pea_buys(pool: PgPool) -> anyhow::Result<()
         &pool,
         user_id,
         &TransactionFilters {
-            search: Some("ACHAT".into()),
+            search: Some("SpaceX".into()),
             ..all()
         },
     )

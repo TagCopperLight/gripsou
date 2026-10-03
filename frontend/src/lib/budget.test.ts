@@ -72,15 +72,15 @@ describe("BUDGET_ICONS", () => {
 describe("sortCategories", () => {
   it("orders by kind and keeps the backend's order inside a kind", () => {
     const rows = [
-      cat({ id: "x", kind: "excluded", name: "Ignore", defaultKey: null }),
-      cat({ id: "i2", kind: "internal", name: "Savings", defaultKey: null }),
+      cat({ id: "x", kind: "neutral", name: "Ignore", defaultKey: null }),
+      cat({ id: "i2", kind: "neutral", name: "Savings", defaultKey: null }),
       cat({ id: "e2", kind: "expense", name: "Transport", defaultKey: null }),
       cat({ id: "n1", kind: "income", name: "Salary", defaultKey: null }),
       cat({ id: "e1", kind: "expense", name: "Groceries", defaultKey: null }),
     ];
     // e2 before e1: the list arrives in the order the user arranged, and only
     // the kind grouping is re-applied here.
-    expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "i2", "x"]);
-    expect(BUDGET_KINDS).toEqual(["expense", "income", "internal", "excluded"]);
+    expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "x", "i2"]);
+    expect(BUDGET_KINDS).toEqual(["expense", "income", "neutral"]);
   });
 });

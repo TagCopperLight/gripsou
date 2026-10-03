@@ -256,7 +256,7 @@ export type Transaction = {
   categoryDefaultKey: string | null;
   categoryColor: string | null;
   categoryIcon: string | null;
-  categoryKind: "expense" | "income" | "internal" | "excluded" | null;
+  categoryKind: "expense" | "income" | "neutral" | null;
   /** Who set the category: the user, the AI, or the transfer-pairing pass. */
   categorySource: "user" | "ai" | "pair" | null;
   /** Decimal string, never a float. */

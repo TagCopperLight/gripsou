@@ -328,14 +328,10 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// `transactions()` hides a PEA's provider `buy`/`sell` rows (the lot branch
-/// already lists them). The counts must agree with it, unfiltered: if
-/// `total`/`uncategorized` reverted to counting raw `transaction` rows with no
-/// PEA exclusion, `matching` (which does exclude them) could never equal
-/// `total`, and `uncategorized` would count rows the list can never show, so
-/// this would fail on both assertions.
+/// `transactions()` hides every `buy`/`sell` row (the lot is the record of the
+/// investment). The counts must agree with it, unfiltered.
 #[sqlx::test(migrations = "../migrations")]
-async fn counts_hide_pea_trades_like_the_list(pool: PgPool) -> anyhow::Result<()> {
+async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _ids) = fixture(&pool).await?;
     let conn_id: Uuid = sqlx::query_scalar("select connection_id from account limit 1")
         .fetch_one(&pool)
@@ -355,6 +351,22 @@ async fn counts_hide_pea_trades_like_the_list(pool: PgPool) -> anyhow::Result<()
         )
         .await?;
     }
+    let checking_id: Uuid =
+        sqlx::query_scalar("select id from account where type_key = 'checking' limit 1")
+            .fetch_one(&pool)
+            .await?;
+    upsert_transaction(
+        &mut conn,
+        checking_id,
+        &txn(
+            "acct-1",
+            "c-buy",
+            "buy",
+            "-50.00".parse().unwrap(),
+            Some("SpaceX Ordre d'achat"),
+        ),
+    )
+    .await?;
 
     let all_rows = transactions(&pool, user_id, &filters()).await?;
     let counts = transaction_counts(&pool, user_id, &filters()).await?;

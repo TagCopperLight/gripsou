@@ -25,7 +25,7 @@ fn request(descs: &[&str]) -> CategorizeRequest {
             CategoryOption {
                 id: ignore,
                 name: "Ignore".into(),
-                kind: "excluded".into(),
+                kind: "neutral".into(),
                 hint: None,
             },
         ],

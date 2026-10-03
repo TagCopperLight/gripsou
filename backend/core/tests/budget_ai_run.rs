@@ -10,7 +10,7 @@ use gripsou_core::categorize::{
     CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Guess, Usage,
 };
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::budget::ai::{last_run, remaining};
+use gripsou_core::repo::budget::ai::{last_run, remaining, work_chunk};
 use gripsou_core::repo::budget::assign::set_category;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::transaction::upsert_transaction;
@@ -210,12 +210,12 @@ async fn candidates_follow_the_sign_and_skip_archived(pool: PgPool) -> anyhow::R
     assert!(
         out.candidates
             .iter()
-            .all(|c| ["expense", "internal", "excluded"].contains(&kind(c).as_str()))
+            .all(|c| ["expense", "neutral"].contains(&kind(c).as_str()))
     );
     assert!(
         inn.candidates
             .iter()
-            .all(|c| ["income", "internal", "excluded"].contains(&kind(c).as_str()))
+            .all(|c| ["income", "neutral"].contains(&kind(c).as_str()))
     );
     assert!(!out.candidates.contains(&groceries));
     assert!(req.categories.iter().all(|c| c.id != groceries));
@@ -533,5 +533,43 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
     assert_eq!(written, 0);
     assert_eq!(row(&pool, ids[0]).await.1, None);
     let _ = alice;
+    Ok(())
+}
+
+/// The AI never sees a buy/sell: the list hides them, so a guess on one could
+/// never be reviewed. Same rule for the chunk and the "N left" count.
+#[sqlx::test(migrations = "../migrations")]
+async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, conn_id) = common::seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let acct = gripsou_core::repo::account::upsert_account(
+        &mut conn,
+        conn_id,
+        &common::checking_account("acct-1"),
+    )
+    .await?;
+    for (ext, kind, amount, desc) in [
+        ("t1", "withdrawal", "-12.00", "BOULANGERIE"),
+        ("t2", "buy", "-50.00", "SpaceX Ordre d'achat"),
+        ("t3", "sell", "55.63", "Micron Ordre de vente"),
+    ] {
+        gripsou_core::repo::transaction::upsert_transaction(
+            &mut conn,
+            acct,
+            &common::txn("acct-1", ext, kind, amount.parse().unwrap(), Some(desc)),
+        )
+        .await?;
+    }
+    drop(conn);
+
+    let chunk = work_chunk(&pool, user_id, &[], 50).await?;
+    assert_eq!(
+        chunk
+            .iter()
+            .map(|r| r.description.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("BOULANGERIE")]
+    );
+    assert_eq!(remaining(&pool, user_id).await?, 1);
     Ok(())
 }

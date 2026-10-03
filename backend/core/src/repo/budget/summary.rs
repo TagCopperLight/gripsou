@@ -18,8 +18,8 @@ pub struct DayCategoryRow {
     pub day: NaiveDate,
     /// `None` is the Uncategorised slice — on day one, most of them.
     pub category_id: Option<Uuid>,
-    /// `expense` | `income` | `internal`. Never `excluded`: those rows are
-    /// dropped by the query. `None` when `category_id` is.
+    /// `expense` | `income`. Never `neutral`: those rows are dropped by
+    /// the query. `None` when `category_id` is.
     pub category_kind: Option<String>,
     /// Signed, in the reporting currency, converted at `day`'s rate. Zero when
     /// the rate was unknown — see `fx_missing`.
@@ -62,9 +62,9 @@ pub async fn day_category_totals(
                    -- A `pair` row reaching here has lost its partner: the
                    -- user recategorised the other half. What is left is money
                    -- that moved with nothing on the other side, so it counts
-                   -- by its sign like any uncategorised row rather than as
-                   -- Saved. Only paired rows carry this source, and the pair
-                   -- rule below has already dropped the live ones.
+                   -- by its sign like any uncategorised row. Only paired rows
+                   -- carry this source, and the pair rule below has already
+                   -- dropped the live ones.
                    case when t.category_source = 'pair' then null
                         else t.budget_category_id end as category_id,
                    case when t.category_source = 'pair' then null
@@ -93,11 +93,11 @@ pub async fn day_category_totals(
               -- index bounds the scan.
               and t.ts >= ($2::date::timestamp at time zone 'UTC')
               and t.ts < (($3::date + 1)::timestamp at time zone 'UTC')
-              -- The list's own exclusion: a provider buy/sell on the PEA is
-              -- the cash leg of a purchase the lot table already holds, and
-              -- buying an ETF is not spending. PEA transfers stay: once
-              -- paired, the pair rule below drops both halves together.
-              and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)
+              -- The list's own exclusion: a buy/sell is the cash leg of an
+              -- investment the lot table records, and buying a security is
+              -- not spending. Transfers stay: once paired, the pair rule
+              -- below drops both halves together.
+              and not budget_investment_leg(t.type)
               -- A paired transfer nets to zero by construction, so both halves
               -- are dropped here rather than left to cancel. Netting only
               -- works when both halves fall inside the window: a pair
@@ -106,10 +106,11 @@ pub async fn day_category_totals(
               -- right one when they don't (including cross-currency pairs,
               -- whose halves convert at different rates).
               and t.transfer_pair_id is null
-              -- Design 6.2: an `excluded` category appears nowhere and counts
-              -- toward nothing. `internal` is NOT dropped — the Sankey draws a
-              -- hand-filed internal category (savings) as its own branch.
-              and coalesce(bc.kind, '') <> 'excluded'
+              -- A neutral category (Internal transfer, Investments, Savings,
+              -- Ignore — names on one behaviour) counts toward nothing. Except
+              -- a `pair` row that lost its partner: it is read above as
+              -- uncategorised, so it must not be dropped with its old category.
+              and (t.category_source = 'pair' or coalesce(bc.kind, '') <> 'neutral')
         ),
         -- The distinct days actually present, not every day in the window.
         -- 0019 dropped valuation_grid's (uuid, date, date) overload precisely

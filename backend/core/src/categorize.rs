@@ -17,7 +17,7 @@ use uuid::Uuid;
 pub struct CategoryOption {
     pub id: Uuid,
     pub name: String,
-    /// `expense` | `income` | `internal` | `excluded`.
+    /// `expense` | `income` | `neutral`.
     pub kind: String,
     /// The user's steering text (Settings → Budget → "Hint for the AI").
     pub hint: Option<String>,
@@ -47,7 +47,7 @@ pub struct CategorizeItem {
     pub account_type: String,
     pub date: NaiveDate,
     /// The category ids this item may be given: by the amount's sign, plus
-    /// the internal and excluded ones (`budget::ai::candidates_for`).
+    /// the neutral ones (`budget::ai::candidates_for`).
     pub candidates: Vec<Uuid>,
     /// Confirmed rows with the same description, then the nearest others.
     pub examples: Vec<Example>,

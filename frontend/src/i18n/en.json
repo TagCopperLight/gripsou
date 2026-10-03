@@ -467,8 +467,7 @@
     "kinds": {
       "expense": "Expense",
       "income": "Income",
-      "internal": "Internal",
-      "excluded": "Excluded"
+      "neutral": "Neutral"
     },
     "defaults": {
       "housing": "Housing",
@@ -641,8 +640,7 @@
       "figures": {
         "income": "Income",
         "expenses": "Expenses",
-        "net": "Net",
-        "saved": "Saved & invested"
+        "net": "Net"
       },
       "vsPrevMonth": "vs previous month",
       "vsAvg12": "vs 12-month average",

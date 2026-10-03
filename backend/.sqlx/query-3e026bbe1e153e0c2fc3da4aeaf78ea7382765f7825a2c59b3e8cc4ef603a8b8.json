@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select c.id          as \"id!\",\n               c.name        as \"name!\",\n               c.default_key,\n               c.color       as \"color!\",\n               c.icon,\n               c.hint,\n               c.kind        as \"kind!\",\n               c.system_key,\n               (c.archived_at is not null) as \"archived!\",\n               coalesce(n.cnt, 0) as \"tx_count!\"\n        from budget_category c\n        left join (\n            select t.budget_category_id as cid, count(*) as cnt\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection k on k.id = a.connection_id\n            where k.user_id = $1\n            group by t.budget_category_id\n        ) n on n.cid = c.id\n        where c.user_id = $1\n        order by case c.kind\n                     when 'expense' then 0\n                     when 'income' then 1\n                     when 'internal' then 2\n                     else 3\n                 end,\n                 c.sort_order, lower(c.name)\n        ",
+  "query": "\n        select c.id          as \"id!\",\n               c.name        as \"name!\",\n               c.default_key,\n               c.color       as \"color!\",\n               c.icon,\n               c.hint,\n               c.kind        as \"kind!\",\n               c.system_key,\n               (c.archived_at is not null) as \"archived!\",\n               coalesce(n.cnt, 0) as \"tx_count!\"\n        from budget_category c\n        left join (\n            select t.budget_category_id as cid, count(*) as cnt\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection k on k.id = a.connection_id\n            where k.user_id = $1\n            group by t.budget_category_id\n        ) n on n.cid = c.id\n        where c.user_id = $1\n        order by case c.kind\n                     when 'expense' then 0\n                     when 'income' then 1\n                     else 2\n                 end,\n                 c.sort_order, lower(c.name)\n        ",
   "describe": {
     "columns": [
       {
@@ -122,5 +122,5 @@
       null
     ]
   },
-  "hash": "febb0d658a87a0e035396afc29c0118bea11a7d874b6f763efc5774d605b8799"
+  "hash": "3e026bbe1e153e0c2fc3da4aeaf78ea7382765f7825a2c59b3e8cc4ef603a8b8"
 }

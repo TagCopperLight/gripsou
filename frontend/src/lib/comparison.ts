@@ -16,7 +16,7 @@ export type Change = {
 };
 
 /** `goodWhen` is the direction that reads as an improvement: `up` for income,
- *  net and saved; `down` for spending. */
+ *  net; `down` for spending. */
 export function compareToBaseline(
   current: string,
   baseline: string,

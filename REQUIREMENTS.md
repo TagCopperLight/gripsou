@@ -112,7 +112,7 @@ At the top of the account item (in the list), there's an edit button, that opens
 ## Budget
 
 The Transactions page became the Budget page (`/budget`; the old `/transactions` URL redirects). It has three modes:
-- Overview: income, expenses, net and savings for a month or a custom range, a Sankey of where the money went, a per-category breakdown and a trend.
+- Overview: income, expenses and net for a month or a custom range, a Sankey of where the money went, a per-category breakdown and a trend.
 - Transactions: every transaction (and every recorded buy/sell lot), searchable and filterable by account, date range, direction, category, tag, uncategorised, needs review and internal transfers. Rows can be categorised, tagged and ticked one by one or in bulk.
 - Review: the AI's low-confidence guesses, to accept or correct.
 

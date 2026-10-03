@@ -19,7 +19,7 @@ const CATS: BudgetCategory[] = [
   cat({ id: "gro", name: "Groceries", kind: "expense" }),
   cat({ id: "fun", name: "Leisure", kind: "expense" }),
   cat({ id: "sal", name: "Salary", kind: "income", icon: "wallet" }),
-  cat({ id: "int", name: "Internal transfer", kind: "internal", systemKey: "internal_transfer" }),
+  cat({ id: "int", name: "Internal transfer", kind: "neutral", systemKey: "internal_transfer" }),
   cat({ id: "old", name: "Archived one", kind: "expense", archived: true }),
 ];
 
@@ -67,7 +67,7 @@ describe("CategoryChooser", () => {
     renderChooser();
     await screen.findByText("Groceries");
     const groups = screen.getAllByTestId("chooser-group").map((g) => g.textContent);
-    expect(groups).toEqual(["EXPENSE", "INCOME", "INTERNAL"]);
+    expect(groups).toEqual(["EXPENSE", "INCOME", "NEUTRAL"]);
     expect(screen.queryByText("Archived one")).toBeNull();
   });
 

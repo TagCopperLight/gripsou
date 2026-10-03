@@ -179,7 +179,7 @@ async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> 
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn excluded_categories_count_nowhere(pool: PgPool) -> anyhow::Result<()> {
+async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -204,14 +204,13 @@ async fn excluded_categories_count_nowhere(pool: PgPool) -> anyhow::Result<()> {
     set_category(&pool, user_id, id, Some(ignore)).await?;
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
-    assert!(rows.is_empty(), "an `excluded` category appears nowhere");
+    assert!(rows.is_empty(), "a neutral category appears nowhere");
     Ok(())
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn internal_categories_are_kept(pool: PgPool) -> anyhow::Result<()> {
-    // The list hides these behind a toggle; the Sankey needs them, because
-    // netting them is how a paired transfer disappears on its own.
+async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
+    // Investments is a neutral category: a name, not a side. It counts nowhere.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -236,15 +235,16 @@ async fn internal_categories_are_kept(pool: PgPool) -> anyhow::Result<()> {
     set_category(&pool, user_id, id, Some(investments)).await?;
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].category_kind.as_deref(), Some("internal"));
-    assert_eq!(rows[0].amount, eur(-500));
+    assert!(
+        rows.is_empty(),
+        "a neutral category appears nowhere, got {rows:?}"
+    );
     Ok(())
 }
 
 /// A pair the user broke by recategorising the other half leaves this half
 /// filed by the pairing pass with no partner. It moved money with nothing on
-/// the other side, so it counts as uncategorised by its sign, not as Saved.
+/// the other side, so it counts as uncategorised by its sign, not as neutral.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     pool: PgPool,
@@ -281,33 +281,83 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     assert_eq!(rows[0].category_kind, None);
     assert_eq!(rows[0].amount, eur(-500));
     let f = gripsou_core::budget::overview::figures(&rows);
-    assert_eq!(f.saved, Decimal::ZERO);
     assert_eq!(f.expenses, eur(500));
     Ok(())
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn pea_provider_trades_are_excluded_but_transfers_kept(pool: PgPool) -> anyhow::Result<()> {
-    // A provider buy is the cash leg of a purchase the lot table already holds,
-    // and buying an ETF is not spending. A transfer is kept: dropping it left
-    // the checking half of a paired transfer standing alone in the Sankey.
+async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Result<()> {
+    // A buy/sell is the cash leg of an investment, never spending or income.
+    // TR books its trades on a checking account, so the rule cannot be
+    // keyed on the account type.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
+    let checking = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     let pea = gripsou_core::dto::CanonicalAccount {
         type_key: "pea".to_string(),
         ..checking_account("acct-pea")
     };
-    let account_id = upsert_account(&mut conn, conn_id, &pea).await?;
-    for (ext, kind, amount, d, desc) in [
-        ("t1", "transfer", eur(50), day(2026, 3, 4), "VIR"),
-        ("t2", "buy", eur(-210), day(2026, 3, 5), "ACHAT COMPTANT"),
-        ("t3", "sell", eur(40), day(2026, 3, 6), "VENTE COMPTANT"),
-        ("t4", "deposit", eur(7), day(2026, 3, 7), "DIVIDENDE"),
+    let pea_id = upsert_account(&mut conn, conn_id, &pea).await?;
+    for (account, ext_acct, ext, kind, amount, d, desc) in [
+        (
+            pea_id,
+            "acct-pea",
+            "t1",
+            "transfer",
+            eur(50),
+            day(2026, 3, 4),
+            "VIR",
+        ),
+        (
+            pea_id,
+            "acct-pea",
+            "t2",
+            "buy",
+            eur(-210),
+            day(2026, 3, 5),
+            "ACHAT COMPTANT",
+        ),
+        (
+            pea_id,
+            "acct-pea",
+            "t3",
+            "sell",
+            eur(40),
+            day(2026, 3, 6),
+            "VENTE COMPTANT",
+        ),
+        (
+            pea_id,
+            "acct-pea",
+            "t4",
+            "deposit",
+            eur(7),
+            day(2026, 3, 7),
+            "DIVIDENDE",
+        ),
+        (
+            checking,
+            "acct-1",
+            "c1",
+            "buy",
+            eur(-50),
+            day(2026, 3, 8),
+            "SpaceX Ordre d'achat",
+        ),
+        (
+            checking,
+            "acct-1",
+            "c2",
+            "sell",
+            eur(55),
+            day(2026, 3, 9),
+            "Micron Ordre de vente",
+        ),
     ] {
         upsert_transaction(
             &mut conn,
-            account_id,
-            &txn_on_day("acct-pea", ext, kind, amount, d, desc),
+            account,
+            &txn_on_day(ext_acct, ext, kind, amount, d, desc),
         )
         .await?;
     }
@@ -319,7 +369,7 @@ async fn pea_provider_trades_are_excluded_but_transfers_kept(pool: PgPool) -> an
     assert_eq!(
         amounts,
         vec![(day(2026, 3, 4), eur(50)), (day(2026, 3, 7), eur(7))],
-        "the transfer and dividend are kept, the buy and sell are dropped"
+        "only the transfer and the dividend are kept"
     );
     Ok(())
 }

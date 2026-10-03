@@ -15,9 +15,9 @@ function cat(over: Partial<BudgetCategory>): BudgetCategory {
 }
 
 const ROWS: BudgetCategory[] = [
-  cat({ id: "sys", name: "Internal transfer", defaultKey: "internal", kind: "internal",
+  cat({ id: "sys", name: "Internal transfer", defaultKey: "internal", kind: "neutral",
         systemKey: "internal_transfer", color: "#aeaaa7", icon: "arrow-left-right", txCount: 8 }),
-  cat({ id: "ign", name: "Ignore", defaultKey: "ignore", kind: "excluded", icon: "eye-off" }),
+  cat({ id: "ign", name: "Ignore", defaultKey: "ignore", kind: "neutral", icon: "eye-off" }),
   cat({ id: "sal", name: "Salary", defaultKey: "salary", kind: "income", icon: "wallet", txCount: 42 }),
   cat({ id: "gro", name: "Groceries", defaultKey: "groceries", kind: "expense",
         hint: "Supermarkets and corner shops", txCount: 137 }),
@@ -51,7 +51,7 @@ describe("CategoriesSurface", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(ROWS)));
   });
 
-  it("lists the unarchived rows grouped expense → income → internal → excluded", async () => {
+  it("lists the unarchived rows grouped expense → income → neutral", async () => {
     renderSurface();
     await screen.findByText("Groceries");
     const names = screen.getAllByTestId("category-name").map((n) => n.textContent);

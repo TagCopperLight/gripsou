@@ -26,7 +26,7 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
         .await?;
     assert_eq!(
         total, 32,
-        "seeded taxonomy is 23 expense + 5 income + 3 internal + 1 excluded"
+        "seeded taxonomy is 23 expense + 5 income + 4 neutral"
     );
 
     let per_kind: Vec<(String, i64)> = sqlx::query_as(
@@ -38,10 +38,9 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(
         per_kind,
         vec![
-            ("excluded".to_string(), 1),
             ("expense".to_string(), 23),
             ("income".to_string(), 5),
-            ("internal".to_string(), 3),
+            ("neutral".to_string(), 4),
         ]
     );
 
@@ -73,7 +72,7 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     .bind(user_id)
     .fetch_all(&pool)
     .await?;
-    assert_eq!(kinds, vec!["excluded", "expense", "income", "internal"]);
+    assert_eq!(kinds, vec!["expense", "income", "neutral"]);
 
     // Every seeded row carries a stable key so the frontend can translate it.
     let without_key: i64 = sqlx::query_scalar(
@@ -101,7 +100,7 @@ async fn internal_transfer_is_the_only_system_category(pool: PgPool) -> anyhow::
     .await?;
     assert_eq!(
         systems,
-        vec![("internal_transfer".to_string(), "internal".to_string())]
+        vec![("internal_transfer".to_string(), "neutral".to_string())]
     );
 
     Ok(())
@@ -166,5 +165,30 @@ async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Resul
             .await?;
         assert_eq!(got, expected, "input: {input}");
     }
+    Ok(())
+}
+
+/// 0033 on an existing user: former internal/excluded rows are neutral,
+/// numbered 1..n with the former internal ones first, and keep their
+/// transactions.
+#[sqlx::test(migrations = "../migrations")]
+async fn neutral_ordering_puts_ignore_last(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = insert_user(&pool).await;
+    let neutral: Vec<(String, i32)> = sqlx::query_as(
+        "select default_key, sort_order from budget_category \
+         where user_id = $1 and kind = 'neutral' order by sort_order",
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        neutral,
+        vec![
+            ("internal".to_string(), 1),
+            ("savings".to_string(), 2),
+            ("investments".to_string(), 3),
+            ("ignore".to_string(), 4),
+        ]
+    );
     Ok(())
 }

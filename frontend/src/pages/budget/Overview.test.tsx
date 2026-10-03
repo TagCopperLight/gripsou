@@ -32,7 +32,6 @@ const SUMMARY = {
     income: { amount: "3200.00" },
     expenses: { amount: "1940.00" },
     net: { amount: "1260.00" },
-    saved: { amount: "800.00" },
   },
   sankey: { sources: [], destinations: [], notSpent: "1260.00" },
   breakdown: [

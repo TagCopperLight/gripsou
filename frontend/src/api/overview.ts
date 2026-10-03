@@ -37,8 +37,7 @@ export type BreakdownRow = {
 
 export type Sankey = {
   sources: SliceAmount[];
-  /** Can exceed 8 entries: the 2%/8 collapse exempts `internal` branches
-   *  (savings, investments) on purpose. `other`, when present, is always last. */
+  /** At most 8 entries plus `other`, which, when present, is always last. */
   destinations: SliceAmount[];
   /** Neither field appears in `sources`/`destinations`; at a remainder of
    *  exactly zero NEITHER is present. Three states, not two. */
@@ -56,7 +55,7 @@ export type BudgetSummary = {
   /** Nothing is missing; the whole sum is in the PIVOT currency, so it must not
    *  be labelled with the reader's reporting symbol as if converted. */
   reportingFxMissing: boolean;
-  figures: { income: Figure; expenses: Figure; net: Figure; saved: Figure };
+  figures: { income: Figure; expenses: Figure; net: Figure };
   sankey: Sankey;
   /** Expense side only: expense-kind categories plus the uncategorised OUTFLOW
    *  row. The 7 largest plus one rolled-up `other`; the rolled-up members are

@@ -28,7 +28,7 @@ import {
 } from "./invalidate";
 import type { Transaction, TransactionFilterQuery } from "./types";
 
-export type BudgetKind = "expense" | "income" | "internal" | "excluded";
+export type BudgetKind = "expense" | "income" | "neutral";
 
 /** One row of the user's own taxonomy. `defaultKey` survives only until the
  *  user renames the row, which is what makes a seeded name translatable and a

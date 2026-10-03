@@ -17,11 +17,11 @@ async fn lists_seeded_categories_grouped_by_kind(pool: PgPool) -> anyhow::Result
 
     let rows = list_categories(&pool, user_id).await?;
     assert_eq!(rows.len(), 32);
-    // expense first, then income, internal, excluded — the order the settings
+    // expense first, then income, then neutral — the order the settings
     // table renders in.
     let kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
     assert_eq!(kinds[0], "expense");
-    assert_eq!(kinds[31], "excluded");
+    assert_eq!(kinds[31], "neutral");
     assert!(rows.iter().all(|r| r.tx_count == 0));
     Ok(())
 }
@@ -180,7 +180,7 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     .await?
     .unwrap();
     assert_eq!(renamed.name, "Virement interne");
-    assert_eq!(renamed.kind, "internal", "kind is locked on a system row");
+    assert_eq!(renamed.kind, "neutral", "kind is locked on a system row");
     assert!(!renamed.archived, "a system row cannot be archived either");
 
     assert_eq!(

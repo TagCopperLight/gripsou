@@ -68,6 +68,7 @@
 - [x] Assets modal, accurate quantity
 - [x] Investments logos transaction page
 - [x] Transaction page search bar
+- [x] Saved and invested don't mean anything
 
 ### Future
 - [ ] First admin configuration
@@ -78,7 +79,8 @@
     - [ ] Transactions reconciliation
     - [ ] Infer lots
 - [ ] reorganize files
+- [ ] Auto pairing rework
+    - Pairing still only looks at transfer rows.
 - [ ] hover on currencies
-- [ ] Investments detection
 - [ ] Apply to all
 - [ ] Last 12 months chart

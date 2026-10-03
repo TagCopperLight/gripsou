@@ -40,7 +40,6 @@ fn income_and_expenses_split_by_kind() {
     assert_eq!(f.income, eur(3000));
     assert_eq!(f.expenses, eur(900), "expenses are reported positive");
     assert_eq!(f.net, eur(2100));
-    assert_eq!(f.saved, Decimal::ZERO);
 }
 
 #[test]
@@ -73,69 +72,17 @@ fn uncategorised_money_counts_by_sign_on_the_same_day() {
 }
 
 #[test]
-fn saved_is_the_net_outflow_of_internal_categories() {
-    let investments = Uuid::new_v4();
-    let rows = vec![
-        row(
-            day(2026, 3, 1),
-            Some(investments),
-            Some("internal"),
-            eur(-800),
-        ),
-        row(
-            day(2026, 3, 9),
-            Some(investments),
-            Some("internal"),
-            eur(100),
-        ),
-    ];
-    let f = figures(&rows);
-    assert_eq!(f.saved, eur(700), "net, not gross");
-    assert_eq!(f.expenses, Decimal::ZERO, "internal money is not spending");
-}
-
-#[test]
-fn a_paired_transfer_nets_to_zero_and_saves_nothing() {
-    let internal = Uuid::new_v4();
-    let rows = vec![
-        row(day(2026, 3, 1), Some(internal), Some("internal"), eur(-500)),
-        row(day(2026, 3, 1), Some(internal), Some("internal"), eur(500)),
-    ];
-    assert_eq!(figures(&rows).saved, Decimal::ZERO);
-}
-
-#[test]
-fn an_internal_category_that_nets_inward_contributes_nothing() {
-    // A month where savings were drawn down is not a month of negative saving.
-    let savings = Uuid::new_v4();
-    let rows = vec![row(
-        day(2026, 3, 1),
-        Some(savings),
-        Some("internal"),
-        eur(400),
-    )];
-    assert_eq!(figures(&rows).saved, Decimal::ZERO);
-}
-
-#[test]
 fn sankey_balances_in_a_surplus_month() {
     let salary = Uuid::new_v4();
     let rent = Uuid::new_v4();
-    let investments = Uuid::new_v4();
     let rows = vec![
         row(day(2026, 3, 1), Some(salary), Some("income"), eur(3000)),
         row(day(2026, 3, 5), Some(rent), Some("expense"), eur(-900)),
-        row(
-            day(2026, 3, 8),
-            Some(investments),
-            Some("internal"),
-            eur(-800),
-        ),
     ];
     let s = sankey(&rows);
     assert_eq!(s.sources.len(), 1);
     assert_eq!(s.sources[0].amount, eur(3000));
-    assert_eq!(s.not_spent, Some(eur(1300)), "3000 - 900 - 800");
+    assert_eq!(s.not_spent, Some(eur(2100)), "3000 - 900");
     assert_eq!(s.drawn_from_savings, None);
     let out: Decimal =
         s.destinations.iter().map(|d| d.amount).sum::<Decimal>() + s.not_spent.unwrap();
@@ -327,55 +274,28 @@ fn category_net_reversal_keeps_the_diagram_balanced() {
 }
 
 #[test]
-fn internal_branches_stay_uncapped_and_before_the_trailing_other() {
-    // Internal branches are exempt from the 2%/8 cap, but must be
-    // inserted before Other so Other stays last.
-    let internal_a = Uuid::new_v4();
-    let internal_b = Uuid::new_v4();
-    let internal_c = Uuid::new_v4();
-    let mut rows = vec![
-        row(
-            day(2026, 3, 1),
-            Some(internal_a),
-            Some("internal"),
-            eur(-100),
-        ),
-        row(
-            day(2026, 3, 1),
-            Some(internal_b),
-            Some("internal"),
-            eur(-200),
-        ),
-        row(
-            day(2026, 3, 1),
-            Some(internal_c),
-            Some("internal"),
-            eur(-300),
-        ),
+fn the_sankey_remainder_is_net() {
+    let salary = Uuid::new_v4();
+    let rent = Uuid::new_v4();
+    let rows = vec![
+        row(day(2026, 3, 1), Some(salary), Some("income"), eur(1000)),
+        row(day(2026, 3, 5), Some(rent), Some("expense"), eur(-1300)),
     ];
-    for _ in 0..10 {
-        rows.push(row(
-            day(2026, 3, 2),
-            Some(Uuid::new_v4()),
-            Some("expense"),
-            eur(-100),
-        ));
-    }
-
+    let f = figures(&rows);
     let s = sankey(&rows);
+    assert_eq!(f.net, eur(-300));
+    assert_eq!(s.not_spent, None);
     assert_eq!(
-        s.destinations.last().unwrap().slice,
-        Slice::Other,
-        "Other is always last"
+        s.drawn_from_savings,
+        Some(eur(300)),
+        "income - expenses, nothing else"
     );
-    for id in [internal_a, internal_b, internal_c] {
-        assert!(
-            s.destinations
-                .iter()
-                .any(|x| x.slice == Slice::Category(id)),
-            "internal category {id} must survive the cap"
-        );
-    }
+    assert!(
+        s.destinations
+            .iter()
+            .all(|d| d.slice != Slice::Category(salary)),
+        "only expense categories are destinations"
+    );
 }
 
 #[test]
@@ -425,16 +345,9 @@ fn the_breakdown_is_expense_side_only() {
     // for an income row.
     let salary = Uuid::new_v4();
     let rent = Uuid::new_v4();
-    let investments = Uuid::new_v4();
     let rows = vec![
         row(day(2026, 3, 1), Some(salary), Some("income"), eur(3000)),
         row(day(2026, 3, 5), Some(rent), Some("expense"), eur(-900)),
-        row(
-            day(2026, 3, 8),
-            Some(investments),
-            Some("internal"),
-            eur(-800),
-        ),
     ];
     let b = breakdown(&rows, None);
     assert_eq!(b.len(), 1);

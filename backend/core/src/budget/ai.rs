@@ -23,7 +23,7 @@ pub struct Decision {
 }
 
 /// The ids an item may be given, by the sign of its amount: money out may
-/// be an expense, money in an income, and either may be internal or excluded.
+/// be an expense, money in an income, and either may be neutral.
 /// `categories` is already the non-archived list. A zero amount gets none.
 pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uuid> {
     let side = if amount < Decimal::ZERO {
@@ -35,7 +35,7 @@ pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uui
     };
     categories
         .iter()
-        .filter(|c| c.kind == side || c.kind == "internal" || c.kind == "excluded")
+        .filter(|c| c.kind == side || c.kind == "neutral")
         .map(|c| c.id)
         .collect()
 }
@@ -276,27 +276,17 @@ mod tests {
     }
 
     #[test]
-    fn money_out_sees_expense_internal_excluded() {
-        let cats = [
-            cat("expense"),
-            cat("income"),
-            cat("internal"),
-            cat("excluded"),
-        ];
+    fn money_out_sees_expense_and_neutral() {
+        let cats = [cat("expense"), cat("income"), cat("neutral")];
         let ids = candidates_for(Decimal::new(-500, 2), &cats);
-        assert_eq!(ids, vec![cats[0].id, cats[2].id, cats[3].id]);
+        assert_eq!(ids, vec![cats[0].id, cats[2].id]);
     }
 
     #[test]
-    fn money_in_sees_income_internal_excluded() {
-        let cats = [
-            cat("expense"),
-            cat("income"),
-            cat("internal"),
-            cat("excluded"),
-        ];
+    fn money_in_sees_income_and_neutral() {
+        let cats = [cat("expense"), cat("income"), cat("neutral")];
         let ids = candidates_for(Decimal::new(500, 2), &cats);
-        assert_eq!(ids, vec![cats[1].id, cats[2].id, cats[3].id]);
+        assert_eq!(ids, vec![cats[1].id, cats[2].id]);
     }
 
     #[test]

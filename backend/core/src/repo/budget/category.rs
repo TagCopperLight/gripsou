@@ -70,8 +70,7 @@ pub async fn list_categories(
         order by case c.kind
                      when 'expense' then 0
                      when 'income' then 1
-                     when 'internal' then 2
-                     else 3
+                     else 2
                  end,
                  c.sort_order, lower(c.name)
         "#,

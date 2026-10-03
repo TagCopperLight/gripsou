@@ -117,8 +117,8 @@ pub struct WorkRow {
 }
 
 /// The next chunk: uncategorised cash rows, newest first, minus the ones this
-/// run already sent (`skip`). The PEA's provider buy/sell legs are excluded —
-/// the list hides them (`query.rs`), so a guess on one could never be reviewed.
+/// run already sent (`skip`). Buy/sell rows are excluded — the list hides
+/// them (`budget_investment_leg`), so a guess on one could never be reviewed.
 pub async fn work_chunk(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -137,7 +137,7 @@ pub async fn work_chunk(
           and t.category_source is null
           and t.budget_category_id is null
           and t.amount <> 0
-          and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)
+          and not budget_investment_leg(t.type)
           and t.id <> all($2)
         order by t.ts desc, t.id
         limit $3
@@ -162,7 +162,7 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
           and t.category_source is null
           and t.budget_category_id is null
           and t.amount <> 0
-          and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)
+          and not budget_investment_leg(t.type)
         "#,
         user_id
     )

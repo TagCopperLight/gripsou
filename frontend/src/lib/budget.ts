@@ -35,8 +35,8 @@ export const BUDGET_PALETTE: readonly string[] = [
   "#9aa4b2",
 ];
 
-/** Display order of the four kinds; also the grouping order of every list. */
-export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "internal", "excluded"];
+/** Display order of the three kinds; also the grouping order of every list. */
+export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "neutral"];
 
 /** The TYPE control, shared with the active-filter chips so a bucket looks the
  *  same wherever it appears.

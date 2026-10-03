@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select t.id, t.description, t.amount, a.currency, a.type_key as account_type,\n               (t.ts at time zone 'utc')::date as \"day!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.category_source is null\n          and t.budget_category_id is null\n          and t.amount <> 0\n          and not budget_hidden_pea_leg(a.type_key, t.external_id, t.type)\n          and t.id <> all($2)\n        order by t.ts desc, t.id\n        limit $3\n        ",
+  "query": "\n        select t.id, t.description, t.amount, a.currency, a.type_key as account_type,\n               (t.ts at time zone 'utc')::date as \"day!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.category_source is null\n          and t.budget_category_id is null\n          and t.amount <> 0\n          and not budget_investment_leg(t.type)\n          and t.id <> all($2)\n        order by t.ts desc, t.id\n        limit $3\n        ",
   "describe": {
     "columns": [
       {
@@ -81,5 +81,5 @@
       null
     ]
   },
-  "hash": "c714b602342ea8afb8cfe3b80409c59c2656e4ffebcca274d1ebf3112cbcf18b"
+  "hash": "c12419882549a6c670c7940d6981586bcf93f1d9763da30b68c755bb5d1d619a"
 }
