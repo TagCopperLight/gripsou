@@ -64,7 +64,7 @@
     - [x] Transactions mode
     - [x] AI categorisation and the review queue
 
-### v1.5.2
+### v1.5.1
 - [x] Assets modal, accurate quantity
 - [x] Investments logos transaction page
 - [x] Transaction page search bar
@@ -85,3 +85,4 @@
     - Pairing still only looks at transfer rows.
 - [ ] hover on currencies
 - [ ] Last 12 months chart
+- [ ] 2FA

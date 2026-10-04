@@ -27,7 +27,7 @@ pub struct IngestSummary {
     /// Holdings present in a prior sync but absent from this one: their position
     /// was zeroed and a zero snapshot stamped for today.
     pub holdings_closed: usize,
-    /// Derived history rows written by the backfill engine (§8).
+    /// Derived history rows written by the backfill engine.
     pub backfill_rows: usize,
     /// Internal-transfer pairs written by the budget pairing pass, counted in
     /// pairs, not rows.
@@ -112,7 +112,7 @@ pub async fn ingest(
     }
 
     // Transactions: upsert on external_id — provider corrections propagate,
-    // user enrichment survives (§7).
+    // while the user's budget fields (category, tags, ✓) are never overwritten.
     let mut transactions_inserted = 0;
     let mut transactions_updated = 0;
     for txn in &sync.transactions {
@@ -151,7 +151,7 @@ pub async fn ingest(
         .await?;
     }
 
-    // Derive the past from the transactions just ingested (§8). Runs inside the
+    // Derive the past from the transactions just ingested. Runs inside the
     // same transaction, so a failed sync leaves no half-written history.
     let backfill_rows =
         crate::backfill::backfill_connection(&mut tx, connection_id).await? as usize;

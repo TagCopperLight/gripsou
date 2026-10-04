@@ -142,7 +142,7 @@ pub struct Holding {
     pub fx_missing: bool,
     pub spark: Option<Vec<String>>,
     pub composition: Option<gripsou_core::dto::Composition>,
-    /// Shares no recorded lot explains (§9.1). "0" when the position is fully
+    /// Shares no recorded lot explains. "0" when the position is fully
     /// accounted for. A non-zero value drives the fill-in badge.
     pub unexplained_qty: String,
     /// Fee-inclusive mean buy price, amount domain (account currency). "0" when

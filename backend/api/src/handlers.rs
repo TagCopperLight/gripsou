@@ -55,7 +55,7 @@ fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
 }
 
 /// Resolve the caller and require the admin role. Server config and provider
-/// management are admin-only (see ARCHITECTURE: app_settings is admin-tunable).
+/// management are admin-only: `app_settings` is the admin-tunable config.
 async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, String)> {
     let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
         .await
@@ -298,7 +298,7 @@ pub async fn save_lots(
         }
     }
 
-    // §9: manual entry is the main path for securities, so the derived history
+    // Manual entry is the main path for securities, so the derived history
     // must move now — not at the next daily sync, a day later. Once, after all
     // the writes, not per row.
     if !parsed.is_empty() || !deletes.is_empty() {
@@ -351,7 +351,7 @@ async fn current_price(
 ///
 /// The math is not duplicated here: `basis_preview` writes the rows, calls
 /// `lot_basis`, and rolls back. That is what guarantees the number shown while
-/// editing is the number obtained after saving (AUDIT.md Z-1).
+/// editing is the number obtained after saving.
 pub async fn preview_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -2985,7 +2985,7 @@ mod auth_tests {
         assert_eq!(err.0, StatusCode::BAD_REQUEST);
     }
 
-    /// §9: manual entry is the main path for securities, so the derived history
+    /// Manual entry is the main path for securities, so the derived history
     /// must move now — and ONCE, not per row.
     #[sqlx::test(migrations = "../migrations")]
     async fn save_lots_rebuilds_the_derived_history(pool: PgPool) {

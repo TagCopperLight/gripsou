@@ -21,7 +21,8 @@ import type { BasisPreview, Holding } from "../api/types";
 // The resulting figures (mean price, invested, realised, unrealised) are never
 // computed here — they come verbatim from `POST /holdings/:id/lots/preview`,
 // which runs the same `lot_basis` function the save path and the chart use.
-// This file must never grow a `buyCost / buyQty` of its own (AUDIT.md Z-1).
+// This file must never grow a `buyCost / buyQty` of its own: a second copy of
+// the rule is how two figures for the same holding ended up disagreeing.
 
 const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" };
 

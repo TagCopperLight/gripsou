@@ -5,5 +5,3 @@ node_modules/
 target/
 dist/
 .env
-gripsou.dump
-tasks/

@@ -28,7 +28,7 @@ import {
 import { keys } from "./keys";
 
 // Each group is pinned to its exact key set rather than a "contains" check:
-// the bugs these guard (AUDIT.md C-17, C-18, Z-6) were all keys MISSING from a
+// the bugs these guard were all keys MISSING from a
 // list, which a containment assertion cannot catch.
 function invalidatedBy(run: (qc: QueryClient) => void): unknown[][] {
   const qc = new QueryClient();

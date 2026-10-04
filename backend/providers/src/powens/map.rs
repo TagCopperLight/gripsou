@@ -23,6 +23,8 @@ pub fn map_type_key(name: &str) -> Option<&'static str> {
         "lifeinsurance" => "life_insurance",
         "per" | "perp" | "pee" | "perco" | "madelin" | "article83" | "rsp" => "retirement",
         "loan" | "card" => return None,
+        // `real_estate` lands here deliberately: a real-estate placement shows
+        // as Brokerage. Don't give it its own type without reconsidering.
         // Anything unrecognised is assumed to be an invest wrapper. A new
         // liability type would be caught by the arm above once named.
         _ => "brokerage",
@@ -300,7 +302,7 @@ pub fn map_sync(
 }
 
 /// Powens appends the card's last four digits to the wording on ~77% of card
-/// rows (§2.1). It carries no information the app uses, and it defeats
+/// rows. It carries no information the app uses, and it defeats
 /// search.
 pub fn strip_card_mask(wording: &str) -> &str {
     let Some(idx) = wording.rfind("CB*") else {
@@ -314,7 +316,7 @@ pub fn strip_card_mask(wording: &str) -> &str {
 }
 
 /// Direction comes from the sign of `value`; the Powens `type` only picks a
-/// semantic label the sign cannot express (§6.2). Stated this way because
+/// semantic label the sign cannot express. Stated this way because
 /// `market_fee` rows were observed carrying positive "INTERETS" values, and
 /// Powens warns that new type strings appear without notice.
 pub fn map_txn_type(powens_type: Option<&str>, value: Decimal) -> &'static str {
@@ -342,8 +344,10 @@ pub fn map_txn_type(powens_type: Option<&str>, value: Decimal) -> &'static str {
     }
 }
 
-/// `None` for a row that must not enter the ledger: pending (§6.1), deleted, or
-/// missing the two fields the ledger cannot do without.
+/// `None` for a row that must not enter the ledger: pending, deleted, or
+/// missing the two fields the ledger cannot do without. Pending rows must stay
+/// out: the backfill walks back from `balance`, which is settled-only, so one
+/// pending row would shift every derived day by its amount.
 pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
     if t.coming || t.deleted.is_some() {
         return None;

@@ -4,7 +4,7 @@ import { keys } from "./keys";
 // What each domain event makes stale, named once.
 //
 // A mutation should call one of these rather than listing keys itself — the
-// list is the thing that kept drifting (AUDIT.md C-17, C-18, Z-6). Adding a new
+// list is the thing that kept drifting. Adding a new
 // screen means adding its key to the groups it belongs to, here, not auditing
 // every mutation.
 

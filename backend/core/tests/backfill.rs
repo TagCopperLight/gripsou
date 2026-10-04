@@ -133,7 +133,7 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
         quantity_on(&pool, holding_id, d(2026, 1, 5)).await,
         Some(dec("110"))
     );
-    // Flat before the earliest transaction (§3 rule 3).
+    // Flat before the earliest transaction.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
         Some(dec("80"))
@@ -147,7 +147,7 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// §8.1: a PEA counts every type like any other account. Within its own
+/// A PEA counts every type like any other account. Within its own
 /// history each provider buy is funded by a transfer-in on record, so counting
 /// both walks back to the bank's real balances.
 #[sqlx::test(migrations = "../migrations")]
@@ -341,7 +341,7 @@ async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
 }
 
 /// Gaps *between* sparse snapshots are filled too, each from its own later
-/// anchor — not from today (§3 anchoring).
+/// anchor — not from today, so drift stays inside one gap.
 #[sqlx::test(migrations = "../migrations")]
 async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     pool: PgPool,
@@ -416,7 +416,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// §3 rule 3 / this fix: `transaction` carries no currency, so the cash walk
+/// `transaction` carries no currency, so the cash walk
 /// only applies to the cash holding whose instrument currency matches the
 /// account's own currency — the line the provider denominates `amount` in.
 /// A second cash holding on the same account, in another currency, has no
@@ -571,7 +571,7 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     Ok(())
 }
 
-/// §3: the horizon is the whole user's, not one connection's. Powens connectors
+/// The horizon is the whole user's, not one connection's. Powens connectors
 /// expose wildly different history depths (one can be a few months, another years), and the
 /// read-side lateral is an inner join, so a holding contributes nothing before
 /// its first derived row — a per-connection horizon draws each bank popping
@@ -613,7 +613,7 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
 
     backfill_connection(&mut conn, shallow_conn).await?;
 
-    // Held flat by §3 rule 3 all the way back to the deep connection's horizon.
+    // Held flat all the way back to the deep connection's horizon.
     assert_eq!(
         quantity_on(&pool, shallow_holding, d(2025, 5, 31)).await,
         Some(dec("70")),

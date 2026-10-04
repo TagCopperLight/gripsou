@@ -1269,8 +1269,8 @@ async fn seed_backfilled_equity(
 }
 
 /// A security with no price row at all is valued on derived days by carrying
-/// the anchor snapshot's unit valuation flat backward (§3 rule 3 applied to
-/// price). Without that the chart would dip to zero on every derived day and
+/// the anchor snapshot's unit valuation flat backward (the held-flat rule,
+/// applied to price). Without that the chart would dip to zero on every derived day and
 /// spuriously raise fx_missing.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_priceless_security_keeps_its_valuation_on_derived_days(
@@ -1520,7 +1520,7 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// §9.1: a security position no lot explains is what the badge keys off.
+/// A security position no lot explains is what the badge keys off.
 #[sqlx::test(migrations = "../migrations")]
 async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1774,8 +1774,8 @@ async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
 
 /// The gap-detection subquery must be scoped to (account, instrument), not the
 /// instrument alone: another user's buy of the same ETF must never reduce this
-/// holding's unexplained figure (§9.1 cross-user scoping, mirroring the
-/// backfill-engine bug found earlier in this feature).
+/// holding's unexplained figure (mirroring the cross-user backfill-engine bug
+/// found earlier).
 #[sqlx::test(migrations = "../migrations")]
 async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     pool: PgPool,
@@ -2004,7 +2004,7 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
     Ok(())
 }
 
-/// AUDIT.md C-7, pinned. A holding whose lots explain its position exactly must
+/// Pinned regression. A holding whose lots explain its position exactly must
 /// report the SAME invested figure through holdings() as through the chart.
 /// Before this change the table said 1 000,00 and the chart said 1 005,49 on
 /// the same screen.
@@ -2053,7 +2053,7 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     );
 }
 
-/// AUDIT.md C-7's other half. The chart's invested line and the holdings
+/// The other half of the same regression. The chart's invested line and the holdings
 /// table's Invested column must agree at today's date, because they are now the
 /// same function.
 #[sqlx::test(migrations = "../migrations")]

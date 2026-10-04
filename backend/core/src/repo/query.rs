@@ -153,7 +153,7 @@ pub async fn net_worth_series_with_target(
         left join rep     on rep.as_of = d.as_of
         left join lb      on lb.holding_id = h.id and lb.as_of = d.as_of
         -- `holding_point` is holding_snapshot ∪ holding_backfill. The invariant
-        -- (§4, enforced by stamp_snapshot) is that no day carries both, so the
+        -- (enforced by stamp_snapshot) is that no day carries both, so the
         -- union needs no precedence rule: synced truth simply exists where it
         -- exists, and derived values fill the rest.
         join lateral (
@@ -218,7 +218,7 @@ pub struct HoldingRow {
     /// Neither valuation branch resolved (no usable price and no convertible
     /// snapshot value), so `value` reads zero.
     pub fx_missing: bool,
-    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells` (§9.1).
+    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells`.
     /// Signed: positive means shares no lot explains, negative means more is
     /// recorded than held (an unrecorded sale). Non-zero means the cost basis
     /// and the pre-purchase history are guesses, which the Holdings badge says
@@ -326,7 +326,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                 or (coalesce(lot.basis, 0) <> 0
                     and fx_asof(a.currency, (select d from today)) is null))
                    as "fx_missing!",
-               -- §9.1: shares no recorded lot explains. Scoped to THIS holding's
+               -- Shares no recorded lot explains. Scoped to THIS holding's
                -- (account, instrument) via the `lot` lateral — never the
                -- instrument alone, or another user's buy of the same ETF would
                -- reduce this figure (the exact cross-user bug already found and
@@ -358,8 +358,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             limit 1
         ) snap on true
         left join lateral (
-            -- THE basis rule, called not reimplemented. Everything §4.3 used to
-            -- say inline now lives in lot_basis (0022), so the holdings table,
+            -- THE basis rule, called not reimplemented. The rule once written
+            -- inline here now lives in lot_basis (0022), so the holdings table,
             -- the chart and the modal preview cannot drift apart again.
             --
             -- `unexplained_cost` is exported so the asset modal can draw its

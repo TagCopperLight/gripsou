@@ -312,7 +312,7 @@ impl AccountProvider for PowensProvider {
         // Full history, every sync. Powens' `last_update` filter returns only
         // rows edited since a timestamp and therefore cannot backfill, so
         // incremental is unsafe; full-fetch + external_id dedup is idempotent
-        // instead (§6.1).
+        // instead.
         //
         // ponytail: fetches the whole history; add a min_date window if
         // payloads grow past a few thousand rows (largest observed: 2,111).

@@ -375,7 +375,7 @@ fn maps_types_by_sign_not_by_label() {
     assert_eq!(by_id(&txns, "1003").kind, "dividend", "profit -> dividend");
     assert_eq!(by_id(&txns, "1004").kind, "buy", "negative market_order");
     assert_eq!(by_id(&txns, "1005").kind, "sell", "positive market_order");
-    // The label lies: a positive market_fee is interest, not a fee (§2.1).
+    // The label lies: a positive market_fee is interest, not a fee.
     assert_eq!(by_id(&txns, "1006").kind, "interest");
     assert_eq!(by_id(&txns, "1007").kind, "fee");
     // Unknown/novel types fall back to the sign of `value`.
@@ -388,7 +388,7 @@ fn drops_pending_and_deleted_rows() {
     let txns = mapped_txns();
     assert!(
         txns.iter().all(|t| t.external_id != "1010"),
-        "coming = true is excluded (§6.1)"
+        "coming = true is excluded"
     );
     assert!(
         txns.iter().all(|t| t.external_id != "1011"),
@@ -401,8 +401,8 @@ fn carries_amount_and_account_link_verbatim() {
     let t = by_id(&mapped_txns(), "1004");
     assert_eq!(t.amount, dec("-312.34"));
     assert_eq!(t.account_external_id, "502");
-    // Powens links no instrument to a market_order row (§2.1): no ISIN, no
-    // id_security, empty `informations`. The user fills that in (§9).
+    // Powens links no instrument to a market_order row: no ISIN, no
+    // id_security, empty `informations`. The user records lots by hand instead.
     assert!(t.quantity.is_none() && t.unit_price.is_none());
 }
 
@@ -410,7 +410,7 @@ fn carries_amount_and_account_link_verbatim() {
 fn carries_the_raw_payload_in_provider_meta() {
     // A future refactor that stops threading the raw row through must fail
     // here: `id_account` has its own canonical column, but the raw copy in
-    // `provider_meta` must still be present verbatim (§4, §6.2).
+    // `provider_meta` must still be present verbatim.
     let t = by_id(&mapped_txns(), "1004");
     assert!(
         !t.provider_meta.as_object().unwrap().is_empty(),
@@ -422,7 +422,7 @@ fn carries_the_raw_payload_in_provider_meta() {
 
 #[test]
 fn maps_the_remaining_powens_type_labels() {
-    // §6.2's mapping table, the rows the earlier fixture never exercised.
+    // The type-mapping table, the rows the earlier fixture never exercised.
     let txns = mapped_txns();
     assert_eq!(by_id(&txns, "1013").kind, "transfer", "order -> transfer");
     assert_eq!(by_id(&txns, "1014").kind, "fee", "bank -> fee");
@@ -431,7 +431,7 @@ fn maps_the_remaining_powens_type_labels() {
 
 #[test]
 fn a_zero_value_is_not_negative() {
-    // §6.2 splits on `< 0` / `>= 0`: zero belongs to the non-negative side of
+    // The mapping splits on `< 0` / `>= 0`: zero belongs to the non-negative side of
     // every sign-dependent arm. Locked so a refactor to `<=` fails here.
     let txns = mapped_txns();
     assert_eq!(by_id(&txns, "1016").kind, "deposit", "unknown type, 0");
@@ -477,7 +477,7 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
     }
 }
 
-/// §6.2 keys `ts` on `rdate` because it is 100% filled — but the *balance*
+/// The mapping keys `ts` on `rdate` because it is 100% filled — but the *balance*
 /// follows the booking date, and the two disagree on 70% of real rows by up to
 /// five days. `ts` stays the day the card was tapped (what the user recognises
 /// on the list); `booked_on` carries the day the money actually moved, which is

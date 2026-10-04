@@ -81,7 +81,7 @@ export type Holding = {
   fxMissing: boolean;
   spark: string[] | null;
   composition: Composition | null;
-  /** Shares no recorded lot explains (§9.1). "0" when the position is fully
+  /** Shares no recorded lot explains. "0" when the position is fully
    *  accounted for. A non-zero value drives the fill-in badge. */
   unexplainedQty: string;
   /** Fee-inclusive mean buy price, amount domain. "0" with no recorded buys. */

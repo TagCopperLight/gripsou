@@ -1,4 +1,4 @@
-//! Derive past holding values from transactions (TRANSACTIONS.md §8).
+//! Derive past holding values from transactions.
 //!
 //! Fills every (holding, day) that has no snapshot, walking quantity backward
 //! from the nearest *later* snapshot — never from today, so drift stays bounded
@@ -11,8 +11,8 @@
 //! one correlated sum per day.
 //!
 //! ponytail: the whole connection is deleted and refilled every sync (~13k rows
-//! for 3.5 years × 10 holdings). §8.3 describes a bounded invalidation instead;
-//! the rewrite is smaller, always correct, and cheap at this size. Revisit if a
+//! for 3.5 years × 10 holdings) rather than refilling only from the oldest
+//! changed transaction forward; the rewrite is smaller, always correct, and cheap at this size. Revisit if a
 //! connection ever carries hundreds of holdings.
 //! ponytail: runs inline in ingest; move to its own job if sync latency becomes
 //! visible.
@@ -73,16 +73,16 @@ pub async fn backfill_connection(
         -- The horizon: as far back as *the whole user* has any evidence, plus
         -- one day so the flat rule-3 tail before the earliest movement is
         -- visible. Every holding is filled to the same date so a chart drawn
-        -- over the whole range has a value for each of them (§3 rule 3 holds
-        -- them flat).
+        -- over the whole range has a value for each of them (with no evidence
+        -- of change before the earliest movement, they are held flat).
         --
         -- User-wide, not connection-wide: the read-side lateral in
         -- net_worth_series is an inner join, so a holding contributes nothing
         -- before its first derived row. Powens connectors expose very different
-        -- history depths (a brokerage account's can be only months, §2.2), so a per-connection
+        -- history depths (a brokerage account's can be only months), so a per-connection
         -- horizon makes each bank pop into existence on its own date and steps
-        -- net worth up as it does. §3 argues truncation-induced jumps are the
-        -- worse failure; everything else here stays per-connection.
+        -- net worth up as it does. A chart that jumps is worse than one held
+        -- approximately right; everything else here stays per-connection.
         --
         -- Scoped to the owner of $1 — never across users.
         owner as (
@@ -120,7 +120,7 @@ pub async fn backfill_connection(
         -- `coalesce` keeps a provider that reports only one date working as before.
         --
         -- Cash moves by `amount`; a security moves by share count. Every
-        -- account counts every type, the PEA included (§8.1): within the PEA's
+        -- account counts every type, the PEA included: within the PEA's
         -- own history each provider buy is funded by a transfer-in on record,
         -- so counting both reproduces the bank's real balances.
         --
@@ -128,7 +128,7 @@ pub async fn backfill_connection(
         -- the cash holding whose instrument currency matches the account's own
         -- currency (the line the provider denominates `amount` in). A second
         -- cash holding on the same account, in another currency, gets no
-        -- movement here and is held flat by §3 rule 3 until `transaction` grows
+        -- movement here and is held flat until `transaction` grows
         -- a currency column to discriminate by.
         -- `materialized` is load-bearing: inlined, this aggregate was re-run once
         -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
@@ -404,7 +404,7 @@ pub async fn backfill_connection(
         -- whole history. one bank's first snapshot sits 25.00 under its own
         -- ledger (one card payment the balance had taken and the connector had
         -- not yet booked) and that 25.00 is the entire negative population.
-        -- A brokerage account's is a small dividend that §8.1 still counts, walked back
+        -- A brokerage account's is a small dividend that is still counted, walked back
         -- from a near-zero balance.
         --
         -- The error is a constant, so each anchored stretch that dips below
@@ -432,7 +432,7 @@ pub async fn backfill_connection(
                -- it matters solely for an instrument with no price row at all.
                -- Cash mirrors the sync's convention; a security carries the
                -- nearest valued snapshot's per-unit valuation flat onto this day
-               -- (§3 rule 3 applied to price), because writing 0 here would make
+               -- (the held-flat rule, applied to price), because writing 0 here would make
                -- the chart dip to zero on every derived day and raise fx_missing
                -- spuriously. Multiply before dividing so a day whose quantity is
                -- unchanged reproduces the snapshot's value exactly. When no

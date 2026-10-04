@@ -139,7 +139,8 @@ pub struct PreviewLot {
 ///
 /// Computed by writing them and rolling back, rather than by reimplementing the
 /// rule against an in-memory list. That is deliberate: a second implementation
-/// is exactly the disease this whole change cures (AUDIT.md Z-1), and the
+/// is exactly the disease the lot table cures (the basis rule once existed in
+/// several copies that disagreed on screen), and the
 /// rollback means the modal's live preview and the number the user gets after
 /// saving come from the same function over the same rows.
 ///

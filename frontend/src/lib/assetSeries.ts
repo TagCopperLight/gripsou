@@ -12,7 +12,7 @@ export type PositionPoint = { t: number; value: number; invested: number };
 //
 // The previous version added up raw transaction amounts, which made a sale
 // reduce "invested" by its proceeds and folded realised profit into the basis —
-// the exact thing the backend refuses to do (AUDIT.md D-1). That failure mode is
+// the exact thing the backend refuses to do. That failure mode is
 // now impossible here: nothing in this function reads a cash amount.
 export function positionSeries(
   prices: PricePoint[],

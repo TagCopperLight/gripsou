@@ -112,13 +112,13 @@ pub struct WebhookEnvelope {
 }
 
 /// A Powens statement line. Only the fields gripsou actually reads: the
-/// payload carries ~30 more that measured ~0% filled (TRANSACTIONS.md §2.1).
+/// payload carries ~30 more that measured ~0% filled.
 ///
 /// Deserializes via `TryFrom<serde_json::Value>` rather than a plain derive so
 /// `raw` can keep the *entire* payload verbatim — `#[serde(flatten)]` would
 /// only catch fields not already named on this struct (i.e. it would drop
 /// `id_account`, `type`, ...), which defeats `provider_meta`'s forensic
-/// purpose (§6.2, §4).
+/// purpose.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "serde_json::Value")]
 pub struct PowensTransaction {
@@ -131,11 +131,11 @@ pub struct PowensTransaction {
     pub value: Option<Decimal>,
     pub wording: Option<String>,
     pub r#type: Option<String>,
-    /// Not yet posted. Excluded from ingest — see §6.1.
+    /// Not yet posted. Excluded from ingest — see `map_transaction`.
     pub coming: bool,
     pub deleted: Option<String>,
     /// The raw JSON object Powens sent for this row, kept verbatim for
-    /// `provider_meta` (§6.2, §4).
+    /// `provider_meta`.
     pub raw: serde_json::Map<String, serde_json::Value>,
 }
 

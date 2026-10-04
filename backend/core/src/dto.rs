@@ -55,10 +55,10 @@ pub struct CanonicalTransaction {
     pub amount: Decimal,
     pub fee: Option<Decimal>,
     /// Human-readable label, provider-cleaned (card masks stripped). A column,
-    /// not `provider_meta`: the list renders it and search matches it (§4).
+    /// not `provider_meta`: the list renders it and search matches it.
     pub description: Option<String>,
     /// The raw provider transaction payload, kept for forensics only —
-    /// nothing the app reads lives here (§4, §6.2).
+    /// nothing the app reads lives here.
     pub provider_meta: serde_json::Value,
     /// The day the provider's balance actually moved, when it reports one
     /// separately from `ts`. `ts` is the day the user spent (Powens' `rdate`);

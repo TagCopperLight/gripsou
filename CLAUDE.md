@@ -1,54 +1,101 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+gripsou is a self-hosted personal finance dashboard: connect bank/broker providers, sync accounts, holdings and transactions, and see net worth, its distribution and a budget over time. Single maintainer, single instance, real data (the Powens domain is named `gripsou-sandbox` but holds the user's real bank connections).
 
-gripsou is a self-hosted personal finance dashboard: connect bank/broker/crypto providers, sync transactions and holdings, and view net worth and its distribution over time.
-
-**`ARCHITECTURE.md` is the source-of-truth design** and is far more detailed than this file. Read it before making non-trivial changes; `REQUIREMENTS.md` covers the product/UI spec. The codebase is currently an early scaffold — most modules are stubs that the architecture doc describes filling in.
+The code and migrations are the reference for *what* exists. This file only records what the code can't tell you: the principles, the invariants, and the decisions that look like mistakes but aren't.
 
 ## Commands
 
-Backend (`cd backend`, a Cargo workspace):
-- `cargo build` / `cargo run --bin gripsou` — the single binary serves both the SPA and the JSON API, and runs `sqlx migrate` on startup. Needs `DATABASE_URL` (e.g. `postgres://gripsou:gripsou@localhost:5432/gripsou`).
-- `cargo test` — run all tests; `cargo test -p gripsou-core <name>` runs a single test in one crate.
-- `cargo clippy` and `cargo fmt` — lint and format.
+Backend (`cd backend`, Cargo workspace; the binary is `gripsou` in `api`):
+- `cargo run --bin gripsou` — serves the SPA and the JSON API on :8080, runs migrations on startup. Loads the root `.env`.
+- `cargo test` / `cargo test -p gripsou-core <name>`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --all`.
 
-Frontend (`cd frontend`, uses **bun**):
-- `bun install`, `bun run dev` (Vite dev server on :5173, proxies `/api` → :8080).
-- `bun run build` (`tsc -b && vite build`), `bun run lint` (eslint), `bun run test` (vitest).
-- Single test: `bun run test <file-or-pattern>` (e.g. `bun run test smoke`).
+Frontend (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `bun run build`, `bun run lint`, `bun run test [pattern]`.
 
-Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` for just the DB, or `... up --build` for the whole app. **Always pass `-f docker/docker-compose.yml`** and rely on the pinned `name: gripsou` — the host has a separate `docker` compose project.
+`./ci.sh` at the root runs exactly what CI runs (fmt, clippy, tests with `SQLX_OFFLINE=true`, frontend lint/test/build). Run it before calling work done.
+
+Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` (or `up --build` for everything). Always pass `-f`: the file pins `name: gripsou`, and the host has an unrelated compose project called `docker` whose `docker_pgdata` volume must never be touched.
+
+### Database access from the host
+
+The compose postgres has **no published port**, so `localhost:5432` does not work from the host even though `.env` says so (that value is for the containerised backend). Use the container IP:
+
+```sh
+export DATABASE_URL=postgres://gripsou:gripsou@$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gripsou-postgres-1):5432/gripsou
+```
+
+`.env` is loaded by `cargo run` only (dotenvy, parent-directory search — never create `backend/.env`). `cargo test`, `cargo build` and the sqlx macros need `DATABASE_URL` exported in the shell.
+
+### sqlx offline data
+
+Queries are compile-time checked and CI builds offline from the committed `backend/.sqlx/`. After adding or editing any `query!`/`query_as!`/`query_scalar!` — in `src` **or** `tests` — regenerate it, or CI fails:
+
+```sh
+cd backend && cargo sqlx prepare --workspace -- --all-targets
+```
+
+`--all-targets` is required (test-only queries are skipped otherwise). Changing a comment *inside* a query string counts as a query change.
+
+### Migrations are immutable
+
+Never edit an applied migration, comments included: sqlx checksums each file and the app refuses to start against a database that ran the old version. Write a new migration instead.
+
+Older migrations cite sections of design docs (`TRANSACTIONS.md §6.1`, `ARCHITECTURE.md §3.2`) that have since been deleted (`AUDIT.md` was never tracked and is gone for good). Read them from git history if needed: `git log --diff-filter=D --oneline -- TRANSACTIONS.md`, then `git show <commit>^:TRANSACTIONS.md`.
 
 ## Architecture
 
-**The database is shaped around gripsou's domain; providers map _into_ it.** Adding a provider must never require a schema migration. This principle drives everything below.
+### The database is gripsou-shaped; providers map into it
 
-**Backend crate split enforces an anti-corruption layer at compile time:**
-- `core` — canonical DTOs (`dto.rs`) and provider ports (`provider.rs`: `AccountProvider`, `PriceProvider` traits; `categorize.rs`: the budget `Categorizer` trait), plus DB wiring and the budget pipeline (`budget/`: pairing, AI run, Overview math). The domain boundary.
-- `providers` — adapters (`powens`, `yahoo`, `boursorama`; `gemini`, `jev` for categorisation) that translate native payloads into canonical DTOs. **Depends on `core` only, never the reverse** — that direction is what keeps the schema gripsou-shaped. Never import a provider's native types into `core`.
-- `jobs` — the in-process tokio scheduler / sync orchestration (daily sync fans out per-connection tasks, one lock each).
-- `api` — the axum binary; handlers, auth, routing, static-file serving.
+Adding a provider must never need a migration. The crate split enforces this at compile time:
 
-**Unified holding model:** cash and securities are the same thing — everything owned is a `holding` of an `instrument`. A checking account is a holding of the `EUR` cash-instrument (quantity = balance, price = 1). This yields one snapshot table and one valuation path. `instrument` and `price` rows are **global/shared across users**; everything else is user-scoped via `connection.user_id`.
+- `core` — canonical DTOs (`dto.rs`), the provider ports (`provider.rs`: `AccountProvider`, `PriceProvider`, `CompositionProvider`; `categorize.rs`: `Categorizer`), repositories, ingest, backfill, price/composition sync, and the budget pipeline (`budget/`).
+- `providers` — adapters translating native payloads into canonical DTOs: `powens` (accounts), `yahoo` (prices and FX), `boursorama` (ETF composition), `gemini` / `jev` (budget categorisation). **Depends on `core`, never the reverse** — never import a provider's native types into `core`.
+- `jobs` — the in-process tokio scheduler and sync orchestration (per-connection tasks, one lock each; the `CATEGORIZERS` registry).
+- `api` — axum handlers, auth, routing, static files.
 
-Currency is part of the same idea: an FX rate is just a price of a cash instrument, so valuation multiplies through `unit_value_asof` and never special-cases cash. Prices are stored in whatever currency the listing quotes; conversion happens at read time from the *price row's* currency, not the instrument's.
+Provider weirdness is absorbed by the adapter, using `*_meta` JSONB columns and `external_id` (idempotent upserts), never by new columns. New account types are rows in `account_type`, not migrations.
 
-**Snapshots are written by the core, not providers.** After each sync the core stamps `holding_snapshot` per holding (idempotent on `(holding_id, as_of)`), so a net-worth time series exists even for a provider that only reports current balances. Net worth at instant `t` = Σ `quantity(last snapshot)` × `unit_value_asof(t)`, where `unit_value_asof` folds in the FX rate — so the sum is in the pivot currency, then divided once into the reader's reporting currency.
+### One holding model, one valuation path
 
-**Budget** (ARCHITECTURE.md §12): per-user categories and tags on `transaction`. `category_source` (`user` > `pair` > `ai`) decides who may overwrite a category; a pairing pass runs inside every ingest, then an optional AI run per user after sync. Budget readers go through the SQL functions `budget_transaction_rows` / `budget_transaction_matches` so the list, counts and bulk writes agree.
+- Everything owned is a `holding` of an `instrument`. A checking account is a holding of the `EUR` cash instrument (quantity = balance, price = 1). Cash is never special-cased.
+- An FX rate is just a `price` of a cash instrument. Prices are stored in whatever currency the listing quotes; conversion happens at read time from the **price row's** currency, via `unit_value_asof` / `fx_asof`. Sums are in the hidden pivot (`app_settings.base_currency`), then divided once into the reader's `prefs.currency` by `reporting_fx_asof`. When that rate is missing it falls back to the pivot and `reporting_fx_degraded` says so — never show an unconverted figure under the chosen currency's symbol.
+- `instrument` and `price` are global (shared by all users); everything else is user-scoped through `connection.user_id`.
 
-## Conventions that bite if missed
+### History: snapshots, backfill, lots
 
-- **Money is `rust_decimal::Decimal` ↔ Postgres `NUMERIC`, never floats.** The API sends decimals as **strings**; the frontend formats them.
-- **New account types are data inserts** into the `account_type` reference table (see `migrations/0002_seed_reference.sql`), **not migrations**.
-- **Escape hatches:** `*_meta` JSONB columns and `external_id` (for idempotent provider upserts/dedup) let adapters absorb provider-specific weirdness without schema churn.
-- **sqlx is compile-time-checked.** Once `query!`/`query_as!` macros are added, `cargo build` requires a reachable `DATABASE_URL` or committed `.sqlx/` offline data (`cargo sqlx prepare`). The current scaffold has no such queries yet, so it builds without a DB.
-- **Config split:** secrets/infra via env (`DATABASE_URL`, `ENCRYPTION_KEY`, `POWENS_*`, `GEMINI_API_KEY`/`JEV_API_KEY` — see `.env.example`); runtime/admin-tunable values (`cors_origins`, `enabled_providers`, `budget_ai_*`) live in the `app_settings` DB row, not env.
-- **Env files live at the repo root.** Copy `.env.example` → `.env` at the root. The backend, even when run from `backend/`, loads the root `.env` via dotenvy's parent-directory search — do not create `backend/.env` (it would shadow the root file). dotenvy only runs at `cargo run`/`seed`, **not** under `cargo test` or `cargo build`/sqlx macros, so those need `DATABASE_URL` exported in the shell.
-- **Credentials at rest** are encrypted with AES-GCM using `ENCRYPTION_KEY`; plaintext secrets never hit the DB.
-- Frontend stack: React 19 + TanStack Router (code-based route tree in `router.tsx`) + TanStack Query, ECharts for charts, react-i18next (en/fr in `src/i18n/`). Per-user formatting prefs drive `Intl` with explicit options.
+- **The core writes snapshots, not providers.** Every sync stamps `holding_snapshot` per holding (idempotent per day), so history exists even for a provider that only reports current balances.
+- **Days without a snapshot are derived into `holding_backfill`** (`core/src/backfill.rs`) by walking transactions backward from the nearest *later* snapshot — never from today, so drift stays inside one gap. Priority: real snapshot > derived > held flat before the first transaction. Invariant: no backfill row for a day that has a snapshot (stamping deletes it). Each sync deletes and rebuilds the connection's whole backfill — simpler and always correct at this size.
+- **`transaction` is the cash ledger and nothing else.** Purchases and sales are `lot` rows (`source` = `manual` | `provider`; only `manual` lots can be deleted by the user).
+- **Cost basis comes from the `lot_basis` SQL function only** (fee-inclusive weighted average, plus the part of the position no lot explains). Never reimplement it elsewhere: it once existed in four copies across three languages that disagreed on screen, which is why the lot table exists.
+- A holding whose lots don't explain its quantity gets a badge in the Holdings list and a modal to record the missing lots. For securities this is the main path, not a fallback (see Provider facts).
 
-## Testing strategy
+### Budget
 
-Adapter mapping tests against recorded provider-response fixtures (proves provider JSON → canonical DTOs without a live account); integration tests against a throwaway Postgres for upsert/snapshot/sync paths; property tests for money/PnL math; Vitest for frontend.
+Per-user categories (`budget_category`, seeded by a trigger on `users` insert) and tags on `transaction`.
+
+- **Who may overwrite a category** is `category_source`: `user` > `pair` > `ai`. A user write is final; nothing automatic touches it again. An `ai` row with a null category is a deliberate abstention, not "uncategorised".
+- **Pairing** (`budget/pairing.rs`) runs inside every ingest, in the same DB transaction, for the connection's owner. It files both halves of a transfer between the user's own accounts as `internal_transfer`. It is deliberately timid (transfers only, mutual nearest match, 3-day window, ties pair nothing) because a false pair silently deletes real spending.
+- **The AI** (`budget/ai.rs`) runs after sync, once per user, only if the admin configured a provider *and* the user opted in. Its answers are never trusted: `decide` turns any guess outside the item's candidates (or a double answer) into an abstention. A guess into a `neutral` category is always sent to review, since it hides money from every total.
+- **Every budget reader goes through `budget_transaction_rows` / `budget_transaction_matches`**, so the list, its counts, the review queue and "select all shown" bulk writes always agree on which rows exist. The cash leg of a buy/sell (`budget_investment_leg`) is left out: the lot is its record, and buying an ETF is not spending.
+- A user write that touches a paired row unlinks the pair, so it is two-step: the server answers `pendingPairBreaks: n` and writes nothing until the client resends with `confirmBreakPairs: true`.
+
+## Provider facts (settled — don't re-research)
+
+- **Powens transactions are cash-only.** `/marketorders` is empty, investment rows carry no instrument, `id_category` is always 9998 (no categories). Lots and categories are gripsou's to build.
+- **No aggregator exposes lots.** PSD2 providers can't see a PEA at all; Bridge models positions the same way as Powens and is sales-gated. The PEA's history only starts at its connection window, so net worth shows a known, unfixable dip before that; recording lots at their real dates keeps it small.
+- Powens `last_update` returns *edited* rows, not new ones: every sync full-fetches and dedups on `external_id`.
+- For investment accounts, Powens `balance` lags; the `XX-liquidity` investment line is the real cash.
+- Loans and cards are skipped (they'd add to net worth with the wrong sign); `real_estate` deliberately falls through to `brokerage`.
+
+## Product decisions
+
+- No merchant logos, merchant notes or clickable descriptions — built and removed on purpose.
+
+## Conventions
+
+- **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings; the frontend formats them with the user's prefs through `Intl`.
+- **Config split:** secrets and infra in env (see `.env.example`); admin-tunable values in the `app_settings` row (`cors_origins`, `enabled_providers`, `budget_ai_*`); per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next (en/fr in `src/i18n/` — every UI string in both). Pure logic lives in `src/lib/` with tests beside it.
+- ESLint's `react-refresh/only-export-components` forbids exporting anything but components from a component file; put shared constants/types in a sibling `.ts`. `bun run build` won't catch it — run `bun run lint`.
+- Vitest hides console output of passing tests when piped. To check for warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
+- Tests: adapter mapping tests against recorded provider fixtures; integration tests against a real Postgres; Vitest for the frontend.

@@ -15,7 +15,7 @@ const sell = (t: number, qty: string, price: string): Lot => ({
 });
 
 describe("positionSeries", () => {
-  // AUDIT.md D-1's headline case. The old implementation subtracted a sale's
+  // The headline regression. The old implementation subtracted a sale's
   // PROCEEDS from invested, folding realised profit into the cost basis: buy 10
   // at 100 then sell 5 at 200 reported invested = 0 while the backend said 500,
   // on the same screen.
