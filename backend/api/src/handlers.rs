@@ -3696,8 +3696,11 @@ mod auth_tests {
         .is_ok()
     }
 
+    /// Store a reset link for `email`, issued by a fresh admin whose unique
+    /// address can't collide with a test's own users.
     async fn mint_reset(pool: &PgPool, raw: &str, email: &str, expires_in: Duration) {
-        let admin = seed_user_role(pool, "admin@t.local", "pw", "admin").await;
+        let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
+        let admin = seed_user_role(pool, &issuer, "pw", "admin").await;
         gripsou_core::repo::invite_token::create(
             pool,
             "reset",

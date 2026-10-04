@@ -2,10 +2,10 @@
 //!
 //! CI points it at the throwaway Postgres's `template1`: every
 //! `#[sqlx::test]` database is copied from there, so each one then starts
-//! migrated and its own migrator finds nothing left to apply. Running the 33
-//! migrations once instead of once per test is most of the test step's time.
+//! migrated and its own migrator finds nothing left to apply. Running every
+//! migration once instead of once per test saves most of the test step's time.
 //!
-//!     DATABASE_URL=postgres://.../template1 cargo run -p gripsou-core --example migrate
+//!     DATABASE_URL=postgres://.../template1 cargo run --example migrate
 //!
 //! Don't aim it at a local server you also use for tests while iterating on a
 //! new migration: the template would keep the old version's checksum, and every

@@ -250,6 +250,12 @@ fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
 }
 
 async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
+    open_gate_with(db, user_id, &available_categorizers()).await
+}
+
+/// [`open_gate`] with the providers whose key is present passed in, so tests
+/// need not touch the process-wide env.
+async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(String, String)> {
     let settings = match gripsou_core::repo::settings::budget_ai(db).await {
         Ok(s) => s,
         Err(e) => {
@@ -265,7 +271,7 @@ async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
             return None;
         }
     };
-    gate(&settings, enabled, &available_categorizers())
+    gate(&settings, enabled, available)
 }
 
 /// Whether a run would actually start — the API answers 409 when not.
@@ -780,6 +786,107 @@ mod categorize_gate_tests {
     }
 }
 
+/// [`open_gate_with`] against a real database: the gate reads the admin's
+/// provider from `app_settings` and the opt-in from the user's own prefs. The
+/// available providers are passed in, never read from the env, so these tests
+/// hold whatever keys the shell exports.
+#[cfg(test)]
+mod open_gate_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    const AVAILABLE: &[&str] = &["gemini"];
+
+    /// Insert a user whose prefs carry `budgetAiEnabled = opted_in`.
+    async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
+        sqlx::query_scalar(
+            "insert into users (email, name, password_hash, prefs) \
+             values (gen_random_uuid()::text || '@t.local', 'Test', 'x', \
+                     jsonb_build_object('budgetAiEnabled', $1::boolean)) \
+             returning id",
+        )
+        .bind(opted_in)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    /// Set the admin's provider choice (`None` = AI off server-wide).
+    async fn set_admin_provider(pool: &PgPool, provider: Option<&str>) {
+        sqlx::query(
+            "update app_settings set budget_ai_provider = $1, budget_ai_model = null where id = 1",
+        )
+        .bind(provider)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn ready(pool: &PgPool, user: Uuid) -> bool {
+        open_gate_with(pool, user, AVAILABLE).await.is_some()
+    }
+
+    /// With neither the admin nor the user having switched the AI on, nothing runs.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_neither_admin_nor_user_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, false).await;
+        set_admin_provider(&pool, None).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// The admin configuring a provider is not consent: a user who did not opt
+    /// in never has their transactions sent to a model.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_only_the_admin_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, false).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// A user's opt-in alone does nothing while the admin has not picked a
+    /// provider.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_only_the_user_opted_in(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, None).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// Admin provider with its key present plus user opt-in: the run may start,
+    /// on the provider's default model since the admin left it blank.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn open_when_admin_and_user_both_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert_eq!(
+            open_gate_with(&pool, user, AVAILABLE).await,
+            Some((
+                "gemini".to_string(),
+                default_model("gemini").unwrap().to_string()
+            ))
+        );
+    }
+
+    /// The schema stores any provider key; one this build does not know (stale
+    /// setting, typo) keeps the gate shut instead of failing mid-run.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_the_admin_named_an_unknown_provider(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, Some("no-such-provider")).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// The gate is per user: one user's opt-in never opens it for another.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn one_users_opt_in_does_not_open_the_gate_for_another(pool: PgPool) {
+        let opted_in = seed_user(&pool, true).await;
+        let other = seed_user(&pool, false).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert!(ready(&pool, opted_in).await);
+        assert!(!ready(&pool, other).await);
+    }
+}
+
 #[cfg(test)]
 mod categorize_run_tests {
     use super::*;
@@ -977,9 +1084,10 @@ mod credentials_tests {
         assert!(decrypt_credentials(KEY, &tampered).is_err());
     }
 
-    /// Anything that is not the envelope (plaintext credentials, a missing or
+    /// A blob without a usable `ct` (plaintext credentials, a missing or
     /// non-string `ct`, non-base64, null) is an error, never passed through
-    /// to the provider as if it were credentials.
+    /// to the provider as if it were credentials. `v` is not checked: v1 is
+    /// the only envelope, so a future v2 must add that check.
     #[test]
     fn a_malformed_blob_is_an_error() {
         for blob in [
