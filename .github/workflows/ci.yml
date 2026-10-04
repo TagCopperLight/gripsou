@@ -6,6 +6,12 @@ on:
     branches: [main]
   workflow_call:
 
+# A newer push to the same PR makes the older run pointless: cancel it. Runs on
+# main and tags (the release workflow calls this one) always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -47,6 +53,25 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+        env:
+          SQLX_OFFLINE: "true"
+      # Every #[sqlx::test] creates its own database and migrates it, and that
+      # setup, not the tests themselves, is most of the test step. Two fixes,
+      # both safe only because this Postgres is thrown away after the job:
+      # - stop it waiting on the disk (a crash would lose data; there is none
+      #   worth keeping here);
+      # - migrate template1, which every new database is copied from, so each
+      #   test's migrator finds everything already applied.
+      # ./ci.sh skips this on purpose: it only changes the speed, and a migrated
+      # template1 on a dev server goes stale when you edit an unmerged migration.
+      - name: Prepare test database
+        run: |
+          for setting in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
+            docker exec ${{ job.services.postgres.id }} psql -U gripsou -d gripsou -c "alter system set $setting"
+          done
+          docker exec ${{ job.services.postgres.id }} psql -U gripsou -d gripsou -c "select pg_reload_conf()"
+          DATABASE_URL=postgres://gripsou:gripsou@localhost:5432/template1 \
+            cargo run -p gripsou-core --example migrate
         env:
           SQLX_OFFLINE: "true"
       - name: Test
