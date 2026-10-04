@@ -250,6 +250,12 @@ fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
 }
 
 async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
+    open_gate_with(db, user_id, &available_categorizers()).await
+}
+
+/// [`open_gate`] with the providers whose key is present passed in, so tests
+/// need not touch the process-wide env.
+async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(String, String)> {
     let settings = match gripsou_core::repo::settings::budget_ai(db).await {
         Ok(s) => s,
         Err(e) => {
@@ -265,7 +271,7 @@ async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
             return None;
         }
     };
-    gate(&settings, enabled, &available_categorizers())
+    gate(&settings, enabled, available)
 }
 
 /// Whether a run would actually start — the API answers 409 when not.
@@ -780,6 +786,107 @@ mod categorize_gate_tests {
     }
 }
 
+/// [`open_gate_with`] against a real database: the gate reads the admin's
+/// provider from `app_settings` and the opt-in from the user's own prefs. The
+/// available providers are passed in, never read from the env, so these tests
+/// hold whatever keys the shell exports.
+#[cfg(test)]
+mod open_gate_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    const AVAILABLE: &[&str] = &["gemini"];
+
+    /// Insert a user whose prefs carry `budgetAiEnabled = opted_in`.
+    async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
+        sqlx::query_scalar(
+            "insert into users (email, name, password_hash, prefs) \
+             values (gen_random_uuid()::text || '@t.local', 'Test', 'x', \
+                     jsonb_build_object('budgetAiEnabled', $1::boolean)) \
+             returning id",
+        )
+        .bind(opted_in)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    /// Set the admin's provider choice (`None` = AI off server-wide).
+    async fn set_admin_provider(pool: &PgPool, provider: Option<&str>) {
+        sqlx::query(
+            "update app_settings set budget_ai_provider = $1, budget_ai_model = null where id = 1",
+        )
+        .bind(provider)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn ready(pool: &PgPool, user: Uuid) -> bool {
+        open_gate_with(pool, user, AVAILABLE).await.is_some()
+    }
+
+    /// With neither the admin nor the user having switched the AI on, nothing runs.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_neither_admin_nor_user_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, false).await;
+        set_admin_provider(&pool, None).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// The admin configuring a provider is not consent: a user who did not opt
+    /// in never has their transactions sent to a model.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_only_the_admin_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, false).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// A user's opt-in alone does nothing while the admin has not picked a
+    /// provider.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_only_the_user_opted_in(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, None).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// Admin provider with its key present plus user opt-in: the run may start,
+    /// on the provider's default model since the admin left it blank.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn open_when_admin_and_user_both_enabled_it(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert_eq!(
+            open_gate_with(&pool, user, AVAILABLE).await,
+            Some((
+                "gemini".to_string(),
+                default_model("gemini").unwrap().to_string()
+            ))
+        );
+    }
+
+    /// The schema stores any provider key; one this build does not know (stale
+    /// setting, typo) keeps the gate shut instead of failing mid-run.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn closed_when_the_admin_named_an_unknown_provider(pool: PgPool) {
+        let user = seed_user(&pool, true).await;
+        set_admin_provider(&pool, Some("no-such-provider")).await;
+        assert!(!ready(&pool, user).await);
+    }
+
+    /// The gate is per user: one user's opt-in never opens it for another.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn one_users_opt_in_does_not_open_the_gate_for_another(pool: PgPool) {
+        let opted_in = seed_user(&pool, true).await;
+        let other = seed_user(&pool, false).await;
+        set_admin_provider(&pool, Some("gemini")).await;
+        assert!(ready(&pool, opted_in).await);
+        assert!(!ready(&pool, other).await);
+    }
+}
+
 #[cfg(test)]
 mod categorize_run_tests {
     use super::*;
@@ -794,6 +901,80 @@ mod categorize_run_tests {
         assert!(run_again(user), "one more run follows");
         assert!(!run_again(user), "then the slot is freed");
         assert!(claim_run(user), "and the next request starts afresh");
+        assert!(!run_again(user));
+    }
+
+    /// One user's run must not block another's: the slot is per user, so a
+    /// long run for A never leaves B's new rows uncategorised.
+    #[test]
+    fn run_slots_are_per_user() {
+        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
+        assert!(claim_run(a));
+        assert!(claim_run(b), "B starts while A runs");
+        assert!(!run_again(a), "A's slot is freed without a re-run");
+        assert!(!run_again(b), "B was never asked twice either");
+    }
+
+    /// Simultaneous requests (several syncs finishing at once) start exactly
+    /// one run: two would pay the model twice for the same rows.
+    #[test]
+    fn concurrent_requests_start_a_single_run() {
+        let user = Uuid::new_v4();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    claim_run(user)
+                })
+            })
+            .collect();
+        let winners = handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .filter(|won| *won)
+            .count();
+        assert_eq!(winners, 1);
+        assert!(run_again(user), "the losers asked for one more run");
+        assert!(!run_again(user), "and only one");
+    }
+
+    /// A request while the user's run is in flight starts no second task: it
+    /// only books one more round, which the running task picks up.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_request_during_a_run_books_a_rerun_instead_of_starting_one(pool: PgPool) {
+        let user = Uuid::new_v4();
+        assert!(claim_run(user), "a run is in flight");
+        request_categorize(pool.clone(), user);
+        request_categorize(pool.clone(), user);
+        // Give a wrongly spawned task the chance to run and touch the slot.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(ai_runs().get(&user), Some(&true), "one re-run is booked");
+        assert!(run_again(user), "the running task goes round once more");
+        assert!(!run_again(user), "then frees the slot");
+    }
+
+    /// A run that cannot start (AI off) must still free the user's slot, or
+    /// every later request would be swallowed until a restart.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_run_that_cannot_start_frees_the_slot(pool: PgPool) {
+        let user: Uuid = sqlx::query_scalar(
+            "insert into users (email, name, password_hash) values ('s@x', 's', 'h') returning id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        request_categorize(pool.clone(), user);
+        let freed = async {
+            while ai_runs().contains_key(&user) {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), freed)
+            .await
+            .expect("the slot is freed once the no-op run ends");
+        assert!(claim_run(user), "the next request starts a run");
         assert!(!run_again(user));
     }
 
@@ -829,5 +1010,109 @@ mod categorize_run_tests {
             .unwrap()
             .expect("the dead run is reported");
         assert_eq!(run.outcome, "error");
+    }
+}
+
+#[cfg(test)]
+mod categorizer_registry_tests {
+    use super::*;
+
+    /// Every provider the admin may pick has a usable default model and a
+    /// unique key: `gate` falls back to the default when the admin leaves the
+    /// model blank, and a lookup by key must not be ambiguous.
+    #[test]
+    fn every_provider_has_a_unique_key_and_a_default_model() {
+        let keys = categorizer_keys();
+        let unique: std::collections::HashSet<_> = keys.iter().collect();
+        assert_eq!(unique.len(), keys.len(), "duplicate provider key");
+        for key in keys {
+            let model = default_model(key).unwrap_or_else(|| panic!("{key}: no default"));
+            assert!(!model.trim().is_empty(), "{key}: blank default model");
+        }
+    }
+}
+
+#[cfg(test)]
+mod credentials_tests {
+    use super::*;
+    use serde_json::json;
+
+    const KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const OTHER_KEY: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+
+    fn creds() -> serde_json::Value {
+        json!({ "access_token": "secret-token", "id_user": 42, "nested": { "a": [1, 2] } })
+    }
+
+    /// What `complete_connection` stores, every sync must read back unchanged,
+    /// or the connection silently stops syncing.
+    #[test]
+    fn credentials_round_trip() {
+        let blob = encrypt_credentials(KEY, &creds()).unwrap();
+        assert_eq!(decrypt_credentials(KEY, &blob).unwrap(), creds());
+    }
+
+    /// The stored blob is the versioned envelope and never contains the
+    /// plaintext secret.
+    #[test]
+    fn stored_blob_is_the_v1_envelope_without_plaintext() {
+        let blob = encrypt_credentials(KEY, &creds()).unwrap();
+        assert_eq!(blob["v"], 1);
+        assert!(blob["ct"].is_string());
+        assert_eq!(blob.as_object().unwrap().len(), 2);
+        assert!(!blob.to_string().contains("secret-token"));
+    }
+
+    /// A rotated or wrong `ENCRYPTION_KEY` must fail the sync, not hand the
+    /// provider garbage credentials.
+    #[test]
+    fn decrypting_with_the_wrong_key_fails() {
+        let blob = encrypt_credentials(KEY, &creds()).unwrap();
+        assert!(decrypt_credentials(OTHER_KEY, &blob).is_err());
+    }
+
+    /// A tampered ciphertext is rejected (authenticated encryption), not
+    /// decoded into altered credentials.
+    #[test]
+    fn a_tampered_ciphertext_fails() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        let blob = encrypt_credentials(KEY, &creds()).unwrap();
+        let mut bytes = STANDARD.decode(blob["ct"].as_str().unwrap()).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0x01;
+        let tampered = json!({ "v": 1, "ct": STANDARD.encode(&bytes) });
+        assert!(decrypt_credentials(KEY, &tampered).is_err());
+    }
+
+    /// A blob without a usable `ct` (plaintext credentials, a missing or
+    /// non-string `ct`, non-base64, null) is an error, never passed through
+    /// to the provider as if it were credentials. `v` is not checked: v1 is
+    /// the only envelope, so a future v2 must add that check.
+    #[test]
+    fn a_malformed_blob_is_an_error() {
+        for blob in [
+            json!(null),
+            json!({}),
+            json!({ "v": 1 }),
+            json!({ "v": 1, "ct": 5 }),
+            json!({ "v": 1, "ct": null }),
+            json!({ "v": 1, "ct": "not base64 !!" }),
+            json!({ "v": 1, "ct": "" }),
+            json!({ "access_token": "plain" }),
+            json!("just a string"),
+        ] {
+            assert!(
+                decrypt_credentials(KEY, &blob).is_err(),
+                "accepted malformed blob {blob}"
+            );
+        }
+    }
+
+    /// An invalid server key refuses to encrypt rather than storing anything
+    /// readable.
+    #[test]
+    fn encrypting_with_an_invalid_key_fails() {
+        assert!(encrypt_credentials("too-short", &creds()).is_err());
+        assert!(encrypt_credentials(&"z".repeat(64), &creds()).is_err());
     }
 }

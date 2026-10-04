@@ -3054,6 +3054,771 @@ mod auth_tests {
         .expect("empty batch ok");
         assert_eq!(status, StatusCode::NO_CONTENT);
     }
+
+    // ── admin-only server settings ──────────────────────────────────────────
+
+    fn cors_cache(initial: Vec<String>) -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
+        std::sync::Arc::new(std::sync::RwLock::new(initial))
+    }
+
+    /// A member must not read the CORS allow-list: it is server config, admin-only.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn cors_origins_requires_admin(pool: PgPool) {
+        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let err = cors_origins(State(pool.clone()), auth(member))
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    /// A member must not widen the CORS allow-list — not in the DB, not in the
+    /// live cache the CORS layer reads.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_cors_origins_requires_admin_and_changes_nothing(pool: PgPool) {
+        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let before = gripsou_core::repo::settings::cors_origins(&pool)
+            .await
+            .unwrap();
+        let cache = cors_cache(before.clone());
+
+        let err = set_cors_origins(
+            State(pool.clone()),
+            State(cache.clone()),
+            auth(member),
+            Json(vec!["https://evil.example".to_string()]),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+        assert_eq!(
+            gripsou_core::repo::settings::cors_origins(&pool)
+                .await
+                .unwrap(),
+            before
+        );
+        assert_eq!(*cache.read().unwrap(), before);
+    }
+
+    /// An admin's CORS write persists and reaches the live cache, so the change
+    /// takes effect without a restart.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_cors_origins_persists_and_refreshes_cache(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let cache = cors_cache(vec![]);
+        let wanted = vec![
+            "https://one.example".to_string(),
+            "https://two.example".to_string(),
+        ];
+
+        let status = set_cors_origins(
+            State(pool.clone()),
+            State(cache.clone()),
+            auth(admin),
+            Json(wanted.clone()),
+        )
+        .await
+        .expect("admin may set origins");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let read = cors_origins(State(pool.clone()), auth(admin))
+            .await
+            .expect("admin may read origins")
+            .0;
+        assert_eq!(read, wanted);
+        assert_eq!(*cache.read().unwrap(), wanted);
+    }
+
+    /// A member must not read the budget AI settings: they are admin-only config.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn budget_ai_settings_requires_admin(pool: PgPool) {
+        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let err = budget_ai_settings(State(pool.clone()), auth(member))
+            .await
+            .err()
+            .expect("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    /// A member must not switch the budget AI provider — that decides where
+    /// every user's transactions are sent.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_budget_ai_settings_requires_admin_and_changes_nothing(pool: PgPool) {
+        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let key = gripsou_jobs::categorizer_keys()[0];
+
+        let err = set_budget_ai_settings(
+            State(pool.clone()),
+            auth(member),
+            Json(dto::SetBudgetAiSettingsReq {
+                provider: Some(key.to_string()),
+                model: Some("m".into()),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+        let s = gripsou_core::repo::settings::budget_ai(&pool)
+            .await
+            .unwrap();
+        assert_eq!((s.provider, s.model), (None, None));
+    }
+
+    /// An admin's budget AI choice persists (trimmed) and reads back as written.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_budget_ai_settings_persists(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let key = gripsou_jobs::categorizer_keys()[0];
+
+        let status = set_budget_ai_settings(
+            State(pool.clone()),
+            auth(admin),
+            Json(dto::SetBudgetAiSettingsReq {
+                provider: Some(format!("  {key} ")),
+                model: Some(" some-model ".into()),
+            }),
+        )
+        .await
+        .expect("admin may set");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let read = budget_ai_settings(State(pool.clone()), auth(admin))
+            .await
+            .expect("admin may read")
+            .0;
+        assert_eq!(read.provider.as_deref(), Some(key));
+        assert_eq!(read.model.as_deref(), Some("some-model"));
+    }
+
+    /// Blank strings switch the AI off (stored as null), rather than storing a
+    /// provider named "" that the scheduler would then try to look up.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let key = gripsou_jobs::categorizer_keys()[0];
+        gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
+            .await
+            .unwrap();
+
+        set_budget_ai_settings(
+            State(pool.clone()),
+            auth(admin),
+            Json(dto::SetBudgetAiSettingsReq {
+                provider: Some("   ".into()),
+                model: Some("".into()),
+            }),
+        )
+        .await
+        .expect("admin may clear");
+        let s = gripsou_core::repo::settings::budget_ai(&pool)
+            .await
+            .unwrap();
+        assert_eq!((s.provider, s.model), (None, None));
+    }
+
+    /// A provider key outside the registry is a 400 and leaves the previous
+    /// choice in place, so a typo cannot silently disable categorisation.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let key = gripsou_jobs::categorizer_keys()[0];
+        gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
+            .await
+            .unwrap();
+
+        let err = set_budget_ai_settings(
+            State(pool.clone()),
+            auth(admin),
+            Json(dto::SetBudgetAiSettingsReq {
+                provider: Some("no-such-provider".into()),
+                model: Some("other".into()),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        let s = gripsou_core::repo::settings::budget_ai(&pool)
+            .await
+            .unwrap();
+        assert_eq!(s.provider.as_deref(), Some(key));
+        assert_eq!(s.model.as_deref(), Some("m"));
+    }
+
+    // ── cross-user isolation ────────────────────────────────────────────────
+
+    /// One user's data: their account, their holding (snapshotted today, so it
+    /// shows in account lists) and one cash transaction described as `label`.
+    struct Owned {
+        user: Uuid,
+        account: Uuid,
+        holding: Uuid,
+    }
+
+    async fn seed_owned(pool: &PgPool, email: &str, label: &str) -> Owned {
+        let (user, holding) = seed_holding(pool, email).await;
+        let account: Uuid = sqlx::query_scalar("select account_id from holding where id = $1")
+            .bind(holding)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into holding_snapshot (holding_id, as_of, quantity, value) \
+             values ($1, current_date, 100, 1200)",
+        )
+        .bind(holding)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into transaction (account_id, ts, type, amount, description) \
+             values ($1, now(), 'deposit', 10, $2)",
+        )
+        .bind(account)
+        .bind(label)
+        .execute(pool)
+        .await
+        .unwrap();
+        Owned {
+            user,
+            account,
+            holding,
+        }
+    }
+
+    fn no_txn_filters() -> TransactionParams {
+        TransactionParams {
+            search: None,
+            account_id: None,
+            bucket: None,
+            from: None,
+            to: None,
+            category_ids: None,
+            tag_ids: None,
+            uncategorized: None,
+            needs_review: None,
+            include_transfers: None,
+            limit: None,
+            offset: None,
+        }
+    }
+
+    /// Renaming another user's account by id must 404 and leave it untouched.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_account_refuses_another_users_account(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let err = update_account(
+            State(pool.clone()),
+            auth(bob.user),
+            Path(alice.account),
+            Json(dto::UpdateAccountReq {
+                name: "Hijacked".into(),
+                type_key: "pea".into(),
+                color: "#000000".into(),
+            }),
+        )
+        .await
+        .err()
+        .expect("cross-user update must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+
+        let name: String = sqlx::query_scalar("select name from account where id = $1")
+            .bind(alice.account)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(name, "PEA");
+    }
+
+    /// The owner's update persists and echoes the type's label.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_account_persists_for_owner(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+
+        let updated = update_account(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.account),
+            Json(dto::UpdateAccountReq {
+                name: "Renamed".into(),
+                type_key: "pea".into(),
+                color: "#123456".into(),
+            }),
+        )
+        .await
+        .expect("owner may update")
+        .0;
+        assert_eq!(updated.name, "Renamed");
+        assert_eq!(updated.type_label, "PEA");
+
+        let (name, color): (String, Option<String>) =
+            sqlx::query_as("select name, color from account where id = $1")
+                .bind(alice.account)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(name, "Renamed");
+        assert_eq!(color.as_deref(), Some("#123456"));
+    }
+
+    /// An account type that does not exist is refused (404) and writes nothing,
+    /// so an account can never point at a type the UI cannot label.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_account_rejects_unknown_type(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+
+        let err = update_account(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.account),
+            Json(dto::UpdateAccountReq {
+                name: "Renamed".into(),
+                type_key: "no-such-type".into(),
+                color: "#123456".into(),
+            }),
+        )
+        .await
+        .err()
+        .expect("unknown type must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+
+        let (name, type_key): (String, String) =
+            sqlx::query_as("select name, type_key from account where id = $1")
+                .bind(alice.account)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!((name.as_str(), type_key.as_str()), ("PEA", "pea"));
+    }
+
+    /// Another user's lots are not listed through their holding id.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn holding_lots_hides_another_users_lots(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+        save_lots(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.holding),
+            Json(dto::SaveLotsReq {
+                adds: vec![add("buy", (2024, 5, 2), "20", "10")],
+                deletes: vec![],
+            }),
+        )
+        .await
+        .unwrap();
+
+        let own = holding_lots(State(pool.clone()), auth(alice.user), Path(alice.holding))
+            .await
+            .expect("owner may list")
+            .0;
+        assert_eq!(own.len(), 1, "the seeded lot is visible to its owner");
+
+        let theirs = holding_lots(State(pool.clone()), auth(bob.user), Path(alice.holding))
+            .await
+            .expect("an unowned holding lists as empty")
+            .0;
+        assert!(theirs.is_empty());
+    }
+
+    /// Another user's price history is not served through their holding id.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn holding_prices_hides_another_users_holding(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+        sqlx::query(
+            "insert into price (instrument_id, ts, unit_price, currency) \
+             select instrument_id, (current_date - 1)::timestamp at time zone 'UTC', 12, 'USD' \
+             from holding where id = $1",
+        )
+        .bind(alice.holding)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let range = || {
+            Query(RangeParams {
+                range: "1mo".into(),
+            })
+        };
+
+        let own = holding_prices(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.holding),
+            range(),
+        )
+        .await
+        .expect("owner may read")
+        .0;
+        assert_eq!(own.len(), 1, "the seeded price is visible to its owner");
+
+        let theirs = holding_prices(
+            State(pool.clone()),
+            auth(bob.user),
+            Path(alice.holding),
+            range(),
+        )
+        .await
+        .expect("an unowned holding reads as empty")
+        .0;
+        assert!(theirs.is_empty());
+    }
+
+    /// Previewing lots on another user's holding is a 404 (the preview writes
+    /// and rolls back on that holding, so it must never get that far) and
+    /// leaves the owner's lots intact.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_refuses_another_users_holding(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+        save_lots(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.holding),
+            Json(dto::SaveLotsReq {
+                adds: vec![add("buy", (2024, 5, 2), "20", "10")],
+                deletes: vec![],
+            }),
+        )
+        .await
+        .unwrap();
+
+        let err = preview_lots(
+            State(pool.clone()),
+            auth(bob.user),
+            Path(alice.holding),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "1", "1")],
+            }),
+        )
+        .await
+        .err()
+        .expect("cross-user preview must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+
+        let lots: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+            .bind(alice.holding)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(lots, 1);
+    }
+
+    /// The owner's preview computes the basis of the given rows without saving them.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_computes_without_writing(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+
+        let preview = preview_lots(
+            State(pool.clone()),
+            auth(alice.user),
+            Path(alice.holding),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "10", "15")],
+            }),
+        )
+        .await
+        .expect("owner may preview")
+        .0;
+        // The mean price is the given rows' own; `invested` would also carry
+        // the part of the 100-unit position the 10 previewed units leave
+        // unexplained, which is `lot_basis`'s business, not this endpoint's.
+        assert_eq!(
+            preview.mean_price.parse::<Decimal>().unwrap(),
+            Decimal::new(15, 0)
+        );
+
+        let lots: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+            .bind(alice.holding)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(lots, 0, "a preview must not persist its rows");
+    }
+
+    /// The accounts list shows only the caller's accounts.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn accounts_lists_only_own(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let list = accounts(State(pool.clone()), auth(alice.user))
+            .await
+            .expect("list ok")
+            .0;
+        let ids: Vec<String> = list.into_iter().map(|a| a.id).collect();
+        assert_eq!(ids, vec![alice.account.to_string()]);
+    }
+
+    /// The holdings list shows only the caller's holdings.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn holdings_lists_only_own(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let list = holdings(State(pool.clone()), auth(alice.user))
+            .await
+            .expect("list ok")
+            .0;
+        let ids: Vec<String> = list.into_iter().map(|h| h.id).collect();
+        assert_eq!(ids, vec![alice.holding.to_string()]);
+    }
+
+    /// The transactions list shows only the caller's transactions.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn transactions_lists_only_own(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let list = transactions(
+            State(pool.clone()),
+            auth(alice.user),
+            Query(no_txn_filters()),
+        )
+        .await
+        .expect("list ok")
+        .0;
+        let descriptions: Vec<Option<String>> = list.into_iter().map(|t| t.description).collect();
+        assert_eq!(descriptions, vec![Some("alice-txn".to_string())]);
+    }
+
+    /// Filtering on another user's account id returns nothing rather than
+    /// that account's rows.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn transactions_account_filter_cannot_reach_another_user(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let list = transactions(
+            State(pool.clone()),
+            auth(bob.user),
+            Query(TransactionParams {
+                account_id: Some(alice.account),
+                ..no_txn_filters()
+            }),
+        )
+        .await
+        .expect("list ok")
+        .0;
+        assert!(list.is_empty());
+    }
+
+    /// The distribution pie shows only the caller's accounts.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn distribution_lists_only_own(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let list = distribution(State(pool.clone()), auth(alice.user))
+            .await
+            .expect("distribution ok")
+            .0;
+        let ids: Vec<String> = list.into_iter().map(|a| a.id).collect();
+        assert_eq!(ids, vec![alice.account.to_string()]);
+    }
+
+    /// The account-type picker is served from the reference table, with labels.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn account_types_lists_reference_types(pool: PgPool) {
+        let list = account_types(State(pool.clone())).await.expect("ok").0;
+        let pea = list
+            .iter()
+            .find(|t| t.key == "pea")
+            .expect("pea is a seeded type");
+        assert_eq!(pea.label, "PEA");
+    }
+
+    // ── sessions and password reset ────────────────────────────────────────
+
+    async fn session_alive(pool: &PgPool, id: Uuid) -> bool {
+        sqlx::query_scalar::<_, i64>("select count(*) from session where id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+            == 1
+    }
+
+    /// "Sign out everywhere else" keeps the caller's own session alive.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn revoke_other_sessions_keeps_current(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        let current = principal_for(&pool, "a@t.local", "pw").await;
+        principal_for(&pool, "a@t.local", "pw").await;
+        let session_id = current.session_id;
+
+        let status = revoke_other_sessions(State(pool.clone()), current)
+            .await
+            .expect("revoke ok");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert!(session_alive(&pool, session_id).await);
+    }
+
+    /// "Sign out everywhere else" revokes the caller's other sessions.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        let current = principal_for(&pool, "a@t.local", "pw").await;
+        let other = principal_for(&pool, "a@t.local", "pw").await;
+
+        revoke_other_sessions(State(pool.clone()), current)
+            .await
+            .expect("revoke ok");
+        assert!(!session_alive(&pool, other.session_id).await);
+    }
+
+    /// "Sign out everywhere else" never touches another user's sessions.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
+        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        seed_user_role(&pool, "b@t.local", "pw", "user").await;
+        let a = principal_for(&pool, "a@t.local", "pw").await;
+        let b = principal_for(&pool, "b@t.local", "pw").await;
+
+        revoke_other_sessions(State(pool.clone()), a)
+            .await
+            .expect("revoke ok");
+        assert!(session_alive(&pool, b.session_id).await);
+    }
+
+    async fn can_login(pool: &PgPool, email: &str, pw: &str) -> bool {
+        login(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(LoginReq {
+                email: email.into(),
+                password: pw.into(),
+                remember: false,
+            }),
+        )
+        .await
+        .is_ok()
+    }
+
+    /// Store a reset link for `email`, issued by a fresh admin whose unique
+    /// address can't collide with a test's own users.
+    async fn mint_reset(pool: &PgPool, raw: &str, email: &str, expires_in: Duration) {
+        let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
+        let admin = seed_user_role(pool, &issuer, "pw", "admin").await;
+        gripsou_core::repo::invite_token::create(
+            pool,
+            "reset",
+            Some(email),
+            admin,
+            &auth::hash_token_str(raw),
+            Utc::now() + expires_in,
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn call_redeem_reset(
+        pool: &PgPool,
+        raw: &str,
+        password: &str,
+    ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+        redeem_reset(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path(raw.to_string()),
+            Json(dto::RedeemResetReq {
+                password: password.into(),
+            }),
+        )
+        .await
+    }
+
+    /// A valid reset link sets the new password, kills the old one, signs out
+    /// every old session and logs the user in.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
+        mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
+
+        let resp = call_redeem_reset(&pool, "raw-reset", "new-pw")
+            .await
+            .expect("redeem ok")
+            .0;
+        assert_eq!(resp.user.email, "t@t.local");
+        assert!(
+            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&resp.token))
+                .await
+                .unwrap()
+                .is_some(),
+            "the response logs the user in"
+        );
+        assert!(can_login(&pool, "t@t.local", "new-pw").await);
+        assert!(!can_login(&pool, "t@t.local", "old-pw").await);
+        assert!(!session_alive(&pool, old_session.session_id).await);
+    }
+
+    /// A reset link works once: replaying it is a 404 and cannot overwrite the
+    /// password chosen with it.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_token_is_single_use(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
+        assert!(
+            call_redeem_reset(&pool, "raw-reset", "first-pw")
+                .await
+                .is_ok(),
+            "first redeem ok"
+        );
+
+        let err = call_redeem_reset(&pool, "raw-reset", "second-pw")
+            .await
+            .expect_err("replay must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert!(can_login(&pool, "t@t.local", "first-pw").await);
+        assert!(!can_login(&pool, "t@t.local", "second-pw").await);
+    }
+
+    /// An unknown reset token is a 404 and changes no password.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        let err = call_redeem_reset(&pool, "never-minted", "new-pw")
+            .await
+            .expect_err("unknown token must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert!(can_login(&pool, "t@t.local", "old-pw").await);
+    }
+
+    /// An expired reset link is a 404 and changes no password.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_expired_token_is_404(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(-1)).await;
+
+        let err = call_redeem_reset(&pool, "raw-reset", "new-pw")
+            .await
+            .expect_err("expired token must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert!(can_login(&pool, "t@t.local", "old-pw").await);
+    }
+
+    /// An empty new password is a 400 and does not burn the link, so the user
+    /// can retry with a real one.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_rejects_empty_password(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
+
+        let err = call_redeem_reset(&pool, "raw-reset", "")
+            .await
+            .expect_err("empty password must fail");
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert!(can_login(&pool, "t@t.local", "old-pw").await);
+        assert!(
+            gripsou_core::repo::invite_token::find_valid(&pool, &auth::hash_token_str("raw-reset"))
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
 }
 
 #[cfg(test)]

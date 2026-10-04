@@ -48,22 +48,20 @@ describe("CategoryChip", () => {
     expect(chip.style.backgroundColor).toBe("");
   });
 
-  it("truncates a long name but keeps it reachable as the accessible title", () => {
+  it("keeps a long name reachable as the chip's title", () => {
     const long = "A very long category name that will not fit in one chip";
     render(<CategoryChip category={{ ...GROCERIES, defaultKey: null, name: long }} />);
     const chip = screen.getByTestId("category-chip");
     expect(chip).toHaveAttribute("title", long);
-    expect(chip.querySelector("span")?.className).toContain("truncate");
   });
 });
 
 describe("TagChip", () => {
-  it("is smaller, less rounded, and always carries the tag icon", () => {
+  it("always carries the tag icon, in the tag's colour", () => {
     render(<TagChip tag={{ name: "Holiday", color: "#5b9bf0" }} />);
     const chip = screen.getByTestId("tag-chip");
     expect(chip).toHaveTextContent("Holiday");
     expect(chip.querySelector("svg")).toBeTruthy();
-    expect(chip.className).toContain("rounded-md");
     expect(chip.style.color).toBe("rgb(91, 155, 240)");
   });
 

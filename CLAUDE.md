@@ -25,7 +25,7 @@ Backend (`cd backend`, Cargo workspace; the binary is `gripsou` in `api`):
 
 Frontend (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `bun run build`, `bun run lint`, `bun run test [pattern]`.
 
-`./ci.sh` at the root runs exactly what CI runs (fmt, clippy, tests with `SQLX_OFFLINE=true`, frontend lint/test/build). Run it before calling work done.
+`./ci.sh` at the root runs exactly what CI runs (fmt, clippy, tests with `SQLX_OFFLINE=true`, frontend lint/test/build). Run it before calling work done. The one thing CI adds is speed-only: it pre-migrates its throwaway Postgres's `template1` (`cargo run --example migrate`) so each `#[sqlx::test]` database starts migrated. Don't do that to the local server: a migrated `template1` keeps the old checksum of a migration you are still editing.
 
 Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` (or `up --build` for everything). Always pass `-f`: the file pins `name: gripsou`, and the host has an unrelated compose project called `docker` whose `docker_pgdata` volume must never be touched.
 
