@@ -23,6 +23,16 @@ export function TrendSurface({
   const { t, i18n } = useTranslation();
 
   const language = i18n.language;
+  // Each month has its own order. Series represent stack positions rather
+  // than categories, so a category can move up or down between columns.
+  const columns = useMemo(
+    () => trend.months.map((_, dataIndex) =>
+      trend.series
+        .map((s) => ({ slice: s.slice, amount: s.values[dataIndex] }))
+        .sort((a, b) => Number(b.amount) - Number(a.amount)),
+    ),
+    [trend],
+  );
 
   // Memoised on the data and the language: the option holds closures, so a
   // fresh object every render would make the chart reset and replay its entry
@@ -46,14 +56,17 @@ export function TrendSurface({
           const { dataIndex } = params as TooltipParam;
           // An item hover still shows the whole month's stack. Read the
           // original decimal strings so the total never sums chart floats.
-          const originals = trend.series.map((s) => s.values[dataIndex]);
+          const entries = [...columns[dataIndex]]
+            .sort((a, b) => Number(a.amount) - Number(b.amount));
+          const originals = entries.map((s) => s.amount);
           const total = sumDecimals(originals);
-          const rows = trend.series
-            .map((s, i) =>
+          const rows = entries
+            .filter((s) => Number(s.amount) !== 0)
+            .map((s) =>
               tooltipRow(
                 sliceColor(s.slice),
                 sliceLabel(t, s.slice),
-                formatMoney(originals[i]),
+                formatMoney(s.amount),
               ),
             )
             .join("");
@@ -94,37 +107,35 @@ export function TrendSurface({
           formatter: (v: number) => formatMoney(String(v), { fractionDigits: 0 }),
         },
       },
-      series: trend.series.map((s) => ({
-        // The series name is the slice key, not its label: a renamed category
-        // must not restart the animation or break the colour lookup.
-        name: sliceKey(s.slice),
+      series: trend.series.map((_, rank) => ({
+        name: `rank:${rank}`,
         type: "bar",
         stack: "total",
-        // Every series has one value per month, zeros included, so the arrays are
-        // already aligned — no sparse handling is needed anywhere here.
-        data: s.values.map(Number),
-        itemStyle: { color: sliceColor(s.slice) },
+        data: columns.map((entries) => Number(entries[rank].amount)),
+        itemStyle: {
+          color: ({ dataIndex }: TooltipParam) => sliceColor(columns[dataIndex][rank].slice),
+        },
         emphasis: { disabled: true },
         barMaxWidth: 28,
       })),
     };
-  }, [trend, language, t]);
+  }, [trend, columns, language, t]);
 
   const onEvents = useMemo(() => {
     // Update only the colours: rebuilding the React option on every hover
     // would reset this notMerge chart and replay its entry animation.
     const colorMonth = (chart: EChartsType, activeIndex: number | null) => {
       chart.setOption({
-        series: trend.series.map((s) => {
-          const color = sliceColor(s.slice);
-          const muted = desaturate(color, 0.65);
-          return {
-            itemStyle: {
-              color: ({ dataIndex }: TooltipParam) =>
-                activeIndex === null || dataIndex === activeIndex ? color : muted,
+        series: trend.series.map((_, rank) => ({
+          name: `rank:${rank}`,
+          itemStyle: {
+            color: ({ dataIndex }: TooltipParam) => {
+              const color = sliceColor(columns[dataIndex][rank].slice);
+              return activeIndex === null || dataIndex === activeIndex
+                ? color : desaturate(color, 0.65);
             },
-          };
-        }),
+          },
+        })),
       });
     };
     return {
@@ -141,7 +152,7 @@ export function TrendSurface({
         if (month) onSelectMonth(month);
       },
     };
-  }, [trend, onSelectMonth]);
+  }, [trend, columns, onSelectMonth]);
 
   return (
     <Surface className="w-full">
@@ -149,6 +160,10 @@ export function TrendSurface({
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.trend.title")}</h2>
         <ReactECharts
           option={option}
+          // Crisp SVG edges prevent dark antialiasing seams where stacked
+          // rectangles meet at fractional pixel coordinates.
+          opts={{ renderer: "svg" }}
+          className="[&_path]:[shape-rendering:crispEdges]"
           notMerge
           onEvents={onEvents}
           style={{ height: 300, width: "100%" }}
