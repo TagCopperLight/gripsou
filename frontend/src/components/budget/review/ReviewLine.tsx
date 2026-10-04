@@ -4,7 +4,7 @@ import { TransactionAvatar } from "../TransactionAvatar";
 import { CategoryChip } from "../CategoryChip";
 import { Money } from "../../Money";
 import { Button } from "../../Button";
-import { formatDate } from "../../../lib/date";
+import { formatDay } from "../../../lib/date";
 import { categoryOfTransaction } from "../../../lib/budget";
 import type { Transaction } from "../../../api/types";
 
@@ -30,7 +30,7 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium uppercase text-fg">{tx.description}</p>
         <p className="flex items-center gap-1.5 text-xs text-fg-faint">
-          <span>{formatDate(tx.t)}</span>
+          <span>{formatDay(tx.t)}</span>
           <span aria-hidden>·</span>
           <span className="truncate">{tx.accountName}</span>
           {byKind && (

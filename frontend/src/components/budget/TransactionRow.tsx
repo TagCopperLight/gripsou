@@ -7,7 +7,7 @@ import { CategoryChip } from "./CategoryChip";
 import { TagCell } from "./TagCell";
 import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
-import { formatDate } from "../../lib/date";
+import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
 import { FALLBACK_COLOR, categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
@@ -162,7 +162,7 @@ export const TransactionRow = memo(function TransactionRow({
       </td>
 
       <td role="cell" className={`py-2.25 whitespace-nowrap text-fg-dim ${COL_PAD.date}`}>
-        <span className={dim}>{formatDate(tx.t)}</span>
+        <span className={dim}>{formatDay(tx.t)}</span>
       </td>
 
       <td role="cell" className={`py-2.25 ${COL_PAD.account}`}>

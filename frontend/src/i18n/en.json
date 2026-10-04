@@ -201,6 +201,8 @@
       "localization": "Localization",
       "language": "Language",
       "interfaceLanguage": "Interface language",
+      "timeZone": "Timezone",
+      "timeZoneHint": "Defines today for syncs, reports and date ranges.",
       "dateFormat": "Date format",
       "today": "Today: {{date}}",
       "numbersCurrency": "Numbers & currency",

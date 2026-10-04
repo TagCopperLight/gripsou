@@ -1,3 +1,4 @@
+import { calendarDay } from "../lib/date";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 import { getJson } from "./client";
@@ -109,7 +110,7 @@ export function useLatestDataMonth() {
     queryFn: async () => {
       const rows = await getJson<Transaction[]>("/transactions?limit=1");
       if (rows.length === 0) return null;
-      const latest = currentMonth(new Date(rows[0].t));
+      const latest = calendarDay(rows[0].t).slice(0, 7);
       const now = currentMonth();
       return latest < now ? latest : now;
     },

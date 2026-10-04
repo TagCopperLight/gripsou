@@ -4,6 +4,7 @@ import { getPrefs } from "./prefs";
 export type DateFormatOptions = {
   /** Token pattern. Supports YYYY, YY, MM, DD. Defaults to the user's prefs. */
   pattern?: string;
+  timeZone?: string;
 };
 
 export function formatDate(
@@ -11,13 +12,12 @@ export function formatDate(
   options: DateFormatOptions = {},
 ): string {
   const pattern = options.pattern ?? getPrefs().dateFormat;
-  const d = value instanceof Date ? value : new Date(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : zonedDay(value, options.timeZone);
+  const [year, month, date] = day.split("-");
   const tokens: Record<string, string> = {
-    YYYY: String(d.getFullYear()),
-    YY: pad(d.getFullYear() % 100),
-    MM: pad(d.getMonth() + 1),
-    DD: pad(d.getDate()),
+    YYYY: year, YY: year.slice(-2), MM: month, DD: date,
   };
   return pattern.replace(/YYYY|YY|MM|DD/g, (token) => tokens[token]);
 }
@@ -43,4 +43,24 @@ export function formatRelative(
   if (days < 7) return i18n.t("time.daysAgo", { count: days });
   if (days < 14) return i18n.t("time.lastWeek");
   return formatDate(value, options);
+}
+
+/** Calendar day of a real instant in the user's saved timezone. */
+export function zonedDay(value: Date | number | string = new Date(), timeZone = getPrefs().timeZone): string {
+  const d = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(d);
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** API calendar dates are encoded as UTC-midnight epoch milliseconds.
+ * They are labels, not instants to shift into the viewer's timezone. */
+export function calendarDay(value: number): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+export function formatDay(value: number): string {
+  return formatDate(calendarDay(value));
 }

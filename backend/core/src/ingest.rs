@@ -3,7 +3,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -62,7 +61,9 @@ pub async fn ingest(
     .execute(&mut *tx)
     .await?;
 
-    let today = Utc::now().date_naive();
+    let today = sqlx::query_scalar!("select user_today($1) as \"day!\"", user_id)
+        .fetch_one(&mut *tx)
+        .await?;
 
     // Accounts first; map external_id -> account id for later lookups.
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();

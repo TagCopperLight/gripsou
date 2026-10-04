@@ -213,9 +213,10 @@ pub async fn basis_preview(
                b.explained_qty as "explained_qty!",
                b.basis as "basis!",
                b.realised as "realised!"
-        from lot_basis(array[$1]::uuid[], array[(now() at time zone 'utc')::date]) b
+        from lot_basis(array[$1]::uuid[], array[user_today($2)]) b
         "#,
         holding_id,
+        user_id,
     )
     .fetch_one(&mut *tx)
     .await?;

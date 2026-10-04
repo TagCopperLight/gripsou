@@ -4,7 +4,7 @@
 use axum::Json;
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -14,23 +14,18 @@ use uuid::Uuid;
 use crate::auth::{self, AuthUser};
 use crate::dto;
 
-/// Map a range key to an inclusive [from, to=now] window.
-fn range_window(range: &str) -> (DateTime<Utc>, DateTime<Utc>) {
-    let now = Utc::now();
+/// Inclusive calendar-day windows, anchored to the caller's saved timezone.
+fn range_window(range: &str, today: NaiveDate) -> (NaiveDate, NaiveDate) {
     let from = match range {
-        "24h" => now - Duration::days(1),
-        "7d" => now - Duration::days(7),
-        "1mo" => now - Duration::days(30),
-        "6mo" => now - Duration::days(182),
-        "1y" => now - Duration::days(365),
-        "ytd" => NaiveDate::from_ymd_opt(now.year(), 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc(),
-        _ => now - Duration::days(4000), // "max"
+        "24h" => today - Duration::days(1),
+        "7d" => today - Duration::days(7),
+        "1mo" => today - Duration::days(30),
+        "6mo" => today - Duration::days(182),
+        "1y" => today - Duration::days(365),
+        "ytd" => NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap(),
+        _ => today - Duration::days(4000),
     };
-    (from, now)
+    (from, today)
 }
 
 #[derive(Deserialize)]
@@ -90,15 +85,13 @@ pub async fn net_worth(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<RangeParams>,
 ) -> Result<Json<dto::NetWorthResponse>, (StatusCode, String)> {
-    let (from, to) = range_window(&p.range);
-    let rows = gripsou_core::repo::query::net_worth_series(
-        &pool,
-        user_id,
-        from.date_naive(),
-        to.date_naive(),
-    )
-    .await
-    .map_err(internal)?;
+    let today = gripsou_core::repo::prefs::today(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let (from, to) = range_window(&p.range, today);
+    let rows = gripsou_core::repo::query::net_worth_series(&pool, user_id, from, to)
+        .await
+        .map_err(internal)?;
     Ok(Json(dto::NetWorthResponse::from_rows(&rows)))
 }
 
@@ -132,10 +125,19 @@ pub async fn holding_prices(
     Path(id): Path<Uuid>,
     Query(p): Query<RangeParams>,
 ) -> Result<Json<Vec<dto::PricePoint>>, (StatusCode, String)> {
-    let (from, to) = range_window(&p.range);
-    let rows = gripsou_core::repo::query::holding_prices(&pool, user_id, id, from, to)
+    let today = gripsou_core::repo::prefs::today(&pool, user_id)
         .await
         .map_err(internal)?;
+    let (from, to) = range_window(&p.range, today);
+    let rows = gripsou_core::repo::query::holding_prices(
+        &pool,
+        user_id,
+        id,
+        from.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        to.and_hms_opt(23, 59, 59).unwrap().and_utc(),
+    )
+    .await
+    .map_err(internal)?;
     Ok(Json(
         rows.into_iter().map(dto::PricePoint::from_row).collect(),
     ))
@@ -400,15 +402,13 @@ pub async fn account_series(
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<RangeParams>,
 ) -> Result<Json<dto::AccountSeriesResponse>, (StatusCode, String)> {
-    let (from, to) = range_window(&p.range);
-    let rows = gripsou_core::repo::query::account_series(
-        &pool,
-        user_id,
-        from.date_naive(),
-        to.date_naive(),
-    )
-    .await
-    .map_err(internal)?;
+    let today = gripsou_core::repo::prefs::today(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let (from, to) = range_window(&p.range, today);
+    let rows = gripsou_core::repo::query::account_series(&pool, user_id, from, to)
+        .await
+        .map_err(internal)?;
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
@@ -831,6 +831,15 @@ pub async fn update_prefs(
     AuthUser { user_id, .. }: AuthUser,
     Json(prefs): Json<gripsou_core::repo::prefs::UserPrefs>,
 ) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+    if !gripsou_core::repo::prefs::valid_time_zone(&pool, &prefs.time_zone)
+        .await
+        .map_err(internal)?
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "timeZone must be a recognized IANA timezone".to_string(),
+        ));
+    }
     if let Some(avatar) = &prefs.avatar {
         if !avatar.starts_with("data:image/") {
             return Err((
@@ -1844,6 +1853,7 @@ mod auth_tests {
             ui_language: "fr".into(),
             currency: "USD".into(),
             currency_position: "before".into(),
+            time_zone: "America/Los_Angeles".into(),
             ..Default::default()
         };
 
@@ -1871,6 +1881,7 @@ mod auth_tests {
         .await
         .unwrap();
         assert_eq!(me_resp.0.prefs.currency_position, "before");
+        assert_eq!(me_resp.0.prefs.time_zone, "America/Los_Angeles");
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2509,6 +2520,45 @@ mod auth_tests {
             .await
             .unwrap_err();
         assert_eq!(err.0, StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_prefs_rejects_invalid_timezone_without_writing(pool: PgPool) {
+        let user_id = seed_user_role(&pool, "tz@example.com", "pw", "user").await;
+        for zone in ["", "Europe/NotAPlace", "+02:00", "posix/Europe/Paris"] {
+            let result = update_prefs(
+                State(pool.clone()),
+                auth::AuthUser {
+                    user_id,
+                    session_id: Uuid::new_v4(),
+                },
+                Json(gripsou_core::repo::prefs::UserPrefs {
+                    time_zone: zone.to_string(),
+                    ..Default::default()
+                }),
+            )
+            .await;
+            assert!(
+                matches!(result, Err((StatusCode::BAD_REQUEST, _))),
+                "{zone}"
+            );
+        }
+        let stored: serde_json::Value = sqlx::query_scalar("select prefs from users where id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stored, serde_json::json!({}));
+    }
+
+    #[test]
+    fn calendar_range_uses_the_supplied_local_day() {
+        let today = NaiveDate::from_ymd_opt(2027, 1, 1).unwrap();
+        assert_eq!(range_window("ytd", today), (today, today));
+        assert_eq!(
+            range_window("7d", today),
+            (NaiveDate::from_ymd_opt(2026, 12, 25).unwrap(), today)
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

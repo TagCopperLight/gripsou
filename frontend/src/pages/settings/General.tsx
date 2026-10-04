@@ -11,6 +11,8 @@ import { formatMoney } from "../../lib/money";
 import { formatDate } from "../../lib/date";
 import { CURRENCIES } from "../../lib/currency";
 
+const TIME_ZONES = [...new Set(["UTC", "Europe/Paris", ...Intl.supportedValuesOf("timeZone")])].sort();
+
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
 const GROUP_OPTIONS = [
@@ -66,10 +68,25 @@ export function SettingsGeneral() {
 
           <Divider />
 
+          <Setting label={t("settings.general.timeZone")} hint={t("settings.general.timeZoneHint")}>
+            <select
+              aria-label={t("settings.general.timeZone")}
+              value={prefs.timeZone}
+              onChange={(event) => set("timeZone", event.target.value)}
+              className="w-36 md:w-60 rounded-xl bg-surface-2 px-3.5 py-2.25 text-sm text-fg"
+            >
+              {[...new Set([...TIME_ZONES, prefs.timeZone])].map((zone) => (
+                <option key={zone} value={zone}>{zone}</option>
+              ))}
+            </select>
+          </Setting>
+
+          <Divider />
+
           <Setting
             label={t("settings.general.dateFormat")}
             hint={t("settings.general.today", {
-              date: formatDate(new Date(), { pattern: prefs.dateFormat }),
+              date: formatDate(new Date(), { pattern: prefs.dateFormat, timeZone: prefs.timeZone }),
             })}
           >
             <Select

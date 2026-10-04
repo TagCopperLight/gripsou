@@ -11,6 +11,9 @@ pub struct UserPrefs {
     pub ui_language: String,
     #[serde(default = "default_date_format")]
     pub date_format: String,
+    /// IANA timezone shared by background syncs and browser date defaults.
+    #[serde(default = "default_time_zone")]
+    pub time_zone: String,
     #[serde(default = "default_group_sep")]
     pub number_group_sep: String,
     #[serde(default = "default_decimal_sep")]
@@ -43,6 +46,10 @@ pub struct UserPrefs {
     pub budget_ai_threshold: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
+}
+
+fn default_time_zone() -> String {
+    "Europe/Paris".to_string()
 }
 
 fn default_ui_language() -> String {
@@ -85,6 +92,7 @@ impl Default for UserPrefs {
         UserPrefs {
             ui_language: default_ui_language(),
             date_format: default_date_format(),
+            time_zone: default_time_zone(),
             number_group_sep: default_group_sep(),
             number_decimal_sep: default_decimal_sep(),
             number_decimals: default_number_decimals(),
@@ -175,6 +183,30 @@ pub async fn budget_ai_enabled(
     .fetch_one(pool)
     .await?;
     Ok(on.unwrap_or(false))
+}
+
+/// PostgreSQL owns timezone rules for every server-side calendar calculation.
+pub async fn today(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+) -> Result<chrono::NaiveDate, crate::error::CoreError> {
+    Ok(
+        sqlx::query_scalar!("select user_today($1) as \"day!\"", user_id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
+pub async fn valid_time_zone(
+    pool: &sqlx::PgPool,
+    zone: &str,
+) -> Result<bool, crate::error::CoreError> {
+    Ok(sqlx::query_scalar!(
+        "select exists(select 1 from pg_timezone_names where name = $1 and (name = 'UTC' or name like '%/%') and name not like 'posix/%' and name not like 'right/%') as \"valid!\"",
+        zone
+    )
+    .fetch_one(pool)
+    .await?)
 }
 
 #[cfg(test)]

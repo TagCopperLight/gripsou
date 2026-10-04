@@ -1,3 +1,10 @@
+import { beforeEach, afterEach } from "vitest";
+import { DEFAULT_PREFS, setPrefs } from "./prefs";
+
+// These calendar-arithmetic fixtures use local Date constructors.
+beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+afterEach(() => setPrefs(DEFAULT_PREFS));
+
 import { describe, it, expect } from "vitest";
 
 import {

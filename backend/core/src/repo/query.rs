@@ -276,7 +276,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         -- currency (`price_currency`), which is not necessarily i.currency.
         -- `invested`/`invested_native` are amount-domain and therefore convert
         -- from a.currency, not i.currency.
-        with today as (select (now() at time zone 'utc')::date as d)
+        with today as (select user_today($1) as d)
         select h.id            as "holding_id!",
                -- Display ticker, not the identity column. `symbol` is null on
                -- the ISIN path (ISIN is the identity there, and tickers are not
@@ -347,6 +347,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             select p.unit_price, p.currency
             from price p
             where p.instrument_id = i.id
+              and p.ts < (((select d from today) + 1)::timestamp at time zone 'UTC')
             order by p.ts desc
             limit 1
         ) px on true
@@ -521,7 +522,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         -- reproduces reporting_fx_asof's own coalesce(nullif(rate, 0), 1) —
         -- no usable rate means report in the pivot rather than 500 on a
         -- division by zero.
-        with today as (select (now() at time zone 'utc')::date as d),
+        with today as (select user_today($1) as d),
         grid as materialized (
             select * from valuation_grid($1, array[(select d from today)]::date[])
         ),
@@ -756,7 +757,7 @@ pub async fn distribution(
         -- The joins are LEFT on purpose: a missing grid row must leave
         -- unit_value NULL so the coalesce falls through to the provider
         -- valuation, exactly as a NULL from unit_value_asof did.
-        with today as (select (now() at time zone 'utc')::date as d),
+        with today as (select user_today($1) as d),
         grid as materialized (
             select * from valuation_grid($1, array[(select d from today)]::date[])
         ),

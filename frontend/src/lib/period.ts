@@ -1,4 +1,4 @@
-import { formatDate } from "./date";
+import { formatDate, zonedDay } from "./date";
 
 /** The Overview's period. The two variants map one-to-one onto the two request
  *  forms of `/api/budget/summary`: month mode sends `?month=`, range mode sends
@@ -12,16 +12,18 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** `YYYY-MM` for the month `today` falls in. Built from local getters, not
- *  `toISOString()`, which converts to UTC first and can shift the month for
- *  anyone east or west of it. */
+/** Current month in the user's saved timezone. */
 export function currentMonth(today: Date = new Date()): string {
-  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}`;
+  return isoDay(today).slice(0, 7);
 }
 
-/** Local calendar day as `YYYY-MM-DD` — local getters, for the same reason as
- *  `currentMonth`. */
+/** Current calendar day in the user's saved timezone. */
 export function isoDay(d: Date): string {
+  return zonedDay(d);
+}
+
+// Local Dates below are calendar arithmetic containers, not real instants.
+function localDay(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -49,7 +51,7 @@ export function addMonths(month: string, delta: number): string {
   const { year, monthIndex } = parse(month);
   // Day 1 is always valid, so the Date constructor's month roll-over does the
   // year arithmetic for us with no clamping needed.
-  return currentMonth(new Date(year, monthIndex + delta, 1));
+  return localDay(new Date(year, monthIndex + delta, 1)).slice(0, 7);
 }
 
 /** `d` shifted back `months` months, with the day clamped to the target
@@ -98,11 +100,13 @@ export type RangePreset =
 /** Resolved at call time rather than at module load, so a session left open
  *  overnight does not offer yesterday's window. Inclusive ISO day bounds. */
 export function presetRange(key: RangePreset, today: Date = new Date()): { from: string; to: string } {
+  const day = isoDay(today);
+  today = parseIsoDay(day);
   const year = today.getFullYear();
-  const rolling = (months: number) => ({ from: isoDay(monthsBack(today, months)), to: isoDay(today) });
+  const rolling = (months: number) => ({ from: localDay(monthsBack(today, months)), to: day });
   switch (key) {
     case "thisMonth":
-      return monthBounds(currentMonth(today));
+      return monthBounds(day.slice(0, 7));
     case "last3Months":
       return rolling(3);
     case "last6Months":
@@ -110,7 +114,7 @@ export function presetRange(key: RangePreset, today: Date = new Date()): { from:
     case "last12Months":
       return rolling(12);
     case "thisYear":
-      return { from: `${year}-01-01`, to: isoDay(today) };
+      return { from: `${year}-01-01`, to: day };
     case "lastYear":
       return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
   }
@@ -131,5 +135,5 @@ export function anchorMonth(p: Period): string {
  *  date format. Also the text of the "Selected period" chip a deep link sets. */
 export function periodLabel(p: Period, language: string): string {
   if (p.mode === "month") return monthLabel(p.month, language);
-  return `${formatDate(parseIsoDay(p.from))} → ${formatDate(parseIsoDay(p.to))}`;
+  return `${formatDate(p.from)} → ${formatDate(p.to)}`;
 }

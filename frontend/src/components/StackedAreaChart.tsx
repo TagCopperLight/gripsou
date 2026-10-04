@@ -2,7 +2,7 @@ import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
 import { formatMoney } from "../lib/money";
-import { formatDate } from "../lib/date";
+import { formatDay } from "../lib/date";
 import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
 export type StackedSeries = {
@@ -51,7 +51,7 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
         const totalRow = tooltipRow("transparent", t("common.total"), formatMoney(total), true);
         return `
           <div style="min-width:200px;">
-            <div style="color:${FAINT};font-size:11px;">${formatDate(items[0].axisValue)}</div>
+            <div style="color:${FAINT};font-size:11px;">${formatDay(items[0].axisValue)}</div>
             ${rows}
             <div style="border-top:1px solid ${FAINT};margin-top:8px;padding-top:2px;">${totalRow}</div>
           </div>`;
@@ -67,7 +67,7 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
         fontFamily: MONO,
         fontSize: 11,
         hideOverlap: true,
-        formatter: (value: number) => formatDate(value),
+        formatter: (value: number) => formatDay(value),
       },
     },
     yAxis: {

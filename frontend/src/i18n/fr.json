@@ -201,6 +201,8 @@
       "localization": "Langue et région",
       "language": "Langue",
       "interfaceLanguage": "Langue de l'interface",
+      "timeZone": "Fuseau horaire",
+      "timeZoneHint": "Définit la date du jour pour les synchronisations, les rapports et les périodes.",
       "dateFormat": "Format de date",
       "today": "Aujourd'hui : {{date}}",
       "numbersCurrency": "Nombres et devise",

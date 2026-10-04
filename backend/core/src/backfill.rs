@@ -94,13 +94,13 @@ pub async fn backfill_connection(
                           join account a    on a.id = t.account_id
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
-                         (now() at time zone 'utc')::date),
+                         user_today((select user_id from owner))),
                 coalesce((select min(hs.as_of) from holding_snapshot hs
                           join holding h    on h.id = hs.holding_id
                           join account a    on a.id = h.account_id
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
-                         (now() at time zone 'utc')::date),
+                         user_today((select user_id from owner))),
                 -- Securities move by `lot` now (0021), so a lot dated earlier
                 -- than any transaction or snapshot must extend the horizon
                 -- too, or the days it explains never get a derived row.
@@ -109,7 +109,7 @@ pub async fn backfill_connection(
                           join account a    on a.id = h.account_id
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
-                         (now() at time zone 'utc')::date)
+                         user_today((select user_id from owner)))
             ) - 1 as start_day
         ),
         -- Signed daily movement per holding, keyed on the day the *balance*
@@ -220,7 +220,7 @@ pub async fn backfill_connection(
             from scope s
             cross join horizon hz
             cross join lateral generate_series(
-                hz.start_day, (now() at time zone 'utc')::date, '1 day') gs
+                hz.start_day, user_today((select user_id from owner)), '1 day') gs
         ),
         -- The day axis the suffix sums are computed over. It must cover every
         -- day a suffix sum is READ at, which is `as_of` and `anchor_day`.
@@ -298,7 +298,7 @@ pub async fn backfill_connection(
             select ma.holding_id, ma.day as as_of, ma.total
             from moves_after ma
             cross join horizon hz
-            where ma.day between hz.start_day and (now() at time zone 'utc')::date
+            where ma.day between hz.start_day and user_today((select user_id from owner))
         ),
         -- The same totals restricted to snapshot days, which is all `anchor_day`
         -- can ever be. Tiny (one row per holding per sync), so this join stays
