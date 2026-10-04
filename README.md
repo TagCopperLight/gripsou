@@ -79,4 +79,4 @@ cargo run -p gripsou-core --example perf -- ... --compare baseline.json # diff
 
 ## Changelog
 
-See [Releases](https://github.com/TagCopperLight/gripsou/releases). Planned work is tracked in [Issues](https://github.com/TagCopperLight/gripsou/issues).
+See [Releases](https://github.com/TagCopperLight/gripsou/releases).
