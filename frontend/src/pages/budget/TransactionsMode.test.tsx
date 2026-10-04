@@ -14,6 +14,10 @@ const CATEGORIES = [
     id: "gro", name: "Groceries", defaultKey: null, color: "#9bb06b", icon: "shopping-cart",
     hint: null, kind: "expense", systemKey: null, archived: false, txCount: 3,
   },
+  {
+    id: "sav", name: "Savings", defaultKey: "savings", color: "#6b9bb0", icon: "piggy-bank",
+    hint: null, kind: "neutral", systemKey: null, archived: false, txCount: 0,
+  },
 ];
 
 function tx(over: Partial<Transaction>): Transaction {
@@ -401,6 +405,21 @@ describe("TransactionsMode", () => {
 
     fireEvent.click(screen.getByTestId("break-pair-confirm"));
     await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro", confirmBreakPairs: true }]));
+    await settle(client);
+  });
+
+  it("keeps a pair without asking when one half moves to a neutral category", async () => {
+    // Savings counts toward nothing, as the pair does: the server keeps the
+    // pair, so there is nothing to confirm and the row stays a transfer.
+    serverRowsState = [tx({ id: "t1", isTransfer: true })];
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("category-chip")[0]);
+    fireEvent.click(await screen.findByTestId("chooser-option-sav"));
+
+    await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "sav" }]));
+    expect(screen.queryByTestId("break-pair-modal")).toBeNull();
+    expect(screen.getByTestId("tx-transfer-note")).toBeVisible();
     await settle(client);
   });
 

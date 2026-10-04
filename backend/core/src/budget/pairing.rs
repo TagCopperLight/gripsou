@@ -8,8 +8,9 @@
 //! — unless the tied rows are interchangeable and as many on each side, which
 //! pair one-to-one. What that leaves gets one more look: a cluster whose rows
 //! can *all* be paired off, and only in one way (a chain through a middle
-//! account), pairs that way — see [`forced_pairs`]. Transfers only: see the
-//! candidate query.
+//! account), pairs that way — see [`forced_pairs`]. Which rows are
+//! candidates at all — transfers, plus whatever the user already filed as
+//! counting toward nothing — is the candidate query's business.
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,9 +20,11 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
-/// How far apart the two halves may sit. Three days covers a weekend transfer
-/// that clears on Monday.
-const WINDOW_DAYS: i64 = 3;
+/// How far apart the two halves may sit. Three days covered a weekend
+/// transfer that clears on Monday; five also catches a card top-up of another
+/// account that settles a few days after the top-up lands, and on real data
+/// let through no wrong pair the narrower window had kept out.
+const WINDOW_DAYS: i64 = 5;
 
 struct Candidate {
     id: Uuid,
@@ -41,8 +44,19 @@ fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
     a.account_id == b.account_id
 }
 
-/// Pairs every unpaired internal transfer this user has, and returns how many
-/// pairs it wrote.
+/// Works out this user's internal-transfer pairs from scratch, writes what
+/// changed, and returns how many pairs it wrote.
+///
+/// From scratch, so a correction always takes effect: once the user files the
+/// row that was blocking a pair (an outside wallet's top-up that tied with a
+/// real transfer), or one that was wrongly paired, the next run sees the
+/// ledger as it is now rather than building on what an earlier run decided.
+/// Every candidate is read — paired or not — and matched again; then only the
+/// difference is written. A pair that no longer holds is unlinked, and a half
+/// whose category pairing set goes back to uncategorised, as if never paired;
+/// a category someone chose stays. A run that finds the pairs already there
+/// writes nothing. At a few thousand rows this is one read and, usually, no
+/// write.
 ///
 /// A single round of mutual-nearest-neighbour matching can leave true pairs on
 /// the table: if X's nearest is Y but Y's own nearest is some other row W,
@@ -53,10 +67,8 @@ fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
 /// strictly shrinks and the loop always terminates; every pair is then
 /// written in one statement.
 ///
-/// Idempotent in the sense that matters: a row already carrying
-/// `transfer_pair_id` is never re-paired or disturbed by a later call, and a
-/// category the user chose is never touched. A call that has already
-/// converged writes nothing on a re-run.
+/// A category the user chose is never changed: a row they filed in a neutral
+/// category may gain or lose a partner, but keeps that category.
 ///
 /// The caller must hold this user's advisory lock (`ingest` takes it at the
 /// top of its transaction). This pass reads and writes across every account
@@ -72,29 +84,44 @@ pub async fn pair_internal_transfers(
                t.account_id  as "account_id!",
                t.ts          as "ts!",
                t.amount      as "amount!",
-               a.currency    as "currency!"
+               a.currency    as "currency!",
+               t.transfer_pair_id
         from transaction t
         join account a    on a.id = t.account_id
         join connection k on k.id = a.connection_id
+        left join budget_category c on c.id = t.budget_category_id
         where k.user_id = $1
-          and t.transfer_pair_id is null
-          -- Pairing may fill an empty slot, replace an AI guess nobody has
-          -- looked at yet, or re-pair a row whose partner went away. It never
-          -- replaces a category the user chose: one they set themselves, or an
-          -- AI guess they accepted in review.
-          and (t.category_source is null
-               or t.category_source = 'pair'
-               or (t.category_source = 'ai' and t.category_reviewed_at is null))
           and t.amount <> 0
-          -- Transfers only. Matching is by amount and date alone, so any
-          -- other type lets a coincidence through: a card payment to Betclic
-          -- equal to a transfer arriving on another account, or a deposit from a
-          -- friend equal to a transfer leaving. Measured on real data, half
-          -- the card/deposit pairs were such coincidences. A buy/sell/
-          -- dividend/fee/interest row is never a movement between accounts.
-          -- Card top-ups of the user's own accounts are left for the user to
-          -- file rather than bought back with that error rate.
-          and t.type = 'transfer'
+          -- The cash leg of a buy/sell is the lot's record, already out of
+          -- every budget total, and it mirrors across a broker's cash and
+          -- portfolio accounts: pairing those copies would mean nothing.
+          and not budget_investment_leg(t.type)
+          and (
+              -- A transfer whose category pairing may still decide: an empty
+              -- slot, an AI guess nobody has looked at yet, or a row whose
+              -- partner went away. A category the user chose (set, or an AI
+              -- guess accepted in review) is theirs.
+              --
+              -- Only transfers: matching is by amount and date alone, so any
+              -- other type lets a coincidence through — a card payment equal
+              -- to a top-up arriving on another account, a friend's deposit
+              -- equal to a transfer leaving, a dividend matched with its own
+              -- mirror on a broker's other account. Measured on real data,
+              -- opening this to every type paired more coincidences than
+              -- transfers, and the extra rows' ties blocked good pairs.
+              (t.type = 'transfer'
+               and (t.category_source is null
+                    -- Set by pairing: paired now (to be matched again), or
+                    -- the half left when the user recategorised its partner.
+                    or t.category_source = 'pair'
+                    or (t.category_source = 'ai' and t.category_reviewed_at is null)))
+              -- Any row, of any type and whoever filed it, already in a
+              -- neutral category: someone said it counts toward nothing, so
+              -- pairing it hides nothing that was counted. This is what
+              -- catches a real transfer the provider labels a deposit or a
+              -- card payment, once the user has filed it.
+              or c.kind = 'neutral'
+          )
         order by t.ts
         "#,
         user_id,
@@ -102,6 +129,8 @@ pub async fn pair_internal_transfers(
     .fetch_all(&mut *conn)
     .await?;
 
+    let current: HashMap<Uuid, Option<Uuid>> =
+        rows.iter().map(|r| (r.id, r.transfer_pair_id)).collect();
     let mut candidates: Vec<Candidate> = rows
         .into_iter()
         .map(|r| Candidate {
@@ -131,24 +160,64 @@ pub async fn pair_internal_transfers(
         candidates.retain(|c| !taken.contains(&c.id));
         pairs.extend(round);
     }
-    if pairs.is_empty() {
-        return Ok(0);
-    }
 
     // Both directions of every pair: each row points at its partner.
-    let (ids, partners): (Vec<Uuid>, Vec<Uuid>) =
-        pairs.iter().flat_map(|&(o, i)| [(o, i), (i, o)]).unzip();
-    // The AI's confidence and review stamp described a guess this replaces;
-    // left behind they would read as a reviewed transfer at 27 %.
+    let links: Vec<(Uuid, Uuid)> = pairs.iter().flat_map(|&(o, i)| [(o, i), (i, o)]).collect();
+    let kept: Vec<Uuid> = links.iter().map(|&(id, _)| id).collect();
+
+    // Pairs this run did not find again. Every paired row is a candidate (its
+    // category is pairing's, or neutral: a write to anything else unlinks
+    // it), but the statement doesn't rely on that and takes every paired row
+    // of the user's outside `kept`. Clearing the source in the same statement
+    // keeps the partner-deleted trigger out of it.
+    sqlx::query!(
+        r#"
+        update transaction t
+           set transfer_pair_id = null,
+               budget_category_id = case when t.category_source = 'pair'
+                                         then null else t.budget_category_id end,
+               category_source = case when t.category_source = 'pair'
+                                      then null else t.category_source end
+          from account a
+          join connection k on k.id = a.connection_id
+         where a.id = t.account_id
+           and k.user_id = $1
+           and t.transfer_pair_id is not null
+           and not (t.id = any($2))
+        "#,
+        user_id,
+        &kept,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    // Only links that are new or moved get written.
+    let (ids, partners): (Vec<Uuid>, Vec<Uuid>) = links
+        .into_iter()
+        .filter(|(id, partner)| current.get(id).copied().flatten() != Some(*partner))
+        .unzip();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    // A category the user chose (set, or accepted in review) is kept: only
+    // the link is added. Every other row becomes a pairing-set internal
+    // transfer, and the AI's confidence and review stamp go with the guess
+    // they described — left behind they would read as a reviewed transfer at
+    // 27 %.
     let result = sqlx::query!(
         r#"
         update transaction t
            set transfer_pair_id = p.partner,
-               budget_category_id = c.id,
-               category_source = 'pair',
-               category_confidence = null,
-               category_reviewed_at = null
-          from unnest($1::uuid[], $2::uuid[]) as p(id, partner),
+               budget_category_id = case when o.user_chose then t.budget_category_id else c.id end,
+               category_source = case when o.user_chose then t.category_source else 'pair' end,
+               category_confidence = case when o.user_chose then t.category_confidence end,
+               category_reviewed_at = case when o.user_chose then t.category_reviewed_at end
+          from unnest($1::uuid[], $2::uuid[]) as p(id, partner)
+          join lateral (
+              select x.category_source = 'user' or x.category_reviewed_at is not null as user_chose
+              from transaction x
+              where x.id = p.id
+          ) o on true,
                budget_category c
          where t.id = p.id
            and c.user_id = $3
@@ -166,15 +235,15 @@ pub async fn pair_internal_transfers(
     // `internal_transfer` category missing), pairs would be reported that
     // were never written.
     if result.rows_affected() != ids.len() as u64 {
-        let (out_id, in_id) = pairs[0];
         return Err(CoreError::TransferPairNotWritten {
             user_id,
-            out_id,
-            in_id,
+            out_id: ids[0],
+            in_id: partners[0],
             rows: result.rows_affected(),
         });
     }
-    Ok(pairs.len())
+    // A moved pair writes both of its rows, as a new one does.
+    Ok(ids.len() / 2)
 }
 
 /// One round: every mutual-nearest-neighbour pair among `candidates`. See

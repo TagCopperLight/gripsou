@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t\n           set transfer_pair_id = p.partner,\n               budget_category_id = case when o.user_chose then t.budget_category_id else c.id end,\n               category_source = case when o.user_chose then t.category_source else 'pair' end,\n               category_confidence = case when o.user_chose then t.category_confidence end,\n               category_reviewed_at = case when o.user_chose then t.category_reviewed_at end\n          from unnest($1::uuid[], $2::uuid[]) as p(id, partner)\n          join lateral (\n              select x.category_source = 'user' or x.category_reviewed_at is not null as user_chose\n              from transaction x\n              where x.id = p.id\n          ) o on true,\n               budget_category c\n         where t.id = p.id\n           and c.user_id = $3\n           and c.system_key = 'internal_transfer'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c16625529aea9b21c8201814ee05f6685fe32e7b13684c65524856caa1367ab6"
+}

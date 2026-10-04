@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t\n           set transfer_pair_id = null,\n               budget_category_id = case when t.category_source = 'pair'\n                                         then null else t.budget_category_id end,\n               category_source = case when t.category_source = 'pair'\n                                      then null else t.category_source end\n          from account a\n          join connection k on k.id = a.connection_id\n         where a.id = t.account_id\n           and k.user_id = $1\n           and t.transfer_pair_id is not null\n           and not (t.id = any($2))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a825ac16b8cdfdceb3d2a8ba0e1e0b40b2338cf69921afec15263bdcf3971f9"
+}

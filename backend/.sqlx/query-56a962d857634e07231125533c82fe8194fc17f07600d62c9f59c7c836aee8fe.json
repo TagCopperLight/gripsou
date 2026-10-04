@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id          as \"id!\",\n               t.account_id  as \"account_id!\",\n               t.ts          as \"ts!\",\n               t.amount      as \"amount!\",\n               a.currency    as \"currency!\",\n               t.transfer_pair_id\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        left join budget_category c on c.id = t.budget_category_id\n        where k.user_id = $1\n          and t.amount <> 0\n          -- The cash leg of a buy/sell is the lot's record, already out of\n          -- every budget total, and it mirrors across a broker's cash and\n          -- portfolio accounts: pairing those copies would mean nothing.\n          and not budget_investment_leg(t.type)\n          and (\n              -- A transfer whose category pairing may still decide: an empty\n              -- slot, an AI guess nobody has looked at yet, or a row whose\n              -- partner went away. A category the user chose (set, or an AI\n              -- guess accepted in review) is theirs.\n              --\n              -- Only transfers: matching is by amount and date alone, so any\n              -- other type lets a coincidence through — a card payment equal\n              -- to a top-up arriving on another account, a friend's deposit\n              -- equal to a transfer leaving, a dividend matched with its own\n              -- mirror on a broker's other account. Measured on real data,\n              -- opening this to every type paired more coincidences than\n              -- transfers, and the extra rows' ties blocked good pairs.\n              (t.type = 'transfer'\n               and (t.category_source is null\n                    -- Set by pairing: paired now (to be matched again), or\n                    -- the half left when the user recategorised its partner.\n                    or t.category_source = 'pair'\n                    or (t.category_source = 'ai' and t.category_reviewed_at is null)))\n              -- Any row, of any type and whoever filed it, already in a\n              -- neutral category: someone said it counts toward nothing, so\n              -- pairing it hides nothing that was counted. This is what\n              -- catches a real transfer the provider labels a deposit or a\n              -- card payment, once the user has filed it.\n              or c.kind = 'neutral'\n          )\n        order by t.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "amount"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "transfer_pair_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "transfer_pair_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "56a962d857634e07231125533c82fe8194fc17f07600d62c9f59c7c836aee8fe"
+}
