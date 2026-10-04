@@ -906,3 +906,109 @@ async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow:
     );
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// A neutral category keeps the pair
+//
+// Savings or Investments instead of Internal transfer is a finer label for
+// the same movement: it counts toward nothing, as the pair does, so no total
+// changes and nothing needs confirming.
+// ---------------------------------------------------------------------------
+
+async fn savings(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
+    Ok(list_categories(pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.default_key.as_deref() == Some("savings"))
+        .expect("the seed ships Savings")
+        .id)
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_patch_to_a_neutral_category_keeps_the_pair(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
+    let savings = savings(&pool, user_id).await?;
+
+    assert_eq!(
+        patch_transaction(
+            &pool,
+            user_id,
+            out,
+            &TransactionPatch {
+                category_id: Some(Some(savings)),
+                ..TransactionPatch::default()
+            },
+            false,
+        )
+        .await?,
+        WriteOutcome::Done(()),
+        "nothing to confirm"
+    );
+    assert_eq!(
+        row_state(&pool, out).await,
+        (Some(savings), false, 0, Some(inn))
+    );
+    assert_eq!(row_state(&pool, inn).await.3, Some(out));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_bulk_to_a_neutral_category_keeps_the_pairs(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
+    let savings = savings(&pool, user_id).await?;
+
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &[out, inn],
+        BulkChanges {
+            category_id: Some(Some(savings)),
+            ..BulkChanges::default()
+        },
+        false,
+    )
+    .await?;
+
+    assert_eq!(outcome, WriteOutcome::Done(2));
+    assert_eq!(
+        row_state(&pool, out).await,
+        (Some(savings), false, 0, Some(inn))
+    );
+    assert_eq!(
+        row_state(&pool, inn).await,
+        (Some(savings), false, 0, Some(out))
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, _groceries, ids) = fixture(&pool, &["VIREMENT", "VIREMENT", "VIREMENT"]).await?;
+    for (id, partner) in [(ids[1], ids[2]), (ids[2], ids[1])] {
+        sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
+            .bind(id)
+            .bind(partner)
+            .execute(&pool)
+            .await?;
+    }
+    let savings = savings(&pool, user_id).await?;
+
+    let WriteOutcome::Done(written) = apply_to_description(
+        &pool,
+        user_id,
+        ids[0],
+        Some(savings),
+        SameDescription::All,
+        false,
+    )
+    .await?
+    else {
+        panic!("a neutral category needs no confirmation");
+    };
+    assert_eq!(written.len(), 3);
+    assert_eq!(row_state(&pool, ids[1]).await.3, Some(ids[2]));
+    assert_eq!(row_state(&pool, ids[2]).await.3, Some(ids[1]));
+    Ok(())
+}

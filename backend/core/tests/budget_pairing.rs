@@ -304,12 +304,33 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
         "acct-b",
         "i1",
         Decimal::new(50000, 2),
-        now + Duration::days(4),
+        now + Duration::days(5) + Duration::hours(1),
     )
     .await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    Ok(())
+}
+
+/// The window's edge is inclusive: five days apart still pairs.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
+    tx_at(
+        &pool,
+        b,
+        "acct-b",
+        "i1",
+        Decimal::new(50000, 2),
+        now + Duration::days(5),
+    )
+    .await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
     Ok(())
 }
 
@@ -458,7 +479,8 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Precedence: a row the user categorised is never touched by the pass.
+/// Precedence: a row the user filed as something that counts — an expense
+/// here — is never touched by the pass.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -473,19 +495,8 @@ async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()
         now + Duration::hours(1),
     )
     .await?;
-    let savings = list_categories(&pool, user_id)
-        .await?
-        .into_iter()
-        .find(|c| c.default_key.as_deref() == Some("savings"))
-        .unwrap()
-        .id;
-    sqlx::query(
-        "update transaction set budget_category_id = $1, category_source = 'user' where id = $2",
-    )
-    .bind(savings)
-    .bind(out)
-    .execute(&pool)
-    .await?;
+    let groceries = by_key(&pool, user_id, "groceries").await?;
+    file_as(&pool, out, groceries, "user").await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
@@ -495,6 +506,109 @@ async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()
             .fetch_one(&pool)
             .await?;
     assert_eq!(still.as_deref(), Some("user"));
+    Ok(())
+}
+
+async fn by_key(pool: &PgPool, user_id: Uuid, key: &str) -> anyhow::Result<Uuid> {
+    Ok(list_categories(pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.default_key.as_deref() == Some(key))
+        .unwrap()
+        .id)
+}
+
+async fn file_as(pool: &PgPool, id: Uuid, category: Uuid, source: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = $2 where id = $3",
+    )
+    .bind(category)
+    .bind(source)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// A row the user filed in a neutral category already counts toward nothing,
+/// so pairing it hides nothing: it pairs, and keeps the category they chose.
+/// The other half, which nobody filed, becomes a pairing-set transfer.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
+    let inn = tx_at(
+        &pool,
+        b,
+        "acct-b",
+        "i1",
+        Decimal::new(50000, 2),
+        now + Duration::hours(1),
+    )
+    .await?;
+    let savings = by_key(&pool, user_id, "savings").await?;
+    file_as(&pool, out, savings, "user").await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+
+    assert_eq!(
+        row(&pool, out).await?,
+        (out, Some(inn), Some(savings), Some("user".to_string()))
+    );
+    let system = by_key(&pool, user_id, "internal").await?;
+    assert_eq!(
+        row(&pool, inn).await?,
+        (inn, Some(out), Some(system), Some("pair".to_string()))
+    );
+    Ok(())
+}
+
+/// A real transfer the provider labels a deposit (or a card payment) pairs
+/// once it is filed in a neutral category; unfiled, it never does — see
+/// `card_payments_and_deposits_never_pair`.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-4000, 2), now).await?;
+    let inn = tx_at_kind(
+        &pool,
+        b,
+        "acct-b",
+        "i1",
+        "deposit",
+        Decimal::new(4000, 2),
+        now + Duration::days(3),
+    )
+    .await?;
+    let internal = by_key(&pool, user_id, "internal").await?;
+    file_as(&pool, inn, internal, "user").await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(row(&pool, out).await?.1, Some(inn));
+    Ok(())
+}
+
+/// The cash leg of a buy or sell never pairs, even filed as Investments: the
+/// lot is its record, and a broker mirrors it across its cash and portfolio
+/// accounts.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
+    let now = Utc::now();
+    let buy = tx_at_kind(&pool, a, "acct-a", "b1", "buy", Decimal::new(-2100, 2), now).await?;
+    let sell = tx_at_kind(&pool, b, "acct-b", "s1", "sell", Decimal::new(2100, 2), now).await?;
+    let investments = by_key(&pool, user_id, "investments").await?;
+    file_as(&pool, buy, investments, "user").await?;
+    file_as(&pool, sell, investments, "user").await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
     Ok(())
 }
 

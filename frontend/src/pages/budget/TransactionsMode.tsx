@@ -148,18 +148,25 @@ export function TransactionsMode() {
 
   const assignToRow = (tx: Transaction, categoryId: string | null) => {
     startWrite();
+    // A neutral category counts toward nothing, as the pair does, so the
+    // server keeps the pair: no question to ask, and the row stays a transfer.
+    const keepsPair = categories.data?.find((c) => c.id === categoryId)?.kind === "neutral";
+    const breaksPair = tx.isTransfer && !keepsPair;
     const attempt = pairBreakAware<AnswerOf<typeof usePatchTransaction>>(
       (confirm, callbacks) =>
         patchRow(
           {
             id: tx.id,
             body: { categoryId, ...(confirm ? { confirmBreakPairs: true } : {}) },
-            // `isTransfer` goes too: the pair is dissolved by this write, so
-            // the row must stop claiming to be one rather than contradicting
+            // `isTransfer` goes too when the pair is dissolved by this write,
+            // so the row stops claiming to be one rather than contradicting
             // its new category until the refetch lands. The *other* half
             // becomes an orphan, but the client cannot know which row that
             // is — that one arrives via the invalidation.
-            optimistic: { ...optimisticCategory(categoryId, categories.data), isTransfer: false },
+            optimistic: {
+              ...optimisticCategory(categoryId, categories.data),
+              isTransfer: tx.isTransfer && !breaksPair,
+            },
           },
           callbacks,
         ),
@@ -175,7 +182,7 @@ export function TransactionsMode() {
     // is sent, so its chip never flips to the new category and back while the
     // server refuses. The server still refuses on its own for a row paired
     // since the list was loaded.
-    if (tx.isTransfer) setBreakPair({ count: 1, run: () => attempt(true) });
+    if (breaksPair) setBreakPair({ count: 1, run: () => attempt(true) });
     else attempt(false);
   };
 

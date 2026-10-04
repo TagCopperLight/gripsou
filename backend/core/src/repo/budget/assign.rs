@@ -4,13 +4,16 @@
 //! pipeline stage, survives a re-run, and joins the AI's example pool. Clearing
 //! a category nulls the source too, handing the row back to the pipeline.
 //!
-//! **A user category write dissolves any internal-transfer pair it touches.**
-//! The user may overrule pairing — it is a timid heuristic, but it can
-//! still false-match two unrelated movements of the same amount. What must not
-//! survive the correction is the link: a row still pointing at a counterpart
-//! that is no longer a transfer is a half-transfer that nets against nothing.
-//! So every category writer here runs in a transaction and calls
-//! [`dissolve_pairs`] with the ids it actually wrote. Both halves lose
+//! **A user category write that makes a row count dissolves any
+//! internal-transfer pair it touches.** The user may overrule pairing — it is
+//! a timid heuristic, but it can still false-match two unrelated movements of
+//! the same amount. What must not survive the correction is the link: a row
+//! still pointing at a counterpart that is no longer a transfer is a
+//! half-transfer that nets against nothing. So every category writer here runs
+//! in a transaction and calls [`dissolve_pairs`] with the ids it actually
+//! wrote — unless the new category is neutral ([`keeps_pairs`]): Savings or
+//! Investments instead of Internal transfer is a finer label for the same
+//! movement, which still counts toward nothing either way. Both halves lose
 //! `transfer_pair_id`; the untouched half keeps its category and its
 //! `category_source = 'pair'`, which surfaces it to the reader as an orphaned
 //! transfer, counts as uncategorised in the Overview, and leaves it eligible
@@ -56,6 +59,26 @@ async fn dissolve_pairs(conn: &mut sqlx::PgConnection, ids: &[Uuid]) -> Result<(
     .execute(&mut *conn)
     .await?;
     Ok(())
+}
+
+/// Whether writing `category_id` leaves the pairs it touches alone: a
+/// neutral category counts toward nothing, as a pair does, so filing one half
+/// under it changes no total and the pair stands. Clearing the category does
+/// not keep them — an uncategorised half is not a transfer.
+async fn keeps_pairs(
+    conn: &mut sqlx::PgConnection,
+    category_id: Option<Uuid>,
+) -> Result<bool, CoreError> {
+    let Some(category_id) = category_id else {
+        return Ok(false);
+    };
+    let neutral = sqlx::query_scalar!(
+        r#"select kind = 'neutral' as "neutral!" from budget_category where id = $1"#,
+        category_id,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(neutral.unwrap_or(false))
 }
 
 /// Why a write was not made, or what it is waiting for.
@@ -145,8 +168,8 @@ async fn tags_are_mine(
 }
 
 /// The category write itself, over the rows of `ids` this user owns. Returns
-/// the ids written and unlinks their pairs. A category that is not the
-/// user's writes nothing.
+/// the ids written and unlinks their pairs, unless the category keeps them
+/// ([`keeps_pairs`]). A category that is not the user's writes nothing.
 async fn write_category(
     conn: &mut sqlx::PgConnection,
     user_id: Uuid,
@@ -174,7 +197,9 @@ async fn write_category(
     )
     .fetch_all(&mut *conn)
     .await?;
-    dissolve_pairs(conn, &written).await?;
+    if !keeps_pairs(conn, category_id).await? {
+        dissolve_pairs(conn, &written).await?;
+    }
     Ok(written)
 }
 
@@ -269,7 +294,8 @@ async fn write_checked(
 }
 
 /// How many of `ids` are half of an internal transfer — i.e. how many of the
-/// caller's own rows a category write over this set would unlink.
+/// caller's own rows a category write over this set would unlink, when the
+/// category is not one that keeps pairs ([`keeps_pairs`]).
 ///
 /// Counts rows, not pairs: when a selection holds both halves it returns 2,
 /// because what the confirmation names is how many transactions change, which
@@ -389,8 +415,8 @@ pub struct TransactionPatch<'a> {
 ///
 /// A category write on half of an internal transfer unlinks the pair, so it
 /// waits for `confirm_break_pairs` like the bulk paths do
-/// ([`WriteOutcome::PendingPairBreaks`]). Tags and ✓ break nothing and are
-/// never gated.
+/// ([`WriteOutcome::PendingPairBreaks`]) — unless the category is neutral and
+/// keeps the pair. Tags and ✓ break nothing and are never gated.
 pub async fn patch_transaction(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -412,7 +438,11 @@ pub async fn patch_transaction(
     {
         return Ok(WriteOutcome::UnknownTag);
     }
-    if patch.category_id.is_some() && paired && !confirm_break_pairs {
+    if let Some(category_id) = patch.category_id
+        && paired
+        && !confirm_break_pairs
+        && !keeps_pairs(&mut tx, category_id).await?
+    {
         return Ok(WriteOutcome::PendingPairBreaks(1));
     }
 
@@ -570,9 +600,10 @@ async fn same_description_rows(
 }
 
 /// Applies the category to the row and to every transaction sharing its
-/// normalised description, pairs included and unlinked. Returns the ids
-/// written, the row itself included. A category that is not the user's writes
-/// nothing. [`apply_to_description`] is the checked form the API calls.
+/// normalised description, pairs included — unlinked unless the category
+/// keeps them. Returns the ids written, the row itself included. A category
+/// that is not the user's writes nothing. [`apply_to_description`] is the
+/// checked form the API calls.
 pub async fn apply_category_to_same_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -609,7 +640,7 @@ pub async fn apply_to_description(
     }
     let rows = same_description_rows(&mut tx, user_id, txn_id, true, scope).await?;
     let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
-    if breaks > 0 && !confirm_break_pairs {
+    if breaks > 0 && !confirm_break_pairs && !keeps_pairs(&mut tx, category_id).await? {
         return Ok(WriteOutcome::PendingPairBreaks(breaks));
     }
     let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
@@ -632,8 +663,8 @@ pub struct BulkChanges<'a> {
 /// Applies one bulk write as one database transaction. Returns how many of
 /// the user's rows it covered.
 ///
-/// A category write unlinks every internal-transfer pair it touches (see this
-/// module's header). "Select all shown" resolves server-side and can hold rows
+/// A category write unlinks every internal-transfer pair it touches, unless
+/// the category is neutral (see this module's header). "Select all shown" resolves server-side and can hold rows
 /// the client has never loaded, so the client cannot count those pairs itself
 /// — this does, on the locked rows, and refuses until the caller confirms.
 /// A refused call writes nothing, tags and ✓ included. Tags and ✓ break no
@@ -659,7 +690,11 @@ pub async fn bulk_apply(
         return Ok(WriteOutcome::UnknownTag);
     }
     let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
-    if changes.category_id.is_some() && breaks > 0 && !confirm_break_pairs {
+    if let Some(category_id) = changes.category_id
+        && breaks > 0
+        && !confirm_break_pairs
+        && !keeps_pairs(&mut tx, category_id).await?
+    {
         return Ok(WriteOutcome::PendingPairBreaks(breaks));
     }
 
