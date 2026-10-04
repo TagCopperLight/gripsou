@@ -462,8 +462,13 @@ pub fn breakdown(rows: &[DayCategoryRow], baseline: Option<&Baseline>) -> Vec<Br
     out
 }
 
-/// The trend chart keeps this many categories, Other excluded.
-const TREND_KEEP: usize = 5;
+/// The trend chart keeps this many categories, Other excluded. The Sankey's
+/// cap, so the two surfaces give a category the same chance of its own colour.
+const TREND_KEEP: usize = SANKEY_MAX_SLICES;
+/// This many of the anchor month's largest slices are always kept, whatever
+/// their window total: ranking by total alone let old one-off spikes crowd
+/// the month being looked at into Other.
+const TREND_ANCHOR_KEEP: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrendSeries {
@@ -477,10 +482,15 @@ pub struct TrendSeries {
 /// baseline excludes the selected month; the chart includes it as its last bar,
 /// because a chart of recent history that stopped before the month you are
 /// looking at would be strange to read.
+///
+/// `fold` is the user's own catch-all category (the seeded "Other"): it is
+/// always rolled into the `Other` series, so the legend never shows two
+/// slices called Other.
 pub fn trend(
     rows: &[DayCategoryRow],
     anchor: Month,
     months: u32,
+    fold: Option<Uuid>,
 ) -> (Vec<Month>, Vec<TrendSeries>) {
     let axis: Vec<Month> = (0..months).rev().map(|back| anchor.minus(back)).collect();
 
@@ -489,6 +499,7 @@ pub fn trend(
         .iter()
         .map(|m| expense_side_amounts(month_rows(&buckets, *m)))
         .collect();
+    let foldable = |s: Slice| fold.is_some_and(|id| s == Slice::Category(id));
 
     // Ranked by total across the window, not by any single month, so a stack's
     // composition is the same in every bar.
@@ -503,7 +514,28 @@ pub fn trend(
     }
     totals.sort_by_key(|(_, total)| std::cmp::Reverse(*total));
 
-    let kept: Vec<Slice> = totals.iter().take(TREND_KEEP).map(|(s, _)| *s).collect();
+    // The anchor month's largest first, then the window's largest, until full.
+    // Still one choice for the whole window, so every bar stacks the same set.
+    let anchor_top = per_month
+        .last()
+        .into_iter()
+        .flatten()
+        .map(|x| x.slice)
+        .filter(|s| !foldable(*s))
+        .take(TREND_ANCHOR_KEEP);
+    let by_total = totals.iter().map(|(s, _)| *s).filter(|s| !foldable(*s));
+    let mut kept: Vec<Slice> = vec![];
+    for slice in anchor_top.chain(by_total) {
+        if kept.len() == TREND_KEEP {
+            break;
+        }
+        if !kept.contains(&slice) {
+            kept.push(slice);
+        }
+    }
+    // Stacked in window-total order, whichever rule let a slice in.
+    kept.sort_by_key(|s| totals.iter().position(|(t, _)| t == s));
+
     let amount_of = |month: &[SliceAmount], slice: Slice| {
         month
             .iter()
