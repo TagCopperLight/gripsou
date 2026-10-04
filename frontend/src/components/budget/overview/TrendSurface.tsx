@@ -1,17 +1,18 @@
 import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
-import type { EChartsOption } from "echarts";
+import type { EChartsOption, EChartsType } from "echarts";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../Surface";
 import { CategoryChip } from "../CategoryChip";
+import { desaturate } from "../../../lib/color";
 import { formatMoney, sumDecimals } from "../../../lib/money";
 import { monthLabel, monthStart } from "../../../lib/period";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
 import { FAINT, GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
 import type { BudgetTrend } from "../../../api/overview";
 
-type TooltipParam = { dataIndex: number; seriesName: string; value: number };
+type TooltipParam = { dataIndex: number };
 
 export function TrendSurface({
   trend, onSelectMonth,
@@ -30,38 +31,28 @@ export function TrendSurface({
     const short = new Intl.DateTimeFormat(language, { month: "short" });
     const axisLabels = trend.months.map((m) => short.format(monthStart(m)));
 
-    const colorByName = new Map(trend.series.map((s) => [sliceKey(s.slice), sliceColor(s.slice)]));
-    const labelByName = new Map(trend.series.map((s) => [sliceKey(s.slice), sliceLabel(t, s.slice)]));
-    // The tooltip renders the server's own decimal strings (never a float sum
-    // of them): `it.value` has already gone through ECharts as a `number`, so
-    // `String(it.value)` would lose whatever precision that round trip cost.
-    const valuesByName = new Map(trend.series.map((s) => [sliceKey(s.slice), s.values]));
-
     return {
       backgroundColor: "transparent",
       animationDuration: 300,
       grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
       tooltip: {
-        trigger: "axis",
+        trigger: "item",
         backgroundColor: GRID,
         borderWidth: 0,
         padding: [10, 12],
         extraCssText: "border-radius:12px;box-shadow:none;",
         textStyle: { fontFamily: MONO },
-        // No hover band: the tooltip alone says which month is under the cursor.
-        axisPointer: { type: "none" },
         formatter: (params) => {
-          const items = params as unknown as TooltipParam[];
-          const dataIndex = items[0]?.dataIndex ?? 0;
-          const originals = items.map(
-            (it) => valuesByName.get(it.seriesName)?.[dataIndex] ?? String(it.value),
-          );
+          const { dataIndex } = params as TooltipParam;
+          // An item hover still shows the whole month's stack. Read the
+          // original decimal strings so the total never sums chart floats.
+          const originals = trend.series.map((s) => s.values[dataIndex]);
           const total = sumDecimals(originals);
-          const rows = items
-            .map((it, i) =>
+          const rows = trend.series
+            .map((s, i) =>
               tooltipRow(
-                colorByName.get(it.seriesName) ?? FAINT,
-                labelByName.get(it.seriesName) ?? it.seriesName,
+                sliceColor(s.slice),
+                sliceLabel(t, s.slice),
                 formatMoney(originals[i]),
               ),
             )
@@ -75,7 +66,7 @@ export function TrendSurface({
           return `
             <div style="min-width:200px;">
               <div style="color:${FAINT};font-size:11px;">${monthLabel(
-                trend.months[items[0].dataIndex],
+                trend.months[dataIndex],
                 language,
               )}</div>
               ${rows}
@@ -113,21 +104,44 @@ export function TrendSurface({
         // already aligned — no sparse handling is needed anywhere here.
         data: s.values.map(Number),
         itemStyle: { color: sliceColor(s.slice) },
+        emphasis: { disabled: true },
         barMaxWidth: 28,
       })),
     };
   }, [trend, language, t]);
 
-  const onEvents = useMemo(
-    () => ({
+  const onEvents = useMemo(() => {
+    // Update only the colours: rebuilding the React option on every hover
+    // would reset this notMerge chart and replay its entry animation.
+    const colorMonth = (chart: EChartsType, activeIndex: number | null) => {
+      chart.setOption({
+        series: trend.series.map((s) => {
+          const color = sliceColor(s.slice);
+          const muted = desaturate(color, 0.65);
+          return {
+            itemStyle: {
+              color: ({ dataIndex }: TooltipParam) =>
+                activeIndex === null || dataIndex === activeIndex ? color : muted,
+            },
+          };
+        }),
+      });
+    };
+    return {
+      mouseover: (params: TooltipParam, chart: EChartsType) => colorMonth(chart, params.dataIndex),
+      mouseout: (_params: unknown, chart: EChartsType) => {
+        // Clear the tooltip position before setOption tries to preserve it
+        // during the colour update, or it can reopen over empty chart space.
+        chart.dispatchAction({ type: "hideTip" });
+        colorMonth(chart, null);
+      },
       click: (params: unknown) => {
         const { dataIndex } = params as { dataIndex: number };
         const month = trend.months[dataIndex];
         if (month) onSelectMonth(month);
       },
-    }),
-    [trend.months, onSelectMonth],
-  );
+    };
+  }, [trend, onSelectMonth]);
 
   return (
     <Surface className="w-full">
