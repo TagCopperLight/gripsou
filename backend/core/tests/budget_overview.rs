@@ -492,7 +492,7 @@ fn breakdown_rows_carry_their_category_baseline() {
 fn the_trend_ends_at_the_anchor_month() {
     // 12 bars ending at the selected month unlike the
     // baseline, which excludes it.
-    let (months, _) = trend(&[], Month::parse("2026-09").unwrap(), 12);
+    let (months, _) = trend(&[], Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(months.len(), 12);
     assert_eq!(months[11].label(), "2026-09");
     assert_eq!(months[0].label(), "2025-10");
@@ -505,7 +505,7 @@ fn every_trend_series_has_one_value_per_month() {
         row(day(2026, 8, 5), Some(rent), Some("expense"), eur(-100)),
         row(day(2026, 9, 5), Some(rent), Some("expense"), eur(-120)),
     ];
-    let (months, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12);
+    let (months, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(series.len(), 1);
     assert_eq!(series[0].values.len(), months.len(), "zeros included");
     assert_eq!(series[0].values[10], eur(100));
@@ -514,11 +514,11 @@ fn every_trend_series_has_one_value_per_month() {
 }
 
 #[test]
-fn the_trend_keeps_the_top_five_across_the_whole_window() {
+fn the_trend_keeps_the_top_eight_across_the_whole_window() {
     // Chosen once for the window, never per month: a stack whose composition
     // changed bar to bar would make the legend a lie.
     let mut rows = vec![];
-    for i in 1..=8i64 {
+    for i in 1..=11i64 {
         rows.push(row(
             day(2026, 9, 5),
             Some(Uuid::new_v4()),
@@ -526,15 +526,79 @@ fn the_trend_keeps_the_top_five_across_the_whole_window() {
             eur(-i * 10),
         ));
     }
-    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12);
-    assert_eq!(series.len(), 6, "5 plus Other");
-    assert_eq!(series[5].slice, Slice::Other);
+    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    assert_eq!(series.len(), 9, "8 plus Other");
+    assert_eq!(series[8].slice, Slice::Other);
     // The three smallest: 10 + 20 + 30.
-    assert_eq!(series[5].values[11], eur(60));
+    assert_eq!(series[8].values[11], eur(60));
 }
 
 #[test]
-fn a_category_big_in_one_month_only_still_makes_the_top_five() {
+fn the_anchor_months_largest_are_kept_over_bigger_window_totals() {
+    // Nine categories with big spending back in March would fill every slot
+    // on window total alone, hiding what the selected month was spent on.
+    let mut rows = vec![];
+    let old: Vec<Uuid> = (0..9).map(|_| Uuid::new_v4()).collect();
+    for id in &old {
+        rows.push(row(day(2026, 3, 5), Some(*id), Some("expense"), eur(-1000)));
+    }
+    let recent: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
+    for (i, id) in recent.iter().enumerate() {
+        let amount = eur(-(40 - 10 * i as i64));
+        rows.push(row(day(2026, 9, 5), Some(*id), Some("expense"), amount));
+    }
+    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    let slices: Vec<Slice> = series.iter().map(|s| s.slice).collect();
+    assert_eq!(slices.len(), 9, "8 plus Other");
+    for id in &recent[..3] {
+        assert!(slices.contains(&Slice::Category(*id)), "the anchor's top 3");
+    }
+    assert!(!slices.contains(&Slice::Category(recent[3])), "but only 3");
+    // Then filled by window total, and stacked in that order throughout.
+    assert_eq!(slices[0], Slice::Category(old[0]));
+    assert_eq!(
+        &slices[5..8],
+        &recent[..3]
+            .iter()
+            .map(|id| Slice::Category(*id))
+            .collect::<Vec<_>>()[..]
+    );
+    assert_eq!(series[8].values[11], eur(10));
+    assert_eq!(
+        series[8].values[5],
+        eur(4000),
+        "four old categories rolled up"
+    );
+}
+
+#[test]
+fn the_folded_category_always_goes_into_other() {
+    // The user's own "Other" category next to the rollup would put two
+    // slices called Other in the legend.
+    let other_category = Uuid::new_v4();
+    let rent = Uuid::new_v4();
+    let rows = vec![
+        row(
+            day(2026, 9, 5),
+            Some(other_category),
+            Some("expense"),
+            eur(-500),
+        ),
+        row(day(2026, 9, 6), Some(rent), Some("expense"), eur(-100)),
+    ];
+    let (_, series) = trend(
+        &rows,
+        Month::parse("2026-09").unwrap(),
+        12,
+        Some(other_category),
+    );
+    let slices: Vec<Slice> = series.iter().map(|s| s.slice).collect();
+    assert_eq!(slices, vec![Slice::Category(rent), Slice::Other]);
+    assert_eq!(series[1].values[11], eur(500));
+}
+
+#[test]
+fn a_category_big_in_one_month_only_still_makes_the_top_eight() {
     let spike = Uuid::new_v4();
     let steady = Uuid::new_v4();
     let mut rows = vec![row(
@@ -547,7 +611,7 @@ fn a_category_big_in_one_month_only_still_makes_the_top_five() {
         let (y, mm) = if m <= 9 { (2026, m) } else { (2025, m) };
         rows.push(row(day(y, mm, 5), Some(steady), Some("expense"), eur(-10)));
     }
-    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12);
+    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(
         series[0].slice,
         Slice::Category(spike),
@@ -583,12 +647,12 @@ fn summary_breakdown_and_trend_agree_on_a_shared_month() {
     ];
 
     // Few enough slices that neither breakdown's top-7 cap nor trend's
-    // top-5 cap rolls anything into `Other` — so the two slice sets are
+    // top-8 cap rolls anything into `Other` — so the two slice sets are
     // identical and every entry has a like-for-like value to compare.
     let period: Vec<DayCategoryRow> = rows_in(&rows, from, to).into_iter().cloned().collect();
     let breakdown_rows = breakdown(&period, None);
 
-    let (months, series) = trend(&rows, month, 1);
+    let (months, series) = trend(&rows, month, 1, None);
     assert_eq!(months, vec![month]);
     let last = months.len() - 1;
 

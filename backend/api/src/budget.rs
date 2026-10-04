@@ -628,8 +628,13 @@ pub async fn trend_handler(
         .await
         .map_err(internal)?;
 
-    let (axis, series) = gripsou_core::budget::overview::trend(&rows, anchor, months);
     let refs = category_refs(&pool, user_id).await?;
+    // By its seeded key, not its name: the user may rename it.
+    let fold = refs
+        .iter()
+        .find(|r| r.default_key.as_deref() == Some("other_expense"))
+        .and_then(|r| r.id.parse().ok());
+    let (axis, series) = gripsou_core::budget::overview::trend(&rows, anchor, months, fold);
 
     Ok(Json(TrendDto {
         months: axis.iter().map(|m| m.label()).collect(),
@@ -2250,6 +2255,33 @@ mod handler_tests {
         assert_eq!(
             values,
             vec![Decimal::ZERO, Decimal::from(40), Decimal::from(30)]
+        );
+    }
+
+    /// The seeded "Other" category is rolled into the trend's own Other
+    /// series, so the legend never shows two slices called Other.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_trend_folds_the_other_category_into_other(pool: PgPool) {
+        let (user_id, account) = seed_user(&pool).await;
+        let other = category(&pool, user_id, "other_expense").await;
+        let t = seed_dated(&pool, account, "2026-03-10", -25, "MISC").await;
+        assign::set_category(&pool, user_id, t, Some(other))
+            .await
+            .unwrap();
+
+        let t = trend_of(&pool, user_id, json!({ "anchor": "2026-03", "months": 3 }))
+            .await
+            .unwrap();
+        assert_eq!(t.series.len(), 1);
+        assert!(matches!(t.series[0].slice, SliceDto::Other));
+        let values: Vec<Decimal> = t.series[0]
+            .values
+            .iter()
+            .map(|v| v.parse().unwrap())
+            .collect();
+        assert_eq!(
+            values,
+            vec![Decimal::ZERO, Decimal::ZERO, Decimal::from(25)]
         );
     }
 
