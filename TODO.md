@@ -70,6 +70,7 @@
 - [x] Transaction page search bar
 - [x] Saved and invested don't mean anything
 - [x] Reworked accounts list
+- [x] Apply to all
 
 ### Future
 - [ ] First admin configuration
@@ -83,5 +84,4 @@
 - [ ] Auto pairing rework
     - Pairing still only looks at transfer rows.
 - [ ] hover on currencies
-- [ ] Apply to all
 - [ ] Last 12 months chart

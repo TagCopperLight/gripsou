@@ -657,6 +657,36 @@ pub struct PatchTransactionBody {
     /// on half of an internal transfer waits for it.
     #[serde(default)]
     pub confirm_break_pairs: bool,
+    /// Which rows `sameDescriptionCount` counts: the review queue sends
+    /// `review`, so its offer matches the write it would launch.
+    #[serde(default)]
+    pub offer_scope: Scope,
+}
+
+/// Which of the rows sharing a description an "apply to all" reaches: every
+/// one (the Transactions list), or only those still in review (the queue).
+#[derive(Deserialize, Default, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum Scope {
+    #[default]
+    All,
+    Review,
+}
+
+/// Resolves `scope` against the reader's own review threshold.
+async fn same_description(
+    pool: &PgPool,
+    user_id: Uuid,
+    scope: Scope,
+) -> Result<assign::SameDescription, (StatusCode, String)> {
+    Ok(match scope {
+        Scope::All => assign::SameDescription::All,
+        Scope::Review => assign::SameDescription::NeedsReview(
+            gripsou_core::repo::prefs::review_threshold(pool, user_id)
+                .await
+                .map_err(internal)?,
+        ),
+    })
 }
 
 /// Distinguishes `{"categoryId": null}` (clear it) from `{}` (leave it).
@@ -727,11 +757,14 @@ pub async fn patch_transaction(
     }
     // Only a category change makes "apply to the others?" a question.
     let same_description_count = match b.category_id {
-        Some(_) => Some(
-            assign::count_same_description(&pool, user_id, id)
-                .await
-                .map_err(internal)?,
-        ),
+        Some(_) => {
+            let scope = same_description(&pool, user_id, b.offer_scope).await?;
+            Some(
+                assign::count_same_description(&pool, user_id, id, scope)
+                    .await
+                    .map_err(internal)?,
+            )
+        }
         None => None,
     };
     Ok(Json(PatchTransactionResponse {
@@ -749,6 +782,9 @@ pub struct ApplyToDescriptionBody {
     /// break one is refused (see `UpdatedResponse::pending_pair_breaks`).
     #[serde(default)]
     pub confirm_break_pairs: bool,
+    /// `review` from the queue: only rows still in review are written.
+    #[serde(default)]
+    pub scope: Scope,
 }
 
 #[derive(Serialize, Debug)]
@@ -776,9 +812,17 @@ pub async fn apply_to_description(
     Path(id): Path<Uuid>,
     Json(b): Json<ApplyToDescriptionBody>,
 ) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
-    match assign::apply_to_description(&pool, user_id, id, b.category_id, b.confirm_break_pairs)
-        .await
-        .map_err(internal)?
+    let scope = same_description(&pool, user_id, b.scope).await?;
+    match assign::apply_to_description(
+        &pool,
+        user_id,
+        id,
+        b.category_id,
+        scope,
+        b.confirm_break_pairs,
+    )
+    .await
+    .map_err(internal)?
     {
         assign::WriteOutcome::Done(ids) => Ok(Json(UpdatedResponse {
             updated: ids.len() as i64,
@@ -1004,8 +1048,8 @@ fn review_status(w: review::ReviewWrite) -> StatusCode {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptReviewResponse {
-    /// How many *other* transactions share this row's normalised description —
-    /// what the review line's "apply to N others" offers, as after a patch.
+    /// How many *other* rows sharing this row's normalised description are
+    /// still in review — what the review line's "apply to N others" offers.
     pub same_description_count: i64,
 }
 
@@ -1018,7 +1062,8 @@ pub async fn accept_review(
         review::ReviewWrite::Done => {}
         other => return Err((review_status(other), String::new())),
     }
-    let same_description_count = assign::count_same_description(&pool, user_id, id)
+    let scope = same_description(&pool, user_id, Scope::Review).await?;
+    let same_description_count = assign::count_same_description(&pool, user_id, id, scope)
         .await
         .map_err(internal)?;
     Ok(Json(AcceptReviewResponse {

@@ -108,7 +108,10 @@ export function ReviewMode() {
     setWriteErrorKey(null);
     setState((s) => resolve(s, r));
     patch.mutate(
-      { id: tx.id, body: { categoryId, ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}) } },
+      {
+        id: tx.id,
+        body: { categoryId, offerScope: "review", ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}) },
+      },
       {
         onSuccess: (res) => {
           if (res.pendingPairBreaks) {
@@ -135,12 +138,13 @@ export function ReviewMode() {
     setCorrecting(null);
   };
 
-  /** Widens a resolved line's category to every row sharing its description.
-   *  Same pair rule as `correct`. Nothing on screen changes until it lands. */
+  /** Widens a resolved line's category to the rows sharing its description
+   *  that are still in review — never one the user already settled. Same pair
+   *  rule as `correct`. Nothing on screen changes until it lands. */
   const runApplyToOthers = (anchorId: string, categoryId: string, confirmBreakPairs: boolean) => {
     setWriteErrorKey(null);
     applyToDescription.mutate(
-      { id: anchorId, categoryId, confirmBreakPairs },
+      { id: anchorId, categoryId, scope: "review", confirmBreakPairs },
       {
         onSuccess: (res) => {
           if (res.pendingPairBreaks) {

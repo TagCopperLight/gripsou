@@ -4,10 +4,10 @@ use chrono::{DateTime, Utc};
 use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, TransactionPatch, WriteOutcome, apply_category_to_same_description,
-    apply_to_description, bulk_add_tags, bulk_apply, bulk_set_category, bulk_set_checked,
-    count_paired_same_description, count_same_description, patch_transaction, set_category,
-    set_checked, set_tags,
+    BulkChanges, SameDescription, TransactionPatch, WriteOutcome,
+    apply_category_to_same_description, apply_to_description, bulk_add_tags, bulk_apply,
+    bulk_set_category, bulk_set_checked, count_paired_same_description, count_same_description,
+    patch_transaction, set_category, set_checked, set_tags,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -199,8 +199,14 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
     )
     .await?;
 
-    assert_eq!(count_same_description(&pool, user_id, ids[0]).await?, 1);
-    assert_eq!(count_same_description(&pool, user_id, ids[2]).await?, 0);
+    assert_eq!(
+        count_same_description(&pool, user_id, ids[0], SameDescription::All).await?,
+        1
+    );
+    assert_eq!(
+        count_same_description(&pool, user_id, ids[2], SameDescription::All).await?,
+        0
+    );
 
     let mut written =
         apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?;
@@ -295,7 +301,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
 ) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["12345", "98765", "SPOTIFY"]).await?;
 
-    let count = count_same_description(&pool, user_id, ids[0]).await?;
+    let count = count_same_description(&pool, user_id, ids[0], SameDescription::All).await?;
     let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
         .await?
         .len();
@@ -351,7 +357,7 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         .unwrap()
         .id;
 
-    let count = count_same_description(&pool, user_id, ids[0]).await?;
+    let count = count_same_description(&pool, user_id, ids[0], SameDescription::All).await?;
     let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
         .await?
         .len();
@@ -668,7 +674,15 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
         WriteOutcome::NotFound
     );
     assert_eq!(
-        apply_to_description(&pool, stranger, ids[0], Some(groceries), true).await?,
+        apply_to_description(
+            &pool,
+            stranger,
+            ids[0],
+            Some(groceries),
+            SameDescription::All,
+            true
+        )
+        .await?,
         WriteOutcome::NotFound
     );
     assert!(
@@ -768,17 +782,40 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
     let stranger_category = list_categories(&pool, stranger).await?[0].id;
 
     assert_eq!(
-        apply_to_description(&pool, user_id, ids[0], Some(stranger_category), true).await?,
+        apply_to_description(
+            &pool,
+            user_id,
+            ids[0],
+            Some(stranger_category),
+            SameDescription::All,
+            true
+        )
+        .await?,
         WriteOutcome::UnknownCategory
     );
     assert_eq!(
-        apply_to_description(&pool, user_id, ids[0], Some(groceries), false).await?,
+        apply_to_description(
+            &pool,
+            user_id,
+            ids[0],
+            Some(groceries),
+            SameDescription::All,
+            false
+        )
+        .await?,
         WriteOutcome::PendingPairBreaks(1)
     );
     assert_eq!(row_state(&pool, ids[1]).await.0, None, "nothing written");
 
-    let WriteOutcome::Done(mut written) =
-        apply_to_description(&pool, user_id, ids[0], Some(groceries), true).await?
+    let WriteOutcome::Done(mut written) = apply_to_description(
+        &pool,
+        user_id,
+        ids[0],
+        Some(groceries),
+        SameDescription::All,
+        true,
+    )
+    .await?
     else {
         panic!("a confirmed apply writes");
     };
@@ -789,6 +826,83 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
     assert_eq!(
         row_state(&pool, ids[1]).await,
         (Some(groceries), false, 0, None)
+    );
+    Ok(())
+}
+
+/// From the review queue, "apply to N others" widens a correction only to the
+/// rows still waiting in that queue: a category the user set, a guess already
+/// accepted and a guess confident enough to skip review are left alone. The
+/// anchor is resolved already, so it is neither counted nor rewritten.
+#[sqlx::test(migrations = "../migrations")]
+async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"; 6]).await?;
+    let restaurants = list_categories(&pool, user_id)
+        .await?
+        .into_iter()
+        .find(|c| c.default_key.as_deref() == Some("restaurants"))
+        .unwrap()
+        .id;
+    // (category, source, confidence, reviewed)
+    let states: [(Option<Uuid>, &str, Option<Decimal>, bool); 6] = [
+        (Some(groceries), "ai", Some(Decimal::new(40, 2)), true), // anchor, just accepted
+        (Some(groceries), "user", None, true),                    // set by hand
+        (Some(groceries), "ai", Some(Decimal::new(40, 2)), true), // accepted earlier
+        (Some(groceries), "ai", Some(Decimal::new(95, 2)), false), // confident: not in review
+        (Some(groceries), "ai", Some(Decimal::new(40, 2)), false), // in review
+        (None, "ai", None, false),                                // in review, no guess
+    ];
+    for (id, (cat, source, conf, reviewed)) in ids.iter().zip(states) {
+        sqlx::query(
+            "update transaction set budget_category_id = $2, category_source = $3,
+                    category_confidence = $4,
+                    category_reviewed_at = case when $5 then now() end
+              where id = $1",
+        )
+        .bind(id)
+        .bind(cat)
+        .bind(source)
+        .bind(conf)
+        .bind(reviewed)
+        .execute(&pool)
+        .await?;
+    }
+    let scope = SameDescription::NeedsReview(Decimal::new(70, 2));
+
+    assert_eq!(
+        count_same_description(&pool, user_id, ids[0], scope).await?,
+        2
+    );
+    let WriteOutcome::Done(mut written) =
+        apply_to_description(&pool, user_id, ids[0], Some(restaurants), scope, false).await?
+    else {
+        panic!("no pair involved, so the write goes through");
+    };
+    written.sort();
+    let mut queued = vec![ids[4], ids[5]];
+    queued.sort();
+    assert_eq!(written, queued);
+
+    let cats: Vec<Option<Uuid>> =
+        sqlx::query_scalar("select budget_category_id from transaction order by external_id")
+            .fetch_all(&pool)
+            .await?;
+    assert_eq!(
+        cats,
+        vec![
+            Some(groceries),
+            Some(groceries),
+            Some(groceries),
+            Some(groceries),
+            Some(restaurants),
+            Some(restaurants),
+        ]
+    );
+
+    // The unscoped form still reaches every twin, the anchor included.
+    assert_eq!(
+        count_same_description(&pool, user_id, ids[0], SameDescription::All).await?,
+        5
     );
     Ok(())
 }

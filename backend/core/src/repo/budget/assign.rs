@@ -23,6 +23,7 @@
 //! A refused request writes nothing. The lower-level writers below them are
 //! the confirmed, unchecked building blocks.
 
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::error::CoreError;
@@ -428,8 +429,29 @@ pub async fn patch_transaction(
     Ok(WriteOutcome::Done(()))
 }
 
+/// Which of the rows sharing a description an "apply to the same
+/// description" reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SameDescription {
+    /// Every one of them, whatever their category or who set it.
+    All,
+    /// Only the rows still in the review queue at this threshold (the
+    /// queue's own `needs_review`), never the anchor: from the queue, a
+    /// correction must not overwrite what the user has already settled.
+    NeedsReview(Decimal),
+}
+
+impl SameDescription {
+    fn threshold(self) -> Option<Decimal> {
+        match self {
+            SameDescription::All => None,
+            SameDescription::NeedsReview(t) => Some(t),
+        }
+    }
+}
+
 /// How many *other* transactions of this user share the row's normalised
-/// description — the number the "apply to all?" prompt shows.
+/// description, within `scope` — the number the "apply to all?" prompt shows.
 ///
 /// Guards on the *normalised* value, not the raw one: `description_norm` (`budget_norm_description`)
 /// collapses any run of 2+ digits, so a raw description like `"12345"` is
@@ -440,6 +462,7 @@ pub async fn count_same_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     txn_id: Uuid,
+    scope: SameDescription,
 ) -> Result<i64, CoreError> {
     let n = sqlx::query_scalar!(
         r#"
@@ -458,9 +481,14 @@ pub async fn count_same_description(
               where t2.id = $1 and k2.user_id = $2
                 and t2.description_norm <> ''
           )
+          and ($3::numeric is null
+               or (t.id <> $1
+                   and t.id in (select r.id from budget_transaction_rows($2, $3) r
+                                where r.needs_review)))
         "#,
         txn_id,
         user_id,
+        scope.threshold(),
     )
     .fetch_one(pool)
     .await?;
@@ -480,12 +508,14 @@ pub async fn count_paired_same_description(
     txn_id: Uuid,
 ) -> Result<i64, CoreError> {
     let mut conn = pool.acquire().await?;
-    let rows = same_description_rows(&mut conn, user_id, txn_id, false).await?;
+    let rows =
+        same_description_rows(&mut conn, user_id, txn_id, false, SameDescription::All).await?;
     Ok(rows.iter().filter(|(_, paired)| *paired).count() as i64)
 }
 
 /// The anchor row and every transaction of this user sharing its normalised
-/// description, with whether each is half of a pair. Locks them when `lock`
+/// description — or, under [`SameDescription::NeedsReview`], only those still
+/// in review, anchor excluded — with whether each is half of a pair. Locks them when `lock`
 /// is set.
 ///
 /// A description that is null, empty, or normalises to `''` (e.g.
@@ -496,6 +526,7 @@ async fn same_description_rows(
     user_id: Uuid,
     txn_id: Uuid,
     lock: bool,
+    scope: SameDescription,
 ) -> Result<Vec<(Uuid, bool)>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"
@@ -513,9 +544,14 @@ async fn same_description_rows(
               where t2.id = $1 and k2.user_id = $2
                 and t2.description_norm <> ''
           )
+          and ($3::numeric is null
+               or (t.id <> $1
+                   and t.id in (select r.id from budget_transaction_rows($2, $3) r
+                                where r.needs_review)))
         "#,
         txn_id,
         user_id,
+        scope.threshold(),
     )
     .fetch_all(&mut *conn)
     .await?;
@@ -544,7 +580,7 @@ pub async fn apply_category_to_same_description(
     category_id: Option<Uuid>,
 ) -> Result<Vec<Uuid>, CoreError> {
     let mut tx = pool.begin().await?;
-    let rows = same_description_rows(&mut tx, user_id, txn_id, true).await?;
+    let rows = same_description_rows(&mut tx, user_id, txn_id, true, SameDescription::All).await?;
     let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
     let written = write_category(&mut tx, user_id, &ids, category_id).await?;
     tx.commit().await?;
@@ -552,15 +588,16 @@ pub async fn apply_category_to_same_description(
 }
 
 /// "Apply to the same description", as one database transaction: the rows
-/// are locked, the category checked, and a write that would unlink pairs
-/// waits for `confirm_break_pairs`. Returns the ids written, the row itself
-/// included — the review queue needs to know *which* of its lines this
-/// resolved.
+/// in `scope` are locked, the category checked, and a write that would unlink
+/// pairs waits for `confirm_break_pairs`. Returns the ids written (the row
+/// itself included under [`SameDescription::All`]) — the review queue needs
+/// to know *which* of its lines this resolved.
 pub async fn apply_to_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     txn_id: Uuid,
     category_id: Option<Uuid>,
+    scope: SameDescription,
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<Vec<Uuid>>, CoreError> {
     let mut tx = pool.begin().await?;
@@ -570,7 +607,7 @@ pub async fn apply_to_description(
     if !category_is_mine(&mut tx, user_id, category_id).await? {
         return Ok(WriteOutcome::UnknownCategory);
     }
-    let rows = same_description_rows(&mut tx, user_id, txn_id, true).await?;
+    let rows = same_description_rows(&mut tx, user_id, txn_id, true, scope).await?;
     let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
     if breaks > 0 && !confirm_break_pairs {
         return Ok(WriteOutcome::PendingPairBreaks(breaks));

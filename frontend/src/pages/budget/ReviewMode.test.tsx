@@ -169,7 +169,7 @@ describe("Review mode", () => {
     expect(await within(resolved).findByText("applied to 2 others")).toBeVisible();
     expect(server.calls.at(-1)).toEqual({
       url: expect.stringContaining("/transactions/t1/apply-to-description"),
-      body: { categoryId: "c1" },
+      body: { categoryId: "c1", scope: "review" },
     });
     expect(await screen.findByTestId("resolved-line-t3")).toHaveTextContent("set to Groceries, same name");
     expect(screen.getByTestId("review-progress")).toHaveTextContent("2 / 3 resolved");
@@ -184,7 +184,7 @@ describe("Review mode", () => {
     fireEvent.click(await screen.findByTestId("break-pair-confirm"));
 
     expect(await screen.findByTestId("resolved-line-t3")).toBeVisible();
-    expect(server.calls.at(-1)?.body).toEqual({ categoryId: "c1", confirmBreakPairs: true });
+    expect(server.calls.at(-1)?.body).toEqual({ categoryId: "c1", scope: "review", confirmBreakPairs: true });
     expect(screen.queryByTestId("break-pair-modal")).toBeNull();
   });
 
@@ -244,7 +244,7 @@ describe("Review mode", () => {
     expect(await screen.findByTestId("resolved-line-t2")).toBeVisible();
     expect(server.calls.at(-1)).toEqual({
       url: expect.stringContaining("/transactions/t2"),
-      body: { categoryId: "c2", confirmBreakPairs: true },
+      body: { categoryId: "c2", offerScope: "review", confirmBreakPairs: true },
     });
     await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
   });

@@ -157,7 +157,13 @@ type TransactionPatch = {
   /** See `BulkBody.confirmBreakPairs`: recategorising a paired transfer is
    *  refused until the caller confirms dissolving the pair. */
   confirmBreakPairs?: boolean;
+  /** Which rows the returned `sameDescriptionCount` counts; see `SameDescriptionScope`. */
+  offerScope?: SameDescriptionScope;
 };
+
+/** Which rows sharing a description an "apply to all" reaches: every one, or
+ *  — from the review queue — only those still in review. */
+export type SameDescriptionScope = "all" | "review";
 
 /** `pendingPairBreaks` set means refused, nothing written: see `WriteResult`. */
 type PatchResult = { sameDescriptionCount: number; pendingPairBreaks?: number | null };
@@ -237,14 +243,17 @@ export function useApplyToDescription() {
     mutationFn: ({
       id,
       categoryId,
+      scope,
       confirmBreakPairs,
     }: {
       id: string;
       categoryId: string | null;
+      scope?: SameDescriptionScope;
       confirmBreakPairs?: boolean;
     }) =>
       postJson<WriteResult>(`/transactions/${id}/apply-to-description`, {
         categoryId,
+        ...(scope ? { scope } : {}),
         ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}),
       }),
     onSuccess: () => afterTransactionChange(qc),
