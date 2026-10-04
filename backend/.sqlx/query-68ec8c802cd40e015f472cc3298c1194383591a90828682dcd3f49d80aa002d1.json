@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select id as \"id!\", account_id as \"account_id!\", ts as \"ts!\",\n               amount as \"amount!\", currency as \"currency!\",\n               undecided as \"undecided!\"\n        from (\n            select t.id, t.account_id, t.ts, t.amount, a.currency, c.kind,\n                   -- A transfer whose category pairing may still decide: an\n                   -- empty slot, an AI guess nobody has looked at yet, or a\n                   -- row whose partner went away. A category the user chose\n                   -- (set, or an AI guess accepted in review) is theirs.\n                   --\n                   -- Only transfers: matching is by amount and date alone, so\n                   -- any other type lets a coincidence through — a card\n                   -- payment equal to a top-up arriving on another account, a\n                   -- friend's deposit equal to a transfer leaving, a dividend\n                   -- matched with its own mirror on a broker's other account.\n                   -- Measured on real data, opening this to every type paired\n                   -- more coincidences than transfers, and the extra rows'\n                   -- ties blocked good pairs.\n                   coalesce(t.type = 'transfer'\n                            and (t.category_source is null\n                                 or t.category_source = 'pair'\n                                 or (t.category_source = 'ai'\n                                     and t.category_reviewed_at is null)),\n                            false) as undecided\n            from transaction t\n            join account a    on a.id = t.account_id\n            join connection k on k.id = a.connection_id\n            left join budget_category c on c.id = t.budget_category_id\n            where k.user_id = $1\n              and t.transfer_pair_id is null\n              and t.amount <> 0\n              -- The cash leg of a buy/sell is the lot's record, already out\n              -- of every budget total, and it mirrors across a broker's cash\n              -- and portfolio accounts: pairing those copies would mean\n              -- nothing.\n              and not budget_investment_leg(t.type)\n        ) r\n        -- Or any row, of any type and whoever filed it, already in a neutral\n        -- category: someone said it counts toward nothing, so pairing it\n        -- hides nothing that was counted. This is what catches a real\n        -- transfer the provider labels a deposit or a card payment, once the\n        -- user has filed it.\n        where undecided or kind = 'neutral'\n        order by ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "amount"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "undecided!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "68ec8c802cd40e015f472cc3298c1194383591a90828682dcd3f49d80aa002d1"
+}

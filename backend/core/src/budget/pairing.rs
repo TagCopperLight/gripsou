@@ -32,6 +32,9 @@ struct Candidate {
     ts: DateTime<Utc>,
     amount: Decimal,
     currency: String,
+    /// A transfer whose category is still pairing's to decide, as opposed to
+    /// a row someone filed in a neutral category: see the candidate query.
+    undecided: bool,
 }
 
 /// Two candidates that could be swapped for each other in a nearest-neighbour
@@ -47,14 +50,17 @@ fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
 /// Pairs every unpaired internal transfer this user has, and returns how many
 /// pairs it wrote.
 ///
-/// A single round of mutual-nearest-neighbour matching can leave true pairs on
-/// the table: if X's nearest is Y but Y's own nearest is some other row W,
-/// neither X-Y nor X-W pairs that round, even though removing Y (paired off
-/// with W) may make W's former runner-up X's new, uncontested nearest match.
-/// So rounds repeat until one pairs nothing. The candidates are read once and
-/// the rounds run in memory, each removing the rows it paired, so the pool
-/// strictly shrinks and the loop always terminates; every pair is then
-/// written in one statement.
+/// Two passes, each run to convergence ([`converge`]). The first sees only
+/// the undecided transfers; the second adds the rows filed in a neutral
+/// category to what the first left. A filed row is often half of a movement
+/// whose other half is on no connected account — a currency exchange, a
+/// top-up of an outside wallet — and in one pool with the rest it would tie
+/// with, or outnumber, real transfers of its amount and block them: measured
+/// on real data, a single pass lost several pairs that way. Kept apart, the
+/// filed rows can only add pairs.
+///
+/// The candidates are read once and the passes run in memory; every pair is
+/// then written in one statement.
 ///
 /// Idempotent in the sense that matters: a row already carrying
 /// `transfer_pair_id` is never re-paired or disturbed by a later call, and a
@@ -72,54 +78,57 @@ pub async fn pair_internal_transfers(
 ) -> Result<usize, CoreError> {
     let rows = sqlx::query!(
         r#"
-        select t.id          as "id!",
-               t.account_id  as "account_id!",
-               t.ts          as "ts!",
-               t.amount      as "amount!",
-               a.currency    as "currency!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        left join budget_category c on c.id = t.budget_category_id
-        where k.user_id = $1
-          and t.transfer_pair_id is null
-          and t.amount <> 0
-          -- The cash leg of a buy/sell is the lot's record, already out of
-          -- every budget total, and it mirrors across a broker's cash and
-          -- portfolio accounts: pairing those copies would mean nothing.
-          and not budget_investment_leg(t.type)
-          and (
-              -- A transfer whose category pairing may still decide: an empty
-              -- slot, an AI guess nobody has looked at yet, or a row whose
-              -- partner went away. A category the user chose (set, or an AI
-              -- guess accepted in review) is theirs.
-              --
-              -- Only transfers: matching is by amount and date alone, so any
-              -- other type lets a coincidence through — a card payment equal
-              -- to a top-up arriving on another account, a friend's deposit
-              -- equal to a transfer leaving, a dividend matched with its own
-              -- mirror on a broker's other account. Measured on real data,
-              -- opening this to every type paired more coincidences than
-              -- transfers, and the extra rows' ties blocked good pairs.
-              (t.type = 'transfer'
-               and (t.category_source is null
-                    or t.category_source = 'pair'
-                    or (t.category_source = 'ai' and t.category_reviewed_at is null)))
-              -- Any row, of any type and whoever filed it, already in a
-              -- neutral category: someone said it counts toward nothing, so
-              -- pairing it hides nothing that was counted. This is what
-              -- catches a real transfer the provider labels a deposit or a
-              -- card payment, once the user has filed it.
-              or c.kind = 'neutral'
-          )
-        order by t.ts
+        select id as "id!", account_id as "account_id!", ts as "ts!",
+               amount as "amount!", currency as "currency!",
+               undecided as "undecided!"
+        from (
+            select t.id, t.account_id, t.ts, t.amount, a.currency, c.kind,
+                   -- A transfer whose category pairing may still decide: an
+                   -- empty slot, an AI guess nobody has looked at yet, or a
+                   -- row whose partner went away. A category the user chose
+                   -- (set, or an AI guess accepted in review) is theirs.
+                   --
+                   -- Only transfers: matching is by amount and date alone, so
+                   -- any other type lets a coincidence through — a card
+                   -- payment equal to a top-up arriving on another account, a
+                   -- friend's deposit equal to a transfer leaving, a dividend
+                   -- matched with its own mirror on a broker's other account.
+                   -- Measured on real data, opening this to every type paired
+                   -- more coincidences than transfers, and the extra rows'
+                   -- ties blocked good pairs.
+                   coalesce(t.type = 'transfer'
+                            and (t.category_source is null
+                                 or t.category_source = 'pair'
+                                 or (t.category_source = 'ai'
+                                     and t.category_reviewed_at is null)),
+                            false) as undecided
+            from transaction t
+            join account a    on a.id = t.account_id
+            join connection k on k.id = a.connection_id
+            left join budget_category c on c.id = t.budget_category_id
+            where k.user_id = $1
+              and t.transfer_pair_id is null
+              and t.amount <> 0
+              -- The cash leg of a buy/sell is the lot's record, already out
+              -- of every budget total, and it mirrors across a broker's cash
+              -- and portfolio accounts: pairing those copies would mean
+              -- nothing.
+              and not budget_investment_leg(t.type)
+        ) r
+        -- Or any row, of any type and whoever filed it, already in a neutral
+        -- category: someone said it counts toward nothing, so pairing it
+        -- hides nothing that was counted. This is what catches a real
+        -- transfer the provider labels a deposit or a card payment, once the
+        -- user has filed it.
+        where undecided or kind = 'neutral'
+        order by ts
         "#,
         user_id,
     )
     .fetch_all(&mut *conn)
     .await?;
 
-    let mut candidates: Vec<Candidate> = rows
+    let (mut pool, filed): (Vec<Candidate>, Vec<Candidate>) = rows
         .into_iter()
         .map(|r| Candidate {
             id: r.id,
@@ -127,27 +136,13 @@ pub async fn pair_internal_transfers(
             ts: r.ts,
             amount: r.amount,
             currency: r.currency,
+            undecided: r.undecided,
         })
-        .collect();
+        .partition(|c| c.undecided);
 
-    let mut pairs: Vec<(Uuid, Uuid)> = vec![];
-    loop {
-        let mut round = nearest_pairs(&candidates);
-        // Nearest-neighbour matching has converged. What it leaves is mostly
-        // chains through a middle account (savings → deposit → checking account
-        // the same day): every row ties there, yet only one pairing explains
-        // them all. Tried only once the rounds above stop finding pairs, so
-        // the nearest-in-time preference always gets first say.
-        if round.is_empty() {
-            round = forced_pairs(&candidates);
-        }
-        if round.is_empty() {
-            break;
-        }
-        let taken: HashSet<Uuid> = round.iter().flat_map(|&(o, i)| [o, i]).collect();
-        candidates.retain(|c| !taken.contains(&c.id));
-        pairs.extend(round);
-    }
+    let mut pairs = converge(&mut pool);
+    pool.extend(filed);
+    pairs.extend(converge(&mut pool));
     if pairs.is_empty() {
         return Ok(0);
     }
@@ -202,8 +197,37 @@ pub async fn pair_internal_transfers(
     Ok(pairs.len())
 }
 
+/// Pairs `pool` until a round pairs nothing, removing from it what it pairs.
+///
+/// A single round of mutual-nearest-neighbour matching can leave true pairs on
+/// the table: if X's nearest is Y but Y's own nearest is some other row W,
+/// neither X-Y nor X-W pairs that round, even though removing Y (paired off
+/// with W) may make W's former runner-up X's new, uncontested nearest match.
+/// So rounds repeat until one pairs nothing. Each removes the rows it paired,
+/// so the pool strictly shrinks and the loop always terminates.
+fn converge(pool: &mut Vec<Candidate>) -> Vec<(Uuid, Uuid)> {
+    let mut pairs: Vec<(Uuid, Uuid)> = vec![];
+    loop {
+        let mut round = nearest_pairs(pool);
+        // Nearest-neighbour matching has converged. What it leaves is mostly
+        // chains through a middle account (savings → deposit → checking account
+        // the same day): every row ties there, yet only one pairing explains
+        // them all. Tried only once the rounds above stop finding pairs, so
+        // the nearest-in-time preference always gets first say.
+        if round.is_empty() {
+            round = forced_pairs(pool);
+        }
+        if round.is_empty() {
+            return pairs;
+        }
+        let taken: HashSet<Uuid> = round.iter().flat_map(|&(o, i)| [o, i]).collect();
+        pool.retain(|c| !taken.contains(&c.id));
+        pairs.extend(round);
+    }
+}
+
 /// One round: every mutual-nearest-neighbour pair among `candidates`. See
-/// [`pair_internal_transfers`] for why this needs to repeat.
+/// [`converge`] for why this needs to repeat.
 fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     // Group by (currency, |amount|): only rows inside one group can ever pair,
     // which keeps the comparison quadratic in the size of a group rather than
