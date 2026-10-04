@@ -656,6 +656,30 @@ pub async fn set_budget_ai_settings(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The models the provider offers, for the admin's model dropdown. Asked of
+/// the provider on every call: the list is short and only read by an admin.
+pub async fn budget_ai_models(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(provider): Path<String>,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    require_admin(&pool, user_id).await?;
+    if !gripsou_jobs::categorizer_keys().contains(&provider.as_str()) {
+        return Err((StatusCode::NOT_FOUND, "unknown provider".into()));
+    }
+    match gripsou_jobs::categorizer_models(&provider).await {
+        Some(Ok(models)) => Ok(Json(models)),
+        Some(Err(e)) => {
+            tracing::warn!("listing {provider} models failed: {e}");
+            Err((StatusCode::BAD_GATEWAY, e.to_string()))
+        }
+        None => Err((
+            StatusCode::CONFLICT,
+            "provider has no API key on this server".into(),
+        )),
+    }
+}
+
 pub async fn budget_ai_usage(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -3187,6 +3211,26 @@ mod auth_tests {
             .err()
             .expect("forbidden");
         assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    /// A member must not list the provider's models: it spends the server's key.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn budget_ai_models_requires_admin(pool: PgPool) {
+        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let key = gripsou_jobs::categorizer_keys()[0];
+        let err = budget_ai_models(State(pool.clone()), auth(member), Path(key.to_string()))
+            .await
+            .expect_err("forbidden");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
+        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let err = budget_ai_models(State(pool.clone()), auth(admin), Path("nope".into()))
+            .await
+            .expect_err("not found");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
     }
 
     /// A member must not switch the budget AI provider — that decides where

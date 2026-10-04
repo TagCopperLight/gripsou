@@ -78,6 +78,9 @@ impl Categorizer for Mock {
         }
         (self.scripts[n.min(self.scripts.len() - 1)])(req)
     }
+    async fn models(&self) -> Result<Vec<String>, CategorizeError> {
+        Ok(vec!["m1".into()])
+    }
 }
 
 /// Answers every item with its first candidate at `conf`.

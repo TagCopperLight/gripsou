@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../Surface";
 import { SegmentedControl } from "../SegmentedControl";
+import { Select } from "../Select";
 import { CardState } from "../CardState";
 import {
+  useBudgetAiModels,
   useBudgetAiSettings,
   useSetBudgetAiSettings,
   type BudgetAiProvider,
@@ -12,12 +14,15 @@ import {
 
 /** Settings → Server: which provider categorises transactions for the whole
  *  instance. Keys live in the server's environment; a provider without one is
- *  never offered. */
+ *  never offered. The model is picked from the provider's own list; when that
+ *  list cannot be had, it is typed instead. */
 export function AiServerSurface() {
   const { t } = useTranslation();
   const query = useBudgetAiSettings();
   const settings = query.data;
   const save = useSetBudgetAiSettings();
+  const models = useBudgetAiModels(settings?.provider ?? null);
+  const modelId = useId();
   // The model being typed, tied to the server value it started from: once a
   // save lands and the server value moves, the draft is spent and the field
   // shows the server again.
@@ -71,18 +76,40 @@ export function AiServerSurface() {
           />
         </div>
         {settings.provider && (
-          <label className="flex items-center gap-3 text-sm text-fg">
-            {t("settings.server.budgetAiModel")}
-            <input
-              className="rounded-xl bg-surface-2 px-3.5 py-2 font-mono text-sm text-fg"
-              value={shownModel}
-              onChange={(e) => setDraft({ base: settings.model, value: e.target.value })}
-              onBlur={commitModel}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-              }}
-            />
-          </label>
+          <div className="flex items-center gap-3 text-sm text-fg">
+            <label htmlFor={modelId}>{t("settings.server.budgetAiModel")}</label>
+            {models.isError || models.data?.length === 0 ? (
+              <input
+                id={modelId}
+                className="rounded-xl bg-surface-2 px-3.5 py-2 font-mono text-sm text-fg"
+                value={shownModel}
+                onChange={(e) => setDraft({ base: settings.model, value: e.target.value })}
+                onBlur={commitModel}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+              />
+            ) : (
+              <Select
+                id={modelId}
+                className="w-72 font-mono"
+                value={shownModel}
+                disabled={!models.data}
+                onChange={(m) => {
+                  if (m !== shownModel) save.mutate({ provider: settings.provider, model: m });
+                }}
+                // The saved model stays listed even when the provider no
+                // longer offers it, so the control never shows a blank.
+                options={[...new Set([shownModel, ...(models.data ?? [])])]
+                  .filter(Boolean)
+                  .sort()
+                  .map((m) => ({ value: m, label: m }))}
+              />
+            )}
+          </div>
+        )}
+        {settings.provider && models.isError && (
+          <p className="w-full text-xs text-fg-faint">{t("settings.server.budgetAiModelsError")}</p>
         )}
       </div>
     );

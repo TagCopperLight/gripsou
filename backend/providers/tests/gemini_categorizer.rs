@@ -5,7 +5,7 @@ use gripsou_core::categorize::{
 use gripsou_providers::gemini::GeminiCategorizer;
 use rust_decimal::Decimal;
 use uuid::Uuid;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 const GROCERIES: &str = "11111111-1111-1111-1111-111111111111";
@@ -190,4 +190,81 @@ async fn an_unparseable_answer_is_an_error_not_a_panic() {
         g.categorize(&request()).await,
         Err(CategorizeError::Other(_))
     ));
+}
+
+fn models_fixture() -> serde_json::Value {
+    serde_json::from_str(include_str!("fixtures/gemini/models.json")).unwrap()
+}
+
+/// Only text Gemini models are offered: no Gemma, Lyria, embeddings, speech,
+/// image or agent models, which cannot answer this adapter's request.
+#[tokio::test]
+async fn models_lists_only_text_gemini_models() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta/models"))
+        .and(header("x-goog-api-key", "k"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(models_fixture()))
+        .mount(&server)
+        .await;
+    let g = GeminiCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    let models = g.models().await.unwrap();
+    assert!(models.contains(&"gemini-3.5-flash-lite".to_string()));
+    assert!(models.contains(&"gemini-2.5-pro".to_string()));
+    assert!(models.is_sorted());
+    for m in &models {
+        assert!(m.starts_with("gemini-"), "{m}");
+        for bad in [
+            "tts",
+            "image",
+            "transcribe",
+            "computer-use",
+            "robotics",
+            "customtools",
+        ] {
+            assert!(!m.contains(bad), "{m}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn models_follows_every_page() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta/models"))
+        .and(query_param("pageToken", "p2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "models": [{ "name": "models/gemini-a", "supportedGenerationMethods": ["generateContent"] }]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "models": [{ "name": "models/gemini-b", "supportedGenerationMethods": ["generateContent"] },
+                       { "name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"] }],
+            "nextPageToken": "p2"
+        })))
+        .mount(&server)
+        .await;
+    let g = GeminiCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    assert_eq!(g.models().await.unwrap(), vec!["gemini-a", "gemini-b"]);
+}
+
+#[tokio::test]
+async fn models_reports_the_api_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta/models"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error": { "message": "API key not valid" }
+        })))
+        .mount(&server)
+        .await;
+    let g = GeminiCategorizer::new("k".into(), "m".into()).with_base_url(server.uri());
+
+    let err = g.models().await.unwrap_err();
+    assert!(err.to_string().contains("API key not valid"), "{err}");
 }

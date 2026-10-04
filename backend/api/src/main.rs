@@ -144,6 +144,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/settings/budget-ai/usage", get(handlers::budget_ai_usage))
         .route(
+            "/settings/budget-ai/models/{provider}",
+            get(handlers::budget_ai_models),
+        )
+        .route(
             "/settings/budget-ai/prices",
             put(handlers::set_budget_ai_prices),
         )

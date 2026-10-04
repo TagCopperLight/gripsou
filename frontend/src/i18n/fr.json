@@ -315,6 +315,7 @@
       "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
       "budgetAiProvider": "Fournisseur",
       "budgetAiModel": "Modèle",
+      "budgetAiModelsError": "Impossible de charger la liste des modèles du fournisseur ; saisissez le nom du modèle.",
       "budgetAiOff": "Désactivée",
       "budgetAiCost": "Coût de la catégorisation par IA",
       "budgetAiCostHint": "Prix par million de jetons, en USD. Reprenez-les depuis la page tarifs de votre fournisseur.",

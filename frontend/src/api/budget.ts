@@ -408,6 +408,18 @@ export function useSetBudgetAiSettings() {
   });
 }
 
+/** The models the provider offers, asked of the provider itself. Not
+ *  retried: a failure falls back to typing the name. */
+export function useBudgetAiModels(provider: BudgetAiProvider | null) {
+  return useQuery({
+    queryKey: keys.budgetAiModels(provider ?? ""),
+    queryFn: () => getJson<string[]>(`/settings/budget-ai/models/${provider}`),
+    enabled: provider !== null,
+    retry: false,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
 export function useBudgetAiUsage() {
   return useQuery({
     queryKey: keys.budgetAiUsage(),
