@@ -9,11 +9,12 @@ The code and migrations are the reference for *what* exists. This file only reco
 Work is driven by GitHub issues on `TagCopperLight/gripsou` (public repo — anything pushed is published).
 
 1. **Start from an issue.** Read it with `gh issue view <n> --comments`. If something is unclear, ask in the conversation before building.
-2. **Work in a worktree** branched from an up-to-date `main`, on a branch named `<n>-<short-slug>` (e.g. `9-pairing-rework`). Never work directly on `main`. Worktrees go under `.claude/worktrees/` (gitignored); from there the backend still finds the root `.env`. A fresh worktree needs `bun install` in `frontend/` and builds into its own `target/` (the first build is slow).
+2. **Work in a worktree** branched from an up-to-date `main`, on a branch named `<n>-<short-slug>` (e.g. `9-pairing-rework`), or just `<short-slug>` when there is no issue. Never work directly on `main`. A tool that creates the worktree for you may give the branch its own name: rename it with `git branch -m` before the first push, so the PR's branch carries the right name. Worktrees go under `.claude/worktrees/` (gitignored); from there the backend still finds the root `.env`. A fresh worktree needs `bun install` in `frontend/` and builds into its own `target/` (the first build is slow).
 3. **Commit freely** on the branch, in whatever steps make sense.
 4. **Before opening the PR**, `./ci.sh` must pass, and `.sqlx/` must be regenerated if any query changed.
 5. **Open a PR** with `gh pr create`: the body says `Closes #<n>`, what changed and why in plain words, and how it was verified. Then stop. The user reviews and merges; never merge, and never push to `main`.
 6. **Review feedback** goes in as new commits on the same branch.
+7. **After the merge** GitHub deletes the remote branch. The local branch and its worktree are removed by `scripts/prune-merged.sh`, which the SessionStart hook in `.claude/settings.json` runs at the start of every session. It only touches branches with a merged PR and a clean worktree, and never the branch of the session running it.
 
 Releases are the user's: never create tags or publish releases. Each `v*` tag triggers the Docker image build, and tagging a version goes with a manual production update. A draft release on GitHub collects the notes for the next version.
 
