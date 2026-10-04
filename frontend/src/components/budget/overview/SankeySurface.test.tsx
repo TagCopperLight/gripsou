@@ -80,14 +80,15 @@ describe("sankeyGraph", () => {
   });
 });
 
-type SeriesNode = { name: string; label: { formatter: () => string } };
+type SeriesNode = { name: string; label: { show: boolean; formatter: () => string } };
 type TooltipFormatter = (p: unknown) => string;
 
 function sankeySeries() {
   const series = (rendered.option!.series as { data: SeriesNode[] }[])[0];
-  const label = (name: string) => series.data.find((n) => n.name === name)!.label.formatter();
+  const node = (name: string) => series.data.find((n) => n.name === name)!.label;
+  const label = (name: string) => node(name).formatter();
   const tooltip = (rendered.option!.tooltip as { formatter: TooltipFormatter }).formatter;
-  return { label, tooltip };
+  return { node, label, tooltip };
 }
 
 describe("SankeySurface's node labels", () => {
@@ -113,7 +114,7 @@ describe("SankeySurface's node labels", () => {
     expect(label("in:cat:i1")).toBe("Salary");
   });
 
-  it("labels the hub with the exact total and prints each flow's own decimal", () => {
+  it("gives the hub no label, its exact total in its tooltip, and each flow's own decimal", () => {
     render(
       <SankeySurface
         sankey={{
@@ -126,9 +127,10 @@ describe("SankeySurface's node labels", () => {
         onSeeTransactions={() => {}}
       />,
     );
-    const { label, tooltip } = sankeySeries();
+    const { node, tooltip } = sankeySeries();
+    expect(node("hub").show).toBe(false);
     // 0.1 + 0.2 in floats is 0.30000000000000004; the hub shows the decimal sum.
-    expect(label("hub")).toMatch(/0,30/);
+    expect(tooltip({ dataType: "node", name: "hub", data: {} })).toMatch(/0,30/);
     const edge = tooltip({ dataType: "edge", name: "", data: { source: "hub", target: "out:cat:e1" } });
     expect(edge).toContain("Rent");
     expect(edge).toMatch(/0,30/);

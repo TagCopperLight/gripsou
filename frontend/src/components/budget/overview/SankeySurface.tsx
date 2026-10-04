@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 import { Surface } from "../../Surface";
 import { formatMoney } from "../../../lib/money";
 import { sliceLabel } from "../../../lib/slice";
-import { sankeyGraph, HUB, type SankeyNode } from "../../../lib/sankeyGraph";
+import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
 import { GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
 import type { Sankey } from "../../../api/overview";
 
@@ -29,8 +29,6 @@ export function SankeySurface({
       drawnFromSavings: t("budget.overview.sankey.drawnFromSavings"),
     });
     const byName = new Map(graph.nodes.map((n) => [n.name, n]));
-    // The hub is the one node whose text is its amount rather than a name.
-    const text = (n: SankeyNode) => (n.name === HUB ? formatMoney(n.amount) : n.label);
 
     return {
       backgroundColor: "transparent",
@@ -89,10 +87,12 @@ export function SankeySurface({
               // inner side of the bar; on the default outer side they would be
               // clipped by the chart's edge.
               position: n.name.startsWith("out:") ? "left" : "right",
+              // The hub has no label: its total is in its tooltip.
+              show: n.name !== HUB,
               color: n.color,
               fontFamily: MONO,
               fontSize: 11,
-              formatter: () => text(n),
+              formatter: () => n.label,
             },
           })),
           links: graph.links.map((l) => ({
