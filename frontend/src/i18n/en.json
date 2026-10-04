@@ -315,6 +315,7 @@
       "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
       "budgetAiProvider": "Provider",
       "budgetAiModel": "Model",
+      "budgetAiModelsError": "The provider's model list could not be loaded; type the model's name.",
       "budgetAiOff": "off",
       "budgetAiCost": "AI categorization cost",
       "budgetAiCostHint": "Prices are per million tokens, in USD. Enter them from your provider's pricing page.",

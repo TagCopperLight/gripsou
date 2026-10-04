@@ -163,3 +163,40 @@ fn usage(meta: &Value) -> Usage {
         complete: tokens_in.is_some() && tokens_out.is_some(),
     }
 }
+
+/// Name fragments of `gemini-*` models that answer `generateContent` but not
+/// with JSON text: speech, images, transcription, agents.
+const NOT_TEXT: &[&str] = &[
+    "tts",
+    "image",
+    "transcribe",
+    "computer-use",
+    "robotics",
+    "customtools",
+];
+
+/// One page of `GET /v1beta/models`: the Gemini models that can categorise,
+/// without the `models/` prefix, and the next page's token. The list also
+/// holds Gemma, Lyria, Imagen, embeddings and agents, none of which take this
+/// adapter's `responseSchema` request.
+pub fn parse_models(body: &Value) -> (Vec<String>, Option<String>) {
+    let models = body["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| {
+            m["supportedGenerationMethods"]
+                .as_array()
+                .is_some_and(|ms| ms.iter().any(|x| x == "generateContent"))
+        })
+        .filter_map(|m| m["name"].as_str())
+        .map(|n| n.strip_prefix("models/").unwrap_or(n))
+        .filter(|n| n.starts_with("gemini-") && !NOT_TEXT.iter().any(|x| n.contains(x)))
+        .map(str::to_string)
+        .collect();
+    let next = body["nextPageToken"]
+        .as_str()
+        .filter(|t| !t.is_empty())
+        .map(str::to_string);
+    (models, next)
+}

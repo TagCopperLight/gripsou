@@ -58,6 +58,7 @@ export const keys = {
   budgetAiStatus: () => ["budget-ai-status"] as const,
   budgetAiSettings: () => ["budget-ai-settings"] as const,
   budgetAiUsage: () => ["budget-ai-usage"] as const,
+  budgetAiModels: (provider: string) => ["budget-ai-models", provider] as const,
 
   users: () => ["users"] as const,
   sessions: () => ["sessions"] as const,

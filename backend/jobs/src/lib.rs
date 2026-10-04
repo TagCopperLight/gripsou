@@ -249,6 +249,16 @@ fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
     (categorizer_kind(kind)?.build)(model)
 }
 
+/// The models a provider offers for categorising, asked of the provider
+/// itself. `None` when the provider is unknown or its key is not set.
+pub async fn categorizer_models(
+    kind: &str,
+) -> Option<Result<Vec<String>, gripsou_core::categorize::CategorizeError>> {
+    let k = categorizer_kind(kind)?;
+    let c = (k.build)(k.default_model)?;
+    Some(c.models().await)
+}
+
 async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
     open_gate_with(db, user_id, &available_categorizers()).await
 }

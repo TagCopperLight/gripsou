@@ -90,4 +90,40 @@ impl Categorizer for GeminiCategorizer {
         }
         map::parse_response(req, &body)
     }
+
+    async fn models(&self) -> Result<Vec<String>, CategorizeError> {
+        let url = format!("{}/v1beta/models", self.base_url);
+        let mut models = Vec::new();
+        let mut page: Option<String> = None;
+        loop {
+            let mut query = vec![("pageSize", "1000")];
+            if let Some(token) = &page {
+                query.push(("pageToken", token));
+            }
+            let resp = self
+                .http
+                .get(&url)
+                .header("x-goog-api-key", &self.api_key)
+                .query(&query)
+                .send()
+                .await
+                .map_err(|e| CategorizeError::Other(format!("gemini request failed: {e}")))?;
+            let status = resp.status();
+            let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+            if !status.is_success() {
+                let msg = body["error"]["message"].as_str().unwrap_or("no message");
+                return Err(CategorizeError::Other(format!("gemini {status}: {msg}")));
+            }
+            let (names, next) = map::parse_models(&body);
+            models.extend(names);
+            // A token equal to the one just sent would loop forever.
+            if next.is_none() || next == page {
+                break;
+            }
+            page = next;
+        }
+        models.sort();
+        models.dedup();
+        Ok(models)
+    }
 }

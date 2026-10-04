@@ -260,3 +260,36 @@ async fn a_server_error_is_other() {
     assert!(matches!(out.interrupted, Some(CategorizeError::Other(_))));
     assert!(out.guesses.is_empty());
 }
+
+#[tokio::test]
+async fn models_lists_every_model_by_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", "Bearer k"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(
+                serde_json::from_str::<serde_json::Value>(include_str!("fixtures/jev/models.json"))
+                    .unwrap(),
+            ),
+        )
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "jev-latest".into()).with_base_url(server.uri());
+
+    assert_eq!(j.models().await.unwrap(), vec!["jev-latest", "jev-preview"]);
+}
+
+#[tokio::test]
+async fn models_reports_the_api_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(401).set_body_string("bad key"))
+        .mount(&server)
+        .await;
+    let j = JevCategorizer::new("k".into(), "jev-latest".into()).with_base_url(server.uri());
+
+    let err = j.models().await.unwrap_err();
+    assert!(err.to_string().contains("401"), "{err}");
+}

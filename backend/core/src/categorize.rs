@@ -143,4 +143,7 @@ pub trait Categorizer: Send + Sync {
         &self,
         req: &CategorizeRequest,
     ) -> Result<CategorizeOutput, CategorizeError>;
+    /// The model names this provider's key can use for categorising, sorted —
+    /// the admin's model dropdown. Only models the adapter can actually drive.
+    async fn models(&self) -> Result<Vec<String>, CategorizeError>;
 }

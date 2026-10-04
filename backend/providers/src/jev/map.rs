@@ -130,3 +130,14 @@ pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Option<Guess>, Usag
     };
     (guess, usage)
 }
+
+/// `GET /v1/models`: every model's name.
+pub fn parse_models(body: &Value) -> Vec<String> {
+    body["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m["name"].as_str())
+        .map(str::to_string)
+        .collect()
+}

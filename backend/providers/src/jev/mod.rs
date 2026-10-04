@@ -134,6 +134,26 @@ impl Categorizer for JevCategorizer {
             interrupted,
         })
     }
+
+    async fn models(&self) -> Result<Vec<String>, CategorizeError> {
+        let resp = self
+            .http
+            .get(format!("{}/v1/models", self.base_url))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(CategorizeError::Other(format!("jev {status}: {text}")));
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+        let mut models = map::parse_models(&body);
+        models.sort();
+        models.dedup();
+        Ok(models)
+    }
 }
 
 /// One item's request. `Ok(None)` is a body that could not be read: the item

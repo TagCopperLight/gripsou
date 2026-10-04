@@ -105,7 +105,7 @@ export function Select({
           ref={menuRef}
           // Hidden until measured, so the first paint is never at the wrong place.
           style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: pos?.width, visibility: pos ? "visible" : "hidden" }}
-          className={`fixed z-60 rounded-xl p-1 shadow-xl ${
+          className={`fixed z-60 max-h-80 overflow-y-auto rounded-xl p-1 shadow-xl ${
             tone === "sunken" ? "bg-surface" : "bg-surface-2"
           }`}
         >
