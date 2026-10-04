@@ -1,7 +1,7 @@
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
-import { formatDate } from "../lib/date";
+import { formatDay } from "../lib/date";
 import { windowReturn } from "../lib/assetSeries";
 import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
@@ -124,7 +124,7 @@ export function ValueChart({
           .join("");
         return `
           <div style="min-width:200px;">
-            <div style="color:${FAINT};font-size:11px;">${formatDate(items[0].axisValue)}</div>
+            <div style="color:${FAINT};font-size:11px;">${formatDay(items[0].axisValue)}</div>
             ${rows}
           </div>`;
       },
@@ -139,7 +139,7 @@ export function ValueChart({
         fontFamily: MONO,
         fontSize: 11,
         hideOverlap: true,
-        formatter: (value: number) => formatDate(value),
+        formatter: (value: number) => formatDay(value),
       },
     },
     yAxis: {

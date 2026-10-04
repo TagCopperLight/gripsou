@@ -12,7 +12,7 @@ import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
 import { formatMoney, formatQuantity, lotCashAmount } from "../lib/money";
-import { formatDate } from "../lib/date";
+import { formatDay } from "../lib/date";
 import { colorForString } from "../lib/palette";
 import { KIND_LABEL_KEY, type Holding, type Lot } from "../api/types";
 import { useHoldingLots, useHoldingPrices } from "../api/hooks";
@@ -473,7 +473,7 @@ function PurchaseHistorySurface({
             {purchases.map((p, i) => (
               <tr key={i} className="font-mono text-sm">
                 <td className="py-2 border-t border-surface-3 text-fg-dim">
-                  {formatDate(p.t)}
+                  {formatDay(p.t)}
                 </td>
                 <td className="py-2 border-t border-surface-3 text-right text-fg-dim">
                   {formatQuantity(p.qty)}

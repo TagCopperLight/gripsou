@@ -1,3 +1,4 @@
+import { calendarDay, zonedDay } from "../lib/date";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Trash2, X } from "lucide-react";
@@ -34,7 +35,7 @@ const PREVIEW_DEBOUNCE_MS = 300;
  *  parsed into IEEE doubles, and 0.1 + 0.2 must still count as 0.3. */
 const EPS = 1e-8;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => zonedDay();
 
 type Row = {
   /** Present on a row already saved; absent on one the user just added. */
@@ -115,7 +116,7 @@ export function RecordLotsModal({
       data
         .filter((l) => l.manual)
         .map((l) => {
-          const date = new Date(l.t).toISOString().slice(0, 10);
+          const date = calendarDay(l.t);
           const quantity = l.qty;
           const unitPrice = l.price;
           const fee = l.fee;

@@ -9,6 +9,8 @@ export type CurrencyPosition = "before" | "after";
 export type UserPrefs = {
   uiLanguage: "en" | "fr";
   dateFormat: string;
+  /** IANA timezone defining today and the display of real timestamps. */
+  timeZone: string;
   numberGroupSep: string;
   numberDecimalSep: string;
   numberDecimals: number;
@@ -30,6 +32,7 @@ export type UserPrefs = {
 export const DEFAULT_PREFS: UserPrefs = {
   uiLanguage: "en",
   dateFormat: "DD/MM/YYYY",
+  timeZone: "Europe/Paris",
   numberGroupSep: " ",
   numberDecimalSep: ",",
   numberDecimals: 2,

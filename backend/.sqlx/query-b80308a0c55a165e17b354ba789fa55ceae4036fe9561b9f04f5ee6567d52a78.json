@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select coalesce(b.mean_price, 0) as \"mean_price!\",\n               b.explained_qty as \"explained_qty!\",\n               b.basis as \"basis!\",\n               b.realised as \"realised!\"\n        from lot_basis(array[$1]::uuid[], array[(now() at time zone 'utc')::date]) b\n        ",
+  "query": "\n        select coalesce(b.mean_price, 0) as \"mean_price!\",\n               b.explained_qty as \"explained_qty!\",\n               b.basis as \"basis!\",\n               b.realised as \"realised!\"\n        from lot_basis(array[$1]::uuid[], array[user_today($2)]) b\n        ",
   "describe": {
     "columns": [
       {
@@ -30,6 +30,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -40,5 +41,5 @@
       null
     ]
   },
-  "hash": "ab9dc4012e0bf9ff12f9addac326f3a2493eb4e962a46d2ea61a0a7cc00bf7f0"
+  "hash": "b80308a0c55a165e17b354ba789fa55ceae4036fe9561b9f04f5ee6567d52a78"
 }
