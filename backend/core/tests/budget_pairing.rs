@@ -1125,6 +1125,92 @@ async fn row(pool: &PgPool, id: Uuid) -> anyhow::Result<PairedRow> {
     .await?)
 }
 
+// ---------------------------------------------------------------------------
+// From scratch on every run
+// ---------------------------------------------------------------------------
+
+/// Adds an arrival on the incoming half's account as far from the outgoing
+/// half as the incoming half is, on the other side: the outgoing half now
+/// ties, and the pair no longer holds.
+async fn tie_the_pair(pool: &PgPool, out: Uuid, inn: Uuid) -> anyhow::Result<()> {
+    let (out_ts,): (DateTime<Utc>,) = sqlx::query_as("select ts from transaction where id = $1")
+        .bind(out)
+        .fetch_one(pool)
+        .await?;
+    let (b, in_ts): (Uuid, DateTime<Utc>) =
+        sqlx::query_as("select account_id, ts from transaction where id = $1")
+            .bind(inn)
+            .fetch_one(pool)
+            .await?;
+    tx_at(
+        pool,
+        b,
+        "acct-b",
+        "i2",
+        Decimal::new(50000, 2),
+        out_ts - (in_ts - out_ts),
+    )
+    .await?;
+    Ok(())
+}
+
+/// A pair a later run no longer finds is undone, and both halves go back to
+/// uncategorised, as if never paired.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    tie_the_pair(&pool, out, inn).await?;
+
+    let mut conn = pool.acquire().await?;
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(row(&pool, out).await?, (out, None, None, None));
+    assert_eq!(row(&pool, inn).await?, (inn, None, None, None));
+    Ok(())
+}
+
+/// Undoing a pair never touches a category the user chose.
+#[sqlx::test(migrations = "../migrations")]
+async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let savings = by_key(&pool, user_id, "savings").await?;
+    assert!(set_category(&pool, user_id, out, Some(savings)).await?);
+    assert_eq!(
+        row(&pool, out).await?.1,
+        Some(inn),
+        "a neutral write keeps the pair"
+    );
+    tie_the_pair(&pool, out, inn).await?;
+
+    let mut conn = pool.acquire().await?;
+    pair_internal_transfers(&mut conn, user_id).await?;
+    assert_eq!(
+        row(&pool, out).await?,
+        (out, None, Some(savings), Some("user".to_string()))
+    );
+    Ok(())
+}
+
+/// The run after a correction sees it: once the row that was tying is filed
+/// as spending, the pair it blocked forms.
+#[sqlx::test(migrations = "../migrations")]
+async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, out, inn) = seeded_pair(&pool).await?;
+    tie_the_pair(&pool, out, inn).await?;
+    let mut conn = pool.acquire().await?;
+    pair_internal_transfers(&mut conn, user_id).await?;
+    assert_eq!(row(&pool, out).await?.1, None);
+
+    let stray: Uuid = sqlx::query_scalar("select id from transaction where external_id = 'i2'")
+        .fetch_one(&pool)
+        .await?;
+    let groceries = a_category(&pool, user_id).await?;
+    assert!(set_category(&pool, user_id, stray, Some(groceries)).await?);
+
+    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(row(&pool, out).await?.1, Some(inn));
+    Ok(())
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn categorising_one_half_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
