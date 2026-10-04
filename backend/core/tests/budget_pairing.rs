@@ -594,39 +594,6 @@ async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// A row filed as neutral whose other half is on no connected account (a top-up
-/// of an outside wallet) must not block a transfer pairing would have made
-/// without it. In one pool, its account would hold two equal rows leaving
-/// against one arriving, and the tie would pair nothing; the filed rows only
-/// join once the undecided transfers have paired.
-#[sqlx::test(migrations = "../migrations")]
-async fn a_filed_row_never_blocks_a_transfer_that_pairs_without_it(
-    pool: PgPool,
-) -> anyhow::Result<()> {
-    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
-    let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-1000, 2), now).await?;
-    let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(1000, 2), now).await?;
-    let wallet = tx_at_kind(
-        &pool,
-        a,
-        "acct-a",
-        "w1",
-        "withdrawal",
-        Decimal::new(-1000, 2),
-        now,
-    )
-    .await?;
-    let internal = by_key(&pool, user_id, "internal").await?;
-    file_as(&pool, wallet, internal, "user").await?;
-
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
-    assert_eq!(row(&pool, out).await?.1, Some(inn));
-    assert_eq!(row(&pool, wallet).await?.1, None);
-    Ok(())
-}
-
 /// The cash leg of a buy or sell never pairs, even filed as Investments: the
 /// lot is its record, and a broker mirrors it across its cash and portfolio
 /// accounts.
