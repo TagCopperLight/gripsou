@@ -282,7 +282,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   <td className={`py-3 px-3 border-t border-surface-2 text-right ${HIDDEN_ON_PHONE}`}>
                     {hasPnl ? (
                       <span className="text-sm text-fg-dim font-mono">
-                        {formatQuantity(h.qty)}
+                        {formatQuantity(h.qty, { fractionDigits: 2 })}
                       </span>
                     ) : (
                       <span className="text-sm text-fg-faint">-</span>
