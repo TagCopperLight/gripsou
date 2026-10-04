@@ -4,6 +4,19 @@ gripsou is a self-hosted personal finance dashboard: connect bank/broker provide
 
 The code and migrations are the reference for *what* exists. This file only records what the code can't tell you: the principles, the invariants, and the decisions that look like mistakes but aren't.
 
+## Workflow
+
+Work is driven by GitHub issues on `TagCopperLight/gripsou` (public repo — anything pushed is published).
+
+1. **Start from an issue.** Read it with `gh issue view <n> --comments`. If something is unclear, ask in the conversation before building.
+2. **Work in a worktree** branched from an up-to-date `main`, on a branch named `<n>-<short-slug>` (e.g. `9-pairing-rework`). Never work directly on `main`. Worktrees go under `.claude/worktrees/` (gitignored); from there the backend still finds the root `.env`. A fresh worktree needs `bun install` in `frontend/` and builds into its own `target/` (the first build is slow).
+3. **Commit freely** on the branch, in whatever steps make sense.
+4. **Before opening the PR**, `./ci.sh` must pass, and `.sqlx/` must be regenerated if any query changed.
+5. **Open a PR** with `gh pr create`: the body says `Closes #<n>`, what changed and why in plain words, and how it was verified. Then stop. The user reviews and merges; never merge, and never push to `main`.
+6. **Review feedback** goes in as new commits on the same branch.
+
+Releases are the user's: never create tags or publish releases. Each `v*` tag triggers the Docker image build, and tagging a version goes with a manual production update. A draft release on GitHub collects the notes for the next version.
+
 ## Commands
 
 Backend (`cd backend`, Cargo workspace; the binary is `gripsou` in `api`):
