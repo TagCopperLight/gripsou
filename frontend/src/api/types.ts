@@ -238,6 +238,9 @@ export type Transaction = {
    *  transaction's own date. The list is capped at 200 rows, so summing these
    *  client-side for an explicit selection is cheap. */
   amountReporting: string;
+  /** A rate was missing on the day, so `amountReporting` is not a real figure
+   *  in the reporting currency and must not be shown as one. */
+  fxMissing: boolean;
   currency: string;
   accountId: string;
   accountName: string;

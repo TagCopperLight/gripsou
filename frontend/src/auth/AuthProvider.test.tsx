@@ -6,6 +6,7 @@ import { setAuthToken } from "../api/client";
 import * as client from "../api/client";
 import { DEFAULT_PREFS, getPrefs, setPrefs } from "../lib/prefs";
 import i18n from "../i18n";
+import { queryClient } from "../queryClient";
 
 function Probe() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -83,4 +84,37 @@ test("stored token → /auth/me network error → token preserved", async () => 
 
   // Token should NOT be wiped from localStorage.
   expect(client.getAuthToken()).toBe("good-tok");
+});
+
+function PrefsProbe({ next }: { next: Partial<typeof DEFAULT_PREFS> }) {
+  const { prefs, updatePrefs, isAuthenticated } = useAuth();
+  return (
+    <button disabled={!isAuthenticated} onClick={() => void updatePrefs({ ...prefs, ...next })}>
+      change
+    </button>
+  );
+}
+
+it.each([
+  ["currency", { currency: "CNY" }, true],
+  ["timezone", { timeZone: "America/Los_Angeles" }, true],
+  ["anything else", { privateMode: true }, false],
+])("a %s change refetches server data: %s", async (_name, next, refetches) => {
+  setPrefs(DEFAULT_PREFS);
+  setAuthToken("tok", true);
+  const user = { id: "1", name: "A", email: "a@t.local", role: "admin" as const, prefs: DEFAULT_PREFS };
+  vi.spyOn(client, "getJson").mockResolvedValue(user);
+  vi.spyOn(client, "patchJson").mockImplementation(async (_url, body) => ({ ...user, prefs: body }));
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue();
+
+  render(<AuthProvider><PrefsProbe next={next} /></AuthProvider>);
+  const button = await screen.findByRole("button", { name: "change" });
+  await waitFor(() => expect(button).toBeEnabled());
+  button.click();
+  await waitFor(() => expect(client.patchJson).toHaveBeenCalled());
+  // Let the PATCH settle: the refetch decision is taken on its answer.
+  await new Promise((r) => setTimeout(r, 0));
+  expect(getPrefs()).toMatchObject(next);
+  if (refetches) await waitFor(() => expect(invalidate).toHaveBeenCalled());
+  else expect(invalidate).not.toHaveBeenCalled();
 });

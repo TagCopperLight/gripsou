@@ -7,7 +7,7 @@ import type { Transaction } from "../../api/types";
 function tx(over: Partial<Transaction>): Transaction {
   return {
     id: "t1", t: Date.UTC(2026, 8, 12, 12), type: "withdrawal", description: "ALDI SARL 1234",
-    amount: "-12.40", amountReporting: "-12.40", currency: "EUR", accountId: "a", accountName: "Current",
+    amount: "-12.40", amountReporting: "-12.40", fxMissing: false, currency: "EUR", accountId: "a", accountName: "Current",
     accountColor: "#5b9bf0", source: "cash", ticker: null, logo: null, quantity: null, unitPrice: null,
     fee: null, categoryId: null, categoryName: null, categoryDefaultKey: null,
     categoryColor: null, categoryIcon: null, categoryKind: null, categorySource: null,
@@ -47,6 +47,25 @@ describe("TransactionRow", () => {
     expect(screen.getByTestId("tx-description")).toHaveTextContent("ALDI SARL 1234");
     expect(screen.getByText("Current")).toBeVisible();
     expect(screen.getByTestId("tx-amount").textContent).toContain("12,40");
+  });
+
+  it("adds no converted line when the account is already in the reader's currency", () => {
+    renderRow();
+    expect(screen.queryByTestId("tx-amount-converted")).toBeNull();
+  });
+
+  it("gives a foreign amount its value in the reader's currency beneath it", () => {
+    renderRow({ amount: "-100.00", amountReporting: "-12.70", currency: "CNY" });
+    const amount = screen.getByTestId("tx-amount");
+    expect(amount.textContent).toContain("100,00 ¥");
+    expect(within(amount).getByTestId("tx-amount-converted").textContent).toBe("≈ -12,70 €");
+  });
+
+  it("never prints the converted figure when the day has no rate", () => {
+    renderRow({ amount: "-100.00", amountReporting: "0", currency: "CNY", fxMissing: true });
+    const converted = screen.getByTestId("tx-amount-converted");
+    expect(converted.textContent).not.toContain("€");
+    expect(converted).toHaveTextContent("No exchange rate");
   });
 
   it("shows the uncategorised chip and opens the chooser when it is clicked", () => {

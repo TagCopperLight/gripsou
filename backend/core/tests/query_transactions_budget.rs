@@ -631,6 +631,60 @@ async fn list_rows_carry_both_their_own_and_the_reporting_amount(
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].amount, eur(-100), "the list still shows what moved");
     assert_eq!(rows[0].amount_reporting, eur(-50));
+    assert!(!rows[0].fx_missing);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_row_with_no_rate_on_its_day_says_its_reporting_amount_is_not_real(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    // The only USD rate is AFTER the transaction, so the account leg is unknown.
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, day(2026, 3, 10), Decimal::new(50, 2)).await;
+
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let usd_acct =
+        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
+    let eur_acct = upsert_account(&mut conn, conn_id, &checking_account("acct-eur")).await?;
+    upsert_transaction(
+        &mut conn,
+        usd_acct,
+        &txn_on_day(
+            "acct-usd",
+            "t1",
+            "withdrawal",
+            eur(-100),
+            day(2026, 3, 4),
+            "US SPEND",
+        ),
+    )
+    .await?;
+    upsert_transaction(
+        &mut conn,
+        eur_acct,
+        &txn_on_day(
+            "acct-eur",
+            "t2",
+            "withdrawal",
+            eur(-10),
+            day(2026, 3, 4),
+            "EU SPEND",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    let by_desc = |d: &str| {
+        rows.iter()
+            .find(|r| r.description.as_deref() == Some(d))
+            .unwrap()
+    };
+    assert_eq!(by_desc("US SPEND").amount_reporting, eur(0));
+    assert!(by_desc("US SPEND").fx_missing);
+    assert!(!by_desc("EU SPEND").fx_missing, "the pivot always converts");
     Ok(())
 }
 

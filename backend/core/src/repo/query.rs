@@ -826,6 +826,12 @@ pub struct TransactionListRow {
     /// pivot currency instead (see the divisor comment on the query below),
     /// so nothing here flags that case for a caller of this row type.
     pub amount_reporting: Decimal,
+    /// `amount_reporting` is not a real figure in the reporting currency: the
+    /// account leg's rate was unknown on that day (it is zero), or the
+    /// reporting leg's was (it is in the pivot). A screen showing the
+    /// converted amount next to `amount` must hide it then, not print it under
+    /// the reporting currency's symbol.
+    pub fx_missing: bool,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale that now
     /// lives in the `lot` table. Structured, not a pre-built sentence: the
     /// frontend's i18n and per-user number formatting render the lot fields.
@@ -1011,6 +1017,9 @@ pub async fn transactions(
                coalesce(filtered.amount * afx.unit_value
                         / coalesce(nullif(rfx.unit_value, 0), 1), 0)
                    as "amount_reporting!",
+               (afx.unit_value is null
+                or reporting_fx_degraded($1, (filtered.ts at time zone 'utc')::date))
+                   as "fx_missing!",
                source as "source!", ticker, logo_url, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color, account_currency as "account_currency!",

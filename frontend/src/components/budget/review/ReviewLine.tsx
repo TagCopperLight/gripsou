@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { TransactionAvatar } from "../TransactionAvatar";
 import { CategoryChip } from "../CategoryChip";
-import { Money } from "../../Money";
+import { TransactionAmount } from "../TransactionAmount";
 import { Button } from "../../Button";
 import { formatDay } from "../../../lib/date";
 import { categoryOfTransaction } from "../../../lib/budget";
@@ -43,7 +43,9 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
       </div>
       {/* Fixed-width columns, so amounts, chips and buttons line up down the
           list whatever the chip's label or whether a guess exists. */}
-      <Money value={tx.amount} currency={tx.currency} signed className="w-28 shrink-0 text-right text-fg" />
+      <span className="w-28 shrink-0 text-right">
+        <TransactionAmount tx={tx} className="text-fg" />
+      </span>
       <div className="flex w-40 shrink-0">
         <CategoryChip category={category} needsReview={category !== null} />
       </div>

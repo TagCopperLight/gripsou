@@ -337,6 +337,9 @@ pub struct Transaction {
     /// The same movement in the reader's reporting currency, converted at the
     /// transaction's own date. Decimal string, never a float.
     pub amount_reporting: String,
+    /// `amount_reporting` could not really be converted (a rate was unknown on
+    /// the day), so it must not be shown as a reporting-currency figure.
+    pub fx_missing: bool,
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
@@ -395,6 +398,7 @@ impl Transaction {
             description: r.description,
             amount: r.amount.to_string(),
             amount_reporting: r.amount_reporting.to_string(),
+            fx_missing: r.fx_missing,
             currency: r.account_currency,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,

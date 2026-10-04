@@ -101,7 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updated = await patchJson<SessionUser>("/auth/prefs", next);
         setUser(updated);
         setPrefs(updated.prefs);
-        if (updated.prefs.timeZone !== prev?.prefs.timeZone)
+        // Both are applied server-side (today's date, every converted
+        // figure), so every cached response is now stale.
+        if (
+          updated.prefs.timeZone !== prev?.prefs.timeZone ||
+          updated.prefs.currency !== prev?.prefs.currency
+        )
           await queryClient.invalidateQueries();
         if (updated.prefs.budgetAiThreshold !== prev?.prefs.budgetAiThreshold)
           afterReviewThresholdChange(queryClient);

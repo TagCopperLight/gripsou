@@ -555,6 +555,7 @@
       "setCategory": "Définir une catégorie",
       "addTags": "Ajouter des étiquettes",
       "checked": "Pointée",
+      "noRate": "Pas de taux de change",
       "autoPaired": "Virement interne associé automatiquement",
       "orphanTransfer": "Virement dissocié : cette opération n'est plus compensée par sa contrepartie",
       "breakPair": {

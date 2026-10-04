@@ -556,6 +556,7 @@
       "addTags": "Add tags",
       "checked": "Checked",
       "autoPaired": "Auto paired transfer",
+      "noRate": "No exchange rate",
       "orphanTransfer": "Transfer pairing removed — this half no longer nets out",
       "breakPair": {
         "title": "Break the transfer pairing?",

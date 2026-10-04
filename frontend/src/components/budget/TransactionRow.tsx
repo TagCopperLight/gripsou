@@ -5,8 +5,8 @@ import { ArrowUpDown, TrendingDown, TrendingUp, TriangleAlert } from "lucide-rea
 import { TransactionAvatar } from "./TransactionAvatar";
 import { CategoryChip } from "./CategoryChip";
 import { TagCell } from "./TagCell";
+import { TransactionAmount } from "./TransactionAmount";
 import { Checkbox } from "../Checkbox";
-import { Money } from "../Money";
 import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
 import { FALLBACK_COLOR, categoryOfTransaction } from "../../lib/budget";
@@ -217,9 +217,8 @@ export const TransactionRow = memo(function TransactionRow({
       )}
 
       <td role="cell" className={`justify-end whitespace-nowrap py-2.25 ${COL_PAD.amount}`}>
-        {/* Denominated in the ACCOUNT's own currency, never the reporting one. */}
         <span data-testid="tx-amount" className={dim}>
-          <Money value={tx.amount} currency={tx.currency} signed className="text-fg" />
+          <TransactionAmount tx={tx} className="text-fg" />
         </span>
       </td>
     </tr>
