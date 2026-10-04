@@ -63,6 +63,8 @@ export function SankeySurface({
             node.name === HUB ? "transparent" : node.color,
             node.name === HUB ? t("common.total") : node.label,
             formatMoney(node.amount),
+            false,
+            0,
           );
         },
       },

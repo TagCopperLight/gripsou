@@ -27,12 +27,14 @@ export function escapeHtml(s: string): string {
 }
 
 /** One line of a chart tooltip: swatch, label, right-aligned value. Pass
- *  `"transparent"` as the colour for a swatch-less row (a Total line). */
+ *  `"transparent"` as the colour for a swatch-less row (a Total line).
+ *  A standalone row uses zero top margin; rows following a heading use 6px. */
 export function tooltipRow(
   color: string,
   label: string,
   value: string,
   strong = false,
+  marginTop = 6,
 ): string {
   const swatch =
     color === "transparent"
@@ -40,7 +42,7 @@ export function tooltipRow(
       : `<span style="width:9px;height:9px;border-radius:3px;background:${color};"></span>`;
   const labelColor = strong ? WHITE : DIM;
   return `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-top:${marginTop}px;">
       ${swatch}
       <span style="color:${labelColor};font-size:12px;${strong ? "font-weight:600;" : ""}">${escapeHtml(label)}</span>
       <span style="margin-left:auto;padding-left:12px;color:${WHITE};font-size:12px;font-weight:600;">${value}</span>
