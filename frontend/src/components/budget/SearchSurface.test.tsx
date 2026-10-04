@@ -129,12 +129,12 @@ describe("SearchSurface", () => {
     expect(iconClass("all")).toContain("text-fg-faint");
 
     // Unselected now, and still its own colour.
-    expect(screen.getByTestId("bucket-in").className).not.toContain("bg-surface-3");
+    expect(screen.getByTestId("bucket-in")).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByTestId("bucket-in"));
-    expect(screen.getByTestId("bucket-in").className).toContain("bg-surface-3");
+    expect(screen.getByTestId("bucket-in")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTestId("bucket-in").className).not.toContain("green");
     expect(iconClass("in")).toContain("text-green");
-    expect(screen.getByTestId("bucket-all").className).not.toContain("bg-surface-3");
+    expect(screen.getByTestId("bucket-all")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("gives a bucket chip the same tinted icon as its row", () => {

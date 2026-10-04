@@ -42,10 +42,9 @@ function renderRow(over: Partial<Transaction> = {}, props: Record<string, unknow
 }
 
 describe("TransactionRow", () => {
-  it("draws the description in caps, the account and the amount in its own currency", () => {
+  it("draws the description, the account and the amount in its own currency", () => {
     renderRow();
     expect(screen.getByTestId("tx-description")).toHaveTextContent("ALDI SARL 1234");
-    expect(screen.getByTestId("tx-description").className).toContain("uppercase");
     expect(screen.getByText("Current")).toBeVisible();
     expect(screen.getByTestId("tx-amount").textContent).toContain("12,40");
   });
