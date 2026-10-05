@@ -126,6 +126,35 @@ describe("CategoryChooser", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("hides the no-category line once a search leaves it out, so Enter applies the first match", async () => {
+    const user = userEvent.setup();
+    const { onPick } = renderChooser({ mode: "pick" });
+    await screen.findByText("Groceries");
+    await user.keyboard("sal");
+    expect(screen.queryByTestId("chooser-option-none")).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(onPick).toHaveBeenCalledWith("sal");
+  });
+
+  it("keeps the no-category line when the search matches its label", async () => {
+    const user = userEvent.setup();
+    const { onPick } = renderChooser({ mode: "pick" });
+    await screen.findByText("Groceries");
+    await user.keyboard("no cat");
+    expect(screen.getByTestId("chooser-option-none")).toBeVisible();
+    expect(screen.queryByText("Nothing matches.")).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(onPick).toHaveBeenCalledWith(null);
+  });
+
+  it("says nothing matches when the search leaves out every line, the no-category one included", async () => {
+    renderChooser({ mode: "pick" });
+    await screen.findByText("Groceries");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zzz" } });
+    expect(screen.queryByTestId("chooser-option-none")).toBeNull();
+    expect(screen.getByText("Nothing matches.")).toBeVisible();
+  });
+
   describe("allowNone", () => {
     it("still offers the no-category line by default in pick mode", async () => {
       renderChooser({ mode: "pick" });

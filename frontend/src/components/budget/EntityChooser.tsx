@@ -49,10 +49,11 @@ export function EntityChooser(props: EntityChooserProps) {
   const listId = `${baseId}-list`;
   const optionId = (sequenceIndex: number) => `${baseId}-opt-${sequenceIndex}`;
 
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return needle ? items.filter((i) => i.label.toLowerCase().includes(needle)) : items;
-  }, [items, query]);
+  const needle = query.trim().toLowerCase();
+  const visible = useMemo(
+    () => (needle ? items.filter((i) => i.label.toLowerCase().includes(needle)) : items),
+    [items, needle],
+  );
 
   const apply = (id: string | null) => {
     if (props.mode === "pick") {
@@ -65,9 +66,10 @@ export function EntityChooser(props: EntityChooserProps) {
 
   // The "no category" line (pick mode only) is a real, keyboard-reachable
   // option, not a mouse-only extra: it occupies sequence index 0 and every
-  // visible item is offset by one behind it.
+  // visible item is offset by one behind it. A search filters it like any
+  // other line, so a bare Enter after typing lands on the first match.
   const noneLabel = props.mode === "pick" ? props.noneLabel : undefined;
-  const hasNone = !!noneLabel;
+  const hasNone = !!noneLabel && (!needle || noneLabel.toLowerCase().includes(needle));
   const offset = hasNone ? 1 : 0;
   const lastIndex = visible.length - 1 + offset;
 
@@ -197,7 +199,7 @@ export function EntityChooser(props: EntityChooserProps) {
                 );
               })
             : visible.map(line)}
-          {visible.length === 0 && (
+          {visible.length === 0 && !hasNone && (
             <p className="px-2 py-4 text-sm text-fg-faint">{t("budget.chooser.noMatch")}</p>
           )}
         </div>
