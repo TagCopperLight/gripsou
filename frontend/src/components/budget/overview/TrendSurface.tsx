@@ -9,7 +9,7 @@ import { desaturate } from "../../../lib/color";
 import { formatMoney, sumDecimals } from "../../../lib/money";
 import { monthLabel, monthStart } from "../../../lib/period";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
-import { FAINT, GRID, MONO, SURFACE, tooltipRow } from "../../../lib/chartTheme";
+import { FAINT, GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
 import type { BudgetTrend } from "../../../api/overview";
 
 type TooltipParam = { dataIndex: number };
@@ -114,11 +114,6 @@ export function TrendSurface({
         data: columns.map((entries) => Number(entries[rank].amount)),
         itemStyle: {
           color: ({ dataIndex }: TooltipParam) => sliceColor(columns[dataIndex][rank].slice),
-          // A border in the card's colour spaces the stacked blocks apart,
-          // like the donut's slices (half its width: the bars are narrow).
-          borderColor: SURFACE,
-          borderWidth: 1,
-          borderRadius: 4,
         },
         emphasis: { disabled: true },
         barMaxWidth: 28,
@@ -165,7 +160,10 @@ export function TrendSurface({
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.trend.title")}</h2>
         <ReactECharts
           option={option}
+          // Crisp SVG edges prevent dark antialiasing seams where stacked
+          // rectangles meet at fractional pixel coordinates.
           opts={{ renderer: "svg" }}
+          className="[&_path]:[shape-rendering:crispEdges]"
           notMerge
           onEvents={onEvents}
           style={{ height: 300, width: "100%" }}
