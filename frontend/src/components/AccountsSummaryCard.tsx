@@ -29,12 +29,12 @@ export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummar
       </div>
       {total > 0 && (
         <div className="relative mt-3" onMouseLeave={() => setHover(null)}>
-          <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+          <div className="flex h-2.5 gap-1">
             {shown.map((a) => (
               <span
                 key={a.id}
                 data-testid="account-share"
-                className="h-full min-w-0.5 transition-opacity duration-140"
+                className="h-full min-w-1 rounded-full transition-opacity duration-140"
                 style={{
                   flexGrow: Number(a.value),
                   flexBasis: 0,

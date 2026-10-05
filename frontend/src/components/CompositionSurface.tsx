@@ -41,12 +41,14 @@ function AllocationBar({
   return (
     <div className="flex flex-col gap-2">
       <span className="text-fg font-semibold text-sm pb-1">{title}</span>
-      <div className="flex h-3 rounded-full overflow-hidden bg-surface-3">
-        {slices.map((s) => (
+      <div className="flex h-3 gap-1">
+        {/* Each slice is its own pill, so a 0% slice would leave a stray gap. */}
+        {slices.filter((s) => s.percent > 0).map((s) => (
           <span
             key={s.name}
             data-testid={`seg-${s.name}`}
-            style={{ width: `${s.percent}%`, background: s.color }}
+            className="h-full min-w-1 rounded-full"
+            style={{ flexGrow: s.percent, flexBasis: 0, background: s.color }}
           />
         ))}
       </div>

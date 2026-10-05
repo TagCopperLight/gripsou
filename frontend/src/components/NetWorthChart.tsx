@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
+import { SURFACE } from "../lib/chartTheme";
 
 const GREEN = "#34d399";
 const GRAY = "#777471"; // fg-faint
-const SURFACE = "#13110f"; // the dashboard card the chart sits on
 
 /** Chart-facing point: numbers, ready for ECharts. */
 export type NetWorthChartPoint = { t: number; netWorth: number; invested: number };

@@ -21,10 +21,10 @@ describe("CompositionSurface", () => {
     expect(screen.getByText(/62/)).toBeInTheDocument();
   });
 
-  it("sets segment widths from weights", () => {
+  it("sizes segments from weights", () => {
     const { container } = render(<CompositionSurface composition={COMP} />);
     const seg = container.querySelector('[data-testid="seg-United States"]') as HTMLElement;
-    expect(seg.style.width).toBe("62%");
+    expect(seg.style.flexGrow).toBe("62");
   });
 
   it("adds an Other slice for the remainder up to 100%", () => {
@@ -32,7 +32,7 @@ describe("CompositionSurface", () => {
     const { container } = render(<CompositionSurface composition={COMP} />);
     expect(screen.getAllByText("Other").length).toBe(2);
     const other = container.querySelector('[data-testid="seg-Other"]') as HTMLElement;
-    expect(other.style.width).toBe("24%");
+    expect(other.style.flexGrow).toBe("24");
   });
 
   it("puts the rounding leftover into Other so percents total 100", () => {
@@ -47,7 +47,7 @@ describe("CompositionSurface", () => {
     };
     const { container } = render(<CompositionSurface composition={thirds} />);
     const other = container.querySelector('[data-testid="seg-Other"]') as HTMLElement;
-    expect(other.style.width).toBe("1%");
+    expect(other.style.flexGrow).toBe("1");
     expect(screen.getByText("Other")).toBeInTheDocument();
   });
 
@@ -59,5 +59,18 @@ describe("CompositionSurface", () => {
     render(<CompositionSurface composition={full} />);
     // 100% → no remainder; 99.7% rounds to 0% → no Other.
     expect(screen.queryByText("Other")).not.toBeInTheDocument();
+  });
+
+  it("keeps a 0% slice in the legend but not in the bar", () => {
+    const tiny: Composition = {
+      countries: [
+        { name: "United States", weight: 0.9 },
+        { name: "Tiny", weight: 0.004 },
+      ],
+      sectors: [],
+    };
+    const { container } = render(<CompositionSurface composition={tiny} />);
+    expect(screen.getByText("Tiny")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="seg-Tiny"]')).toBeNull();
   });
 });
