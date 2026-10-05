@@ -115,9 +115,9 @@ export function TrendSurface({
         itemStyle: {
           color: ({ dataIndex }: TooltipParam) => sliceColor(columns[dataIndex][rank].slice),
           // A border in the card's colour spaces the stacked blocks apart,
-          // like the donut's slices.
+          // like the donut's slices (half its width: the bars are narrow).
           borderColor: SURFACE,
-          borderWidth: 2,
+          borderWidth: 1,
           borderRadius: 4,
         },
         emphasis: { disabled: true },
