@@ -8,10 +8,9 @@ import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { CardState } from "./CardState";
 import { desaturate } from "../lib/color";
+import { SURFACE } from "../lib/chartTheme";
 import { accountTypeLabel, type DistributionAccount } from "../api/types";
 import { useDistribution } from "../api/hooks";
-
-const SURFACE = "#13110f";
 
 type DistributionCardProps = {
   className?: string;

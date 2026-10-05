@@ -3,6 +3,7 @@
 // `var(--color-…)`, so the hexes are duplicated here deliberately. Keep them in
 // step with the theme tokens named in the comments.
 
+export const SURFACE = "#13110f"; // surface
 export const GRID = "#262321"; // surface-3
 export const FAINT = "#777471"; // fg-faint
 export const DIM = "#aeaaa7"; // fg-dim
