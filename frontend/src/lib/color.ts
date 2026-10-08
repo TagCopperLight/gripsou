@@ -89,3 +89,15 @@ export function tint(hex: string, alpha: number, base = SURFACE): string {
     b: b.b + (c.b - b.b) * alpha,
   });
 }
+
+/**
+ * The `index`-th of `count` shades of `hex`, from a little lighter to a little
+ * darker, so children of one slice read as one family (e.g. the countries of a
+ * region on the outer ring of a donut). A single child keeps the colour as is.
+ */
+export function shade(hex: string, index: number, count: number, spread = 0.22): string {
+  if (count <= 1) return hex;
+  const hsl = rgbToHsl(hexToRgb(hex));
+  const l = hsl.l + spread / 2 - (spread * index) / (count - 1);
+  return rgbToHex(hslToRgb({ ...hsl, l: Math.min(0.85, Math.max(0.25, l)) }));
+}

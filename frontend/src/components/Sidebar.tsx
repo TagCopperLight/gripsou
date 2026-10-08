@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
+  ChartColumn,
   LayoutDashboard,
   Wallet,
   type LucideIcon,
@@ -19,6 +20,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/accounts", labelKey: "nav.accounts", icon: Wallet },
+  { to: "/investments", labelKey: "nav.investments", icon: ChartColumn },
   { to: "/budget", labelKey: "nav.budget", icon: BudgetIcon },
 ];
 

@@ -159,6 +159,7 @@ async fn main() -> anyhow::Result<()> {
             post(handlers::webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
         )
         .route("/holdings", get(handlers::holdings))
+        .route("/investments/returns", get(handlers::investment_returns))
         .route("/holdings/{id}/prices", get(handlers::holding_prices))
         .route(
             "/holdings/{id}/lots",

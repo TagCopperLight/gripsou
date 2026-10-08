@@ -3,7 +3,8 @@
     "dashboard": "Tableau de bord",
     "accounts": "Comptes",
     "settings": "Paramètres",
-    "budget": "Budget"
+    "budget": "Budget",
+    "investments": "Investissements"
   },
   "common": {
     "loading": "Chargement…",
@@ -708,6 +709,57 @@
       "retry": "Réessayer",
       "running_one": "Catégorisation de l'historique en cours ({{count}} restante)",
       "running_other": "Catégorisation de l'historique en cours ({{count}} restantes)"
+    }
+  },
+  "investments": {
+    "annualised": {
+      "title": "Rendement annualisé"
+    },
+    "figures": {
+      "invested": "Investi",
+      "value": "Valeur actuelle",
+      "unrealised": "Plus-value latente"
+    },
+    "returns": {
+      "title": "Rendements",
+      "account": "COMPTE",
+      "annualised": "RENDEMENT ANNUALISÉ",
+      "perYearShort": "/an",
+      "invested": "INVESTI",
+      "value": "VALEUR ACTUELLE",
+      "unrealised": "PLUS-VALUE LATENTE"
+    },
+    "span": {
+      "over": "sur {{span}}",
+      "years_one": "{{count}} an",
+      "years_other": "{{count}} ans",
+      "months_one": "{{count}} mois",
+      "months_other": "{{count}} mois",
+      "days_one": "{{count}} jour",
+      "days_other": "{{count}} jours"
+    },
+    "missing": {
+      "dotTitle": "Exclu, achats non renseignés : {{names}}",
+      "noReturn": "aucun achat renseigné"
+    },
+    "exposure": {
+      "title": "Exposition",
+      "regions": "Par régions et pays",
+      "sectors": "Par secteurs",
+      "indices": "Par indice",
+      "stocks": "Actions",
+      "center": "Valeur",
+      "other": "Autre"
+    },
+    "regions": {
+      "northAmerica": "Amérique du Nord",
+      "europe": "Europe",
+      "asiaPacific": "Asie-Pacifique",
+      "other": "Autre"
+    },
+    "empty": {
+      "title": "Aucun investissement",
+      "body": "Aucun de vos comptes ne détient de titres. Les liquidités ne sont pas comptées sur cette page."
     }
   }
 }

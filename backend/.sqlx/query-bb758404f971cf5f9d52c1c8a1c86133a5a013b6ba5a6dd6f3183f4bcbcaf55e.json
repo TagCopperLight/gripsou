@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select l.holding_id as \"holding_id?\", h.account_id as \"account_id!\",\n               l.acquired_on as \"day!\",\n               (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)\n                     else l.quantity * l.unit_price - l.fee end)\n                 * fx_asof(a.currency, l.acquired_on)\n                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), l.acquired_on), 0) as \"amount?\"\n        from lot l\n        join holding h    on h.id = l.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        join instrument i on i.id = h.instrument_id\n        where c.user_id = $1 and i.kind <> 'cash'\n        union all\n        select null::uuid, t.account_id,\n               coalesce(t.booked_on, t.ts::date),\n               t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.ts::date))\n                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), coalesce(t.booked_on, t.ts::date)), 0)\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection c on c.id = a.connection_id\n        where c.user_id = $1 and t.type = 'dividend'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "holding_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "bb758404f971cf5f9d52c1c8a1c86133a5a013b6ba5a6dd6f3183f4bcbcaf55e"
+}

@@ -34,6 +34,7 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.accounts(),
     keys.accountSeries(),
     keys.holdings(),
+    keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
     keys.budgetCategories(),
@@ -61,6 +62,7 @@ export function afterAccountEdit(qc: QueryClient) {
     keys.distribution(),
     keys.accountSeries(),
     keys.holdings(),
+    keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
   ]);
@@ -80,6 +82,7 @@ export function afterConnectionDeleted(qc: QueryClient) {
 export function afterLotsSaved(qc: QueryClient, holdingId: string) {
   invalidateAll(qc, [
     keys.holdings(),
+    keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
     keys.netWorth(),

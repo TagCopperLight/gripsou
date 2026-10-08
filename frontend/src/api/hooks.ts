@@ -14,6 +14,7 @@ import type {
   DistributionAccount,
   EnabledProvider,
   Holding,
+  InvestmentReturns,
   Lot,
   NetWorthResponse,
   PricePoint,
@@ -68,6 +69,13 @@ export function useHoldings() {
   return useQuery({
     queryKey: keys.holdings(),
     queryFn: () => getJson<Holding[]>(`/holdings`),
+  });
+}
+
+export function useInvestmentReturns() {
+  return useQuery({
+    queryKey: keys.investmentReturns(),
+    queryFn: () => getJson<InvestmentReturns>(`/investments/returns`),
   });
 }
 

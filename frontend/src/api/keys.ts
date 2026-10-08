@@ -38,6 +38,7 @@ export const keys = {
       ? ["holding-prices", id]
       : ["holding-prices", id, range]) as readonly unknown[],
   holdingLots: (id: string) => ["holding-lots", id] as const,
+  investmentReturns: () => ["investment-returns"] as const,
 
   transactions: (q?: TransactionFilterQuery) =>
     (q === undefined ? ["transactions"] : ["transactions", q]) as readonly unknown[],

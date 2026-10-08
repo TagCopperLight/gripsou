@@ -3,7 +3,8 @@
     "dashboard": "Dashboard",
     "accounts": "Accounts",
     "settings": "Settings",
-    "budget": "Budget"
+    "budget": "Budget",
+    "investments": "Investments"
   },
   "common": {
     "loading": "Loading…",
@@ -699,6 +700,57 @@
       "retry": "Retry",
       "running_one": "Categorising your history — {{count}} left",
       "running_other": "Categorising your history — {{count}} left"
+    }
+  },
+  "investments": {
+    "annualised": {
+      "title": "Annualised return"
+    },
+    "figures": {
+      "invested": "Invested",
+      "value": "Current value",
+      "unrealised": "Unrealised gain"
+    },
+    "returns": {
+      "title": "Returns",
+      "account": "ACCOUNT",
+      "annualised": "ANNUALISED RETURN",
+      "perYearShort": "/yr",
+      "invested": "INVESTED",
+      "value": "CURRENT VALUE",
+      "unrealised": "UNREALISED GAIN"
+    },
+    "span": {
+      "over": "over {{span}}",
+      "years_one": "{{count}} yr",
+      "years_other": "{{count}} yrs",
+      "months_one": "{{count}} mo",
+      "months_other": "{{count}} mo",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "missing": {
+      "dotTitle": "Left out, purchases not recorded: {{names}}",
+      "noReturn": "no purchases recorded"
+    },
+    "exposure": {
+      "title": "Exposure",
+      "regions": "By regions and countries",
+      "sectors": "By sectors",
+      "indices": "By index",
+      "stocks": "Stocks",
+      "center": "Value",
+      "other": "Other"
+    },
+    "regions": {
+      "northAmerica": "North America",
+      "europe": "Europe",
+      "asiaPacific": "Asia-Pacific",
+      "other": "Other"
+    },
+    "empty": {
+      "title": "No investments yet",
+      "body": "None of your accounts holds securities. Cash isn't counted on this page."
     }
   }
 }

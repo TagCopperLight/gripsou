@@ -119,6 +119,52 @@ pub async fn holdings(
     Ok(Json(rows.into_iter().map(dto::Holding::from_row).collect()))
 }
 
+pub async fn investment_returns(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<Json<dto::InvestmentReturns>, (StatusCode, String)> {
+    let inputs = gripsou_core::repo::returns::load(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let accounts = gripsou_core::repo::query::accounts(&pool, user_id)
+        .await
+        .map_err(internal)?;
+    let r = gripsou_core::returns::returns(&inputs.positions, &inputs.flows, inputs.today);
+
+    // `query::accounts` lists every account it can value from snapshots, which
+    // every synced account has, so the lookup only fails for an account never
+    // synced.
+    let rows = r
+        .accounts
+        .iter()
+        .filter_map(|a| {
+            let acc = accounts.iter().find(|x| x.account_id == a.account_id)?;
+            Some(dto::ReturnAccount {
+                id: a.account_id.to_string(),
+                name: acc.name.clone(),
+                color: acc.color.clone().unwrap_or_else(|| "#888888".to_string()),
+                source: acc.source_name.clone().unwrap_or_default(),
+                missing: a
+                    .figures
+                    .missing
+                    .iter()
+                    .map(|m| dto::MissingHolding {
+                        id: m.holding_id.to_string(),
+                        name: m.name.clone(),
+                    })
+                    .collect(),
+                figures: dto::ReturnFigures::from_scope(&a.figures),
+            })
+        })
+        .collect();
+
+    Ok(Json(dto::InvestmentReturns {
+        today: inputs.today.to_string(),
+        total: dto::ReturnFigures::from_scope(&r.total),
+        accounts: rows,
+    }))
+}
+
 pub async fn holding_prices(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -1400,6 +1446,84 @@ mod auth_tests {
         .expect("login ok")
         .0
         .token
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn investment_returns_lists_accounts_with_securities(pool: PgPool) {
+        let user_id = seed_user(&pool, "a@t.local", "hunter2").await;
+        let conn_id = Uuid::new_v4();
+        sqlx::query(
+            "insert into connection (id, user_id, provider_key, display_name) \
+             values ($1, $2, 'powens', 'Test')",
+        )
+        .bind(conn_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let account_id: Uuid = sqlx::query_scalar(
+            "insert into account (connection_id, external_id, name, type_key, currency) \
+             values ($1, 'a1', 'PEA', 'pea', 'EUR') returning id",
+        )
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let instrument_id: Uuid = sqlx::query_scalar(
+            "insert into instrument (kind, symbol, name, currency) \
+             values ('equity', 'WLDX', 'World ETF', 'EUR') returning id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let holding_id: Uuid = sqlx::query_scalar(
+            "insert into holding (account_id, instrument_id, quantity, cost_basis) \
+             values ($1, $2, 2, 200) returning id",
+        )
+        .bind(account_id)
+        .bind(instrument_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
+             values ($1, 'buy', current_date - 365, 2, 100, 0, 'manual')",
+        )
+        .bind(holding_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // `accounts` values from snapshots, as after any real sync.
+        sqlx::query(
+            "insert into holding_snapshot (holding_id, as_of, quantity, value) \
+             values ($1, current_date, 2, 220)",
+        )
+        .bind(holding_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let resp = investment_returns(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id: Uuid::new_v4(),
+            },
+        )
+        .await
+        .expect("returns ok");
+
+        assert_eq!(resp.0.accounts.len(), 1);
+        let a = &resp.0.accounts[0];
+        assert_eq!(a.name, "PEA");
+        assert!(a.missing.is_empty());
+        // Compared as numbers: numeric division can widen the string's scale.
+        assert_eq!(
+            a.figures.invested.parse::<Decimal>().unwrap(),
+            Decimal::from(200)
+        );
+        assert!(a.figures.since.is_some());
     }
 
     #[sqlx::test(migrations = "../migrations")]

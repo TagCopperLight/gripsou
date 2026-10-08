@@ -310,3 +310,33 @@ export type TransactionCounts = {
 /** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the
  * filter set the user picks, which is also what the query key is built from. */
 export type TransactionFilterQuery = Omit<TransactionQuery, "limit" | "offset">;
+
+// GET /investments/returns. `annualised` is a ratio per year ("0.0712"), null
+// when it can't be computed; `since` is the first purchase it covers.
+export type ReturnFigures = {
+  annualised: string | null;
+  since: string | null;
+  invested: string;
+  value: string;
+  gl: string;
+  glPct: string;
+};
+
+export type MissingHolding = { id: string; name: string };
+
+export type ReturnAccount = ReturnFigures & {
+  id: string;
+  name: string;
+  color: string;
+  /** The bank or broker; "" when unknown. */
+  source: string;
+  /** Holdings left out of the return: purchases not recorded. */
+  missing: MissingHolding[];
+};
+
+export type InvestmentReturns = {
+  /** The user's today (YYYY-MM-DD), which periods run up to. */
+  today: string;
+  total: ReturnFigures;
+  accounts: ReturnAccount[];
+};

@@ -45,6 +45,7 @@ describe("afterSyncFinished", () => {
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
       ["budget-categories"],
@@ -70,6 +71,7 @@ describe("afterAccountEdit", () => {
       ["distribution"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
     ]);
@@ -85,6 +87,7 @@ describe("afterConnectionDeleted", () => {
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
       ["budget-categories"],
@@ -100,6 +103,7 @@ describe("afterLotsSaved", () => {
   it("refreshes the derived history, the transaction counts that list lot rows, and that holding's own lots and prices", () => {
     expect(invalidatedBy((qc) => afterLotsSaved(qc, "h1"))).toEqual([
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
       ["net-worth"],
@@ -151,6 +155,7 @@ describe("budget taxonomy changes", () => {
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
       ["budget-categories"],
