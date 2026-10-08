@@ -737,7 +737,8 @@
       "title": "Exposure",
       "regions": "By regions and countries",
       "sectors": "By sectors",
-      "holdings": "By holdings",
+      "indices": "By index",
+      "stocks": "Stocks",
       "center": "Value",
       "other": "Other"
     },

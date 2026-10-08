@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { capped, exposure, regionOf, OTHER, type ExposureHolding } from "./exposure";
+import { capped, exposure, regionOf, OTHER, STOCKS, type ExposureHolding } from "./exposure";
 
 const fund = (
   key: string,
@@ -7,8 +7,8 @@ const fund = (
   countries: [string, number][],
   sectors: [string, number][],
 ): ExposureHolding => ({
-  key,
   name: key,
+  kind: "etf",
   value,
   composition: {
     countries: countries.map(([name, weight]) => ({ name, weight })),
@@ -84,20 +84,27 @@ describe("exposure", () => {
   it("leaves holdings without data out of sectors and regions only", () => {
     const e = exposure([
       fund("A", 90, [["Etats-Unis", 1]], [["Technologie", 1]]),
-      { key: "S", name: "Stock", value: 10, composition: null },
+      { name: "Stock", kind: "equity", value: 10, composition: null },
     ]);
     expect(shares(e.regions)).toEqual({ northAmerica: 1 });
-    expect(shares(e.holdings)).toEqual({ A: 0.9, S: 0.1 });
+    expect(shares(e.indices)).toEqual({ [OTHER]: 0.9, [STOCKS]: 0.1 });
     expect(e.covered).toBe(90);
     expect(e.total).toBe(100);
   });
 
-  it("merges the same security held in two accounts", () => {
+  it("groups funds by the index they track, stocks together, the rest as other", () => {
+    const none: [string, number][] = [];
     const e = exposure([
-      fund("A", 50, [["Etats-Unis", 1]], [["Technologie", 1]]),
-      fund("A", 50, [["Etats-Unis", 1]], [["Technologie", 1]]),
+      fund("Example MSCI World", 40, none, none),
+      fund("Other MSCI World", 20, none, none),
+      fund("Example S&P 500", 20, none, none),
+      fund("Example Robotics", 5, none, none),
+      { name: "Example Coin", kind: "crypto", value: 5, composition: null },
+      { name: "Example Corp", kind: "equity", value: 6, composition: null },
+      { name: "Other Corp", kind: "equity", value: 4, composition: null },
     ]);
-    expect(e.holdings).toEqual([{ key: "A", name: "A", share: 1 }]);
+    expect(e.indices.map((s) => s.key)).toEqual(["MSCI World", "S&P 500", STOCKS, OTHER]);
+    expect(shares(e.indices)).toEqual({ "MSCI World": 0.6, "S&P 500": 0.2, [STOCKS]: 0.1, [OTHER]: 0.1 });
   });
 
   it("keeps the top sectors and the top countries of each region", () => {
@@ -118,9 +125,9 @@ describe("exposure", () => {
   });
 
   it("is empty without any data", () => {
-    const e = exposure([{ key: "S", name: "Stock", value: 10, composition: null }]);
+    const e = exposure([{ name: "Stock", kind: "equity", value: 10, composition: null }]);
     expect(e.sectors).toEqual([]);
     expect(e.regions).toEqual([]);
-    expect(e.holdings).toHaveLength(1);
+    expect(e.indices).toHaveLength(1);
   });
 });

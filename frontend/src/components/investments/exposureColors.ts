@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { ACCOUNT_PALETTE } from "../../lib/palette";
 import { shade } from "../../lib/color";
 import { localizeCountry, localizeSector } from "../../lib/composition-i18n";
-import { OTHER, type RegionSlice, type Slice } from "../../lib/exposure";
+import { OTHER, STOCKS, type RegionSlice, type Slice } from "../../lib/exposure";
 
 export type DonutItem = {
   key: string;
@@ -41,8 +41,10 @@ export function sectorItems(slices: Slice[], t: TFunction): DonutItem[] {
   );
 }
 
-export function holdingItems(slices: Slice[]): DonutItem[] {
-  return flatItems(slices, (s) => s.name);
+export function indexItems(slices: Slice[], t: TFunction): DonutItem[] {
+  return flatItems(slices, (s) =>
+    s.key === OTHER || s.key === STOCKS ? t(`investments.exposure.${s.key}`) : s.name,
+  );
 }
 
 /** Regions, each with its countries in shades of the region's colour. */

@@ -7,7 +7,7 @@ import { AnnualisedReturnCard } from "../components/investments/AnnualisedReturn
 import { ReturnsCard } from "../components/investments/ReturnsCard";
 import { ExposureDonut } from "../components/investments/ExposureDonut";
 import { InvestmentsEmpty } from "../components/investments/InvestmentsEmpty";
-import { holdingItems, regionItems, sectorItems } from "../components/investments/exposureColors";
+import { indexItems, regionItems, sectorItems } from "../components/investments/exposureColors";
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
@@ -17,8 +17,8 @@ function securities(holdings: Holding[]): ExposureHolding[] {
   return holdings
     .filter((h) => h.kind !== "cash")
     .map((h) => ({
-      key: h.instrumentId,
       name: h.name,
+      kind: h.kind,
       value: Number(h.value),
       composition: h.composition,
     }));
@@ -79,8 +79,8 @@ function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: Exposu
               total={e.covered}
             />
             <ExposureDonut
-              title={t("investments.exposure.holdings")}
-              items={holdingItems(e.holdings)}
+              title={t("investments.exposure.indices")}
+              items={indexItems(e.indices, t)}
               total={e.total}
             />
           </div>
@@ -112,7 +112,7 @@ function Placeholder({ variant, onRetry }: { variant: "loading" | "error"; onRet
           {card(t("investments.exposure.regions"), "h-64")}
           <div className="grid gap-4 md:grid-cols-2">
             {card(t("investments.exposure.sectors"), "h-52")}
-            {card(t("investments.exposure.holdings"), "h-52")}
+            {card(t("investments.exposure.indices"), "h-52")}
           </div>
         </div>
       </section>

@@ -1,16 +1,17 @@
 // What the invested money is exposed to, looking through funds: each holding's
 // value is spread over its fund's country and sector weights, then summed.
 // Cash never enters here, and a holding with no composition data is left out
-// of the sector and region breakdowns (but still counts in "by holding").
+// of the sector and region breakdowns (but still counts in "by index").
 
+import type { HoldingKind } from "../api/types";
 import { countryCode } from "./composition-i18n";
+import { trackedIndex } from "./indices";
 
 export type Allocation = { name: string; weight: number };
 
 export type ExposureHolding = {
-  /** Groups the same security held in several accounts into one slice. */
-  key: string;
   name: string;
+  kind: HoldingKind;
   /** Current value, in the reporting currency. */
   value: number;
   composition: { countries: Allocation[]; sectors: Allocation[] } | null;
@@ -19,6 +20,9 @@ export type ExposureHolding = {
 /** The leftover of a fund that lists only its top countries or sectors, and
  *  countries that belong to no known region. */
 export const OTHER = "other";
+
+/** Shares held directly, in the by-index breakdown. */
+export const STOCKS = "stocks";
 
 export type Region = "northAmerica" | "europe" | "asiaPacific" | typeof OTHER;
 
@@ -29,7 +33,7 @@ export const TOP_COUNTRIES_PER_REGION = 5;
 
 export type Slice = {
   key: string;
-  /** Raw name (a Boursorama label, a holding name), or OTHER. */
+  /** Raw name (a Boursorama label, an index), or OTHER / STOCKS. */
   name: string;
   /** Share of the breakdown's total, 0..1. */
   share: number;
@@ -44,7 +48,9 @@ export type RegionSlice = Slice & {
 export type Exposure = {
   sectors: Slice[];
   regions: RegionSlice[];
-  holdings: Slice[];
+  /** Funds by the index they track, shares held directly as one STOCKS
+   *  slice, the rest (funds of no known index, crypto) as OTHER. */
+  indices: Slice[];
   /** Value of every holding. */
   total: number;
   /** Value of the holdings that sectors and regions are made of. */
@@ -142,18 +148,16 @@ export function exposure(holdings: ExposureHolding[]): Exposure {
     })
     .sort(bySize) as RegionSlice[];
 
-  const holdingSums = new Map<string, { name: string; value: number }>();
+  const indexSums = new Map<string, number>();
   for (const h of held) {
-    const prev = holdingSums.get(h.key);
-    holdingSums.set(h.key, { name: h.name, value: (prev?.value ?? 0) + h.value });
+    const group = h.kind === "equity" ? STOCKS : (h.kind === "etf" && trackedIndex(h.name)) || OTHER;
+    indexSums.set(group, (indexSums.get(group) ?? 0) + h.value);
   }
 
   return {
     sectors: covered > 0 ? capped(toSlices(sectorSums, covered), TOP_SECTORS) : [],
     regions: covered > 0 ? regions : [],
-    holdings: [...holdingSums]
-      .map(([key, { name, value }]) => ({ key, name, share: value / total }))
-      .sort(bySize),
+    indices: toSlices(indexSums, total),
     total,
     covered,
   };

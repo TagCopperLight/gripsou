@@ -27,7 +27,7 @@ const RETURNS = {
 };
 
 const FUND = {
-  id: "h1", instrumentId: "i1", ticker: "WLD", name: "Example World ETF", kind: "etf", logo: null,
+  id: "h1", instrumentId: "i1", ticker: "WLD", name: "Example MSCI World ETF", kind: "etf", logo: null,
   accountId: "a1", accountName: "Example PEA", accountColor: "#5b9bf0", accountType: "pea",
   accountTypeLabel: "PEA", qty: "1", price: "110", currency: "EUR", priceCurrency: "EUR",
   accountCurrency: "EUR", invested: "100", investedNative: "100", value: "110", gl: "10",
@@ -67,7 +67,7 @@ describe("Investments page", () => {
     renderPage({ "/investments/returns": RETURNS, "/holdings": [FUND, CASH] });
     await waitFor(() => expect(screen.getByText("Example PEA")).toBeInTheDocument());
     expect(screen.getByText("Example Bank")).toBeInTheDocument();
-    expect(screen.getByText("Example World ETF")).toBeInTheDocument();
+    expect(screen.getByText("MSCI World")).toBeInTheDocument();
     expect(screen.queryByText("Euro")).not.toBeInTheDocument();
   });
 

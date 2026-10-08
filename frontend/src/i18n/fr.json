@@ -746,7 +746,8 @@
       "title": "Exposition",
       "regions": "Par régions et pays",
       "sectors": "Par secteurs",
-      "holdings": "Par lignes",
+      "indices": "Par indice",
+      "stocks": "Actions",
       "center": "Valeur",
       "other": "Autre"
     },
