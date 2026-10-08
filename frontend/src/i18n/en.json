@@ -739,9 +739,7 @@
       "sectors": "By sectors",
       "holdings": "By holdings",
       "center": "Value",
-      "other": "Other",
-      "excluded_one": "{{names}} ({{share}} of value) has no country or sector data and is left out of regions and sectors.",
-      "excluded_other": "{{names}} ({{share}} of value) have no country or sector data and are left out of regions and sectors."
+      "other": "Other"
     },
     "regions": {
       "northAmerica": "North America",

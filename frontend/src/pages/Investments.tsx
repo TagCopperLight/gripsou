@@ -11,7 +11,6 @@ import { holdingItems, regionItems, sectorItems } from "../components/investment
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
-import { formatPercent } from "../lib/money";
 
 /** The securities the page is about: cash never counts here. */
 function securities(holdings: Holding[]): ExposureHolding[] {
@@ -57,7 +56,6 @@ export function Investments() {
 function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: ExposureHolding[] }) {
   const { t, i18n } = useTranslation();
   const e = exposure(held);
-  const excludedShare = e.excluded.reduce((s, x) => s + x.share, 0);
 
   return (
     <>
@@ -66,17 +64,6 @@ function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: Exposu
 
       <section className="mt-8 mb-4">
         <h2 className="mb-3 px-1 text-lg font-semibold">{t("investments.exposure.title")}</h2>
-
-        {e.excluded.length > 0 && (
-          <p className="mb-3 flex items-start gap-1.5 px-1 text-xs text-fg-dim">
-            <span className="mt-1 size-2 shrink-0 rounded-full bg-fg-faint" />
-            {t("investments.exposure.excluded", {
-              count: e.excluded.length,
-              names: e.excluded.map((x) => x.name).join(", "),
-              share: formatPercent(excludedShare, { fractionDigits: 1 }),
-            })}
-          </p>
-        )}
 
         <div className="flex flex-col gap-4">
           <ExposureDonut

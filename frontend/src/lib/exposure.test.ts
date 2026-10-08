@@ -88,7 +88,6 @@ describe("exposure", () => {
     ]);
     expect(shares(e.regions)).toEqual({ northAmerica: 1 });
     expect(shares(e.holdings)).toEqual({ A: 0.9, S: 0.1 });
-    expect(e.excluded).toEqual([{ key: "S", name: "Stock", share: 0.1 }]);
     expect(e.covered).toBe(90);
     expect(e.total).toBe(100);
   });

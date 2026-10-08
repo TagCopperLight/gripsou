@@ -45,9 +45,6 @@ export type Exposure = {
   sectors: Slice[];
   regions: RegionSlice[];
   holdings: Slice[];
-  /** Holdings left out of sectors and regions for lack of data, with their
-   *  share of everything invested. */
-  excluded: Slice[];
   /** Value of every holding. */
   total: number;
   /** Value of the holdings that sectors and regions are made of. */
@@ -157,9 +154,6 @@ export function exposure(holdings: ExposureHolding[]): Exposure {
     holdings: [...holdingSums]
       .map(([key, { name, value }]) => ({ key, name, share: value / total }))
       .sort(bySize),
-    excluded: held
-      .filter((h) => !withData.includes(h))
-      .map((h) => ({ key: h.key, name: h.name, share: h.value / total })),
     total,
     covered,
   };
