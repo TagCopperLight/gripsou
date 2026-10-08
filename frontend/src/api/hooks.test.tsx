@@ -109,6 +109,7 @@ describe("useUpdateAccount invalidation", () => {
       ["distribution"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
     ]);
@@ -137,6 +138,7 @@ describe("useDeleteConnection", () => {
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
       ["budget-categories"],
@@ -167,6 +169,7 @@ describe("useSaveLots", () => {
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["holdings"]);
+    expect(invalidatedKeys).toContainEqual(["investment-returns"]);
     expect(invalidatedKeys).toContainEqual(["transactions"]);
     expect(invalidatedKeys).toContainEqual(["transaction-counts"]);
     expect(invalidatedKeys).toContainEqual(["net-worth"]);

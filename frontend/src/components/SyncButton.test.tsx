@@ -98,6 +98,7 @@ describe("SyncButton", () => {
       "accounts",
       "account-series",
       "holdings",
+      "investment-returns",
       "transactions",
       "transaction-counts",
       "budget-categories",
