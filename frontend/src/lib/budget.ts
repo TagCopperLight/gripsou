@@ -1,8 +1,8 @@
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BookOpen, CandlestickChart,
-  ChartColumn, CircleDashed, CirclePlus,
+  CircleDashed, CirclePlus,
   Coins, EyeOff, Film, Fuel, Gamepad2, Gift, GraduationCap, HeartPulse, House, Lamp,
-  Landmark, List, PawPrint, Percent, PiggyBank, Plane, PlugZap, Receipt, Repeat, Shield,
+  Landmark, List, PawPrint, Percent, PiggyBank, Plane, PlugZap, Receipt, ReceiptEuro, Repeat, Shield,
   Shirt, ShoppingBag, ShoppingCart, Smartphone, Sparkles, TrainFront, TrendingUp, Undo2,
   Utensils, Wallet, Zap, type LucideIcon
 } from "lucide-react";
@@ -101,7 +101,7 @@ export const typeBucket = (key: TypeBucket) =>
   TYPE_BUCKETS.find((b) => b.key === key) ?? TYPE_BUCKETS[0];
 
 /** The page/sidebar glyph, named once so Settings and later phases agree. */
-export const BudgetIcon: LucideIcon = ChartColumn;
+export const BudgetIcon: LucideIcon = ReceiptEuro;
 
 /** Every icon the seed in `0028_budget.sql` uses plus the rest of the pickable
  *  set, statically imported —

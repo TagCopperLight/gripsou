@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ChartPie } from "lucide-react";
+import { ChartColumn } from "lucide-react";
 
 import { Surface } from "../Surface";
 
@@ -9,7 +9,7 @@ export function InvestmentsEmpty() {
   const { t } = useTranslation();
   return (
     <Surface className="mt-4 flex flex-col items-center gap-2 p-16">
-      <ChartPie className="size-6 text-fg-faint" />
+      <ChartColumn className="size-6 text-fg-faint" />
       <p className="text-fg text-sm font-medium">{t("investments.empty.title")}</p>
       <p className="max-w-md text-center text-sm text-fg-faint">{t("investments.empty.body")}</p>
     </Surface>
