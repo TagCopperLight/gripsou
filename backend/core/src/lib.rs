@@ -11,3 +11,4 @@ pub mod logo;
 pub mod price_sync;
 pub mod provider;
 pub mod repo;
+pub mod returns;
