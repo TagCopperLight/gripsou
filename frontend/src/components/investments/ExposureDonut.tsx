@@ -6,9 +6,8 @@ import type { EChartsOption } from "echarts";
 import { Surface } from "../Surface";
 import { Money } from "../Money";
 import { Percent } from "../Percent";
-import { desaturate } from "../../lib/color";
 import { SURFACE } from "../../lib/chartTheme";
-import { stripeCss, stripePattern, type DonutItem } from "./exposureColors";
+import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 
 type ExposureDonutProps = {
   title: string;
@@ -25,6 +24,11 @@ type ExposureDonutProps = {
 const childKey = (parent: string, child: string) => `${parent}/${child}`;
 const parentOf = (key: string) => key.split("/")[0];
 
+// Hover dims the rest by opacity, not colour, so a faded slice keeps its hue
+// (and the striped leftover its stripes).
+const DONUT_DIM = 0.3;
+const LEGEND_DIM = 0.45;
+
 /** A donut and its legend, the legend always showing every row so nothing
  *  moves under the pointer. Items with children (regions and their
  *  countries) get a thin outer ring in shades of their colour. */
@@ -38,16 +42,10 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
   const activeParent = active === null ? null : parentOf(active);
   const isLit = (key: string) => activeParent === null || parentOf(key) === activeParent;
   const isHighlighted = (key: string) => key === active || (key === activeParent && active !== key);
-  const fill = (key: string, item: { color: string; other?: boolean }) => {
-    const lit = isLit(key);
-    if (item.other) return stripePattern(!lit);
-    return lit ? item.color : desaturate(item.color, 0.65);
-  };
-  const swatch = (key: string, item: { color: string; other?: boolean }) => {
-    const lit = isLit(key);
-    if (item.other) return { background: stripeCss(!lit) };
-    return { background: lit ? item.color : desaturate(item.color) };
-  };
+  const fill = (item: { color: string; other?: boolean }) => (item.other ? stripePattern() : item.color);
+  const swatch = (item: { color: string; other?: boolean }) => ({
+    background: item.other ? STRIPE_CSS : item.color,
+  });
 
   // The outer ring follows the inner one slice for slice: an item without
   // children fills its stretch with itself.
@@ -72,7 +70,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
         ...base,
         radius: nested ? ["50%", "80%"] : ["62%", "92%"],
         itemStyle: { borderColor: SURFACE, borderWidth: 2, borderRadius: 4 },
-        data: items.map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i.key, i) } })),
+        data: items.map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i), opacity: isLit(i.key) ? 1 : DONUT_DIM } })),
       },
       ...(nested
         ? [
@@ -80,7 +78,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
               ...base,
               radius: ["84%", "94%"],
               itemStyle: { borderColor: SURFACE, borderWidth: 1.5, borderRadius: 2 },
-              data: outer.map((o) => ({ name: o.key, value: o.share, itemStyle: { color: fill(o.key, o) } })),
+              data: outer.map((o) => ({ name: o.key, value: o.share, itemStyle: { color: fill(o), opacity: isLit(o.key) ? 1 : DONUT_DIM } })),
             },
           ]
         : []),
@@ -104,13 +102,14 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
       key={key}
       onMouseEnter={() => setActive(key)}
       onMouseLeave={() => setActive(null)}
-      className={`grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 rounded-lg px-2 transition-colors duration-140 ${
+      style={{ opacity: isLit(key) ? 1 : LEGEND_DIM }}
+      className={`grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 rounded-lg px-2 transition-[background-color,opacity] duration-140 ${
         child ? "py-1 pl-7" : "py-1.5"
       } ${isHighlighted(key) ? "bg-surface-2" : "bg-transparent"}`}
     >
       <span
-        className={`shrink-0 rounded-sm transition-colors duration-140 ${child ? "size-2" : "size-3"}`}
-        style={swatch(key, item)}
+        className={`shrink-0 rounded-sm ${child ? "size-2" : "size-3"}`}
+        style={swatch(item)}
       />
       <span className={`min-w-0 truncate ${child ? "text-xs text-fg-dim" : "text-sm text-fg"}`}>{item.label}</span>
       <Percent value={item.share} fractionDigits={1} className={`text-right text-fg ${child ? "text-xs" : "text-sm"}`} />

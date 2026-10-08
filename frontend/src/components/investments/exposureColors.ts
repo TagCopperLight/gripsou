@@ -60,30 +60,26 @@ export function regionItems(regions: RegionSlice[], t: TFunction, lang: string):
         key: c.key,
         label: c.key === OTHER ? t("investments.exposure.other") : localizeCountry(c.name, lang),
         share: c.share,
-        color: c.key === OTHER ? OTHER_COLOR : shade(color, j, r.countries.length),
-        other: c.key === OTHER,
+        // A region's own leftover stays in the family's shades: the stripes
+        // mark leftovers of the whole breakdown only.
+        color: shade(color, j, r.countries.length),
       })),
     };
   });
 }
 
-// The leftover's 45° stripes: 2px light, 2px dark. Dimmed, both go darker so
-// the slice greys out with the others on hover.
+// The leftover's 45° stripes: 2px light, 2px dark.
 const STRIPES = { light: "#5d5955", dark: "#2e2b28" };
-const STRIPES_DIM = { light: "#3a3734", dark: "#1f1d1b" };
 
 /** The stripes as CSS, for legend swatches. */
-export function stripeCss(dim = false): string {
-  const c = dim ? STRIPES_DIM : STRIPES;
-  return `repeating-linear-gradient(45deg, ${c.light} 0 2px, ${c.dark} 2px 4px)`;
-}
+export const STRIPE_CSS = `repeating-linear-gradient(45deg, ${STRIPES.light} 0 2px, ${STRIPES.dark} 2px 4px)`;
 
-const patterns = new Map<boolean, HTMLCanvasElement>();
+let pattern: HTMLCanvasElement | null = null;
 
 /** The stripes as an ECharts pattern fill. A 6px tile repeats seamlessly at
  *  45° (a stripe period of ~4px), drawn at the screen's pixel density. */
-export function stripePattern(dim = false) {
-  let tile = patterns.get(dim);
+export function stripePattern() {
+  let tile = pattern;
   if (!tile) {
     const dpr = window.devicePixelRatio || 1;
     const size = 6;
@@ -91,7 +87,7 @@ export function stripePattern(dim = false) {
     tile.width = tile.height = size * dpr;
     const ctx = tile.getContext("2d");
     if (ctx) {
-      const c = dim ? STRIPES_DIM : STRIPES;
+      const c = STRIPES;
       ctx.scale(dpr, dpr);
       ctx.fillStyle = c.dark;
       ctx.fillRect(0, 0, size, size);
@@ -105,7 +101,7 @@ export function stripePattern(dim = false) {
         ctx.stroke();
       }
     }
-    patterns.set(dim, tile);
+    pattern = tile;
   }
   const dpr = window.devicePixelRatio || 1;
   return { image: tile, repeat: "repeat" as const, scaleX: 1 / dpr, scaleY: 1 / dpr };
