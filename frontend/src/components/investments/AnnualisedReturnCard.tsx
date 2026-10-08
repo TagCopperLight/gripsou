@@ -28,17 +28,19 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
           {total.annualised === null ? (
             <span className="text-[32px] font-semibold tracking-tight text-fg-faint md:text-[40px]">—</span>
           ) : (
-            <span className="flex items-baseline gap-2">
+            <span className="flex flex-wrap items-baseline gap-x-3">
               <Percent
                 value={total.annualised}
                 signed
                 fractionDigits={1}
                 className={`whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(total.annualised)}`}
               />
-              <span className="text-fg-faint text-sm">{t("investments.annualised.perYear")}</span>
+              <span className="flex items-baseline gap-1 text-sm whitespace-nowrap">
+                <span className="text-fg-faint">{t("investments.annualised.perYear")}</span>
+                {total.since && <ReturnSpan since={total.since} today={today} className="text-sm" />}
+              </span>
             </span>
           )}
-          {total.since && <ReturnSpan since={total.since} today={today} />}
           {missing > 0 && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-fg-dim">
               <span className="size-2 shrink-0 rounded-full bg-amber" />
@@ -60,7 +62,9 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
             <dt className="text-fg-faint text-xs">{t("investments.figures.unrealised")}</dt>
             <dd className={`flex flex-wrap items-baseline gap-x-2 md:justify-end ${toneClass(total.gl)}`}>
               <Money value={total.gl} signed fractionDigits={0} className="text-base md:text-lg" />
-              <Percent value={total.glPct} signed fractionDigits={1} className="text-xs md:text-sm" />
+              <span className="font-mono text-xs md:text-sm">
+                (<Percent value={total.glPct} signed fractionDigits={1} />)
+              </span>
             </dd>
           </div>
         </dl>
