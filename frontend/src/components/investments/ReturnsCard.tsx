@@ -8,6 +8,9 @@ import { mutedToneClass, toneClass } from "../../lib/returns";
 import type { InvestmentsData, ReturnAccount } from "../../pages/investments/mock";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
+// The figure columns get a wide left gutter so they don't run together.
+const PAD_TEXT = "px-2 md:px-3";
+const PAD_FIGURE = "pl-4 pr-2 md:pl-10 md:pr-3";
 
 type ReturnsCardProps = {
   data: InvestmentsData;
@@ -21,8 +24,8 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
 
   const head = (key: string, desktopOnly = false, left = false) => (
     <th
-      className={`pb-2 px-2 md:px-3 text-[11px] font-medium tracking-wide font-mono whitespace-nowrap text-fg-faint ${
-        left ? "text-left" : "text-right"
+      className={`pb-2 text-[11px] font-medium tracking-wide font-mono whitespace-nowrap text-fg-faint ${
+        left ? `text-left ${PAD_TEXT}` : `text-right ${PAD_FIGURE}`
       } ${desktopOnly ? HIDDEN_ON_PHONE : ""}`}
     >
       {t(key)}
@@ -56,13 +59,14 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
 
 function AccountRow({ account: a, today }: { account: ReturnAccount; today: string }) {
   const { t } = useTranslation();
-  const cell = "py-3 px-2 md:px-3 border-t border-surface-2";
+  const row = "py-3 border-t border-surface-2";
+  const cell = `${row} ${PAD_FIGURE}`;
   const missing = a.missing.length;
 
   return (
     <tr>
       {/* ACCOUNT */}
-      <td className={`${cell} max-w-0 w-full`}>
+      <td className={`${row} ${PAD_TEXT} max-w-0 w-full`}>
         <div className="flex items-center gap-3">
           <span className="relative shrink-0">
             <span className="block size-3 rounded-[4px]" style={{ background: a.color }} />
