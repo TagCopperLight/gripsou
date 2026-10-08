@@ -704,8 +704,7 @@
   },
   "investments": {
     "annualised": {
-      "title": "Annualised return",
-      "perYear": "per year"
+      "title": "Annualised return"
     },
     "figures": {
       "invested": "Invested",

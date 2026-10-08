@@ -713,8 +713,7 @@
   },
   "investments": {
     "annualised": {
-      "title": "Rendement annualisé",
-      "perYear": "par an"
+      "title": "Rendement annualisé"
     },
     "figures": {
       "invested": "Investi",

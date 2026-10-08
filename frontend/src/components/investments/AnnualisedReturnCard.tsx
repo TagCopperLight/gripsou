@@ -5,7 +5,7 @@ import { Money } from "../Money";
 import { PrivateMoney } from "../PrivateMoney";
 import { Percent } from "../Percent";
 import { ReturnSpan } from "./ReturnSpan";
-import { toneClass } from "../../lib/returns";
+import { mutedToneClass, toneClass } from "../../lib/returns";
 import type { InvestmentsData } from "../../pages/investments/mock";
 
 type AnnualisedReturnCardProps = {
@@ -28,16 +28,18 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
             <span className="text-[32px] font-semibold tracking-tight text-fg-faint md:text-[40px]">—</span>
           ) : (
             <span className="flex flex-wrap items-baseline gap-x-3">
-              <Percent
-                value={total.annualised}
-                signed
-                fractionDigits={1}
-                className={`whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(total.annualised)}`}
-              />
-              <span className="flex items-baseline gap-[0.3em] text-base md:text-lg whitespace-nowrap">
-                <span className="text-fg-faint">{t("investments.annualised.perYear")}</span>
-                {total.since && <ReturnSpan since={total.since} today={today} className="text-base md:text-lg" />}
+              <span className="flex items-baseline whitespace-nowrap">
+                <Percent
+                  value={total.annualised}
+                  signed
+                  fractionDigits={1}
+                  className={`text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(total.annualised)}`}
+                />
+                <span className={`font-mono text-base md:text-lg ${mutedToneClass(total.annualised)}`}>
+                  {t("investments.returns.perYearShort")}
+                </span>
               </span>
+              {total.since && <ReturnSpan since={total.since} today={today} className="text-sm" />}
             </span>
           )}
         </div>
