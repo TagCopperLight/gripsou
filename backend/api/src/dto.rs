@@ -910,6 +910,66 @@ pub struct CompleteConnectionReq {
     pub params: std::collections::HashMap<String, String>,
 }
 
+/// One scope's figures on the Investments page. `annualised` is a ratio per
+/// year ("0.0712"), null when it can't be computed.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReturnFigures {
+    pub annualised: Option<String>,
+    pub since: Option<String>,
+    pub invested: String,
+    pub value: String,
+    pub gl: String,
+    pub gl_pct: String,
+}
+
+impl ReturnFigures {
+    pub fn from_scope(s: &gripsou_core::returns::ScopeReturn) -> Self {
+        let gl = s.value - s.invested;
+        let gl_pct = if s.invested.is_zero() {
+            Decimal::ZERO
+        } else {
+            (gl / s.invested).round_dp(4)
+        };
+        ReturnFigures {
+            annualised: s.annualised.map(|r| format!("{r:.4}")),
+            since: s.since.map(|d| d.to_string()),
+            invested: s.invested.to_string(),
+            value: s.value.to_string(),
+            gl: gl.to_string(),
+            gl_pct: gl_pct.to_string(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct MissingHolding {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReturnAccount {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    /// The bank or broker the account comes from; empty when unknown.
+    pub source: String,
+    /// Holdings left out of `annualised`: their purchases aren't recorded.
+    pub missing: Vec<MissingHolding>,
+    #[serde(flatten)]
+    pub figures: ReturnFigures,
+}
+
+#[derive(Serialize)]
+pub struct InvestmentReturns {
+    /// The user's today, which `since` periods run up to.
+    pub today: String,
+    pub total: ReturnFigures,
+    pub accounts: Vec<ReturnAccount>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
