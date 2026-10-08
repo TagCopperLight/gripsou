@@ -722,7 +722,6 @@
       "unrealised": "UNREALISED GAIN"
     },
     "span": {
-      "since": "since {{date}}",
       "years_one": "{{count}} yr",
       "years_other": "{{count}} yrs",
       "months_one": "{{count}} mo",
@@ -739,10 +738,9 @@
     },
     "exposure": {
       "title": "Exposure",
-      "legend": "Where your invested money goes, looking inside each fund. Cash isn't counted.",
-      "regions": "Regions and countries",
-      "sectors": "Sectors",
-      "holdings": "Holdings",
+      "regions": "By regions and countries",
+      "sectors": "By sectors",
+      "holdings": "By holdings",
       "center": "Value",
       "other": "Other",
       "excluded_one": "{{names}} ({{share}} of invested) has no country or sector data and is left out of regions and sectors.",
@@ -752,14 +750,7 @@
       "northAmerica": "North America",
       "europe": "Europe",
       "asiaPacific": "Asia-Pacific",
-      "latinAmerica": "Latin America",
-      "middleEastAfrica": "Middle East & Africa",
       "other": "Other"
-    },
-    "noConnection": {
-      "title": "No connection yet",
-      "body": "Connect a bank or broker to see how your investments are doing and what they're exposed to.",
-      "action": "Add a connection"
     },
     "empty": {
       "title": "No investments yet",

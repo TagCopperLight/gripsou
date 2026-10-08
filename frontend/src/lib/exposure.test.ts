@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { exposure, regionOf, OTHER, type ExposureHolding } from "./exposure";
+import { capped, exposure, regionOf, OTHER, type ExposureHolding } from "./exposure";
 
 const fund = (
   key: string,
@@ -26,8 +26,25 @@ describe("regionOf", () => {
     expect(regionOf("Japon")).toBe("asiaPacific");
   });
 
-  it("puts unknown countries in other", () => {
+  it("puts unknown countries, and regions too small to show, in other", () => {
     expect(regionOf("Atlantide")).toBe(OTHER);
+    expect(regionOf("Brésil")).toBe(OTHER);
+  });
+});
+
+describe("capped", () => {
+  const sl = (key: string, share: number) => ({ key, name: key, share });
+
+  it("keeps the largest and folds the rest, OTHER included, into OTHER", () => {
+    expect(capped([sl("a", 0.5), sl("b", 0.3), sl("c", 0.1), sl(OTHER, 0.1)], 1)).toEqual([
+      sl("a", 0.5),
+      { key: OTHER, name: OTHER, share: 0.5 },
+    ]);
+  });
+
+  it("leaves short lists alone", () => {
+    const short = [sl("a", 0.6), sl(OTHER, 0.4)];
+    expect(capped(short, 1)).toBe(short);
   });
 });
 
@@ -82,6 +99,23 @@ describe("exposure", () => {
       fund("A", 50, [["Etats-Unis", 1]], [["Technologie", 1]]),
     ]);
     expect(e.holdings).toEqual([{ key: "A", name: "A", share: 1 }]);
+  });
+
+  it("keeps the top sectors and the top countries of each region", () => {
+    const countries: [string, number][] = [
+      ["Royaume-Uni", 0.3], ["France", 0.2], ["Suisse", 0.15], ["Allemagne", 0.15],
+      ["Pays-Bas", 0.1], ["Suède", 0.06], ["Danemark", 0.04],
+    ];
+    const sectors: [string, number][] = [
+      ["a", 0.3], ["b", 0.2], ["c", 0.15], ["d", 0.1], ["e", 0.1], ["f", 0.05], ["g", 0.05], ["h", 0.05],
+    ];
+    const e = exposure([fund("A", 100, countries, sectors)]);
+    expect(e.sectors.map((s) => s.key)).toEqual(["a", "b", "c", "d", "e", "f", OTHER]);
+    expect(e.sectors.at(-1)!.share).toBeCloseTo(0.1);
+    const europe = e.regions.find((r) => r.key === "europe")!;
+    expect(europe.countries).toHaveLength(6);
+    expect(europe.countries.at(-1)).toMatchObject({ key: OTHER });
+    expect(europe.countries.at(-1)!.share).toBeCloseTo(0.1);
   });
 
   it("is empty without any data", () => {

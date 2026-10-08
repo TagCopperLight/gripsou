@@ -731,7 +731,6 @@
       "unrealised": "PLUS-VALUE LATENTE"
     },
     "span": {
-      "since": "depuis {{date}}",
       "years_one": "{{count}} an",
       "years_other": "{{count}} ans",
       "months_one": "{{count}} mois",
@@ -748,10 +747,9 @@
     },
     "exposure": {
       "title": "Exposition",
-      "legend": "Où va votre argent investi, en regardant dans chaque fonds. Les liquidités ne sont pas comptées.",
-      "regions": "Régions et pays",
-      "sectors": "Secteurs",
-      "holdings": "Lignes",
+      "regions": "Par régions et pays",
+      "sectors": "Par secteurs",
+      "holdings": "Par lignes",
       "center": "Valeur",
       "other": "Autre",
       "excluded_one": "{{names}} ({{share}} de l'investi) n'a pas de données pays ni secteur et est exclu des régions et secteurs.",
@@ -761,14 +759,7 @@
       "northAmerica": "Amérique du Nord",
       "europe": "Europe",
       "asiaPacific": "Asie-Pacifique",
-      "latinAmerica": "Amérique latine",
-      "middleEastAfrica": "Moyen-Orient et Afrique",
       "other": "Autre"
-    },
-    "noConnection": {
-      "title": "Aucune connexion",
-      "body": "Connectez une banque ou un courtier pour voir le rendement de vos investissements et leur exposition.",
-      "action": "Ajouter une connexion"
     },
     "empty": {
       "title": "Aucun investissement",

@@ -36,8 +36,9 @@ export type InvestmentsData = {
   holdings: ExposureHolding[];
 };
 
-export type Scenario = "full" | "partial" | "empty" | "noConnection";
-export const SCENARIOS: Scenario[] = ["full", "partial", "empty", "noConnection"];
+/** "offline": the API can't be reached. */
+export type Scenario = "full" | "partial" | "empty" | "offline";
+export const SCENARIOS: Scenario[] = ["full", "partial", "empty", "offline"];
 
 const w = (pairs: [string, number][]) => pairs.map(([name, weight]) => ({ name, weight }));
 
@@ -123,7 +124,7 @@ const PEA: ReturnAccount = {
 
 const CTO: ReturnAccount = {
   id: "cto", name: "Securities account", color: "#4dd0b1", source: "Lumen Broker",
-  annualised: -0.031, since: "2025-06-02",
+  annualised: -0.031, since: "2026-03-02",
   invested: "2000", value: "1950", gl: "-50", glPct: "-0.025", missing: [],
 };
 

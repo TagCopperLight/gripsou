@@ -71,8 +71,10 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
             )}
           </span>
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm text-fg leading-tight">{a.name}</span>
-            <span className="truncate text-xs text-fg-faint">{a.source}</span>
+            <span className="flex min-w-0 items-baseline gap-2.5">
+              <span className="truncate text-sm text-fg">{a.name}</span>
+              <span className="hidden text-fg-faint text-xs whitespace-nowrap sm:inline">{a.source}</span>
+            </span>
             {missing > 0 && (
               // MOCKUP: will open the record-purchases modal for these holdings.
               <button

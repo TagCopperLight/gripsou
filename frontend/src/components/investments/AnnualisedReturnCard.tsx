@@ -58,9 +58,9 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
           </div>
           <div className="flex flex-col gap-1 md:items-end">
             <dt className="text-fg-faint text-xs">{t("investments.figures.unrealised")}</dt>
-            <dd className={`flex flex-col md:items-end ${toneClass(total.gl)}`}>
+            <dd className={`flex flex-wrap items-baseline gap-x-2 md:justify-end ${toneClass(total.gl)}`}>
               <Money value={total.gl} signed fractionDigits={0} className="text-base md:text-lg" />
-              <Percent value={total.glPct} signed fractionDigits={1} className="text-xs" />
+              <Percent value={total.glPct} signed fractionDigits={1} className="text-xs md:text-sm" />
             </dd>
           </div>
         </dl>

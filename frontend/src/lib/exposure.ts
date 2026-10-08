@@ -20,13 +20,12 @@ export type ExposureHolding = {
  *  countries that belong to no known region. */
 export const OTHER = "other";
 
-export type Region =
-  | "northAmerica"
-  | "europe"
-  | "asiaPacific"
-  | "latinAmerica"
-  | "middleEastAfrica"
-  | typeof OTHER;
+export type Region = "northAmerica" | "europe" | "asiaPacific" | typeof OTHER;
+
+/** Breakdowns keep their largest entries and fold the rest into OTHER, so a
+ *  long tail of slivers doesn't crowd the donut and its legend. */
+export const TOP_SECTORS = 6;
+export const TOP_COUNTRIES_PER_REGION = 5;
 
 export type Slice = {
   key: string;
@@ -56,7 +55,8 @@ export type Exposure = {
 };
 
 // Geographic, so every country has exactly one home. Countries outside this
-// set fall into OTHER rather than being guessed.
+// set fall into OTHER rather than being guessed. Latin America and the Middle
+// East & Africa weigh too little in typical funds to earn a region of their own.
 const REGION_OF: Record<string, Region> = {
   US: "northAmerica", CA: "northAmerica",
   GB: "europe", FR: "europe", DE: "europe", CH: "europe", NL: "europe",
@@ -66,9 +66,6 @@ const REGION_OF: Record<string, Region> = {
   JP: "asiaPacific", CN: "asiaPacific", KR: "asiaPacific", TW: "asiaPacific",
   IN: "asiaPacific", AU: "asiaPacific", HK: "asiaPacific", SG: "asiaPacific",
   NZ: "asiaPacific", ID: "asiaPacific", TH: "asiaPacific", MY: "asiaPacific",
-  BR: "latinAmerica", MX: "latinAmerica",
-  ZA: "middleEastAfrica", IL: "middleEastAfrica", TR: "middleEastAfrica",
-  SA: "middleEastAfrica",
 };
 
 export function regionOf(country: string): Region {
@@ -102,6 +99,17 @@ function toSlices(sums: Map<string, number>, total: number): Slice[] {
     .sort(bySize);
 }
 
+/** The `n` largest slices, everything else (OTHER included) merged into one
+ *  OTHER slice at the end. */
+export function capped(slices: Slice[], n: number): Slice[] {
+  const named = slices.filter((s) => s.key !== OTHER);
+  if (named.length <= n) return slices;
+  const rest = slices
+    .filter((s) => s.key === OTHER || !named.slice(0, n).includes(s))
+    .reduce((sum, s) => sum + s.share, 0);
+  return [...named.slice(0, n), { key: OTHER, name: OTHER, share: rest }];
+}
+
 export function exposure(holdings: ExposureHolding[]): Exposure {
   const held = holdings.filter((h) => h.value > 0);
   const total = held.reduce((s, h) => s + h.value, 0);
@@ -132,7 +140,7 @@ export function exposure(holdings: ExposureHolding[]): Exposure {
         name: region,
         share: covered > 0 ? sum / covered : 0,
         // A region's lone OTHER needs no child: it would just repeat the region.
-        countries: region === OTHER ? [] : toSlices(countries, covered),
+        countries: region === OTHER ? [] : capped(toSlices(countries, covered), TOP_COUNTRIES_PER_REGION),
       };
     })
     .sort(bySize) as RegionSlice[];
@@ -144,7 +152,7 @@ export function exposure(holdings: ExposureHolding[]): Exposure {
   }
 
   return {
-    sectors: covered > 0 ? toSlices(sectorSums, covered) : [],
+    sectors: covered > 0 ? capped(toSlices(sectorSums, covered), TOP_SECTORS) : [],
     regions: covered > 0 ? regions : [],
     holdings: [...holdingSums]
       .map(([key, { name, value }]) => ({ key, name, share: value / total }))
