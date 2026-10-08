@@ -103,7 +103,7 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
           <div className="flex flex-col items-end">
             <span className="flex items-baseline">
               <Percent value={a.annualised} signed fractionDigits={1} className={`text-sm ${toneClass(a.annualised)}`} />
-              <span className={`font-mono text-[11px] ${mutedToneClass(a.annualised)}`}>
+              <span className={`ml-0.5 font-mono text-[11px] ${mutedToneClass(a.annualised)}`}>
                 {t("investments.returns.perYearShort")}
               </span>
             </span>
