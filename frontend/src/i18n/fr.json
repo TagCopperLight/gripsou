@@ -739,8 +739,7 @@
       "days_other": "{{count}} jours"
     },
     "missing": {
-      "accountNote_one": "{{count}} ligne exclue · renseigner ses achats",
-      "accountNote_other": "{{count}} lignes exclues · renseigner leurs achats",
+      "dotTitle": "Exclu, achats non renseignés : {{names}}",
       "noReturn": "aucun achat renseigné"
     },
     "exposure": {

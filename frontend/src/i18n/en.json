@@ -730,8 +730,7 @@
       "days_other": "{{count}} days"
     },
     "missing": {
-      "accountNote_one": "{{count}} holding left out · record its purchases",
-      "accountNote_other": "{{count}} holdings left out · record their purchases",
+      "dotTitle": "Left out, purchases not recorded: {{names}}",
       "noReturn": "no purchases recorded"
     },
     "exposure": {

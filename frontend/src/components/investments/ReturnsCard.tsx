@@ -71,7 +71,10 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
           <span className="relative shrink-0">
             <span className="block size-3 rounded-[4px]" style={{ background: a.color }} />
             {missing > 0 && (
-              <span className="absolute -top-1 -right-1 size-2 rounded-full bg-amber ring-2 ring-surface" />
+              <span
+                title={t("investments.missing.dotTitle", { names: a.missing.map((m) => m.name).join(", ") })}
+                className="absolute -top-1 -right-1 size-2 rounded-full bg-amber ring-2 ring-surface"
+              />
             )}
           </span>
           <div className="flex min-w-0 flex-col">
@@ -79,16 +82,6 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
               <span className="truncate text-sm text-fg">{a.name}</span>
               <span className="hidden text-fg-faint text-xs whitespace-nowrap sm:inline">{a.source}</span>
             </span>
-            {missing > 0 && (
-              // MOCKUP: will open the record-purchases modal for these holdings.
-              <button
-                type="button"
-                title={a.missing.map((m) => m.name).join(", ")}
-                className="mt-0.5 self-start cursor-pointer text-left text-xs text-amber hover:underline"
-              >
-                {t("investments.missing.accountNote", { count: missing })}
-              </button>
-            )}
           </div>
         </div>
       </td>
