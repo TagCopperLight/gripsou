@@ -731,8 +731,6 @@
       "days_other": "{{count}} days"
     },
     "missing": {
-      "totalNote_one": "Leaves out {{count}} holding whose purchases aren't recorded",
-      "totalNote_other": "Leaves out {{count}} holdings whose purchases aren't recorded",
       "accountNote_one": "{{count}} holding left out · record its purchases",
       "accountNote_other": "{{count}} holdings left out · record their purchases",
       "noReturn": "no purchases recorded"

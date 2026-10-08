@@ -31,7 +31,7 @@ export type ReturnAccount = ReturnFigures & {
 
 export type InvestmentsData = {
   today: string;
-  total: ReturnFigures & { missing: MissingPurchases[] };
+  total: ReturnFigures;
   accounts: ReturnAccount[];
   holdings: ExposureHolding[];
 };
@@ -132,7 +132,7 @@ const FULL: InvestmentsData = {
   today: "2026-10-08",
   total: {
     annualised: 0.071, since: "2024-12-08",
-    invested: "11700", value: "13100", gl: "1400", glPct: "0.1197", missing: [],
+    invested: "11700", value: "13100", gl: "1400", glPct: "0.1197",
   },
   accounts: [PEA, CTO],
   holdings,
@@ -147,7 +147,7 @@ const PARTIAL: InvestmentsData = {
   today: "2026-10-08",
   total: {
     annualised: 0.071, since: "2024-12-08",
-    invested: "12400", value: "13800", gl: "1400", glPct: "0.1129", missing: [ACME, GLOBEX],
+    invested: "12400", value: "13800", gl: "1400", glPct: "0.1129",
   },
   accounts: [
     PEA,

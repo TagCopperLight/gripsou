@@ -18,7 +18,6 @@ type AnnualisedReturnCardProps = {
 export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnCardProps) {
   const { t } = useTranslation();
   const { total, today } = data;
-  const missing = total.missing.length;
 
   return (
     <Surface className={`w-full ${className}`}>
@@ -40,12 +39,6 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
                 {total.since && <ReturnSpan since={total.since} today={today} className="text-sm" />}
               </span>
             </span>
-          )}
-          {missing > 0 && (
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-fg-dim">
-              <span className="size-2 shrink-0 rounded-full bg-amber" />
-              {t("investments.missing.totalNote", { count: missing })}
-            </p>
           )}
         </div>
 

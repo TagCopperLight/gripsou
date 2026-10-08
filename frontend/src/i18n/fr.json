@@ -740,8 +740,6 @@
       "days_other": "{{count}} jours"
     },
     "missing": {
-      "totalNote_one": "Hors {{count}} ligne dont les achats ne sont pas renseignés",
-      "totalNote_other": "Hors {{count}} lignes dont les achats ne sont pas renseignés",
       "accountNote_one": "{{count}} ligne exclue · renseigner ses achats",
       "accountNote_other": "{{count}} lignes exclues · renseigner leurs achats",
       "noReturn": "aucun achat renseigné"
