@@ -34,9 +34,9 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
                 fractionDigits={1}
                 className={`whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(total.annualised)}`}
               />
-              <span className="flex items-baseline gap-1 text-sm whitespace-nowrap">
+              <span className="flex items-baseline gap-[0.3em] text-base md:text-lg whitespace-nowrap">
                 <span className="text-fg-faint">{t("investments.annualised.perYear")}</span>
-                {total.since && <ReturnSpan since={total.since} today={today} className="text-sm" />}
+                {total.since && <ReturnSpan since={total.since} today={today} className="text-base md:text-lg" />}
               </span>
             </span>
           )}
