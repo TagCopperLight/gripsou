@@ -8,6 +8,7 @@ import {
 import { RootLayout } from "./components/RootLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
+import { Investments } from "./pages/Investments";
 import { Budget } from "./pages/Budget";
 import { BudgetOverview } from "./pages/budget/Overview";
 import { TransactionsMode } from "./pages/budget/TransactionsMode";
@@ -69,6 +70,12 @@ const accountsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/accounts",
   component: Accounts,
+});
+
+const investmentsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/investments",
+  component: Investments,
 });
 
 const budgetRoute = createRoute({
@@ -199,6 +206,7 @@ export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     accountsRoute,
+    investmentsRoute,
     budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
     legacyTransactionsRoute,
     settingsRouteWithChildren,

@@ -45,6 +45,12 @@ const COUNTRY_CODE: Record<string, string> = {
   "Arabie Saoudite": "SA",
 };
 
+/// French country name (from Boursorama) → ISO-3166 alpha-2, or null when the
+/// country isn't in the hand-maintained set.
+export function countryCode(name: string): string | null {
+  return COUNTRY_CODE[name] ?? null;
+}
+
 /// French country name (from Boursorama) → name in the given UI language, via
 /// the native Intl.DisplayNames. Unmapped countries pass through unchanged.
 export function localizeCountry(name: string, lang: string): string {

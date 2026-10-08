@@ -3,7 +3,8 @@
     "dashboard": "Tableau de bord",
     "accounts": "Comptes",
     "settings": "Paramètres",
-    "budget": "Budget"
+    "budget": "Budget",
+    "investments": "Investissements"
   },
   "common": {
     "loading": "Chargement…",
@@ -708,6 +709,70 @@
       "retry": "Réessayer",
       "running_one": "Catégorisation de l'historique en cours ({{count}} restante)",
       "running_other": "Catégorisation de l'historique en cours ({{count}} restantes)"
+    }
+  },
+  "investments": {
+    "annualised": {
+      "title": "Rendement annualisé",
+      "perYear": "par an"
+    },
+    "figures": {
+      "invested": "Investi",
+      "value": "Valeur actuelle",
+      "unrealised": "Plus-value latente"
+    },
+    "returns": {
+      "title": "Rendements",
+      "account": "COMPTE",
+      "annualised": "RENDEMENT ANNUALISÉ",
+      "perYearShort": "/an",
+      "invested": "INVESTI",
+      "value": "VALEUR ACTUELLE",
+      "unrealised": "PLUS-VALUE LATENTE"
+    },
+    "span": {
+      "since": "depuis {{date}}",
+      "years_one": "{{count}} an",
+      "years_other": "{{count}} ans",
+      "months_one": "{{count}} mois",
+      "months_other": "{{count}} mois",
+      "days_one": "{{count}} jour",
+      "days_other": "{{count}} jours"
+    },
+    "missing": {
+      "totalNote_one": "Hors {{count}} ligne dont les achats ne sont pas renseignés",
+      "totalNote_other": "Hors {{count}} lignes dont les achats ne sont pas renseignés",
+      "accountNote_one": "{{count}} ligne exclue · renseigner ses achats",
+      "accountNote_other": "{{count}} lignes exclues · renseigner leurs achats",
+      "noReturn": "aucun achat renseigné"
+    },
+    "exposure": {
+      "title": "Exposition",
+      "legend": "Où va votre argent investi, en regardant dans chaque fonds. Les liquidités ne sont pas comptées.",
+      "regions": "Régions et pays",
+      "sectors": "Secteurs",
+      "holdings": "Lignes",
+      "center": "Valeur",
+      "other": "Autre",
+      "excluded_one": "{{names}} ({{share}} de l'investi) n'a pas de données pays ni secteur et est exclu des régions et secteurs.",
+      "excluded_other": "{{names}} ({{share}} de l'investi) n'ont pas de données pays ni secteur et sont exclus des régions et secteurs."
+    },
+    "regions": {
+      "northAmerica": "Amérique du Nord",
+      "europe": "Europe",
+      "asiaPacific": "Asie-Pacifique",
+      "latinAmerica": "Amérique latine",
+      "middleEastAfrica": "Moyen-Orient et Afrique",
+      "other": "Autre"
+    },
+    "noConnection": {
+      "title": "Aucune connexion",
+      "body": "Connectez une banque ou un courtier pour voir le rendement de vos investissements et leur exposition.",
+      "action": "Ajouter une connexion"
+    },
+    "empty": {
+      "title": "Aucun investissement",
+      "body": "Aucun de vos comptes ne détient de titres. Les liquidités ne sont pas comptées sur cette page."
     }
   }
 }

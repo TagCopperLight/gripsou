@@ -3,7 +3,8 @@
     "dashboard": "Dashboard",
     "accounts": "Accounts",
     "settings": "Settings",
-    "budget": "Budget"
+    "budget": "Budget",
+    "investments": "Investments"
   },
   "common": {
     "loading": "Loading…",
@@ -699,6 +700,70 @@
       "retry": "Retry",
       "running_one": "Categorising your history — {{count}} left",
       "running_other": "Categorising your history — {{count}} left"
+    }
+  },
+  "investments": {
+    "annualised": {
+      "title": "Annualised return",
+      "perYear": "per year"
+    },
+    "figures": {
+      "invested": "Invested",
+      "value": "Current value",
+      "unrealised": "Unrealised gain"
+    },
+    "returns": {
+      "title": "Returns",
+      "account": "ACCOUNT",
+      "annualised": "ANNUALISED RETURN",
+      "perYearShort": "/yr",
+      "invested": "INVESTED",
+      "value": "CURRENT VALUE",
+      "unrealised": "UNREALISED GAIN"
+    },
+    "span": {
+      "since": "since {{date}}",
+      "years_one": "{{count}} yr",
+      "years_other": "{{count}} yrs",
+      "months_one": "{{count}} mo",
+      "months_other": "{{count}} mo",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "missing": {
+      "totalNote_one": "Leaves out {{count}} holding whose purchases aren't recorded",
+      "totalNote_other": "Leaves out {{count}} holdings whose purchases aren't recorded",
+      "accountNote_one": "{{count}} holding left out · record its purchases",
+      "accountNote_other": "{{count}} holdings left out · record their purchases",
+      "noReturn": "no purchases recorded"
+    },
+    "exposure": {
+      "title": "Exposure",
+      "legend": "Where your invested money goes, looking inside each fund. Cash isn't counted.",
+      "regions": "Regions and countries",
+      "sectors": "Sectors",
+      "holdings": "Holdings",
+      "center": "Value",
+      "other": "Other",
+      "excluded_one": "{{names}} ({{share}} of invested) has no country or sector data and is left out of regions and sectors.",
+      "excluded_other": "{{names}} ({{share}} of invested) have no country or sector data and are left out of regions and sectors."
+    },
+    "regions": {
+      "northAmerica": "North America",
+      "europe": "Europe",
+      "asiaPacific": "Asia-Pacific",
+      "latinAmerica": "Latin America",
+      "middleEastAfrica": "Middle East & Africa",
+      "other": "Other"
+    },
+    "noConnection": {
+      "title": "No connection yet",
+      "body": "Connect a bank or broker to see how your investments are doing and what they're exposed to.",
+      "action": "Add a connection"
+    },
+    "empty": {
+      "title": "No investments yet",
+      "body": "None of your accounts holds securities. Cash isn't counted on this page."
     }
   }
 }
