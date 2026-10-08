@@ -118,6 +118,7 @@ pub async fn holdings(
         .map_err(internal)?;
     Ok(Json(rows.into_iter().map(dto::Holding::from_row).collect()))
 }
+
 pub async fn investment_returns(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -130,6 +131,9 @@ pub async fn investment_returns(
         .map_err(internal)?;
     let r = gripsou_core::returns::returns(&inputs.positions, &inputs.flows, inputs.today);
 
+    // `query::accounts` lists every account it can value from snapshots, which
+    // every synced account has, so the lookup only fails for an account never
+    // synced.
     let rows = r
         .accounts
         .iter()

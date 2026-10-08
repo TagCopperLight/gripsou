@@ -19,9 +19,10 @@ pub struct Flow {
 /// all on one day, or no sign change over the search range (only money in, or
 /// a gain too extreme to annualise).
 ///
-/// Bisection rather than Newton: the net present value of an investment's
-/// flows falls as the rate rises, so a bracketed root is always found, with no
-/// starting guess to get wrong.
+/// Bisection rather than Newton: no starting guess to get wrong. For the usual
+/// shape (money in first, money out later) the net present value falls as the
+/// rate rises, so the bracketed root is the return; flows of mixed shape can
+/// have several roots and bisection returns one of them.
 pub fn xirr(flows: &[Flow]) -> Option<f64> {
     let first = flows.iter().map(|f| f.day).min()?;
     let last = flows.iter().map(|f| f.day).max()?;
@@ -70,6 +71,8 @@ pub struct Position {
     pub complete: bool,
     pub value: Decimal,
     pub invested: Decimal,
+    /// The holding couldn't be valued today (no rate); its `value` is 0.
+    pub fx_missing: bool,
 }
 
 /// A lot (`holding_id` set) or a dividend (`holding_id` none — transactions
@@ -118,9 +121,11 @@ pub struct Returns {
 /// The figures of one scope (an account, or everything).
 ///
 /// Invested and value cover every position. The return covers the complete
-/// ones only: their lots, the dividends of accounts that have at least one
-/// complete position, and today their current value. Any missing rate among
-/// those flows leaves the return unknown rather than wrong.
+/// ones only: their lots, the dividends of accounts whose positions in scope
+/// are all complete (from the account's first recorded purchase on), and today
+/// their current value. A missing rate among those flows, or a complete
+/// position that couldn't be valued today, leaves the return unknown rather
+/// than wrong.
 pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDate) -> ScopeReturn {
     let invested = positions.iter().map(|p| p.invested).sum();
     let value = positions.iter().map(|p| p.value).sum();
@@ -135,9 +140,28 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
     missing.sort_by(|a, b| a.name.cmp(&b.name));
 
     let complete: Vec<&&Position> = positions.iter().filter(|p| p.complete).collect();
+    // A dividend belongs to its account, so it counts only when every position
+    // of that account in scope is complete (else it may pay for a holding whose
+    // purchases we don't know) and from the account's first recorded purchase.
+    let dividend_counts = |f: &CashFlow| {
+        let mut of_account = positions.iter().filter(|p| p.account_id == f.account_id);
+        if of_account.clone().next().is_none() || !of_account.all(|p| p.complete) {
+            return false;
+        }
+        flows
+            .iter()
+            .filter(|l| l.account_id == f.account_id)
+            .filter(|l| {
+                l.holding_id
+                    .is_some_and(|h| complete.iter().any(|p| p.holding_id == h))
+            })
+            .map(|l| l.day)
+            .min()
+            .is_some_and(|first| f.day >= first)
+    };
     let counts = |f: &CashFlow| match f.holding_id {
         Some(h) => complete.iter().any(|p| p.holding_id == h),
-        None => complete.iter().any(|p| p.account_id == f.account_id),
+        None => dividend_counts(f),
     };
     let included: Vec<&&CashFlow> = flows.iter().filter(|f| counts(f)).collect();
     let since = included
@@ -146,7 +170,8 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         .map(|f| f.day)
         .min();
 
-    let annualised = since.and_then(|_| {
+    let unvalued = complete.iter().any(|p| p.fx_missing);
+    let annualised = since.filter(|_| !unvalued).and_then(|_| {
         let mut solved: Vec<Flow> = Vec::with_capacity(included.len() + 1);
         for f in &included {
             solved.push(Flow {
@@ -226,6 +251,7 @@ mod tests {
             complete,
             value: dec(value),
             invested: dec(invested),
+            fx_missing: false,
         }
     }
 
@@ -306,6 +332,41 @@ mod tests {
         ];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dividends_of_a_partly_recorded_account_are_ignored() {
+        let p = [
+            pos(1, 10, true, "1100", "1000"),
+            pos(2, 10, false, "500", "500"),
+        ];
+        let fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            dividend(10, "2025-06-01", "999"),
+        ];
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dividends_before_the_first_lot_are_ignored() {
+        let p = [pos(1, 10, true, "1100", "1000")];
+        let fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            dividend(10, "2024-06-01", "999"),
+        ];
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
+    }
+
+    #[test]
+    fn an_unvalued_complete_position_leaves_the_return_unknown() {
+        let mut p = [pos(1, 10, true, "1100", "1000")];
+        p[0].fx_missing = true;
+        let fl = [lot(1, 10, "2025-01-01", "-1000")];
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert_eq!(s.annualised, None);
+        assert_eq!(s.since, Some(d("2025-01-01")));
     }
 
     #[test]

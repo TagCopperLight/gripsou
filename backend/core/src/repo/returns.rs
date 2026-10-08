@@ -34,6 +34,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
             complete: h.unexplained_quantity.is_zero(),
             value: h.value,
             invested: h.invested,
+            fx_missing: h.fx_missing,
         })
         .collect();
 
@@ -63,11 +64,13 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         complete: r.explained.is_zero(),
         value: Decimal::ZERO,
         invested: Decimal::ZERO,
+        fx_missing: false,
     }));
 
     // Lots (fee-inclusive, buys negative) and dividends, each converted on its
-    // own day from the account's currency into the reporting currency. A NULL
-    // amount means that day's rate is missing.
+    // own day from the account's currency into the reporting currency (picked as
+    // `reporting_fx_asof` does, minus its fallback to 1). A NULL amount means a
+    // rate is missing for that day.
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",
@@ -75,7 +78,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
                (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                      else l.quantity * l.unit_price - l.fee end)
                  * fx_asof(a.currency, l.acquired_on)
-                 / reporting_fx_asof($1, l.acquired_on) as "amount?"
+                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), l.acquired_on), 0) as "amount?"
         from lot l
         join holding h    on h.id = l.holding_id
         join account a    on a.id = h.account_id
@@ -86,7 +89,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         select null::uuid, t.account_id,
                coalesce(t.booked_on, t.ts::date),
                t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.ts::date))
-                 / reporting_fx_asof($1, coalesce(t.booked_on, t.ts::date))
+                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), coalesce(t.booked_on, t.ts::date)), 0)
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id

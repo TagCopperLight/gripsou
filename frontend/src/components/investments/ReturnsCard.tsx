@@ -90,7 +90,9 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
         {a.annualised === null ? (
           <div className="flex flex-col items-end">
             <span className="text-sm text-fg-faint">—</span>
-            <span className="text-xs text-fg-faint">{t("investments.missing.noReturn")}</span>
+            {a.since === null && (
+              <span className="text-xs text-fg-faint">{t("investments.missing.noReturn")}</span>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-end">

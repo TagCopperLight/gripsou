@@ -71,6 +71,20 @@ describe("Investments page", () => {
     expect(screen.queryByText("Euro")).not.toBeInTheDocument();
   });
 
+  it("says no purchases are recorded when the account has no return and no first purchase", async () => {
+    const account = { ...RETURNS.accounts[0], annualised: null, since: null };
+    renderPage({ "/investments/returns": { ...RETURNS, accounts: [account] }, "/holdings": [FUND, CASH] });
+    await waitFor(() => expect(screen.getByText("Example PEA")).toBeInTheDocument());
+    expect(screen.getByText("no purchases recorded")).toBeInTheDocument();
+  });
+
+  it("leaves the label out when purchases exist but the return can't be computed", async () => {
+    const account = { ...RETURNS.accounts[0], annualised: null };
+    renderPage({ "/investments/returns": { ...RETURNS, accounts: [account] }, "/holdings": [FUND, CASH] });
+    await waitFor(() => expect(screen.getByText("Example PEA")).toBeInTheDocument());
+    expect(screen.queryByText("no purchases recorded")).not.toBeInTheDocument();
+  });
+
   it("shows the empty state when nothing but cash is held", async () => {
     renderPage({
       "/investments/returns": { ...RETURNS, accounts: [] },

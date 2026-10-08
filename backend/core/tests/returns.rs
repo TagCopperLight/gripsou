@@ -168,3 +168,25 @@ async fn other_users_data_is_not_loaded(pool: PgPool) {
     assert_eq!(inputs.flows.len(), 1);
     assert_eq!(inputs.flows[0].amount, Some(dec("-100")));
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_missing_reporting_rate_leaves_the_amount_unknown(pool: PgPool) {
+    let (user_id, _account_id, holding_id) = seed(&pool, "1").await;
+    sqlx::query("update users set prefs = prefs || '{\"currency\":\"USD\"}' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    add_lot(&pool, holding_id, "buy", "2025-01-10", "1", "100", "0").await;
+
+    let inputs = gripsou_core::repo::returns::load(&pool, user_id)
+        .await
+        .unwrap();
+
+    let lot = inputs
+        .flows
+        .iter()
+        .find(|f| f.holding_id == Some(holding_id))
+        .unwrap();
+    assert_eq!(lot.amount, None, "no USD rate: unknown, not unconverted");
+}

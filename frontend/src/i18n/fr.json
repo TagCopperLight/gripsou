@@ -749,8 +749,8 @@
       "holdings": "Par lignes",
       "center": "Valeur",
       "other": "Autre",
-      "excluded_one": "{{names}} ({{share}} de l'investi) n'a pas de données pays ni secteur et est exclu des régions et secteurs.",
-      "excluded_other": "{{names}} ({{share}} de l'investi) n'ont pas de données pays ni secteur et sont exclus des régions et secteurs."
+      "excluded_one": "{{names}} ({{share}} de la valeur) n'a pas de données pays ni secteur et est exclu des régions et secteurs.",
+      "excluded_other": "{{names}} ({{share}} de la valeur) n'ont pas de données pays ni secteur et sont exclus des régions et secteurs."
     },
     "regions": {
       "northAmerica": "Amérique du Nord",
