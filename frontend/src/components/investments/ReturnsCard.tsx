@@ -5,7 +5,7 @@ import { Money } from "../Money";
 import { Percent } from "../Percent";
 import { ReturnSpan } from "./ReturnSpan";
 import { mutedToneClass, toneClass } from "../../lib/returns";
-import type { InvestmentsData, ReturnAccount } from "../../pages/investments/mock";
+import type { InvestmentReturns, ReturnAccount } from "../../api/types";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
 // The figure columns get a wide left gutter so they don't run together.
@@ -13,7 +13,7 @@ const PAD_TEXT = "px-2 md:px-3";
 const PAD_FIGURE = "pl-4 pr-2 md:pl-10 md:pr-3";
 
 type ReturnsCardProps = {
-  data: InvestmentsData;
+  data: InvestmentReturns;
   className?: string;
 };
 

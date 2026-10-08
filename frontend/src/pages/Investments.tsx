@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../components/PageHeader";
-import { SegmentedControl } from "../components/SegmentedControl";
 import { Surface } from "../components/Surface";
 import { CardState } from "../components/CardState";
 import { AnnualisedReturnCard } from "../components/investments/AnnualisedReturnCard";
@@ -10,44 +8,55 @@ import { ReturnsCard } from "../components/investments/ReturnsCard";
 import { ExposureDonut } from "../components/investments/ExposureDonut";
 import { InvestmentsEmpty } from "../components/investments/InvestmentsEmpty";
 import { holdingItems, regionItems, sectorItems } from "../components/investments/exposureColors";
-import { exposure } from "../lib/exposure";
+import { useHoldings, useInvestmentReturns } from "../api/hooks";
+import type { Holding, InvestmentReturns } from "../api/types";
+import { exposure, type ExposureHolding } from "../lib/exposure";
 import { formatPercent } from "../lib/money";
-import { mockInvestments, SCENARIOS, type InvestmentsData, type Scenario } from "./investments/mock";
+
+/** The securities the page is about: cash never counts here. */
+function securities(holdings: Holding[]): ExposureHolding[] {
+  return holdings
+    .filter((h) => h.kind !== "cash")
+    .map((h) => ({
+      key: h.instrumentId,
+      name: h.name,
+      value: Number(h.value),
+      composition: h.composition,
+    }));
+}
 
 export function Investments() {
   const { t } = useTranslation();
-  // MOCKUP: flips between the states the page has to handle.
-  const [scenario, setScenario] = useState<Scenario>(
-    () => (new URLSearchParams(window.location.search).get("scenario") as Scenario | null) ?? "full",
-  );
-  const data = mockInvestments(scenario);
+  const returns = useInvestmentReturns();
+  const holdings = useHoldings();
+
+  const failed = returns.isError || holdings.isError;
+  const ready = returns.data !== undefined && holdings.data !== undefined;
+  const held = ready ? securities(holdings.data) : [];
 
   return (
     <div>
       <PageHeader title={t("nav.investments")} />
-      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-soft px-3 py-2 text-xs text-fg-dim">
-        Mockup — invented figures
-        <SegmentedControl
-          options={SCENARIOS.map((s) => ({ value: s, label: s }))}
-          value={scenario}
-          onChange={(v) => setScenario(v as Scenario)}
+      {!ready ? (
+        <Placeholder
+          variant={failed ? "error" : "loading"}
+          onRetry={() => {
+            void returns.refetch();
+            void holdings.refetch();
+          }}
         />
-      </div>
-
-      {scenario === "offline" ? (
-        <Offline />
-      ) : data === null ? (
+      ) : held.length === 0 && returns.data.accounts.length === 0 ? (
         <InvestmentsEmpty />
       ) : (
-        <InvestmentsBody data={data} />
+        <InvestmentsBody data={returns.data} held={held} />
       )}
     </div>
   );
 }
 
-function InvestmentsBody({ data }: { data: InvestmentsData }) {
+function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: ExposureHolding[] }) {
   const { t, i18n } = useTranslation();
-  const e = exposure(data.holdings);
+  const e = exposure(held);
   const excludedShare = e.excluded.reduce((s, x) => s + x.share, 0);
 
   return (
@@ -94,16 +103,15 @@ function InvestmentsBody({ data }: { data: InvestmentsData }) {
   );
 }
 
-/** The API can't be reached: the page keeps its shape, each surface saying so
- *  the way every other card in the app does. */
-function Offline() {
+/** Loading, or the API can't be reached: the page keeps its shape, each
+ *  surface saying so the way every other card in the app does. */
+function Placeholder({ variant, onRetry }: { variant: "loading" | "error"; onRetry: () => void }) {
   const { t } = useTranslation();
   const card = (title: string, height: string, className = "") => (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
         <p className="text-fg font-semibold text-sm">{title}</p>
-        {/* MOCKUP: Retry will refetch. */}
-        <CardState variant="error" onRetry={() => {}} className={`mt-2 ${height}`} />
+        <CardState variant={variant} onRetry={onRetry} className={`mt-2 ${height}`} />
       </div>
     </Surface>
   );

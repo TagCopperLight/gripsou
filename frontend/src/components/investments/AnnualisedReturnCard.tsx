@@ -6,10 +6,10 @@ import { PrivateMoney } from "../PrivateMoney";
 import { Percent } from "../Percent";
 import { ReturnSpan } from "./ReturnSpan";
 import { mutedToneClass, toneClass } from "../../lib/returns";
-import type { InvestmentsData } from "../../pages/investments/mock";
+import type { InvestmentReturns } from "../../api/types";
 
 type AnnualisedReturnCardProps = {
-  data: InvestmentsData;
+  data: InvestmentReturns;
   className?: string;
 };
 
