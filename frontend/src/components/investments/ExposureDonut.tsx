@@ -37,10 +37,15 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
   const [active, setActive] = useState<string | null>(null);
   const nested = items.some((i) => i.children && i.children.length > 0);
 
-  // Hovering a child counts as hovering its parent too: the whole family
-  // stays lit, and the parent's row is highlighted alongside the child's.
+  // Hovering a child also lights its parent, whose row is highlighted
+  // alongside the child's; its siblings fade with everything else.
   const activeParent = active === null ? null : parentOf(active);
-  const isLit = (key: string) => activeParent === null || parentOf(key) === activeParent;
+  const isLit = (key: string) => {
+    if (active === null) return true;
+    // A hovered child: itself and its parent. A hovered parent: its whole family.
+    if (active.includes("/")) return key === active || key === activeParent;
+    return parentOf(key) === active;
+  };
   const isHighlighted = (key: string) => key === active || (key === activeParent && active !== key);
   const fill = (item: { color: string; other?: boolean }) => (item.other ? stripePattern() : item.color);
   const swatch = (item: { color: string; other?: boolean }) => ({
