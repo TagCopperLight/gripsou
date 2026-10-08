@@ -731,6 +731,7 @@
       "unrealised": "PLUS-VALUE LATENTE"
     },
     "span": {
+      "over": "sur {{span}}",
       "years_one": "{{count}} an",
       "years_other": "{{count}} ans",
       "months_one": "{{count}} mois",

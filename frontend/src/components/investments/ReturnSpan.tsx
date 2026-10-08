@@ -8,7 +8,7 @@ type ReturnSpanProps = {
   className?: string;
 };
 
-/** "1 yr 10 mo": the time an annualised figure covers. Under a year it turns
+/** "over 1 yr 10 mo": the time an annualised figure covers. Under a year it turns
  *  amber: a few months' return, scaled to a year, can look far bigger than it
  *  is. */
 export function ReturnSpan({ since, today, className = "" }: ReturnSpanProps) {
@@ -25,7 +25,7 @@ export function ReturnSpan({ since, today, className = "" }: ReturnSpanProps) {
     <span
       className={`text-xs whitespace-nowrap ${span.years === 0 ? "text-amber" : "text-fg-faint"} ${className}`}
     >
-      {parts.join(" ")}
+      {t("investments.span.over", { span: parts.join(" ") })}
     </span>
   );
 }

@@ -722,6 +722,7 @@
       "unrealised": "UNREALISED GAIN"
     },
     "span": {
+      "over": "over {{span}}",
       "years_one": "{{count}} yr",
       "years_other": "{{count}} yrs",
       "months_one": "{{count}} mo",
