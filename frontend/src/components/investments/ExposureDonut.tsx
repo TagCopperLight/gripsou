@@ -108,7 +108,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
       onMouseEnter={() => setActive(key)}
       onMouseLeave={() => setActive(null)}
       style={{ opacity: isLit(key) ? 1 : LEGEND_DIM }}
-      className={`grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 rounded-lg px-2 transition-[background-color,opacity] duration-140 ${
+      className={`grid cursor-pointer grid-cols-[auto_1fr_auto_auto] items-center gap-x-2 rounded-lg px-2 transition-[background-color,opacity] duration-140 ${
         child ? "py-1 pl-7" : "py-1.5"
       } ${isHighlighted(key) ? "bg-surface-2" : "bg-transparent"}`}
     >
@@ -130,8 +130,8 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
         <p className="text-fg font-semibold text-sm">{title}</p>
-        <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-6"}`}>
-          <div className={`relative shrink-0 ${wide ? "size-64" : "size-44"}`}>
+        <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
+          <div className={`relative shrink-0 ${wide ? "size-64" : "size-48"}`}>
             <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
               {hovered ? (
