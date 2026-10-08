@@ -112,6 +112,7 @@ impl DistributionAccount {
 #[serde(rename_all = "camelCase")]
 pub struct Holding {
     pub id: String,
+    pub instrument_id: String,
     pub ticker: String,
     pub name: String,
     pub kind: String,
@@ -206,6 +207,7 @@ impl Holding {
 
         Holding {
             id: r.holding_id.to_string(),
+            instrument_id: r.instrument_id.to_string(),
             ticker: r.symbol.unwrap_or_else(|| r.currency.clone()),
             name: r.instrument_name,
             kind,
@@ -913,6 +915,39 @@ mod tests {
     use super::*;
     use gripsou_core::repo::query::AccountSeriesRow;
     use uuid::Uuid;
+
+    #[test]
+    fn holding_carries_its_instrument_id() {
+        let id = uuid::Uuid::from_u128(7);
+        let row = gripsou_core::repo::query::HoldingRow {
+            holding_id: uuid::Uuid::from_u128(1),
+            instrument_id: id,
+            symbol: Some("WLD".into()),
+            instrument_name: "World".into(),
+            kind: "equity".into(),
+            logo_url: None,
+            currency: "EUR".into(),
+            price_currency: None,
+            account_currency: "EUR".into(),
+            account_id: uuid::Uuid::from_u128(2),
+            account_name: "PEA".into(),
+            account_color: None,
+            type_key: "pea".into(),
+            type_label: "PEA".into(),
+            quantity: Decimal::ONE,
+            price: None,
+            spark: vec![],
+            composition: None,
+            value: Decimal::ONE,
+            invested: Decimal::ONE,
+            invested_native: Decimal::ONE,
+            fx_missing: false,
+            unexplained_quantity: Decimal::ZERO,
+            mean_price: Decimal::ONE,
+            unexplained_cost: Decimal::ZERO,
+        };
+        assert_eq!(Holding::from_row(row).instrument_id, id.to_string());
+    }
 
     #[test]
     fn display_kind_promotes_only_an_equity_with_a_composition() {

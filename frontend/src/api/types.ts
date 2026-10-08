@@ -54,6 +54,8 @@ export type Composition = { countries: Allocation[]; sectors: Allocation[] };
 
 export type Holding = {
   id: string;
+  /** Shared by every account holding the same security. */
+  instrumentId: string;
   ticker: string;
   name: string;
   kind: HoldingKind;
