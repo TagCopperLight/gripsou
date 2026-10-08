@@ -11,7 +11,7 @@ import type { Holding } from "../api/types";
 vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
-  id: "h1", instrumentId: "i1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
+  id: "h1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
   accountId: "a1", accountName: "PEA", accountColor: "#6ea8fe",
   accountType: "pea", accountTypeLabel: "PEA", qty: "10", price: "100", currency: "EUR",
   priceCurrency: "EUR", accountCurrency: "EUR",

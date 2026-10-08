@@ -177,9 +177,6 @@ pub async fn net_worth_series_with_target(
 
 pub struct HoldingRow {
     pub holding_id: Uuid,
-    /// The instrument, shared by every account holding it: what the
-    /// Investments page merges one security's slices on.
-    pub instrument_id: Uuid,
     pub symbol: Option<String>,
     pub instrument_name: String,
     pub kind: String,
@@ -414,7 +411,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 
         out.push(HoldingRow {
             holding_id: b.holding_id,
-            instrument_id: b.instrument_id,
             symbol: b.symbol,
             instrument_name: b.instrument_name,
             kind: b.kind,

@@ -11,7 +11,6 @@ function cash(
 ): Holding {
   return {
     id,
-    instrumentId: "i1",
     ticker: "EUR",
     name: "Euro",
     kind: "cash",
@@ -43,7 +42,6 @@ function cash(
 function equity(id: string, value: string): Holding {
   return {
     id,
-    instrumentId: "i1",
     ticker: "AAPL",
     name: "Apple Inc.",
     kind: "equity",
