@@ -21,7 +21,7 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col gap-5 p-4 md:flex-row md:items-end md:justify-between md:p-5">
+      <div className="flex flex-col gap-5 p-4 md:flex-row md:items-baseline-last md:justify-between md:p-5">
         <div className="flex flex-col gap-1">
           <p className="text-fg font-semibold text-sm">{t("investments.annualised.title")}</p>
           {total.annualised === null ? (
