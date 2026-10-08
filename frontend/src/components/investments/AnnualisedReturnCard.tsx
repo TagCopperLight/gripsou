@@ -35,8 +35,8 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
                   fractionDigits={1}
                   className={`text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(total.annualised)}`}
                 />
-                {/* /yr at half the figure's size. */}
-                <span className={`ml-1 font-mono text-[16px] md:text-[20px] ${mutedToneClass(total.annualised)}`}>
+                {/* /yr at 65% of the figure's size. */}
+                <span className={`ml-1 font-mono text-[21px] md:text-[26px] ${mutedToneClass(total.annualised)}`}>
                   {t("investments.returns.perYearShort")}
                 </span>
               </span>
