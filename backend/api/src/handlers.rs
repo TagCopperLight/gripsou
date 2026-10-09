@@ -754,7 +754,7 @@ pub async fn budget_ai_models(
     match gripsou_jobs::categorizer_models(&provider).await {
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
-            tracing::warn!(provider = %provider, error = %e, "ai model list failed");
+            tracing::warn!(provider = %provider, error = %gripsou_core::logs::error_chain(&e), "ai model list failed");
             Err((StatusCode::BAD_GATEWAY, e.to_string()))
         }
         None => Err((
@@ -1284,7 +1284,7 @@ pub async fn init_connection(
             }),
         )),
         Err(e) => {
-            tracing::warn!(provider = %body.provider_key, step = "init", error = %e, "connect failed");
+            tracing::warn!(provider = %body.provider_key, step = "init", error = %gripsou_core::logs::error_chain(&e), "connect failed");
             Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
         }
     }
@@ -1303,7 +1303,7 @@ pub async fn complete_connection(
     match gripsou_jobs::complete_connection(pool, user_id, connection_id, &body.params).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            tracing::warn!(connection_id = %connection_id, step = "complete", error = %e, "connect failed");
+            tracing::warn!(connection_id = %connection_id, step = "complete", error = %gripsou_core::logs::error_chain(&e), "connect failed");
             let msg = e.to_string();
             if msg.contains("not found") {
                 Err((StatusCode::NOT_FOUND, msg))

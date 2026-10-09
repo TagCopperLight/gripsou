@@ -585,7 +585,7 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
         Ok(Some(user_id)) => request_categorize(db, user_id),
         Ok(None) => {}
         Err(e) => {
-            tracing::error!(
+            tracing::warn!(
                 connection_id = %connection_id,
                 error = %gripsou_core::logs::error_chain(&e),
                 "ai run start failed"

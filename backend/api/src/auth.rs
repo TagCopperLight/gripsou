@@ -87,7 +87,7 @@ pub fn verify_password(plain: &str, hash: &str) -> bool {
         Err(e) => {
             // Same answer as a wrong password for the caller; the operator
             // needs to know the stored hash is unreadable.
-            tracing::error!(error = %e, "stored password hash unreadable");
+            tracing::error!(error = %gripsou_core::logs::error_chain(&e), "stored password hash unreadable");
             false
         }
     }

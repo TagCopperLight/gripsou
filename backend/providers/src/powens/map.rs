@@ -307,7 +307,7 @@ pub fn map_sync(
         .filter(|t| emitted.contains(t.account_external_id.as_str()))
         .collect();
     // Pending, deleted, incomplete, or on an account skipped above.
-    result.skipped.transactions = transactions.len() - result.transactions.len();
+    result.skipped.transactions = transactions.len().saturating_sub(result.transactions.len());
 
     result
 }

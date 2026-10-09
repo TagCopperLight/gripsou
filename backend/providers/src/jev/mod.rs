@@ -154,6 +154,7 @@ impl Categorizer for JevCategorizer {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
+            let text: String = text.chars().take(300).collect();
             return Err(CategorizeError::Other(format!("jev {status}: {text}")));
         }
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
