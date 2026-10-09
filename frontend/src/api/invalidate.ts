@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
+import { hasSyncing, type ProviderGroup } from "./types";
 
 // What each domain event makes stale, named once.
 //
@@ -9,7 +10,12 @@ import { keys } from "./keys";
 // every mutation.
 
 function invalidateAll(qc: QueryClient, groups: readonly (readonly unknown[])[]) {
-  for (const queryKey of groups) qc.invalidateQueries({ queryKey });
+  return Promise.all(groups.map(async (queryKey) => {
+    // invalidateQueries alone reuses an initial fetch with no cached data,
+    // even with cancelRefetch enabled. Its response can predate this write.
+    await qc.cancelQueries({ queryKey });
+    await qc.invalidateQueries({ queryKey });
+  }));
 }
 
 // For refreshes nobody asked for (a background run moving on): never cancel a
@@ -28,12 +34,14 @@ function invalidateQuietly(
 // because ingesting transactions is the main thing a sync does — its absence
 // was C-17, which left the Transactions page showing pre-sync rows.
 export function afterSyncFinished(qc: QueryClient) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
     keys.netWorth(),
     keys.distribution(),
     keys.accounts(),
     keys.accountSeries(),
     keys.holdings(),
+    keys.holdingPrices(),
+    keys.holdingLots(),
     keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
@@ -45,20 +53,23 @@ export function afterSyncFinished(qc: QueryClient) {
   ]);
 }
 
-// Requesting a sync, or finishing a connect (which kicks one). The backend
-// answers 202 and works in a detached task, so there is nothing fresh to fetch
-// yet — only the connection's new `syncing` state, which starts the poll that
-// eventually fires `afterSyncFinished`.
-export function afterSyncRequested(qc: QueryClient) {
-  invalidateAll(qc, [keys.connections()]);
+// Refresh the status after requesting a sync or completing a connect. If the
+// very first status read already says idle, no earlier snapshot exists for
+// the watcher to compare, so refresh the data here as well.
+export async function afterSyncRequested(qc: QueryClient) {
+  const before = qc.getQueryData<ProviderGroup[]>(keys.connections());
+  await invalidateAll(qc, [keys.connections()]);
+  const next = qc.getQueryData<ProviderGroup[]>(keys.connections());
+  if (!before && next && !hasSyncing(next)) await afterSyncFinished(qc);
 }
 
 // Renaming/recolouring/retyping an account. The holdings and transactions
 // tables both render the account's name and colour from their own payloads, so
 // they go stale too — that omission was C-18.
 export function afterAccountEdit(qc: QueryClient) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
     keys.accounts(),
+    keys.connections(),
     keys.distribution(),
     keys.accountSeries(),
     keys.holdings(),
@@ -71,8 +82,7 @@ export function afterAccountEdit(qc: QueryClient) {
 // Deleting a connection cascades to its accounts and holdings immediately, so
 // every figure on every screen changes at once.
 export function afterConnectionDeleted(qc: QueryClient) {
-  invalidateAll(qc, [keys.connections()]);
-  afterSyncFinished(qc);
+  return Promise.all([invalidateAll(qc, [keys.connections()]), afterSyncFinished(qc)]);
 }
 
 // A saved lot batch changes the explained quantity, the cost basis and the
@@ -80,7 +90,7 @@ export function afterConnectionDeleted(qc: QueryClient) {
 // Lot rows are listed and counted on the transactions page, so its counts move
 // with them.
 export function afterLotsSaved(qc: QueryClient, holdingId: string) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
     keys.holdings(),
     keys.investmentReturns(),
     keys.transactions(),
@@ -93,33 +103,33 @@ export function afterLotsSaved(qc: QueryClient, holdingId: string) {
 }
 
 export function afterSessionChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.sessions()]);
+  return invalidateAll(qc, [keys.sessions()]);
 }
 
 export function afterUserChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.users()]);
+  return invalidateAll(qc, [keys.users()]);
 }
 
 // A new category or tag has no rows yet, so only its own list changes.
 export function afterBudgetCategoryCreated(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetCategories()]);
+  return invalidateAll(qc, [keys.budgetCategories()]);
 }
 
 export function afterBudgetTagCreated(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetTags()]);
+  return invalidateAll(qc, [keys.budgetTags()]);
 }
 
 // Reordering moves the category list and nothing else: no figure and no
 // transaction reads the order.
 export function afterBudgetCategoryReorder(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetCategories()]);
+  return invalidateAll(qc, [keys.budgetCategories()]);
 }
 
 // Editing the taxonomy changes the chips the transactions table draws, so the
 // transaction pages go stale with the category/tag list itself. A rename,
 // retype or delete also moves every figure built on categories.
 export function afterBudgetCategoryChange(qc: QueryClient) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
     keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
@@ -130,14 +140,16 @@ export function afterBudgetCategoryChange(qc: QueryClient) {
 }
 
 export function afterBudgetTagChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetTags(), keys.transactions(), keys.transactionCounts()]);
+  return invalidateAll(qc, [keys.budgetTags(), keys.transactions(), keys.transactionCounts()]);
 }
 
 // Assigning a category, tagging a row, or any bulk write. The counts feed the
 // header and the `matching / total` readout, so they go stale with the list
 // itself — the same omission that was C-17 for the list.
 export function afterTransactionChange(qc: QueryClient) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
+    keys.budgetCategories(),
+    keys.budgetTags(),
     keys.transactions(),
     keys.transactionCounts(),
     keys.budgetSummary(),
@@ -149,13 +161,14 @@ export function afterTransactionChange(qc: QueryClient) {
 // The ✓ is the user's own bookkeeping: no count, figure or review line reads
 // it, only the row itself.
 export function afterCheckedChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.transactions()]);
+  return invalidateAll(qc, [keys.transactions()]);
 }
 
 // Accepting, correcting or undoing a review line: the queue count and every
 // figure built on categories move together.
 export function afterReviewChange(qc: QueryClient) {
-  invalidateAll(qc, [
+  return invalidateAll(qc, [
+    keys.budgetCategories(),
     keys.budgetAiStatus(),
     keys.transactions(),
     keys.transactionCounts(),
@@ -167,13 +180,13 @@ export function afterReviewChange(qc: QueryClient) {
 // The review threshold decides which AI guesses "need review": the flag on
 // each row, the needs-review filter's counts and the review queue's size.
 export function afterReviewThresholdChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()]);
+  return invalidateAll(qc, [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()]);
 }
 
 // Asking for a run: the server answers 202 and works in the background, so only
 // the status (whose `running` starts the poll) has anything new.
 export function afterCategorizeRequested(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetAiStatus()]);
+  return invalidateAll(qc, [keys.budgetAiStatus()]);
 }
 
 // A background AI run filed more rows. The Overview figures refresh live; the
@@ -186,7 +199,8 @@ export function afterAiRunProgress(qc: QueryClient) {
 }
 
 export function afterAiRunFinished(qc: QueryClient) {
-  invalidateQuietly(qc, [
+  return invalidateAll(qc, [
+    keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
     keys.budgetSummary(),
@@ -197,10 +211,19 @@ export function afterAiRunFinished(qc: QueryClient) {
 
 // Switching the server's AI provider or model changes whether AI is configured.
 export function afterBudgetAiSettingsChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetAiSettings(), keys.budgetAiStatus()]);
+  return invalidateAll(qc, [keys.budgetAiSettings(), keys.budgetAiStatus()]);
 }
 
 // Prices only feed the cost column.
 export function afterBudgetAiPricesChange(qc: QueryClient) {
-  invalidateAll(qc, [keys.budgetAiUsage()]);
+  return invalidateAll(qc, [keys.budgetAiUsage()]);
+}
+
+// Both the admin catalog and the connection picker read provider availability.
+export function afterProviderChange(qc: QueryClient) {
+  return invalidateAll(qc, [keys.providers(), keys.providersEnabled()]);
+}
+
+export function afterCorsOriginsChange(qc: QueryClient) {
+  return invalidateAll(qc, [keys.corsOrigins()]);
 }

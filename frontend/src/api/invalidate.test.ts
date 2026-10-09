@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Mock } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
 import {
@@ -30,21 +29,23 @@ import { keys } from "./keys";
 // Each group is pinned to its exact key set rather than a "contains" check:
 // the bugs these guard were all keys MISSING from a
 // list, which a containment assertion cannot catch.
-function invalidatedBy(run: (qc: QueryClient) => void): unknown[][] {
+async function invalidatedBy(run: (qc: QueryClient) => unknown): Promise<unknown[][]> {
   const qc = new QueryClient();
   const spy = vi.spyOn(qc, "invalidateQueries");
-  run(qc);
+  await run(qc);
   return spy.mock.calls.map((c) => c[0]?.queryKey as unknown[]);
 }
 
 describe("afterSyncFinished", () => {
-  it("refreshes every synced-data view, transactions included (C-17)", () => {
-    expect(invalidatedBy(afterSyncFinished)).toEqual([
+  it("refreshes every synced-data view, transactions included (C-17)", async () => {
+    expect(await invalidatedBy(afterSyncFinished)).toEqual([
       ["net-worth"],
       ["distribution"],
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["holding-prices"],
+      ["holding-lots"],
       ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
@@ -58,16 +59,17 @@ describe("afterSyncFinished", () => {
 });
 
 describe("afterSyncRequested", () => {
-  it("refreshes only the connections list — the sync itself is asynchronous", () => {
-    expect(invalidatedBy(afterSyncRequested)).toEqual([["connections"]]);
+  it("refreshes only the connections list — the sync itself is asynchronous", async () => {
+    expect(await invalidatedBy(afterSyncRequested)).toEqual([["connections"]]);
   });
 });
 
 describe("afterAccountEdit", () => {
-  it("refreshes the two tables that render the account's name and colour (C-18)", () => {
-    const got = invalidatedBy(afterAccountEdit);
+  it("refreshes the two tables that render the account's name and colour (C-18)", async () => {
+    const got = await invalidatedBy(afterAccountEdit);
     expect(got).toEqual([
       ["accounts"],
+      ["connections"],
       ["distribution"],
       ["account-series"],
       ["holdings"],
@@ -79,14 +81,16 @@ describe("afterAccountEdit", () => {
 });
 
 describe("afterConnectionDeleted", () => {
-  it("refreshes the connections list AND every figure the deleted accounts fed", () => {
-    expect(invalidatedBy(afterConnectionDeleted)).toEqual([
+  it("refreshes the connections list AND every figure the deleted accounts fed", async () => {
+    expect(await invalidatedBy(afterConnectionDeleted)).toEqual([
       ["connections"],
       ["net-worth"],
       ["distribution"],
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["holding-prices"],
+      ["holding-lots"],
       ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
@@ -100,8 +104,8 @@ describe("afterConnectionDeleted", () => {
 });
 
 describe("afterLotsSaved", () => {
-  it("refreshes the derived history, the transaction counts that list lot rows, and that holding's own lots and prices", () => {
-    expect(invalidatedBy((qc) => afterLotsSaved(qc, "h1"))).toEqual([
+  it("refreshes the derived history, the transaction counts that list lot rows, and that holding's own lots and prices", async () => {
+    expect(await invalidatedBy((qc) => afterLotsSaved(qc, "h1"))).toEqual([
       ["holdings"],
       ["investment-returns"],
       ["transactions"],
@@ -115,18 +119,18 @@ describe("afterLotsSaved", () => {
 });
 
 describe("the single-key groups", () => {
-  it("afterSessionChange refreshes sessions", () => {
-    expect(invalidatedBy(afterSessionChange)).toEqual([["sessions"]]);
+  it("afterSessionChange refreshes sessions", async () => {
+    expect(await invalidatedBy(afterSessionChange)).toEqual([["sessions"]]);
   });
 
-  it("afterUserChange refreshes users", () => {
-    expect(invalidatedBy(afterUserChange)).toEqual([["users"]]);
+  it("afterUserChange refreshes users", async () => {
+    expect(await invalidatedBy(afterUserChange)).toEqual([["users"]]);
   });
 });
 
 describe("budget taxonomy changes", () => {
-  it("refreshes categories and the transactions that render their chips", () => {
-    expect(invalidatedBy(afterBudgetCategoryChange)).toEqual([
+  it("refreshes categories and the transactions that render their chips", async () => {
+    expect(await invalidatedBy(afterBudgetCategoryChange)).toEqual([
       ["budget-categories"],
       ["transactions"],
       ["transaction-counts"],
@@ -136,25 +140,27 @@ describe("budget taxonomy changes", () => {
     ]);
   });
 
-  it("refreshes tags and the transactions that render their chips", () => {
-    expect(invalidatedBy(afterBudgetTagChange)).toEqual([
+  it("refreshes tags and the transactions that render their chips", async () => {
+    expect(await invalidatedBy(afterBudgetTagChange)).toEqual([
       ["budget-tags"],
       ["transactions"],
       ["transaction-counts"],
     ]);
   });
 
-  it("leaves the Overview alone — no surface there renders a tag", () => {
-    expect(invalidatedBy(afterBudgetTagChange)).not.toContainEqual(["budget-summary"]);
+  it("leaves the Overview alone — no surface there renders a tag", async () => {
+    expect(await invalidatedBy(afterBudgetTagChange)).not.toContainEqual(["budget-summary"]);
   });
 
-  it("a finished sync refreshes both budget families, whose txCounts it moves", () => {
-    expect(invalidatedBy(afterSyncFinished)).toEqual([
+  it("a finished sync refreshes both budget families, whose txCounts it moves", async () => {
+    expect(await invalidatedBy(afterSyncFinished)).toEqual([
       ["net-worth"],
       ["distribution"],
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["holding-prices"],
+      ["holding-lots"],
       ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
@@ -167,10 +173,11 @@ describe("budget taxonomy changes", () => {
   });
 });
 
-it("afterTransactionChange refreshes the list and its counts", () => {
-  const qc = { invalidateQueries: vi.fn() } as unknown as QueryClient;
-  afterTransactionChange(qc);
-  const keysCalled = (qc.invalidateQueries as Mock).mock.calls.map((c) => c[0].queryKey);
+it("afterTransactionChange refreshes the list and its counts", async () => {
+  const qc = new QueryClient();
+  const spy = vi.spyOn(qc, "invalidateQueries");
+  await afterTransactionChange(qc);
+  const keysCalled = spy.mock.calls.map((c) => c[0]?.queryKey);
   expect(keysCalled).toContainEqual(keys.transactions());
   expect(keysCalled).toContainEqual(keys.transactionCounts());
   expect(keysCalled).toContainEqual(keys.budgetSummary());
@@ -178,8 +185,9 @@ it("afterTransactionChange refreshes the list and its counts", () => {
   expect(keysCalled).toContainEqual(keys.budgetAiStatus());
 });
 
-it("afterReviewChange refreshes the review queue and every figure built on categories", () => {
-  expect(invalidatedBy(afterReviewChange)).toEqual([
+it("afterReviewChange refreshes the review queue and every figure built on categories", async () => {
+  expect(await invalidatedBy(afterReviewChange)).toEqual([
+    ["budget-categories"],
     ["budget-ai-status"],
     ["transactions"],
     ["transaction-counts"],
@@ -188,10 +196,11 @@ it("afterReviewChange refreshes the review queue and every figure built on categ
   ]);
 });
 
-it("a finished sync refreshes the transaction counts too", () => {
-  const qc = { invalidateQueries: vi.fn() } as unknown as QueryClient;
-  afterSyncFinished(qc);
-  const keysCalled = (qc.invalidateQueries as Mock).mock.calls.map((c) => c[0].queryKey);
+it("a finished sync refreshes the transaction counts too", async () => {
+  const qc = new QueryClient();
+  const spy = vi.spyOn(qc, "invalidateQueries");
+  await afterSyncFinished(qc);
+  const keysCalled = spy.mock.calls.map((c) => c[0]?.queryKey);
   expect(keysCalled).toContainEqual(keys.transactionCounts());
 });
 
@@ -200,49 +209,49 @@ it("a finished sync refreshes the transaction counts too", () => {
 describe("narrow budget groups", () => {
   const FIGURES = [["budget-summary"], ["budget-trend"], ["budget-ai-status"]];
 
-  it("a new category or tag refreshes only its own list", () => {
-    expect(invalidatedBy(afterBudgetCategoryCreated)).toEqual([["budget-categories"]]);
-    expect(invalidatedBy(afterBudgetTagCreated)).toEqual([["budget-tags"]]);
+  it("a new category or tag refreshes only its own list", async () => {
+    expect(await invalidatedBy(afterBudgetCategoryCreated)).toEqual([["budget-categories"]]);
+    expect(await invalidatedBy(afterBudgetTagCreated)).toEqual([["budget-tags"]]);
   });
 
-  it("a reorder leaves the transactions and the Overview alone", () => {
-    const got = invalidatedBy(afterBudgetCategoryReorder);
+  it("a reorder leaves the transactions and the Overview alone", async () => {
+    const got = await invalidatedBy(afterBudgetCategoryReorder);
     expect(got).toEqual([["budget-categories"]]);
     expect(got).not.toContainEqual(["transactions"]);
     for (const k of FIGURES) expect(got).not.toContainEqual(k);
   });
 
-  it("a ✓ toggle leaves the counts, the figures and the AI status alone", () => {
-    const got = invalidatedBy(afterCheckedChange);
+  it("a ✓ toggle leaves the counts, the figures and the AI status alone", async () => {
+    const got = await invalidatedBy(afterCheckedChange);
     expect(got).toEqual([["transactions"]]);
     expect(got).not.toContainEqual(["transaction-counts"]);
     for (const k of FIGURES) expect(got).not.toContainEqual(k);
   });
 
-  it("a threshold change refreshes what needs-review decides, and not the figures", () => {
-    const got = invalidatedBy(afterReviewThresholdChange);
+  it("a threshold change refreshes what needs-review decides, and not the figures", async () => {
+    const got = await invalidatedBy(afterReviewThresholdChange);
     expect(got).toEqual([["transactions"], ["transaction-counts"], ["budget-ai-status"]]);
     expect(got).not.toContainEqual(["budget-summary"]);
   });
 
-  it("requesting a run refreshes only the status", () => {
-    expect(invalidatedBy(afterCategorizeRequested)).toEqual([["budget-ai-status"]]);
+  it("requesting a run refreshes only the status", async () => {
+    expect(await invalidatedBy(afterCategorizeRequested)).toEqual([["budget-ai-status"]]);
   });
 
-  it("the admin AI settings refresh the settings and the status; prices only the usage", () => {
-    expect(invalidatedBy(afterBudgetAiSettingsChange)).toEqual([
+  it("the admin AI settings refresh the settings and the status; prices only the usage", async () => {
+    expect(await invalidatedBy(afterBudgetAiSettingsChange)).toEqual([
       ["budget-ai-settings"],
       ["budget-ai-status"],
     ]);
-    expect(invalidatedBy(afterBudgetAiPricesChange)).toEqual([["budget-ai-usage"]]);
+    expect(await invalidatedBy(afterBudgetAiPricesChange)).toEqual([["budget-ai-usage"]]);
   });
 });
 
 describe("a background AI run", () => {
-  function calls(run: (qc: QueryClient) => void) {
+  async function calls(run: (qc: QueryClient) => unknown) {
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
-    run(qc);
+    await run(qc);
     return spy.mock.calls.map(([filters, options]) => ({
       key: filters?.queryKey,
       refetchType: filters?.refetchType,
@@ -250,8 +259,8 @@ describe("a background AI run", () => {
     }));
   }
 
-  it("refetches the figures while it runs, and only marks the list stale", () => {
-    const got = calls(afterAiRunProgress);
+  it("refetches the figures while it runs, and only marks the list stale", async () => {
+    const got = await calls(afterAiRunProgress);
     expect(got.map((c) => c.key)).toEqual([
       ["budget-summary"],
       ["budget-trend"],
@@ -267,15 +276,16 @@ describe("a background AI run", () => {
     expect(got.every((c) => c.cancelRefetch === false)).toBe(true);
   });
 
-  it("refetches the list too once it ends, but not the status it was read from", () => {
-    const got = calls(afterAiRunFinished);
+  it("refetches the list too once it ends, but not the status it was read from", async () => {
+    const got = await calls(afterAiRunFinished);
     expect(got.map((c) => c.key)).toEqual([
+      ["budget-categories"],
       ["transactions"],
       ["transaction-counts"],
       ["budget-summary"],
       ["budget-trend"],
       ["budget-ai-usage"],
     ]);
-    expect(got.every((c) => c.refetchType === "active")).toBe(true);
+    expect(got.every((c) => c.refetchType !== "none")).toBe(true);
   });
 });

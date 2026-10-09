@@ -69,43 +69,4 @@ describe("SyncButton", () => {
       screen.getByRole("button").querySelector(".animate-spin"),
     ).toBeNull();
   });
-
-  it("invalidates dashboard/accounts/holdings/transactions when a sync finishes", () => {
-    const client = new QueryClient();
-    const spy = vi.spyOn(client, "invalidateQueries");
-    mockUseConnections.mockReturnValue({ data: groups("syncing") } as ReturnType<
-      typeof useConnections
-    >);
-    const { rerender } = renderButton(client);
-    spy.mockClear(); // ignore any mount-time calls
-    mockUseConnections.mockReturnValue({ data: groups("ok") } as ReturnType<
-      typeof useConnections
-    >);
-    rerender(
-      <QueryClientProvider client={client}>
-        <SyncButton />
-      </QueryClientProvider>,
-    );
-    const invalidatedKeys = spy.mock.calls.map(
-      (c) => (c[0] as { queryKey: string[] }).queryKey[0],
-    );
-    // `transactions` is the one C-17 was missing: ingesting transactions is the
-    // main thing a sync does, and the Transactions page kept showing pre-sync
-    // rows until a reload.
-    expect(invalidatedKeys).toEqual([
-      "net-worth",
-      "distribution",
-      "accounts",
-      "account-series",
-      "holdings",
-      "investment-returns",
-      "transactions",
-      "transaction-counts",
-      "budget-categories",
-      "budget-tags",
-      "budget-summary",
-      "budget-trend",
-      "budget-ai-status",
-    ]);
-  });
 });

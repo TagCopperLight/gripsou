@@ -1073,6 +1073,8 @@ mod tests {
 pub struct AiLastRunDto {
     pub outcome: String,
     pub error: Option<String>,
+    /// Identifies a completed run even when the browser missed it running.
+    pub started_at: String,
 }
 
 #[derive(Serialize)]
@@ -1155,6 +1157,7 @@ mod budget_ai_contract_tests {
             last_run: Some(AiLastRunDto {
                 outcome: "ok".into(),
                 error: None,
+                started_at: "2026-10-09T00:00:00+00:00".into(),
             }),
         })
         .unwrap();
@@ -1163,7 +1166,7 @@ mod budget_ai_contract_tests {
             serde_json::json!({
                 "configured": true, "running": false,
                 "remaining": 3, "reviewCount": 2,
-                "lastRun": {"outcome": "ok", "error": null}
+                "lastRun": {"outcome": "ok", "error": null, "startedAt": "2026-10-09T00:00:00+00:00"}
             })
         );
     }

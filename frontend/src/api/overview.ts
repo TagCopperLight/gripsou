@@ -80,7 +80,7 @@ function summaryParams(period: Period): string {
 export function useBudgetSummary(period: Period) {
   return useQuery({
     queryKey: keys.budgetSummary(period),
-    queryFn: () => getJson<BudgetSummary>(`/budget/summary?${summaryParams(period)}`),
+    queryFn: ({ signal }) => getJson<BudgetSummary>(`/budget/summary?${summaryParams(period)}`, { signal }),
     // Stepping a month keeps the old numbers on screen until the new ones land,
     // instead of flashing every surface through its loading state.
     placeholderData: keepPreviousData,
@@ -94,7 +94,7 @@ export function useBudgetSummary(period: Period) {
 export function useBudgetTrend(anchor: string) {
   return useQuery({
     queryKey: keys.budgetTrend(anchor),
-    queryFn: () => getJson<BudgetTrend>(`/budget/trend?anchor=${anchor}&months=12`),
+    queryFn: ({ signal }) => getJson<BudgetTrend>(`/budget/trend?anchor=${anchor}&months=12`, { signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -107,8 +107,8 @@ export function useBudgetTrend(anchor: string) {
 export function useLatestDataMonth() {
   return useQuery({
     queryKey: keys.budgetLatestMonth(),
-    queryFn: async () => {
-      const rows = await getJson<Transaction[]>("/transactions?limit=1");
+    queryFn: async ({ signal }) => {
+      const rows = await getJson<Transaction[]>("/transactions?limit=1", { signal });
       if (rows.length === 0) return null;
       const latest = calendarDay(rows[0].t).slice(0, 7);
       const now = currentMonth();
@@ -127,7 +127,7 @@ export function useHasDataBefore(month: string | undefined) {
   return useQuery({
     // The counts' own key, so it refreshes with every other count.
     queryKey: keys.transactionCounts(q),
-    queryFn: () => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`),
+    queryFn: ({ signal }) => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`, { signal }),
     enabled: month !== undefined,
     select: (c) => c.matching > 0,
     placeholderData: keepPreviousData,

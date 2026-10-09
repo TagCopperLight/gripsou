@@ -30,6 +30,18 @@ test("clearing removes from both stores", () => {
 });
 
 describe("ApiError", () => {
+  it("does not log out a new session when an old request returns 401", async () => {
+    setAuthToken("old-token");
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    let release!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    const request = getJson("/transactions").catch((error: unknown) => error);
+    setAuthToken("new-token");
+    release(new Response("", { status: 401 }));
+    expect(await request).toBeInstanceOf(ApiError);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
   it("carries the status so callers can branch on 409 without parsing messages", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 409 })));
     const err = (await getJson("/budget/categories").catch((e: unknown) => e)) as ApiError;

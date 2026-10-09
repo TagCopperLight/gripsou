@@ -71,7 +71,7 @@ describe("useBudgetCategories", () => {
     const { result } = renderHook(() => useBudgetCategories(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].defaultKey).toBe("groceries");
-    expect(fetch).toHaveBeenCalledWith("/api/budget/categories", { headers: {} });
+    expect(fetch).toHaveBeenCalledWith("/api/budget/categories", { headers: {}, signal: expect.any(AbortSignal) });
   });
 });
 
@@ -161,7 +161,7 @@ describe("useBudgetTags", () => {
     const { result } = renderHook(() => useBudgetTags(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].name).toBe("Holiday");
-    expect(fetch).toHaveBeenCalledWith("/api/budget/tags", { headers: {} });
+    expect(fetch).toHaveBeenCalledWith("/api/budget/tags", { headers: {}, signal: expect.any(AbortSignal) });
   });
 });
 

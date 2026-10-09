@@ -33,11 +33,12 @@ export const keys = {
   holdings: () => ["holdings"] as const,
   // `range` is only meaningful with an `id`; the id-only form is the family
   // prefix for one holding's price history across every range.
-  holdingPrices: (id: string, range?: string) =>
-    (range === undefined
+  holdingPrices: (id?: string, range?: string) =>
+    (id === undefined ? ["holding-prices"] : range === undefined
       ? ["holding-prices", id]
       : ["holding-prices", id, range]) as readonly unknown[],
-  holdingLots: (id: string) => ["holding-lots", id] as const,
+  holdingLots: (id?: string) =>
+    (id === undefined ? ["holding-lots"] : ["holding-lots", id]) as readonly unknown[],
   // Under the `holding-lots` prefix on purpose: `afterLotsSaved` invalidates
   // `holdingLots(id)`, which refetches these too, so a saved suggestion goes.
   holdingLotSuggestions: (id: string) => ["holding-lots", id, "suggestions"] as const,
