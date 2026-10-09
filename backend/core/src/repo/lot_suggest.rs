@@ -27,8 +27,8 @@ pub struct Candidate {
     pub amount: Decimal,
 }
 
-/// A quantity change of one holding between two snapshots, not yet covered by
-/// a lot, with every transaction that could explain it.
+/// A quantity change of one holding between two snapshots, with every
+/// transaction that could explain it.
 #[derive(Debug, Clone)]
 pub struct Jump {
     pub holding_id: Uuid,
@@ -36,6 +36,9 @@ pub struct Jump {
     pub day: NaiveDate,
     /// New quantity minus the previous one (from 0 for a first snapshot).
     pub dq: Decimal,
+    /// False when a lot already covers it or the holding's lots explain its
+    /// quantity: it gets no suggestion but still claims its candidates.
+    pub open: bool,
     pub candidates: Vec<Candidate>,
 }
 
@@ -49,9 +52,11 @@ pub struct Suggestion {
     pub fee: Decimal,
 }
 
-/// Keep only the unambiguous matches: a jump with exactly one candidate,
-/// which no other jump of the account also claims. Anything else is left to
-/// the user, exactly as before this feature existed.
+/// Keep only the unambiguous matches: an open jump with exactly one candidate,
+/// which no other jump of the account also claims. Closed jumps (already
+/// covered or explained) get no suggestion but still count as claimants, so
+/// their transaction is never handed to another holding. Anything else is left
+/// to the user, exactly as before this feature existed.
 pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
     // How many jumps each transaction could explain, across the account.
     let mut claims: HashMap<Uuid, usize> = HashMap::new();
@@ -67,7 +72,7 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
             let [c] = j.candidates.as_slice() else {
                 return None;
             };
-            if claims[&c.txn_id] != 1 || j.dq.is_zero() {
+            if !j.open || claims[&c.txn_id] != 1 || j.dq.is_zero() {
                 return None;
             }
             let quantity = j.dq.abs();
@@ -92,14 +97,15 @@ struct AccountRef {
     currency: String,
 }
 
-/// Every uncovered quantity jump of the account's non-cash holdings, with its
+/// Every quantity jump of the account's non-cash holdings, with its
 /// candidate transactions. See the spec for each rule; in short:
 /// - a jump is a snapshot whose quantity differs from the holding's previous
 ///   one, or a holding's first snapshot when the account already had an
 ///   earlier snapshot (a rise from 0);
 /// - its window is [min(prev_day + 1, day − 3), day + 3];
-/// - it is covered when a lot of the same side lies in that window, and a
-///   holding whose lots explain its quantity has no jumps at all;
+/// - it is closed (`open = false`) when a lot of the same side lies in that
+///   window, or when the holding's lots explain its quantity; closed jumps
+///   are kept so they still claim their candidates;
 /// - a candidate is a buy or sell of the account, in the window, whose
 ///   absolute amount is within 5 % of the shares' market value that day.
 async fn account_jumps(
@@ -139,20 +145,20 @@ async fn account_jumps(
         open_jumps as (
             select j.holding_id, j.instrument_id, j.day, j.dq,
                    least(j.prev_day + 1, j.day - 3) as win_from,
-                   j.day + 3 as win_to
+                   j.day + 3 as win_to,
+                   b.explained_qty <> h.quantity
+                   and not exists (
+                       select 1 from lot l
+                       where l.holding_id = j.holding_id
+                         and l.side = case when j.dq > 0 then 'buy' else 'sell' end
+                         and l.acquired_on between least(j.prev_day + 1, j.day - 3)
+                                               and j.day + 3
+                   ) as "open"
             from jumps j
             join holding h on h.id = j.holding_id
             join lateral lot_basis(array[h.id], array[user_today($3)]) b on true
-            where b.explained_qty <> h.quantity
-              and not exists (
-                  select 1 from lot l
-                  where l.holding_id = j.holding_id
-                    and l.side = case when j.dq > 0 then 'buy' else 'sell' end
-                    and l.acquired_on between least(j.prev_day + 1, j.day - 3)
-                                          and j.day + 3
-              )
         )
-        select oj.holding_id as "holding_id!", oj.day as "day!", oj.dq as "dq!",
+        select oj.holding_id as "holding_id!", oj.day as "day!", oj.dq as "dq!", oj."open" as "open!",
                c.id as "txn_id?", c.day as "txn_day?", c.amount as "amount?"
         from open_jumps oj
         left join lateral (
@@ -187,6 +193,7 @@ async fn account_jumps(
                 holding_id: r.holding_id,
                 day: r.day,
                 dq: r.dq,
+                open: r.open,
                 candidates: Vec::new(),
             });
         }
@@ -263,8 +270,13 @@ mod tests {
             holding_id: Uuid::from_u128(holding),
             day: day(8),
             dq: dec(dq),
+            open: true,
             candidates,
         }
+    }
+    fn closed(mut j: Jump) -> Jump {
+        j.open = false;
+        j
     }
 
     #[test]
@@ -330,6 +342,21 @@ mod tests {
             jump(2, "5", vec![cand(11, 8, "-50")]),
         ]);
         assert_eq!(got.len(), 2);
+    }
+
+    #[test]
+    fn a_closed_jump_still_claims_its_transaction() {
+        let got = pick(&[
+            closed(jump(1, "10", vec![cand(10, 8, "-100")])),
+            jump(2, "5", vec![cand(10, 8, "-100")]),
+        ]);
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn a_closed_jump_alone_suggests_nothing() {
+        let got = pick(&[closed(jump(1, "10", vec![cand(10, 8, "-100")]))]);
+        assert!(got.is_empty());
     }
 
     #[test]

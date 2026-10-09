@@ -261,3 +261,66 @@ async fn another_users_holding_is_none(pool: PgPool) {
             .is_none()
     );
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
+    // ETF1's purchase is already recorded (a lot in its window).
+    let fx = bought_23(&pool).await;
+    lot(&pool, fx.holding, "buy", oct(8), "22").await;
+    // ETF2 rose by a similar value the same day, its own transaction missing.
+    let other = common::seed_equity_holding(&pool, fx.account, "ETF2", dec("33")).await;
+    let instrument: Uuid = sqlx::query_scalar("select instrument_id from holding where id = $1")
+        .bind(other)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for d in 1..=15 {
+        common::insert_price_on(
+            &pool,
+            instrument,
+            oct(d).and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            dec("6.36"),
+        )
+        .await;
+    }
+    lot(
+        &pool,
+        other,
+        "buy",
+        NaiveDate::from_ymd_opt(2025, 6, 4).unwrap(),
+        "10",
+    )
+    .await;
+    snap(&pool, other, 4, "10").await;
+    snap(&pool, other, 8, "33").await;
+    // The only transaction belongs to ETF1.
+    txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
+
+    let got = suggest_lots(&pool, fx.user, other).await.unwrap().unwrap();
+    assert!(got.is_empty());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_long_sync_gap_widens_the_window_backwards(pool: PgPool) {
+    let fx = fixture(&pool, "83").await;
+    lot(
+        &pool,
+        fx.holding,
+        "buy",
+        NaiveDate::from_ymd_opt(2025, 6, 4).unwrap(),
+        "60",
+    )
+    .await;
+    snap(&pool, fx.holding, 1, "60").await;
+    snap(&pool, fx.holding, 10, "83").await;
+    // Window is [Oct 2, Oct 13]: Oct 3 is outside [Oct 7, Oct 13].
+    txn(&pool, fx.account, "t1", "buy", "-146.17", 3).await;
+
+    let got = suggest_lots(&pool, fx.user, fx.holding)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].date, oct(3));
+    assert_eq!(got[0].quantity, dec("23"));
+}
