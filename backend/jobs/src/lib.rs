@@ -262,6 +262,8 @@ async fn sync_all_daily(db: Db) {
                 for s in syncs {
                     match s.await {
                         Ok(ok) => any_ok |= ok,
+                        // A panicking sync is already caught and logged by
+                        // its supervisor; this is the supervisor itself dying.
                         Err(e) => {
                             tracing::error!(user_id = %user_id, error = %e, "sync task crashed")
                         }
@@ -611,12 +613,43 @@ fn failure(step: &'static str, error: impl Into<String>) -> SyncFailure {
 /// Runs inside a `sync_span`.
 async fn sync_connection_data(db: Db, connection_id: Uuid) -> bool {
     let deps = SyncDeps::from_env(&db).await;
-    sync_connection_data_with(&db, connection_id, &deps).await
+    sync_connection_data_with(db, connection_id, deps).await
 }
 
 /// [`sync_connection_data`] with its adapters passed in (tests use fakes).
-/// Logs `sync started`, one line per step, and exactly one `sync finished`.
-pub async fn sync_connection_data_with(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool {
+/// Runs inside a `sync_span`, and logs `sync started`, one line per step and
+/// exactly one `sync finished`, a panic included: the sync runs in its own
+/// task, and if that task panics the connection's lock is released now (not
+/// by the stale-lock sweep) and `sync finished` says `failed_step = "panic"`.
+pub async fn sync_connection_data_with(db: Db, connection_id: Uuid, deps: SyncDeps) -> bool {
+    let started = std::time::Instant::now();
+    let task_db = db.clone();
+    let task = async move { run_sync_logged(&task_db, connection_id, &deps).await };
+    let e = match tokio::spawn(task.in_current_span()).await {
+        Ok(ok) => return ok,
+        Err(e) => e,
+    };
+    if let Err(e) = connection::mark_synced_error(&db, connection_id, "sync crashed").await {
+        tracing::error!(
+            error = %gripsou_core::logs::error_chain(&e),
+            "sync failure not recorded"
+        );
+    }
+    // The sync-history line: keep its shape (jobs/tests/sync_log.rs).
+    // The panic payload is in JoinError's Display.
+    tracing::error!(
+        outcome = "failed",
+        failed_step = "panic",
+        error = %e,
+        duration_ms = started.elapsed().as_millis() as u64,
+        "sync finished"
+    );
+    false
+}
+
+/// One sync, start to `sync finished`, unsupervised: only
+/// [`sync_connection_data_with`] calls it.
+async fn run_sync_logged(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool {
     let started = std::time::Instant::now();
     tracing::info!("sync started");
     match run_sync(db, connection_id, deps).await {
@@ -790,8 +823,13 @@ pub async fn handle_webhook(
             tracing::info!(provider, outcome = "ignored", "webhook received");
             return WebhookOutcome::Accepted;
         }
-        Err(_) => {
-            tracing::warn!(provider, reason = "bad_signature", "webhook rejected");
+        Err(e) => {
+            tracing::warn!(
+                provider,
+                reason = "bad_signature",
+                error = %gripsou_core::logs::error_chain(&e),
+                "webhook rejected"
+            );
             return WebhookOutcome::Unauthorized;
         }
     };

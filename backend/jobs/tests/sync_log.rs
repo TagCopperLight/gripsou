@@ -16,8 +16,15 @@ use uuid::Uuid;
 
 const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+#[derive(Clone, Copy)]
+enum Mode {
+    Ok,
+    Fail,
+    Panic,
+}
+
 struct FakeBank {
-    fail: bool,
+    mode: Mode,
 }
 
 #[async_trait]
@@ -32,12 +39,12 @@ impl AccountProvider for FakeBank {
         Err(ProviderError::NotImplemented)
     }
     async fn sync(&self, _: &Value) -> Result<SyncResult, ProviderError> {
-        if self.fail {
-            Err(ProviderError::Other(
+        match self.mode {
+            Mode::Ok => Ok(SyncResult::default()),
+            Mode::Fail => Err(ProviderError::Other(
                 "GET /accounts failed: 503 Service Unavailable".into(),
-            ))
-        } else {
-            Ok(SyncResult::default())
+            )),
+            Mode::Panic => panic!("adapter bug"),
         }
     }
 }
@@ -57,9 +64,9 @@ impl CompositionProvider for NoComposition {
     }
 }
 
-fn deps(fail: bool) -> SyncDeps {
+fn deps(mode: Mode) -> SyncDeps {
     let mut accounts: HashMap<String, Box<dyn AccountProvider>> = HashMap::new();
-    accounts.insert("fake".into(), Box::new(FakeBank { fail }));
+    accounts.insert("fake".into(), Box::new(FakeBank { mode }));
     SyncDeps {
         accounts,
         prices: Vec::new(),
@@ -98,7 +105,7 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(&pool, conn, &deps(false))
+    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Ok))
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(ok);
@@ -143,7 +150,7 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(&pool, conn, &deps(true))
+    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Fail))
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Daily))
         .await;
     assert!(!ok);
@@ -164,6 +171,40 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
         .await
         .unwrap();
     assert_eq!(errors, 1);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool) {
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
+    let (user, conn) = seed(&pool).await;
+    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
+        .await
+        .unwrap();
+
+    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Panic))
+        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
+        .await;
+    assert!(!ok);
+    writer.flush(&pool).await;
+
+    let lines = finished_lines(&pool).await;
+    assert_eq!(lines.len(), 1, "exactly one sync finished, even on a panic");
+    let (level, f) = &lines[0];
+    assert_eq!(level, "error");
+    assert_eq!(f["outcome"], "failed");
+    assert_eq!(f["failed_step"], "panic");
+    assert!(f["error"].as_str().unwrap().contains("adapter bug"));
+    assert_eq!(f["trigger"], "manual");
+    assert_eq!(f["connection_id"], conn.to_string());
+    assert!(f["duration_ms"].is_u64());
+
+    // The lock is released now, not by the 30-minute stale-lock sweep.
+    let status: String = sqlx::query_scalar("select status from connection where id = $1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_ne!(status, "syncing");
 }
 
 #[sqlx::test(migrations = "../migrations")]
