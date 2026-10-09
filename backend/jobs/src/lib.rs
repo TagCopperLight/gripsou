@@ -585,7 +585,11 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
         Ok(Some(user_id)) => request_categorize(db, user_id),
         Ok(None) => {}
         Err(e) => {
-            tracing::warn!("could not start budget AI after sync of {connection_id}: {e}")
+            tracing::error!(
+                connection_id = %connection_id,
+                error = %gripsou_core::logs::error_chain(&e),
+                "ai run start failed"
+            )
         }
     }
 }
@@ -776,22 +780,37 @@ pub async fn handle_webhook(
 ) -> WebhookOutcome {
     let providers = account_providers();
     let Some(adapter) = providers.get(provider) else {
+        tracing::warn!(provider, reason = "unknown_provider", "webhook rejected");
         return WebhookOutcome::NotFound;
     };
     let signal = match adapter.verify_webhook(path, &headers, &body) {
         Ok(Some(s)) => s,
-        Ok(None) => return WebhookOutcome::Accepted, // valid, ignored
-        Err(_) => return WebhookOutcome::Unauthorized,
+        Ok(None) => {
+            // valid, ignored
+            tracing::info!(provider, outcome = "ignored", "webhook received");
+            return WebhookOutcome::Accepted;
+        }
+        Err(_) => {
+            tracing::warn!(provider, reason = "bad_signature", "webhook rejected");
+            return WebhookOutcome::Unauthorized;
+        }
     };
     match connection::find_by_external_connection_id(&db, provider, &signal.provider_connection_id)
         .await
     {
-        Ok(Some((id, user_id))) => claim_and_spawn(&db, user_id, id, Trigger::Webhook).await,
+        Ok(Some((id, user_id))) => {
+            tracing::info!(provider, outcome = "matched", connection_id = %id, "webhook received");
+            claim_and_spawn(&db, user_id, id, Trigger::Webhook).await;
+        }
         Ok(None) => tracing::warn!(
-            "webhook for unknown {provider} connection {}",
-            signal.provider_connection_id
+            provider,
+            outcome = "unknown_connection",
+            external_connection_id = %signal.provider_connection_id,
+            "webhook received"
         ),
-        Err(e) => tracing::warn!("webhook correlation failed: {e}"),
+        Err(e) => {
+            tracing::error!(provider, error = %gripsou_core::logs::error_chain(&e), "webhook lookup failed")
+        }
     }
     WebhookOutcome::Accepted
 }
@@ -951,6 +970,7 @@ pub async fn init_connection(
         gripsou_core::repo::connection::insert_pending(&db, user_id, provider_key, display_name)
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
+    tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = provider_key, "connection created");
 
     let init = ConnectInit {
         redirect_url: init.redirect_url.map(|url| {
@@ -1005,6 +1025,7 @@ pub async fn complete_connection(
     if !updated {
         return Err(ProviderError::Other("connection not found".to_string()));
     }
+    tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = %provider_key, "connection activated");
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
     // The connect itself has succeeded either way, so a failure here is logged,
     // not returned — but it must not be invisible.
