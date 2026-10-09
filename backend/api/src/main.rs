@@ -166,6 +166,10 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::holding_lots).put(handlers::save_lots),
         )
         .route("/holdings/{id}/lots/preview", post(handlers::preview_lots))
+        .route(
+            "/holdings/{id}/lots/suggestions",
+            get(handlers::lot_suggestions),
+        )
         .with_state(app_state);
 
     let cors_layer = CorsLayer::new()

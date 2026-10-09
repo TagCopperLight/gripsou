@@ -292,6 +292,31 @@ impl Lot {
     }
 }
 
+/// A lot inferred from a quantity change and its one matching transaction,
+/// shaped like `LotEntry` so the form can save it unchanged.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LotSuggestion {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub date: NaiveDate,
+    pub quantity: String,
+    pub unit_price: String,
+    pub fee: String,
+}
+
+impl LotSuggestion {
+    pub fn from_suggestion(s: gripsou_core::repo::lot_suggest::Suggestion) -> Self {
+        LotSuggestion {
+            kind: s.side.to_string(),
+            date: s.date,
+            quantity: s.quantity.to_string(),
+            unit_price: s.unit_price.to_string(),
+            fee: s.fee.to_string(),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewLotsReq {
