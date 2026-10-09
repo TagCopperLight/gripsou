@@ -2,6 +2,30 @@
 //! site uses. Conventions (fixed messages, shared field names, levels) are in
 //! CLAUDE.md "Logs".
 
+mod layer;
+mod writer;
+
+pub use layer::{LogLayer, is_saved};
+pub use writer::{LogWriter, WriterHandle};
+
+/// Lines held in memory while the database is slow or down.
+pub const QUEUE_CAPACITY: usize = 10_000;
+
+/// The layer to install and the writer that drains it. Create both before the
+/// pool exists, so startup lines are queued; spawn the writer once migrations
+/// have run.
+pub fn channel(capacity: usize) -> (LogLayer, LogWriter) {
+    let (tx, rx) = tokio::sync::mpsc::channel(capacity);
+    let dropped = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    (
+        LogLayer {
+            tx,
+            dropped: dropped.clone(),
+        },
+        LogWriter { rx, dropped },
+    )
+}
+
 /// How long saved log rows are kept. The daily sweep deletes older rows.
 pub const RETENTION_DAYS: i32 = 90;
 
@@ -21,6 +45,18 @@ pub fn error_chain(e: &(dyn std::error::Error + 'static)) -> String {
         cur = c.source();
     }
     out
+}
+
+/// One saved log line, as queued by the layer and written by the writer.
+#[derive(Debug, Clone)]
+pub struct LogLine {
+    pub at: chrono::DateTime<chrono::Utc>,
+    /// `error` | `warn` | `info`.
+    pub level: &'static str,
+    pub target: String,
+    pub message: String,
+    /// A JSON object: event fields over span fields, plus `spans`.
+    pub fields: serde_json::Value,
 }
 
 #[cfg(test)]
@@ -44,16 +80,4 @@ mod tests {
     fn error_chain_of_a_leaf_is_its_message() {
         assert_eq!(error_chain(&Inner), "inner timed out");
     }
-}
-
-/// One saved log line, as queued by the layer and written by the writer.
-#[derive(Debug, Clone)]
-pub struct LogLine {
-    pub at: chrono::DateTime<chrono::Utc>,
-    /// `error` | `warn` | `info`.
-    pub level: &'static str,
-    pub target: String,
-    pub message: String,
-    /// A JSON object: event fields over span fields, plus `spans`.
-    pub fields: serde_json::Value,
 }
