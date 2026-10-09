@@ -7,7 +7,7 @@ import { Button } from "./Button";
 import { CardState } from "./CardState";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Money } from "./Money";
-import { useHoldingLots, useLotsPreview, useSaveLots, type SaveLotAdd } from "../api/hooks";
+import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
 import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
 import type { BasisPreview, Holding } from "../api/types";
 
@@ -50,6 +50,9 @@ type Row = {
    *  edit can be detected later. A saved row is "changed" when its date differs
    *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
   pristine?: { date: string; quantity: string; unitPrice: string; fee: string };
+  /** True on a row pre-filled from a suggestion, until it is binned. Drives
+   *  the note under the table; editing the row keeps it. */
+  suggested?: boolean;
 };
 
 const ADD_ROW_BUTTON =
@@ -89,6 +92,7 @@ export function RecordLotsModal({
   const { data, isError, refetch } = useHoldingLots(holding.id);
   const saveLots = useSaveLots(holding.id);
   const preview = useLotsPreview(holding.id);
+  const suggestions = useLotSuggestions(holding.id);
 
   const [rows, setRows] = useState<Row[] | null>(null);
   // Ids the user explicitly binned via the delete button. A changed-but-not-
@@ -102,18 +106,31 @@ export function RecordLotsModal({
   // touched anything is free to reseed it — only a refetch mid-edit must not
   // throw away what the user is typing.
   const [dirty, setDirty] = useState(false);
-  // The last `data` reference the table was seeded from — lets a render tell
-  // a genuine refetch apart from a re-render with the same data.
-  const [seededFrom, setSeededFrom] = useState<typeof data>(undefined);
+  // The last pair of server responses the table was seeded from — lets a
+  // render tell a genuine refetch apart from a re-render with the same data.
+  const [seededFrom, setSeededFrom] = useState<{ lots: typeof data; suggested: typeof suggestions.data }>({
+    lots: undefined,
+    suggested: undefined,
+  });
 
   // Adjusting state during render (not in an effect) is the pattern React
   // recommends for "mirror this prop into state until the user diverges from
   // it" — it avoids an extra render pass and the effect only exists to call
   // setState synchronously anyway.
-  if (data !== undefined && data !== seededFrom && !(rows !== null && dirty)) {
-    setSeededFrom(data);
-    setRows(
-      data
+  //
+  // Seed once the suggestions have settled too (loaded or failed), so the
+  // pre-filled rows don't pop in after the table has rendered. A failed
+  // request seeds without them: the form works exactly as before.
+  const suggestionsSettled = !suggestions.isPending;
+  if (
+    data !== undefined &&
+    suggestionsSettled &&
+    (data !== seededFrom.lots || suggestions.data !== seededFrom.suggested) &&
+    !(rows !== null && dirty)
+  ) {
+    setSeededFrom({ lots: data, suggested: suggestions.data });
+    setRows([
+      ...data
         .filter((l) => l.manual)
         .map((l) => {
           const date = calendarDay(l.t);
@@ -130,7 +147,17 @@ export function RecordLotsModal({
             pristine: { date, quantity, unitPrice, fee },
           };
         }),
-    );
+      // New, unsaved rows: they count on Save and feed the preview and the
+      // bar like any row the user added.
+      ...(suggestions.data ?? []).map((s) => ({
+        type: s.type,
+        date: s.date,
+        quantity: s.quantity,
+        unitPrice: s.unitPrice,
+        fee: s.fee,
+        suggested: true,
+      })),
+    ]);
   }
 
   // Close on Escape; lock background scroll while open.
@@ -389,6 +416,12 @@ export function RecordLotsModal({
                 })}
               </tbody>
             </table>
+          )}
+
+          {list.some((r) => r.suggested) && (
+            <p className="text-fg-faint text-sm">
+              {t("dashboard.holdings.gap.prefilled", { count: list.filter((r) => r.suggested).length })}
+            </p>
           )}
 
           <div className="flex items-center gap-2">

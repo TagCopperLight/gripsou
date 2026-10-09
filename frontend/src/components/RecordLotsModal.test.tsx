@@ -4,11 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import { RecordLotsModal } from "./RecordLotsModal";
-import type { BasisPreview, Holding, Lot } from "../api/types";
+import type { BasisPreview, Holding, Lot, LotSuggestion } from "../api/types";
 import type { SaveLotAdd } from "../api/hooks";
 
 const mutateAsync = vi.fn();
 let txns: Lot[] = [];
+let suggestions: LotSuggestion[] = [];
+let suggestionsFailed = false;
 
 // Fixed sentinel responses for the mocked preview endpoint. Deliberately NOT a
 // reimplementation of the basis formula (that was the bug in fix round 1:
@@ -39,6 +41,10 @@ vi.mock("../api/hooks", async () => {
     ...actual,
     useSaveLots: () => ({ mutateAsync, isPending: false }),
     useHoldingLots: () => ({ data: txns, isError: false, refetch: vi.fn() }),
+    useLotSuggestions: () =>
+      suggestionsFailed
+        ? { data: undefined, isPending: false, isError: true }
+        : { data: suggestions, isPending: false, isError: false },
     // Mirrors the one behaviour that mattered for fix round 1's flicker bug:
     // TanStack Query's real `useMutation` resets `data` to `undefined` the
     // instant a mutation goes pending, and only `onSuccess` carries the next
@@ -105,6 +111,8 @@ describe("RecordLotsModal", () => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue(undefined);
     txns = [];
+    suggestions = [];
+    suggestionsFailed = false;
     previewMutate = vi.fn<(rows: SaveLotAdd[]) => void>();
     previewCallCount = 0;
     holdPreviewResolution = false;
@@ -411,5 +419,66 @@ describe("RecordLotsModal", () => {
     await user.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(screen.getByText(/nothing was saved/i)).toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  describe("suggestions", () => {
+    const suggestion: LotSuggestion = {
+      type: "buy",
+      date: "2026-10-08",
+      quantity: "23",
+      unitPrice: "6.35521739",
+      fee: "0",
+    };
+
+    it("adds each suggestion as an editable row after the saved ones", () => {
+      txns = [lot("a", "buy", "10", "20")];
+      suggestions = [suggestion];
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      const rows = screen.getAllByTestId("lot-row");
+      expect(rows).toHaveLength(2);
+      expect(screen.getAllByTestId("lot-date")[1]).toHaveValue("2026-10-08");
+      expect(screen.getAllByTestId("lot-quantity")[1]).toHaveValue("23");
+      expect(screen.getAllByTestId("lot-unitPrice")[1]).toHaveValue("6.35521739");
+      expect(screen.getAllByTestId("lot-fee")[1]).toHaveValue("0");
+    });
+
+    it("counts a suggestion on the Save button and says it was pre-filled", () => {
+      suggestions = [suggestion];
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "Save 1 entry" })).toBeEnabled();
+      expect(screen.getByText(/1 row pre-filled from your transactions/)).toBeInTheDocument();
+    });
+
+    it("saves a suggestion unchanged", async () => {
+      suggestions = [suggestion];
+      const user = userEvent.setup();
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "Save 1 entry" }));
+      expect(mutateAsync).toHaveBeenCalledWith({
+        adds: [{ type: "buy", date: "2026-10-08", quantity: "23", unitPrice: "6.35521739", fee: "0" }],
+        deletes: [],
+      });
+    });
+
+    it("drops the note once the pre-filled row is binned", async () => {
+      suggestions = [suggestion];
+      const user = userEvent.setup();
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: /delete entry/i }));
+      expect(screen.queryByText(/pre-filled/)).not.toBeInTheDocument();
+    });
+
+    it("shows no note without suggestions", () => {
+      txns = [lot("a", "buy", "10", "20")];
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      expect(screen.queryByText(/pre-filled/)).not.toBeInTheDocument();
+    });
+
+    it("still shows the saved lots when suggestions fail to load", () => {
+      txns = [lot("a", "buy", "10", "20")];
+      suggestionsFailed = true;
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
+    });
   });
 });

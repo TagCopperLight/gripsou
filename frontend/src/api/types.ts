@@ -107,6 +107,16 @@ export type Lot = {
   manual: boolean;
 };
 
+/** A lot inferred from a quantity change and its one matching transaction.
+ *  Already in the save endpoint's row shape; `date` is `YYYY-MM-DD`. */
+export type LotSuggestion = {
+  type: "buy" | "sell";
+  date: string;
+  quantity: string;
+  unitPrice: string;
+  fee: string;
+};
+
 export type BasisPreview = {
   meanPrice: string;
   invested: string;

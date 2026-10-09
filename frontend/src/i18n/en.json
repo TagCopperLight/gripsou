@@ -123,6 +123,8 @@
         "addSell": "Add sale",
         "delete": "Delete entry",
         "empty": "No buys or sales recorded yet.",
+        "prefilled": "{{count}} row pre-filled from your transactions. Check it before saving.",
+        "prefilled_other": "{{count}} rows pre-filled from your transactions. Check them before saving.",
         "figures": "Resulting figures",
         "figuresProvisional": "provisional until quantities match",
         "capitalInvested": "Capital invested",
