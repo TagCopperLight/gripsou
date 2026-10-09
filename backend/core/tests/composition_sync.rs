@@ -142,3 +142,39 @@ async fn marks_none_when_composition_empty(pool: PgPool) {
     assert_eq!(row.meta["composition_status"], "none");
     assert!(row.meta.get("composition").is_none());
 }
+
+struct FailingResolve;
+
+#[async_trait]
+impl CompositionProvider for FailingResolve {
+    fn key(&self) -> &str {
+        "mock"
+    }
+    async fn resolve_symbol(&self, _i: &InstrumentRef) -> Result<Option<String>, ProviderError> {
+        Err(ProviderError::Other("503".into()))
+    }
+    async fn fetch_composition(&self, _s: &str) -> Result<Composition, ProviderError> {
+        unreachable!("no symbol was resolved")
+    }
+}
+
+// An unavailable source is not "no composition": the instrument must stay
+// eligible for the next sync.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_unavailable_source_is_a_failure_not_a_none_mark(pool: PgPool) {
+    let conn_id = seed_one_equity(&pool).await;
+
+    let summary = fetch_composition_for_connection(&pool, conn_id, &FailingResolve)
+        .await
+        .unwrap();
+    assert_eq!(summary.failed, 1);
+    assert_eq!(summary.unresolved, 0);
+
+    let status: Option<String> = sqlx::query_scalar(
+        "select meta->>'composition_status' from instrument where kind <> 'cash' limit 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_ne!(status.as_deref(), Some("none"));
+}

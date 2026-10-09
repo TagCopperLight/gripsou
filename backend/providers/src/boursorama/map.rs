@@ -36,23 +36,23 @@ struct AmPoint {
 }
 
 /// Extract one embedded chart dataset by its `brs.id` ("regional" | "sector").
-/// Returns weights as ratios in 0..1. Empty when the id or its data is absent
-/// (e.g. the page is not a tracker, or has no breakdown).
-pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Vec<Allocation> {
+/// Returns weights as ratios in 0..1. `Ok(empty)` when the page has no such
+/// chart (not a tracker, or no breakdown). `Err` when the chart's anchor is
+/// there but its data can't be read: the page layout changed, and that must
+/// not be mistaken for "this fund has no composition".
+pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Result<Vec<Allocation>, String> {
     // Anchor on the full `valueField`+`id` pair so a stray `"id":"sector"`
     // elsewhere on the page can't match.
     let anchor = format!("\"valueField\":\"value\",\"id\":\"{id}\"");
     let Some(start) = html.find(&anchor) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let Some(rel) = html[start..].find("\"amChartData\":") else {
-        return Vec::new();
-    };
+    let unreadable = || format!("{id} chart unreadable");
+    let rel = html[start..]
+        .find("\"amChartData\":")
+        .ok_or_else(unreadable)?;
     let after = start + rel + "\"amChartData\":".len();
-    let Some(open_off) = html[after..].find('[') else {
-        return Vec::new();
-    };
-    let open = after + open_off;
+    let open = after + html[after..].find('[').ok_or_else(unreadable)?;
 
     // Find the matching `]` (names contain no brackets, so a depth count is safe).
     let bytes = html.as_bytes();
@@ -71,18 +71,17 @@ pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Vec<Allocation> {
             _ => {}
         }
     }
-    let Some(end) = end else {
-        return Vec::new();
-    };
+    let end = end.ok_or_else(unreadable)?;
 
-    let points: Vec<AmPoint> = serde_json::from_str(&html[open..end]).unwrap_or_default();
-    points
+    let points: Vec<AmPoint> = serde_json::from_str(&html[open..end])
+        .map_err(|e| format!("{id} chart unreadable: {e}"))?;
+    Ok(points
         .into_iter()
         .map(|p| Allocation {
             name: p.name,
             weight: p.value / 100.0,
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -119,7 +118,7 @@ mod tests {
 
     #[test]
     fn parse_amchart_data_reads_regional_with_ratio_weights() {
-        let a = parse_amchart_data(SAMPLE, "regional");
+        let a = parse_amchart_data(SAMPLE, "regional").unwrap();
         assert_eq!(a.len(), 2);
         assert_eq!(a[0].name, "Etats-Unis");
         assert!((a[0].weight - 0.9755).abs() < 1e-9);
@@ -128,7 +127,7 @@ mod tests {
 
     #[test]
     fn parse_amchart_data_reads_sector_and_decodes_unicode() {
-        let a = parse_amchart_data(SAMPLE, "sector");
+        let a = parse_amchart_data(SAMPLE, "sector").unwrap();
         assert_eq!(a.len(), 2);
         assert_eq!(a[0].name, "Technologie");
         assert!((a[0].weight - 0.5853).abs() < 1e-9);
@@ -138,7 +137,17 @@ mod tests {
 
     #[test]
     fn parse_amchart_data_empty_for_missing_id() {
-        assert!(parse_amchart_data(SAMPLE, "nope").is_empty());
-        assert!(parse_amchart_data("<html>no charts</html>", "regional").is_empty());
+        assert!(parse_amchart_data(SAMPLE, "nope").unwrap().is_empty());
+        assert!(
+            parse_amchart_data("<html>no charts</html>", "regional")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn parse_amchart_data_errors_when_the_chart_is_present_but_unreadable() {
+        let html = r#""valueField":"value","id":"regional"},"amChartData":[{"name":"US""#;
+        assert!(parse_amchart_data(html, "regional").is_err());
     }
 }

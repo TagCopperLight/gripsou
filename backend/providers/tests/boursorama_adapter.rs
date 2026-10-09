@@ -69,3 +69,45 @@ async fn fetch_composition_extracts_country_and_sector_from_real_page() {
     assert!(comp.countries.iter().all(|a| a.name != "Actions"));
     assert!(comp.sectors.iter().all(|a| a.name != "Actions"));
 }
+
+#[tokio::test]
+async fn resolve_symbol_errors_when_boursorama_is_down_or_blocks() {
+    for status in [403, 429, 500, 503] {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/recherche/"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&server)
+            .await;
+        let p = BoursoramaCompositionProvider::new(server.uri());
+        assert!(
+            p.resolve_symbol(&iref("PUST.PA")).await.is_err(),
+            "status {status} must not read as 'no such fund'"
+        );
+    }
+}
+
+#[tokio::test]
+async fn resolve_symbol_none_on_404() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/recherche/"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    let p = BoursoramaCompositionProvider::new(server.uri());
+    assert_eq!(p.resolve_symbol(&iref("NOPE")).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn fetch_composition_errors_on_a_broken_chart() {
+    let server = MockServer::start().await;
+    let broken = r#"<script>"brs":{"valueField":"value","id":"regional"},"amChartData":[{"name":"US","value":</script>"#;
+    Mock::given(method("GET"))
+        .and(path("/bourse/trackers/cours/composition/X/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(broken))
+        .mount(&server)
+        .await;
+    let p = BoursoramaCompositionProvider::new(server.uri());
+    assert!(p.fetch_composition("X").await.is_err());
+}

@@ -90,6 +90,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
         .unwrap();
     assert_eq!(s1.resolved, 1);
     assert_eq!(s1.prices_inserted, 1);
+    assert_eq!(s1.failed, 0);
     assert_eq!(price_count(&pool).await, 1);
 
     // The resolved ticker is cached in meta, and the identity columns the next
