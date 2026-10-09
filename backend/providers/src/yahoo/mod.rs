@@ -19,7 +19,8 @@ pub struct YahooPriceProvider {
 
 impl YahooPriceProvider {
     pub fn new(pivot: String) -> Result<Self, ProviderError> {
-        let connector = YahooConnector::new().map_err(|e| ProviderError::Other(e.to_string()))?;
+        let connector = YahooConnector::new()
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
         Ok(Self { connector, pivot })
     }
 }
@@ -54,7 +55,7 @@ impl PriceProvider for YahooPriceProvider {
             .connector
             .search_ticker(query)
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         // Distil the crate's result rows into our own minimal type, then apply
         // the pure selection. NOTE: field names (`symbol`, `quote_type`) are the
@@ -78,14 +79,14 @@ impl PriceProvider for YahooPriceProvider {
     ) -> Result<Vec<PricePoint>, ProviderError> {
         let start_ts = since.map(|ts| ts.timestamp()).unwrap_or(0);
         let start = OffsetDateTime::from_unix_timestamp(start_ts)
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
         let end = OffsetDateTime::now_utc();
 
         let resp = self
             .connector
             .get_quote_history(symbol, start, end)
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         // Report Yahoo's own currency for the listing. If it's missing we do NOT
         // guess (an empty string won't match any instrument currency, so the
@@ -98,7 +99,7 @@ impl PriceProvider for YahooPriceProvider {
             .unwrap_or_default();
         let rows: Vec<(i64, f64)> = resp
             .quotes()
-            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?
             .iter()
             .map(|q| (q.timestamp, q.close))
             .collect();

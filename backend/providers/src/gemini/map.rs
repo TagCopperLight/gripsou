@@ -118,7 +118,10 @@ pub fn parse_response(
             ))
         })?;
     let answers: Vec<Value> = serde_json::from_str(text).map_err(|e| {
-        CategorizeError::Other(format!("gemini answer is not the expected JSON: {e}"))
+        CategorizeError::Other(format!(
+            "gemini answer is not the expected JSON: {}",
+            gripsou_core::logs::error_chain(&e)
+        ))
     })?;
     let guesses = answers
         .iter()

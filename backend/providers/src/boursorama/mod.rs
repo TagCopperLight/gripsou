@@ -69,7 +69,7 @@ impl CompositionProvider for BoursoramaCompositionProvider {
             .get(&url)
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         // An exact ticker 302-redirects to the security page; anything else
         // (a results page, a 404) means we couldn't resolve a single security.
@@ -93,12 +93,12 @@ impl CompositionProvider for BoursoramaCompositionProvider {
             .get(&url)
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?
             .error_for_status()
-            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?
             .text()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         Ok(Composition {
             countries: parse_amchart_data(&html, "regional"),

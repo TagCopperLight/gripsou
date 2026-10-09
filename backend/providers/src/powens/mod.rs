@@ -127,7 +127,7 @@ impl PowensProvider {
                 .bearer_auth(auth_token)
                 .send()
                 .await
-                .map_err(|e| ProviderError::Other(e.to_string()))?;
+                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
             if !resp.status().is_success() {
                 return Err(ProviderError::Other(format!(
                     "GET {endpoint} failed: {}",
@@ -137,7 +137,7 @@ impl PowensProvider {
             let body = resp
                 .text()
                 .await
-                .map_err(|e| ProviderError::Other(e.to_string()))?;
+                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
             let page: P = match serde_json::from_str(&body) {
                 Ok(v) => v,
                 Err(e) => {
@@ -147,7 +147,8 @@ impl PowensProvider {
                         body.chars().take(500).collect::<String>()
                     );
                     return Err(ProviderError::Other(format!(
-                        "{endpoint} decode error: {e}"
+                        "{endpoint} decode error: {}",
+                        gripsou_core::logs::error_chain(&e)
                     )));
                 }
             };
@@ -226,7 +227,7 @@ impl AccountProvider for PowensProvider {
             ])
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         if !resp.status().is_success() {
             return Err(ProviderError::Other(format!(
@@ -238,7 +239,7 @@ impl AccountProvider for PowensProvider {
         let token_resp: TokenAccessResponse = resp
             .json()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         let me_resp = self
             .http
@@ -246,7 +247,7 @@ impl AccountProvider for PowensProvider {
             .bearer_auth(&token_resp.access_token)
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         if !me_resp.status().is_success() {
             return Err(ProviderError::Other(format!(
@@ -258,7 +259,7 @@ impl AccountProvider for PowensProvider {
         let me: Me = me_resp
             .json()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         let connection_id = callback.split('&').find_map(|pair| {
             let (k, v) = pair.split_once('=')?;
@@ -298,7 +299,7 @@ impl AccountProvider for PowensProvider {
                 .bearer_auth(auth_token)
                 .send()
                 .await
-                .map_err(|e| ProviderError::Other(e.to_string()))?;
+                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
             if resp.status().is_success() {
                 resp.json::<model::ConnectionsResponse>()
                     .await
@@ -347,7 +348,7 @@ impl AccountProvider for PowensProvider {
             .query(&[("psu_requested", "false")])
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
         // 409: Powens considers the connection already up to date (or a sync is
         // already running) and won't emit a webhook — signal a benign conflict so
         // the caller can fall back to a direct fetch instead of erroring.
@@ -387,7 +388,7 @@ impl AccountProvider for PowensProvider {
         let body_str = std::str::from_utf8(body)
             .map_err(|_| ProviderError::Other("non-utf8 webhook body".into()))?;
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
         mac.update(format!("POST.{path}.{date}.{body_str}").as_bytes());
         let expected = STANDARD.encode(mac.finalize().into_bytes());
 
@@ -398,8 +399,8 @@ impl AccountProvider for PowensProvider {
             return Err(ProviderError::Other("bad webhook signature".into()));
         }
 
-        let env: model::WebhookEnvelope =
-            serde_json::from_slice(body).map_err(|e| ProviderError::Other(e.to_string()))?;
+        let env: model::WebhookEnvelope = serde_json::from_slice(body)
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
         Ok(env
             .connection
             .map(|c| gripsou_core::provider::WebhookSignal {

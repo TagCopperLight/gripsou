@@ -111,7 +111,10 @@ impl Categorizer for JevCategorizer {
                 }
                 Ok(Ok(None)) => continue,
                 Ok(Err(e)) => e,
-                Err(e) => CategorizeError::Other(format!("jev task failed: {e}")),
+                Err(e) => CategorizeError::Other(format!(
+                    "jev task failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                )),
             };
             gate.close();
             interrupted.get_or_insert(failure);
@@ -142,7 +145,12 @@ impl Categorizer for JevCategorizer {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+            .map_err(|e| {
+                CategorizeError::Other(format!(
+                    "jev request failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                ))
+            })?;
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
@@ -170,7 +178,12 @@ async fn ask(
         .json(body)
         .send()
         .await
-        .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+        .map_err(|e| {
+            CategorizeError::Other(format!(
+                "jev request failed: {}",
+                gripsou_core::logs::error_chain(&e)
+            ))
+        })?;
     let status = resp.status();
     if status.as_u16() == 429 {
         return Err(CategorizeError::RateLimited);
