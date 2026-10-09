@@ -45,3 +45,15 @@ mod tests {
         assert_eq!(error_chain(&Inner), "inner timed out");
     }
 }
+
+/// One saved log line, as queued by the layer and written by the writer.
+#[derive(Debug, Clone)]
+pub struct LogLine {
+    pub at: chrono::DateTime<chrono::Utc>,
+    /// `error` | `warn` | `info`.
+    pub level: &'static str,
+    pub target: String,
+    pub message: String,
+    /// A JSON object: event fields over span fields, plus `spans`.
+    pub fields: serde_json::Value,
+}
