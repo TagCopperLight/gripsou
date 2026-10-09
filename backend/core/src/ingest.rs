@@ -22,6 +22,8 @@ pub struct IngestSummary {
     pub holdings: usize,
     pub transactions_inserted: usize,
     pub transactions_updated: usize,
+    /// Transactions the ingest could not store and left out.
+    pub transactions_skipped: usize,
     pub snapshots: usize,
     /// Holdings present in a prior sync but absent from this one: their position
     /// was zeroed and a zero snapshot stamped for today.
@@ -173,6 +175,7 @@ pub async fn ingest(
         holdings: sync.holdings.len(),
         transactions_inserted,
         transactions_updated,
+        transactions_skipped: 0,
         snapshots,
         holdings_closed,
         backfill_rows,

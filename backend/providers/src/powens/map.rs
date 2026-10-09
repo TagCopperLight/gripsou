@@ -247,6 +247,7 @@ pub fn map_sync(
 
     // institution is filled by sync() after fetching connections; placeholder here.
     let mut result = SyncResult {
+        skipped: Default::default(),
         institution: Institution::default(),
         accounts: Vec::new(),
         holdings: Vec::new(),

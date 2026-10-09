@@ -27,6 +27,7 @@ async fn insert_price_is_upsert(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
@@ -75,6 +76,7 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0)), equity],
@@ -146,6 +148,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0)), equity],
@@ -219,6 +222,7 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
@@ -273,6 +277,7 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
@@ -331,6 +336,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![
@@ -352,6 +358,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
@@ -386,6 +393,7 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
@@ -437,6 +445,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
@@ -482,6 +491,7 @@ async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
@@ -537,6 +547,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
             holdings: vec![
@@ -580,6 +591,7 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity_holding(
@@ -648,6 +660,7 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![cny_account],
             holdings: vec![cny_cash],
@@ -684,6 +697,7 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
@@ -736,6 +750,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity],
@@ -812,6 +827,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![cny_account],
             holdings: vec![cny_cash],
@@ -873,6 +889,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![
@@ -1029,6 +1046,7 @@ async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> a
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity],
@@ -1094,6 +1112,7 @@ async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Re
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity],
@@ -1152,6 +1171,7 @@ async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> a
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![equity],
@@ -2147,6 +2167,7 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(120, 0))],
@@ -2193,6 +2214,7 @@ async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
@@ -2257,6 +2279,7 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
         &pool,
         conn_id,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![cny_account],
             holdings: vec![equity],

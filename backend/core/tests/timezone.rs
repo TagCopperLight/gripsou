@@ -75,6 +75,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         &pool,
         connection,
         &SyncResult {
+            skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![common::checking_account("a")],
             holdings: vec![security],

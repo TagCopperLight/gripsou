@@ -17,6 +17,8 @@ pub struct CompositionSyncSummary {
     pub resolved: usize,
     pub fetched: usize,
     pub unresolved: usize,
+    /// Listings whose composition fetch failed.
+    pub failed: usize,
 }
 
 pub async fn fetch_composition_for_connection(

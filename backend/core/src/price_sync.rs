@@ -41,6 +41,8 @@ pub struct PriceSyncSummary {
     /// Points dropped because Yahoo reported no currency for the listing at all,
     /// so there is nothing to convert them from.
     pub skipped_unlabelled: usize,
+    /// Listings whose fetch failed.
+    pub failed: usize,
 }
 
 // An FX rate can only be stored against a cash instrument, and cash instruments

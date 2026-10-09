@@ -84,13 +84,24 @@ pub struct Institution {
     pub name: String,
 }
 
+/// Rows a provider returned but the adapter could not map, by kind.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkippedCounts {
+    pub accounts: usize,
+    pub holdings: usize,
+    pub transactions: usize,
+}
+
 /// What an `AccountProvider::sync` returns for one connection.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SyncResult {
     pub institution: Institution,
     pub accounts: Vec<CanonicalAccount>,
     pub holdings: Vec<CanonicalHolding>,
     pub transactions: Vec<CanonicalTransaction>,
+    /// What the adapter dropped while mapping (logged, never ingested).
+    #[serde(default)]
+    pub skipped: SkippedCounts,
 }
 
 /// One slice of an ETF allocation breakdown. `weight` is a display ratio in

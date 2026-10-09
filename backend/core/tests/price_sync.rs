@@ -48,6 +48,7 @@ impl PriceProvider for MockProvider {
 async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
     let conn_id = seed_connection(pool).await;
     let sync = SyncResult {
+        skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
