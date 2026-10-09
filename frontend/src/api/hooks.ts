@@ -125,6 +125,7 @@ export function useHoldingLots(id: string) {
 export function useLotSuggestions(id: string) {
   return useQuery({
     queryKey: keys.holdingLotSuggestions(id),
+    retry: false, // suggestions are optional: fall back to the empty form fast
     queryFn: () => getJson<LotSuggestion[]>(`/holdings/${id}/lots/suggestions`),
   });
 }
