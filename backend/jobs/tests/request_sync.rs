@@ -224,3 +224,24 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
 
     Ok(())
 }
+
+// ── database failure ─────────────────────────────────────────────────────────
+
+/// A database that cannot answer is an Err (the handler turns it into a 500),
+/// never a silent "not found".
+#[sqlx::test(migrations = "../migrations")]
+async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = seed_user(&pool).await;
+    pool.close().await;
+
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        Uuid::new_v4(),
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await;
+    assert!(result.is_err(), "expected Err on a closed pool");
+
+    Ok(())
+}

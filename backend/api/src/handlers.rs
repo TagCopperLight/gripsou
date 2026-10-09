@@ -887,24 +887,24 @@ pub async fn login(
             "invalid email or password".to_string(),
         )
     };
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
+    let ip = client_ip(&headers, peer);
     let Some(creds) = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
         .map_err(internal)?
     else {
-        tracing::warn!(email = %body.email, ip = %client_ip(&headers, peer), "login failed");
+        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
     if !auth::verify_password(&body.password, &creds.password_hash) {
-        tracing::warn!(email = %body.email, ip = %client_ip(&headers, peer), "login failed");
+        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     }
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok());
-    let ip = client_ip(&headers, peer);
     let ttl = if body.remember {
         Duration::days(30)
     } else {
@@ -1599,9 +1599,14 @@ mod auth_tests {
         let password = "correct horse battery staple";
         let admin = seed_user(&pool, "log@t.local", password).await;
         login_token(&pool, "log@t.local", password).await;
+        let mut ua = axum::http::HeaderMap::new();
+        ua.insert(
+            axum::http::header::USER_AGENT,
+            "test-agent/1".parse().unwrap(),
+        );
         let failed = login(
             State(pool.clone()),
-            axum::http::HeaderMap::new(),
+            ua,
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
                 email: "log@t.local".into(),
@@ -1629,7 +1634,8 @@ mod auth_tests {
                 .unwrap();
         let messages: Vec<&str> = rows.iter().map(|(m, _)| m.as_str()).collect();
         assert!(messages.contains(&"login succeeded"));
-        assert!(messages.contains(&"login failed"));
+        let (_, failed_line) = rows.iter().find(|(m, _)| m == "login failed").unwrap();
+        assert_eq!(failed_line["user_agent"], "test-agent/1");
         assert!(messages.contains(&"invite created"));
         let all = serde_json::to_string(&rows).unwrap();
         assert!(!all.contains(password), "password leaked into the log");
