@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -42,14 +42,9 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     // Two independent outputs: the terminal (filtered by RUST_LOG, default info)
     // and the saved log (gripsou's info+ lines, whatever RUST_LOG says).
-    let (log_layer, log_writer) = gripsou_core::logs::channel(gripsou_core::logs::QUEUE_CAPACITY);
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())),
-        )
-        .with(log_layer.filtered())
-        .init();
+    let log_writer = gripsou_core::logs::install(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+    );
 
     let database_url =
         env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;

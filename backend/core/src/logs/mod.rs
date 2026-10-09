@@ -11,6 +11,25 @@ pub use writer::{LogWriter, WriterHandle};
 /// Lines held in memory while the database is slow or down.
 pub const QUEUE_CAPACITY: usize = 10_000;
 
+/// Install the process-wide subscriber: the terminal, filtered by `terminal`
+/// (RUST_LOG), and the saved log. Returns the writer to spawn once the
+/// database is migrated.
+///
+/// Deliberately not `.init()`: that also installs the `log`-crate bridge, and
+/// with per-layer filters the bridge's "is this enabled?" checks (sqlx asks on
+/// every query) made tracing drop the next line from both outputs. Crates that
+/// log through `log` (sqlx, reqwest, rustls) go unbridged; at info they are
+/// silent anyway.
+pub fn install(terminal: tracing_subscriber::EnvFilter) -> LogWriter {
+    use tracing_subscriber::{Layer, layer::SubscriberExt};
+    let (layer, writer) = channel(QUEUE_CAPACITY);
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(terminal))
+        .with(layer.filtered());
+    tracing::subscriber::set_global_default(subscriber).expect("subscriber installed once");
+    writer
+}
+
 /// The layer to install and the writer that drains it. Create both before the
 /// pool exists, so startup lines are queued; spawn the writer once migrations
 /// have run.

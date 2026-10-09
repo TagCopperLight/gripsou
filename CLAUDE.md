@@ -123,6 +123,7 @@ Every info-and-above line from gripsou's crates is printed *and* saved to the `l
 - **Errors** go in `error = %gripsou_core::logs::error_chain(&e)`, logged once where handled.
 - **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names.
 - **Spans** carry the operation: `sync` (`sync_id`, `connection_id`, `user_id`, `provider`, `trigger`), `ai_run` (`user_id`, `run_id`, `model`), `sweep` (`name`), `request` (`request_id`, `route`, `user_id`). Spawned work must be `.instrument(...)`-ed or it loses them.
+- **The subscriber is installed by `gripsou_core::logs::install`, never `.init()`**: `.init()` adds the `log`-crate bridge, whose checks (sqlx makes one per query) made the per-output filters drop the next line, in the terminal too. `core/tests/logs_install.rs` pins it.
 - **Tests** that assert on saved logs capture with `gripsou_core::logs::capture(capacity)`: it keeps tracing's per-callsite interest stable across parallel tests.
 - **Sync history is the `sync finished` lines**, one per sync: `outcome`, `failed_step` (`credentials`, `provider_fetch`, `ingest`, or `panic` when the sync's task panicked: its supervisor frees the lock and logs the line), `error`, `duration_ms`, counts. `jobs/tests/sync_log.rs` pins that shape; change both together. A sync cut off by a restart has no `sync finished` line (only the boot `boot_sync_locks` sweep count shows it), so the history is not guaranteed complete.
 
