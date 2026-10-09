@@ -54,6 +54,19 @@ impl ListPage for model::InvestmentsResponse {
     }
 }
 
+/// A response body decoded as JSON, its decode error without the value.
+async fn read_json<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+    what: &str,
+) -> Result<T, ProviderError> {
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
+    serde_json::from_str(&body)
+        .map_err(|e| ProviderError::Other(crate::json_decode_error(what, &e)))
+}
+
 impl PowensProvider {
     pub fn from_env() -> Option<Self> {
         let client_id = std::env::var("POWENS_CLIENT_ID").ok()?;
@@ -141,10 +154,7 @@ impl PowensProvider {
             let page: P = match serde_json::from_str(&body) {
                 Ok(v) => v,
                 Err(e) => {
-                    return Err(ProviderError::Other(format!(
-                        "{endpoint} decode error: {}",
-                        gripsou_core::logs::error_chain(&e)
-                    )));
+                    return Err(ProviderError::Other(crate::json_decode_error(endpoint, &e)));
                 }
             };
 
@@ -231,10 +241,7 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let token_resp: TokenAccessResponse = resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
+        let token_resp: TokenAccessResponse = read_json(resp, "/auth/token/access").await?;
 
         let me_resp = self
             .http
@@ -251,10 +258,7 @@ impl AccountProvider for PowensProvider {
             )));
         }
 
-        let me: Me = me_resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
+        let me: Me = read_json(me_resp, "/users/me").await?;
 
         let connection_id = callback.split('&').find_map(|pair| {
             let (k, v) = pair.split_once('=')?;
@@ -296,7 +300,7 @@ impl AccountProvider for PowensProvider {
                 .await
                 .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
             if resp.status().is_success() {
-                match resp.json::<model::ConnectionsResponse>().await {
+                match read_json::<model::ConnectionsResponse>(resp, "/users/me/connections").await {
                     Ok(r) => r.connections,
                     Err(e) => {
                         tracing::warn!(
@@ -402,7 +406,7 @@ impl AccountProvider for PowensProvider {
         }
 
         let env: model::WebhookEnvelope = serde_json::from_slice(body)
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
+            .map_err(|e| ProviderError::Other(crate::json_decode_error("webhook", &e)))?;
         Ok(env
             .connection
             .map(|c| gripsou_core::provider::WebhookSignal {
