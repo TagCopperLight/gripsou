@@ -118,6 +118,7 @@ pub async fn ingest(
     // while the user's budget fields (category, tags, ✓) are never overwritten.
     let mut transactions_inserted = 0;
     let mut transactions_updated = 0;
+    let mut transactions_skipped = 0usize;
     for txn in &sync.transactions {
         // A transaction naming an account this sync did not emit is skipped,
         // not fatal: a provider whose transactions endpoint is user-scoped
@@ -128,11 +129,12 @@ pub async fn ingest(
         // holdings loop above keeps its hard failure on purpose: `map_sync`
         // guarantees that invariant, so a violation there is a real bug.
         let Some(&account_id) = account_ids.get(txn.account_external_id.as_str()) else {
-            tracing::warn!(
-                external_id = %txn.account_external_id,
+            tracing::debug!(
+                account_external_id = %txn.account_external_id,
                 txn_external_id = %txn.external_id,
-                "skipping transaction on an account not present in this sync"
+                "transaction skipped: account not in this sync"
             );
+            transactions_skipped += 1;
             continue;
         };
         match upsert_transaction(&mut tx, account_id, txn).await? {
@@ -175,7 +177,7 @@ pub async fn ingest(
         holdings: sync.holdings.len(),
         transactions_inserted,
         transactions_updated,
-        transactions_skipped: 0,
+        transactions_skipped,
         snapshots,
         holdings_closed,
         backfill_rows,

@@ -141,11 +141,6 @@ impl PowensProvider {
             let page: P = match serde_json::from_str(&body) {
                 Ok(v) => v,
                 Err(e) => {
-                    tracing::error!("powens {endpoint} decode error: {e}");
-                    tracing::debug!(
-                        "powens {endpoint} raw body: {}",
-                        body.chars().take(500).collect::<String>()
-                    );
                     return Err(ProviderError::Other(format!(
                         "{endpoint} decode error: {}",
                         gripsou_core::logs::error_chain(&e)
@@ -301,11 +296,18 @@ impl AccountProvider for PowensProvider {
                 .await
                 .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
             if resp.status().is_success() {
-                resp.json::<model::ConnectionsResponse>()
-                    .await
-                    .map(|r| r.connections)
-                    .unwrap_or_default()
+                match resp.json::<model::ConnectionsResponse>().await {
+                    Ok(r) => r.connections,
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %gripsou_core::logs::error_chain(&e),
+                            "institution lookup failed"
+                        );
+                        Vec::new()
+                    }
+                }
             } else {
+                tracing::warn!(status = resp.status().as_u16(), "institution lookup failed");
                 Vec::new()
             }
         };

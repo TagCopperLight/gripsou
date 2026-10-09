@@ -503,3 +503,60 @@ fn falls_back_to_the_booking_date_when_rdate_is_absent() {
         Some("2026-08-19")
     );
 }
+
+fn acct(id: i64, kind: &str, deleted: Option<&str>) -> BankAccount {
+    serde_json::from_value(serde_json::json!({
+        "id": id, "type": kind, "deleted": deleted, "balance": "0",
+        "currency": {"id": "EUR"}
+    }))
+    .unwrap()
+}
+
+fn txn(id: i64, id_account: i64, coming: bool, deleted: Option<&str>) -> PowensTransaction {
+    serde_json::from_value(serde_json::json!({
+        "id": id, "id_account": id_account, "rdate": "2024-01-02", "date": "2024-01-02",
+        "value": "-1.50", "wording": "x", "type": "card",
+        "coming": coming, "deleted": deleted
+    }))
+    .unwrap()
+}
+
+#[test]
+fn map_sync_counts_what_it_skips() {
+    // One live checking account, one deleted account, one loan (no type mapping);
+    // one coming and one deleted transaction on the live account, one on the loan.
+    let accounts = vec![
+        acct(1, "checking", None),
+        acct(2, "checking", Some("2024-01-01 00:00:00")),
+        acct(3, "loan", None),
+    ];
+    let txns = vec![
+        txn(10, 1, false, None),
+        txn(11, 1, true, None),
+        txn(12, 1, false, Some("2024-01-01 00:00:00")),
+        txn(13, 3, false, None),
+    ];
+    let r = map::map_sync(&accounts, &[], &txns);
+    assert_eq!(r.accounts.len(), 1);
+    assert_eq!(r.skipped.accounts, 2);
+    assert_eq!(r.transactions.len(), 1);
+    assert_eq!(r.skipped.transactions, 3);
+}
+
+#[test]
+fn map_sync_counts_skipped_holdings() {
+    let accounts = vec![acct(1, "pea", None)];
+    let invs: Vec<Investment> = serde_json::from_value(serde_json::json!([
+        {"id": 1, "id_account": 1, "code": "FR0000000001", "code_type": "ISIN", "label": "a",
+         "quantity": "1", "unitprice": "1", "valuation": "1"},
+        {"id": 2, "id_account": 1, "label": "no identity", "valuation": "1"},
+        {"id": 3, "id_account": 1, "code": "FR0000000002", "code_type": "ISIN", "deleted": "2024-01-01 00:00:00"},
+        {"id": 4, "id_account": 1, "code": "XX-liquidity", "valuation": "5"}
+    ]))
+    .unwrap();
+    let r = map::map_sync(&accounts, &invs, &[]);
+    assert_eq!(
+        r.skipped.holdings, 2,
+        "deleted + unidentifiable, not liquidity"
+    );
+}

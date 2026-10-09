@@ -318,6 +318,7 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
         "the dangling row is skipped"
     );
     assert_eq!(summary.transactions_updated, 0);
+    assert_eq!(summary.transactions_skipped, 1);
 
     let accounts: i64 = sqlx::query_scalar("select count(*) from account")
         .fetch_one(&pool)

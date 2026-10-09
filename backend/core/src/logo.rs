@@ -65,9 +65,8 @@ pub fn institution_logo_url(institution_key: Option<&str>) -> Option<String> {
         .find(|(k, _)| *k == key)
         .map(|(_, d)| *d)
     else {
-        tracing::warn!(
-            "no logo domain mapped for institution_key {key}; add it to INSTITUTION_DOMAINS"
-        );
+        // Add the key to INSTITUTION_DOMAINS to give it a logo.
+        tracing::debug!(institution_key = key, "no logo domain mapped");
         return None;
     };
     Some(brandfetch_decorate(&format!(
