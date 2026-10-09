@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gripsou_core::categorize::Categorizer;
 use gripsou_core::db::Db;
-use gripsou_core::provider::{AccountProvider, PriceProvider, ProviderError};
+use gripsou_core::provider::{AccountProvider, CompositionProvider, PriceProvider, ProviderError};
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
 use gripsou_core::repo::settings::BudgetAiSettings;
@@ -32,12 +32,113 @@ where
     .await
 }
 
-/// Mark a connection's sync as failed and log why. Centralizes the
-/// previously-silent `mark_synced_error` call sites so failures show in logs.
-async fn fail_sync(db: &Db, id: Uuid, msg: impl Into<String>) {
-    let msg = msg.into();
-    tracing::warn!("sync failed for {id}: {msg}");
-    let _ = connection::mark_synced_error(db, id, &msg).await;
+/// What started a sync's fetch. Logged on every line of the sync.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trigger {
+    /// The scheduler's daily pass.
+    Daily,
+    /// A user's "Sync now" / "Sync all" on a direct-fetch provider.
+    Manual,
+    /// The provider's webhook said its refresh finished.
+    Webhook,
+    /// No webhook within the awaiting timeout: fetched directly.
+    WebhookTimeout,
+    /// The first sync after a connection is completed.
+    Initial,
+    /// The provider refused the refresh as already up to date (409).
+    AlreadyFresh,
+}
+
+impl Trigger {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Trigger::Daily => "daily",
+            Trigger::Manual => "manual",
+            Trigger::Webhook => "webhook",
+            Trigger::WebhookTimeout => "webhook_timeout",
+            Trigger::Initial => "initial",
+            Trigger::AlreadyFresh => "already_fresh",
+        }
+    }
+}
+
+/// The span one sync runs in. Every line of the sync inherits these fields;
+/// `provider` is recorded once read. Created where the sync is spawned, so a
+/// sync started by a request is a child of its `request` span.
+pub fn sync_span(user_id: Uuid, connection_id: Uuid, trigger: Trigger) -> tracing::Span {
+    tracing::info_span!(
+        "sync",
+        sync_id = %Uuid::new_v4(),
+        connection_id = %connection_id,
+        user_id = %user_id,
+        trigger = trigger.as_str(),
+        provider = tracing::field::Empty,
+    )
+}
+
+/// The adapters one sync uses. Built per sync (prices need the pivot).
+pub struct SyncDeps {
+    pub accounts: HashMap<String, Box<dyn AccountProvider>>,
+    pub prices: Vec<Box<dyn PriceProvider>>,
+    pub composition: Box<dyn CompositionProvider>,
+}
+
+impl SyncDeps {
+    pub async fn from_env(db: &Db) -> SyncDeps {
+        let pivot = gripsou_core::repo::settings::base_currency(db)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "base currency unreadable, using EUR"
+                );
+                "EUR".to_string()
+            });
+        SyncDeps {
+            accounts: account_providers()
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+            prices: price_providers(pivot),
+            composition: Box::new(composition_provider()),
+        }
+    }
+}
+
+/// A sync that could not start, and why. Every caller that starts a sync
+/// goes through this or [`spawn_sync`], so a refused or failed claim is
+/// never silent.
+fn skipped(reason: &'static str, user_id: Uuid, connection_id: Uuid, trigger: Trigger) {
+    tracing::info!(
+        reason,
+        trigger = trigger.as_str(),
+        connection_id = %connection_id,
+        user_id = %user_id,
+        "sync skipped"
+    );
+}
+
+/// Run a claimed sync in the background, inside its `sync` span.
+fn spawn_sync(db: Db, user_id: Uuid, connection_id: Uuid, trigger: Trigger) {
+    let span = sync_span(user_id, connection_id, trigger);
+    tokio::spawn(sync_connection(db, connection_id).instrument(span));
+}
+
+/// Claim the connection and spawn its sync, or log `sync skipped`.
+async fn claim_and_spawn(db: &Db, user_id: Uuid, id: Uuid, trigger: Trigger) {
+    match connection::begin_sync(db, user_id, id).await {
+        Ok(BeginSync::Started(_)) => spawn_sync(db.clone(), user_id, id, trigger),
+        Ok(BeginSync::AlreadySyncing) => skipped("already_running", user_id, id, trigger),
+        Ok(BeginSync::NotFound) => skipped("not_found", user_id, id, trigger),
+        Err(e) => {
+            tracing::error!(
+                error = %gripsou_core::logs::error_chain(&e),
+                connection_id = %id,
+                "sync claim failed"
+            );
+            skipped("read_failed", user_id, id, trigger);
+        }
+    }
 }
 
 /// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
@@ -78,12 +179,7 @@ async fn reap_awaiting(db: Db) {
             }
         };
         for row in rows {
-            if let Ok(connection::BeginSync::Started(_)) =
-                connection::begin_sync(&db, row.user_id, row.id).await
-            {
-                tracing::info!("awaiting webhook timed out for {}; direct fetch", row.id);
-                tokio::spawn(sync_connection(db.clone(), row.id));
-            }
+            claim_and_spawn(&db, row.user_id, row.id, Trigger::WebhookTimeout).await;
         }
 
         // A sync whose task died without a restart (panic, lost DB connection)
@@ -119,17 +215,41 @@ async fn sync_all_daily(db: Db) {
             }
         };
 
+        let due = rows.len();
+        let mut started = 0usize;
         let mut per_user: HashMap<Uuid, Vec<tokio::task::JoinHandle<bool>>> = HashMap::new();
         for row in rows {
-            // Attempt to claim the connection; prevents double-syncs
-            if let Ok(connection::BeginSync::Started(_)) =
-                connection::begin_sync(&db, row.user_id, row.id).await
-            {
-                per_user
-                    .entry(row.user_id)
-                    .or_default()
-                    .push(tokio::spawn(sync_connection_data(db.clone(), row.id)));
+            // The claim prevents double-syncs.
+            match connection::begin_sync(&db, row.user_id, row.id).await {
+                Ok(BeginSync::Started(_)) => {
+                    started += 1;
+                    let span = sync_span(row.user_id, row.id, Trigger::Daily);
+                    per_user.entry(row.user_id).or_default().push(tokio::spawn(
+                        sync_connection_data(db.clone(), row.id).instrument(span),
+                    ));
+                }
+                Ok(BeginSync::AlreadySyncing) => {
+                    skipped("already_running", row.user_id, row.id, Trigger::Daily)
+                }
+                Ok(BeginSync::NotFound) => {
+                    skipped("not_found", row.user_id, row.id, Trigger::Daily)
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = %gripsou_core::logs::error_chain(&e),
+                        connection_id = %row.id,
+                        "sync claim failed"
+                    );
+                    skipped("read_failed", row.user_id, row.id, Trigger::Daily);
+                }
             }
+        }
+        if due > 0 {
+            tracing::info!(
+                due = due as u64,
+                started = started as u64,
+                "daily sync started"
+            );
         }
         // One AI run per user, once every connection of theirs is in: a run
         // started after the first would miss the others' rows, and could pay
@@ -139,7 +259,12 @@ async fn sync_all_daily(db: Db) {
             tokio::spawn(async move {
                 let mut any_ok = false;
                 for s in syncs {
-                    any_ok |= s.await.unwrap_or(false);
+                    match s.await {
+                        Ok(ok) => any_ok |= ok,
+                        Err(e) => {
+                            tracing::error!(user_id = %user_id, error = %e, "sync task crashed")
+                        }
+                    }
                 }
                 if any_ok {
                     request_categorize(db, user_id);
@@ -184,8 +309,12 @@ fn account_providers() -> HashMap<&'static str, Box<dyn AccountProvider>> {
 /// storage currency, needed to build `{currency}{pivot}=X` symbols.
 fn price_providers(pivot: String) -> Vec<Box<dyn PriceProvider>> {
     let mut v: Vec<Box<dyn PriceProvider>> = Vec::new();
-    if let Ok(p) = gripsou_providers::yahoo::YahooPriceProvider::new(pivot) {
-        v.push(Box::new(p));
+    match gripsou_providers::yahoo::YahooPriceProvider::new(pivot) {
+        Ok(p) => v.push(Box::new(p)),
+        Err(e) => tracing::error!(
+            error = %gripsou_core::logs::error_chain(&e),
+            "yahoo provider unavailable"
+        ),
     }
     v
 }
@@ -436,129 +565,172 @@ pub async fn sync_connection(db: Db, connection_id: Uuid) {
     }
 }
 
+/// Why a sync stopped. `step` is `failed_step` in the log.
+struct SyncFailure {
+    step: &'static str,
+    error: String,
+}
+
+fn failure(step: &'static str, error: impl Into<String>) -> SyncFailure {
+    SyncFailure {
+        step,
+        error: error.into(),
+    }
+}
+
 /// The sync itself, without the AI run. True when the data was ingested.
+/// Runs inside a `sync_span`.
 async fn sync_connection_data(db: Db, connection_id: Uuid) -> bool {
-    let encryption_key = match std::env::var("ENCRYPTION_KEY") {
-        Ok(k) => k,
-        Err(_) => {
-            fail_sync(&db, connection_id, "ENCRYPTION_KEY not set").await;
-            return false;
-        }
-    };
+    let deps = SyncDeps::from_env(&db).await;
+    sync_connection_data_with(&db, connection_id, &deps).await
+}
 
-    let provider_key = match connection::provider_key(&db, connection_id).await {
-        Ok(Some(k)) => k,
-        Ok(None) => return false,
-        Err(e) => {
-            fail_sync(&db, connection_id, e.to_string()).await;
-            return false;
-        }
-    };
-
-    let encrypted_creds = match connection::get_credentials(&db, connection_id).await {
-        Ok(Some(v)) => v,
-        Ok(None) => {
-            fail_sync(&db, connection_id, "no credentials stored").await;
-            return false;
-        }
-        Err(e) => {
-            fail_sync(&db, connection_id, e.to_string()).await;
-            return false;
-        }
-    };
-
-    let credentials = match decrypt_credentials(&encryption_key, &encrypted_creds) {
-        Ok(v) => v,
-        Err(e) => {
-            fail_sync(&db, connection_id, e).await;
-            return false;
-        }
-    };
-
-    let providers = account_providers();
-    let Some(adapter) = providers.get(provider_key.as_str()) else {
-        fail_sync(
-            &db,
-            connection_id,
-            format!("no adapter for provider '{provider_key}'"),
-        )
-        .await;
-        return false;
-    };
-
-    let result = match adapter.sync(&credentials).await {
-        Ok(r) => r,
-        Err(e) => {
-            fail_sync(&db, connection_id, e.to_string()).await;
-            return false;
-        }
-    };
-
-    match gripsou_core::ingest::ingest(&db, connection_id, &result).await {
-        Ok(summary) => {
-            tracing::info!(
-                "sync ok for {connection_id}: accounts={} holdings={} txns={} closed={} transfers_paired={}",
-                summary.accounts,
-                summary.holdings,
-                summary.transactions_inserted,
-                summary.holdings_closed,
-                summary.transfers_paired,
-            );
-            // Prices are best-effort: a failure here must not fail the sync.
-            let pivot = gripsou_core::repo::settings::base_currency(&db)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::warn!("failed to read base_currency, defaulting to EUR: {e}");
-                    "EUR".to_string()
-                });
-            match gripsou_core::price_sync::fetch_prices_for_connection(
-                &db,
-                connection_id,
-                &price_providers(pivot),
-            )
-            .await
-            {
-                Ok(s) => tracing::info!(
-                    "prices for {connection_id}: resolved={} inserted={} skipped_fresh={} unresolved={} skipped_unlabelled={}",
-                    s.resolved,
-                    s.prices_inserted,
-                    s.skipped_fresh,
-                    s.unresolved,
-                    s.skipped_unlabelled
-                ),
-                Err(e) => tracing::warn!("price fetch errored for {connection_id}: {e}"),
-            }
-            // Composition is best-effort too: a failure must not fail the sync.
-            match gripsou_core::composition_sync::fetch_composition_for_connection(
-                &db,
-                connection_id,
-                &composition_provider(),
-            )
-            .await
-            {
-                Ok(s) => tracing::info!(
-                    "composition for {connection_id}: resolved={} fetched={} unresolved={}",
-                    s.resolved,
-                    s.fetched,
-                    s.unresolved
-                ),
-                Err(e) => tracing::warn!("composition fetch errored for {connection_id}: {e}"),
-            }
-            // The write that releases the lock. If it fails the data is already
-            // committed but the connection would sit on a spinner, so say so —
+/// [`sync_connection_data`] with its adapters passed in (tests use fakes).
+/// Logs `sync started`, one line per step, and exactly one `sync finished`.
+pub async fn sync_connection_data_with(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool {
+    let started = std::time::Instant::now();
+    tracing::info!("sync started");
+    match run_sync(db, connection_id, deps).await {
+        Ok(s) => {
+            // The write that releases the lock. If it fails the data is
+            // already committed but the connection would sit on a spinner;
             // the stale-lock sweep is what eventually frees it.
-            if let Err(e) = connection::mark_synced_ok(&db, connection_id).await {
-                tracing::warn!(
-                    "sync for {connection_id} succeeded but the lock was not released: {e}"
+            if let Err(e) = connection::mark_synced_ok(db, connection_id).await {
+                tracing::error!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "sync lock not released"
                 );
             }
+            // The sync-history line: keep its shape (jobs/tests/sync_log.rs).
+            tracing::info!(
+                outcome = "ok",
+                duration_ms = started.elapsed().as_millis() as u64,
+                accounts = s.accounts as u64,
+                holdings = s.holdings as u64,
+                transactions_inserted = s.transactions_inserted as u64,
+                transactions_updated = s.transactions_updated as u64,
+                holdings_closed = s.holdings_closed as u64,
+                transfers_paired = s.transfers_paired as u64,
+                "sync finished"
+            );
             true
         }
-        Err(e) => {
-            fail_sync(&db, connection_id, e.to_string()).await;
+        Err(f) => {
+            if let Err(e) = connection::mark_synced_error(db, connection_id, &f.error).await {
+                tracing::error!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "sync failure not recorded"
+                );
+            }
+            // The sync-history line: keep its shape (jobs/tests/sync_log.rs).
+            tracing::error!(
+                outcome = "failed",
+                failed_step = f.step,
+                error = %f.error,
+                duration_ms = started.elapsed().as_millis() as u64,
+                "sync finished"
+            );
             false
         }
     }
+}
+
+async fn run_sync(
+    db: &Db,
+    connection_id: Uuid,
+    deps: &SyncDeps,
+) -> Result<gripsou_core::ingest::IngestSummary, SyncFailure> {
+    use gripsou_core::logs::error_chain;
+    let key = std::env::var("ENCRYPTION_KEY")
+        .map_err(|_| failure("credentials", "ENCRYPTION_KEY not set"))?;
+    let provider_key = connection::provider_key(db, connection_id)
+        .await
+        .map_err(|e| failure("credentials", error_chain(&e)))?
+        .ok_or_else(|| failure("credentials", "connection no longer exists"))?;
+    tracing::Span::current().record("provider", provider_key.as_str());
+    let encrypted = connection::get_credentials(db, connection_id)
+        .await
+        .map_err(|e| failure("credentials", error_chain(&e)))?
+        .ok_or_else(|| failure("credentials", "no credentials stored"))?;
+    let credentials =
+        decrypt_credentials(&key, &encrypted).map_err(|e| failure("credentials", e))?;
+    let adapter = deps.accounts.get(provider_key.as_str()).ok_or_else(|| {
+        failure(
+            "provider_fetch",
+            format!("no adapter for provider '{provider_key}'"),
+        )
+    })?;
+
+    let t = std::time::Instant::now();
+    let result = adapter
+        .sync(&credentials)
+        .await
+        .map_err(|e| failure("provider_fetch", error_chain(&e)))?;
+    tracing::info!(
+        accounts = result.accounts.len() as u64,
+        holdings = result.holdings.len() as u64,
+        transactions = result.transactions.len() as u64,
+        accounts_skipped = result.skipped.accounts as u64,
+        holdings_skipped = result.skipped.holdings as u64,
+        transactions_skipped = result.skipped.transactions as u64,
+        duration_ms = t.elapsed().as_millis() as u64,
+        "provider fetch finished"
+    );
+
+    let t = std::time::Instant::now();
+    let s = gripsou_core::ingest::ingest(db, connection_id, &result)
+        .await
+        .map_err(|e| failure("ingest", error_chain(&e)))?;
+    tracing::info!(
+        accounts = s.accounts as u64,
+        holdings = s.holdings as u64,
+        transactions_inserted = s.transactions_inserted as u64,
+        transactions_updated = s.transactions_updated as u64,
+        transactions_skipped = s.transactions_skipped as u64,
+        snapshots = s.snapshots as u64,
+        holdings_closed = s.holdings_closed as u64,
+        backfill_rows = s.backfill_rows as u64,
+        transfers_paired = s.transfers_paired as u64,
+        duration_ms = t.elapsed().as_millis() as u64,
+        "ingest finished"
+    );
+
+    // Prices and composition are best-effort: a failure must not fail the sync.
+    let t = std::time::Instant::now();
+    match gripsou_core::price_sync::fetch_prices_for_connection(db, connection_id, &deps.prices)
+        .await
+    {
+        Ok(p) => tracing::info!(
+            resolved = p.resolved as u64,
+            inserted = p.prices_inserted as u64,
+            skipped_fresh = p.skipped_fresh as u64,
+            unresolved = p.unresolved as u64,
+            failed = p.failed as u64,
+            skipped_unlabelled = p.skipped_unlabelled as u64,
+            duration_ms = t.elapsed().as_millis() as u64,
+            "price fetch finished"
+        ),
+        Err(e) => tracing::warn!(error = %error_chain(&e), "price fetch failed"),
+    }
+    let t = std::time::Instant::now();
+    match gripsou_core::composition_sync::fetch_composition_for_connection(
+        db,
+        connection_id,
+        deps.composition.as_ref(),
+    )
+    .await
+    {
+        Ok(c) => tracing::info!(
+            resolved = c.resolved as u64,
+            fetched = c.fetched as u64,
+            unresolved = c.unresolved as u64,
+            failed = c.failed as u64,
+            duration_ms = t.elapsed().as_millis() as u64,
+            "composition fetch finished"
+        ),
+        Err(e) => tracing::warn!(error = %error_chain(&e), "composition fetch failed"),
+    }
+    Ok(s)
 }
 
 pub enum WebhookOutcome {
@@ -589,11 +761,7 @@ pub async fn handle_webhook(
     match connection::find_by_external_connection_id(&db, provider, &signal.provider_connection_id)
         .await
     {
-        Ok(Some((id, user_id))) => {
-            if let Ok(BeginSync::Started(_)) = connection::begin_sync(&db, user_id, id).await {
-                tokio::spawn(sync_connection(db.clone(), id));
-            }
-        }
+        Ok(Some((id, user_id))) => claim_and_spawn(&db, user_id, id, Trigger::Webhook).await,
         Ok(None) => tracing::warn!(
             "webhook for unknown {provider} connection {}",
             signal.provider_connection_id
@@ -603,16 +771,18 @@ pub async fn handle_webhook(
     WebhookOutcome::Accepted
 }
 
-/// Entry point for user-initiated sync. Webhook providers: request a provider
-/// refresh and await the webhook (status 'awaiting'). Others: direct full-fetch.
-pub async fn request_sync(db: Db, user_id: Uuid, id: Uuid) -> BeginSync {
-    let conn = match connection::connection_for_sync(&db, user_id, id).await {
-        Ok(Some(c)) => c,
-        Ok(None) => return BeginSync::NotFound,
-        Err(e) => {
-            tracing::warn!("request_sync read failed: {e}");
-            return BeginSync::NotFound;
-        }
+/// Entry point for a user-initiated or initial sync. Webhook providers:
+/// request a provider refresh and await the webhook (status 'awaiting').
+/// Others: direct full-fetch under `trigger`. Err only on a database failure.
+pub async fn request_sync(
+    db: Db,
+    user_id: Uuid,
+    id: Uuid,
+    trigger: Trigger,
+) -> Result<BeginSync, gripsou_core::error::CoreError> {
+    let Some(conn) = connection::connection_for_sync(&db, user_id, id).await? else {
+        skipped("not_found", user_id, id, trigger);
+        return Ok(BeginSync::NotFound);
     };
 
     let providers = account_providers();
@@ -627,25 +797,48 @@ pub async fn request_sync(db: Db, user_id: Uuid, id: Uuid) -> BeginSync {
         .unwrap_or(false)
         && has_external_id;
 
-    if !webhook {
-        // Direct path (today's behavior).
-        match connection::begin_sync(&db, user_id, id).await {
-            Ok(BeginSync::Started(state)) => {
-                tokio::spawn(sync_connection(db.clone(), id));
-                BeginSync::Started(state)
-            }
-            Ok(other) => other,
-            Err(_) => BeginSync::NotFound,
-        }
+    let claim = if webhook {
+        connection::begin_await(&db, user_id, id).await?
     } else {
-        match connection::begin_await(&db, user_id, id).await {
-            Ok(BeginSync::Started(state)) => {
-                tokio::spawn(do_request_refresh(db.clone(), user_id, id, conn));
-                BeginSync::Started(state)
+        connection::begin_sync(&db, user_id, id).await?
+    };
+    match claim {
+        BeginSync::Started(state) => {
+            if webhook {
+                tracing::info!(
+                    connection_id = %id,
+                    user_id = %user_id,
+                    trigger = trigger.as_str(),
+                    "refresh requested"
+                );
+                tokio::spawn(do_request_refresh(db.clone(), user_id, id, conn).in_current_span());
+            } else {
+                spawn_sync(db.clone(), user_id, id, trigger);
             }
-            Ok(other) => other,
-            Err(_) => BeginSync::NotFound,
+            Ok(BeginSync::Started(state))
         }
+        BeginSync::AlreadySyncing => {
+            skipped("already_running", user_id, id, trigger);
+            Ok(BeginSync::AlreadySyncing)
+        }
+        BeginSync::NotFound => {
+            skipped("not_found", user_id, id, trigger);
+            Ok(BeginSync::NotFound)
+        }
+    }
+}
+
+/// A refresh request that failed before any fetch: mark the connection's
+/// error (which also releases the awaiting claim) and say why.
+async fn refresh_failed(db: &Db, id: Uuid, msg: impl Into<String>) {
+    let msg = msg.into();
+    tracing::error!(connection_id = %id, error = %msg, "refresh request failed");
+    if let Err(e) = connection::mark_synced_error(db, id, &msg).await {
+        tracing::error!(
+            connection_id = %id,
+            error = %gripsou_core::logs::error_chain(&e),
+            "refresh failure not recorded"
+        );
     }
 }
 
@@ -654,20 +847,25 @@ async fn do_request_refresh(db: Db, user_id: Uuid, id: Uuid, conn: connection::C
     let key = match std::env::var("ENCRYPTION_KEY") {
         Ok(k) => k,
         Err(_) => {
-            fail_sync(&db, id, "ENCRYPTION_KEY not set").await;
+            refresh_failed(&db, id, "ENCRYPTION_KEY not set").await;
             return;
         }
     };
     let creds = match decrypt_credentials(&key, &conn.credentials) {
         Ok(c) => c,
         Err(e) => {
-            fail_sync(&db, id, e).await;
+            refresh_failed(&db, id, e).await;
             return;
         }
     };
     let providers = account_providers();
     let Some(adapter) = providers.get(conn.provider_key.as_str()) else {
-        fail_sync(&db, id, "no adapter").await;
+        refresh_failed(
+            &db,
+            id,
+            format!("no adapter for provider '{}'", conn.provider_key),
+        )
+        .await;
         return;
     };
     match adapter.request_refresh(&creds, &conn.provider_meta).await {
@@ -678,11 +876,28 @@ async fn do_request_refresh(db: Db, user_id: Uuid, id: Uuid, conn: connection::C
         // come). Don't error — fall back to a direct full-fetch immediately
         // rather than waiting for the awaiting-timeout reaper.
         Err(ProviderError::Conflict) => {
-            if let Ok(BeginSync::Started(_)) = connection::begin_sync(&db, user_id, id).await {
-                sync_connection(db.clone(), id).await;
+            tracing::info!(connection_id = %id, "refresh refused as already up to date");
+            match connection::begin_sync(&db, user_id, id).await {
+                Ok(BeginSync::Started(_)) => {
+                    sync_connection(db.clone(), id)
+                        .instrument(sync_span(user_id, id, Trigger::AlreadyFresh))
+                        .await
+                }
+                Ok(BeginSync::AlreadySyncing) => {
+                    skipped("already_running", user_id, id, Trigger::AlreadyFresh)
+                }
+                Ok(BeginSync::NotFound) => skipped("not_found", user_id, id, Trigger::AlreadyFresh),
+                Err(e) => {
+                    tracing::error!(
+                        error = %gripsou_core::logs::error_chain(&e),
+                        connection_id = %id,
+                        "sync claim failed"
+                    );
+                    skipped("read_failed", user_id, id, Trigger::AlreadyFresh);
+                }
             }
         }
-        Err(e) => fail_sync(&db, id, e.to_string()).await,
+        Err(e) => refresh_failed(&db, id, gripsou_core::logs::error_chain(&e)).await,
     }
 }
 
@@ -768,14 +983,13 @@ pub async fn complete_connection(
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
     // The connect itself has succeeded either way, so a failure here is logged,
     // not returned — but it must not be invisible.
-    match request_sync(db.clone(), user_id, connection_id).await {
-        BeginSync::Started(_) => {}
-        BeginSync::AlreadySyncing => {
-            tracing::info!("initial sync for {connection_id} skipped: already running")
-        }
-        BeginSync::NotFound => {
-            tracing::warn!("initial sync for {connection_id} skipped: connection not readable")
-        }
+    match request_sync(db.clone(), user_id, connection_id, Trigger::Initial).await {
+        Ok(_) => {} // started or skipped: both already logged
+        Err(e) => tracing::error!(
+            connection_id = %connection_id,
+            error = %gripsou_core::logs::error_chain(&e),
+            "initial sync failed to start"
+        ),
     }
     Ok(())
 }

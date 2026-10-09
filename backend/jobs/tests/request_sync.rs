@@ -95,7 +95,14 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     let meta = serde_json::json!({ "external_connection_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "no-adapter", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
@@ -137,7 +144,14 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     let meta = serde_json::json!({ "external_connection_id": "99" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
@@ -190,7 +204,14 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     let meta = serde_json::json!({ "powens_user_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Must take the DIRECT path → status 'syncing', not 'awaiting'.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(

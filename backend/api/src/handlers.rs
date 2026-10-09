@@ -572,7 +572,10 @@ pub async fn sync_connection(
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
     use gripsou_core::repo::connection::BeginSync;
-    match gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
+    match gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
+        .await
+        .map_err(internal)?
+    {
         BeginSync::Started(state) => Ok((
             StatusCode::ACCEPTED,
             Json(dto::ConnectionState::from_row(state)),
@@ -595,7 +598,11 @@ pub async fn sync_all(
         .map_err(internal)?;
     let mut started = 0u32;
     for id in ids {
-        if let BeginSync::Started(_) = gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
+        if let BeginSync::Started(_) =
+            gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
+                .await
+                .map_err(internal)?
+        {
             started += 1;
         }
     }
