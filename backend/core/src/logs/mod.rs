@@ -3,6 +3,7 @@
 //! CLAUDE.md "Logs".
 
 mod layer;
+mod terminal;
 mod writer;
 
 pub use layer::{LogLayer, is_saved};
@@ -23,8 +24,9 @@ pub const QUEUE_CAPACITY: usize = 10_000;
 pub fn install(terminal: tracing_subscriber::EnvFilter) -> LogWriter {
     use tracing_subscriber::{Layer, layer::SubscriberExt};
     let (layer, writer) = channel(QUEUE_CAPACITY);
+    let ansi = std::io::IsTerminal::is_terminal(&std::io::stdout());
     let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_filter(terminal))
+        .with(terminal::layer(std::io::stdout, ansi).with_filter(terminal))
         .with(layer.filtered());
     tracing::subscriber::set_global_default(subscriber).expect("subscriber installed once");
     writer
