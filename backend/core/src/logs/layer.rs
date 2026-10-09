@@ -41,13 +41,23 @@ impl LogLayer {
     }
 }
 
+/// A string value as saved: Postgres refuses a NUL (`\u0000`) in text and
+/// jsonb, and one such line would make it reject the writer's whole batch.
+fn text(v: &str) -> Value {
+    if v.contains('\0') {
+        Value::from(v.replace('\0', ""))
+    } else {
+        Value::from(v)
+    }
+}
+
 /// A span's (or event's) fields as JSON.
 #[derive(Default, Clone)]
 struct Fields(Map<String, Value>);
 
 impl Visit for Fields {
     fn record_str(&mut self, f: &Field, v: &str) {
-        self.0.insert(f.name().into(), Value::from(v));
+        self.0.insert(f.name().into(), text(v));
     }
     fn record_i64(&mut self, f: &Field, v: i64) {
         self.0.insert(f.name().into(), Value::from(v));
@@ -62,13 +72,11 @@ impl Visit for Fields {
         self.0.insert(f.name().into(), Value::from(v));
     }
     fn record_error(&mut self, f: &Field, v: &(dyn std::error::Error + 'static)) {
-        self.0
-            .insert(f.name().into(), Value::from(super::error_chain(v)));
+        self.0.insert(f.name().into(), text(&super::error_chain(v)));
     }
     // `%x` and the message arrive here; their Debug is their Display.
     fn record_debug(&mut self, f: &Field, v: &dyn std::fmt::Debug) {
-        self.0
-            .insert(f.name().into(), Value::from(format!("{v:?}")));
+        self.0.insert(f.name().into(), text(&format!("{v:?}")));
     }
 }
 

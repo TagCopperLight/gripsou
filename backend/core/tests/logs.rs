@@ -143,3 +143,23 @@ async fn shutdown_flushes_what_is_queued(pool: PgPool) {
     handle.shutdown().await;
     assert_eq!(saved(&pool).await.len(), 1);
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_nul_in_a_field_or_the_message_does_not_lose_the_batch(pool: PgPool) {
+    let (_g, mut writer) = install(100);
+    let span = tracing::info_span!(target: "gripsou_jobs", "sync", connection_id = "c\0span");
+    span.in_scope(|| {
+        tracing::info!(target: "gripsou_jobs", "before");
+        let bad = "bad\0value";
+        tracing::warn!(target: "gripsou_jobs", error = %bad, reason = "r\0s", "price {}", "fetch\0failed");
+        tracing::info!(target: "gripsou_jobs", "after");
+    });
+    assert_eq!(writer.flush(&pool).await, 3);
+    let rows = saved(&pool).await;
+    assert_eq!(rows.len(), 3);
+    let (_, _, message, fields) = &rows[1];
+    assert_eq!(message, "price fetchfailed");
+    assert_eq!(fields["error"], "badvalue");
+    assert_eq!(fields["reason"], "rs");
+    assert_eq!(fields["connection_id"], "cspan");
+}
