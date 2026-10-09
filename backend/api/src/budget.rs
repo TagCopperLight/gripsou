@@ -1027,6 +1027,7 @@ pub async fn categorize_status(
         last_run: last.map(|r| crate::dto::AiLastRunDto {
             outcome: r.outcome,
             error: r.error,
+            started_at: r.started_at.to_rfc3339(),
         }),
     }))
 }

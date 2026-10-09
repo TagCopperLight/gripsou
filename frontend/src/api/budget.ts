@@ -8,7 +8,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
+import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
 import { transactionFilterFields } from "./filter";
 import {
@@ -58,7 +58,7 @@ export type TagBody = Pick<BudgetTag, "name" | "color">;
 export function useBudgetCategories() {
   return useQuery({
     queryKey: keys.budgetCategories(),
-    queryFn: () => getJson<BudgetCategory[]>("/budget/categories"),
+    queryFn: ({ signal }) => getJson<BudgetCategory[]>("/budget/categories", { signal }),
   });
 }
 
@@ -87,9 +87,11 @@ export function useReorderBudgetCategories() {
   return useMutation({
     mutationFn: (ids: string[]) => putJson<void>("/budget/categories/order", { ids }),
     onMutate: async (ids: string[]) => {
+      const token = getAuthToken();
       // An in-flight list refetch would otherwise land on top of the optimistic
       // order and bounce the row back.
       await qc.cancelQueries({ queryKey: keys.budgetCategories() });
+      if (token !== getAuthToken()) throw new Error("session changed");
       const previous = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
       if (previous) {
         const byId = new Map(previous.map((c) => [c.id, c]));
@@ -98,12 +100,14 @@ export function useReorderBudgetCategories() {
         // sign the cache moved under us, so leave it to the refetch.
         if (next.length === previous.length) qc.setQueryData(keys.budgetCategories(), next);
       }
-      return { previous };
+      return { previous, token };
     },
     onError: (_err, _ids, ctx) => {
-      if (ctx?.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
+      if (ctx?.token === getAuthToken() && ctx.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
     },
-    onSettled: () => afterBudgetCategoryReorder(qc),
+    onSettled: (_data, _error, _ids, ctx) => {
+      if (ctx?.token === getAuthToken()) return afterBudgetCategoryReorder(qc);
+    },
   });
 }
 
@@ -118,7 +122,7 @@ export function useDeleteBudgetCategory() {
 export function useBudgetTags() {
   return useQuery({
     queryKey: keys.budgetTags(),
-    queryFn: () => getJson<BudgetTag[]>("/budget/tags"),
+    queryFn: ({ signal }) => getJson<BudgetTag[]>("/budget/tags", { signal }),
   });
 }
 
@@ -198,10 +202,12 @@ export function usePatchTransaction() {
     mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
       patchJson<PatchResult>(`/transactions/${id}`, body),
     onMutate: async ({ id, optimistic }) => {
-      if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
+      const token = getAuthToken();
+      if (!optimistic) return { previous: [] as [readonly unknown[], unknown][], token };
       // Every cached filter combination may hold this row, so patch the whole
       // family rather than guessing which key the caller is reading.
       await qc.cancelQueries({ queryKey: keys.transactions() });
+      if (token !== getAuthToken()) throw new Error("session changed");
       const previous = qc.getQueriesData({ queryKey: keys.transactions() });
       qc.setQueriesData<InfiniteData<Transaction[]>>({ queryKey: keys.transactions() }, (data) =>
         data
@@ -213,19 +219,22 @@ export function usePatchTransaction() {
             }
           : data,
       );
-      return { previous };
+      return { previous, token };
     },
     onError: (_err, _vars, ctx) => {
+      if (ctx?.token !== getAuthToken()) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
     // Refused pending confirmation: nothing was written, so the row goes back
     // to what it was while the caller asks.
     onSuccess: (res, _vars, ctx) => {
-      if (!res?.pendingPairBreaks) return;
+      if (ctx?.token !== getAuthToken() || !res?.pendingPairBreaks) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
-    onSettled: (_res, _err, { body }) =>
-      onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
+    onSettled: (_res, _err, { body }, ctx) => {
+      if (ctx?.token !== getAuthToken()) return;
+      return onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc);
+    },
   });
 }
 
@@ -288,7 +297,7 @@ export type AiStatus = {
   running: boolean;
   remaining: number;
   reviewCount: number;
-  lastRun: { outcome: AiRunOutcome; error: string | null } | null;
+  lastRun: { outcome: AiRunOutcome; error: string | null; startedAt: string } | null;
 };
 
 export type BudgetAiProvider = "gemini" | "jev";
@@ -326,36 +335,39 @@ export type BudgetAiPrices = Record<string, { in: string; out: string }>;
 const AI_STATUS_HASH = hashKey(keys.budgetAiStatus());
 const watchedClients = new WeakSet<QueryClient>();
 
-/** Installed once per client, however many components read the status, so a
- *  change refreshes once. Only a change seen while a run was in progress
- *  counts: when nothing was running, the status moved because of the user's
- *  own write (or a sync), which already refreshed what it touched. */
+/** Installed once per client. A finished run has a durable timestamp, so a
+ *  short run missed between polls still refreshes its dependent queries. */
 function watchAiRun(qc: QueryClient) {
   if (watchedClients.has(qc)) return;
   watchedClients.add(qc);
   let last = qc.getQueryData<AiStatus>(keys.budgetAiStatus());
   qc.getQueryCache().subscribe((event) => {
-    if (event.type !== "updated" || event.action.type !== "success") return;
     if (event.query.queryHash !== AI_STATUS_HASH) return;
+    if (event.type === "removed") {
+      last = undefined;
+      return;
+    }
+    if (event.type !== "updated" || event.action.type !== "success") return;
     const next = event.query.state.data as AiStatus | undefined;
     const prev = last;
     last = next;
-    if (!prev?.running || !next) return;
-    if (!next.running) afterAiRunFinished(qc);
-    else if (next.remaining !== prev.remaining || next.reviewCount !== prev.reviewCount)
+    if (!prev || !next) return;
+    const completed = next.lastRun !== null && next.lastRun.startedAt !== prev.lastRun?.startedAt;
+    if ((prev.running && !next.running) || completed) void afterAiRunFinished(qc);
+    else if (next.running && (next.remaining !== prev.remaining || next.reviewCount !== prev.reviewCount))
       afterAiRunProgress(qc);
   });
 }
 
-/** Polled every 5 s only while a run is in progress. As the run moves on the
- *  Overview figures fill in; the transactions list catches up when it ends. */
+/** Fast polls while running; idle checks discover automatic or short runs.
+ *  The Overview fills in live; transaction rows catch up at completion. */
 export function useAiStatus() {
   const qc = useQueryClient();
   useEffect(() => watchAiRun(qc), [qc]);
   return useQuery({
     queryKey: keys.budgetAiStatus(),
-    queryFn: () => getJson<AiStatus>("/budget/categorize/status"),
-    refetchInterval: (q) => (q.state.data?.running ? 5000 : false),
+    queryFn: ({ signal }) => getJson<AiStatus>("/budget/categorize/status", { signal }),
+    refetchInterval: (q) => (q.state.data?.running ? 5000 : q.state.data?.configured ? 30_000 : false),
   });
 }
 
@@ -395,7 +407,7 @@ export function useUndoReview() {
 export function useBudgetAiSettings() {
   return useQuery({
     queryKey: keys.budgetAiSettings(),
-    queryFn: () => getJson<BudgetAiSettings>("/settings/budget-ai"),
+    queryFn: ({ signal }) => getJson<BudgetAiSettings>("/settings/budget-ai", { signal }),
   });
 }
 
@@ -413,7 +425,7 @@ export function useSetBudgetAiSettings() {
 export function useBudgetAiModels(provider: BudgetAiProvider | null) {
   return useQuery({
     queryKey: keys.budgetAiModels(provider ?? ""),
-    queryFn: () => getJson<string[]>(`/settings/budget-ai/models/${provider}`),
+    queryFn: ({ signal }) => getJson<string[]>(`/settings/budget-ai/models/${provider}`, { signal }),
     enabled: provider !== null,
     retry: false,
     staleTime: 60 * 60 * 1000,
@@ -423,7 +435,7 @@ export function useBudgetAiModels(provider: BudgetAiProvider | null) {
 export function useBudgetAiUsage() {
   return useQuery({
     queryKey: keys.budgetAiUsage(),
-    queryFn: () => getJson<BudgetAiUsage>("/settings/budget-ai/usage"),
+    queryFn: ({ signal }) => getJson<BudgetAiUsage>("/settings/budget-ai/usage", { signal }),
   });
 }
 

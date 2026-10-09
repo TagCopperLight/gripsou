@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   keepPreviousData,
   useInfiniteQuery,
@@ -5,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
+import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
@@ -31,10 +32,13 @@ import type {
 import { hasSyncing } from "./types";
 import { transactionFilterParams } from "./filter";
 import { keys } from "./keys";
+import { watchSync } from "./watchSync";
 import {
   afterAccountEdit,
   afterConnectionDeleted,
   afterLotsSaved,
+  afterProviderChange,
+  afterCorsOriginsChange,
   afterSessionChange,
   afterSyncRequested,
   afterUserChange,
@@ -43,7 +47,7 @@ import {
 export function useNetWorth(range: string) {
   return useQuery({
     queryKey: keys.netWorth(range),
-    queryFn: () => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`),
+    queryFn: ({ signal }) => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`, { signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -54,7 +58,7 @@ export function useHealth() {
   return useQuery({
     queryKey: keys.health(),
     // The version cannot change without a page reload, so never refetch it.
-    queryFn: () => getJson<Health>(`/health`),
+    queryFn: ({ signal }) => getJson<Health>(`/health`, { signal }),
     staleTime: Infinity,
   });
 }
@@ -62,21 +66,21 @@ export function useHealth() {
 export function useDistribution() {
   return useQuery({
     queryKey: keys.distribution(),
-    queryFn: () => getJson<DistributionAccount[]>(`/dashboard/distribution`),
+    queryFn: ({ signal }) => getJson<DistributionAccount[]>(`/dashboard/distribution`, { signal }),
   });
 }
 
 export function useHoldings() {
   return useQuery({
     queryKey: keys.holdings(),
-    queryFn: () => getJson<Holding[]>(`/holdings`),
+    queryFn: ({ signal }) => getJson<Holding[]>(`/holdings`, { signal }),
   });
 }
 
 export function useInvestmentReturns() {
   return useQuery({
     queryKey: keys.investmentReturns(),
-    queryFn: () => getJson<InvestmentReturns>(`/investments/returns`),
+    queryFn: ({ signal }) => getJson<InvestmentReturns>(`/investments/returns`, { signal }),
   });
 }
 
@@ -110,7 +114,7 @@ export function useSaveLots(holdingId: string) {
 export function useHoldingPrices(id: string, range: string) {
   return useQuery({
     queryKey: keys.holdingPrices(id, range),
-    queryFn: () => getJson<PricePoint[]>(`/holdings/${id}/prices?range=${range}`),
+    queryFn: ({ signal }) => getJson<PricePoint[]>(`/holdings/${id}/prices?range=${range}`, { signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -118,7 +122,7 @@ export function useHoldingPrices(id: string, range: string) {
 export function useHoldingLots(id: string) {
   return useQuery({
     queryKey: keys.holdingLots(id),
-    queryFn: () => getJson<Lot[]>(`/holdings/${id}/lots`),
+    queryFn: ({ signal }) => getJson<Lot[]>(`/holdings/${id}/lots`, { signal }),
   });
 }
 
@@ -126,21 +130,21 @@ export function useLotSuggestions(id: string) {
   return useQuery({
     queryKey: keys.holdingLotSuggestions(id),
     retry: false, // suggestions are optional: fall back to the empty form fast
-    queryFn: () => getJson<LotSuggestion[]>(`/holdings/${id}/lots/suggestions`),
+    queryFn: ({ signal }) => getJson<LotSuggestion[]>(`/holdings/${id}/lots/suggestions`, { signal }),
   });
 }
 
 export function useAccounts() {
   return useQuery({
     queryKey: keys.accounts(),
-    queryFn: () => getJson<Account[]>(`/accounts`),
+    queryFn: ({ signal }) => getJson<Account[]>(`/accounts`, { signal }),
   });
 }
 
 export function useAccountSeries(range: string) {
   return useQuery({
     queryKey: keys.accountSeries(range),
-    queryFn: () => getJson<AccountSeries>(`/accounts/series?range=${range}`),
+    queryFn: ({ signal }) => getJson<AccountSeries>(`/accounts/series?range=${range}`, { signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -154,11 +158,11 @@ const TRANSACTIONS_PAGE_SIZE = 200;
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({
     queryKey: keys.transactions(q),
-    queryFn: ({ pageParam }) => {
+    queryFn: ({ pageParam, signal }) => {
       const params = transactionFilterParams(q);
       params.set("limit", String(TRANSACTIONS_PAGE_SIZE));
       params.set("offset", String(pageParam));
-      return getJson<Transaction[]>(`/transactions?${params}`);
+      return getJson<Transaction[]>(`/transactions?${params}`, { signal });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
@@ -178,7 +182,7 @@ export function useTransactions(q: TransactionFilterQuery) {
 export function useTransactionCounts(q: TransactionFilterQuery) {
   return useQuery({
     queryKey: keys.transactionCounts(q),
-    queryFn: () => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`),
+    queryFn: ({ signal }) => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`, { signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -186,14 +190,14 @@ export function useTransactionCounts(q: TransactionFilterQuery) {
 export function useAccountTypes() {
   return useQuery({
     queryKey: keys.accountTypes(),
-    queryFn: () => getJson<AccountType[]>(`/account-types`),
+    queryFn: ({ signal }) => getJson<AccountType[]>(`/account-types`, { signal }),
   });
 }
 
 export function useUsers() {
   return useQuery({
     queryKey: keys.users(),
-    queryFn: () => getJson<User[]>(`/users`),
+    queryFn: ({ signal }) => getJson<User[]>(`/users`, { signal }),
   });
 }
 
@@ -260,7 +264,7 @@ export function useDeleteAccount() {
 export function useSessions() {
   return useQuery({
     queryKey: keys.sessions(),
-    queryFn: () => getJson<Session[]>("/auth/sessions"),
+    queryFn: ({ signal }) => getJson<Session[]>("/auth/sessions", { signal }),
   });
 }
 
@@ -281,12 +285,15 @@ export function useRevokeOtherSessions() {
 }
 
 export function useConnections() {
+  const qc = useQueryClient();
+  useEffect(() => watchSync(qc), [qc]);
   return useQuery({
     queryKey: keys.connections(),
-    queryFn: () => getJson<ProviderGroup[]>("/connections"),
-    // Poll while any connection is syncing; stop when none are.
+    queryFn: ({ signal }) => getJson<ProviderGroup[]>("/connections", { signal }),
+    // Check idle connections too: scheduled syncs and other tabs may finish
+    // without this page ever seeing a running state.
     refetchInterval: (query) =>
-      hasSyncing(query.state.data as ProviderGroup[] | undefined) ? 2000 : false,
+      hasSyncing(query.state.data as ProviderGroup[] | undefined) ? 2000 : 30_000,
   });
 }
 
@@ -310,7 +317,7 @@ export function useSyncAll() {
 export function useProviders() {
   return useQuery({
     queryKey: keys.providers(),
-    queryFn: () => getJson<Provider[]>("/providers"),
+    queryFn: ({ signal }) => getJson<Provider[]>("/providers", { signal }),
   });
 }
 
@@ -321,31 +328,35 @@ export function useSetProviderEnabled() {
       patchJson<Provider>(`/providers/${key}`, { enabled }),
     // Optimistically flip the toggle; roll back on error.
     onMutate: async ({ key, enabled }) => {
+      const token = getAuthToken();
       await qc.cancelQueries({ queryKey: keys.providers() });
+      if (token !== getAuthToken()) throw new Error("session changed");
       const prev = qc.getQueryData<Provider[]>(keys.providers());
       qc.setQueryData<Provider[]>(keys.providers(), (old) =>
         old?.map((p) => (p.key === key ? { ...p, enabled } : p)),
       );
-      return { prev };
+      return { prev, token };
     },
     onError: (_e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(keys.providers(), ctx.prev);
+      if (ctx?.token === getAuthToken() && ctx.prev) qc.setQueryData(keys.providers(), ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.providers() }),
+    onSettled: (_data, _error, _vars, ctx) => {
+      if (ctx?.token === getAuthToken()) return afterProviderChange(qc);
+    },
   });
 }
 
 export function useEnabledProviders() {
   return useQuery({
     queryKey: keys.providersEnabled(),
-    queryFn: () => getJson<EnabledProvider[]>("/providers/enabled"),
+    queryFn: ({ signal }) => getJson<EnabledProvider[]>("/providers/enabled", { signal }),
   });
 }
 
 export function useCorsOrigins() {
   return useQuery({
     queryKey: keys.corsOrigins(),
-    queryFn: () => getJson<string[]>("/settings/cors"),
+    queryFn: ({ signal }) => getJson<string[]>("/settings/cors", { signal }),
   });
 }
 
@@ -353,7 +364,7 @@ export function useSetCorsOrigins() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.corsOrigins() }),
+    onSuccess: () => afterCorsOriginsChange(qc),
   });
 }
 

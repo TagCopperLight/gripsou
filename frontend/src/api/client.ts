@@ -56,9 +56,9 @@ export class ApiError extends Error {
   }
 }
 
-function handle(res: Response, path: string, method: string, opts?: HandleOptions): void {
+function handle(res: Response, path: string, method: string, requestToken: string | null, opts?: HandleOptions): void {
   if (res.status === 401) {
-    if (!opts?.skipGlobalUnauthorized) onUnauthorized?.();
+    if (!opts?.skipGlobalUnauthorized && requestToken === authToken) onUnauthorized?.();
     throw new ApiError(`${method} ${path} unauthorized`, 401);
   }
   if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, res.status);
@@ -72,49 +72,54 @@ async function bodyOf<T>(res: Response): Promise<T> {
   return (text === "" ? undefined : JSON.parse(text)) as T;
 }
 
-export type GetJsonOptions = { skipGlobalUnauthorized?: boolean };
+export type GetJsonOptions = { skipGlobalUnauthorized?: boolean; signal?: AbortSignal };
 
 export async function getJson<T>(path: string, opts?: GetJsonOptions): Promise<T> {
-  const res = await fetch(`/api${path}`, { headers: authHeaders() });
-  handle(res, path, "GET", opts);
+  const requestToken = authToken;
+  const res = await fetch(`/api${path}`, { headers: authHeaders(), ...(opts?.signal ? { signal: opts.signal } : {}) });
+  handle(res, path, "GET", requestToken, opts);
   return res.json() as Promise<T>;
 }
 
 export async function postJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
+  const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  handle(res, path, "POST", opts);
+  handle(res, path, "POST", requestToken, opts);
   // 204 No Content (e.g. change-password) and a bare 202 have empty bodies.
   return bodyOf<T>(res);
 }
 
 export async function putJson<T>(path: string, body: unknown, opts?: HandleOptions): Promise<T> {
+  const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method: "PUT",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  handle(res, path, "PUT", opts);
+  handle(res, path, "PUT", requestToken, opts);
   // 204 No Content (e.g. save-lots) has an empty body.
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 export async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  handle(res, path, "PATCH");
+  handle(res, path, "PATCH", requestToken);
   // 204 No Content (e.g. /settings/cors, /settings/budget-ai) has an empty body.
   return bodyOf<T>(res);
 }
 
 export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {
+  const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method: "DELETE",
     headers:
@@ -123,7 +128,7 @@ export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {
         : authHeaders({ "Content-Type": "application/json" }),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  handle(res, path, "DELETE");
+  handle(res, path, "DELETE", requestToken);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { useConnections } from "../api/hooks";
-import { afterSyncFinished } from "../api/invalidate";
 import { hasError, hasSyncing } from "../api/types";
 import { SyncModal } from "./SyncModal";
 
@@ -22,21 +20,10 @@ import { SyncModal } from "./SyncModal";
 // derives that margin from the same two numbers.
 export function SyncButton() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const { data } = useConnections();
   const syncing = hasSyncing(data);
   const error = hasError(data);
-
-  // When a sync finishes (syncing → idle), snapshots/values may have changed.
-  // This is the ONLY place a completed sync is noticed: the sync mutations
-  // answer 202 and the work happens in a detached task, so the connections poll
-  // landing on 'ok' is the completion signal for every screen.
-  const wasSyncing = useRef(false);
-  useEffect(() => {
-    if (wasSyncing.current && !syncing) afterSyncFinished(qc);
-    wasSyncing.current = syncing;
-  }, [syncing, qc]);
 
   return (
     <>

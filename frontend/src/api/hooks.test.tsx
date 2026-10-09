@@ -10,6 +10,8 @@ import {
   useTransactions,
   useUpdateAccount,
   useDeleteConnection,
+  useSetProviderEnabled,
+  useEnabledProviders,
 } from "./hooks";
 
 // The page size the list asks the server for.
@@ -45,8 +47,26 @@ describe("useHoldings", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].ticker).toBe("AAPL");
     // getJson now attaches an (empty, unauthenticated) headers object.
-    expect(fetch).toHaveBeenCalledWith("/api/holdings", { headers: {} });
+    expect(fetch).toHaveBeenCalledWith("/api/holdings", { headers: {}, signal: expect.any(AbortSignal) });
   });
+});
+
+it("refreshes the connection picker after a provider is disabled", async () => {
+  let enabled = true;
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === "PATCH") {
+      enabled = false;
+      return new Response(null, { status: 204 });
+    }
+    return Response.json(enabled ? [{ key: "powens", name: "Powens" }] : []);
+  }));
+  const { client, wrapper: w } = makeWrapper();
+  const { result, unmount } = renderHook(() => ({ list: useEnabledProviders(), toggle: useSetProviderEnabled() }), { wrapper: w });
+  try {
+    await waitFor(() => expect(result.current.list.data?.length).toBe(1));
+    result.current.toggle.mutate({ key: "powens", enabled: false });
+    await waitFor(() => expect(result.current.list.data).toEqual([]));
+  } finally { unmount(); client.clear(); }
 });
 
 describe("useUpdateAccount", () => {
@@ -106,6 +126,7 @@ describe("useUpdateAccount invalidation", () => {
     // their own payload, so a rename left them showing the old value.
     expect(invalidatedKeys).toEqual([
       ["accounts"],
+      ["connections"],
       ["distribution"],
       ["account-series"],
       ["holdings"],
@@ -138,6 +159,8 @@ describe("useDeleteConnection", () => {
       ["accounts"],
       ["account-series"],
       ["holdings"],
+      ["holding-prices"],
+      ["holding-lots"],
       ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
@@ -199,7 +222,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/transactions?search=leclerc&limit=${TRANSACTIONS_PAGE_SIZE}&offset=0`,
-      { headers: {} },
+      { headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(true);
   });
@@ -230,7 +253,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/transactions?limit=${TRANSACTIONS_PAGE_SIZE}&offset=${TRANSACTIONS_PAGE_SIZE}`,
-      { headers: {} },
+      { headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(false);
   });

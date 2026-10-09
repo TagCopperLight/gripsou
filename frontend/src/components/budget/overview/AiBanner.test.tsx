@@ -34,7 +34,7 @@ describe("AiBanner", () => {
   });
 
   it("shows the failure and retries", async () => {
-    const calls = stub({ lastRun: { outcome: "error", error: "API key not valid" } });
+    const calls = stub({ lastRun: { startedAt: "2026-10-09T00:00:00Z", outcome: "error", error: "API key not valid" } });
     renderBanner();
     expect(await screen.findByText("API key not valid")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
