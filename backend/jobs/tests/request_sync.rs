@@ -95,7 +95,14 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     let meta = serde_json::json!({ "external_connection_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "no-adapter", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
@@ -137,7 +144,14 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     let meta = serde_json::json!({ "external_connection_id": "99" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
@@ -190,7 +204,14 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     let meta = serde_json::json!({ "powens_user_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
-    let result = gripsou_jobs::request_sync(pool.clone(), user_id, conn_id).await;
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        conn_id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .unwrap();
     // Must take the DIRECT path → status 'syncing', not 'awaiting'.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
@@ -200,6 +221,27 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     } else {
         panic!("expected Started on direct fallback path");
     }
+
+    Ok(())
+}
+
+// ── database failure ─────────────────────────────────────────────────────────
+
+/// A database that cannot answer is an Err (the handler turns it into a 500),
+/// never a silent "not found".
+#[sqlx::test(migrations = "../migrations")]
+async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = seed_user(&pool).await;
+    pool.close().await;
+
+    let result = gripsou_jobs::request_sync(
+        pool.clone(),
+        user_id,
+        Uuid::new_v4(),
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await;
+    assert!(result.is_err(), "expected Err on a closed pool");
 
     Ok(())
 }

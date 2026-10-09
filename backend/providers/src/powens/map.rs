@@ -238,27 +238,34 @@ pub fn map_sync(
     investments: &[Investment],
     transactions: &[PowensTransaction],
 ) -> SyncResult {
-    let mut by_account: HashMap<i64, Vec<&Investment>> = HashMap::new();
-    for inv in investments {
-        if inv.deleted.is_none() {
-            by_account.entry(inv.id_account).or_default().push(inv);
-        }
-    }
-
     // institution is filled by sync() after fetching connections; placeholder here.
     let mut result = SyncResult {
+        skipped: Default::default(),
         institution: Institution::default(),
         accounts: Vec::new(),
         holdings: Vec::new(),
         transactions: Vec::new(),
     };
+    let mut by_account: HashMap<i64, Vec<&Investment>> = HashMap::new();
+    for inv in investments {
+        if inv.deleted.is_none() {
+            by_account.entry(inv.id_account).or_default().push(inv);
+        } else {
+            result.skipped.holdings += 1;
+        }
+    }
+
     for acct in accounts {
         if acct.deleted.is_some() {
+            result.skipped.accounts += 1;
             continue;
         }
         // A liability maps to no asset type; skip the account entirely so
         // neither it nor its holdings reach the database.
-        let Some(type_key) = map_type_key(acct.r#type.as_deref().unwrap_or("unknown")) else {
+        let powens_type = acct.r#type.as_deref().unwrap_or("unknown");
+        let Some(type_key) = map_type_key(powens_type) else {
+            tracing::debug!(powens_type, "account skipped: no asset type");
+            result.skipped.accounts += 1;
             continue;
         };
         result.accounts.push(map_account(acct, type_key));
@@ -279,6 +286,8 @@ pub fn map_sync(
                 if let Some(holding) = map_investment(inv, account_currency) {
                     invested += holding.valuation.unwrap_or(Decimal::ZERO);
                     result.holdings.push(holding);
+                } else {
+                    result.skipped.holdings += 1;
                 }
             }
         }
@@ -297,6 +306,8 @@ pub fn map_sync(
         .into_iter()
         .filter(|t| emitted.contains(t.account_external_id.as_str()))
         .collect();
+    // Pending, deleted, incomplete, or on an account skipped above.
+    result.skipped.transactions = transactions.len().saturating_sub(result.transactions.len());
 
     result
 }

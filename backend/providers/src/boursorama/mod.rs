@@ -69,12 +69,20 @@ impl CompositionProvider for BoursoramaCompositionProvider {
             .get(&url)
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
-        // An exact ticker 302-redirects to the security page; anything else
-        // (a results page, a 404) means we couldn't resolve a single security.
-        if !resp.status().is_redirection() {
-            return Ok(None);
+        // An exact ticker 302-redirects to the security page. A results page
+        // (2xx) or a 404 means no single security: a real "not found". Anything
+        // else (403/429 block page, 5xx) is Boursorama being unavailable, an
+        // error, so the instrument is retried next sync instead of marked "none".
+        let status = resp.status();
+        if !status.is_redirection() {
+            if status.is_success() || status == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+            return Err(ProviderError::Other(format!(
+                "boursorama search failed: {status}"
+            )));
         }
         let location = resp
             .headers()
@@ -93,16 +101,16 @@ impl CompositionProvider for BoursoramaCompositionProvider {
             .get(&url)
             .send()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?
             .error_for_status()
-            .map_err(|e| ProviderError::Other(e.to_string()))?
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?
             .text()
             .await
-            .map_err(|e| ProviderError::Other(e.to_string()))?;
+            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
         Ok(Composition {
-            countries: parse_amchart_data(&html, "regional"),
-            sectors: parse_amchart_data(&html, "sector"),
+            countries: parse_amchart_data(&html, "regional").map_err(ProviderError::Other)?,
+            sectors: parse_amchart_data(&html, "sector").map_err(ProviderError::Other)?,
         })
     }
 }

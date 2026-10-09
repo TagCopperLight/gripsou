@@ -111,7 +111,10 @@ impl Categorizer for JevCategorizer {
                 }
                 Ok(Ok(None)) => continue,
                 Ok(Err(e)) => e,
-                Err(e) => CategorizeError::Other(format!("jev task failed: {e}")),
+                Err(e) => CategorizeError::Other(format!(
+                    "jev task failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                )),
             };
             gate.close();
             interrupted.get_or_insert(failure);
@@ -142,10 +145,16 @@ impl Categorizer for JevCategorizer {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+            .map_err(|e| {
+                CategorizeError::Other(format!(
+                    "jev request failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                ))
+            })?;
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
+            let text: String = text.chars().take(300).collect();
             return Err(CategorizeError::Other(format!("jev {status}: {text}")));
         }
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
@@ -170,14 +179,28 @@ async fn ask(
         .json(body)
         .send()
         .await
-        .map_err(|e| CategorizeError::Other(format!("jev request failed: {e}")))?;
+        .map_err(|e| {
+            CategorizeError::Other(format!(
+                "jev request failed: {}",
+                gripsou_core::logs::error_chain(&e)
+            ))
+        })?;
     let status = resp.status();
     if status.as_u16() == 429 {
         return Err(CategorizeError::RateLimited);
     }
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
+        // Bounded: the body can echo the prompt, and this text reaches the run row.
+        let text: String = text.chars().take(300).collect();
         return Err(CategorizeError::Other(format!("jev {status}: {text}")));
     }
-    Ok(resp.json().await.ok())
+    match resp.json().await {
+        Ok(v) => Ok(Some(v)),
+        Err(e) => {
+            // Left unanswered on purpose: a later run sends the item again.
+            tracing::warn!(error = %gripsou_core::logs::error_chain(&e), "jev answer unreadable");
+            Ok(None)
+        }
+    }
 }

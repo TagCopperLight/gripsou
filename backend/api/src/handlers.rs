@@ -40,9 +40,10 @@ fn default_range() -> String {
 /// The real error goes to the log; the client gets a fixed, non-descriptive
 /// message. sqlx/Postgres error strings quote the failing statement and its
 /// parameters, so returning them hands an untrusted caller a view of the schema
-/// and of whatever input reached the query.
-fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    tracing::error!("internal error: {e}");
+/// and of whatever input reached the query. The request span supplies the
+/// route and request_id.
+pub(crate) fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
+    tracing::error!(error = %e, "internal error");
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         "internal server error".to_string(),
@@ -571,11 +572,17 @@ pub async fn sync_connection(
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
     use gripsou_core::repo::connection::BeginSync;
-    match gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
-        BeginSync::Started(state) => Ok((
-            StatusCode::ACCEPTED,
-            Json(dto::ConnectionState::from_row(state)),
-        )),
+    match gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
+        .await
+        .map_err(internal)?
+    {
+        BeginSync::Started(state) => {
+            tracing::info!(connection_id = %id, "sync requested");
+            Ok((
+                StatusCode::ACCEPTED,
+                Json(dto::ConnectionState::from_row(state)),
+            ))
+        }
         BeginSync::AlreadySyncing => Err((
             StatusCode::CONFLICT,
             "connection is already syncing".to_string(),
@@ -594,10 +601,15 @@ pub async fn sync_all(
         .map_err(internal)?;
     let mut started = 0u32;
     for id in ids {
-        if let BeginSync::Started(_) = gripsou_jobs::request_sync(pool.clone(), user_id, id).await {
+        if let BeginSync::Started(_) =
+            gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
+                .await
+                .map_err(internal)?
+        {
             started += 1;
         }
     }
+    tracing::info!(started, "sync requested");
     Ok((
         StatusCode::ACCEPTED,
         Json(serde_json::json!({ "started": started })),
@@ -669,9 +681,11 @@ pub async fn set_cors_origins(
     gripsou_core::repo::settings::set_cors_origins(&pool, &origins)
         .await
         .map_err(internal)?;
-    if let Ok(mut cache) = cors_state.write() {
-        *cache = origins;
+    match cors_state.write() {
+        Ok(mut cache) => *cache = origins.clone(),
+        Err(_) => tracing::error!("cors cache poisoned; saved origins not applied until restart"),
     }
+    tracing::info!(by = %user_id, count = origins.len() as u64, "cors origins changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -717,6 +731,12 @@ pub async fn set_budget_ai_settings(
     gripsou_core::repo::settings::set_budget_ai(&pool, provider, model)
         .await
         .map_err(internal)?;
+    tracing::info!(
+        by = %user_id,
+        provider = provider.unwrap_or(""),
+        model = model.unwrap_or(""),
+        "ai settings changed"
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -734,7 +754,7 @@ pub async fn budget_ai_models(
     match gripsou_jobs::categorizer_models(&provider).await {
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
-            tracing::warn!("listing {provider} models failed: {e}");
+            tracing::warn!(provider = %provider, error = %gripsou_core::logs::error_chain(&e), "ai model list failed");
             Err((StatusCode::BAD_GATEWAY, e.to_string()))
         }
         None => Err((
@@ -811,6 +831,7 @@ pub async fn set_budget_ai_prices(
     gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices)
         .await
         .map_err(internal)?;
+    tracing::info!(by = %user_id, models = prices.len() as u64, "ai prices changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -829,6 +850,7 @@ pub async fn set_provider(
     gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled)
         .await
         .map_err(internal)?;
+    tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
     Ok(Json(dto::Provider {
         key: row.key,
         display_name: row.display_name,
@@ -865,20 +887,24 @@ pub async fn login(
             "invalid email or password".to_string(),
         )
     };
-    let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
+    let ip = client_ip(&headers, peer);
+    let Some(creds) = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
         .map_err(internal)?
-        .ok_or_else(unauthorized)?;
+    else {
+        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
+        return Err(unauthorized());
+    };
     if !auth::verify_password(&body.password, &creds.password_hash) {
+        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     }
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok());
-    let ip = client_ip(&headers, peer);
     let ttl = if body.remember {
         Duration::days(30)
     } else {
@@ -897,6 +923,7 @@ pub async fn login(
     .await
     .map_err(internal)?;
 
+    tracing::info!(user_id = %creds.id, ip = %ip, user_agent = user_agent.unwrap_or(""), "login succeeded");
     Ok(Json(dto::LoginResponse {
         token,
         user: dto::SessionUser::from_credentials(&creds),
@@ -958,6 +985,9 @@ pub async fn update_prefs(
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    if prefs.budget_ai_enabled != was_enabled {
+        tracing::info!(user_id = %user_id, enabled = prefs.budget_ai_enabled, "ai opt-in changed");
+    }
     if prefs.budget_ai_enabled && !was_enabled {
         gripsou_jobs::request_categorize(pool.clone(), user_id);
     }
@@ -981,6 +1011,7 @@ pub async fn update_profile(
         .await
         .map_err(unique_or_internal("email is already in use"))?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    tracing::info!(user_id = %user_id, "profile changed");
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
@@ -1008,6 +1039,7 @@ pub async fn logout(
     gripsou_core::repo::session::delete(&pool, user_id, session_id)
         .await
         .map_err(internal)?;
+    tracing::info!(user_id = %user_id, "logout");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1037,6 +1069,7 @@ pub async fn revoke_session(
         .await
         .map_err(internal)?;
     if deleted {
+        tracing::info!(user_id = %user_id, session_id = %id, "session revoked");
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err((StatusCode::NOT_FOUND, "session not found".to_string()))
@@ -1053,6 +1086,7 @@ pub async fn revoke_other_sessions(
     gripsou_core::repo::session::delete_others(&pool, user_id, session_id)
         .await
         .map_err(internal)?;
+    tracing::info!(user_id = %user_id, "other sessions revoked");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1081,6 +1115,7 @@ pub async fn change_password(
     gripsou_core::repo::session::delete_others(&pool, user_id, session_id)
         .await
         .map_err(internal)?;
+    tracing::info!(user_id = %user_id, "password changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1116,6 +1151,7 @@ pub async fn delete_account(
     gripsou_core::repo::user::delete_user(&pool, user_id)
         .await
         .map_err(internal)?;
+    tracing::info!(user_id = %user_id, "account deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1130,6 +1166,7 @@ pub async fn create_invite(
     gripsou_core::repo::invite_token::create(&pool, "invite", None, user_id, &stored, expires_at)
         .await
         .map_err(internal)?;
+    tracing::info!(by = %user_id, "invite created");
     Ok((
         StatusCode::CREATED,
         Json(dto::InviteLinkResp { token: raw }),
@@ -1159,6 +1196,7 @@ pub async fn create_reset_link(
     )
     .await
     .map_err(internal)?;
+    tracing::info!(by = %user_id, target_user_id = %id, "reset link created");
     Ok((
         StatusCode::CREATED,
         Json(dto::InviteLinkResp { token: raw }),
@@ -1198,6 +1236,7 @@ pub async fn delete_user(
     gripsou_core::repo::user::delete_user(&pool, id)
         .await
         .map_err(internal)?;
+    tracing::info!(by = %user_id, target_user_id = %id, "user deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1244,7 +1283,10 @@ pub async fn init_connection(
                 redirect_url: init.redirect_url,
             }),
         )),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+        Err(e) => {
+            tracing::warn!(provider = %body.provider_key, step = "init", error = %gripsou_core::logs::error_chain(&e), "connect failed");
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
     }
 }
 
@@ -1261,6 +1303,7 @@ pub async fn complete_connection(
     match gripsou_jobs::complete_connection(pool, user_id, connection_id, &body.params).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
+            tracing::warn!(connection_id = %connection_id, step = "complete", error = %gripsou_core::logs::error_chain(&e), "connect failed");
             let msg = e.to_string();
             if msg.contains("not found") {
                 Err((StatusCode::NOT_FOUND, msg))
@@ -1376,6 +1419,7 @@ pub async fn redeem_invite(
             ))?
             .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
     let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    tracing::info!(user_id = %user_id, "invite redeemed");
     Ok(Json(resp))
 }
 
@@ -1397,6 +1441,7 @@ pub async fn redeem_reset(
         .map_err(internal)?
         .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
     let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    tracing::info!(user_id = %user_id, "reset link redeemed");
     Ok(Json(resp))
 }
 
@@ -1409,6 +1454,7 @@ pub async fn delete_connection(
         .await
         .map_err(internal)?;
     if deleted {
+        tracing::info!(user_id = %user_id, connection_id = %id, "connection deleted");
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err((StatusCode::NOT_FOUND, "connection not found".to_string()))
@@ -1542,6 +1588,65 @@ mod auth_tests {
             Decimal::from(200)
         );
         assert!(a.figures.since.is_some());
+    }
+
+    /// Login (ok and failed) and invite creation are logged, and no saved line
+    /// carries the password, the attempted password or the invite token.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn account_lines_are_saved_without_secrets(pool: PgPool) {
+        let (_g, mut writer) = gripsou_core::logs::capture(1000);
+
+        let password = "correct horse battery staple";
+        let admin = seed_user(&pool, "log@t.local", password).await;
+        login_token(&pool, "log@t.local", password).await;
+        let mut ua = axum::http::HeaderMap::new();
+        ua.insert(
+            axum::http::header::USER_AGENT,
+            "test-agent/1".parse().unwrap(),
+        );
+        let failed = login(
+            State(pool.clone()),
+            ua,
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(LoginReq {
+                email: "log@t.local".into(),
+                password: "wrong-pass".into(),
+                remember: false,
+            }),
+        )
+        .await;
+        assert!(failed.is_err());
+        let (_, Json(invite)) = create_invite(
+            State(pool.clone()),
+            AuthUser {
+                user_id: admin,
+                session_id: Uuid::nil(),
+            },
+        )
+        .await
+        .unwrap();
+        writer.flush(&pool).await;
+
+        let rows: Vec<(String, serde_json::Value)> =
+            sqlx::query_as("select message, fields from log")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let messages: Vec<&str> = rows.iter().map(|(m, _)| m.as_str()).collect();
+        assert!(messages.contains(&"login succeeded"));
+        let (_, failed_line) = rows.iter().find(|(m, _)| m == "login failed").unwrap();
+        assert_eq!(failed_line["user_agent"], "test-agent/1");
+        assert!(messages.contains(&"invite created"));
+        let all = serde_json::to_string(&rows).unwrap();
+        assert!(!all.contains(password), "password leaked into the log");
+        assert!(
+            !all.contains("wrong-pass"),
+            "attempted password leaked into the log"
+        );
+        assert!(
+            !all.contains(&invite.token),
+            "invite token leaked into the log"
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

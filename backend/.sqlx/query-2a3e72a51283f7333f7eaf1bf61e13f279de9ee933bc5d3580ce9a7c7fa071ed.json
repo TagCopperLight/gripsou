@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into log (at, level, target, message, fields)\n         select * from unnest($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::jsonb[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TimestamptzArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2a3e72a51283f7333f7eaf1bf61e13f279de9ee933bc5d3580ce9a7c7fa071ed"
+}

@@ -113,3 +113,32 @@ Per-user categories (`budget_category`, seeded by a trigger on `users` insert) a
 - ESLint's `react-refresh/only-export-components` forbids exporting anything but components from a component file; put shared constants/types in a sibling `.ts`. `bun run build` won't catch it — run `bun run lint`.
 - Vitest hides console output of passing tests when piped. To check for warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
 - Tests: adapter mapping tests against recorded provider fixtures; integration tests against a real Postgres; Vitest for the frontend.
+
+## Logs
+
+Every info-and-above line from gripsou's crates is printed *and* saved to the `log` table (kept 90 days, daily `logs` sweep). Library lines (sqlx, hyper, reqwest) and debug are terminal-only. The writer drops lines rather than ever slow the app, and says so with a `log lines dropped` line.
+
+- **Message** is a fixed lowercase phrase (`sync finished`, `price fetch failed`); every variable is a field. Shared names: `connection_id`, `user_id`, `provider`, `instrument_id`, `step`, `trigger`, `outcome`, `duration_ms`, `error`, `reason`, `count`.
+- **Levels:** error = someone must look / work was lost; warn = degraded but recovered; info = something happened; debug = routine, not saved.
+- **Errors** go in `error = %gripsou_core::logs::error_chain(&e)`, logged once where handled.
+- **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names.
+- **Spans** carry the operation: `sync` (`sync_id`, `connection_id`, `user_id`, `provider`, `trigger`), `ai_run` (`user_id`, `run_id`, `model`), `sweep` (`name`), `request` (`request_id`, `route`, `user_id`). Spawned work must be `.instrument(...)`-ed or it loses them.
+- **The subscriber is installed by `gripsou_core::logs::install`, never `.init()`**: `.init()` adds the `log`-crate bridge, whose checks (sqlx makes one per query) made the per-output filters drop the next line, in the terminal too. `core/tests/logs_install.rs` pins it.
+- **The terminal shows UUIDs cut to 8 characters** (`core/src/logs/terminal.rs`); the saved log keeps them whole, so match a copied one with `like '1fe32d5a%'`.
+- **Tests** that assert on saved logs capture with `gripsou_core::logs::capture(capacity)`: it keeps tracing's per-callsite interest stable across parallel tests.
+- **Sync history is the `sync finished` lines**, one per sync: `outcome`, `failed_step` (`credentials`, `provider_fetch`, `ingest`, or `panic` when the sync's task panicked: its supervisor frees the lock and logs the line), `error`, `duration_ms`, counts. `jobs/tests/sync_log.rs` pins that shape; change both together. A sync cut off by a restart has no `sync finished` line (only the boot `boot_sync_locks` sweep count shows it), so the history is not guaranteed complete.
+
+```sql
+-- Sync history of one connection
+select at, fields->>'trigger' trigger, fields->>'outcome' outcome, fields->>'failed_step' step,
+       fields->>'error' error, (fields->>'duration_ms')::int ms, fields->>'transactions_inserted' new_txns
+from log where message = 'sync finished' and fields->>'connection_id' = '<uuid>'
+order by at desc limit 50;
+
+-- Everything one sync logged
+select at, level, message, fields from log where fields->>'sync_id' = '<uuid>' order by id;
+
+-- Errors of the last 7 days
+select at, target, message, fields from log
+where level = 'error' and at > now() - interval '7 days' order by at desc;
+```

@@ -48,6 +48,7 @@ impl PriceProvider for MockProvider {
 async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
     let conn_id = seed_connection(pool).await;
     let sync = SyncResult {
+        skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
@@ -89,6 +90,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
         .unwrap();
     assert_eq!(s1.resolved, 1);
     assert_eq!(s1.prices_inserted, 1);
+    assert_eq!(s1.failed, 0);
     assert_eq!(price_count(&pool).await, 1);
 
     // The resolved ticker is cached in meta, and the identity columns the next

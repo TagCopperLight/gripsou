@@ -17,6 +17,8 @@ pub struct CompositionSyncSummary {
     pub resolved: usize,
     pub fetched: usize,
     pub unresolved: usize,
+    /// Listings whose composition fetch failed.
+    pub failed: usize,
 }
 
 pub async fn fetch_composition_for_connection(
@@ -52,7 +54,13 @@ pub async fn fetch_composition_for_connection(
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("boursorama resolve failed for {}: {e}", row.name);
+                    tracing::warn!(
+                        provider = provider.key(),
+                        instrument_id = %row.id,
+                        error = %crate::logs::error_chain(&e),
+                        "composition resolve failed"
+                    );
+                    summary.failed += 1;
                     continue;
                 }
             },
@@ -73,7 +81,15 @@ pub async fn fetch_composition_for_connection(
             // ponytail: a cached symbol that errors on fetch every sync is re-tried forever (one
             // request/sync). Mirrors price_sync's transient-error handling; add a
             // meta.composition_attempted_at backoff if this becomes costly.
-            Err(e) => tracing::warn!("boursorama fetch failed for {symbol}: {e}"),
+            Err(e) => {
+                tracing::warn!(
+                    provider = provider.key(),
+                    instrument_id = %row.id,
+                    error = %crate::logs::error_chain(&e),
+                    "composition fetch failed"
+                );
+                summary.failed += 1;
+            }
         }
     }
 

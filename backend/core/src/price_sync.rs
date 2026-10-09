@@ -41,6 +41,8 @@ pub struct PriceSyncSummary {
     /// Points dropped because Yahoo reported no currency for the listing at all,
     /// so there is nothing to convert them from.
     pub skipped_unlabelled: usize,
+    /// Listings whose fetch failed.
+    pub failed: usize,
 }
 
 // An FX rate can only be stored against a cash instrument, and cash instruments
@@ -196,7 +198,13 @@ async fn fetch_prices_for_connection_inner(
                         continue;
                     }
                     Err(e) => {
-                        tracing::warn!("yahoo resolve failed for {}: {e}", row.name);
+                        tracing::warn!(
+                            provider = provider.key(),
+                            instrument_id = %row.id,
+                            error = %crate::logs::error_chain(&e),
+                            "price resolve failed"
+                        );
+                        summary.failed += 1;
                         continue;
                     }
                 }
@@ -222,6 +230,13 @@ async fn fetch_prices_for_connection_inner(
                     .map(|p| p.currency.clone())
                     .unwrap_or_default();
                 if currency.is_empty() {
+                    tracing::warn!(
+                        provider = provider.key(),
+                        instrument_id = %row.id,
+                        symbol = %symbol,
+                        points = points.len() as u64,
+                        "prices dropped: listing has no currency"
+                    );
                     summary.skipped_unlabelled += points.len();
                     continue;
                 }
@@ -233,7 +248,13 @@ async fn fetch_prices_for_connection_inner(
                 summary.prices_inserted += written as usize;
             }
             Err(e) => {
-                tracing::warn!("yahoo fetch failed for {symbol}: {e}");
+                tracing::warn!(
+                    provider = provider.key(),
+                    instrument_id = %row.id,
+                    error = %crate::logs::error_chain(&e),
+                    "price fetch failed"
+                );
+                summary.failed += 1;
             }
         }
     }

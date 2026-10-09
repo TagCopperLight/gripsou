@@ -78,7 +78,12 @@ impl Categorizer for GeminiCategorizer {
             .json(&map::build_body(req))
             .send()
             .await
-            .map_err(|e| CategorizeError::Other(format!("gemini request failed: {e}")))?;
+            .map_err(|e| {
+                CategorizeError::Other(format!(
+                    "gemini request failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                ))
+            })?;
         let status = resp.status();
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
         if status.as_u16() == 429 || body["error"]["status"] == "RESOURCE_EXHAUSTED" {
@@ -107,7 +112,12 @@ impl Categorizer for GeminiCategorizer {
                 .query(&query)
                 .send()
                 .await
-                .map_err(|e| CategorizeError::Other(format!("gemini request failed: {e}")))?;
+                .map_err(|e| {
+                    CategorizeError::Other(format!(
+                        "gemini request failed: {}",
+                        gripsou_core::logs::error_chain(&e)
+                    ))
+                })?;
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
             if !status.is_success() {

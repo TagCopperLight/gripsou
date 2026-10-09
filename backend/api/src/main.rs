@@ -40,15 +40,19 @@ impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    // Two independent outputs: the terminal (filtered by RUST_LOG, default info)
+    // and the saved log (gripsou's info+ lines, whatever RUST_LOG says).
+    let log_writer = gripsou_core::logs::install(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+    );
 
     let database_url =
         env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
     let db = gripsou_core::db::connect(&database_url).await?;
 
     sqlx::migrate!("../migrations").run(&db).await?;
+    // The log table exists from here; lines queued since startup are written too.
+    let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone()));
 
@@ -193,13 +197,24 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
         .allow_credentials(true);
 
-    // Per-request logging: an info-level span carries method+path so failing
-    // requests show context; 2xx responses log at debug (hidden at info),
-    // 4xx at warn, 5xx at error. `on_request`/`on_failure` are disabled — the
-    // status-class branch in `on_response` is the single source of truth.
+    // Per-request span: every line a handler logs carries request_id, method,
+    // the route pattern (not the raw path, full of ids) and, once the session is
+    // resolved, user_id. 5xx are logged by `internal()` with their cause, so the
+    // response line itself is debug.
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|req: &axum::http::Request<axum::body::Body>| {
-            tracing::info_span!("request", method = %req.method(), uri = %req.uri().path())
+            let route = req
+                .extensions()
+                .get::<axum::extract::MatchedPath>()
+                .map(|p| p.as_str().to_string())
+                .unwrap_or_else(|| "unmatched".into());
+            tracing::info_span!(
+                "request",
+                request_id = %uuid::Uuid::new_v4(),
+                method = %req.method(),
+                route = %route,
+                user_id = tracing::field::Empty,
+            )
         })
         .on_request(())
         .on_failure(())
@@ -207,15 +222,11 @@ async fn main() -> anyhow::Result<()> {
             |response: &axum::http::Response<axum::body::Body>,
              latency: std::time::Duration,
              _span: &tracing::Span| {
-                let status = response.status().as_u16();
-                let ms = latency.as_millis();
-                if status >= 500 {
-                    tracing::error!("response {status} in {ms}ms");
-                } else if status >= 400 {
-                    tracing::warn!("response {status} in {ms}ms");
-                } else {
-                    tracing::debug!("response {status} in {ms}ms");
-                }
+                tracing::debug!(
+                    status = response.status().as_u16(),
+                    duration_ms = latency.as_millis() as u64,
+                    "response"
+                );
             },
         );
 
@@ -225,13 +236,33 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("listening on http://{addr}");
+    tracing::info!(addr = %addr, "listening");
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
+    tracing::info!("server stopped");
+    log_handle.shutdown().await;
     Ok(())
+}
+
+/// Ctrl-C locally, SIGTERM from `docker stop`.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let term = async {
+        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            s.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! { _ = ctrl_c => {}, _ = term => {} }
 }
 
 async fn health() -> Json<Value> {

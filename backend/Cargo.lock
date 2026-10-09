@@ -975,6 +975,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -983,6 +984,7 @@ name = "gripsou-jobs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64",
  "chrono",
  "gripsou-core",
@@ -993,6 +995,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

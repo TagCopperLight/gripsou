@@ -84,7 +84,12 @@ pub fn verify_password(plain: &str, hash: &str) -> bool {
         Ok(parsed) => Argon2::default()
             .verify_password(plain.as_bytes(), &parsed)
             .is_ok(),
-        Err(_) => false,
+        Err(e) => {
+            // Same answer as a wrong password for the caller; the operator
+            // needs to know the stored hash is unreadable.
+            tracing::error!(error = %gripsou_core::logs::error_chain(&e), "stored password hash unreadable");
+            false
+        }
     }
 }
 
@@ -117,14 +122,21 @@ where
         let session = gripsou_core::repo::session::find_valid_by_hash(&pool, &hash)
             .await
             .map_err(|e| {
-                tracing::warn!("session lookup failed: {e}");
-                unauthorized()
+                tracing::error!(error = %gripsou_core::logs::error_chain(&e), "session lookup failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal server error".to_string(),
+                )
             })?
             .ok_or_else(unauthorized)?;
+        tracing::Span::current().record("user_id", tracing::field::display(session.user_id));
 
         // Throttled sliding-window bump; failures here must not fail the request.
-        if (Utc::now() - session.last_active_at).num_seconds() >= TOUCH_THROTTLE_SECS {
-            let _ = gripsou_core::repo::session::touch(&pool, session.id, session.remembered).await;
+        if (Utc::now() - session.last_active_at).num_seconds() >= TOUCH_THROTTLE_SECS
+            && let Err(e) =
+                gripsou_core::repo::session::touch(&pool, session.id, session.remembered).await
+        {
+            tracing::warn!(error = %gripsou_core::logs::error_chain(&e), "session touch failed");
         }
 
         Ok(AuthUser {
@@ -266,6 +278,23 @@ mod tests {
         let hash = hash_password("hunter2").unwrap();
         assert!(verify_password("hunter2", &hash));
         assert!(!verify_password("wrong", &hash));
+    }
+
+    /// A database outage is a server error, not "you are logged out": a 401
+    /// would make the SPA drop the session.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn session_lookup_failure_is_a_server_error(pool: PgPool) {
+        pool.close().await;
+        let mut parts = make_parts(Some("whatever"));
+        let err = AuthUser::from_request_parts(&mut parts, &pool)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn a_corrupt_stored_hash_is_not_a_match() {
+        assert!(!verify_password("pw", "not-a-phc-string"));
     }
 
     #[test]

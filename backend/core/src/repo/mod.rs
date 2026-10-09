@@ -8,6 +8,7 @@ pub mod connection;
 pub mod holding;
 pub mod instrument;
 pub mod invite_token;
+pub mod log;
 pub mod lot;
 pub mod lot_suggest;
 pub mod prefs;

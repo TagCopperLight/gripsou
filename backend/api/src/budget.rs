@@ -15,6 +15,7 @@ use crate::auth::AuthUser;
 use gripsou_core::repo::budget::{ai as ai_repo, assign, category, review, tag};
 use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transaction_counts};
 
+use crate::handlers::internal;
 use chrono::NaiveDate;
 use gripsou_core::budget::overview::{
     BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline_figures,
@@ -23,11 +24,6 @@ use gripsou_core::budget::overview::{
 use std::collections::BTreeMap;
 
 use gripsou_core::repo::budget::summary::{DayCategoryRow, day_category_totals};
-
-fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    tracing::error!("{e}");
-    (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
-}
 
 fn not_found() -> (StatusCode, String) {
     (StatusCode::NOT_FOUND, "not found".into())

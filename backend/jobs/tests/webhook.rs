@@ -150,6 +150,7 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
 /// connection status is not touched.
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Result<()> {
+    let (_g, mut writer) = gripsou_core::logs::capture(100);
     let user_id = seed_user(&pool).await;
     let conn_id = seed_connection(&pool, user_id, "77").await;
 
@@ -183,6 +184,20 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
     assert!(
         matches!(outcome, gripsou_jobs::WebhookOutcome::Unauthorized),
         "expected Unauthorized for bad signature"
+    );
+
+    // The rejection says why, without the body.
+    writer.flush(&pool).await;
+    let f: serde_json::Value =
+        sqlx::query_scalar("select fields from log where message = 'webhook rejected'")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(f["reason"], "bad_signature");
+    assert!(
+        f["error"]
+            .as_str()
+            .unwrap()
+            .contains("bad webhook signature")
     );
 
     // Status must be untouched ('ok').
