@@ -8,10 +8,29 @@ use gripsou_core::provider::{AccountProvider, PriceProvider, ProviderError};
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
 use gripsou_core::repo::settings::BudgetAiSettings;
+use tracing::Instrument;
 use uuid::Uuid;
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
 const PENDING_TIMEOUT_MINS: i32 = 10;
+
+/// One cleanup pass: logs `sweep finished` with the count when it changed
+/// something, `sweep failed` (error: whatever it cleans stays stuck) when
+/// it could not run.
+async fn sweep<F>(name: &'static str, run: F)
+where
+    F: std::future::Future<Output = Result<u64, gripsou_core::error::CoreError>>,
+{
+    async {
+        match run.await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(count = n, "sweep finished"),
+            Err(e) => tracing::error!(error = %gripsou_core::logs::error_chain(&e), "sweep failed"),
+        }
+    }
+    .instrument(tracing::info_span!("sweep", name))
+    .await
+}
 
 /// Mark a connection's sync as failed and log why. Centralizes the
 /// previously-silent `mark_synced_error` call sites so failures show in logs.
@@ -26,28 +45,19 @@ pub async fn run_scheduler(db: Db) {
     // Boot sweep: every 'syncing' row predates this process, so whatever held
     // the lock is gone. The scheduler runs in the API process and the app is
     // single-instance, so there is no sibling whose live claim this could steal.
-    match connection::clear_stale_syncing(&db, 0).await {
-        Ok(n) if n > 0 => {
-            tracing::warn!("released {n} sync lock(s) left behind by a previous process")
-        }
-        Ok(_) => {}
-        Err(e) => tracing::warn!("boot sync-lock sweep failed: {e}"),
-    }
-    match gripsou_core::repo::budget::ai::clear_all_locks(&db).await {
-        Ok(n) if n > 0 => {
-            tracing::warn!("released {n} budget AI lock(s) left behind by a previous process")
-        }
-        Ok(_) => {}
-        Err(e) => tracing::warn!("boot budget-AI-lock sweep failed: {e}"),
-    }
-    match gripsou_core::repo::budget::ai::close_abandoned_runs(&db, None).await {
-        Ok(n) if n > 0 => {
-            tracing::warn!("closed {n} budget AI run(s) left running by a previous process")
-        }
-        Ok(_) => {}
-        Err(e) => tracing::warn!("boot budget-AI-run sweep failed: {e}"),
-    }
+    sweep("boot_sync_locks", connection::clear_stale_syncing(&db, 0)).await;
+    sweep(
+        "boot_ai_locks",
+        gripsou_core::repo::budget::ai::clear_all_locks(&db),
+    )
+    .await;
+    sweep(
+        "boot_ai_runs",
+        gripsou_core::repo::budget::ai::close_abandoned_runs(&db, None),
+    )
+    .await;
     tokio::spawn(prune_sessions(db.clone()));
+    tokio::spawn(prune_logs(db.clone()));
     tokio::spawn(sync_all_daily(db.clone()));
     tokio::spawn(reap_awaiting(db));
 }
@@ -60,7 +70,10 @@ async fn reap_awaiting(db: Db) {
         {
             Ok(r) => r,
             Err(e) => {
-                tracing::warn!("reaper query failed: {e}");
+                tracing::error!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "awaiting connections read failed"
+                );
                 continue;
             }
         };
@@ -75,18 +88,18 @@ async fn reap_awaiting(db: Db) {
 
         // A sync whose task died without a restart (panic, lost DB connection)
         // holds its lock until this clears it — see connection::clear_stale_syncing.
-        match connection::clear_stale_syncing(&db, connection::SYNC_LOCK_STALE_MINS).await {
-            Ok(n) if n > 0 => tracing::warn!("released {n} stale sync lock(s)"),
-            Ok(_) => {}
-            Err(e) => tracing::warn!("stale sync-lock sweep failed: {e}"),
-        }
+        sweep(
+            "stale_sync_locks",
+            connection::clear_stale_syncing(&db, connection::SYNC_LOCK_STALE_MINS),
+        )
+        .await;
 
         // Backstop for abandoned webview flows whose callback never ran.
-        match connection::delete_stale_pending(&db, PENDING_TIMEOUT_MINS).await {
-            Ok(n) if n > 0 => tracing::info!("reaped {n} stale pending connection(s)"),
-            Ok(_) => {}
-            Err(e) => tracing::warn!("stale pending reap failed: {e}"),
-        }
+        sweep(
+            "stale_pending",
+            connection::delete_stale_pending(&db, PENDING_TIMEOUT_MINS),
+        )
+        .await;
     }
 }
 
@@ -98,7 +111,10 @@ async fn sync_all_daily(db: Db) {
         let rows = match connection::connections_needing_sync(&db).await {
             Ok(rows) => rows,
             Err(e) => {
-                tracing::warn!("daily sync failed to fetch connections: {e}");
+                tracing::error!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "daily sync read failed"
+                );
                 continue;
             }
         };
@@ -137,11 +153,19 @@ async fn prune_sessions(db: Db) {
     let mut tick = tokio::time::interval(Duration::from_secs(3600));
     loop {
         tick.tick().await;
-        match gripsou_core::repo::session::delete_expired(&db).await {
-            Ok(n) if n > 0 => tracing::info!("pruned {n} expired session(s)"),
-            Ok(_) => {}
-            Err(e) => tracing::warn!("session prune failed: {e}"),
-        }
+        sweep("sessions", gripsou_core::repo::session::delete_expired(&db)).await;
+    }
+}
+
+async fn prune_logs(db: Db) {
+    let mut tick = tokio::time::interval(Duration::from_secs(24 * 3600));
+    loop {
+        tick.tick().await;
+        sweep(
+            "logs",
+            gripsou_core::repo::log::purge_older_than(&db, gripsou_core::logs::RETENTION_DAYS),
+        )
+        .await;
     }
 }
 
