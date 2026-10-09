@@ -40,9 +40,10 @@ fn default_range() -> String {
 /// The real error goes to the log; the client gets a fixed, non-descriptive
 /// message. sqlx/Postgres error strings quote the failing statement and its
 /// parameters, so returning them hands an untrusted caller a view of the schema
-/// and of whatever input reached the query.
-fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    tracing::error!("internal error: {e}");
+/// and of whatever input reached the query. The request span supplies the
+/// route and request_id.
+pub(crate) fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
+    tracing::error!(error = %e, "internal error");
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         "internal server error".to_string(),
