@@ -1274,10 +1274,7 @@ mod categorize_run_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_panicking_run_releases_the_lock_and_closes_its_row(pool: PgPool) {
-        use tracing_subscriber::layer::SubscriberExt;
-        let (layer, mut writer) = gripsou_core::logs::channel(100);
-        let _g =
-            tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
+        let (_g, mut writer) = gripsou_core::logs::capture(100);
         let user: Uuid = sqlx::query_scalar(
             "insert into users (email, name, password_hash) values ('p@x', 'p', 'h') returning id",
         )

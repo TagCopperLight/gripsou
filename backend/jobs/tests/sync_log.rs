@@ -12,7 +12,6 @@ use gripsou_jobs::{SyncDeps, Trigger};
 use serde_json::Value;
 use sqlx::PgPool;
 use tracing::Instrument;
-use tracing_subscriber::layer::SubscriberExt;
 use uuid::Uuid;
 
 const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -93,9 +92,7 @@ async fn finished_lines(pool: &PgPool) -> Vec<(String, Value)> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) {
-    let (layer, mut writer) = gripsou_core::logs::channel(1000);
-    let _g =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
     gripsou_core::repo::connection::begin_sync(&pool, user, conn)
         .await
@@ -140,9 +137,7 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
 
 #[sqlx::test(migrations = "../migrations")]
 async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPool) {
-    let (layer, mut writer) = gripsou_core::logs::channel(1000);
-    let _g =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
     gripsou_core::repo::connection::begin_sync(&pool, user, conn)
         .await
@@ -173,9 +168,7 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
 
 #[sqlx::test(migrations = "../migrations")]
 async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
-    let (layer, mut writer) = gripsou_core::logs::channel(1000);
-    let _g =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
     gripsou_core::repo::connection::begin_sync(&pool, user, conn)
         .await

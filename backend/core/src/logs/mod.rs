@@ -59,6 +59,49 @@ pub struct LogLine {
     pub fields: serde_json::Value,
 }
 
+/// Test helper (public because `cfg(test)` does not cross crates): install the
+/// saving layer as this thread's subscriber and return its writer.
+///
+/// Tests run in parallel in one process. With a single live subscriber,
+/// `tracing` computes a call site's interest from the current thread only, so
+/// a parallel test with no subscriber could cache a call site as "never" and
+/// this test would lose the line. A permanently registered "sometimes"
+/// dispatcher keeps every call site's interest at "sometimes".
+pub fn capture(capacity: usize) -> (tracing::subscriber::DefaultGuard, LogWriter) {
+    use tracing_subscriber::layer::SubscriberExt;
+    static KEEP: std::sync::OnceLock<tracing::Dispatch> = std::sync::OnceLock::new();
+    KEEP.get_or_init(|| tracing::Dispatch::new(Sometimes));
+    let (layer, writer) = channel(capacity);
+    let guard =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
+    (guard, writer)
+}
+
+struct Sometimes;
+
+impl tracing::Subscriber for Sometimes {
+    fn register_callsite(
+        &self,
+        _: &'static tracing::Metadata<'static>,
+    ) -> tracing::subscriber::Interest {
+        tracing::subscriber::Interest::sometimes()
+    }
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        false
+    }
+    fn max_level_hint(&self) -> Option<tracing::level_filters::LevelFilter> {
+        None
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, _: &tracing::Event<'_>) {}
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

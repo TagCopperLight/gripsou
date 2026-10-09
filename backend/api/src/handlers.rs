@@ -1594,11 +1594,7 @@ mod auth_tests {
     /// carries the password, the attempted password or the invite token.
     #[sqlx::test(migrations = "../migrations")]
     async fn account_lines_are_saved_without_secrets(pool: PgPool) {
-        use tracing_subscriber::layer::SubscriberExt;
-        let (layer, mut writer) = gripsou_core::logs::channel(1000);
-        let _g =
-            tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
-        tracing::callsite::rebuild_interest_cache();
+        let (_g, mut writer) = gripsou_core::logs::capture(1000);
 
         let password = "correct horse battery staple";
         let admin = seed_user(&pool, "log@t.local", password).await;

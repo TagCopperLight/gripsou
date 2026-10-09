@@ -54,8 +54,6 @@ async fn purge_deletes_only_rows_older_than_the_retention(pool: PgPool) {
     assert_eq!(left, vec!["recent".to_string()]);
 }
 
-use tracing_subscriber::layer::SubscriberExt;
-
 /// Install a subscriber that only has the saving layer, for the current
 /// thread (sqlx::test runs a current-thread runtime, so spawned tasks too).
 fn install(
@@ -64,9 +62,7 @@ fn install(
     tracing::subscriber::DefaultGuard,
     gripsou_core::logs::LogWriter,
 ) {
-    let (layer, writer) = gripsou_core::logs::channel(capacity);
-    let sub = tracing_subscriber::registry().with(layer.filtered());
-    (tracing::subscriber::set_default(sub), writer)
+    gripsou_core::logs::capture(capacity)
 }
 
 async fn saved(pool: &PgPool) -> Vec<(String, String, String, serde_json::Value)> {
