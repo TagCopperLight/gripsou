@@ -38,6 +38,9 @@ export const keys = {
       ? ["holding-prices", id]
       : ["holding-prices", id, range]) as readonly unknown[],
   holdingLots: (id: string) => ["holding-lots", id] as const,
+  // Under the `holding-lots` prefix on purpose: `afterLotsSaved` invalidates
+  // `holdingLots(id)`, which refetches these too, so a saved suggestion goes.
+  holdingLotSuggestions: (id: string) => ["holding-lots", id, "suggestions"] as const,
   investmentReturns: () => ["investment-returns"] as const,
 
   transactions: (q?: TransactionFilterQuery) =>

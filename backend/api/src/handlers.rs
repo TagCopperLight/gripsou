@@ -370,6 +370,24 @@ pub async fn holding_lots(
     Ok(Json(rows.into_iter().map(dto::Lot::from_row).collect()))
 }
 
+/// Lots the form can pre-fill: quantity changes matched to their one
+/// transaction. Read-only; the user saves them through `save_lots`.
+pub async fn lot_suggestions(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(holding_id): Path<Uuid>,
+) -> Result<Json<Vec<dto::LotSuggestion>>, (StatusCode, String)> {
+    let rows = gripsou_core::repo::lot_suggest::suggest_lots(&pool, user_id, holding_id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "unknown holding".to_string()))?;
+    Ok(Json(
+        rows.into_iter()
+            .map(dto::LotSuggestion::from_suggestion)
+            .collect(),
+    ))
+}
+
 /// Latest known unit price for a holding's instrument, in whatever currency
 /// that price row carries. No helper for this already existed outside the
 /// full `holdings()` listing query, so this is a new, narrow lookup rather
@@ -3637,6 +3655,26 @@ mod auth_tests {
             .expect("an unowned holding lists as empty")
             .0;
         assert!(theirs.is_empty());
+    }
+
+    /// Suggestions on another user's holding are a 404, never an empty list:
+    /// the endpoint must not confirm the existence of ids the caller can't see.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn lot_suggestions_refuse_another_users_holding(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let own = lot_suggestions(State(pool.clone()), auth(alice.user), Path(alice.holding))
+            .await
+            .expect("owner may read")
+            .0;
+        assert!(own.is_empty(), "one snapshot, no jump, nothing to suggest");
+
+        let err = lot_suggestions(State(pool.clone()), auth(bob.user), Path(alice.holding))
+            .await
+            .err()
+            .expect("cross-user read must fail");
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
     }
 
     /// Another user's price history is not served through their holding id.

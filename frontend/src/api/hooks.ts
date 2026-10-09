@@ -16,6 +16,7 @@ import type {
   Holding,
   InvestmentReturns,
   Lot,
+  LotSuggestion,
   NetWorthResponse,
   PricePoint,
   Provider,
@@ -118,6 +119,14 @@ export function useHoldingLots(id: string) {
   return useQuery({
     queryKey: keys.holdingLots(id),
     queryFn: () => getJson<Lot[]>(`/holdings/${id}/lots`),
+  });
+}
+
+export function useLotSuggestions(id: string) {
+  return useQuery({
+    queryKey: keys.holdingLotSuggestions(id),
+    retry: false, // suggestions are optional: fall back to the empty form fast
+    queryFn: () => getJson<LotSuggestion[]>(`/holdings/${id}/lots/suggestions`),
   });
 }
 

@@ -29,8 +29,10 @@ const CASH_PEA = {
 
 function renderCard(holdings: unknown[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.stubGlobal("fetch", vi.fn(async () =>
-    new Response(JSON.stringify(holdings), { status: 200, headers: { "Content-Type": "application/json" } }),
+  // Every URL gets the holdings list, except the modal's suggestions: that
+  // endpoint returns lots to pre-fill, and none is what these tests want.
+  vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+    new Response(JSON.stringify(String(url).includes("/lots/suggestions") ? [] : holdings), { status: 200, headers: { "Content-Type": "application/json" } }),
   ));
   return render(
     <QueryClientProvider client={client}>

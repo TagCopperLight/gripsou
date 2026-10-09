@@ -123,6 +123,8 @@
         "addSell": "Ajouter une vente",
         "delete": "Supprimer l'opération",
         "empty": "Aucun achat ni vente saisi pour l'instant.",
+        "prefilled": "{{count}} ligne préremplie à partir de vos transactions. Vérifiez-la avant d'enregistrer.",
+        "prefilled_other": "{{count}} lignes préremplies à partir de vos transactions. Vérifiez-les avant d'enregistrer.",
         "figures": "Résultat",
         "figuresProvisional": "provisoire tant que les quantités ne concordent pas",
         "capitalInvested": "Capital investi",
