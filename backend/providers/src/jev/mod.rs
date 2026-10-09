@@ -190,7 +190,16 @@ async fn ask(
     }
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
+        // Bounded: the body can echo the prompt, and this text reaches the run row.
+        let text: String = text.chars().take(300).collect();
         return Err(CategorizeError::Other(format!("jev {status}: {text}")));
     }
-    Ok(resp.json().await.ok())
+    match resp.json().await {
+        Ok(v) => Ok(Some(v)),
+        Err(e) => {
+            // Left unanswered on purpose: a later run sends the item again.
+            tracing::warn!(error = %gripsou_core::logs::error_chain(&e), "jev answer unreadable");
+            Ok(None)
+        }
+    }
 }

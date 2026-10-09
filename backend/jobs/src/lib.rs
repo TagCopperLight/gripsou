@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+use gripsou_core::budget::ai::RunOutcome;
 use gripsou_core::categorize::Categorizer;
 use gripsou_core::db::Db;
 use gripsou_core::provider::{AccountProvider, CompositionProvider, PriceProvider, ProviderError};
@@ -422,7 +423,7 @@ async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(S
     let settings = match gripsou_core::repo::settings::budget_ai(db).await {
         Ok(s) => s,
         Err(e) => {
-            tracing::warn!("budget AI settings unreadable: {e}");
+            tracing::error!(error = %gripsou_core::logs::error_chain(&e), "ai settings unreadable");
             return None;
         }
     };
@@ -430,7 +431,7 @@ async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(S
     let enabled = match gripsou_core::repo::prefs::budget_ai_enabled(db, user_id).await {
         Ok(b) => b,
         Err(e) => {
-            tracing::warn!("budget AI opt-in unreadable for {user_id}: {e}");
+            tracing::error!(user_id = %user_id, error = %gripsou_core::logs::error_chain(&e), "ai opt-in unreadable");
             return None;
         }
     };
@@ -450,12 +451,23 @@ pub async fn categorize_user(db: Db, user_id: Uuid) {
         return;
     };
     let Some(c) = categorizer(&kind, &model) else {
-        tracing::warn!("budget AI provider '{kind}' is configured but its API key is not set");
+        tracing::error!(provider = %kind, "ai provider key missing");
         return;
     };
     match gripsou_core::budget::ai::run_for_user(&db, user_id, c.as_ref()).await {
-        Ok(outcome) => tracing::info!("budget AI run for {user_id}: {outcome:?}"),
-        Err(e) => tracing::warn!("budget AI run for {user_id} failed: {e}"),
+        Ok(RunOutcome::Finished {
+            outcome,
+            items,
+            batches,
+        }) => tracing::info!(
+            outcome = %outcome,
+            items = items as i64,
+            batches = batches as i64,
+            "ai run finished"
+        ),
+        Ok(RunOutcome::Busy) => tracing::debug!("ai run skipped: another is running"),
+        Ok(RunOutcome::Nothing) => tracing::debug!("ai run skipped: nothing to categorise"),
+        Err(e) => tracing::error!(error = %gripsou_core::logs::error_chain(&e), "ai run failed"),
     }
 }
 
@@ -504,7 +516,15 @@ pub fn request_categorize(db: Db, user_id: Uuid) {
     }
     tokio::spawn(async move {
         loop {
-            guarded(&db, user_id, categorize_user(db.clone(), user_id)).await;
+            let span = tracing::info_span!(
+                "ai_run",
+                user_id = %user_id,
+                run_id = tracing::field::Empty,
+                model = tracing::field::Empty,
+            );
+            guarded(&db, user_id, categorize_user(db.clone(), user_id))
+                .instrument(span)
+                .await;
             if !run_again(user_id) {
                 break;
             }
@@ -519,12 +539,17 @@ async fn guarded<F>(db: &Db, user_id: Uuid, run: F)
 where
     F: std::future::Future<Output = ()> + Send + 'static,
 {
-    let Err(e) = tokio::spawn(run).await else {
+    let Err(e) = tokio::spawn(run.in_current_span()).await else {
         return;
     };
-    tracing::warn!("budget AI run for {user_id} died: {e}");
+    // The panic payload is in JoinError's Display.
+    tracing::error!(user_id = %user_id, error = %e, "ai run crashed");
     if let Err(e) = gripsou_core::budget::ai::abandon(db, user_id).await {
-        tracing::warn!("budget AI lock for {user_id} not released after a crash: {e}");
+        tracing::error!(
+            user_id = %user_id,
+            error = %gripsou_core::logs::error_chain(&e),
+            "ai lock not released"
+        );
     }
 }
 
@@ -1228,6 +1253,10 @@ mod categorize_run_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_panicking_run_releases_the_lock_and_closes_its_row(pool: PgPool) {
+        use tracing_subscriber::layer::SubscriberExt;
+        let (layer, mut writer) = gripsou_core::logs::channel(100);
+        let _g =
+            tracing::subscriber::set_default(tracing_subscriber::registry().with(layer.filtered()));
         let user: Uuid = sqlx::query_scalar(
             "insert into users (email, name, password_hash) values ('p@x', 'p', 'h') returning id",
         )
@@ -1258,6 +1287,15 @@ mod categorize_run_tests {
             .unwrap()
             .expect("the dead run is reported");
         assert_eq!(run.outcome, "error");
+
+        writer.flush(&pool).await;
+        let f: serde_json::Value =
+            sqlx::query_scalar("select fields from log where message = 'ai run crashed'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(f["user_id"], user.to_string());
+        assert!(f["error"].as_str().unwrap().contains("boom"));
     }
 }
 

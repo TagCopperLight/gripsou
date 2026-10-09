@@ -742,7 +742,7 @@ pub async fn budget_ai_models(
     match gripsou_jobs::categorizer_models(&provider).await {
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
-            tracing::warn!("listing {provider} models failed: {e}");
+            tracing::warn!(provider = %provider, error = %e, "ai model list failed");
             Err((StatusCode::BAD_GATEWAY, e.to_string()))
         }
         None => Err((

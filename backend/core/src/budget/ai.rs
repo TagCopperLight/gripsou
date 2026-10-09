@@ -118,7 +118,7 @@ pub async fn run_for_user(
         Err(e) => Err(e),
     };
     if let Err(e) = repo::unlock(pool, user_id).await {
-        tracing::warn!("budget AI lock for {user_id} not released: {e}");
+        tracing::error!(user_id = %user_id, error = %crate::logs::error_chain(&e), "ai lock not released");
     }
     result
 }
@@ -154,6 +154,10 @@ async fn run_locked(
         batches: 0,
         items: 0,
     };
+    let span = tracing::Span::current();
+    span.record("run_id", tracing::field::display(tally.run_id));
+    span.record("model", model.as_str());
+    tracing::info!("ai run started");
     let result = run_chunks(pool, user_id, categorizer, first, batch, &mut tally).await;
     let (outcome, error) = match &result {
         Ok(None) => ("ok", None),
@@ -165,11 +169,14 @@ async fn run_locked(
     match (result, closed) {
         (Err(e), closed) => {
             if let Err(e2) = closed {
-                tracing::warn!("budget AI run {} not closed: {e2}", tally.run_id);
+                tracing::error!(run_id = %tally.run_id, error = %crate::logs::error_chain(&e2), "ai run not closed");
             }
             Err(e)
         }
-        (Ok(_), Err(e)) => Err(e),
+        (Ok(_), Err(e)) => {
+            tracing::error!(run_id = %tally.run_id, error = %crate::logs::error_chain(&e), "ai run not closed");
+            Err(e)
+        }
         (Ok(_), Ok(())) => Ok(RunOutcome::Finished {
             outcome: outcome.to_string(),
             items: tally.items,
