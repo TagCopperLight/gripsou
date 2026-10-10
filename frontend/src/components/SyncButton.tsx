@@ -39,7 +39,7 @@ export function SyncButton() {
         {(error || warning) && (
           <span
             data-testid={error ? "sync-error-dot" : "sync-warning-dot"}
-            className={`absolute -top-px -right-px size-2 rounded-full ${error ? "bg-red" : "bg-amber-500"} ring-2 ring-bg`}
+            className={`absolute -top-px -right-px size-2 rounded-full ${error ? "bg-red" : "bg-amber"} ring-2 ring-bg`}
           />
         )}
       </button>

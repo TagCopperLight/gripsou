@@ -152,7 +152,7 @@ export function ConnectionRow({
 
       {manageError && <p role="alert" className="px-4 pb-3 text-xs text-red">{manageError}</p>}
       {issues.length > 0 && !isPending && (
-        <div className="mx-4 mb-3 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3.5 py-3 text-[13px] leading-relaxed text-amber-700 dark:text-amber-300">
+        <div className="mx-4 mb-3 rounded-xl border border-amber/20 bg-amber-soft px-3.5 py-3 text-[13px] leading-relaxed text-amber">
           {issues.map((issue, index) => (
             <p key={index}>
               {issue.accounts.length > 0 && `${issue.accounts.join(", ")}: `}
@@ -187,7 +187,7 @@ export function ConnectionRow({
                       {a.typeLabel}
                     </span>
                     {a.health?.lastUpdatedOn && (
-                      <span title={t("settings.connections.health.bankUpdated")} className={`text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber-700 dark:text-amber-300" : "text-fg-faint"}`}>
+                      <span title={t("settings.connections.health.bankUpdated")} className={`text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                         <span className="mr-3">·</span>{formatDate(a.health.lastUpdatedOn)}
                       </span>
                     )}
@@ -260,7 +260,7 @@ export function ConnectionRow({
       );
     }
     if (issues.length > 0) {
-      return <span className={`${base} bg-amber-500/15 text-amber-700 dark:text-amber-300`}>
+      return <span className={`${base} bg-amber-soft text-amber`}>
         {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
       </span>;
     }
