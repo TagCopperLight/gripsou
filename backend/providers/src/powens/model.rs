@@ -2,6 +2,13 @@
 //! resilient (Option / serde defaults) so unexpected or missing fields never
 //! break a sync. Decimals arrive as JSON numbers and are parsed exactly via
 //! rust_decimal's arbitrary-precision serde adapter (no float step).
+//!
+//! Offset-free date-and-time strings from Powens are Europe/Paris local time,
+//! not UTC (confirmed on live data; issue #38). Keep them as strings while only
+//! checking presence or reading their calendar day. Any future instant parsing
+//! belongs in a shared adapter helper using Paris daylight-saving rules, with
+//! tests for transitions and ambiguous/nonexistent local times. Date-only
+//! transaction fields are already Paris calendar days and stay `NaiveDate`.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -28,7 +35,7 @@ pub struct BankAccount {
     pub currency: Option<Currency>,
     #[serde(rename = "type", default)]
     pub r#type: Option<String>,
-    /// DateTime string or null; presence means the account is gone.
+    /// Paris-local DateTime string or null; presence means the account is gone.
     #[serde(default)]
     pub deleted: Option<String>,
     #[serde(default)]
