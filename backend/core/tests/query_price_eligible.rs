@@ -13,6 +13,7 @@ use sqlx::PgPool;
 async fn returns_only_nonzero_noncash(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -50,6 +51,7 @@ async fn foreign_cash_is_price_eligible_but_pivot_cash_is_not(pool: PgPool) -> a
         &pool,
         conn_id,
         &SyncResult {
+            provider_meta: Default::default(),
             skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
@@ -94,6 +96,7 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
         &pool,
         conn_id,
         &SyncResult {
+            provider_meta: Default::default(),
             skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
@@ -137,6 +140,7 @@ async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_i
         &pool,
         conn_id,
         &SyncResult {
+            provider_meta: Default::default(),
             skipped: Default::default(),
             institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],

@@ -581,6 +581,7 @@ impl AccountType {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncAccount {
+    pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub name: String,
     pub color: Option<String>,
@@ -592,6 +593,7 @@ pub struct SyncAccount {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnection {
+    pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub display_name: String,
     pub status: String,
@@ -624,6 +626,10 @@ impl ProviderGroup {
                 .entry(a.connection_id)
                 .or_default()
                 .push(SyncAccount {
+                    health: a
+                        .provider_meta
+                        .get("sync_health")
+                        .and_then(|h| serde_json::from_value(h.clone()).ok()),
                     id: a.account_id.to_string(),
                     name: a.name,
                     color: a.color,
@@ -635,6 +641,10 @@ impl ProviderGroup {
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {
             let conn = SyncConnection {
+                health: c
+                    .provider_meta
+                    .get("sync_health")
+                    .and_then(|h| serde_json::from_value(h.clone()).ok()),
                 id: c.id.to_string(),
                 logo: gripsou_core::logo::institution_logo_url(c.institution_key.as_deref()),
                 // Bank/broker name once known (filled on first sync); the
@@ -1038,6 +1048,7 @@ mod tests {
     fn conn_row(institution_key: Option<&str>) -> ConnectionListRow {
         ConnectionListRow {
             id: Uuid::from_u128(1),
+            provider_meta: serde_json::json!({}),
             provider_key: "powens".into(),
             provider_name: "Powens".into(),
             display_name: "My bank".into(),

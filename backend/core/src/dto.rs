@@ -92,9 +92,23 @@ pub struct SkippedCounts {
     pub transactions: usize,
 }
 
+/// Provider calendar dates are labels, not timezone-qualified instants.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncHealth {
+    pub verified: bool,
+    pub last_updated_on: Option<chrono::NaiveDate>,
+    pub state: Option<String>,
+    pub error_message: Option<String>,
+    pub next_retry_on: Option<chrono::NaiveDate>,
+}
+
 /// What an `AccountProvider::sync` returns for one connection.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SyncResult {
+    /// Normalized provider observations; merged without replacing native ids.
+    #[serde(default)]
+    pub provider_meta: serde_json::Value,
     pub institution: Institution,
     pub accounts: Vec<CanonicalAccount>,
     pub holdings: Vec<CanonicalHolding>,

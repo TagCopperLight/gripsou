@@ -294,7 +294,7 @@ impl AccountProvider for PowensProvider {
         let connections = {
             let resp = self
                 .http
-                .get(self.api_url("/users/me/connections?expand=connector"))
+                .get(self.api_url("/users/me/connections?expand=connector,sources"))
                 .bearer_auth(auth_token)
                 .send()
                 .await
@@ -329,6 +329,7 @@ impl AccountProvider for PowensProvider {
 
         let mut result = map::map_sync(&accounts, &investments, &transactions);
         result.institution = map::map_institution(&connections);
+        map::apply_health(&mut result, &accounts, &connections);
         Ok(result)
     }
 
@@ -641,7 +642,7 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/2.0/users/me/connections"))
-            .and(query_param("expand", "connector"))
+            .and(query_param("expand", "connector,sources"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "connections": [ { "id": 99, "connector": { "uuid": "abc-uuid-bnp", "name": "BNP Paribas" } } ]
             })))

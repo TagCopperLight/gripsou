@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               p.display_name  as \"provider_name!\",\n               c.display_name  as \"display_name!\",\n               c.institution_name,\n               c.institution_key,\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error\n        from connection c\n        join provider p on p.key = c.provider_key\n        where c.user_id = $1\n        order by p.display_name, c.display_name, c.id\n        ",
+  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               p.display_name  as \"provider_name!\",\n               c.display_name  as \"display_name!\",\n               c.institution_name,\n               c.institution_key,\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error,\n               c.provider_meta as \"provider_meta!\"\n        from connection c\n        join provider p on p.key = c.provider_key\n        where c.user_id = $1\n        order by p.display_name, c.display_name, c.id\n        ",
   "describe": {
     "columns": [
       {
@@ -101,6 +101,17 @@
             "name": "last_error"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "provider_meta!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_meta"
+          }
+        }
       }
     ],
     "parameters": {
@@ -117,8 +128,9 @@
       true,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "7647d6408e2a7fb08f987d3add7f9941136d8eef7a852481269ab3376dcd2731"
+  "hash": "251632566a6c82b1de82840e2c169cfdf346f9c76e4b52d0c92368719e617f7b"
 }

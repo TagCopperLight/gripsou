@@ -16,6 +16,7 @@ pub struct ConnectionListRow {
     pub status: String,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
+    pub provider_meta: serde_json::Value,
 }
 
 /// All of a user's connections joined to their provider, ordered so that
@@ -35,7 +36,8 @@ pub async fn list_connections(
                c.institution_key,
                c.status        as "status!",
                c.last_sync_at,
-               c.last_error
+               c.last_error,
+               c.provider_meta as "provider_meta!"
         from connection c
         join provider p on p.key = c.provider_key
         where c.user_id = $1
@@ -49,6 +51,7 @@ pub async fn list_connections(
 }
 
 pub struct ConnectionAccountRow {
+    pub provider_meta: serde_json::Value,
     pub connection_id: Uuid,
     pub account_id: Uuid,
     pub name: String,
@@ -79,7 +82,8 @@ pub async fn list_connection_accounts(
                a.color                 as "color",
                t.label                 as "type_label!",
                coalesce(sum(l.value), 0) as "value!",
-               c.last_sync_at
+               c.last_sync_at,
+               a.provider_meta as "provider_meta!"
         from account a
         join connection c   on c.id = a.connection_id
         join account_type t on t.key = a.type_key
