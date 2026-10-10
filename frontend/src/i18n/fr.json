@@ -362,7 +362,25 @@
       },
       "pickProvider": "Choisir un fournisseur",
       "connect": "Connecter",
-      "connectError": "Impossible de démarrer la connexion. Veuillez réessayer."
+      "connectError": "Impossible de démarrer la connexion. Veuillez réessayer.",
+      "synced": "Synchronisé {{date}}",
+      "health": {
+        "partial": "Mise à jour partielle",
+        "stale": "Données anciennes",
+        "attention": "À vérifier",
+        "bankUpdated": "Mise à jour bancaire",
+        "providerError": "Powens signale un problème ({{state}}).",
+        "staleMessage": "Les données bancaires n’ont pas été mises à jour depuis le {{date}}. Powens ne signale aucune erreur.",
+        "unknownMessage": "Impossible de vérifier la mise à jour bancaire. Réessayez la synchronisation.",
+        "retry": "Powens a prévu une nouvelle tentative le {{date}}.",
+        "states": {
+          "bug": "Le fournisseur a rencontré un problème de synchronisation.",
+          "wrongpass": "La banque a refusé vos identifiants. Gérez cette connexion pour vous reconnecter.",
+          "SCARequired": "La banque demande une authentification. Gérez cette connexion pour continuer.",
+          "webauthRequired": "La banque demande une validation. Gérez cette connexion pour continuer.",
+          "decoupled": "Une validation est en attente dans votre application bancaire."
+        }
+      }
     },
     "budget": {
       "title": "Budget",

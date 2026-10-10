@@ -362,7 +362,25 @@
       },
       "pickProvider": "Choose a provider",
       "connect": "Connect",
-      "connectError": "Could not start the connection. Please try again."
+      "connectError": "Could not start the connection. Please try again.",
+      "synced": "Synced {{date}}",
+      "health": {
+        "partial": "Partial update",
+        "stale": "Outdated data",
+        "attention": "Needs attention",
+        "bankUpdated": "Bank updated",
+        "providerError": "Powens reports an issue ({{state}}).",
+        "staleMessage": "Bank data has not updated since {{date}}. Powens reports no error.",
+        "unknownMessage": "Unable to verify the bank update status. Try syncing again.",
+        "retry": "Powens has scheduled a retry for {{date}}.",
+        "states": {
+          "bug": "The provider encountered a synchronization issue.",
+          "wrongpass": "The bank rejected your credentials. Manage this connection to sign in again.",
+          "SCARequired": "The bank requires authentication. Manage this connection to continue.",
+          "webauthRequired": "The bank requires approval. Manage this connection to continue.",
+          "decoupled": "Approval is pending in your bank app."
+        }
+      }
     },
     "budget": {
       "title": "Budget",

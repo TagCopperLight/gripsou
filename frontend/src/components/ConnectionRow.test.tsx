@@ -24,8 +24,10 @@ const conn: SyncConnection & { providerName: string } = {
 
 const expand = () => fireEvent.click(screen.getByRole("button", { name: /caisse/i }));
 
+beforeEach(() => { syncSpy.mockReset(); vi.restoreAllMocks(); });
+
 describe("ConnectionRow", () => {
-  beforeEach(() => syncSpy.mockReset());
+
 
   it("keeps the actions hidden until the row is expanded", () => {
     render(<ConnectionRow conn={conn} onDelete={() => {}} />);
@@ -56,4 +58,17 @@ describe("ConnectionRow", () => {
       screen.getAllByRole("button", { name: /sync now/i }).length,
     ).toBeGreaterThan(1);
   });
+});
+
+it("shows source errors while collapsed and bank dates inline when expanded", () => {
+  const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
+  render(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
+  expect(screen.getByText("Partial update")).toBeInTheDocument();
+  expect(screen.getByText(/403 Client Error: Forbidden/)).toBeInTheDocument();
+  expect(screen.queryByText("Connected")).toBeNull();
+  expect(screen.getByText(/Synced/)).toBeInTheDocument();
+  expand();
+  const date = screen.getAllByTitle("Bank updated")[0];
+  expect(date.parentElement?.textContent).toContain("Savings");
+  expect(date.querySelector("span")).toHaveClass("mr-3");
 });
