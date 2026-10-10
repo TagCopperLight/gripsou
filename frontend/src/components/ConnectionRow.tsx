@@ -116,10 +116,14 @@ export function ConnectionRow({
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="hidden items-center gap-1.5 md:flex">
           {conn.canManage && (
-            <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || isSyncing || isPending}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-fg-dim hover:bg-surface-3 disabled:opacity-40 cursor-pointer">
-              <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
-            </button>
+            <IconButton
+              onClick={stop(() => { void openManage(); })}
+              aria-label={t("settings.connections.manage")}
+              title={t("settings.connections.manage")}
+              disabled={manage.isPending || isSyncing || isPending}
+            >
+              <ExternalLink className="size-4" />
+            </IconButton>
           )}
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
