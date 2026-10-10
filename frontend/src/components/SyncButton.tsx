@@ -3,7 +3,8 @@ import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useConnections } from "../api/hooks";
-import { hasError, hasSyncing } from "../api/types";
+import { connectionIssues } from "../lib/connectionHealth";
+import { flattenConnections, hasError, hasSyncing } from "../api/types";
 import { SyncModal } from "./SyncModal";
 
 // Global sync control: positioned top-right on every page. The icon spins while any
@@ -24,6 +25,7 @@ export function SyncButton() {
   const { data } = useConnections();
   const syncing = hasSyncing(data);
   const error = hasError(data);
+  const warning = flattenConnections(data).some((conn) => connectionIssues(conn).length > 0);
 
   return (
     <>
@@ -34,10 +36,10 @@ export function SyncButton() {
         className="absolute top-7 right-(--sync-button-inset) z-40 grid size-(--sync-button-size) place-items-center rounded-lg bg-surface-2 text-fg hover:bg-surface-3 hover:text-fg transition-colors duration-140 cursor-pointer"
       >
         <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} />
-        {error && (
+        {(error || warning) && (
           <span
-            data-testid="sync-error-dot"
-            className="absolute -top-px -right-px size-2 rounded-full bg-red ring-2 ring-bg"
+            data-testid={error ? "sync-error-dot" : "sync-warning-dot"}
+            className={`absolute -top-px -right-px size-2 rounded-full ${error ? "bg-red" : "bg-amber"} ring-2 ring-bg`}
           />
         )}
       </button>

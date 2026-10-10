@@ -306,6 +306,17 @@ export function useSyncConnection() {
   });
 }
 
+export function useManageConnection() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const token = getAuthToken();
+      const result = await postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {});
+      if (token !== getAuthToken()) throw new Error("session changed");
+      return result;
+    },
+  });
+}
+
 export function useSyncAll() {
   const qc = useQueryClient();
   return useMutation({

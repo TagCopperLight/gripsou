@@ -9,6 +9,7 @@ use sqlx::PgPool;
 
 fn sample_sync() -> SyncResult {
     SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -67,6 +68,7 @@ async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> 
 async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
@@ -93,6 +95,7 @@ async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Resu
 async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -138,6 +141,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 
     // First sync: a cash holding alongside an equity.
     let sync1 = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -158,6 +162,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     // Second sync: the cash holding is gone (e.g. the invest residual went to
     // zero). The equity remains.
     let sync2 = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -213,6 +218,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -238,6 +244,7 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
     let conn_b = seed_connection(&pool).await;
 
     let sync_a = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("a-1")],
@@ -245,6 +252,7 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
         transactions: vec![],
     };
     let sync_b = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("b-1")],
@@ -269,6 +277,7 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
 async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: gripsou_core::dto::Institution {
             key: "abc-uuid".into(),
@@ -298,6 +307,7 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
 async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -340,6 +350,7 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
 async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -362,6 +373,7 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
     let conn_id = seed_connection(&pool).await;
     let day = chrono::Utc::now().date_naive() - chrono::Duration::days(3);
     let sync = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
@@ -388,5 +400,50 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
         Some(Decimal::new(7500, 2)),
         "100.00 - 25.00 deposit"
     );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn health_observations_persist_without_replacing_native_ids(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let id = seed_connection(&pool).await;
+    sqlx::query("update connection set provider_meta = $2 where id = $1")
+        .bind(id)
+        .bind(serde_json::json!({"external_connection_id":"6"}))
+        .execute(&pool)
+        .await?;
+    let mut sync = sample_sync();
+    sync.provider_meta = serde_json::json!({"sync_health":{"verified":true,"state":null}});
+    sync.accounts[0].meta["sync_health"] =
+        serde_json::json!({"verified":true,"state":"bug","lastUpdatedOn":"2026-10-08"});
+    ingest(&pool, id, &sync).await?;
+    let conns = gripsou_core::repo::connection::list_connections(
+        &pool,
+        gripsou_core::repo::connection::user_id(&pool, id)
+            .await?
+            .unwrap(),
+    )
+    .await?;
+    assert_eq!(conns[0].provider_meta["external_connection_id"], "6");
+    assert_eq!(conns[0].provider_meta["sync_health"]["verified"], true);
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(
+        &pool,
+        gripsou_core::repo::connection::user_id(&pool, id)
+            .await?
+            .unwrap(),
+    )
+    .await?;
+    assert_eq!(accounts[0].provider_meta["sync_health"]["state"], "bug");
+    sync.accounts[0].meta["sync_health"]["state"] = serde_json::Value::Null;
+    ingest(&pool, id, &sync).await?;
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(
+        &pool,
+        gripsou_core::repo::connection::user_id(&pool, id)
+            .await?
+            .unwrap(),
+    )
+    .await?;
+    assert!(accounts[0].provider_meta["sync_health"]["state"].is_null());
     Ok(())
 }

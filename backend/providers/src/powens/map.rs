@@ -240,6 +240,7 @@ pub fn map_sync(
 ) -> SyncResult {
     // institution is filled by sync() after fetching connections; placeholder here.
     let mut result = SyncResult {
+        provider_meta: Default::default(),
         skipped: Default::default(),
         institution: Institution::default(),
         accounts: Vec::new(),
@@ -385,4 +386,82 @@ pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
 
 pub fn map_transactions(txns: &[PowensTransaction]) -> Vec<CanonicalTransaction> {
     txns.iter().filter_map(map_transaction).collect()
+}
+
+/// Keep account timestamps independent from the parent/source timestamps: a
+/// successful checking update must not make blocked savings appear current.
+pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connections: &[Connection]) {
+    fn day(value: Option<&str>) -> Option<chrono::NaiveDate> {
+        chrono::NaiveDate::parse_from_str(value?.get(..10)?, "%Y-%m-%d").ok()
+    }
+    fn health(
+        raw: Option<&crate::powens::model::SourceHealth>,
+        date: Option<&str>,
+    ) -> gripsou_core::dto::SyncHealth {
+        gripsou_core::dto::SyncHealth {
+            verified: raw.is_some(),
+            last_updated_on: day(date),
+            state: raw.and_then(|h| h.state.clone()),
+            error_message: raw.and_then(|h| h.error_message.clone()),
+            next_retry_on: day(raw.and_then(|h| h.next_try.as_deref())),
+        }
+    }
+    for mapped in &mut result.accounts {
+        let Some(account) = accounts
+            .iter()
+            .find(|a| a.id.to_string() == mapped.external_id)
+        else {
+            continue;
+        };
+        let connection = connections
+            .iter()
+            .find(|c| Some(c.id) == account.id_connection);
+        let source = connection.and_then(|c| {
+            c.sources
+                .iter()
+                .find(|s| Some(s.id) == account.id_source && s.disabled.is_none())
+        });
+        let raw = source
+            .map(|s| &s.health)
+            .or_else(|| connection.map(|c| &c.health));
+        let mut observed = health(raw, account.last_update.as_deref());
+        if let Some(error) = account.error.as_ref().filter(|s| !s.is_empty()) {
+            observed.error_message = Some(error.clone());
+        }
+        // A connection-wide error also applies when a source reports success.
+        if observed.state.is_none()
+            && observed.error_message.is_none()
+            && let Some(c) = connection
+        {
+            observed.state = c.health.state.clone();
+            observed.error_message = c.health.error_message.clone();
+            observed.next_retry_on = observed
+                .next_retry_on
+                .or_else(|| day(c.health.next_try.as_deref()));
+        }
+        mapped.meta["sync_health"] = json!(observed);
+        mapped.meta["id_source"] = json!(account.id_source);
+    }
+    // Only single-connection tokens can safely supply connection-wide metadata.
+    let observed = if connections.len() == 1 {
+        let c = &connections[0];
+        let raw = if c.health.state.is_some() || c.health.error_message.is_some() {
+            &c.health
+        } else {
+            c.sources
+                .iter()
+                .find(|s| {
+                    s.disabled.is_none()
+                        && (s.health.state.is_some() || s.health.error_message.is_some())
+                })
+                .map(|s| &s.health)
+                .unwrap_or(&c.health)
+        };
+        Some(health(Some(raw), c.health.last_update.as_deref()))
+    } else if connections.is_empty() {
+        Some(health(None, None))
+    } else {
+        None
+    };
+    result.provider_meta = json!({"sync_health": observed});
 }

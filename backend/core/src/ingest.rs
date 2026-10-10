@@ -143,6 +143,14 @@ pub async fn ingest(
         }
     }
 
+    if sync.provider_meta.is_object() {
+        sqlx::query("update connection set provider_meta = provider_meta || $2 where id = $1")
+            .bind(connection_id)
+            .bind(&sync.provider_meta)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     // Stamp the institution onto the connection. Guarded so a provider that
     // momentarily reports nothing can't clobber a previously-good value.
     if !sync.institution.key.is_empty() {

@@ -70,3 +70,16 @@ describe("SyncButton", () => {
     ).toBeNull();
   });
 });
+
+
+it("shows a warning for provider problems even after a successful local sync", () => {
+  const data = groups("ok");
+  data[0].connections[0].health = {verified:true,lastUpdatedOn:"2099-10-10",state:"bug",errorMessage:"Forbidden",nextRetryOn:null};
+  mockUseConnections.mockReturnValue({data} as ReturnType<typeof useConnections>);
+  const {rerender} = renderButton();
+  expect(screen.getByTestId("sync-warning-dot")).toBeInTheDocument();
+  data[0].connections[0].health.state = null;
+  data[0].connections[0].health.errorMessage = null;
+  rerender(<SyncButton />);
+  expect(screen.queryByTestId("sync-warning-dot")).toBeNull();
+});

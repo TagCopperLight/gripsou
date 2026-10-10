@@ -37,6 +37,12 @@ pub struct BankAccount {
     pub number: Option<String>,
     #[serde(default)]
     pub id_connection: Option<i64>,
+    #[serde(default)]
+    pub id_source: Option<i64>,
+    #[serde(default)]
+    pub last_update: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,6 +98,10 @@ pub struct Connection {
     /// Present when the request used `?expand=connector`.
     #[serde(default)]
     pub connector: Option<Connector>,
+    #[serde(flatten)]
+    pub health: SourceHealth,
+    #[serde(default)]
+    pub sources: Vec<Source>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -190,4 +200,25 @@ pub struct TransactionsResponse {
     pub transactions: Vec<PowensTransaction>,
     #[serde(default, rename = "_links")]
     pub links: Links,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SourceHealth {
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub error_message: Option<String>,
+    #[serde(default)]
+    pub last_update: Option<String>,
+    #[serde(default)]
+    pub next_try: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Source {
+    pub id: i64,
+    #[serde(default)]
+    pub disabled: Option<String>,
+    #[serde(flatten)]
+    pub health: SourceHealth,
 }

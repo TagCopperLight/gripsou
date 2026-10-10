@@ -1254,6 +1254,40 @@ pub async fn enabled_providers(
     ))
 }
 
+pub async fn manage_connection(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<(HeaderMap, Json<serde_json::Value>), (StatusCode, String)> {
+    let conn = gripsou_core::repo::connection::connection_for_sync(&pool, user_id, id)
+        .await
+        .map_err(internal)?
+        .ok_or((StatusCode::NOT_FOUND, "connection not found".into()))?;
+    if !gripsou_jobs::supports_manage(&conn.provider_key) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "connection management unavailable".into(),
+        ));
+    }
+    let init = gripsou_jobs::manage_connection(&conn).await.map_err(|_| {
+        // The temporary access URL and provider response must never enter logs.
+        tracing::warn!(connection_id = %id, "connection management failed");
+        (
+            StatusCode::BAD_GATEWAY,
+            "Unable to open connection management. Please try again.".into(),
+        )
+    })?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        "no-store".parse().unwrap(),
+    );
+    Ok((
+        headers,
+        Json(serde_json::json!({"redirectUrl": init.redirect_url})),
+    ))
+}
+
 pub async fn init_connection(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -2153,6 +2187,32 @@ mod auth_tests {
         .unwrap();
         assert_eq!(me_resp.0.prefs.currency_position, "before");
         assert_eq!(me_resp.0.prefs.time_zone, "America/Los_Angeles");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
+        let owner = seed_user_role(&pool, "owner@t.local", "pw", "user").await;
+        let other = seed_user_role(&pool, "other@t.local", "pw", "user").await;
+        let id = gripsou_core::repo::connection::insert_pending(&pool, owner, "powens", "Bank")
+            .await
+            .unwrap();
+        let principal = || auth::AuthUser {
+            user_id: other,
+            session_id: Uuid::new_v4(),
+        };
+        for target in [id, Uuid::new_v4()] {
+            let error = manage_connection(State(pool.clone()), principal(), Path(target))
+                .await
+                .unwrap_err();
+            assert_eq!(error.0, StatusCode::NOT_FOUND);
+        }
+        let stored = gripsou_core::repo::connection::connection_for_sync(&pool, owner, id)
+            .await
+            .unwrap();
+        assert!(
+            stored.is_some(),
+            "Manage must not delete the existing connection"
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

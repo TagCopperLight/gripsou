@@ -180,7 +180,16 @@ export type Session = {
 
 export type SyncStatus = "ok" | "syncing" | "error" | "pending" | "awaiting";
 
+export type SyncHealth = {
+  verified: boolean;
+  lastUpdatedOn: string | null;
+  state: string | null;
+  errorMessage: string | null;
+  nextRetryOn: string | null;
+};
+
 export type SyncAccount = {
+  health?: SyncHealth | null;
   id: string;
   name: string;
   color: string | null;
@@ -190,6 +199,8 @@ export type SyncAccount = {
 };
 
 export type SyncConnection = {
+  canManage?: boolean;
+  health?: SyncHealth | null;
   id: string;
   displayName: string;
   status: SyncStatus;

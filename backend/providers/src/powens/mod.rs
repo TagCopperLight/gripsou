@@ -294,7 +294,7 @@ impl AccountProvider for PowensProvider {
         let connections = {
             let resp = self
                 .http
-                .get(self.api_url("/users/me/connections?expand=connector"))
+                .get(self.api_url("/users/me/connections?expand=connector,sources"))
                 .bearer_auth(auth_token)
                 .send()
                 .await
@@ -329,7 +329,80 @@ impl AccountProvider for PowensProvider {
 
         let mut result = map::map_sync(&accounts, &investments, &transactions);
         result.institution = map::map_institution(&connections);
+        map::apply_health(&mut result, &accounts, &connections);
         Ok(result)
+    }
+
+    fn supports_manage(&self) -> bool {
+        true
+    }
+
+    async fn manage(
+        &self,
+        credentials: &serde_json::Value,
+        provider_meta: &serde_json::Value,
+    ) -> Result<ConnectInit, ProviderError> {
+        let token = credentials["auth_token"]
+            .as_str()
+            .ok_or_else(|| ProviderError::Other("missing Powens credentials".into()))?;
+        let response = self
+            .http
+            .get(self.api_url("/users/me/connections"))
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|_| ProviderError::Other("Powens connection lookup failed".into()))?;
+        if !response.status().is_success() {
+            return Err(ProviderError::Other(
+                "Powens connection lookup failed".into(),
+            ));
+        }
+        let connections: model::ConnectionsResponse = read_json(response, "connections").await?;
+        // Older connections have no stored external id. Resolve only when the
+        // token contains exactly one connection; never choose an arbitrary bank.
+        let stored_id = provider_meta["external_connection_id"].as_str();
+        let connection = match stored_id {
+            Some(id) => connections
+                .connections
+                .iter()
+                .find(|c| c.id.to_string() == id),
+            None if connections.connections.len() == 1 => connections.connections.first(),
+            None => None,
+        }
+        .ok_or_else(|| {
+            ProviderError::Other("unable to identify the Powens connection to manage".into())
+        })?;
+        let response = self
+            .http
+            .get(self.api_url("/auth/token/code"))
+            .query(&[("type", "singleAccess")])
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|_| ProviderError::Other("Powens temporary access failed".into()))?;
+        if !response.status().is_success() {
+            return Err(ProviderError::Other(
+                "Powens temporary access failed".into(),
+            ));
+        }
+        #[derive(serde::Deserialize)]
+        struct AccessCode {
+            code: String,
+        }
+        let code: AccessCode = read_json(response, "temporary access").await?;
+        let mut url =
+            reqwest::Url::parse("https://webview.powens.com/en/manage").expect("static URL");
+        url.query_pairs_mut().extend_pairs([
+            ("domain", self.domain.as_str()),
+            ("client_id", self.client_id.as_str()),
+            ("code", code.code.as_str()),
+            ("connection_id", &connection.id.to_string()),
+        ]);
+        // Do not use the add-connection callback: it can delete a failed pending
+        // row. Manage opens separately and operates on the existing connection.
+        Ok(ConnectInit {
+            redirect_url: Some(url.to_string()),
+        })
     }
 
     fn webhooks_enabled(&self) -> bool {
@@ -641,7 +714,7 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/2.0/users/me/connections"))
-            .and(query_param("expand", "connector"))
+            .and(query_param("expand", "connector,sources"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "connections": [ { "id": 99, "connector": { "uuid": "abc-uuid-bnp", "name": "BNP Paribas" } } ]
             })))

@@ -130,6 +130,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/account-types", get(handlers::account_types))
         .route("/connections", get(handlers::connections))
         .route("/connections/{id}/sync", post(handlers::sync_connection))
+        .route(
+            "/connections/{id}/manage",
+            post(handlers::manage_connection),
+        )
         .route("/sync", post(handlers::sync_all))
         .route("/users", get(handlers::users))
         .route("/invites", post(handlers::create_invite))
