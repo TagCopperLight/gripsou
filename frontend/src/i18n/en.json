@@ -380,7 +380,10 @@
           "webauthRequired": "The bank requires approval. Manage this connection to continue.",
           "decoupled": "Approval is pending in your bank app."
         }
-      }
+      },
+      "manage": "Manage",
+      "manageBlocked": "Allow pop-ups to open Powens connection management.",
+      "manageFailed": "Unable to open Powens. Please try again."
     },
     "budget": {
       "title": "Budget",

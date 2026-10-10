@@ -46,6 +46,19 @@ pub trait AccountProvider: Send + Sync {
     /// Pull canonical accounts / holdings / transactions for a connection.
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError>;
 
+    fn supports_manage(&self) -> bool {
+        false
+    }
+
+    /// Open an existing provider connection without creating a local row.
+    async fn manage(
+        &self,
+        _credentials: &serde_json::Value,
+        _provider_meta: &serde_json::Value,
+    ) -> Result<ConnectInit, ProviderError> {
+        Err(ProviderError::NotImplemented)
+    }
+
     /// True when this provider drives sync via webhooks (and is configured for it).
     fn webhooks_enabled(&self) -> bool {
         false

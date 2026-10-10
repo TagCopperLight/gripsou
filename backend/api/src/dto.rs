@@ -593,6 +593,7 @@ pub struct SyncAccount {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnection {
+    pub can_manage: bool,
     pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub display_name: String,
@@ -641,6 +642,7 @@ impl ProviderGroup {
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {
             let conn = SyncConnection {
+                can_manage: gripsou_jobs::supports_manage(&c.provider_key),
                 health: c
                     .provider_meta
                     .get("sync_health")

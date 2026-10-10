@@ -380,7 +380,10 @@
           "webauthRequired": "La banque demande une validation. Gérez cette connexion pour continuer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
         }
-      }
+      },
+      "manage": "Gérer",
+      "manageBlocked": "Autorisez les fenêtres contextuelles pour gérer la connexion dans Powens.",
+      "manageFailed": "Impossible d’ouvrir Powens. Veuillez réessayer."
     },
     "budget": {
       "title": "Budget",

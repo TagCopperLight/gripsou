@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
 
 import { HoldingBadge } from "./HoldingBadge";
-import { useSyncConnection } from "../api/hooks";
+import { useManageConnection, useSyncConnection } from "../api/hooks";
 import { connectionIssues, healthIssue } from "../lib/connectionHealth";
 import { formatDate, formatRelative } from "../lib/date";
 import { formatMoney } from "../lib/money";
@@ -27,6 +27,40 @@ export function ConnectionRow({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const sync = useSyncConnection();
+  const manage = useManageConnection();
+  const [manageError, setManageError] = useState<string | null>(null);
+  const returnListener = useRef<(() => void) | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (returnListener.current) window.removeEventListener("focus", returnListener.current);
+    };
+  }, []);
+  const openManage = async () => {
+    setManageError(null);
+    // Open synchronously during the click so browsers do not block the tab.
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) { setManageError(t("settings.connections.manageBlocked")); return; }
+    tab.opener = null;
+    try {
+      const { redirectUrl } = await manage.mutateAsync(conn.id);
+      if (!mounted.current) { tab.close(); return; }
+      tab.location.href = redirectUrl;
+      if (returnListener.current) window.removeEventListener("focus", returnListener.current);
+      const onReturn = () => {
+        returnListener.current = null;
+        // Import whatever the user refreshed in Powens when they return.
+        sync.mutate(conn.id);
+      };
+      returnListener.current = onReturn;
+      window.addEventListener("focus", onReturn, { once: true });
+    } catch {
+      tab.close();
+      if (mounted.current) setManageError(t("settings.connections.manageFailed"));
+    }
+  };
   const issues = connectionIssues(conn);
   const partial = conn.accounts.some((a) => !healthIssue(a.health)) && issues.some((i) => i.accounts.length > 0);
 
@@ -81,6 +115,12 @@ export function ConnectionRow({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="hidden items-center gap-1.5 md:flex">
+          {conn.canManage && (
+            <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || isSyncing || isPending}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-fg-dim hover:bg-surface-3 disabled:opacity-40 cursor-pointer">
+              <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
+            </button>
+          )}
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
             aria-label={t("settings.connections.syncConnection")}
@@ -106,6 +146,7 @@ export function ConnectionRow({
         </div>
       </div>
 
+      {manageError && <p role="alert" className="px-4 pb-3 text-xs text-red">{manageError}</p>}
       {issues.length > 0 && !isPending && (
         <div className="mx-4 mb-3 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3.5 py-3 text-[13px] leading-relaxed text-amber-700 dark:text-amber-300">
           {issues.map((issue, index) => (
@@ -159,6 +200,12 @@ export function ConnectionRow({
           {/* Phone: the header has no room for icon buttons, so the actions
               live here instead. */}
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
+            {conn.canManage && (
+              <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || isSyncing || isPending}
+                className="flex shrink-0 items-center gap-1.5 text-xs text-fg-dim disabled:opacity-40">
+                <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
+              </button>
+            )}
             <button
               type="button"
               onClick={stop(() => sync.mutate(conn.id))}

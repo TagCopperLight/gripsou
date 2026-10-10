@@ -199,6 +199,7 @@ export type SyncAccount = {
 };
 
 export type SyncConnection = {
+  canManage?: boolean;
   health?: SyncHealth | null;
   id: string;
   displayName: string;

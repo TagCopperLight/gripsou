@@ -983,6 +983,29 @@ async fn do_request_refresh(db: Db, user_id: Uuid, id: Uuid, conn: connection::C
     }
 }
 
+pub fn supports_manage(provider_key: &str) -> bool {
+    account_providers()
+        .get(provider_key)
+        .is_some_and(|p| p.supports_manage())
+}
+
+/// Credentials never leave the server; the returned URL contains a single-use code.
+pub async fn manage_connection(
+    conn: &gripsou_core::repo::connection::ConnForSync,
+) -> Result<gripsou_core::provider::ConnectInit, gripsou_core::provider::ProviderError> {
+    use gripsou_core::provider::ProviderError;
+    let providers = account_providers();
+    let adapter = providers
+        .get(conn.provider_key.as_str())
+        .filter(|p| p.supports_manage())
+        .ok_or(ProviderError::NotImplemented)?;
+    let key = std::env::var("ENCRYPTION_KEY")
+        .map_err(|_| ProviderError::Other("encryption key unavailable".into()))?;
+    let credentials = decrypt_credentials(&key, &conn.credentials)
+        .map_err(|_| ProviderError::Other("connection credentials unavailable".into()))?;
+    adapter.manage(&credentials, &conn.provider_meta).await
+}
+
 /// Begin a provider connection: check the adapter exists, call `connect()`,
 /// create a pending DB row, and append `state=<id>` to the redirect URL.
 ///

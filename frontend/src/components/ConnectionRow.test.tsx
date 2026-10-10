@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { SyncConnection } from "../api/types";
 
 const syncSpy = vi.fn();
+const manageSpy = vi.fn();
 vi.mock("../api/hooks", () => ({
+  useManageConnection: () => ({ mutateAsync: manageSpy, isPending: false }),
   useSyncConnection: () => ({ mutate: syncSpy }),
 }));
 
@@ -24,7 +26,7 @@ const conn: SyncConnection & { providerName: string } = {
 
 const expand = () => fireEvent.click(screen.getByRole("button", { name: /caisse/i }));
 
-beforeEach(() => { syncSpy.mockReset(); vi.restoreAllMocks(); });
+beforeEach(() => { syncSpy.mockReset(); manageSpy.mockReset(); vi.restoreAllMocks(); });
 
 describe("ConnectionRow", () => {
 
@@ -71,4 +73,51 @@ it("shows source errors while collapsed and bank dates inline when expanded", ()
   const date = screen.getAllByTitle("Bank updated")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
   expect(date.querySelector("span")).toHaveClass("mr-3");
+});
+
+it("opens Manage with a temporary link and syncs once when returning", async () => {
+  const tab = {opener:window,location:{href:"about:blank"},close:vi.fn()};
+  vi.spyOn(window,"open").mockReturnValue(tab as unknown as Window);
+  manageSpy.mockResolvedValue({redirectUrl:"https://webview.powens.com/en/manage?code=temporary"});
+  render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  fireEvent.click(screen.getByRole("button",{name:"Manage"}));
+  await waitFor(()=>expect(tab.location.href).toContain("code=temporary"));
+  expect(manageSpy).toHaveBeenCalledWith("c1");
+  expect(tab.opener).toBeNull();
+  fireEvent.focus(window);
+  fireEvent.focus(window);
+  expect(syncSpy).toHaveBeenCalledTimes(1);
+});
+
+it("handles blocked tabs and failed Manage requests", async () => {
+  vi.spyOn(window,"open").mockReturnValue(null);
+  const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  fireEvent.click(screen.getByRole("button",{name:"Manage"}));
+  expect(screen.getByRole("alert")).toHaveTextContent("Allow pop-ups");
+  expect(manageSpy).not.toHaveBeenCalled();
+  unmount();
+  const close=vi.fn();
+  vi.mocked(window.open).mockReturnValue({opener:null,location:{href:""},close} as unknown as Window);
+  manageSpy.mockRejectedValue(new Error("provider failed"));
+  render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  fireEvent.click(screen.getByRole("button",{name:"Manage"}));
+  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Unable to open Powens"));
+  expect(close).toHaveBeenCalled();
+  expect(syncSpy).not.toHaveBeenCalled();
+});
+
+it("discards a delayed Manage response after leaving the page", async () => {
+  const close=vi.fn();
+  const tab={opener:null,location:{href:"about:blank"},close};
+  vi.spyOn(window,"open").mockReturnValue(tab as unknown as Window);
+  let resolve!: (value:{redirectUrl:string}) => void;
+  manageSpy.mockReturnValue(new Promise((done)=>{resolve=done;}));
+  const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  fireEvent.click(screen.getByRole("button",{name:"Manage"}));
+  unmount();
+  resolve({redirectUrl:"https://webview.powens.com/en/manage?code=temporary"});
+  await waitFor(()=>expect(close).toHaveBeenCalled());
+  expect(tab.location.href).toBe("about:blank");
+  fireEvent.focus(window);
+  expect(syncSpy).not.toHaveBeenCalled();
 });
