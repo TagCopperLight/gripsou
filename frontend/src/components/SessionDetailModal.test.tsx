@@ -22,16 +22,16 @@ describe("SessionDetailModal", () => {
     expect(screen.getByText(/remembered · 30 days/i)).toBeInTheDocument();
   });
 
-  it("calls onRevoke when Revoke is clicked", () => {
+  it("calls onRevoke when Log out is clicked", () => {
     const onRevoke = vi.fn();
     render(
       <SessionDetailModal session={session} onRevoke={onRevoke} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /revoke/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     expect(onRevoke).toHaveBeenCalled();
   });
 
-  it("offers no Revoke for the current session", () => {
+  it("offers no Log out for the current session", () => {
     render(
       <SessionDetailModal
         session={{ ...session, current: true }}
@@ -39,6 +39,6 @@ describe("SessionDetailModal", () => {
       />,
     );
     expect(screen.getByText(/this device/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /revoke/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
   });
 });
