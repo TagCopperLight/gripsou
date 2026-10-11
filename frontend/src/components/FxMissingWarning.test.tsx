@@ -8,7 +8,7 @@ import type { DistributionAccount, NetWorthResponse } from "../api/types";
 import { AuthContext, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 
-vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
+vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const WARNING = /The exchange rate for this currency is not available yet/;
 const REPORTING_WARNING = /The exchange rate to USD is not available yet/;

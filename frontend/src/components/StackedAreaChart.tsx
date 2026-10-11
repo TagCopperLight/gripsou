@@ -1,5 +1,5 @@
 import { chartReadinessEvents, chartReady } from "./chartReadiness";
-import ReactECharts from "echarts-for-react";
+import ReactECharts from "./EChart";
 import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
 import { formatMoney } from "../lib/money";

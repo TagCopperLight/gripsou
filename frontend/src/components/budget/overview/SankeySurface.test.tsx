@@ -9,7 +9,7 @@ import type { Sankey } from "../../../api/overview";
 // Stands in for the chart so a test can read the option it was handed: jsdom
 // cannot draw it, and the labels and tooltips are what is under test.
 const rendered: { option?: EChartsOption } = {};
-vi.mock("echarts-for-react", () => ({
+vi.mock("../../EChart", () => ({
   default: (props: { option: EChartsOption }) => {
     rendered.option = props.option;
     return <div data-testid="chart-stub" />;

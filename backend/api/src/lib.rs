@@ -2,8 +2,8 @@ pub mod auth;
 mod budget;
 mod dto;
 mod handlers;
-use axum::http::Method;
-use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::{HeaderValue, Method, Response};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, FromRef},
@@ -11,8 +11,10 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
@@ -208,9 +210,28 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
             },
         );
 
+    // Vite names every file under /assets after a hash of its content, so a
+    // browser may keep one forever: a new build ships new names. Only
+    // successes, or a missing file would stay missing for a year.
+    let assets = SetResponseHeader::overriding(
+        ServeDir::new(static_dir.join("assets")),
+        CACHE_CONTROL,
+        |res: &Response<_>| {
+            res.status()
+                .is_success()
+                .then(|| HeaderValue::from_static("public, max-age=31536000, immutable"))
+        },
+    );
+    // Compressed here, as nothing in front of the app is assumed to do it:
+    // the JavaScript shrinks to about a third.
+    let static_files = Router::new()
+        .nest_service("/assets", assets)
+        .fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(index_html)))
+        .layer(CompressionLayer::new());
+
     Router::new()
         .nest("/api", api.layer(cors_layer).layer(trace_layer))
-        .fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(index_html)))
+        .merge(static_files)
 }
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))

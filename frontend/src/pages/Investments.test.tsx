@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthContext, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS } from "../lib/prefs";
-vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
+vi.mock("../components/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 import { Investments } from "./Investments";
 
