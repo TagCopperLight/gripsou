@@ -6,3 +6,4 @@ target/
 dist/
 .env
 .claude/worktrees/
+benchmarks/results/
