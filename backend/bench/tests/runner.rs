@@ -78,3 +78,32 @@ async fn black_box_smoke_has_correct_results() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn typical_budget_and_description_trials_remain_correct() -> anyhow::Result<()> {
+    let Command::Run(c) = parse_cli(
+        [
+            "run",
+            "--profile",
+            "typical",
+            "--only",
+            "budget.day-totals,transactions.apply-description",
+            "--samples",
+            "5",
+            "--warmups",
+            "0",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect(),
+    )?
+    else {
+        panic!()
+    };
+    let set = runner::run(&c).await?;
+    for m in &set.runs[0].measurements {
+        assert!(m.correct, "{}: {:?}", m.id, m.errors);
+        assert_eq!(m.samples_ms.len(), 5);
+    }
+    Ok(())
+}

@@ -9,6 +9,7 @@ use uuid::Uuid;
 pub struct Input {
     ids: Vec<Uuid>,
     sync: SyncResult,
+    description_ids: Vec<Uuid>,
     before: Value,
 }
 async fn cash_state(pool: &sqlx::PgPool) -> anyhow::Result<Value> {
@@ -59,9 +60,24 @@ pub async fn prepare(case: &Case, p: &sqlx::PgPool, f: &Fixture) -> anyhow::Resu
         }
         _ => {}
     }
+    let description_ids = if case.id == "transactions.apply-description" {
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "select t.id from transaction t join account a on a.id=t.account_id \
+             join connection c on c.id=a.connection_id \
+             where c.user_id=$1 and t.description='Market groceries' order by t.id",
+        )
+        .bind(f.user_id)
+        .fetch_all(p)
+        .await?;
+        ensure!(!ids.is_empty(), "fixture has no grocery transactions");
+        ids
+    } else {
+        Vec::new()
+    };
     Ok(Input {
         ids,
         sync,
+        description_ids,
         before: cash_state(p).await?,
     })
 }
@@ -111,7 +127,7 @@ pub async fn execute(c: &PreparedCase, p: &sqlx::PgPool) -> anyhow::Result<Execu
                 match assign::apply_to_description(
                     p,
                     f.user_id,
-                    crate::fixture::id(7, 0, 99),
+                    input.description_ids[0],
                     Some(f.category_id),
                     assign::SameDescription::All,
                     true,
@@ -238,11 +254,34 @@ pub async fn verify(c: &PreparedCase, p: &sqlx::PgPool, e: &Execution) -> anyhow
             }
         }
         "transactions.apply-description" => {
-            let n:i64=sqlx::query_scalar("select count(*) from transaction where description='Market groceries' and budget_category_id=$1 and category_source='user'").bind(f.category_id).fetch_one(p).await?;
             ensure!(
-                n > 0 && e.outcome.as_array().map(Vec::len) == Some(n as usize),
-                "description write mismatch"
+                e.outcome == serde_json::json!(input.description_ids),
+                "description write returned wrong transaction IDs"
             );
+            ensure!(
+                after.as_array().unwrap().len() == input.before.as_array().unwrap().len(),
+                "description write changed transaction count"
+            );
+            for (a, b) in after
+                .as_array()
+                .unwrap()
+                .iter()
+                .zip(input.before.as_array().unwrap())
+            {
+                let id: Uuid = serde_json::from_value(a[0].clone())?;
+                if input.description_ids.binary_search(&id).is_ok() {
+                    ensure!(
+                        a[1] == b[1] && a[4] == b[4] && a[5] == b[5],
+                        "description write altered unrelated fields"
+                    );
+                    ensure!(
+                        a[2] == serde_json::json!(f.category_id) && a[3] == "user",
+                        "description category write missing"
+                    );
+                } else {
+                    ensure!(a == b, "description write touched non-target");
+                }
+            }
         }
         "sync.ingest.unchanged" => {
             ensure!(

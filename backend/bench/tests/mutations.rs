@@ -20,10 +20,21 @@ async fn committed_trials_start_identically_and_offline_paths_are_verified() -> 
         for _ in 0..2 {
             let (name, pool) = scratch.create_db(Some(&template)).await?;
             let p = operations::prepare(&case, &pool, &fixture).await?;
-            let e = operations::execute(&p, &pool).await?;
+            let mut e = operations::execute(&p, &pool).await?;
             operations::verify(&p, &pool, &e).await?;
             if let Some(prev) = previous {
                 assert_eq!(prev, e.outcome, "{} differs across resets", case.id);
+            }
+            if case.id == "transactions.apply-description" {
+                let original = e.outcome[0].clone();
+                e.outcome[0] = serde_json::json!(uuid::Uuid::nil());
+                assert!(operations::verify(&p, &pool, &e).await.is_err());
+                e.outcome[0] = original.clone();
+                sqlx::query("update transaction set budget_category_id=null where id=$1")
+                    .bind(serde_json::from_value::<uuid::Uuid>(original)?)
+                    .execute(&pool)
+                    .await?;
+                assert!(operations::verify(&p, &pool, &e).await.is_err());
             }
             previous = Some(e.outcome);
             scratch.remove_db(&name).await?;

@@ -48,6 +48,11 @@ async fn real_reads_reject_wrong_values_and_identity_even_with_the_same_count() 
             bad.outcome = serde_json::Value::Null;
             assert!(operations::verify(&prepared, &pool, &bad).await.is_err());
         }
+        if id == "budget.day-totals" {
+            let mut bad = operations::execute(&prepared, &pool).await?;
+            bad.outcome[0]["amount"] = serde_json::json!("999999");
+            assert!(operations::verify(&prepared, &pool, &bad).await.is_err());
+        }
         if id == "portfolio.holdings" {
             let mut bad = operations::execute(&prepared, &pool).await?;
             bad.outcome[0]["value"] = serde_json::json!("999999");

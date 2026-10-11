@@ -4,10 +4,19 @@ pub async fn execute(c: &PreparedCase, p: &sqlx::PgPool) -> anyhow::Result<Execu
     let f = &c.fixture;
     match c.case.id.as_str() {
         "budget.day-totals" => {
-            timed(async {
+            let mut result = timed(async {
                 Ok(summary::day_category_totals(p, f.user_id, f.from(), f.today()).await?)
             })
-            .await
+            .await?;
+            // Positive and negative uncategorised buckets can share a day/category.
+            // Their SQL ordering is unspecified. Canonicalise the complete rows
+            // outside the timer without dropping any values or duplicates.
+            result
+                .outcome
+                .as_array_mut()
+                .unwrap()
+                .sort_by_cached_key(Value::to_string);
+            Ok(result)
         }
         "budget.overview.projection" => {
             timed(async {
