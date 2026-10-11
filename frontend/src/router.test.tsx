@@ -6,7 +6,7 @@ import {
   createRouter,
   createMemoryHistory,
 } from "@tanstack/react-router";
-import { routeTree } from "./router";
+import { routeTree, router as appRouter } from "./router";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 import { setAuthToken } from "./api/client";
@@ -18,11 +18,6 @@ import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
 // tests we only care that we *land* on it, so stub it to a sentinel.
 vi.mock("./pages/Dashboard", () => ({
   Dashboard: () => <div>dashboard-page</div>,
-}));
-
-// The welcome page has its own tests; here we only check where the guard sends people.
-vi.mock("./pages/Welcome", () => ({
-  Welcome: () => <div>welcome-page</div>,
 }));
 
 function renderAt(path: string, auth: AuthValue) {
@@ -246,5 +241,46 @@ describe("welcome guard", () => {
   it("sends a logged-out visitor of /welcome to /login", async () => {
     const router = renderAt("/welcome", unauth);
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+  });
+});
+
+describe("finishing the welcome screen", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setAuthToken("t");
+    vi.restoreAllMocks();
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        // /auth/me and the prefill's prefs save both answer with the session user.
+        if (url === "/api/auth/me" || url === "/api/auth/prefs")
+          return json({ id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false });
+        if (url === "/api/auth/welcome") return new Response(null, { status: 204 });
+        if (url === "/api/budget/categorize/status") return json({ configured: false, running: false });
+        return json([]);
+      }),
+    );
+  });
+
+  // The whole chain: skip -> POST -> updateUser -> App invalidates -> guard leaves /welcome.
+  it("leaves /welcome once the user skips the setup", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    const skip = await screen.findByRole("button", { name: "Skip setup for now" });
+    expect(appRouter.state.location.pathname).toBe("/welcome");
+    fireEvent.click(skip);
+    await waitFor(() => expect(appRouter.state.location.pathname).toBe("/"));
+    expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+    expect(appRouter.state.location.pathname).not.toBe("/welcome");
   });
 });

@@ -166,4 +166,25 @@ describe("Welcome", () => {
     await waitFor(() => expect(posted("/auth/welcome")).toHaveLength(1));
     await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith(expect.objectContaining({ welcomeDone: true })));
   });
+
+  it("skips the bank step to finish when no AI provider is set up", async () => {
+    search = { step: "bank" };
+    server.aiConfigured = false;
+    const auth = renderWelcome();
+    const skip = await screen.findByRole("button", { name: "Skip this step" });
+    await waitFor(() => expect(skip).toBeEnabled());
+    fireEvent.click(skip);
+    await waitFor(() => expect(posted("/auth/welcome")).toHaveLength(1));
+    await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith(expect.objectContaining({ welcomeDone: true })));
+  });
+
+  it("does not leave a rejected save unhandled", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR"]);
+    const updatePrefs = vi.fn(async () => {
+      throw new Error("save failed");
+    });
+    renderWelcome({ updatePrefs });
+    await waitFor(() => expect(updatePrefs).toHaveBeenCalled());
+    await screen.findByRole("button", { name: "Skip setup for now" });
+  });
 });
