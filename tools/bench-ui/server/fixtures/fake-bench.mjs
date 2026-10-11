@@ -5,6 +5,15 @@ if (args[0] === 'cleanup') {
   writeFileSync(`${args[1]}.cleaned`, '')
   process.exit(0)
 }
+if (args[0] === 'compare') {
+  if (args[1].includes('broken')) {
+    process.stderr.write('different number of independent runs\n')
+    process.exit(2)
+  }
+  const ok = args[1] === args[2]
+  console.log(JSON.stringify({ compatible: ok, reasons: ok ? [] : ['run 0: different environment cpu'], changes: [] }))
+  process.exit(ok ? 0 : 1)
+}
 const flag = (name) => args[args.indexOf(name) + 1]
 const save = flag('--save')
 const ev = (e) => process.stderr.write(`@progress ${JSON.stringify(e)}\n`)
