@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { SettingsConnections } from "./Connections";
-import type { ProviderGroup } from "../../api/types";
+import type { EnabledProvider, ProviderGroup } from "../../api/types";
+import { goTo } from "../../lib/navigate";
+
+vi.mock("../../lib/navigate", () => ({ goTo: vi.fn() }));
+
+const json = (body: unknown) => Response.json(body);
+let providers: EnabledProvider[];
+let fetchMock: ReturnType<typeof vi.fn>;
 
 const GROUPS: ProviderGroup[] = [
   {
@@ -42,12 +49,14 @@ function withClient(children: ReactNode) {
 
 describe("SettingsConnections", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify(GROUPS), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ));
+    vi.mocked(goTo).mockClear();
+    providers = [{ key: "powens", displayName: "Powens", description: null }];
+    fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/providers/enabled") return json(providers);
+      if (url === "/api/connections/init") return json({ connectionId: "c3", redirectUrl: "https://provider.test/connect" });
+      return json(GROUPS);
+    });
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   it("shows an error state with retry when the fetch fails", async () => {
@@ -85,5 +94,102 @@ describe("SettingsConnections", () => {
     fireEvent.click(header);
     expect(screen.getByText("Compte courant")).toBeInTheDocument();
     expect(screen.getByText("Livret A")).toBeInTheDocument();
+  });
+
+  it("starts the only provider directly and follows its redirect", async () => {
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("https://provider.test/connect"));
+    expect(fetchMock).toHaveBeenCalledWith("/api/connections/init", expect.objectContaining({
+      method: "POST", body: JSON.stringify({ providerKey: "powens" }),
+    }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("returns to connections when the provider needs no redirect", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/providers/enabled") return json(providers);
+      if (url === "/api/connections/init") return json({ connectionId: "c3", redirectUrl: null });
+      return json(GROUPS);
+    });
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/settings/connections"));
+  });
+
+  it("waits for providers and prevents another start while connecting", async () => {
+    let resolveProviders!: (response: Response) => void;
+    let resolveInit!: (response: Response) => void;
+    const providerResponse = new Promise<Response>((resolve) => { resolveProviders = resolve; });
+    const initResponse = new Promise<Response>((resolve) => { resolveInit = resolve; });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/providers/enabled") return providerResponse;
+      if (url === "/api/connections/init") return initResponse;
+      return json(GROUPS);
+    });
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    expect(add).toBeDisabled();
+    fireEvent.click(add);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    resolveProviders(json(providers));
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    await waitFor(() => expect(add).toBeDisabled());
+    fireEvent.click(add);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/connections/init")).toHaveLength(1);
+    resolveInit(json({ connectionId: "c3", redirectUrl: null }));
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/settings/connections"));
+  });
+
+  it("shows a failure and lets the user retry the direct connection", async () => {
+    let fail = true;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/providers/enabled") return json(providers);
+      if (url === "/api/connections/init") return fail
+        ? new Response("nope", { status: 500 })
+        : json({ connectionId: "c3", redirectUrl: null });
+      return json(GROUPS);
+    });
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not start the connection");
+    expect(goTo).not.toHaveBeenCalled();
+    fail = false;
+    fireEvent.click(add);
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/settings/connections"));
+  });
+
+  it("keeps the picker when several providers are enabled", async () => {
+    providers.push({ key: "other", displayName: "Other provider", description: null });
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Other provider")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/connections/init")).toBe(false);
+    fireEvent.click(screen.getByText("Other provider"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/connections/init", expect.objectContaining({
+      body: JSON.stringify({ providerKey: "other" }),
+    })));
+  });
+
+  it("explains when no providers are enabled", async () => {
+    providers = [];
+    render(withClient(<SettingsConnections />));
+    const add = screen.getByRole("button", { name: "Add connection" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    expect(await screen.findByText(/No providers enabled/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/connections/init")).toBe(false);
   });
 });

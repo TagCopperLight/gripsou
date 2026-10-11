@@ -121,6 +121,18 @@ describe("Welcome", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
+  it("explains when no providers are enabled", async () => {
+    search = { step: "bank" };
+    server.providers = [];
+    renderWelcome();
+    const connect = await screen.findByRole("button", { name: "Connect a bank" });
+    await waitFor(() => expect(connect).toBeEnabled());
+    fireEvent.click(connect);
+    expect(await screen.findByText(/No providers enabled/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(posted("/connections/init")).toHaveLength(0);
+  });
+
   it("hides the AI step when no AI provider is set up, and finishes from the bank step", async () => {
     search = { step: "bank" };
     server.aiConfigured = false;

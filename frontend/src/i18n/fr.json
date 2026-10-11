@@ -399,6 +399,7 @@
         "pending": "Connexion en cours…"
       },
       "pickProvider": "Choisir un fournisseur",
+      "noProviders": "Aucun fournisseur activé. Demandez à votre administrateur d’activer un fournisseur.",
       "connect": "Connecter",
       "connectError": "Impossible de démarrer la connexion. Veuillez réessayer.",
       "synced": "Synchronisé {{date}}",

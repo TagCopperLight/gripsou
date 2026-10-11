@@ -6,6 +6,7 @@ import { Button } from "./Button";
 import { CardState } from "./CardState";
 import { useEnabledProviders, useInitConnection } from "../api/hooks";
 import type { EnabledProvider } from "../api/types";
+import { goTo } from "../lib/navigate";
 
 type AddConnectionModalProps = {
   onClose: () => void;
@@ -36,11 +37,7 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
     if (!selected) return;
     initConnection.mutate(selected, {
       onSuccess: ({ redirectUrl }) => {
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        } else {
-          window.location.href = returnTo;
-        }
+        goTo(redirectUrl ?? returnTo);
       },
     });
   };
@@ -75,6 +72,11 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
         <div className="flex-1 px-6 py-4 flex flex-col gap-3 overflow-y-auto">
           {isLoading && <CardState variant="loading" className="h-32" />}
           {isError && <CardState variant="error" className="h-32" />}
+          {!isLoading && !isError && providers?.length === 0 && (
+            <p className="text-sm text-fg-faint py-6 text-center">
+              {t("settings.connections.noProviders")}
+            </p>
+          )}
           {providers?.map((p) => (
             <ProviderCard
               key={p.key}
