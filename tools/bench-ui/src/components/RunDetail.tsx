@@ -46,9 +46,9 @@ export function RunDetail({ id }: { id: string }) {
                   <tr><td colSpan={6} style={{ whiteSpace: 'normal' }}>
                     <SampleDots lanes={set.runs.map((r, i) => ({ name: set.runs.length > 1 ? `repeat ${i + 1}` : 'samples', samples: r.measurements.find((m) => m.id === mid)?.samples_ms ?? [], color: PALETTE[1 + (i % (PALETTE.length - 1))] }))} />
                     <p className="small muted">{ms[0]?.boundary}</p>
-                    {Object.keys(ms[0]?.diagnostics ?? {}).length > 0 && (
-                      <details><summary>Diagnostics</summary><pre className="log">{JSON.stringify(ms[0]!.diagnostics, null, 2)}</pre></details>
-                    )}
+                    {ms.map((m, i) => Object.keys(m.diagnostics ?? {}).length > 0 && (
+                      <details key={i}><summary>Diagnostics{ms.length > 1 ? ` (repeat ${i + 1})` : ''}</summary><pre className="log">{JSON.stringify(m.diagnostics, null, 2)}</pre></details>
+                    ))}
                   </td></tr>
                 )}
               </Fragment>

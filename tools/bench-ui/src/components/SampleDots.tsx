@@ -13,9 +13,12 @@ export function SampleDots({ lanes }: { lanes: Lane[] }) {
     yAxis: { type: 'category', data: lanes.map((l) => l.name), inverse: true },
     tooltip: {
       trigger: 'item',
-      formatter: (p: { seriesIndex: number; value: [number, string] }) => {
+      formatter: (p: { componentType: string; seriesIndex: number; value?: [number, string] }) => {
         const s = stats[p.seriesIndex]
-        return `${lanes[p.seriesIndex].name}: ${formatMs(p.value[0])}<br/>median ${formatMs(s?.median ?? null)} · p95 ${formatMs(s?.p95 ?? null)}`
+        const name = lanes[p.seriesIndex].name
+        const summary = `median ${formatMs(s?.median ?? null)} · p95 ${formatMs(s?.p95 ?? null)}`
+        if (p.componentType === 'markPoint' || !p.value) return `${name}: ${summary}`
+        return `${name}: ${formatMs(p.value[0])}<br/>${summary}`
       },
     },
     series: lanes.map((l, i) => ({
