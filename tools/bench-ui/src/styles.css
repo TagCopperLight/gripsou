@@ -45,3 +45,10 @@ input[type=text], input[type=number], select, textarea { font: inherit; padding:
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 pre.log { background: #1d2433; color: #dfe4ee; padding: 10px; border-radius: 6px; max-height: 300px; overflow: auto; font-size: 12px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 12px; }
+.trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.trend-card { min-width: 0; padding: 16px; border: 1px solid #dde1e7; border-radius: 6px; background: #fff; }
+.trend-card h2 { margin: 0 0 12px; overflow-wrap: anywhere; }
+.trend-card select { max-width: 100%; }
+@media (max-width: 1000px) {
+  .trend-grid { grid-template-columns: minmax(0, 1fr); }
+}
