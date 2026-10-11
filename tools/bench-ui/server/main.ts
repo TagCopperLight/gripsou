@@ -23,7 +23,8 @@ const jobs = new JobManager({
 
 let catalog: Promise<Catalog> | null = null
 function loadCatalog(): Promise<Catalog> {
-  catalog ??= promisify(execFile)(BENCH_COMMAND[0], ['list', '--json'], { cwd: REPO_ROOT, maxBuffer: 8 * 1024 * 1024 })
+  const [program, ...prefix] = BENCH_COMMAND
+  catalog ??= promisify(execFile)(program, [...prefix, 'list', '--json'], { cwd: REPO_ROOT, maxBuffer: 8 * 1024 * 1024 })
     .then(({ stdout }) => JSON.parse(stdout) as Catalog)
     .catch((e) => {
       catalog = null
@@ -100,7 +101,11 @@ Bun.serve({
     '/api/compare': {
       POST: async (req) => {
         try {
-          const { reference, others } = (await req.json()) as { reference: string; others: string[] }
+          const body = (await req.json()) as { reference?: unknown; others?: unknown }
+          if (typeof body.reference !== 'string' || !Array.isArray(body.others) || !body.others.every((o) => typeof o === 'string')) {
+            return fail(new Error('reference must be a string and others an array of strings'))
+          }
+          const { reference, others } = body as { reference: string; others: string[] }
           const pairs = await Promise.all(
             others.map(async (id) => [id, await compareRuns(BENCH_COMMAND, REPO_ROOT, store.pathFor(reference), store.pathFor(id))] as const),
           )
@@ -125,10 +130,15 @@ Bun.serve({
 let stopping = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {
-    if (stopping) return
+    if (stopping) process.exit(1) // second signal: give up waiting
     stopping = true
-    await jobs.shutdown()
-    process.exit(0)
+    try {
+      await jobs.shutdown()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      process.exit(0)
+    }
   })
 }
 
