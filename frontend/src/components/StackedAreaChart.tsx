@@ -1,3 +1,4 @@
+import { chartReadinessEvents, chartReady } from "./chartReadiness";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
@@ -102,7 +103,7 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
     .join("|");
 
   return (
-    <ReactECharts
+    <ReactECharts onChartReady={chartReady} onEvents={chartReadinessEvents}
       key={animationKey}
       option={option}
       notMerge

@@ -24,7 +24,7 @@ pub struct CategoryOption {
 }
 
 /// A transaction the user confirmed, shown to the model as evidence.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Example {
     pub description: String,
     pub amount: Decimal,

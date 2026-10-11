@@ -28,3 +28,6 @@ uuid.workspace = true
 dotenvy.workspace = true
 sha2 = "0.10.9"
 base64 = "0.22.1"
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }

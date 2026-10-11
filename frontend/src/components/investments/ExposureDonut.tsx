@@ -1,3 +1,4 @@
+import { chartReadinessEvents, chartReady } from "./../chartReadiness";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
@@ -132,7 +133,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
         <p className="text-fg font-semibold text-sm">{title}</p>
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
-            <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
+            <ReactECharts onChartReady={chartReady} option={option} onEvents={{ ...onEvents, ...chartReadinessEvents, chartReady }} style={{ height: "100%", width: "100%" }} />
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
               {hovered ? (
                 <>

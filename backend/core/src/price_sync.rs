@@ -32,7 +32,7 @@ use crate::repo::query::price_eligible_instruments_for_connection;
 /// already in the data without a one-off migration.
 const REFETCH_DAYS: i64 = 30;
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct PriceSyncSummary {
     pub resolved: usize,
     pub prices_inserted: usize,
@@ -119,7 +119,13 @@ pub async fn fetch_prices_for_connection(
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
 ) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(pool, connection_id, providers, false).await
+    fetch_prices_for_connection_at(
+        pool,
+        connection_id,
+        providers,
+        chrono::Utc::now().date_naive(),
+    )
+    .await
 }
 
 /// Re-request every eligible instrument's ENTIRE history, ignoring both the
@@ -139,14 +145,31 @@ pub async fn refresh_all_prices_for_connection(
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
 ) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(pool, connection_id, providers, true).await
+    fetch_prices_for_connection_inner(
+        pool,
+        connection_id,
+        providers,
+        true,
+        chrono::Utc::now().date_naive(),
+    )
+    .await
 }
 
+/// Runs the routine pass for an explicit business date. Production callers use UTC today.
+pub async fn fetch_prices_for_connection_at(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+    providers: &[Box<dyn PriceProvider>],
+    today: chrono::NaiveDate,
+) -> Result<PriceSyncSummary, CoreError> {
+    fetch_prices_for_connection_inner(pool, connection_id, providers, false, today).await
+}
 async fn fetch_prices_for_connection_inner(
     pool: &sqlx::PgPool,
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
     full: bool,
+    today: chrono::NaiveDate,
 ) -> Result<PriceSyncSummary, CoreError> {
     let mut summary = PriceSyncSummary::default();
     {
@@ -154,7 +177,6 @@ async fn fetch_prices_for_connection_inner(
         ensure_cash_instruments_for_held_currencies(&mut conn, connection_id).await?;
     }
     let instruments = price_eligible_instruments_for_connection(pool, connection_id).await?;
-    let today = chrono::Utc::now().date_naive();
     let mut conn = pool.acquire().await?;
 
     for row in instruments {

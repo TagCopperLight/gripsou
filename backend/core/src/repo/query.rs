@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
+#[derive(serde::Serialize)]
 pub struct NetWorthRow {
     pub as_of: NaiveDate,
     pub net_worth: Decimal,
@@ -175,6 +176,7 @@ pub async fn net_worth_series_with_target(
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct HoldingRow {
     pub holding_id: Uuid,
     pub symbol: Option<String>,
@@ -439,6 +441,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     Ok(out)
 }
 
+#[derive(serde::Serialize)]
 pub struct PricePointRow {
     pub ts: DateTime<Utc>,
     pub unit_price: Decimal,
@@ -472,6 +475,7 @@ pub async fn holding_prices(
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct AccountRow {
     pub account_id: Uuid,
     pub connection_id: Uuid,
@@ -580,6 +584,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct AccountSeriesRow {
     pub account_id: Uuid,
     pub name: String,
@@ -671,6 +676,7 @@ pub async fn account_series_with_target(
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct AccountTypeRow {
     pub key: String,
     pub label: String,
@@ -694,6 +700,7 @@ pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, C
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct UserRow {
     pub id: Uuid,
     pub name: String,
@@ -719,6 +726,7 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct DistributionRow {
     pub account_id: Uuid,
     pub name: String,
@@ -809,6 +817,7 @@ pub async fn distribution(
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
 pub struct TransactionListRow {
     pub id: Uuid,
     pub ts: DateTime<Utc>,
@@ -880,7 +889,7 @@ pub struct TransactionListRow {
 }
 
 /// The TYPE control on the filter panel: one value, always one selected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
 pub enum TypeBucket {
     #[default]
     All,
@@ -918,7 +927,7 @@ pub fn default_review_threshold() -> Decimal {
     Decimal::new(crate::repo::prefs::DEFAULT_BUDGET_AI_THRESHOLD as i64, 2)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TransactionFilters {
     /// Case-insensitive substring of `description` (cash rows) or `ticker`
     /// (lot rows).
@@ -1046,7 +1055,7 @@ pub async fn transactions(
     Ok(rows)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TagRef {
     pub id: Uuid,
     pub name: String,
@@ -1098,7 +1107,7 @@ pub async fn tags_for_transactions(
     Ok(map)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct TransactionCounts {
     /// Rows under the active filters — the left half of "matching / total".
     pub matching: i64,
@@ -1236,6 +1245,7 @@ pub async fn matching_transaction_ids(
     Ok(ids)
 }
 
+#[derive(serde::Serialize)]
 pub struct PriceEligibleInstrument {
     pub id: Uuid,
     pub kind: String,

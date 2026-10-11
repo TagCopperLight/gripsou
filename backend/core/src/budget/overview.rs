@@ -13,7 +13,7 @@ use crate::repo::budget::summary::DayCategoryRow;
 
 /// What a Sankey node, a breakdown row and a trend series all are. One union
 /// so the frontend's category chip has a single input shape everywhere.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Slice {
     Category(Uuid),
     /// The amber chip: rows with no category at all.
@@ -22,14 +22,14 @@ pub enum Slice {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct SliceAmount {
     pub slice: Slice,
     /// Always positive — direction is carried by which list it is in.
     pub amount: Decimal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Figures {
     pub income: Decimal,
     /// Positive. Expenses are reported as a magnitude, not as a negative.
@@ -37,7 +37,7 @@ pub struct Figures {
     pub net: Decimal,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Sankey {
     pub sources: Vec<SliceAmount>,
     pub destinations: Vec<SliceAmount>,
@@ -228,7 +228,7 @@ pub const BASELINE_MONTHS: u32 = 12;
 
 /// A calendar month. The Overview's period when it is not a custom range.
 /// Ordered chronologically: year first, then month.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct Month {
     pub year: i32,
     pub month: u32,
@@ -400,7 +400,7 @@ fn expense_side_amounts(rows: &[DayCategoryRow]) -> Vec<SliceAmount> {
     side(rows, false)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct BreakdownEntry {
     pub slice: Slice,
     /// Positive.
@@ -470,7 +470,7 @@ const TREND_KEEP: usize = SANKEY_MAX_SLICES;
 /// the month being looked at into Other.
 const TREND_ANCHOR_KEEP: usize = 3;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TrendSeries {
     pub slice: Slice,
     /// One value per month, zeros included, so the frontend never aligns

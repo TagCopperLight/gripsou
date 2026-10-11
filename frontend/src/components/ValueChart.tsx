@@ -1,3 +1,4 @@
+import { chartReadinessEvents, chartReady } from "./chartReadiness";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
@@ -198,7 +199,7 @@ export function ValueChart({
     .join("|")}`;
 
   return (
-    <ReactECharts
+    <ReactECharts onChartReady={chartReady} onEvents={chartReadinessEvents}
       key={animationKey}
       option={option}
       notMerge

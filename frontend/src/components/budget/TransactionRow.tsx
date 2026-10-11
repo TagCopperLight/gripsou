@@ -84,6 +84,7 @@ export const TransactionRow = memo(function TransactionRow({
   return (
     <tr
       data-testid="tx-row"
+      data-transaction-id={tx.id}
       role="row"
       className={`col-span-full grid grid-cols-subgrid text-sm ${CELL} group ${
         selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : "hover:[&>td]:bg-hover"

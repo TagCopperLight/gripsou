@@ -1,3 +1,4 @@
+import { chartReadinessEvents, chartReady } from "./../../chartReadiness";
 import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
@@ -131,7 +132,7 @@ export function SankeySurface({
             never a coarser truth on a small screen. */}
         <div className="mt-2 overflow-x-auto">
           <div className="min-w-[560px]">
-            <ReactECharts option={option} notMerge style={{ height: 380, width: "100%" }} />
+            <ReactECharts onChartReady={chartReady} onEvents={chartReadinessEvents} option={option} notMerge style={{ height: 380, width: "100%" }} />
           </div>
         </div>
       </div>

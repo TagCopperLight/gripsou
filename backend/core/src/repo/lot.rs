@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
+#[derive(serde::Serialize)]
 pub struct LotRow {
     pub id: Uuid,
     pub side: String,
@@ -120,6 +121,7 @@ pub async fn delete_lots(
     Ok(deleted)
 }
 
+#[derive(serde::Serialize)]
 pub struct BasisFigures {
     pub mean_price: Decimal,
     pub explained_qty: Decimal,
@@ -127,6 +129,7 @@ pub struct BasisFigures {
     pub realised: Decimal,
 }
 
+#[derive(serde::Serialize)]
 pub struct PreviewLot {
     pub side: String,
     pub acquired_on: NaiveDate,

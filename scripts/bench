@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+bench_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+export SQLX_OFFLINE=true
+exec cargo run --release --manifest-path "$bench_root/backend/Cargo.toml" -p gripsou-bench -- "$@"

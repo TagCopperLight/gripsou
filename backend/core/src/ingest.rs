@@ -16,7 +16,7 @@ use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::{TxnWrite, upsert_transaction};
 
 /// Counts of what an ingest wrote (handy for logging and tests).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 pub struct IngestSummary {
     pub accounts: usize,
     pub holdings: usize,
