@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import {
   RouterProvider,
@@ -196,7 +196,9 @@ describe("scroll reset on navigation", () => {
     expect(main).not.toBeNull();
     const scrollTo = vi.spyOn(main as Element, "scrollTo");
 
-    await router.navigate({ to: "/" });
+    await act(async () => {
+      await router.navigate({ to: "/" });
+    });
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
 
     await waitFor(() => expect(scrollTo).toHaveBeenCalled());

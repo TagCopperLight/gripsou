@@ -15,7 +15,7 @@ The current interface and workflow are a mix of my own ideas, concepts from Pics
 
 ## Develop
 
-Prerequisites: Rust (stable), [bun](https://bun.sh), Docker.
+Prerequisites: Rust (stable), [bun](https://bun.sh) 1.4.3 or newer, Docker.
 
 ```sh
 # 1. Start Postgres

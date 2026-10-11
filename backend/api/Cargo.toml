@@ -26,5 +26,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 dotenvy.workspace = true
-sha2 = "0.10"
-base64 = "0.22"
+sha2 = "0.10.9"
+base64 = "0.22.1"

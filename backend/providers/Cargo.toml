@@ -16,11 +16,11 @@ chrono = { workspace = true }
 tracing.workspace = true
 uuid = { workspace = true }
 tokio = { workspace = true }
-yahoo_finance_api = "4.1"
-time = "0.3"
-hmac = "0.12"
-sha2 = "0.10"
-base64 = "0.22"
+yahoo_finance_api = "4.2.0"
+time = "0.3.55"
+hmac = "0.12.1"
+sha2 = "0.10.9"
+base64 = "0.22.1"
 
 [dev-dependencies]
-wiremock = "0.6"
+wiremock = "0.6.5"
