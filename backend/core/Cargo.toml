@@ -4,10 +4,6 @@ edition.workspace = true
 version.workspace = true
 license.workspace = true
 
-[[example]]
-name = "perf"
-test = true
-
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true

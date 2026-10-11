@@ -1,6 +1,6 @@
 # Application benchmarks
 
-Use `scripts/bench list` to discover stable target IDs and `scripts/bench list --profiles` for fixture dimensions. Builds use release mode. The old `cargo run -p gripsou-jobs --example perf` remains available, but its debug timings are not comparable to this runner.
+Use `scripts/bench list` to discover stable target IDs and `scripts/bench list --profiles` for fixture dimensions. Builds use release mode.
 
 PostgreSQL must allow the supplied DATABASE_URL role to create databases. The URL supplies connection settings only: the runner creates migrated scratch databases from template0, freezes their business calendar at 2026-01-15, seeds synthetic data and closes a template before cloning trials. It never seeds the source database. Exact database names and ownership markers are recorded in a private temporary manifest. Normal errors and panics trigger cleanup; after an interrupted process use `scripts/bench cleanup /tmp/gripsou-bench-<run>.json`. Cleanup refuses names without a matching ownership marker.
 
