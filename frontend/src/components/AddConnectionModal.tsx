@@ -9,9 +9,11 @@ import type { EnabledProvider } from "../api/types";
 
 type AddConnectionModalProps = {
   onClose: () => void;
+  /** Where to go when the provider needs no redirect. */
+  returnTo?: string;
 };
 
-export function AddConnectionModal({ onClose }: AddConnectionModalProps) {
+export function AddConnectionModal({ onClose, returnTo = "/settings/connections" }: AddConnectionModalProps) {
   const { t } = useTranslation();
   const { data: providers, isLoading, isError } = useEnabledProviders();
   const initConnection = useInitConnection();
@@ -37,7 +39,7 @@ export function AddConnectionModal({ onClose }: AddConnectionModalProps) {
         if (redirectUrl) {
           window.location.href = redirectUrl;
         } else {
-          window.location.href = "/settings/connections";
+          window.location.href = returnTo;
         }
       },
     });

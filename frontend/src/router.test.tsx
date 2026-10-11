@@ -20,6 +20,11 @@ vi.mock("./pages/Dashboard", () => ({
   Dashboard: () => <div>dashboard-page</div>,
 }));
 
+// The welcome page has its own tests; here we only check where the guard sends people.
+vi.mock("./pages/Welcome", () => ({
+  Welcome: () => <div>welcome-page</div>,
+}));
+
 function renderAt(path: string, auth: AuthValue) {
   const router = createRouter({
     routeTree,
