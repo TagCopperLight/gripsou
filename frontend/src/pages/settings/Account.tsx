@@ -223,7 +223,7 @@ export function SettingsAccount() {
               key={s.id}
               type="button"
               onClick={() => setDetail(s)}
-              className="flex items-center gap-3 rounded-xl bg-surface-2 px-4 py-3 text-left"
+              className="flex cursor-pointer items-center gap-3 rounded-xl bg-surface-2 px-4 py-3 text-left"
             >
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-center gap-2">
