@@ -52,7 +52,8 @@ function callsTo(fetchMock: ReturnType<typeof vi.fn>, path: string) {
     }));
 }
 
-const ERROR_TITLE = "Something went wrong connecting your account.";
+const ERROR_TITLE = "Your bank couldn't be connected";
+const CONNECTING = "Connecting your bank…";
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -71,6 +72,7 @@ describe("ConnectionCallback", () => {
     landWith("?state=c42&code=abc&connection_id=7");
     render(withClient(<ConnectionCallback />));
 
+    expect(screen.getByText(CONNECTING)).toBeInTheDocument();
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" }),
     );
@@ -83,7 +85,7 @@ describe("ConnectionCallback", () => {
     expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
   });
 
-  it("deletes the pending connection and shows the error screen when Powens reports an error", async () => {
+  it("deletes the pending connection and shows the failure when the provider reports an error", async () => {
     landWith("?state=c42&error=access_denied");
     render(withClient(<ConnectionCallback />));
 
@@ -97,7 +99,7 @@ describe("ConnectionCallback", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("shows the error screen and calls nothing when there is no state param", async () => {
+  it("shows the failure and calls nothing when there is no state param", async () => {
     landWith("?code=abc");
     render(withClient(<ConnectionCallback />));
 
@@ -110,12 +112,19 @@ describe("ConnectionCallback", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows the error screen when completing fails, with a way back to the connections page", async () => {
-    fetchMock.mockImplementation(async () => new Response("boom", { status: 500 }));
+  it("deletes the pending connection and shows the failure when completing fails", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url === "/api/connections/complete" ? new Response("boom", { status: 500 }) : noContent(),
+    );
     landWith("?state=c42&code=abc");
     render(withClient(<ConnectionCallback />));
 
     expect(await screen.findByText(ERROR_TITLE)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(callsTo(fetchMock, "/connections/c42")).toEqual([
+        { method: "DELETE", body: undefined },
+      ]),
+    );
     expect(navigate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to connections" }));
@@ -134,18 +143,35 @@ describe("ConnectionCallback", () => {
     expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1);
   });
 
-  it("goes back to the welcome screen's bank step while the welcome isn't finished", async () => {
-    landWith("?state=c42&code=abc&connection_id=7");
-    render(withClient(<ConnectionCallback />, false));
-    await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" } }),
-    );
-  });
+  describe("while the welcome isn't finished", () => {
+    it("hands the raw query to the welcome screen without showing or requesting anything", async () => {
+      landWith("?state=c42&code=abc&connection_id=7");
+      render(withClient(<ConnectionCallback />, false));
 
-  it("offers to go back to setup after a failure while the welcome isn't finished", async () => {
-    landWith("?state=c42&error=access_denied");
-    render(withClient(<ConnectionCallback />, false));
-    fireEvent.click(await screen.findByRole("button", { name: "Back to setup" }));
-    expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" } });
+      expect(navigate).toHaveBeenCalledWith({
+        to: "/welcome",
+        search: { step: "bank", callback: "state=c42&code=abc&connection_id=7" },
+        replace: true,
+      });
+      expect(screen.queryByText(CONNECTING)).not.toBeInTheDocument();
+      expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("does the same for a provider error", () => {
+      landWith("?state=c42&error=access_denied");
+      render(withClient(<ConnectionCallback />, false));
+
+      expect(navigate).toHaveBeenCalledWith({
+        to: "/welcome",
+        search: { step: "bank", callback: "state=c42&error=access_denied" },
+        replace: true,
+      });
+      expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

@@ -53,13 +53,12 @@ const loginRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
-  beforeLoad: ({ context, location }) => {
+  beforeLoad: ({ context }) => {
     if (!context.auth.isAuthenticated) {
       throw redirect({ to: "/login" });
     }
-    // A new account goes through the welcome screen first. The bank-connection
-    // callback is part of that screen's flow, so it is let through.
-    if (context.auth.user?.welcomeDone === false && location.pathname !== "/connections/callback") {
+    // A new account goes through the welcome screen first.
+    if (context.auth.user?.welcomeDone === false) {
       throw redirect({ to: "/welcome" });
     }
   },
@@ -177,9 +176,14 @@ const settingsServerRoute = createRoute({
   component: SettingsServer,
 });
 
+// Full page outside the app chrome. Not guarded by the welcome redirect: mid-
+// setup the page hands the callback over to /welcome itself.
 const connectionsCallbackRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => rootRoute,
   path: "/connections/callback",
+  beforeLoad: ({ context }) => {
+    if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });
+  },
   component: ConnectionCallback,
 });
 
@@ -199,8 +203,10 @@ const resetRoute = createRoute({
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/welcome",
-  validateSearch: (search: Record<string, unknown>): { step?: "bank" } =>
-    search.step === "bank" ? { step: "bank" } : {},
+  validateSearch: (search: Record<string, unknown>): { step?: "bank"; callback?: string } => ({
+    ...(search.step === "bank" ? { step: "bank" as const } : {}),
+    ...(typeof search.callback === "string" && search.callback !== "" ? { callback: search.callback } : {}),
+  }),
   beforeLoad: ({ context }) => {
     if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });
     if (context.auth.user?.welcomeDone !== false) throw redirect({ to: "/" });
@@ -223,6 +229,7 @@ export const routeTree = rootRoute.addChildren([
   inviteRoute,
   resetRoute,
   welcomeRoute,
+  connectionsCallbackRoute,
   appRoute.addChildren([
     indexRoute,
     accountsRoute,
@@ -230,7 +237,6 @@ export const routeTree = rootRoute.addChildren([
     budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
     legacyTransactionsRoute,
     settingsRouteWithChildren,
-    connectionsCallbackRoute,
   ]),
 ]);
 

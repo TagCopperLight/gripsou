@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearch } from "@tanstack/react-router";
-import { Check, Landmark, Lock } from "lucide-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Check, CircleAlert, Landmark, Lock, LoaderCircle } from "lucide-react";
 import { Button } from "../components/Button";
 import { Select } from "../components/Select";
 import { SegmentedControl } from "../components/SegmentedControl";
@@ -9,12 +9,19 @@ import { Toggle } from "../components/Toggle";
 import { AddConnectionModal } from "../components/AddConnectionModal";
 import { useAuth } from "../auth/context";
 import { postJson } from "../api/client";
-import { useConnections, useEnabledProviders, useInitConnection } from "../api/hooks";
+import {
+  useCompleteConnection,
+  useConnections,
+  useDeleteConnection,
+  useEnabledProviders,
+  useInitConnection,
+} from "../api/hooks";
 import { useAiStatus } from "../api/budget";
 import { flattenConnections, type SyncConnection } from "../api/types";
 import { CURRENCIES } from "../lib/currency";
 import { TIME_ZONES } from "../lib/timeZoneList";
 import { goTo } from "../lib/navigate";
+import { parseCallbackParams } from "../lib/connectionCallback";
 import { prefillFromBrowser } from "../lib/welcome";
 
 type Step = 1 | 2 | 3;
@@ -24,11 +31,13 @@ type Step = 1 | 2 | 3;
 export function Welcome() {
   const { t } = useTranslation();
   const { user, prefs, updatePrefs, updateUser } = useAuth();
-  const search = useSearch({ strict: false }) as { step?: "bank" };
+  const search = useSearch({ strict: false }) as { step?: "bank"; callback?: string };
+  const navigate = useNavigate();
   const backFromBank = search.step === "bank";
 
-  // A failed save is rolled back by AuthProvider; like Settings > General, the
-  // user can simply try again, so the rejection is swallowed.
+  // A failed save is rolled back by AuthProvider (the control shows the old
+  // value again), and the user can retry here or later in Settings, so the
+  // rejection is swallowed.
   const save = (next: typeof prefs) => {
     updatePrefs(next).catch(() => {});
   };
@@ -40,6 +49,8 @@ export function Welcome() {
   // Until the status is known (or failed), whether step 3 exists is undecided.
   const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
   const initConnection = useInitConnection();
+  const completeConnection = useCompleteConnection();
+  const deleteConnection = useDeleteConnection();
 
   const [step, setStep] = useState<Step>(backFromBank ? 2 : 1);
   const [done, setDone] = useState<Record<Step, boolean>>({ 1: backFromBank, 2: false, 3: false });
@@ -47,6 +58,32 @@ export function Welcome() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(false);
+  // Coming back from the provider with its query string (ConnectionCallback
+  // hands it over): finish the connection here, once.
+  const [connecting, setConnecting] = useState(Boolean(search.callback));
+  const [bankFailed, setBankFailed] = useState(false);
+  const callbackHandled = useRef(false);
+  useEffect(() => {
+    if (callbackHandled.current || !search.callback) return;
+    callbackHandled.current = true;
+    const { connectionId, rest } = parseCallbackParams(search.callback);
+    // Drop the query right away so a reload doesn't redo the connection.
+    void navigate({ to: "/welcome", search: { step: "bank" }, replace: true });
+    const fail = () => {
+      setBankFailed(true);
+      setConnecting(false);
+      // Don't leave the orphaned pending row stuck on "Connecting…".
+      if (connectionId) deleteConnection.mutate(connectionId);
+    };
+    if (!connectionId || rest.error) {
+      fail();
+      return;
+    }
+    completeConnection
+      .mutateAsync({ connectionId, params: rest })
+      .then(() => setConnecting(false))
+      .catch(fail);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fill language and time zone from the browser once, when step 1 is the
   // starting point (not when coming back from the bank's page).
@@ -82,6 +119,7 @@ export function Welcome() {
   };
 
   const connectBank = () => {
+    setBankFailed(false);
     if (providers?.length === 1) {
       initConnection.mutate(providers[0].key, {
         onSuccess: ({ redirectUrl }) => {
@@ -101,6 +139,7 @@ export function Welcome() {
 
   const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
   const hasBank = connections.length > 0;
+  const connectDisabled = connecting || initConnection.isPending || providers === undefined;
 
   return (
     <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
@@ -172,25 +211,33 @@ export function Welcome() {
                   {connections.map((c) => <BankRow key={c.id} connection={c} />)}
                 </div>
               )}
+              {bankFailed && (
+                <div className="flex items-center gap-2.5 rounded-xl bg-red-soft px-3.5 py-2.5">
+                  <CircleAlert className="size-4 shrink-0 text-red" />
+                  <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
+                </div>
+              )}
               {initConnection.isError && <p className="text-sm text-red">{t("welcome.bank.connectError")}</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 {hasBank ? (
-                  <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={initConnection.isPending || providers === undefined}>
+                  <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
                     {t("welcome.bank.addAnother")}
                   </Button>
                 ) : (
-                  <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown}>
+                  <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown || connecting}>
                     {t("welcome.bank.skip")}
                   </Button>
                 )}
                 {hasBank ? (
                   aiConfigured ? (
-                    <Button onClick={() => complete(2, 3)} disabled={!aiKnown}>{t("welcome.continue")}</Button>
+                    <Button onClick={() => complete(2, 3)} disabled={!aiKnown || connecting}>{t("welcome.continue")}</Button>
                   ) : (
-                    <Button onClick={() => void finish()} disabled={finishing || !aiKnown}>{t("welcome.finish")}</Button>
+                    <Button onClick={() => void finish()} disabled={finishing || !aiKnown || connecting}>{t("welcome.finish")}</Button>
                   )
                 ) : (
-                  <Button onClick={connectBank} disabled={initConnection.isPending || providers === undefined}>{t("welcome.bank.connect")}</Button>
+                  <Button onClick={connectBank} disabled={connectDisabled}>
+                    {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
+                  </Button>
                 )}
               </div>
             </WelcomeStep>
@@ -283,14 +330,24 @@ function WelcomeStep({
 
 function BankRow({ connection }: { connection: SyncConnection }) {
   const { t } = useTranslation();
-  const state = connection.status === "ok" ? "ok" : connection.status === "error" ? "error" : "syncing";
-  const tone = { ok: "text-green", error: "text-red", syncing: "text-amber" }[state];
+  const state =
+    connection.status === "ok" ? "ok"
+    : connection.status === "error" ? "error"
+    : connection.status === "pending" ? "connecting"
+    : "syncing";
+  const tone = { ok: "text-green", error: "text-red", syncing: "text-amber", connecting: "text-fg-dim" }[state];
   return (
     <div className="flex items-center gap-3 rounded-xl bg-surface-2 px-3.5 py-2.5">
       <Landmark className="size-4 text-fg-faint" />
       <span className="flex-1 truncate text-sm text-fg">{connection.displayName}</span>
       <span className={`flex items-center gap-1.5 text-xs ${tone}`}>
-        {state === "ok" ? <Check className="size-3" /> : <span className="size-1.5 rounded-full bg-current" />}
+        {state === "ok" ? (
+          <Check className="size-3" />
+        ) : state === "connecting" ? (
+          <LoaderCircle className="size-3 animate-spin" />
+        ) : (
+          <span className="size-1.5 rounded-full bg-current" />
+        )}
         {t(`welcome.bank.status.${state}`)}
       </span>
     </div>

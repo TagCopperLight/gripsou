@@ -10,9 +10,11 @@ import type { SessionUser } from "../api/types";
 
 vi.mock("../lib/navigate", () => ({ goTo: vi.fn() }));
 
-let search: { step?: "bank" } = {};
+let search: { step?: "bank"; callback?: string } = {};
+const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => search,
+  useNavigate: () => navigate,
 }));
 
 const newcomer: SessionUser = {
@@ -22,7 +24,7 @@ const newcomer: SessionUser = {
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
-type Server = { providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number };
+type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number };
 let server: Server;
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -34,7 +36,7 @@ function routes(url: string, init?: RequestInit) {
     return json(server.connections === 0 ? [] : [{
       providerKey: "p1", providerName: "Provider",
       connections: Array.from({ length: server.connections }, (_, i) => ({
-        id: `c${i}`, displayName: `Bank ${i + 1}`, status: "ok", lastSyncAt: null, lastError: null, accounts: [], logo: null,
+        id: `c${i}`, displayName: `Bank ${i + 1}`, status: server.status ?? "ok", lastSyncAt: null, lastError: null, accounts: [], logo: null,
       })),
     }]);
   if (url === "/api/connections/init" && method === "POST") return json({ connectionId: "c9", redirectUrl: null });
@@ -68,6 +70,7 @@ const posted = (path: string) =>
 
 beforeEach(() => {
   search = {};
+  navigate.mockClear();
   server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0 };
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => routes(url, init));
   vi.stubGlobal("fetch", fetchMock);
@@ -186,5 +189,87 @@ describe("Welcome", () => {
     renderWelcome({ updatePrefs });
     await waitFor(() => expect(updatePrefs).toHaveBeenCalled());
     await screen.findByRole("button", { name: "Skip setup for now" });
+  });
+
+  describe("finishing a bank connection", () => {
+    const completeBody = { connectionId: "c9", params: { code: "abc" } };
+
+    it("completes the connection, clears the callback from the URL and locks the bank step meanwhile", async () => {
+      search = { step: "bank", callback: "state=c9&code=abc" };
+      let release: () => void = () => {};
+      const gate = new Promise<void>((r) => (release = r));
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url === "/api/connections/complete") {
+          await gate;
+          return new Response(null, { status: 204 });
+        }
+        return routes(url, init);
+      });
+      renderWelcome();
+
+      await waitFor(() => expect(posted("/connections/complete")).toHaveLength(1));
+      expect(JSON.parse((posted("/connections/complete")[0][1] as RequestInit).body as string)).toEqual(completeBody);
+      expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" }, replace: true });
+      expect(screen.getByRole("button", { name: "Connect a bank" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Skip this step" })).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Skip this step" })).toBeEnabled());
+      expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
+    });
+
+    it("deletes the pending connection and offers to try again when completing fails", async () => {
+      search = { step: "bank", callback: "state=c9&code=abc" };
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+        url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : routes(url, init),
+      );
+      renderWelcome();
+
+      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE")).toHaveLength(1),
+      );
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
+    });
+
+    it("deletes the pending connection without completing when the provider reported an error", async () => {
+      search = { step: "bank", callback: "state=c9&error=access_denied" };
+      renderWelcome();
+
+      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE")).toHaveLength(1),
+      );
+      expect(posted("/connections/complete")).toHaveLength(0);
+    });
+
+    it("keeps the normal actions next to the failure when another bank is already connected", async () => {
+      search = { step: "bank", callback: "state=c9&error=access_denied" };
+      server.connections = 1;
+      renderWelcome();
+
+      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add another bank" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    });
+
+    it("clears the failure when connecting again", async () => {
+      search = { step: "bank", callback: "state=c9&error=access_denied" };
+      renderWelcome();
+      const retry = await screen.findByRole("button", { name: "Try again" });
+      await waitFor(() => expect(retry).toBeEnabled());
+      fireEvent.click(retry);
+      await waitFor(() => expect(posted("/connections/init")).toHaveLength(1));
+      expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
+    });
+
+    it("shows a pending connection as Connecting…", async () => {
+      search = { step: "bank" };
+      server.connections = 1;
+      server.status = "pending";
+      renderWelcome();
+      expect(await screen.findByText("Connecting…")).toBeInTheDocument();
+    });
   });
 });

@@ -189,7 +189,9 @@
       "connected_one": "{{count}} bank connected",
       "connected_other": "{{count}} banks connected",
       "skipped": "Skipped. You can connect one later in Settings › Connections.",
-      "status": { "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
+      "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
+      "failed": "Your bank couldn't be connected. Nothing was saved.",
+      "tryAgain": "Try again",
       "connectError": "Could not start the connection. Please try again."
     },
     "ai": {
@@ -505,11 +507,11 @@
     }
   },
   "connectionCallback": {
-    "callbackError": "Something went wrong connecting your account.",
-    "callbackErrorBody": "The provider returned an error. You can try again from the Connections page.",
-    "backToConnections": "Back to connections",
-    "callbackErrorBodySetup": "The provider returned an error. You can try again from the setup page.",
-    "backToSetup": "Back to setup"
+    "connecting": "Connecting your bank…",
+    "connectingBody": "Finishing the connection with your bank. This can take a few seconds.",
+    "errorTitle": "Your bank couldn't be connected",
+    "errorBody": "Nothing was saved. You can try again.",
+    "backToConnections": "Back to connections"
   },
   "sectors": {
     "Technologie": "Technology",

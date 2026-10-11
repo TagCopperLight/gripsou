@@ -227,10 +227,25 @@ describe("welcome guard", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/welcome"));
   });
 
-  it("lets the bank-connection callback through", async () => {
+  it("lets the bank-connection callback through, outside the app chrome", async () => {
+    // The guard doesn't redirect to /welcome: the page does that itself, once
+    // the session user is loaded (here /auth/me answers without a user).
     const router = renderAt("/connections/callback?state=c1&error=access_denied", newcomer);
-    await waitFor(() => expect(router.state.status).toBe("idle"));
+    expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/connections/callback");
+    expect(screen.queryByRole("link", { name: "Accounts" })).not.toBeInTheDocument();
+  });
+
+  it("renders the callback page without the sidebar for a finished user", async () => {
+    const router = renderAt("/connections/callback?code=abc", authedUser);
+    expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/connections/callback");
+    expect(screen.queryByRole("link", { name: "Accounts" })).not.toBeInTheDocument();
+  });
+
+  it("sends a logged-out visitor of the callback to /login", async () => {
+    const router = renderAt("/connections/callback?state=c1&code=abc", unauth);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
   });
 
   it("sends a user who finished it away from /welcome", async () => {

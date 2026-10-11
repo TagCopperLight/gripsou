@@ -189,7 +189,9 @@
       "connected_one": "{{count}} banque connectée",
       "connected_other": "{{count}} banques connectées",
       "skipped": "Passée. Vous pourrez en connecter une plus tard dans Paramètres › Connexions.",
-      "status": { "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
+      "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
+      "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
+      "tryAgain": "Réessayer",
       "connectError": "Impossible de lancer la connexion. Veuillez réessayer."
     },
     "ai": {
@@ -505,11 +507,11 @@
     }
   },
   "connectionCallback": {
-    "callbackError": "Une erreur s'est produite lors de la connexion de votre compte.",
-    "callbackErrorBody": "Le fournisseur a renvoyé une erreur. Vous pouvez réessayer depuis la page Connexions.",
-    "backToConnections": "Retour aux connexions",
-    "callbackErrorBodySetup": "Le fournisseur a renvoyé une erreur. Vous pouvez réessayer depuis la page de configuration.",
-    "backToSetup": "Retour à la configuration"
+    "connecting": "Connexion à votre banque…",
+    "connectingBody": "Finalisation de la connexion avec votre banque. Cela peut prendre quelques secondes.",
+    "errorTitle": "Votre banque n'a pas pu être connectée",
+    "errorBody": "Rien n'a été enregistré. Vous pouvez réessayer.",
+    "backToConnections": "Retour aux connexions"
   },
   "sectors": {
     "Technologie": "Technologie",

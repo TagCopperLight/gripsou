@@ -1,85 +1,85 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 import { useCompleteConnection, useDeleteConnection } from "../api/hooks";
+import { parseCallbackParams } from "../lib/connectionCallback";
 
-function parseCallbackParams(): {
-  connectionId: string | null;
-  rest: Record<string, string>;
-} {
-  const allParams = Object.fromEntries(
-    new URLSearchParams(window.location.search),
-  );
-  const { state: connectionId = null, ...rest } = allParams;
-  return { connectionId, rest };
-}
-
+/** Where the bank provider sends the user back to. Mid-setup the page is never
+ *  shown: the welcome screen finishes the connection (see Welcome). */
 export function ConnectionCallback() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const complete = useCompleteConnection();
   const deleteConnection = useDeleteConnection();
   const { user } = useAuth();
-  const { connectionId, rest } = parseCallbackParams();
-  // Mid-welcome, the bank step lives on the welcome screen, not in Settings.
+  const search = window.location.search;
+  const { connectionId, rest } = parseCallbackParams(search);
   const inWelcome = user?.welcomeDone === false;
-  const goBack = () =>
-    inWelcome
-      ? navigate({ to: "/welcome", search: { step: "bank" } })
-      : navigate({ to: "/settings/connections" });
   // Powens echoes our `state` (the connectionId) plus an `error` param when the
   // user cancels or the flow fails.
   const [failed, setFailed] = useState(() => !connectionId || !!rest.error);
   const called = useRef(false);
 
   useEffect(() => {
-    if (!connectionId || called.current) return;
+    if (called.current) return;
     called.current = true;
 
-    // On a Powens failure, drop the orphaned pending row instead of leaving it
-    // stuck on "Connecting…".
+    if (inWelcome) {
+      void navigate({
+        to: "/welcome",
+        search: { step: "bank", callback: search.replace(/^\?/, "") },
+        replace: true,
+      });
+      return;
+    }
+    if (!connectionId) return;
+
+    // Drop the orphaned pending row instead of leaving it stuck on "Connecting…".
     if (rest.error) {
       deleteConnection.mutate(connectionId);
       return;
     }
 
-    complete.mutateAsync({ connectionId, params: rest })
-      .then(() => goBack())
-      .catch(() => setFailed(true));
+    complete
+      .mutateAsync({ connectionId, params: rest })
+      .then(() => navigate({ to: "/settings/connections" }))
+      .catch(() => {
+        setFailed(true);
+        deleteConnection.mutate(connectionId);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (failed || complete.isError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <p className="text-lg font-semibold text-fg">
-            {t("connectionCallback.callbackError")}
-          </p>
-          <p className="text-sm text-fg-faint">
-            {t(
-              inWelcome
-                ? "connectionCallback.callbackErrorBodySetup"
-                : "connectionCallback.callbackErrorBody",
-            )}
-          </p>
-          <Button onClick={goBack}>
-            {t(
-              inWelcome
-                ? "connectionCallback.backToSetup"
-                : "connectionCallback.backToConnections",
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  if (inWelcome) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <p className="text-sm text-fg-faint">{t("common.loading")}</p>
+    <div className="flex min-h-screen items-center justify-center bg-bg px-4 py-16">
+      <div className="flex flex-col items-center gap-12">
+        <div className="font-wordmark text-[75px] font-semibold tracking-tight text-fg">gripsou</div>
+        <div className="flex w-100 max-w-full flex-col items-center gap-4 rounded-3xl bg-surface px-6 py-8 text-center">
+          {failed ? (
+            <>
+              <span className="flex size-11 items-center justify-center rounded-full bg-red-soft text-red">
+                <CircleAlert className="size-5" />
+              </span>
+              <p className="text-lg font-semibold text-fg">{t("connectionCallback.errorTitle")}</p>
+              <p className="text-sm text-fg-faint">{t("connectionCallback.errorBody")}</p>
+              <Button className="mt-1" onClick={() => void navigate({ to: "/settings/connections" })}>
+                {t("connectionCallback.backToConnections")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <LoaderCircle className="size-8 animate-spin text-green" />
+              <p className="text-lg font-semibold text-fg">{t("connectionCallback.connecting")}</p>
+              <p className="text-sm text-fg-faint">{t("connectionCallback.connectingBody")}</p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
