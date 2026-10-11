@@ -90,7 +90,17 @@ async fn recorded_syncs(pool: &PgPool, c: &FixtureConfig) -> Result<Vec<(Uuid, S
                 meta: serde_json::json!({}),
             });
         }
-        let holdings:Vec<(String,String,Option<String>,String,String,rust_decimal::Decimal,rust_decimal::Decimal,rust_decimal::Decimal)>=sqlx::query_as("select a.external_id,i.kind,i.symbol,i.name,i.currency,h.quantity,h.cost_basis,s.value from holding h join account a on a.id=h.account_id join instrument i on i.id=h.instrument_id join holding_snapshot s on s.holding_id=h.id and s.as_of=user_today($2) where a.connection_id=$1 order by h.id").bind(connection).bind(id(1,0,0)).fetch_all(pool).await?;
+        type HoldingInput = (
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            rust_decimal::Decimal,
+            rust_decimal::Decimal,
+            rust_decimal::Decimal,
+        );
+        let holdings:Vec<HoldingInput>=sqlx::query_as("select a.external_id,i.kind,i.symbol,i.name,i.currency,h.quantity,h.cost_basis,s.value from holding h join account a on a.id=h.account_id join instrument i on i.id=h.instrument_id join holding_snapshot s on s.holding_id=h.id and s.as_of=user_today($2) where a.connection_id=$1 order by h.id").bind(connection).bind(id(1,0,0)).fetch_all(pool).await?;
         for (account_external_id, kind, symbol, name, currency, quantity, cost_basis, valuation) in
             holdings
         {
@@ -108,7 +118,16 @@ async fn recorded_syncs(pool: &PgPool, c: &FixtureConfig) -> Result<Vec<(Uuid, S
                 valuation: Some(valuation),
             });
         }
-        let rows:Vec<(String,String,String,chrono::DateTime<chrono::Utc>,rust_decimal::Decimal,Option<String>,Option<NaiveDate>)>=sqlx::query_as("select a.external_id,t.external_id,t.type,t.ts,t.amount,t.description,t.booked_on from transaction t join account a on a.id=t.account_id where a.connection_id=$1 order by t.id").bind(connection).fetch_all(pool).await?;
+        type TransactionInput = (
+            String,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            rust_decimal::Decimal,
+            Option<String>,
+            Option<NaiveDate>,
+        );
+        let rows:Vec<TransactionInput>=sqlx::query_as("select a.external_id,t.external_id,t.type,t.ts,t.amount,t.description,t.booked_on from transaction t join account a on a.id=t.account_id where a.connection_id=$1 order by t.id").bind(connection).fetch_all(pool).await?;
         for (account_external_id, external_id, kind, ts, amount, description, booked_on) in rows {
             sync.transactions.push(CanonicalTransaction {
                 account_external_id,

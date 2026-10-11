@@ -7,3 +7,6 @@ pub mod operations;
 pub mod report;
 
 pub mod offline;
+
+pub mod metadata;
+pub mod runner;

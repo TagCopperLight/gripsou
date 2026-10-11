@@ -904,6 +904,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dotenvy",
+ "futures-util",
  "gripsou-core",
  "reqwest 0.12.28",
  "rust_decimal",

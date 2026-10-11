@@ -21,6 +21,7 @@ reqwest.workspace = true
 dotenvy.workspace = true
 sha2 = "0.10.9"
 url = "2.5.8"
+futures-util = "0.3.31"
 
 [[bin]]
 name = "gripsou-bench"

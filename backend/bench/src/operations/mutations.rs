@@ -12,7 +12,15 @@ pub struct Input {
     before: Value,
 }
 async fn cash_state(pool: &sqlx::PgPool) -> anyhow::Result<Value> {
-    let rows:Vec<(Uuid,Decimal,Option<Uuid>,Option<String>,bool,Option<Uuid>)>=sqlx::query_as("select id,amount,budget_category_id,category_source,checked_at is not null,transfer_pair_id from transaction order by id").fetch_all(pool).await?;
+    type CashState = (
+        Uuid,
+        Decimal,
+        Option<Uuid>,
+        Option<String>,
+        bool,
+        Option<Uuid>,
+    );
+    let rows:Vec<CashState>=sqlx::query_as("select id,amount,budget_category_id,category_source,checked_at is not null,transfer_pair_id from transaction order by id").fetch_all(pool).await?;
     Ok(serde_json::to_value(rows)?)
 }
 async fn pair(p: &sqlx::PgPool, u: Uuid) -> anyhow::Result<usize> {

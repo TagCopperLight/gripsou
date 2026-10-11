@@ -145,7 +145,7 @@ pub struct RunConfig {
 }
 pub enum Command {
     List { json: bool, profiles: bool },
-    Run(RunConfig),
+    Run(Box<RunConfig>),
     Compare(PathBuf, PathBuf),
     Check(PathBuf, PathBuf, PathBuf),
     Cleanup(PathBuf),
@@ -286,7 +286,7 @@ pub fn parse_cli(args: Vec<String>) -> Result<Command> {
         .get("--only")
         .map(|v| v.split(',').map(str::to_string).collect())
         .unwrap_or_default();
-    Ok(Command::Run(RunConfig {
+    Ok(Command::Run(Box::new(RunConfig {
         fixture: f,
         suite,
         only,
@@ -297,5 +297,5 @@ pub fn parse_cli(args: Vec<String>) -> Result<Command> {
         database_url: pairs.get("--database-url").map(|v| (*v).into()),
         diagnostics,
         concurrency,
-    }))
+    })))
 }
