@@ -44,9 +44,14 @@ import {
   afterUserChange,
 } from "./invalidate";
 
+// Reuse portfolio reads during quick navigation. Syncs, edits and reporting
+// preference changes invalidate these queries before the window expires.
+const PORTFOLIO_STALE_MS = 30_000;
+
 export function useNetWorth(range: string) {
   return useQuery({
     queryKey: keys.netWorth(range),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`, { signal }),
     placeholderData: keepPreviousData,
   });
@@ -66,6 +71,7 @@ export function useHealth() {
 export function useDistribution() {
   return useQuery({
     queryKey: keys.distribution(),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<DistributionAccount[]>(`/dashboard/distribution`, { signal }),
   });
 }
@@ -73,6 +79,7 @@ export function useDistribution() {
 export function useHoldings() {
   return useQuery({
     queryKey: keys.holdings(),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<Holding[]>(`/holdings`, { signal }),
   });
 }
@@ -80,6 +87,7 @@ export function useHoldings() {
 export function useInvestmentReturns() {
   return useQuery({
     queryKey: keys.investmentReturns(),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<InvestmentReturns>(`/investments/returns`, { signal }),
   });
 }
@@ -137,6 +145,7 @@ export function useLotSuggestions(id: string) {
 export function useAccounts() {
   return useQuery({
     queryKey: keys.accounts(),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<Account[]>(`/accounts`, { signal }),
   });
 }
@@ -144,6 +153,7 @@ export function useAccounts() {
 export function useAccountSeries(range: string) {
   return useQuery({
     queryKey: keys.accountSeries(range),
+    staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<AccountSeries>(`/accounts/series?range=${range}`, { signal }),
     placeholderData: keepPreviousData,
   });

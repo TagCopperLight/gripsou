@@ -3,7 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { useConnections, useHoldings, useSyncConnection, useTransactions } from "./hooks";
+import {
+  useAccounts, useAccountSeries, useConnections, useDistribution, useHoldings,
+  useInvestmentReturns, useNetWorth, useSyncConnection, useTransactions,
+} from "./hooks";
 import { useAiStatus, usePatchTransaction, type AiStatus } from "./budget";
 import { setAuthToken } from "./client";
 import {
@@ -34,6 +37,54 @@ function connection(id: string, status: SyncStatus, lastSyncAt: number | null) {
 function groups(...connections: ProviderGroup["connections"]): ProviderGroup[] {
   return [{ providerKey: "p", providerName: "P", connections }];
 }
+
+describe("portfolio navigation cache", () => {
+  const cases = [
+    ["net worth", () => useNetWorth("1y"), {
+      points: [], summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
+    }],
+    ["distribution", useDistribution, []],
+    ["holdings", useHoldings, []],
+    ["accounts", useAccounts, []],
+    ["account history", () => useAccountSeries("1y"), { accounts: [], points: [] }],
+    ["investment returns", useInvestmentReturns, {
+      today: "2026-01-15", total: { annualised: null, since: null, invested: "0", value: "0", gl: "0", glPct: "0" }, accounts: [],
+    }],
+  ] as const;
+
+  it.each(cases)("reuses fresh %s on navigation and refreshes after sync", async (_name, query, body) => {
+    const { qc, wrapper } = setup();
+    let reads = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => { reads++; return Response.json(body); }));
+    const first = renderHook(() => query(), { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+    const next = renderHook(() => query(), { wrapper });
+    try {
+      expect(next.result.current.data).toEqual(body);
+      expect(next.result.current.isFetching).toBe(false);
+      expect(reads).toBe(1);
+      await act(() => afterSyncFinished(qc));
+      expect(reads).toBe(2);
+    } finally { next.unmount(); qc.clear(); }
+  });
+
+  it.each(cases)("refetches %s when returning after the freshness window", async (_name, query, body) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { qc, wrapper } = setup();
+    let reads = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => { reads++; return Response.json(body); }));
+    const first = renderHook(() => query(), { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+    vi.setSystemTime(Date.now() + 30_001);
+    const next = renderHook(() => query(), { wrapper });
+    try {
+      await waitFor(() => expect(next.result.current.isFetching).toBe(false));
+      expect(reads).toBe(2);
+    } finally { next.unmount(); qc.clear(); }
+  });
+});
 
 describe("sync completion", () => {
   it("refreshes a requested sync that finished before the first connection snapshot arrived", async () => {

@@ -1,5 +1,5 @@
 import { act, useState } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
@@ -21,6 +21,7 @@ let suggestionsFailed = false;
 const PREVIEW_RESULTS: BasisPreview[] = [
   { meanPrice: "25", invested: "375", realised: "0", unrealised: "12" },
   { meanPrice: "30", invested: "400", realised: "5", unrealised: "20" },
+  { meanPrice: "35", invested: "450", realised: "7", unrealised: "25" },
 ];
 
 let previewMutate: ReturnType<typeof vi.fn<(rows: SaveLotAdd[]) => void>>;
@@ -56,9 +57,8 @@ vi.mock("../api/hooks", async () => {
         mutate: (rows: SaveLotAdd[], options?: { onSuccess?: (d: BasisPreview) => void }) => {
           previewMutate(rows);
           setData(undefined);
-          // An incidental extra call with no rows can land before the seeded
-          // rows' debounced call does (mount timing) — it must not consume a
-          // sentinel slot the assertions below are counting on.
+          // An empty holding previews zero without consuming a sentinel used
+          // by assertions about populated rows.
           const result =
             rows.length === 0
               ? { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" }
@@ -135,6 +135,66 @@ describe("RecordLotsModal", () => {
     expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
   });
 
+  it("shows the populated preview immediately when lots have loaded", () => {
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
+    expect(previewMutate).toHaveBeenCalledTimes(1);
+    expect(previewMutate).toHaveBeenCalledWith([
+      { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },
+    ]);
+  });
+
+  it("ignores an older preview that finishes after a newer edit", async () => {
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("figure-invested")).toHaveTextContent("375"));
+    holdPreviewResolution = true;
+    fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "11" } });
+    await waitFor(() => expect(heldResolvers).toHaveLength(1));
+    fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "12" } });
+    await waitFor(() => expect(heldResolvers).toHaveLength(2));
+    act(heldResolvers[1]);
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("450");
+    act(heldResolvers[0]);
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("450");
+  });
+
+  it("keeps prior figures when an outdated preview finishes during the next debounce", async () => {
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("figure-invested")).toHaveTextContent("375"));
+    holdPreviewResolution = true;
+    fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "11" } });
+    await waitFor(() => expect(heldResolvers).toHaveLength(1));
+    fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "12" } });
+    releaseHeldPreview();
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
+    await waitFor(() => expect(heldResolvers).toHaveLength(1));
+    releaseHeldPreview();
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("450");
+  });
+
+  it("debounces rapid edits after the initial populated preview", async () => {
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "11" } });
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      fireEvent.change(screen.getByTestId("lot-quantity"), { target: { value: "12" } });
+      await act(() => vi.advanceTimersByTimeAsync(299));
+      expect(previewMutate).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(previewMutate).toHaveBeenCalledTimes(2);
+      expect(previewMutate).toHaveBeenLastCalledWith([
+        { type: "buy", date: "2024-05-02", quantity: "12", unitPrice: "20", fee: "0" },
+      ]);
+      expect(screen.getByTestId("figure-invested")).toHaveTextContent("400");
+    } finally { vi.useRealTimers(); }
+  });
+
   it("sets the accounted quantities in the mono font", () => {
     txns = [lot("a", "buy", "10", "20")];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
@@ -162,10 +222,8 @@ describe("RecordLotsModal", () => {
   it("shows the resulting figures the preview endpoint returns", async () => {
     txns = [lot("a", "buy", "10", "20"), lot("b", "buy", "10", "30"), lot("c", "sell", "5", "35")];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    // The mount fires an initial (empty-rows) preview before the seeded rows'
-    // debounced call lands, so wait for the CALL with the real rows first —
-    // the sentinel is the same regardless of rows, so asserting on the figure
-    // text alone would pass too early.
+    // Check the row payload as well as the returned figures: sentinel figures
+    // alone cannot distinguish a correctly seeded request from a wrong one.
     await waitFor(() =>
       expect(previewMutate).toHaveBeenCalledWith([
         { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },

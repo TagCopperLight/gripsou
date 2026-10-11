@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { act } from "react";
 
 import { TransactionsMode } from "./TransactionsMode";
 import { BudgetProvider } from "../../components/budget/BudgetProvider";
@@ -122,7 +123,10 @@ function stubFetch() {
         }
         return json({ sameDescriptionCount });
       }
-      if (u.includes("/transactions")) return json(serverRowsState);
+      if (u.includes("/transactions")) {
+        const search = new URL(u, "http://test").searchParams.get("search")?.toLowerCase() ?? "";
+        return json(serverRowsState.filter((row) => (row.description ?? "").toLowerCase().includes(search)));
+      }
       return json([]);
     }),
   );
@@ -171,6 +175,64 @@ describe("TransactionsMode", () => {
     bulkShouldFail = false;
     serverRowsState = ROWS.map((r) => ({ ...r, tags: [...r.tags] }));
     stubFetch();
+  });
+
+  it("coalesces typing and shows matching rows within 200 ms of the last keystroke", async () => {
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    await settle(client);
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "SN" } });
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      expect(screen.getByText("ALDI")).toBeVisible();
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "SNCF" } });
+      await act(() => vi.advanceTimersByTimeAsync(150));
+      await act(() => vi.advanceTimersByTimeAsync(50));
+      expect(screen.queryByText("ALDI")).not.toBeInTheDocument();
+      expect(screen.getByText("SNCF")).toBeVisible();
+      expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+        new URL(String(url), "http://test").searchParams.get("search") === "SN",
+      )).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("applies the current search immediately on Enter", async () => {
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    await settle(client);
+    vi.useFakeTimers();
+    try {
+      const input = screen.getByRole("searchbox");
+      fireEvent.change(input, { target: { value: "SNCF" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect(screen.queryByText("ALDI")).not.toBeInTheDocument();
+      expect(screen.getByText("SNCF")).toBeVisible();
+      fireEvent.change(input, { target: { value: "ALDI" } });
+      await act(() => vi.advanceTimersByTimeAsync(150));
+      await act(() => vi.advanceTimersByTimeAsync(50));
+      expect(screen.queryByText("SNCF")).not.toBeInTheDocument();
+      expect(screen.getByText("ALDI")).toBeVisible();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps Enter used for input composition from submitting an unfinished search", async () => {
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    await settle(client);
+    vi.useFakeTimers();
+    try {
+      const input = screen.getByRole("searchbox");
+      fireEvent.change(input, { target: { value: "SNCF" } });
+      fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect(screen.getByText("ALDI")).toBeVisible();
+      await act(() => vi.advanceTimersByTimeAsync(150));
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect(screen.queryByText("ALDI")).not.toBeInTheDocument();
+      expect(screen.getByText("SNCF")).toBeVisible();
+    } finally { vi.useRealTimers(); }
   });
 
   it("assigns a category from a row and sends only that field", async () => {

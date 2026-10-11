@@ -222,24 +222,28 @@ export function RecordLotsModal({
   const barColor = over ? "bg-red" : short ? "bg-amber" : "bg-green";
   const barWidth = over || total <= 0 ? 1 : Math.max(0, Math.min(1, recorded / total));
 
-  // Debounce the preview request: fire it only once edits settle, not on every
-  // keystroke. TanStack Query's mutation state resets `data` to `undefined`
+  // Preview loaded rows immediately; debounce only user edits. TanStack
+  // Query's mutation state resets `data` to `undefined`
   // the instant a mutation goes pending — `preview.data` alone would blank
   // the panel to zero on every request, not just the first. So the last
   // successful result is held here explicitly, and THAT is what renders;
   // `preview.data` is read only inside `onSuccess`, never for display.
   const [lastPreview, setLastPreview] = useState<BasisPreview>(ZERO_PREVIEW);
-  const [debouncedRows, setDebouncedRows] = useState<SaveLotAdd[]>(parsed);
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedRows(parsed), PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(id);
+    if (rows === null) return;
+    let current = true;
+    const request = () => preview.mutate(parsed, {
+      // A slower response for an earlier edit must not replace newer figures.
+      onSuccess: (result) => { if (current) setLastPreview(result); },
+    });
+    const id = dirty ? setTimeout(request, PREVIEW_DEBOUNCE_MS) : undefined;
+    if (!dirty) request();
+    return () => {
+      current = false;
+      clearTimeout(id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(parsed)]);
-
-  useEffect(() => {
-    preview.mutate(debouncedRows, { onSuccess: setLastPreview });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(debouncedRows), holding.id]);
+  }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
   const figures: BasisPreview = lastPreview;
 
