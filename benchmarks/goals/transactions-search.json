@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "primary": {
+    "id": "transactions.search.common",
+    "metric": "median_ms",
+    "min_improvement_percent": 25
+  },
+  "companions": [
+    {
+      "id": "transactions.page.first",
+      "metric": "median_ms",
+      "max_regression_percent": 10
+    },
+    {
+      "id": "transactions.page.deep",
+      "metric": "median_ms",
+      "max_regression_percent": 10
+    },
+    {
+      "id": "transactions.counts",
+      "metric": "median_ms",
+      "max_regression_percent": 10
+    }
+  ],
+  "minimum_samples": 30,
+  "required_runs": 3,
+  "max_noise_percent": 10,
+  "allow_environment_differences": []
+}
