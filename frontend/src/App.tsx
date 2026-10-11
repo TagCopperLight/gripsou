@@ -9,11 +9,12 @@ function InnerApp() {
 
   // Route guards (beforeLoad) read auth from the router context, which only
   // refreshes on render — they don't re-run by themselves. When auth flips
-  // (login/logout), invalidate so the current match re-evaluates its guard and
-  // redirects, instead of leaving the user on a now-wrong page.
+  // (login/logout, or finishing the welcome screen), invalidate so the current
+  // match re-evaluates its guard and redirects, instead of leaving the user on
+  // a now-wrong page.
   useEffect(() => {
     void router.invalidate();
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, auth.user?.welcomeDone]);
 
   return <RouterProvider router={router} context={{ auth }} />;
 }

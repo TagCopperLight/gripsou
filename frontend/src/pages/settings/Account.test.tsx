@@ -48,7 +48,7 @@ vi.mock("../../api/hooks", async (importOriginal) => {
 
 const authValue: AuthValue = {
   isAuthenticated: true,
-  user: { id: "u1", name: "Jules", email: "jules@gripsou.local", role: "admin", prefs: DEFAULT_PREFS },
+  user: { id: "u1", name: "Jules", email: "jules@gripsou.local", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true },
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: vi.fn(),

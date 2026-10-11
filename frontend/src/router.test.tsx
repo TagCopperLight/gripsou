@@ -60,7 +60,7 @@ describe("route guard", () => {
 
 const authedUser: AuthValue = {
   isAuthenticated: true,
-  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS },
+  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: async () => {},
@@ -138,7 +138,7 @@ describe("login redirect", () => {
           ? new Response(
               JSON.stringify({
                 token: "t",
-                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS },
+                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true },
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -201,5 +201,45 @@ describe("scroll reset on navigation", () => {
 
     await waitFor(() => expect(scrollTo).toHaveBeenCalled());
     expect(scrollTo.mock.calls[0][0]).toMatchObject({ top: 0, left: 0 });
+  });
+});
+
+describe("welcome guard", () => {
+  const newcomer: AuthValue = {
+    ...authedUser,
+    user: { ...authedUser.user!, welcomeDone: false },
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("sends a user who hasn't finished the welcome to /welcome", async () => {
+    const router = renderAt("/accounts", newcomer);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/welcome"));
+  });
+
+  it("lets the bank-connection callback through", async () => {
+    const router = renderAt("/connections/callback?state=c1&error=access_denied", newcomer);
+    await waitFor(() => expect(router.state.status).toBe("idle"));
+    expect(router.state.location.pathname).toBe("/connections/callback");
+  });
+
+  it("sends a user who finished it away from /welcome", async () => {
+    const router = renderAt("/welcome", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("sends a logged-out visitor of /welcome to /login", async () => {
+    const router = renderAt("/welcome", unauth);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
   });
 });

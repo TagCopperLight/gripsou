@@ -120,7 +120,7 @@ function FilterProbe() {
 // the brief's own snippet used, which throws outside an AuthProvider.
 const authValue: AuthValue = {
   isAuthenticated: true,
-  user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS },
+  user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: async () => {},

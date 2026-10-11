@@ -24,6 +24,7 @@ import { SettingsServer } from "./pages/settings/Server";
 import { ConnectionCallback } from "./pages/ConnectionCallback";
 import { Invite } from "./pages/Invite";
 import { Reset } from "./pages/Reset";
+import { Welcome } from "./pages/Welcome";
 import type { AuthValue } from "./auth/context";
 import { scrollRestorationOptions } from "./lib/scroll";
 
@@ -52,9 +53,14 @@ const loginRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, location }) => {
     if (!context.auth.isAuthenticated) {
       throw redirect({ to: "/login" });
+    }
+    // A new account goes through the welcome screen first. The bank-connection
+    // callback is part of that screen's flow, so it is let through.
+    if (context.auth.user?.welcomeDone === false && location.pathname !== "/connections/callback") {
+      throw redirect({ to: "/welcome" });
     }
   },
   component: RootLayout,
@@ -189,6 +195,19 @@ const resetRoute = createRoute({
   component: Reset,
 });
 
+// Full page outside the app chrome, like login and invite.
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/welcome",
+  validateSearch: (search: Record<string, unknown>): { step?: "bank" } =>
+    search.step === "bank" ? { step: "bank" } : {},
+  beforeLoad: ({ context }) => {
+    if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });
+    if (context.auth.user?.welcomeDone !== false) throw redirect({ to: "/" });
+  },
+  component: Welcome,
+});
+
 const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsIndexRoute,
   settingsGeneralRoute,
@@ -203,6 +222,7 @@ export const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteRoute,
   resetRoute,
+  welcomeRoute,
   appRoute.addChildren([
     indexRoute,
     accountsRoute,

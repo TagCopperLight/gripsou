@@ -29,7 +29,7 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
 function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
   const authValue: AuthValue = {
     isAuthenticated: true,
-    user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs },
+    user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs, welcomeDone: true },
     isBootstrapping: false,
     prefs,
     login: async () => {},

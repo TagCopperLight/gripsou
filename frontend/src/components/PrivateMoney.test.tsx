@@ -10,7 +10,7 @@ import { PrivateMoney } from "./PrivateMoney";
 function renderWith(prefs: UserPrefs) {
   const authValue: AuthValue = {
     isAuthenticated: true,
-    user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs },
+    user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs, welcomeDone: true },
     isBootstrapping: false,
     prefs,
     login: async () => {},

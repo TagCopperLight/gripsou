@@ -10,7 +10,7 @@ import { keys } from "../api/keys";
 import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 import type { SessionUser } from "../api/types";
 
-const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS };
+const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true };
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
 
 afterEach(() => {
