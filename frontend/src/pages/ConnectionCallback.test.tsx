@@ -161,6 +161,17 @@ describe("ConnectionCallback", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("hands over an empty callback when there is no query string, so the welcome screen shows the failure", () => {
+      landWith("");
+      render(withClient(<ConnectionCallback />, false));
+
+      expect(navigate).toHaveBeenCalledWith({
+        to: "/welcome",
+        search: { step: "bank", callback: "" },
+        replace: true,
+      });
+    });
+
     it("does the same for a provider error", () => {
       landWith("?state=c42&error=access_denied");
       render(withClient(<ConnectionCallback />, false));

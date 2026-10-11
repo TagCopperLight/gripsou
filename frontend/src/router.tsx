@@ -205,7 +205,7 @@ const welcomeRoute = createRoute({
   path: "/welcome",
   validateSearch: (search: Record<string, unknown>): { step?: "bank"; callback?: string } => ({
     ...(search.step === "bank" ? { step: "bank" as const } : {}),
-    ...(typeof search.callback === "string" && search.callback !== "" ? { callback: search.callback } : {}),
+    ...(typeof search.callback === "string" ? { callback: search.callback } : {}),
   }),
   beforeLoad: ({ context }) => {
     if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });

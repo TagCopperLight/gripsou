@@ -60,11 +60,12 @@ export function Welcome() {
   const [finishError, setFinishError] = useState(false);
   // Coming back from the provider with its query string (ConnectionCallback
   // hands it over): finish the connection here, once.
-  const [connecting, setConnecting] = useState(Boolean(search.callback));
+  const [connecting, setConnecting] = useState(search.callback !== undefined);
   const [bankFailed, setBankFailed] = useState(false);
   const callbackHandled = useRef(false);
   useEffect(() => {
-    if (callbackHandled.current || !search.callback) return;
+    // An empty callback (no query string at all) still counts: no state, so a failure.
+    if (callbackHandled.current || search.callback === undefined) return;
     callbackHandled.current = true;
     const { connectionId, rest } = parseCallbackParams(search.callback);
     // Drop the query right away so a reload doesn't redo the connection.
@@ -138,7 +139,10 @@ export function Welcome() {
   };
 
   const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
-  const hasBank = connections.length > 0;
+  // A pending row is a connection still being set up (or about to be deleted):
+  // listed, but not a bank yet.
+  const readyBanks = connections.filter((c) => c.status !== "pending");
+  const hasBank = readyBanks.length > 0;
   const connectDisabled = connecting || initConnection.isPending || providers === undefined;
 
   return (
@@ -202,11 +206,11 @@ export function Welcome() {
               title={t("welcome.bank.title")}
               active={step === 2}
               done={done[2]}
-              summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: connections.length })}
+              summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: readyBanks.length })}
               onEdit={() => setStep(2)}
             >
               <p className="text-sm text-fg-dim">{t("welcome.bank.body")}</p>
-              {hasBank && (
+              {connections.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {connections.map((c) => <BankRow key={c.id} connection={c} />)}
                 </div>

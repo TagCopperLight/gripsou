@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { StrictMode, type ReactNode } from "react";
 import { goTo } from "../lib/navigate";
 import { Welcome } from "./Welcome";
 import { AuthContext, type AuthValue } from "../auth/context";
@@ -44,7 +44,7 @@ function routes(url: string, init?: RequestInit) {
   return json([]);
 }
 
-function renderWelcome(overrides: Partial<AuthValue> = {}) {
+function renderWelcome(overrides: Partial<AuthValue> = {}, strict = false) {
   const value: AuthValue = {
     isAuthenticated: true,
     user: newcomer,
@@ -61,7 +61,7 @@ function renderWelcome(overrides: Partial<AuthValue> = {}) {
   const wrap = (c: ReactNode) => (
     <QueryClientProvider client={client}><AuthContext.Provider value={value}>{c}</AuthContext.Provider></QueryClientProvider>
   );
-  render(wrap(<Welcome />));
+  render(strict ? <StrictMode>{wrap(<Welcome />)}</StrictMode> : wrap(<Welcome />));
   return value;
 }
 
@@ -262,6 +262,57 @@ describe("Welcome", () => {
       fireEvent.click(retry);
       await waitFor(() => expect(posted("/connections/init")).toHaveLength(1));
       expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
+    });
+
+    const deletes = () =>
+      fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE");
+    const pendingRow = {
+      providerKey: "p1", providerName: "Provider",
+      connections: [{ id: "c9", displayName: "Bank 9", status: "pending", lastSyncAt: null, lastError: null, accounts: [], logo: null }],
+    };
+
+    it("does not count the pending row as a bank after a failure", async () => {
+      search = { step: "bank", callback: "state=c9&code=abc" };
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url === "/api/connections/complete") return new Response("boom", { status: 400 });
+        if (url === "/api/connections") return json([pendingRow]);
+        return routes(url, init);
+      });
+      renderWelcome();
+
+      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
+      expect(screen.getByText("Connecting…")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Add another bank" })).not.toBeInTheDocument();
+    });
+
+    it("completes only once under StrictMode", async () => {
+      search = { step: "bank", callback: "state=c9&code=abc" };
+      renderWelcome({}, true);
+      await waitFor(() => expect(posted("/connections/complete")).toHaveLength(1));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(posted("/connections/complete")).toHaveLength(1);
+    });
+
+    it("deletes the pending connection only once under StrictMode when completing fails", async () => {
+      search = { step: "bank", callback: "state=c9&code=abc" };
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+        url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : routes(url, init),
+      );
+      renderWelcome({}, true);
+      await waitFor(() => expect(deletes()).toHaveLength(1));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(deletes()).toHaveLength(1);
+    });
+
+    it("shows the failure, with no request to complete, for a callback without a state", async () => {
+      search = { step: "bank", callback: "" };
+      renderWelcome();
+      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
+      expect(posted("/connections/complete")).toHaveLength(0);
+      expect(deletes()).toHaveLength(0);
     });
 
     it("shows a pending connection as Connecting…", async () => {

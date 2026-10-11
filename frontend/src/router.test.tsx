@@ -228,8 +228,9 @@ describe("welcome guard", () => {
   });
 
   it("lets the bank-connection callback through, outside the app chrome", async () => {
-    // The guard doesn't redirect to /welcome: the page does that itself, once
-    // the session user is loaded (here /auth/me answers without a user).
+    // The guard lets an unfinished user reach the callback, rendered outside the
+    // app chrome. The hand-over to /welcome itself is covered in
+    // ConnectionCallback.test.tsx.
     const router = renderAt("/connections/callback?state=c1&error=access_denied", newcomer);
     expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/connections/callback");
