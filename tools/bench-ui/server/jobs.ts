@@ -20,6 +20,7 @@ export interface JobDeps {
 
 const LOG_LINES = 200
 const KEEP_FINISHED = 20
+const DRAIN_MS = 2000
 
 export class JobManager {
   private jobs: Job[] = []
@@ -27,6 +28,7 @@ export class JobManager {
   private running: Promise<void> | null = null
   private cancelled = new Set<string>()
   private counter = 0
+  private stopping = false
 
   constructor(private deps: JobDeps) {}
 
@@ -60,6 +62,17 @@ export class JobManager {
     return true
   }
 
+  /** Stop for good: queued jobs are cancelled, the running one is terminated and cleaned up. */
+  async shutdown(): Promise<void> {
+    this.stopping = true
+    const now = new Date().toISOString()
+    this.jobs = this.jobs.map((j) => (j.status === 'queued' ? { ...j, status: 'cancelled', endedAt: now } : j))
+    this.emit()
+    const running = this.jobs.find((j) => j.status === 'running')
+    if (running) await this.cancel(running.id)
+    await this.idle()
+  }
+
   async idle(): Promise<void> {
     while (this.running) await this.running
   }
@@ -80,10 +93,10 @@ export class JobManager {
   }
 
   private pump() {
-    if (this.running) return
+    if (this.running || this.stopping) return
     const next = this.jobs.find((j) => j.status === 'queued')
     if (!next) return
-    this.running = this.execute(next.id).finally(() => {
+    this.running = this.execute(next.id).catch(() => {}).finally(() => {
       this.running = null
       this.trim()
       this.pump()
@@ -97,6 +110,16 @@ export class JobManager {
   }
 
   private async execute(id: string): Promise<void> {
+    try {
+      await this.run(id)
+    } catch (e) {
+      this.child = null
+      this.cancelled.delete(id)
+      this.set(id, { status: 'failed', current: null, error: (e as Error).message, endedAt: new Date().toISOString() })
+    }
+  }
+
+  private async run(id: string): Promise<void> {
     const job = this.jobs.find((j) => j.id === id)!
     const resultId = this.deps.store.newId(job.options.name)
     const save = this.deps.store.pathFor(resultId)
@@ -133,30 +156,35 @@ export class JobManager {
       if (ev.type === 'manifest') pendingAdds.push(this.deps.pending.add(ev.path).catch(() => {}))
       this.set(id, (j) => applyEvent(j, ev))
     })
-    // 'close' can fire before the last buffered lines are delivered: wait for the readers too.
+    // Wait for the readers so trailing lines are not lost. A failed spawn never closes them
+    // under Bun, and a stuck reader must not wedge the queue, so both cases are bounded.
     const drained = Promise.all([out, err].map((rl) => new Promise<void>((r) => rl.once('close', () => r()))))
+    let spawnFailed = false
     const code = await new Promise<number | null>((resolve) => {
       child.on('error', (e) => {
+        spawnFailed = true
         log(`could not start runner: ${e.message}`)
         resolve(null)
       })
       child.on('close', (c) => resolve(c))
     })
-    await drained
+    if (!spawnFailed) await Promise.race([drained, new Promise((r) => setTimeout(r, DRAIN_MS))])
+    out.close()
+    err.close()
     await Promise.all(pendingAdds)
     this.child = null
     const endedAt = new Date().toISOString()
     const manifests = this.jobs.find((j) => j.id === id)!.manifests
 
+    // Whatever the exit, a manifest still on disk means the runner did not clean up after itself.
+    for (const m of manifests) await this.cleanup(m, databaseUrl, id)
+
     if (this.cancelled.has(id)) {
       this.cancelled.delete(id)
-      for (const m of manifests) await this.cleanup(m, databaseUrl)
       await this.deps.store.remove(resultId)
       this.set(id, { status: 'cancelled', current: null, endedAt })
       return
     }
-    // The runner removed its own scratch databases on any normal exit.
-    for (const m of manifests) await this.deps.pending.remove(m)
     if ((code === 0 || code === 1) && existsSync(save)) {
       await this.deps.store.writeLabel(resultId, { name: job.options.name, note: '', created_at: endedAt, status: code === 0 ? 'ok' : 'failed' })
       this.set(id, { status: 'saved', resultId, current: null, endedAt })
@@ -166,18 +194,29 @@ export class JobManager {
     }
   }
 
-  private async cleanup(manifest: string, databaseUrl?: string): Promise<void> {
-    const url = databaseUrl ?? (await this.deps.databaseUrl().catch(() => undefined))
-    const [program, ...prefix] = this.deps.command
-    await new Promise<void>((resolve) => {
-      const c = spawn(program, [...prefix, 'cleanup', manifest], {
-        cwd: this.deps.cwd,
-        env: { ...process.env, ...(url ? { DATABASE_URL: url } : {}) },
-        stdio: 'ignore',
+  /** Runs the runner's `cleanup`; the manifest stays pending unless that succeeded (or it is gone). */
+  private async cleanup(manifest: string, databaseUrl?: string, jobId?: string): Promise<void> {
+    const note = (msg: string) => {
+      if (jobId) this.set(jobId, (j) => ({ ...j, log: [...j.log, msg].slice(-LOG_LINES) }))
+      else console.error(msg)
+    }
+    if (existsSync(manifest)) {
+      const url = databaseUrl ?? (await this.deps.databaseUrl().catch(() => undefined))
+      const [program, ...prefix] = this.deps.command
+      const outcome = await new Promise<string | null>((resolve) => {
+        const c = spawn(program, [...prefix, 'cleanup', manifest], {
+          cwd: this.deps.cwd,
+          env: { ...process.env, ...(url ? { DATABASE_URL: url } : {}) },
+          stdio: 'ignore',
+        })
+        c.on('close', (code) => resolve(code === 0 ? null : `exit code ${code}`))
+        c.on('error', (e) => resolve(e.message))
       })
-      c.on('close', () => resolve())
-      c.on('error', () => resolve())
-    })
+      if (outcome) {
+        note(`cleanup of ${manifest} failed (${outcome}); it will be retried at the next start`)
+        return
+      }
+    }
     await this.deps.pending.remove(manifest)
   }
 }

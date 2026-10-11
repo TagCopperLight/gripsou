@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /** Scratch-database manifests of runs this server started and has not seen finish. */
@@ -17,7 +17,9 @@ export class PendingCleanup {
   private edit(f: (paths: string[]) => string[]): Promise<void> {
     const next = this.chain.then(async () => {
       await mkdir(dirname(this.file), { recursive: true })
-      await writeFile(this.file, JSON.stringify(f(await this.all())))
+      const tmp = `${this.file}.tmp`
+      await writeFile(tmp, JSON.stringify(f(await this.all())))
+      await rename(tmp, this.file)
     })
     this.chain = next.catch(() => {})
     return next
