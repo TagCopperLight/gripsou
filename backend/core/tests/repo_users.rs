@@ -30,3 +30,45 @@ async fn lists_users_oldest_first(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(users[2].email, "m2@t.local", "newest last");
     Ok(())
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn welcome_starts_pending_and_finishing_is_idempotent(pool: PgPool) -> anyhow::Result<()> {
+    let id: uuid::Uuid = sqlx::query_scalar(
+        "insert into users (email, name, password_hash, role) \
+         values ('new@t.local','New','x','user') returning id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, id)
+        .await?
+        .unwrap();
+    assert!(
+        !profile.welcome_done,
+        "a new account has not seen the welcome yet"
+    );
+
+    assert!(gripsou_core::repo::user::finish_welcome(&pool, id).await?);
+    let first: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("select welcomed_at from users where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await?;
+    assert!(
+        gripsou_core::repo::user::profile_by_id(&pool, id)
+            .await?
+            .unwrap()
+            .welcome_done
+    );
+
+    assert!(gripsou_core::repo::user::finish_welcome(&pool, id).await?);
+    let second: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("select welcomed_at from users where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(first, second, "finishing twice keeps the first date");
+
+    assert!(!gripsou_core::repo::user::finish_welcome(&pool, uuid::Uuid::new_v4()).await?);
+    Ok(())
+}

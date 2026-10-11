@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update users set welcomed_at = coalesce(welcomed_at, now()) where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8f9fa266fae749741cc61cb9d8a01f1b107959f7511d1599042a83ed6411c39"
+}

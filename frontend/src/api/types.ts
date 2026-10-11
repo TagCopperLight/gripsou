@@ -165,6 +165,8 @@ export type SessionUser = {
   email: string;
   role: "admin" | "user";
   prefs: UserPrefs;
+  /** False until the user finished or skipped the post-invite welcome screen. */
+  welcomeDone: boolean;
 };
 
 // One active login session, from GET /api/auth/sessions.

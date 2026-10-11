@@ -81,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/invite/{token}/redeem", post(handlers::redeem_invite))
         .route("/auth/reset/{token}/redeem", post(handlers::redeem_reset))
         .route("/auth/prefs", patch(handlers::update_prefs))
+        .route("/auth/welcome", post(handlers::finish_welcome))
         .route("/auth/change-password", post(handlers::change_password))
         .route("/auth/account", delete(handlers::delete_account))
         .route(

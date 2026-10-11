@@ -166,6 +166,44 @@
       }
     }
   },
+  "welcome": {
+    "title": "Welcome, {{name}}",
+    "privacy": "This gripsou instance is run by the person who invited you. As its owner, they can technically see your data. Your bank passwords are typed on the connection provider's page and never reach gripsou.",
+    "edit": "Edit",
+    "continue": "Continue",
+    "finish": "Finish",
+    "skipAll": "Skip setup for now",
+    "finishError": "Could not finish the setup. Please try again.",
+    "prefs": {
+      "title": "Your preferences",
+      "language": "Language",
+      "currency": "Currency",
+      "timeZone": "Time zone"
+    },
+    "bank": {
+      "title": "Connect a bank",
+      "body": "You'll log in to your bank on the connection provider's page, then come back here.",
+      "connect": "Connect a bank",
+      "addAnother": "Add another bank",
+      "skip": "Skip this step",
+      "connected_one": "{{count}} bank connected",
+      "connected_other": "{{count}} banks connected",
+      "skipped": "Skipped. You can connect one later in Settings › Connections.",
+      "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
+      "failed": "Your bank couldn't be connected. Nothing was saved.",
+      "tryAgain": "Try again",
+      "connectError": "Could not start the connection. Please try again."
+    },
+    "ai": {
+      "title": "Sort your spending automatically",
+      "toggle": "Categorise my transactions with AI",
+      "body": "Each new transaction's description and amount are sent to an AI service chosen by the server owner.",
+      "suggestions": "Its guesses are only suggestions: the ones it isn't sure of wait for your review.",
+      "later": "You can change it anytime in Settings › Budget.",
+      "on": "AI categorisation on",
+      "off": "AI categorisation off"
+    }
+  },
   "auth": {
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
@@ -469,8 +507,10 @@
     }
   },
   "connectionCallback": {
-    "callbackError": "Something went wrong connecting your account.",
-    "callbackErrorBody": "The provider returned an error. You can try again from the Connections page.",
+    "connecting": "Connecting your bank…",
+    "connectingBody": "Finishing the connection with your bank. This can take a few seconds.",
+    "errorTitle": "Your bank couldn't be connected",
+    "errorBody": "Nothing was saved. You can try again.",
     "backToConnections": "Back to connections"
   },
   "sectors": {

@@ -6,7 +6,7 @@ import {
   createRouter,
   createMemoryHistory,
 } from "@tanstack/react-router";
-import { routeTree } from "./router";
+import { routeTree, router as appRouter } from "./router";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 import { setAuthToken } from "./api/client";
@@ -60,7 +60,7 @@ describe("route guard", () => {
 
 const authedUser: AuthValue = {
   isAuthenticated: true,
-  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS },
+  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: async () => {},
@@ -138,7 +138,7 @@ describe("login redirect", () => {
           ? new Response(
               JSON.stringify({
                 token: "t",
-                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS },
+                user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true },
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
             )
@@ -201,5 +201,102 @@ describe("scroll reset on navigation", () => {
 
     await waitFor(() => expect(scrollTo).toHaveBeenCalled());
     expect(scrollTo.mock.calls[0][0]).toMatchObject({ top: 0, left: 0 });
+  });
+});
+
+describe("welcome guard", () => {
+  const newcomer: AuthValue = {
+    ...authedUser,
+    user: { ...authedUser.user!, welcomeDone: false },
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("sends a user who hasn't finished the welcome to /welcome", async () => {
+    const router = renderAt("/accounts", newcomer);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/welcome"));
+  });
+
+  it("lets the bank-connection callback through, outside the app chrome", async () => {
+    // The guard lets an unfinished user reach the callback, rendered outside the
+    // app chrome. The hand-over to /welcome itself is covered in
+    // ConnectionCallback.test.tsx.
+    const router = renderAt("/connections/callback?state=c1&error=access_denied", newcomer);
+    expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/connections/callback");
+    expect(screen.queryByRole("link", { name: "Accounts" })).not.toBeInTheDocument();
+  });
+
+  it("renders the callback page without the sidebar for a finished user", async () => {
+    const router = renderAt("/connections/callback?code=abc", authedUser);
+    expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/connections/callback");
+    expect(screen.queryByRole("link", { name: "Accounts" })).not.toBeInTheDocument();
+  });
+
+  it("sends a logged-out visitor of the callback to /login", async () => {
+    const router = renderAt("/connections/callback?state=c1&code=abc", unauth);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+  });
+
+  it("sends a user who finished it away from /welcome", async () => {
+    const router = renderAt("/welcome", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("sends a logged-out visitor of /welcome to /login", async () => {
+    const router = renderAt("/welcome", unauth);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+  });
+});
+
+describe("finishing the welcome screen", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setAuthToken("t");
+    vi.restoreAllMocks();
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        // /auth/me and the prefill's prefs save both answer with the session user.
+        if (url === "/api/auth/me" || url === "/api/auth/prefs")
+          return json({ id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false });
+        if (url === "/api/auth/welcome") return new Response(null, { status: 204 });
+        if (url === "/api/budget/categorize/status") return json({ configured: false, running: false });
+        return json([]);
+      }),
+    );
+  });
+
+  // The whole chain: skip -> POST -> updateUser -> App invalidates -> guard leaves /welcome.
+  it("leaves /welcome once the user skips the setup", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    const skip = await screen.findByRole("button", { name: "Skip setup for now" });
+    expect(appRouter.state.location.pathname).toBe("/welcome");
+    fireEvent.click(skip);
+    await waitFor(() => expect(appRouter.state.location.pathname).toBe("/"));
+    expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+    expect(appRouter.state.location.pathname).not.toBe("/welcome");
   });
 });
