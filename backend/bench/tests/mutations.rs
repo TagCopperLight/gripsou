@@ -4,7 +4,7 @@ async fn committed_trials_start_identically_and_offline_paths_are_verified() -> 
     assert!(
         catalog::catalog()
             .iter()
-            .filter(|c| c.reset == "clone")
+            .filter(|c| c.reset == "clone" && c.suite == "backend")
             .count()
             >= 16
     );
@@ -14,7 +14,7 @@ async fn committed_trials_start_identically_and_offline_paths_are_verified() -> 
     pool.close().await;
     for case in catalog::catalog()
         .into_iter()
-        .filter(|c| c.reset == "clone")
+        .filter(|c| c.reset == "clone" && c.suite == "backend")
     {
         let mut previous = None;
         for _ in 0..2 {

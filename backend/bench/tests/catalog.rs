@@ -36,7 +36,7 @@ async fn real_reads_reject_wrong_values_and_identity_even_with_the_same_count() 
     let f = fixture::seed(&pool, &FixtureConfig::profile("smoke")?).await?;
     for case in catalog::catalog()
         .into_iter()
-        .filter(|c| c.id != "transactions.page.deep" && c.reset == "read")
+        .filter(|c| c.id != "transactions.page.deep" && c.reset == "read" && c.suite == "backend")
     {
         let id = case.id.clone();
 

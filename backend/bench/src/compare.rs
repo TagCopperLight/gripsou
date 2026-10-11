@@ -89,6 +89,44 @@ pub fn compare(b: &RunSet, c: &RunSet, allowed: &[String]) -> Result<Value> {
     let mut reasons = Vec::new();
     let mut changes = Vec::new();
     let mut acknowledged = Vec::new();
+    for (revision, set) in [("baseline", b), ("candidate", c)] {
+        let first = &set.runs[0];
+        let reference = index(first);
+        for run in &set.runs[1..] {
+            if run.commit != first.commit
+                || run.dirty_fingerprint != first.dirty_fingerprint
+                || run.environment != first.environment
+                || run.fixture != first.fixture
+                || run.fixture_fingerprint != first.fixture_fingerprint
+                || run.suite != first.suite
+                || run.warmups != first.warmups
+            {
+                reasons.push(format!(
+                    "{revision}: independent runs do not share a revision/workload/environment"
+                ));
+            }
+            let current = index(run);
+            if reference.keys().collect::<Vec<_>>() != current.keys().collect::<Vec<_>>() {
+                reasons.push(format!(
+                    "{revision}: independent runs have different targets"
+                ));
+            }
+            for (id, m) in &reference {
+                if let Some(n) = current.get(id)
+                    && (m.parameters != n.parameters
+                        || m.boundary != n.boundary
+                        || m.reset != n.reset
+                        || m.batch_size != n.batch_size
+                        || m.samples_ms.len() != n.samples_ms.len()
+                        || m.outcome != n.outcome)
+                {
+                    reasons.push(format!(
+                        "{revision}: {id} contract/outcome differs across runs"
+                    ));
+                }
+            }
+        }
+    }
     for (i, (br, cr)) in b.runs.iter().zip(&c.runs).enumerate() {
         if br.fixture_fingerprint != cr.fixture_fingerprint
             || br.fixture != cr.fixture
@@ -104,7 +142,7 @@ pub fn compare(b: &RunSet, c: &RunSet, allowed: &[String]) -> Result<Value> {
         for key in keys {
             if br.environment.get(key) != cr.environment.get(key) {
                 let detail = json!({"run":i,"field":key,"baseline":br.environment.get(key),"candidate":cr.environment.get(key)});
-                if allowed.contains(key) {
+                if allowed.contains(key) && key != "build_mode" && key != "pool_max_connections" {
                     acknowledged.push(detail);
                 } else {
                     reasons.push(format!("run {i}: different environment {key}"));

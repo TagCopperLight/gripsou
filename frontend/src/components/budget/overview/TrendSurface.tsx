@@ -1,3 +1,4 @@
+import { chartReadinessEvents, chartReady } from "./../../chartReadiness";
 import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption, EChartsType } from "echarts";
@@ -163,11 +164,11 @@ export function TrendSurface({
     <Surface className="w-full">
       <div className="flex flex-col p-5">
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.trend.title")}</h2>
-        <ReactECharts
+        <ReactECharts onChartReady={chartReady}
           option={option}
           opts={{ renderer: "svg" }}
           notMerge
-          onEvents={onEvents}
+          onEvents={{ ...onEvents, ...chartReadinessEvents, chartReady }}
           style={{ height: 300, width: "100%" }}
         />
         {/* Wraps freely: French labels run longer and a renamed category can be

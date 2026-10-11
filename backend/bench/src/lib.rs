@@ -12,3 +12,9 @@ pub mod metadata;
 pub mod runner;
 
 pub mod server;
+
+pub mod browser;
+
+pub mod load;
+
+pub mod diagnostics;

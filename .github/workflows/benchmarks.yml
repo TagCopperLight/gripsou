@@ -1,0 +1,68 @@
+name: Benchmarks
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Fixture profile
+        type: choice
+        options: [smoke, typical, large-ledger, active-investor, long-history, multi-currency, transfer-heavy, shared-database, large-portfolio]
+        default: typical
+      suite:
+        description: Measurement layer
+        type: choice
+        options: [backend, http, browser, load]
+        default: backend
+      samples:
+        description: Measured trials (30 median / 100 p95 goals)
+        default: '30'
+      only:
+        description: Comma-separated target IDs (empty runs supported defaults)
+        default: ''
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: gripsou
+          POSTGRES_PASSWORD: gripsou
+          POSTGRES_DB: gripsou
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gripsou" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://gripsou:gripsou@localhost:5432/gripsou
+      SQLX_OFFLINE: 'true'
+      BENCH_PROFILE: ${{ inputs.profile }}
+      BENCH_SUITE: ${{ inputs.suite }}
+      BENCH_SAMPLES: ${{ inputs.samples }}
+      BENCH_ONLY: ${{ inputs.only }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.3'
+      - run: cd frontend && bun install --frozen-lockfile
+        if: inputs.suite == 'browser'
+      - run: cd frontend && bun x playwright install --with-deps chromium
+        if: inputs.suite == 'browser'
+      - run: cd frontend && bun run bench:typecheck && bun run bench:readiness
+        if: inputs.suite == 'browser'
+      - name: Correctness-checked release measurement (no shared-runner latency gate)
+        run: |
+          args=(run --profile "$BENCH_PROFILE" --suite "$BENCH_SUITE" --samples "$BENCH_SAMPLES" --repeat 3 --save "$RUNNER_TEMP/results.json")
+          if [ -n "$BENCH_ONLY" ]; then args+=(--only "$BENCH_ONLY"); fi
+          if [ "$BENCH_SUITE" = load ]; then args+=(--users 2 --connections 2); fi
+          scripts/bench "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: ${{ runner.temp }}/results.json

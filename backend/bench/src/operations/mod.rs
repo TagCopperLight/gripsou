@@ -7,6 +7,7 @@ pub struct Execution {
     pub batch_size: usize,
 }
 mod budget;
+pub mod http;
 mod mutations;
 mod portfolio;
 mod returns;
@@ -175,6 +176,65 @@ pub async fn verify(
             );
         }
     }
+    if case.case.id == "transactions.counts" {
+        let cash:i64=sqlx::query_scalar("select count(*) from transaction t join account a on a.id=t.account_id join connection c on c.id=a.connection_id where c.user_id=$1").bind(f.user_id).fetch_one(pool).await?;
+        let lots = (f.config.holdings - f.config.accounts) * f.config.lots_per_security;
+        ensure!(
+            out["total"].as_i64() == Some(cash + lots as i64) && out["matching"] == out["total"],
+            "wrong transaction totals"
+        );
+    }
+    if case.case.id == "transactions.tags" {
+        let expected = (0..200.min(f.config.transactions))
+            .filter(|n| n % 3 == 0)
+            .count();
+        ensure!(
+            out.as_object().map(serde_json::Map::len) == Some(expected),
+            "wrong transaction tag count"
+        );
+        for (key, rows) in out.as_object().unwrap() {
+            let id: uuid::Uuid = key.parse()?;
+            ensure!(
+                (0..200.min(f.config.transactions))
+                    .any(|n| n % 3 == 0 && id == crate::fixture::id(7, 0, n)),
+                "wrong tagged owner"
+            );
+            ensure!(
+                rows.as_array().map(Vec::len) == Some(1),
+                "wrong tag coverage"
+            );
+        }
+    }
+    if case.case.id == "budget.day-totals" {
+        let rows = out
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("budget rows must be array"))?;
+        ensure!(
+            rows.iter()
+                .map(|r| r["txn_count"].as_i64().unwrap_or(0))
+                .sum::<i64>()
+                == f.config.transactions as i64,
+            "budget omitted cash rows"
+        );
+        if f.config.currencies.len() == 1 {
+            let expected:rust_decimal::Decimal=sqlx::query_scalar("select sum(t.amount) from transaction t join account a on a.id=t.account_id join connection c on c.id=a.connection_id where c.user_id=$1").bind(f.user_id).fetch_one(pool).await?;
+            let actual: rust_decimal::Decimal = rows
+                .iter()
+                .map(|r| decimal(&r["amount"]))
+                .collect::<anyhow::Result<Vec<_>>>()?
+                .into_iter()
+                .sum();
+            ensure!(actual == expected, "wrong budget aggregate amount");
+        }
+    }
+    if case.case.id == "portfolio.net-worth" {
+        let expected = fixture_value(pool, f, None).await?;
+        let rows = out.as_array().unwrap();
+        ensure!(
+            decimal(&rows.last().unwrap()["net_worth"])? == expected,
+            "wrong net worth amount"
+        );
+    }
     match case.case.id.as_str() {
         "portfolio.accounts" | "portfolio.distribution" => {
             let rows = out
@@ -186,6 +246,10 @@ pub async fn verify(
                 ensure!(
                     (0..f.config.accounts).any(|n| id == crate::fixture::id(3, 0, n)),
                     "foreign account"
+                );
+                ensure!(
+                    decimal(&r["value"])? == fixture_value(pool, f, Some(id)).await?,
+                    "wrong account value"
                 );
             }
         }
@@ -268,6 +332,19 @@ pub async fn verify(
         _ => {}
     }
     Ok(())
+}
+pub async fn fixture_value(
+    pool: &sqlx::PgPool,
+    f: &Fixture,
+    account: Option<uuid::Uuid>,
+) -> anyhow::Result<rust_decimal::Decimal> {
+    let value:rust_decimal::Decimal=sqlx::query_scalar("select coalesce(sum(h.quantity * case i.kind when 'cash' then 1 else 12 end * case i.currency when 'USD' then 0.9 when 'GBP' then 1.2 else 1 end),0) from holding h join instrument i on i.id=h.instrument_id join account a on a.id=h.account_id join connection c on c.id=a.connection_id where c.user_id=$1 and ($2::uuid is null or a.id=$2)").bind(f.user_id).bind(account).fetch_one(pool).await?;
+    let reporting = match f.config.reporting_currency.as_str() {
+        "USD" => rust_decimal::Decimal::new(9, 1),
+        "GBP" => rust_decimal::Decimal::new(12, 1),
+        _ => rust_decimal::Decimal::ONE,
+    };
+    Ok(value / reporting)
 }
 pub fn decimal(value: &Value) -> anyhow::Result<rust_decimal::Decimal> {
     Ok(value
