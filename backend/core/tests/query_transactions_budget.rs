@@ -777,3 +777,74 @@ async fn a_date_range_keeps_whole_utc_days(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(kept, vec!["first", "last"]);
     Ok(())
 }
+
+/// Aggregating through a single FX join must preserve each row's missing-rate
+/// flags, pivot fallback, and decimal division (including a zero-rate leg).
+#[sqlx::test(migrations = "../migrations")]
+async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, day(2026, 3, 2), Decimal::ZERO).await;
+    rate_on(&pool, usd, day(2026, 3, 3), Decimal::new(3, 1)).await;
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    sqlx::query("update users set prefs = prefs || '{\"currency\":\"USD\"}' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    for currency in ["EUR", "USD", "GBP"] {
+        let account_id =
+            upsert_account(&mut conn, conn_id, &checking_account_in(currency, currency)).await?;
+        for d in 1..=3 {
+            upsert_transaction(
+                &mut conn,
+                account_id,
+                &txn_on_day(
+                    currency,
+                    &format!("{currency}-{d}"),
+                    "withdrawal",
+                    eur(-1),
+                    day(2026, 3, d),
+                    currency,
+                ),
+            )
+            .await?;
+        }
+    }
+    drop(conn);
+    for currency in [None, Some("EUR"), Some("USD"), Some("GBP"), Some("absent")] {
+        let f = TransactionFilters {
+            search: currency.map(str::to_string),
+            ..filters()
+        };
+        let rows = transactions(&pool, user_id, &f).await?;
+        let counts = transaction_counts(&pool, user_id, &f).await?;
+        assert_eq!(counts.matching, rows.len() as i64);
+        assert_eq!(
+            counts.matching_total,
+            rows.iter().map(|r| r.amount_reporting).sum::<Decimal>()
+        );
+        assert_eq!(
+            counts.fx_missing,
+            matches!(currency, None | Some("USD") | Some("GBP"))
+        );
+        assert_eq!(counts.reporting_fx_missing, currency != Some("absent"));
+        assert_eq!(counts.total, 9);
+    }
+    let zero_day = TransactionFilters {
+        search: Some("USD".into()),
+        from: Some(day(2026, 3, 2)),
+        to: Some(day(2026, 3, 2)),
+        ..filters()
+    };
+    let zero = transaction_counts(&pool, user_id, &zero_day).await?;
+    assert_eq!(zero.matching, 1);
+    assert_eq!(zero.matching_total, Decimal::ZERO);
+    assert!(!zero.fx_missing, "a zero account rate is present");
+    assert!(
+        zero.reporting_fx_missing,
+        "a zero divisor degrades to pivot"
+    );
+    Ok(())
+}

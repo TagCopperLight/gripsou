@@ -21,8 +21,8 @@ export function SankeySurface({
   const { t } = useTranslation();
 
   // Memoised on the data and the translations: the option holds closures, so
-  // a fresh object every render would reset the chart and replay its entry
-  // animation whenever the page re-renders for an unrelated reason.
+  // a fresh object every render would reset the chart whenever the page
+  // re-renders for an unrelated reason.
   const option = useMemo<EChartsOption>(() => {
     const graph = sankeyGraph(sankey, {
       slice: (s) => sliceLabel(t, s),
@@ -33,7 +33,7 @@ export function SankeySurface({
 
     return {
       backgroundColor: "transparent",
-      animationDuration: 300,
+      animation: false,
       tooltip: {
         trigger: "item",
         backgroundColor: GRID,

@@ -56,6 +56,10 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
   }, []);
 
   useLayoutEffect(() => {
+    // Empty cells and single chips have no overflow decision: a single chip
+    // always stays visible and truncates. Avoid a measuring twin, forced
+    // layout reads and a ResizeObserver for these common ledger rows.
+    if (tags.length <= 1) return;
     measure();
     const box = line.current;
     if (!box || typeof ResizeObserver === "undefined") return;
@@ -64,7 +68,8 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
     return () => observer.disconnect();
   }, [measure, tags]);
 
-  const hidden = tags.slice(visible);
+  const shown = tags.length <= 1 ? tags.length : visible;
+  const hidden = tags.slice(shown);
   const addButton = (
     <button
       type="button"
@@ -83,7 +88,7 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
 
   return (
     <span ref={line} className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-      {tags.slice(0, visible).map((tag) => (
+      {tags.slice(0, shown).map((tag) => (
         <TagChip key={tag.id} tag={tag} className="min-w-0 shrink" />
       ))}
       {hidden.length > 0 && (
@@ -98,21 +103,23 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
       {addButton}
 
       {/* Off-flow twin: full-width, never wrapping, invisible and inert. */}
-      <span
-        ref={ghost}
-        aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 flex items-center gap-1 opacity-0"
-      >
-        {tags.map((tag) => (
-          <TagChip key={tag.id} tag={tag} className="shrink-0" />
-        ))}
-        <span className="shrink-0 text-[11px] font-medium">+{tags.length}</span>
-        {/* A stand-in, not the button itself: a second `tx-add-tag` would be
-            both a duplicate test id and a focusable node inside aria-hidden. */}
-        <span className="shrink-0 p-1">
-          <Plus className="size-3.5" />
+      {tags.length > 1 && (
+        <span
+          ref={ghost}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 flex items-center gap-1 opacity-0"
+        >
+          {tags.map((tag) => (
+            <TagChip key={tag.id} tag={tag} className="shrink-0" />
+          ))}
+          <span className="shrink-0 text-[11px] font-medium">+{tags.length}</span>
+          {/* A stand-in, not the button itself: a second `tx-add-tag` would be
+              both a duplicate test id and a focusable node inside aria-hidden. */}
+          <span className="shrink-0 p-1">
+            <Plus className="size-3.5" />
+          </span>
         </span>
-      </span>
+      )}
     </span>
   );
 }

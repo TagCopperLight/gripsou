@@ -23,6 +23,35 @@ function stubLayout(itemWidth: number, lineWidth: number) {
 afterEach(cleanup);
 
 describe("TagCell", () => {
+  it.each([{ tags: [] }, { tags: TAGS.slice(0, 1) }])("avoids synchronous layout reads when all tags must stay visible: $tags", ({ tags }) => {
+    const offset = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get");
+    const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get");
+    try {
+      render(<TagCell tags={tags} label="Add tags" onOpen={vi.fn()} />);
+      expect(screen.queryAllByTestId("tag-chip")).toHaveLength(tags.length);
+      expect(screen.getByRole("button", { name: "Add tags" })).toBeInTheDocument();
+      expect(offset).not.toHaveBeenCalled();
+      expect(client).not.toHaveBeenCalled();
+    } finally {
+      offset.mockRestore();
+      client.mockRestore();
+    }
+  });
+
+  it("remeasures when a second tag is added and shows a new single tag immediately", () => {
+    const restore = stubLayout(40, 130);
+    try {
+      const { rerender } = render(<TagCell tags={[]} label="Add tags" onOpen={vi.fn()} />);
+      rerender(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
+      expect(screen.getByTestId("tx-tags-overflow")).toHaveTextContent("+2");
+      rerender(<TagCell tags={[TAGS[2]]} label="Add tags" onOpen={vi.fn()} />);
+      expect(screen.queryByTestId("tx-tags-overflow")).toBeNull();
+      expect(screen.getByTestId("tag-chip")).toHaveTextContent("Shared");
+    } finally {
+      restore();
+    }
+  });
+
   it("shows every tag and no counter when the line is wide enough", () => {
     const restore = stubLayout(40, 1000);
     render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
