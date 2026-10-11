@@ -5,3 +5,5 @@ pub mod database;
 pub mod fixture;
 pub mod operations;
 pub mod report;
+
+pub mod offline;

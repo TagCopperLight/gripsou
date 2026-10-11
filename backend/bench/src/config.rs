@@ -84,6 +84,27 @@ impl FixtureConfig {
         })
     }
     pub fn validate(&self) -> Result<()> {
+        ensure!(self.seed == 1, "fixture version 1 supports seed 1 only");
+        ensure!(
+            self.accounts > self.currencies.len(),
+            "accounts must include same-currency transfer counterparts"
+        );
+        ensure!(
+            [
+                self.accounts,
+                self.connections,
+                self.holdings,
+                self.transactions,
+                self.users,
+                self.lots_per_security,
+                self.categories,
+                self.tags
+            ]
+            .iter()
+            .all(|n| *n < i32::MAX as usize)
+                && self.days < 100000,
+            "fixture dimensions exceed generator bounds"
+        );
         ensure!(
             self.accounts >= 2
                 && self.connections > 0

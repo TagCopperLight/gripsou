@@ -7,10 +7,12 @@ pub struct Execution {
     pub batch_size: usize,
 }
 mod budget;
+mod mutations;
 mod portfolio;
 mod returns;
 mod transactions;
 pub struct PreparedCase {
+    pub mutation: Option<mutations::Input>,
     pub case: Case,
     pub fixture: Fixture,
     pub filters: gripsou_core::repo::query::TransactionFilters,
@@ -47,7 +49,13 @@ pub async fn prepare(
     } else {
         vec![]
     };
+    let mutation = if case.reset == "clone" {
+        Some(mutations::prepare(case, pool, fixture).await?)
+    } else {
+        None
+    };
     Ok(PreparedCase {
+        mutation,
         case: case.clone(),
         fixture: fixture.clone(),
         filters,
@@ -70,6 +78,9 @@ pub async fn timed<T: serde::Serialize>(
     })
 }
 pub async fn execute(case: &PreparedCase, pool: &sqlx::PgPool) -> anyhow::Result<Execution> {
+    if case.mutation.is_some() {
+        return mutations::execute(case, pool).await;
+    }
     match case.case.id.split('.').next().unwrap() {
         "portfolio" | "prices" | "lots" => portfolio::execute(case, pool).await,
         "transactions" => transactions::execute(case, pool).await,
@@ -84,6 +95,9 @@ pub async fn verify(
     execution: &Execution,
 ) -> anyhow::Result<()> {
     use anyhow::ensure;
+    if case.mutation.is_some() {
+        return mutations::verify(case, pool, execution).await;
+    }
     let f = &case.fixture;
     let out = &execution.outcome;
     if case.case.id == "returns.xirr.valid" {

@@ -51,6 +51,33 @@ pub fn catalog() -> Vec<Case> {
             .into(),
             reset: "read".into(),
         })
+        .chain(
+            [
+                "portfolio.backfill",
+                "transactions.bulk.category",
+                "transactions.bulk.tags",
+                "transactions.bulk.checked",
+                "transactions.apply-description",
+                "sync.ingest.first",
+                "sync.ingest.unchanged",
+                "sync.ingest.corrected",
+                "transfers.pair.first",
+                "transfers.pair.unchanged",
+                "transfers.pair.ambiguous",
+                "ai.prepare",
+                "ai.persist",
+                "prices.insert.first",
+                "prices.insert.duplicate",
+                "prices.refresh.fresh",
+            ]
+            .into_iter()
+            .map(|id| Case {
+                id: id.into(),
+                suite: "backend".into(),
+                boundary: "application call including acquisition and commit".into(),
+                reset: "clone".into(),
+            }),
+        )
         .collect()
 }
 pub fn select(config: &RunConfig) -> anyhow::Result<Vec<Case>> {
