@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     prefs as \"prefs!: sqlx::types::Json<UserPrefs>\"",
+  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     welcomed_at is not null as \"welcome_done!\",\n                     prefs as \"prefs!: sqlx::types::Json<UserPrefs>\"",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,12 @@
       },
       {
         "ordinal": 4,
+        "name": "welcome_done!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
         "name": "prefs!: sqlx::types::Json<UserPrefs>",
         "type_info": "Jsonb",
         "origin": {
@@ -71,8 +77,9 @@
       false,
       false,
       false,
+      null,
       false
     ]
   },
-  "hash": "882005a74d307b456380389ed41b1db4cd2e885ded0de2574a64c70821cb5a27"
+  "hash": "0c65d57b079865e152893ded20bd55fd4b1e1f2387fb8fdfbaba9ad4b6285c4a"
 }

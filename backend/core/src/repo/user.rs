@@ -15,6 +15,8 @@ pub struct UserCredentials {
     pub email: String,
     pub role: String,
     pub prefs: UserPrefs,
+    /// False until the user finished or skipped the post-invite welcome screen.
+    pub welcome_done: bool,
 }
 
 pub async fn credentials_by_email(
@@ -23,6 +25,7 @@ pub async fn credentials_by_email(
 ) -> Result<Option<UserCredentials>, CoreError> {
     let row = sqlx::query!(
         r#"select id, password_hash, name, email, role,
+                  welcomed_at is not null as "welcome_done!",
                   prefs as "prefs!: sqlx::types::Json<UserPrefs>"
            from users where email = $1"#,
         email,
@@ -36,6 +39,7 @@ pub async fn credentials_by_email(
         email: r.email,
         role: r.role,
         prefs: r.prefs.0,
+        welcome_done: r.welcome_done,
     }))
 }
 
@@ -57,6 +61,8 @@ pub struct UserProfile {
     pub email: String,
     pub role: String,
     pub prefs: UserPrefs,
+    /// False until the user finished or skipped the post-invite welcome screen.
+    pub welcome_done: bool,
 }
 
 pub async fn profile_by_id(
@@ -65,6 +71,7 @@ pub async fn profile_by_id(
 ) -> Result<Option<UserProfile>, CoreError> {
     let row = sqlx::query!(
         r#"select id, name, email, role,
+                  welcomed_at is not null as "welcome_done!",
                   prefs as "prefs!: sqlx::types::Json<UserPrefs>"
            from users where id = $1"#,
         user_id,
@@ -77,6 +84,7 @@ pub async fn profile_by_id(
         email: r.email,
         role: r.role,
         prefs: r.prefs.0,
+        welcome_done: r.welcome_done,
     }))
 }
 
@@ -111,6 +119,7 @@ pub async fn update_profile(
     let row = sqlx::query!(
         r#"update users set name = $2, email = $3 where id = $1
            returning id, name, email, role,
+                     welcomed_at is not null as "welcome_done!",
                      prefs as "prefs!: sqlx::types::Json<UserPrefs>""#,
         user_id,
         name,
@@ -124,7 +133,20 @@ pub async fn update_profile(
         email: r.email,
         role: r.role,
         prefs: r.prefs.0,
+        welcome_done: r.welcome_done,
     }))
+}
+
+/// Mark the welcome screen done. Keeps the first date when called again.
+/// Returns true when the user exists.
+pub async fn finish_welcome(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
+    let res = sqlx::query!(
+        r#"update users set welcomed_at = coalesce(welcomed_at, now()) where id = $1"#,
+        user_id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
 }
 
 /// Returns true when a row was updated (the user exists).

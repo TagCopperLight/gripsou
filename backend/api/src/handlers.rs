@@ -941,6 +941,21 @@ pub async fn me(
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
+/// Mark the post-invite welcome screen finished (or skipped). Idempotent.
+pub async fn finish_welcome(
+    State(pool): State<PgPool>,
+    AuthUser { user_id, .. }: AuthUser,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if !gripsou_core::repo::user::finish_welcome(&pool, user_id)
+        .await
+        .map_err(internal)?
+    {
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized".to_string()));
+    }
+    tracing::info!(user_id = %user_id, "welcome finished");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn update_prefs(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -2803,6 +2818,54 @@ mod auth_tests {
         assert!(!resp.0.token.is_empty());
         assert_eq!(resp.0.user.email, "new@t.local");
         assert_eq!(resp.0.user.role, "user");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeemed_account_needs_welcome_until_finished(pool: PgPool) {
+        let admin = seed_admin_user(&pool).await;
+        gripsou_core::repo::invite_token::create(
+            &pool,
+            "invite",
+            None,
+            admin,
+            &auth::hash_token_str("raw-invite"),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+        let resp = redeem_invite(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path("raw-invite".to_string()),
+            Json(dto::RedeemInviteReq {
+                email: "new@t.local".into(),
+                name: "New".into(),
+                password: "hunter2".into(),
+            }),
+        )
+        .await
+        .expect("redeem ok");
+        assert!(!resp.0.user.welcome_done);
+
+        let session = gripsou_core::repo::session::find_valid_by_hash(
+            &pool,
+            &auth::hash_token(&resp.0.token),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let principal = || auth::AuthUser {
+            user_id: session.user_id,
+            session_id: session.id,
+        };
+        let status = finish_welcome(State(pool.clone()), principal())
+            .await
+            .expect("finish ok");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let me_resp = me(State(pool.clone()), principal()).await.expect("me ok");
+        assert!(me_resp.0.welcome_done);
     }
 
     #[sqlx::test(migrations = "../migrations")]
