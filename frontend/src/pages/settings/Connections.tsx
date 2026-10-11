@@ -8,12 +8,15 @@ import { CardState } from "../../components/CardState";
 import { ConnectionRow } from "../../components/ConnectionRow";
 import { AddConnectionModal } from "../../components/AddConnectionModal";
 import { DeleteConnectionModal } from "../../components/DeleteConnectionModal";
-import { useConnections } from "../../api/hooks";
+import { useConnections, useEnabledProviders, useInitConnection } from "../../api/hooks";
+import { goTo } from "../../lib/navigate";
 import type { SyncConnection } from "../../api/types";
 
 export function SettingsConnections() {
   const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useConnections();
+  const { data: providers, isLoading: providersLoading } = useEnabledProviders();
+  const initConnection = useInitConnection();
   const groups = data ?? [];
   const conns = groups.flatMap((g) =>
     g.connections.map((c) => ({ ...c, providerName: g.providerName })),
@@ -23,6 +26,18 @@ export function SettingsConnections() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SyncConnection | null>(null);
+
+  const addConnection = () => {
+    if (providers?.length === 1) {
+      initConnection.mutate(providers[0].key, {
+        onSuccess: ({ redirectUrl }) => {
+          goTo(redirectUrl ?? "/settings/connections");
+        },
+      });
+    } else {
+      setAddOpen(true);
+    }
+  };
 
   return (
     <div className="pb-8 md:mt-13">
@@ -40,11 +55,17 @@ export function SettingsConnections() {
                 </span>
               )}
             </h2>
-            <Button onClick={() => setAddOpen(true)} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
+            <Button onClick={addConnection} disabled={providersLoading || initConnection.isPending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
               <Plus className="size-4" />
               {t("settings.connections.addConnection")}
             </Button>
           </div>
+
+          {initConnection.isError && (
+            <p role="alert" className="mt-4 text-sm text-red">
+              {t("settings.connections.connectError")}
+            </p>
+          )}
 
           {isLoading ? (
             <CardState variant="loading" className="mt-4 h-64" />

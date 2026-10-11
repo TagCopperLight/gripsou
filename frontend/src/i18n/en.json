@@ -399,6 +399,7 @@
         "pending": "Connecting…"
       },
       "pickProvider": "Choose a provider",
+      "noProviders": "No data providers are enabled. Ask your administrator to enable one.",
       "connect": "Connect",
       "connectError": "Could not start the connection. Please try again.",
       "synced": "Synced {{date}}",
