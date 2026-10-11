@@ -10,8 +10,7 @@ import type { UserPrefs } from "../../lib/prefs";
 import { formatMoney } from "../../lib/money";
 import { formatDate } from "../../lib/date";
 import { CURRENCIES } from "../../lib/currency";
-
-const TIME_ZONES = [...new Set(["UTC", "Europe/Paris", ...Intl.supportedValuesOf("timeZone")])].sort();
+import { TIME_ZONES } from "../../lib/timeZoneList";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
