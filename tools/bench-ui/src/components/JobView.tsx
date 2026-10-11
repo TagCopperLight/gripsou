@@ -53,7 +53,7 @@ export function JobView({ id }: { id: string }) {
           <div>
             {job.phase === 'measuring' && c
               ? `${c.id} (${c.index} of ${c.of})${c.kind ? `: ${c.kind === 'first' ? 'first run' : `${c.kind} ${c.n}/${c.total}`}` : ''}`
-              : PHASES[job.phase ?? 'compiling']}
+              : job.cases.length === 0 ? PHASES.compiling : job.phase && job.phase !== 'compiling' ? PHASES[job.phase] : 'Preparing…'}
           </div>
           <ProgressBar value={job.phase === 'measuring' && c ? caseValue : null} />
         </>

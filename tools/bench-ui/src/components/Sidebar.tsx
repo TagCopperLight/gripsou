@@ -8,6 +8,15 @@ interface Props { view: View; onView(v: View): void; selected: string[]; onSelec
 export function Sidebar({ view, onView, selected, onSelected }: Props) {
   const jobs = useJobs().filter((j) => j.status === 'queued' || j.status === 'running' || j.status === 'failed')
   const runs = useRuns()
+  const attempt = async (action: () => Promise<unknown>) => {
+    try {
+      await action()
+      return true
+    } catch (err) {
+      alert((err as Error).message)
+      return false
+    }
+  }
   const toggle = (id: string) => {
     onSelected(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id])
     onView({ kind: 'runs' })
@@ -34,9 +43,9 @@ export function Sidebar({ view, onView, selected, onSelected }: Props) {
             {r.error ? r.error : `${r.createdAt.slice(0, 16).replace('T', ' ')} · ${r.profile ?? '?'} · ${r.suite ?? '?'}`}
           </div>
           <div className="row-actions">
-            <button onClick={() => { const name = prompt('New name', r.name); if (name) void renameRun(r.id, { name }) }}>Rename</button>
-            <button onClick={() => { const note = prompt('Note', r.note); if (note !== null) void renameRun(r.id, { note }) }}>Note</button>
-            <button onClick={() => { if (confirm(`Delete “${r.name}”?`)) { onSelected(selected.filter((s) => s !== r.id)); void deleteRun(r.id) } }}>Delete</button>
+            <button onClick={() => { const name = prompt('New name', r.name); if (name) void attempt(() => renameRun(r.id, { name })) }}>Rename</button>
+            <button onClick={() => { const note = prompt('Note', r.note); if (note !== null) void attempt(() => renameRun(r.id, { note })) }}>Note</button>
+            <button onClick={() => { if (confirm(`Delete “${r.name}”?`)) void attempt(() => deleteRun(r.id)).then((ok) => { if (ok) onSelected(selected.filter((s) => s !== r.id)) }) }}>Delete</button>
           </div>
         </div>
       ))}

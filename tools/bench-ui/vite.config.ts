@@ -4,6 +4,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5175, proxy: { '/api': 'http://127.0.0.1:5174' } },
+  server: { port: 5175, proxy: { '/api': { target: 'http://127.0.0.1:5174', changeOrigin: true } } },
   test: { include: ['src/**/*.test.ts', 'server/**/*.test.ts', 'shared/**/*.test.ts'] },
 })

@@ -23,6 +23,12 @@ export async function resolveDatabaseUrl(
   return { url: `postgres://gripsou:gripsou@${ip}:5432/gripsou`, source: 'docker' }
 }
 
+/** hostname:port of a database URL, without any credentials. */
+export function hostOf(url: string): string {
+  const { hostname, port } = new URL(url)
+  return `${hostname}:${port || 5432}`
+}
+
 /** Opens a TCP connection to the database host; null when it answers. */
 export function reachable(url: string, timeoutMs = 2000): Promise<string | null> {
   const { hostname, port } = new URL(url)

@@ -1,3 +1,4 @@
+import { escapeHtml } from '../lib/html'
 import ReactECharts from 'echarts-for-react'
 import { formatMs } from '../lib/runs'
 import { summarize } from '../lib/stats'
@@ -15,7 +16,7 @@ export function SampleDots({ lanes }: { lanes: Lane[] }) {
       trigger: 'item',
       formatter: (p: { componentType: string; seriesIndex: number; value?: [number, string] }) => {
         const s = stats[p.seriesIndex]
-        const name = lanes[p.seriesIndex].name
+        const name = escapeHtml(lanes[p.seriesIndex].name)
         const summary = `median ${formatMs(s?.median ?? null)} · p95 ${formatMs(s?.p95 ?? null)}`
         if (p.componentType === 'markPoint' || !p.value) return `${name}: ${summary}`
         return `${name}: ${formatMs(p.value[0])}<br/>${summary}`

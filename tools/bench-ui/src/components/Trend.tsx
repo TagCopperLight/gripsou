@@ -1,3 +1,4 @@
+import { escapeHtml } from '../lib/html'
 import ReactECharts from 'echarts-for-react'
 import { useState } from 'react'
 import { useRuns, useRunSets } from '../api'
@@ -32,7 +33,7 @@ export function Trend() {
       trigger: 'axis',
       formatter: (items: Array<{ dataIndex: number }>) => {
         const p = points[items[0].dataIndex]
-        return `<b>${p.name}</b><br/>commit ${p.commit.slice(0, 10)}<br/>median ${formatMs(p.median)} · p95 ${formatMs(p.p95)}`
+        return `<b>${escapeHtml(p.name)}</b><br/>commit ${escapeHtml(p.commit.slice(0, 10))}<br/>median ${formatMs(p.median)} · p95 ${formatMs(p.p95)}`
       },
     },
     series: [

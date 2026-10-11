@@ -96,6 +96,21 @@ describe('JobManager', () => {
     expect(await store.list()).toEqual([])
   })
 
+  it('hides the result of a job in progress from activeResultIds until it is done', async () => {
+    const m = manager({ FAKE_HANG: '1' })
+    const job = m.enqueue(options)
+    expect(m.activeResultIds().size).toBe(1)
+    await waitFor(() => m.list()[0].manifests.length === 1)
+    await m.cancel(job.id)
+    await m.idle()
+    expect(m.activeResultIds().size).toBe(0)
+    const done = manager()
+    done.enqueue(options)
+    expect(done.activeResultIds().size).toBe(1)
+    await done.idle()
+    expect(done.activeResultIds().size).toBe(0)
+  })
+
   it('cancels a queued job without running it', async () => {
     const m = manager({ FAKE_HANG: '1' })
     const first = m.enqueue(options)

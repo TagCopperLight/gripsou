@@ -126,7 +126,7 @@ export interface Job {
 }
 
 export interface Health {
-  database: { ok: boolean; source: 'env' | 'docker' | null; error: string | null }
+  database: { ok: boolean; source: 'env' | 'docker' | null; host: string | null; error: string | null }
 }
 export interface CompareResult {
   compatible: boolean

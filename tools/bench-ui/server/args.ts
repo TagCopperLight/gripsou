@@ -1,9 +1,10 @@
 import { OVERRIDES, SUITES, type Override, type RunOptions, type Suite } from '../shared/types'
 
-function int(value: unknown, field: string, min: number): number {
+function int(value: unknown, field: string, min: number, max = Infinity): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < min) {
     throw new Error(`${field} must be a whole number ≥ ${min}`)
   }
+  if (value > max) throw new Error(`${field} must be at most ${max}`)
   return value
 }
 
@@ -27,11 +28,11 @@ export function validateOptions(raw: unknown): RunOptions {
     suite: o.suite as Suite,
     profile: o.profile,
     only: only as string[],
-    samples: int(o.samples, 'samples', 1),
-    warmups: int(o.warmups, 'warmups', 0),
-    repeat: int(o.repeat, 'repeat', 1),
+    samples: int(o.samples, 'samples', 1, 10000),
+    warmups: int(o.warmups, 'warmups', 0, 1000),
+    repeat: int(o.repeat, 'repeat', 1, 100),
     diagnostics: o.diagnostics === true,
-    concurrency: o.concurrency === null || o.concurrency === undefined ? null : int(o.concurrency, 'concurrency', 1),
+    concurrency: o.concurrency === null || o.concurrency === undefined ? null : int(o.concurrency, 'concurrency', 1, 1000),
     overrides,
   }
 }

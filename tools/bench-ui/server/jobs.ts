@@ -27,6 +27,8 @@ export class JobManager {
   private child: ChildProcess | null = null
   private running: Promise<void> | null = null
   private cancelled = new Set<string>()
+  private exited = new Set<string>() // runner process is gone; only cleanup is left
+  private active = new Map<string, string>() // job id -> result id, while the job is queued or running
   private counter = 0
   private stopping = false
 
@@ -44,6 +46,11 @@ export class JobManager {
     return this.jobs.find((j) => j.id === job.id)!
   }
 
+  /** Result ids of jobs still in progress: their file may exist but is not final yet. */
+  activeResultIds(): Set<string> {
+    return new Set(this.active.values())
+  }
+
   async cancel(id: string): Promise<boolean> {
     const job = this.jobs.find((j) => j.id === id)
     if (!job) return false
@@ -51,7 +58,7 @@ export class JobManager {
       this.set(id, { status: 'cancelled', endedAt: new Date().toISOString() })
       return true
     }
-    if (job.status !== 'running') return false
+    if (job.status !== 'running' || this.exited.has(id)) return false
     this.cancelled.add(id)
     if (!this.child?.pid) return true // not spawned yet: execute() checks the flag before spawning
     try {
@@ -116,6 +123,9 @@ export class JobManager {
       this.child = null
       this.cancelled.delete(id)
       this.set(id, { status: 'failed', current: null, error: (e as Error).message, endedAt: new Date().toISOString() })
+    } finally {
+      this.active.delete(id)
+      this.exited.delete(id)
     }
   }
 
@@ -123,10 +133,11 @@ export class JobManager {
     const job = this.jobs.find((j) => j.id === id)!
     const resultId = this.deps.store.newId(job.options.name)
     const save = this.deps.store.pathFor(resultId)
+    this.active.set(id, resultId)
     this.set(id, { status: 'running', phase: 'compiling', startedAt: new Date().toISOString() })
     let databaseUrl: string
     try {
-      await mkdir(dirname(save), { recursive: true }) // the runner writes its manifest next to the result
+      await mkdir(dirname(save), { recursive: true }) // make sure the results directory exists for the runner's --save
       databaseUrl = await this.deps.databaseUrl()
     } catch (e) {
       this.set(id, { status: 'failed', error: (e as Error).message, endedAt: new Date().toISOString() })
@@ -163,10 +174,14 @@ export class JobManager {
     const code = await new Promise<number | null>((resolve) => {
       child.on('error', (e) => {
         spawnFailed = true
+        this.exited.add(id)
         log(`could not start runner: ${e.message}`)
         resolve(null)
       })
-      child.on('close', (c) => resolve(c))
+      child.on('close', (c) => {
+        this.exited.add(id)
+        resolve(c)
+      })
     })
     if (!spawnFailed) await Promise.race([drained, new Promise((r) => setTimeout(r, DRAIN_MS))])
     out.close()

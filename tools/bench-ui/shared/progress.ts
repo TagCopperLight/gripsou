@@ -30,7 +30,7 @@ export function applyEvent(job: Job, ev: ProgressEvent): Job {
     case 'phase':
       return { ...job, phase: ev.name }
     case 'repeat':
-      return { ...job, repeat: { index: ev.index, of: ev.of }, current: null }
+      return { ...job, repeat: { index: ev.index, of: ev.of }, phase: null, current: null }
     case 'case_start':
       return { ...job, phase: 'measuring', current: { id: ev.id, index: ev.index, of: ev.of, kind: null, n: 0, total: 0 } }
     case 'trial':

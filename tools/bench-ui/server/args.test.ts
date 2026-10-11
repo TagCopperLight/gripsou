@@ -7,6 +7,10 @@ describe('validateOptions', () => {
   it('accepts a normal launch', () => {
     expect(validateOptions(base)).toEqual(base)
   })
+  it('accepts the maximums', () => {
+    const max = { samples: 10000, warmups: 1000, repeat: 100, concurrency: 1000 }
+    expect(validateOptions({ ...base, ...max })).toMatchObject(max)
+  })
   it.each([
     [{ name: '  ' }, 'name'],
     [{ suite: 'gpu' }, 'suite'],
@@ -18,6 +22,10 @@ describe('validateOptions', () => {
     [{ overrides: { transactions: 0 } }, 'transactions'],
     [{ overrides: { bogus: 3 } }, 'bogus'],
     [{ only: ['a,b'] }, 'benchmark'],
+    [{ samples: 10001 }, 'samples'],
+    [{ warmups: 1001 }, 'warmups'],
+    [{ repeat: 101 }, 'repeat'],
+    [{ concurrency: 1001 }, 'concurrency'],
   ])('rejects %o', (patch, word) => {
     expect(() => validateOptions({ ...base, ...patch })).toThrow(word)
   })

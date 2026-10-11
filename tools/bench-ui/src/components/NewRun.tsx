@@ -53,6 +53,7 @@ export function NewRun({ onStarted }: { onStarted(job: Job): void }) {
     <form onSubmit={submit}>
       <h1>New run</h1>
       {db && !db.ok && <div className="error">{db.error}</div>}
+      {db?.host && <p className="muted small">Scratch databases on {db.host} (from {db.source})</p>}
       {error && <div className="error">{error}</div>}
       <label className="field">
         <span>Name</span>

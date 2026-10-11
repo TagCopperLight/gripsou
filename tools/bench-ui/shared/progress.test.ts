@@ -46,6 +46,7 @@ describe('applyEvent and fractions', () => {
     expect(overallFraction(job)).toBe(0.25)
     job = applyEvent(job, { type: 'repeat', index: 2, of: 2 })
     expect(job.repeat).toEqual({ index: 2, of: 2 })
+    expect(job.phase).toBeNull()
   })
 
   it('is complete once saved', () => {
