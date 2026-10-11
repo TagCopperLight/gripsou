@@ -17,14 +17,9 @@ async fn dispatch() -> anyhow::Result<i32> {
             Ok(0)
         }
         Command::Compare(b, c) => {
-            let value = compare::compare(&report::read(&b)?, &report::read(&c)?, &[])?;
+            let value = compare::compare(&report::read(&b)?, &report::read(&c)?)?;
             println!("{}", serde_json::to_string_pretty(&value)?);
             Ok(if value["compatible"] == true { 0 } else { 1 })
-        }
-        Command::Check(b, c, g) => {
-            let value = compare::check(&report::read(&b)?, &report::read(&c)?, &report::read(&g)?)?;
-            println!("{}", serde_json::to_string_pretty(&value)?);
-            Ok(if value["passed"] == true { 0 } else { 1 })
         }
         Command::Run(c) => {
             let set = gripsou_bench::runner::run(&c).await?;

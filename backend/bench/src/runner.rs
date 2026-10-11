@@ -140,16 +140,17 @@ async fn run_inner(
                 .and_then(|v| v.as_array())
             && samples.iter().any(|v| v.as_f64().unwrap_or(0.) > 0.)
         {
-            let mut companion = m.clone();
-            companion.id = format!("{}.background", m.id);
-            companion.boundary = "background application call duration including lock waits".into();
-            companion.samples_ms = samples.iter().filter_map(|v| v.as_f64()).collect();
-            companion.first_ms = m
+            let mut background = m.clone();
+            background.id = format!("{}.background", m.id);
+            background.boundary =
+                "background application call duration including lock waits".into();
+            background.samples_ms = samples.iter().filter_map(|v| v.as_f64()).collect();
+            background.first_ms = m
                 .diagnostics
                 .get("background_first_ms")
                 .and_then(|v| v.as_f64());
-            companion.diagnostics = BTreeMap::new();
-            report.measurements.push(companion);
+            background.diagnostics = BTreeMap::new();
+            report.measurements.push(background);
         }
         if let Some(version) = m.diagnostics.get("browser_version") {
             report

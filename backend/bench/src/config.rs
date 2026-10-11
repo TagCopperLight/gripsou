@@ -149,7 +149,6 @@ pub enum Command {
     List { json: bool, profiles: bool },
     Run(Box<RunConfig>),
     Compare(PathBuf, PathBuf),
-    Check(PathBuf, PathBuf, PathBuf),
     Cleanup(PathBuf),
 }
 pub fn parse_cli(args: Vec<String>) -> Result<Command> {
@@ -175,17 +174,6 @@ pub fn parse_cli(args: Vec<String>) -> Result<Command> {
         return Ok(Command::Compare(
             args[1].clone().into(),
             args[2].clone().into(),
-        ));
-    }
-    if action == "check" {
-        ensure!(
-            args.len() == 5 && args[3] == "--goal",
-            "check requires baseline candidate --goal path"
-        );
-        return Ok(Command::Check(
-            args[1].clone().into(),
-            args[2].clone().into(),
-            args[4].clone().into(),
         ));
     }
     ensure!(action == "run", "unknown command {action}");

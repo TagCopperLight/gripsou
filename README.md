@@ -81,4 +81,4 @@ cargo run -p gripsou-core --example perf -- ... --compare baseline.json # diff
 
 See [Releases](https://github.com/TagCopperLight/gripsou/releases).
 
-Performance workloads and optimization-agent goals: [benchmark guide](docs/benchmarks.md).
+Performance workloads and result comparison: [benchmark guide](docs/benchmarks.md).

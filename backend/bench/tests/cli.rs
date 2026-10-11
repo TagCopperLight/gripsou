@@ -47,22 +47,16 @@ fn report(ms: f64) -> Value {
     })).collect::<Vec<_>>()})
 }
 
-fn check(baseline: &Value, candidate: &Value, goal: &Value) -> (i32, Value) {
+fn compare(baseline: &Value, candidate: &Value) -> (i32, Value) {
     let dir = std::env::temp_dir().join(format!("bench-cli-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
-    for (name, value) in [
-        ("baseline", baseline),
-        ("candidate", candidate),
-        ("goal", goal),
-    ] {
+    for (name, value) in [("baseline", baseline), ("candidate", candidate)] {
         std::fs::write(dir.join(name), serde_json::to_vec(value).unwrap()).unwrap();
     }
     let out = invoke(&[
-        "check",
+        "compare",
         dir.join("baseline").to_str().unwrap(),
         dir.join("candidate").to_str().unwrap(),
-        "--goal",
-        dir.join("goal").to_str().unwrap(),
     ]);
     std::fs::remove_dir_all(dir).unwrap();
     let value = serde_json::from_slice(&out.stdout)
@@ -70,55 +64,62 @@ fn check(baseline: &Value, candidate: &Value, goal: &Value) -> (i32, Value) {
     (out.status.code().unwrap(), value)
 }
 
-fn goal() -> Value {
-    json!({"schema_version":1,"primary":{"id":"primary","metric":"median_ms","min_improvement_percent":25.0},
-    "companions":[{"id":"guard","metric":"median_ms","max_regression_percent":10.0}],
-    "minimum_samples":30,"required_runs":3,"max_noise_percent":10.0,"allow_environment_differences":[]})
-}
-
 #[test]
-fn goal_requires_real_improvement_and_complete_compatible_correct_runs() {
+fn comparison_reports_deltas_and_rejects_incompatible_results() {
     let base = report(100.);
-    assert_eq!(check(&base, &report(75.), &goal()).0, 0);
-    assert_eq!(check(&base, &report(76.), &goal()).0, 1);
+    let (code, result) = compare(&base, &report(75.));
+    assert_eq!(code, 0);
+    assert_eq!(result["compatible"], true);
+    assert!(
+        result["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|change| change["delta_percent"] == -25.)
+    );
+    // Comparisons describe measurements; they impose no improvement or noise threshold.
+    assert_eq!(compare(&base, &report(120.)).0, 0);
+    let mut varied = report(75.);
+    varied["runs"][2]["measurements"][0]["samples_ms"] = json!(vec![40.; 30]);
+    assert_eq!(compare(&base, &varied).0, 0);
+    let (_, zero) = compare(&report(0.), &report(75.));
+    assert!(
+        zero["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|change| change["delta_percent"].is_null())
+    );
     for fault in [
         "missing",
         "fixture",
         "incorrect",
         "samples",
-        "noise",
-        "zero",
         "environment",
         "outcome",
         "duplicate-run",
     ] {
-        let mut b = base.clone();
-        let mut c = report(75.);
+        let mut candidate = report(75.);
         match fault {
             "missing" => {
-                c["runs"][0]["measurements"].as_array_mut().unwrap().pop();
+                candidate["runs"][0]["measurements"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
             }
-            "fixture" => c["runs"][0]["fixture_fingerprint"] = json!("other"),
-            "incorrect" => c["runs"][0]["measurements"][0]["correct"] = json!(false),
-            "samples" => c["runs"][0]["measurements"][0]["samples_ms"] = json!([75.]),
-            "noise" => c["runs"][2]["measurements"][0]["samples_ms"] = json!(vec![40.; 30]),
-            "zero" => b = report(0.),
-            "environment" => c["runs"][0]["environment"]["cpu"] = json!("other"),
-            "outcome" => c["runs"][0]["measurements"][0]["outcome"]["amount"] = json!("99"),
-            "duplicate-run" => c["runs"][1]["id"] = c["runs"][0]["id"].clone(),
+            "fixture" => candidate["runs"][0]["fixture_fingerprint"] = json!("other"),
+            "incorrect" => candidate["runs"][0]["measurements"][0]["correct"] = json!(false),
+            "samples" => candidate["runs"][0]["measurements"][0]["samples_ms"] = json!([75.]),
+            "environment" => candidate["runs"][0]["environment"]["cpu"] = json!("other"),
+            "outcome" => candidate["runs"][0]["measurements"][0]["outcome"]["amount"] = json!("99"),
+            "duplicate-run" => candidate["runs"][1]["id"] = candidate["runs"][0]["id"].clone(),
             _ => unreachable!(),
         }
-        assert_ne!(check(&b, &c, &goal()).0, 0, "{fault}");
+        assert_ne!(compare(&base, &candidate).0, 0, "{fault}");
     }
-    let mut unguarded = goal();
-    unguarded["companions"] = json!([]);
-    assert_ne!(check(&base, &report(75.), &unguarded).0, 0);
-    let mut g = goal();
-    g["primary"]["metric"] = json!("p95_ms");
-    assert_ne!(check(&base, &report(75.), &g).0, 0);
-    let mut c = report(75.);
-    for run in c["runs"].as_array_mut().unwrap() {
+    let mut candidate = report(75.);
+    for run in candidate["runs"].as_array_mut().unwrap() {
         run["commit"] = json!("new");
     }
-    assert_eq!(check(&base, &c, &goal()).0, 0);
+    assert_eq!(compare(&base, &candidate).0, 0);
 }

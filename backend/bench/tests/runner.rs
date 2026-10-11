@@ -48,7 +48,7 @@ async fn first_warmups_samples_and_independent_repeats() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn black_box_smoke_rejects_performance_goal() -> anyhow::Result<()> {
+async fn black_box_smoke_has_correct_results() -> anyhow::Result<()> {
     let Command::Run(c) = parse_cli(
         [
             "run",
@@ -70,26 +70,11 @@ async fn black_box_smoke_rejects_performance_goal() -> anyhow::Result<()> {
     };
     let report = runner::run(&c).await?;
     assert!(report.runs[0].measurements.iter().all(|m| m.correct));
-    let goal = gripsou_bench::compare::Goal {
-        schema_version: 1,
-        primary: gripsou_bench::compare::Primary {
-            id: "portfolio.holdings".into(),
-            metric: "median_ms".into(),
-            min_improvement_percent: 25.,
-        },
-        companions: vec![gripsou_bench::compare::Companion {
-            id: "transactions.search.rare".into(),
-            metric: "median_ms".into(),
-            max_regression_percent: 10.,
-        }],
-        minimum_samples: 30,
-        required_runs: 3,
-        max_noise_percent: 10.,
-        allow_environment_differences: vec![],
-    };
+    report.validate()?;
+    assert_eq!(report.runs[0].measurements.len(), 3);
     assert_eq!(
-        gripsou_bench::compare::check(&report, &report, &goal)?["passed"],
-        false
+        gripsou_bench::compare::compare(&report, &report)?["compatible"],
+        true
     );
     Ok(())
 }

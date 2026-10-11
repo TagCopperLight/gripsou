@@ -13,7 +13,7 @@ on:
         options: [backend, http, browser, load]
         default: backend
       samples:
-        description: Measured trials (30 median / 100 p95 goals)
+        description: Measured trials per target
         default: '30'
       only:
         description: Comma-separated target IDs (empty runs supported defaults)
@@ -57,7 +57,7 @@ jobs:
         if: inputs.suite == 'browser'
       - name: Correctness-checked release measurement (no shared-runner latency gate)
         run: |
-          args=(run --profile "$BENCH_PROFILE" --suite "$BENCH_SUITE" --samples "$BENCH_SAMPLES" --repeat 3 --save "$RUNNER_TEMP/results.json")
+          args=(run --profile "$BENCH_PROFILE" --suite "$BENCH_SUITE" --samples "$BENCH_SAMPLES" --save "$RUNNER_TEMP/results.json")
           if [ -n "$BENCH_ONLY" ]; then args+=(--only "$BENCH_ONLY"); fi
           if [ "$BENCH_SUITE" = load ]; then args+=(--users 2 --connections 2); fi
           scripts/bench "${args[@]}"

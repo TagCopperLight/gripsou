@@ -1,9 +1,0 @@
-{
-  "schema_version": 1,
-  "primary": {"id":"load.dashboard-during-backfill","metric":"p95_ms","min_improvement_percent":20},
-  "companions": [{"id":"load.dashboard-during-backfill.background","metric":"median_ms","max_regression_percent":10}],
-  "minimum_samples":100,
-  "required_runs":3,
-  "max_noise_percent":10,
-  "allow_environment_differences":[]
-}
