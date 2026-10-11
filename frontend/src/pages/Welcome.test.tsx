@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { goTo } from "../lib/navigate";
 import { Welcome } from "./Welcome";
 import { AuthContext, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS } from "../lib/prefs";
 import type { SessionUser } from "../api/types";
+
+vi.mock("../lib/navigate", () => ({ goTo: vi.fn() }));
 
 let search: { step?: "bank" } = {};
 vi.mock("@tanstack/react-router", () => ({
@@ -102,6 +105,7 @@ describe("Welcome", () => {
     fireEvent.click(connect);
     await waitFor(() => expect(posted("/connections/init")).toHaveLength(1));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/welcome?step=bank"));
   });
 
   it("opens the picker when several providers are enabled", async () => {
@@ -119,7 +123,9 @@ describe("Welcome", () => {
     server.aiConfigured = false;
     server.connections = 1;
     const auth = renderWelcome();
-    fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
+    const finishButton = await screen.findByRole("button", { name: "Finish" });
+    await waitFor(() => expect(finishButton).toBeEnabled());
+    fireEvent.click(finishButton);
     expect(screen.queryByText("Sort your spending automatically")).not.toBeInTheDocument();
     await waitFor(() => expect(posted("/auth/welcome")).toHaveLength(1));
     await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith(expect.objectContaining({ welcomeDone: true })));
@@ -129,9 +135,29 @@ describe("Welcome", () => {
     search = { step: "bank" };
     server.connections = 1;
     const auth = renderWelcome();
-    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    const next = await screen.findByRole("button", { name: "Continue" });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
     fireEvent.click(await screen.findByRole("switch", { name: "Categorise my transactions with AI" }));
     expect(auth.updatePrefs).toHaveBeenCalledWith(expect.objectContaining({ budgetAiEnabled: true }));
+  });
+
+  it("does not rewrite prefs that already match the browser", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR"]);
+    const prefs = { ...DEFAULT_PREFS, uiLanguage: "fr" as const, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+    const auth = renderWelcome({ prefs });
+    await screen.findByRole("button", { name: "Skip setup for now" });
+    expect(auth.updatePrefs).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and stays put when finishing fails", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
+      url === "/api/auth/welcome" ? new Response("boom", { status: 500 }) : routes(url, init),
+    );
+    const auth = renderWelcome();
+    fireEvent.click(await screen.findByRole("button", { name: "Skip setup for now" }));
+    expect(await screen.findByText("Could not finish the setup. Please try again.")).toBeInTheDocument();
+    expect(auth.updateUser).not.toHaveBeenCalled();
   });
 
   it("can be skipped entirely", async () => {

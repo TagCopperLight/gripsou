@@ -173,6 +173,7 @@
     "continue": "Continuer",
     "finish": "Terminer",
     "skipAll": "Passer la configuration pour l'instant",
+    "finishError": "Impossible de terminer la configuration. Veuillez réessayer.",
     "prefs": {
       "title": "Vos préférences",
       "language": "Langue",

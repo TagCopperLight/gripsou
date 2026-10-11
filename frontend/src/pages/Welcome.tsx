@@ -14,6 +14,7 @@ import { useAiStatus } from "../api/budget";
 import { flattenConnections, type SyncConnection } from "../api/types";
 import { CURRENCIES } from "../lib/currency";
 import { TIME_ZONES } from "../lib/timeZoneList";
+import { goTo } from "../lib/navigate";
 import { prefillFromBrowser } from "../lib/welcome";
 
 type Step = 1 | 2 | 3;
@@ -28,7 +29,10 @@ export function Welcome() {
 
   const connections = flattenConnections(useConnections().data);
   const providers = useEnabledProviders().data;
-  const aiConfigured = useAiStatus().data?.configured ?? false;
+  const aiStatus = useAiStatus();
+  const aiConfigured = aiStatus.data?.configured ?? false;
+  // Until the status is known (or failed), whether step 3 exists is undecided.
+  const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
   const initConnection = useInitConnection();
 
   const [step, setStep] = useState<Step>(backFromBank ? 2 : 1);
@@ -36,6 +40,7 @@ export function Welcome() {
   const [bankSkipped, setBankSkipped] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState(false);
 
   // Fill language and time zone from the browser once, when step 1 is the
   // starting point (not when coming back from the bank's page).
@@ -43,7 +48,8 @@ export function Welcome() {
   useEffect(() => {
     if (prefilled.current || backFromBank) return;
     prefilled.current = true;
-    void updatePrefs(prefillFromBrowser(prefs));
+    const filled = prefillFromBrowser(prefs);
+    if (filled.uiLanguage !== prefs.uiLanguage || filled.timeZone !== prefs.timeZone) void updatePrefs(filled);
   }, [backFromBank, prefs, updatePrefs]);
 
   const complete = (n: Step, next: Step) => {
@@ -54,10 +60,13 @@ export function Welcome() {
   const finish = async () => {
     if (!user || finishing) return;
     setFinishing(true);
+    setFinishError(false);
     try {
       await postJson<void>("/auth/welcome", {});
       // The router guard re-runs on this change and leaves /welcome.
       updateUser({ ...user, welcomeDone: true });
+    } catch {
+      setFinishError(true);
     } finally {
       setFinishing(false);
     }
@@ -67,7 +76,7 @@ export function Welcome() {
     if (providers?.length === 1) {
       initConnection.mutate(providers[0].key, {
         onSuccess: ({ redirectUrl }) => {
-          window.location.href = redirectUrl ?? "/welcome?step=bank";
+          goTo(redirectUrl ?? "/welcome?step=bank");
         },
       });
     } else {
@@ -161,15 +170,15 @@ export function Welcome() {
                     {t("welcome.bank.addAnother")}
                   </Button>
                 ) : (
-                  <Button variant="ghost" padded={false} onClick={skipBank}>
+                  <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown}>
                     {t("welcome.bank.skip")}
                   </Button>
                 )}
                 {hasBank ? (
                   aiConfigured ? (
-                    <Button onClick={() => complete(2, 3)}>{t("welcome.continue")}</Button>
+                    <Button onClick={() => complete(2, 3)} disabled={!aiKnown}>{t("welcome.continue")}</Button>
                   ) : (
-                    <Button onClick={() => void finish()} disabled={finishing}>{t("welcome.finish")}</Button>
+                    <Button onClick={() => void finish()} disabled={finishing || !aiKnown}>{t("welcome.finish")}</Button>
                   )
                 ) : (
                   <Button onClick={connectBank} disabled={initConnection.isPending || providers === undefined}>{t("welcome.bank.connect")}</Button>
@@ -206,6 +215,7 @@ export function Welcome() {
             )}
           </div>
         </div>
+        {finishError && <p className="-mt-4 text-sm text-red">{t("welcome.finishError")}</p>}
         <button
           type="button"
           onClick={() => void finish()}

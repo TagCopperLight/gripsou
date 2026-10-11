@@ -173,6 +173,7 @@
     "continue": "Continue",
     "finish": "Finish",
     "skipAll": "Skip setup for now",
+    "finishError": "Could not finish the setup. Please try again.",
     "prefs": {
       "title": "Your preferences",
       "language": "Language",
