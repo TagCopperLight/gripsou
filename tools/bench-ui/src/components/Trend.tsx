@@ -1,6 +1,7 @@
 import { escapeHtml } from '../lib/html'
 import ReactECharts from 'echarts-for-react'
 import { useState } from 'react'
+import type { RunSummary } from '../../shared/types'
 import { useRuns, useRunSets } from '../api'
 import { formatMs, trendGroups, trendPoints } from '../lib/runs'
 
@@ -8,20 +9,26 @@ export function Trend() {
   const runs = useRuns()
   const all = (runs.data ?? []).filter((r) => !r.error)
   const benchmarks = [...new Set(all.flatMap((r) => r.benchmarks))].sort()
-  const [benchmark, setBenchmark] = useState('')
-  // Default: the benchmark whose largest trend group has the most runs (ties: alphabetical).
-  const busiest = benchmarks.reduce((best, id) => {
-    const size = Math.max(0, ...trendGroups(all, id).map((g) => g.runs.length))
-    return size > best.size ? { id, size } : best
-  }, { id: benchmarks[0] ?? '', size: -1 }).id
-  const b = benchmarks.includes(benchmark) ? benchmark : busiest
-  const groups = trendGroups(all, b)
-  const [groupKey, setGroupKey] = useState('')
-  const group = groups.find((g) => g.key === groupKey) ?? groups[0]
-  const { data } = useRunSets(group?.runs.map((r) => r.id) ?? [])
-  const points = trendPoints((group?.runs ?? []).filter((r) => data[r.id]).map((r) => ({ summary: r, set: data[r.id].set })), b)
 
   if (!benchmarks.length) return <p className="muted">No saved runs yet.</p>
+  return (
+    <div>
+      <h1>Trend over time</h1>
+      <p className="small muted">Only runs with the same group and identical fake data are shown together.</p>
+      <div className="trend-grid">
+        {benchmarks.map((benchmark) => <BenchmarkTrend key={benchmark} benchmark={benchmark} runs={all} />)}
+      </div>
+    </div>
+  )
+}
+
+function BenchmarkTrend({ benchmark, runs }: { benchmark: string; runs: RunSummary[] }) {
+  const groups = trendGroups(runs, benchmark)
+  const [groupKey, setGroupKey] = useState('')
+  const group = groups.find((g) => g.key === groupKey) ?? groups[0]
+  const { data, isLoading } = useRunSets(group?.runs.map((r) => r.id) ?? [])
+  const points = trendPoints((group?.runs ?? []).filter((r) => data[r.id]).map((r) => ({ summary: r, set: data[r.id].set })), benchmark)
+
   const baseLabel = (g: (typeof groups)[number]) => `${g.suite} · ${g.profile ?? '?'}`
   const groupLabel = (g: (typeof groups)[number]) => {
     const label = baseLabel(g)
@@ -48,18 +55,14 @@ export function Trend() {
     ],
   }
   return (
-    <div>
-      <h1>Trend over time</h1>
-      <label>Benchmark <select value={b} onChange={(e) => setBenchmark(e.target.value)}>
-        {benchmarks.map((id) => <option key={id}>{id}</option>)}
-      </select></label>{' '}
+    <section className="trend-card" aria-label={benchmark}>
+      <h2>{benchmark}</h2>
       {groups.length > 1 && (
         <label>Runs with <select value={group?.key} onChange={(e) => setGroupKey(e.target.value)}>
           {groups.map((g) => <option key={g.key} value={g.key}>{groupLabel(g)}</option>)}
         </select></label>
       )}
-      <p className="small muted">Only runs with the same group and identical fake data are shown together.</p>
-      {points.length < 2 ? <p className="muted">Need at least two matching runs.</p> : <ReactECharts option={option} notMerge style={{ height: 380 }} />}
-    </div>
+      {isLoading ? <p className="muted">Loading runs…</p> : points.length < 2 ? <p className="muted">Need at least two matching runs.</p> : <ReactECharts option={option} notMerge style={{ height: 240 }} />}
+    </section>
   )
 }
