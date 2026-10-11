@@ -1,5 +1,5 @@
-import ReactEChartsCore from "echarts-for-react/lib/core";
-import type { EChartsReactProps } from "echarts-for-react/lib/types";
+import ReactEChartsCore from "echarts-for-react/esm/core";
+import type { EChartsReactProps } from "echarts-for-react/esm/types";
 import { echarts } from "../lib/echarts";
 
 /** echarts-for-react bound to the trimmed ECharts build in `lib/echarts.ts`. */
