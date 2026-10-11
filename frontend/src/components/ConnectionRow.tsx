@@ -206,7 +206,7 @@ export function ConnectionRow({
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
             {conn.canManage && (
               <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || isSyncing || isPending}
-                className="flex shrink-0 items-center gap-1.5 text-xs text-fg-dim disabled:opacity-40">
+                className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed">
                 <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
               </button>
             )}
@@ -214,7 +214,7 @@ export function ConnectionRow({
               type="button"
               onClick={stop(() => sync.mutate(conn.id))}
               disabled={isSyncing}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim disabled:opacity-40"
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
               {t("settings.connections.syncConnection")}
@@ -223,7 +223,7 @@ export function ConnectionRow({
               <button
                 type="button"
                 onClick={stop(onDelete)}
-                className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-red"
+                className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-red"
               >
                 <Trash2 className="size-3.5" />
                 {t("settings.connections.deleteConnection")}
