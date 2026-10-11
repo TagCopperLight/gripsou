@@ -17,7 +17,10 @@ import type { TransactionCounts } from "../../api/types";
  *  Transactions surface above it is `surface`, this whole search surface —
  *  all three parts — is `surface-2`, and every control sitting on it drops
  *  back to `surface` so it reads as a control and not as more panel. */
-export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
+export function SearchSurface({ counts, onSubmitSearch }: {
+  counts?: TransactionCounts;
+  onSubmitSearch?: () => void;
+}) {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
   const [panelOpen, setPanelOpen] = useState(false);
@@ -33,6 +36,12 @@ export function SearchSurface({ counts }: { counts?: TransactionCounts }) {
             type="search"
             value={filters.search}
             onChange={(e) => patchFilters({ search: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                onSubmitSearch?.();
+              }
+            }}
             placeholder={t("budget.transactions.search")}
             className="w-full rounded-xl bg-surface py-2 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint outline-none"
           />

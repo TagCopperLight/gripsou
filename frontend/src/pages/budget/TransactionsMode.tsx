@@ -66,7 +66,7 @@ export function TransactionsMode() {
     useBudget();
 
   // The search box stays fully responsive; only the fetch waits.
-  const debouncedSearch = useDebouncedValue(filters.search, 300);
+  const [debouncedSearch, submitSearch] = useDebouncedValue(filters.search, 150);
   const query = toQuery({ ...filters, search: debouncedSearch });
 
   const list = useTransactions(query);
@@ -273,7 +273,7 @@ export function TransactionsMode() {
           </Button>
         </div>
 
-        <SearchSurface counts={counts.data} />
+        <SearchSurface counts={counts.data} onSubmitSearch={submitSearch} />
 
         <TransactionsTable
           rows={rows}

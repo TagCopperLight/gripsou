@@ -1,5 +1,7 @@
 # Running benchmarks
 
+Recorded measurements: [search, lot preview and navigation improvements](ux-performance-2026-10-12.md).
+
 Benchmarks measure how long the app takes to do specific jobs, such as loading
 holdings, searching transactions or opening the dashboard. Use them before and
 after a change to see whether the app got faster.
