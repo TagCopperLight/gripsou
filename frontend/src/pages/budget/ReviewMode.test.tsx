@@ -136,7 +136,7 @@ describe("Review mode", () => {
     stubServer({ pending: [GUESS, NO_GUESS], calls: [] });
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Clear resolved" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Hide reviewed suggestions" }));
     await waitFor(() => expect(screen.queryByTestId("resolved-line-t1")).toBeNull());
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 1 resolved");
   });
@@ -145,7 +145,7 @@ describe("Review mode", () => {
     stubServer({ pending: [], calls: [] });
     renderMode();
     expect(await screen.findByText("All caught up")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Back to Overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to overview" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/budget/overview" });
   });
 
@@ -171,7 +171,7 @@ describe("Review mode", () => {
       url: expect.stringContaining("/transactions/t1/apply-to-description"),
       body: { categoryId: "c1", scope: "review" },
     });
-    expect(await screen.findByTestId("resolved-line-t3")).toHaveTextContent("set to Groceries, same name");
+    expect(await screen.findByTestId("resolved-line-t3")).toHaveTextContent("category set to Groceries (same description)");
     expect(screen.getByTestId("review-progress")).toHaveTextContent("2 / 3 resolved");
   });
 

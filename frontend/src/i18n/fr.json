@@ -10,7 +10,7 @@
     "loading": "Chargement…",
     "retry": "Réessayer",
     "cantReachServer": "Impossible de joindre le serveur",
-    "apiUnavailable": "L'API est indisponible pour le moment.",
+    "apiUnavailable": "Le service est momentanément indisponible.",
     "close": "Fermer",
     "cancel": "Annuler",
     "save": "Enregistrer",
@@ -37,7 +37,7 @@
     "cash": "Liquidités",
     "etf": "ETF",
     "equity": "Action",
-    "crypto": "Crypto"
+    "crypto": "Cryptomonnaie"
   },
   "accountTypes": {
     "checking": "Compte courant",
@@ -46,8 +46,8 @@
     "brokerage": "Compte-titres",
     "life_insurance": "Assurance-vie",
     "retirement": "Épargne retraite",
-    "crypto": "Crypto",
-    "multiple": "Plusieurs"
+    "crypto": "Cryptomonnaies",
+    "multiple": "Plusieurs types"
   },
   "time": {
     "justNow": "à l'instant",
@@ -74,8 +74,8 @@
     }
   },
   "dashboard": {
-    "fxMissing": "Taux de change pas encore disponible pour cette devise : ce montant n'est pas pris en compte. Il sera récupéré à la prochaine synchronisation.",
-    "reportingFxMissing": "Taux de change {{currency}} pas encore disponible : les montants ci-dessous restent dans la devise de base de l'application, sans conversion. Il sera récupéré à la prochaine synchronisation.",
+    "fxMissing": "Le taux de change de cette devise n'est pas encore disponible. Ce montant est exclu des totaux jusqu'à la prochaine synchronisation, qui récupérera le taux.",
+    "reportingFxMissing": "Le taux de change vers {{currency}} n'est pas encore disponible. Les montants ci-dessous sont affichés dans la devise de base de l'application. Le taux sera récupéré à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
       "over": "sur {{range}}",
@@ -97,17 +97,17 @@
         "account": "COMPTE",
         "accountType": "TYPE DE COMPTE",
         "value": "VALEUR",
-        "unrealizedPnl": "+/- VALUE LATENTE",
-        "thirtyDays": "30J"
+        "unrealizedPnl": "GAIN/PERTE LATENTE",
+        "thirtyDays": "30 J"
       },
       "gap": {
-        "open": "Saisir l'historique d'achats et de ventes",
-        "tooltipShort": "{{qty}} titres n'ont aucun achat ou vente associé. Saisissez-les pour corriger le prix de revient et l'historique du graphique.",
-        "tooltipExcess": "Il y a {{qty}} titres de plus dans l'historique que réellement détenus. Vérifiez vos opérations.",
-        "title": "Historique d'achats et de ventes",
-        "stripTitle": "Historique d'achats et de ventes incomplet",
-        "stripBodyShort": "{{qty}} titres n'ont aucun achat ou vente associé.",
-        "stripBodyExcess": "Il y a {{qty}} titres de plus dans l'historique que réellement détenus.",
+        "open": "Compléter l'historique des achats et des ventes",
+        "tooltipShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus. Complétez-le pour corriger le prix de revient et le graphique.",
+        "tooltipExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez. Vérifiez les opérations saisies.",
+        "title": "Historique des achats et des ventes",
+        "stripTitle": "Historique des achats et des ventes incomplet",
+        "stripBodyShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus.",
+        "stripBodyExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez.",
         "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> titres comptabilisés",
         "columns": {
           "type": "TYPE",
@@ -122,15 +122,15 @@
         "addBuy": "Ajouter un achat",
         "addSell": "Ajouter une vente",
         "delete": "Supprimer l'opération",
-        "empty": "Aucun achat ni vente saisi pour l'instant.",
+        "empty": "Aucune opération d'achat ou de vente enregistrée pour l'instant.",
         "prefilled": "{{count}} ligne préremplie à partir de vos transactions. Vérifiez-la avant d'enregistrer.",
         "prefilled_other": "{{count}} lignes préremplies à partir de vos transactions. Vérifiez-les avant d'enregistrer.",
-        "figures": "Résultat",
-        "figuresProvisional": "provisoire tant que les quantités ne concordent pas",
+        "figures": "Bilan",
+        "figuresProvisional": "provisoire tant que les quantités ne correspondent pas",
         "capitalInvested": "Capital investi",
         "meanPricePerShare": "Prix de revient unitaire",
-        "realisedPnl": "+/- value réalisée",
-        "unrealisedPnl": "+/- value latente",
+        "realisedPnl": "Plus-value / moins-value réalisée",
+        "unrealisedPnl": "Plus-value / moins-value latente",
         "cancel": "Annuler",
         "save": "Enregistrer {{count}} opération",
         "save_other": "Enregistrer {{count}} opérations",
@@ -148,13 +148,13 @@
       "meanPricePerShare": "Prix de revient unitaire",
       "capitalInvested": "Capital investi",
       "currentValue": "Valeur actuelle",
-      "totalUnrealizedPnl": "+/- value latente totale",
+      "totalUnrealizedPnl": "Plus-value / moins-value latente totale",
       "about": "À propos",
       "type": "Type",
       "account": "Compte",
-      "weightOfNetWorth": "Poids dans le patrimoine",
+      "weightOfNetWorth": "Part du patrimoine",
       "purchaseHistory": "Historique des achats",
-      "noPurchases": "Aucun achat.",
+      "noPurchases": "Aucun achat enregistré.",
       "countryDistribution": "Répartition géographique",
       "sectorDistribution": "Répartition sectorielle",
       "otherAllocation": "Autres",
@@ -168,7 +168,7 @@
   },
   "welcome": {
     "title": "Bienvenue, {{name}}",
-    "privacy": "Cette instance gripsou est hébergée par la personne qui vous a invité. En tant que propriétaire, elle peut techniquement voir vos données. Vos mots de passe bancaires sont saisis sur la page du fournisseur de connexion et n'arrivent jamais à gripsou.",
+    "privacy": "Cette instance de gripsou est hébergée par la personne qui vous a invité. Elle peut accéder à vos données en tant que propriétaire du serveur. Vous saisissez vos mots de passe bancaires sur le site du fournisseur de connexion ; ils ne sont jamais transmis à gripsou.",
     "edit": "Modifier",
     "continue": "Continuer",
     "finish": "Terminer",
@@ -182,33 +182,33 @@
     },
     "bank": {
       "title": "Connecter une banque",
-      "body": "Vous vous connecterez à votre banque sur la page du fournisseur de connexion, puis reviendrez ici.",
+      "body": "Vous serez redirigé vers le site du fournisseur de connexion pour vous connecter à votre banque, puis vous reviendrez ici.",
       "connect": "Connecter une banque",
       "addAnother": "Ajouter une autre banque",
       "skip": "Passer cette étape",
       "connected_one": "{{count}} banque connectée",
       "connected_other": "{{count}} banques connectées",
-      "skipped": "Passée. Vous pourrez en connecter une plus tard dans Paramètres › Connexions.",
+      "skipped": "Étape ignorée. Vous pourrez connecter une banque plus tard dans Paramètres › Connexions.",
       "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
       "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
       "tryAgain": "Réessayer",
       "connectError": "Impossible de lancer la connexion. Veuillez réessayer."
     },
     "ai": {
-      "title": "Classer vos dépenses automatiquement",
+      "title": "Catégoriser vos transactions automatiquement",
       "toggle": "Catégoriser mes transactions avec l'IA",
       "body": "Le libellé et le montant de chaque nouvelle transaction sont envoyés à un service d'IA choisi par le propriétaire du serveur.",
-      "suggestions": "Ses propositions ne sont que des suggestions : celles dont elle n'est pas sûre attendent votre validation.",
-      "later": "Modifiable à tout moment dans Paramètres › Budget.",
-      "on": "Catégorisation IA activée",
-      "off": "Catégorisation IA désactivée"
+      "suggestions": "L'IA propose des catégories. Les suggestions incertaines vous sont soumises pour vérification.",
+      "later": "Vous pouvez modifier ce choix à tout moment dans Paramètres › Budget.",
+      "on": "Catégorisation par IA activée",
+      "off": "Catégorisation par IA désactivée"
     }
   },
   "auth": {
     "signIn": "Se connecter",
-    "welcomeBack": "Content de vous revoir",
+    "welcomeBack": "Heureux de vous retrouver",
     "signInToContinue": "Connectez-vous pour continuer.",
-    "inviteOnly1": "Première visite ? Les comptes gripsou se créent uniquement sur invitation.",
+    "inviteOnly1": "Première visite ? La création d'un compte gripsou se fait sur invitation.",
     "inviteOnly2": "<1>Ouvrez votre lien d'invitation</1> pour créer votre compte.",
     "email": "E-mail",
     "password": "Mot de passe",
@@ -217,8 +217,8 @@
     "logOutConfirmTitle": "Se déconnecter ?",
     "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
     "rememberMe": "Se souvenir de moi",
-    "createAccount": "Créez votre compte",
-    "setUpToContinue": "Quelques informations pour commencer.",
+    "createAccount": "Créer votre compte",
+    "setUpToContinue": "Renseignez vos informations pour commencer.",
     "name": "Nom",
     "confirmPassword": "Confirmer le mot de passe",
     "passwordsDontMatch": "Les mots de passe ne correspondent pas",
@@ -243,16 +243,16 @@
       "language": "Langue",
       "interfaceLanguage": "Langue de l'interface",
       "timeZone": "Fuseau horaire",
-      "timeZoneHint": "Définit la date du jour pour les synchronisations, les rapports et les périodes.",
+      "timeZoneHint": "Détermine la date du jour utilisée pour les synchronisations, les rapports et les périodes affichées.",
       "dateFormat": "Format de date",
       "today": "Aujourd'hui : {{date}}",
       "numbersCurrency": "Nombres et devise",
       "currency": "Devise",
       "baseReportingCurrency": "Devise de référence",
       "numberFormat": "Format des nombres",
-      "numberFormatHint": "Séparateurs des milliers et des décimales, position du symbole",
-      "thousandsSeparator": "Milliers",
-      "decimalSeparator": "Décimales",
+      "numberFormatHint": "Séparateurs de milliers et de décimales, position du symbole monétaire",
+      "thousandsSeparator": "Séparateur de milliers",
+      "decimalSeparator": "Séparateur décimal",
       "symbolPosition": "Position du symbole",
       "symbolBefore": "Avant",
       "symbolAfter": "Après",
@@ -282,17 +282,17 @@
       "sessions": "Sessions actives",
       "sessionsDescription": "Appareils actuellement connectés à votre compte.",
       "thisDevice": "Cet appareil",
-      "sessionRemembered": "Mémorisée · 30 jours",
-      "sessionSingle": "Non mémorisée",
+      "sessionRemembered": "Connexion mémorisée · 30 jours",
+      "sessionSingle": "Connexion non mémorisée",
       "sessionIp": "Adresse IP",
       "sessionLastActive": "Dernière activité",
       "sessionSignedIn": "Connecté le",
       "sessionDetails": "Détails de la session",
       "signedInOn": "Connecté le {{date}}",
       "lastActive": "Dernière activité {{time}}",
-      "revokeSession": "Révoquer",
+      "revokeSession": "Déconnecter",
       "logOutOtherSessions": "Déconnecter toutes les autres sessions",
-      "dangerZone": "Zone dangereuse",
+      "dangerZone": "Actions irréversibles",
       "deleteAccount": "Supprimer le compte",
       "deleteAccountDescription": "Supprimer définitivement votre compte et toutes ses données. Cette action est irréversible.",
       "deleteAccountTitle": "Supprimer votre compte ?",
@@ -322,18 +322,18 @@
       "deleteUser": "Supprimer l'utilisateur",
       "invite": {
         "title": "Inviter un nouvel utilisateur",
-        "heading": "Partagez ce lien à usage unique",
+        "heading": "Envoyez ce lien à usage unique",
         "body": "Toute personne qui ouvre ce lien peut créer son propre compte. Le lien expire dans 24 heures."
       },
       "reset": {
         "title": "Réinitialiser le mot de passe",
-        "heading": "Partagez ce lien à usage unique",
+        "heading": "Envoyez ce lien à usage unique",
         "body": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut servir qu'une fois."
       },
       "removeUser": {
         "title": "Supprimer {{name}}",
         "body": "L'utilisateur et toutes ses données seront définitivement supprimés.",
-        "warning": "Tous ses comptes, positions et son historique seront effacés. Cette action est irréversible.",
+        "warning": "Tous ses comptes, ses positions et son historique seront effacés. Cette action est irréversible.",
         "confirm": "Saisissez {{email}} pour confirmer",
         "error": "Impossible de supprimer l'utilisateur. Veuillez réessayer."
       },
@@ -347,7 +347,7 @@
       "about": "À propos",
       "version": "Version",
       "providers": "Fournisseurs de données",
-      "providersHint": "Agrégateurs utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous avez des identifiants d'API.",
+      "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",
       "cors": "Origines CORS",
       "corsHint": "Origines autorisées à appeler l'API gripsou depuis un navigateur. Ajoutez l'adresse par laquelle vous accédez à ce tableau de bord.",
       "corsPlaceholder": "https://gripsou.example.com",
@@ -359,7 +359,7 @@
       "budgetAiModelsError": "Impossible de charger la liste des modèles du fournisseur ; saisissez le nom du modèle.",
       "budgetAiOff": "Désactivée",
       "budgetAiCost": "Coût de la catégorisation par IA",
-      "budgetAiCostHint": "Prix par million de jetons, en USD. Reprenez-les depuis la page tarifs de votre fournisseur.",
+      "budgetAiCostHint": "Tarifs par million de jetons, en dollars américains (USD). Renseignez les tarifs indiqués par votre fournisseur.",
       "budgetAiCostModel": "Modèle",
       "budgetAiCostRuns": "Exécutions",
       "budgetAiCostTokensIn": "Jetons en entrée",
@@ -370,8 +370,8 @@
       "budgetAiCostPriceInFor": "Prix en entrée pour {{model}}",
       "budgetAiCostPriceOutFor": "Prix en sortie pour {{model}}",
       "budgetAiCostNoPrice": "Aucun prix défini",
-      "budgetAiCostNoUsage_one": "{{count}} exécution sans données d'utilisation (non comptée)",
-      "budgetAiCostNoUsage_other": "{{count}} exécutions sans données d'utilisation (non comptées)",
+      "budgetAiCostNoUsage_one": "{{count}} exécution sans données de consommation (exclue du coût)",
+      "budgetAiCostNoUsage_other": "{{count}} exécutions sans données de consommation (exclues du coût)",
       "budgetAiCostTotal": "Total",
       "budgetAiCostEmpty": "Aucune catégorisation par IA pour l'instant.",
       "budgetAiSaveError": "Impossible d'enregistrer cette modification. Veuillez réessayer."
@@ -385,37 +385,37 @@
       "accountsCount_other": "{{count}} comptes",
       "providersCount_one": "{{count}} fournisseur",
       "providersCount_other": "{{count}} fournisseurs",
-      "connectionConnected": "Connecté",
+      "connectionConnected": "Connectée",
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
       "deleteConnectionTitle": "Supprimer la connexion ?",
       "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
       "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
       "status": {
-        "ok": "Synchronisé",
+        "ok": "Synchronisée",
         "syncing": "Synchronisation…",
         "awaiting": "En attente de la banque…",
         "error": "Échec de la synchronisation",
         "pending": "Connexion en cours…"
       },
-      "pickProvider": "Choisir un fournisseur",
+      "pickProvider": "Choisir un fournisseur de données",
       "connect": "Connecter",
-      "connectError": "Impossible de démarrer la connexion. Veuillez réessayer.",
-      "synced": "Synchronisé {{date}}",
+      "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
+      "synced": "Synchronisée {{date}}",
       "health": {
         "partial": "Mise à jour partielle",
-        "stale": "Données anciennes",
+        "stale": "Données non actualisées",
         "attention": "À vérifier",
-        "bankUpdated": "Mise à jour bancaire",
+        "bankUpdated": "Dernière mise à jour bancaire",
         "providerError": "Powens signale un problème ({{state}}).",
         "staleMessage": "Les données bancaires n’ont pas été mises à jour depuis le {{date}}. Powens ne signale aucune erreur.",
-        "unknownMessage": "Impossible de vérifier la mise à jour bancaire. Réessayez la synchronisation.",
+        "unknownMessage": "Impossible de vérifier la date de mise à jour des données bancaires. Relancez la synchronisation.",
         "retry": "Powens a prévu une nouvelle tentative le {{date}}.",
         "states": {
           "bug": "Le fournisseur a rencontré un problème de synchronisation.",
-          "wrongpass": "La banque a refusé vos identifiants. Gérez cette connexion pour vous reconnecter.",
-          "SCARequired": "La banque demande une authentification. Gérez cette connexion pour continuer.",
-          "webauthRequired": "La banque demande une validation. Gérez cette connexion pour continuer.",
+          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
+          "SCARequired": "La banque demande une authentification. Cliquez sur Gérer pour continuer.",
+          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer pour continuer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
         }
       },
@@ -436,7 +436,7 @@
         "colRows": "TRANSACTIONS",
         "noHint": "—",
         "system": "SYSTÈME",
-        "archivedBadge": "ARCHIVÉ",
+        "archivedBadge": "ARCHIVÉE",
         "archiveLocked": "Une catégorie système ne peut pas être archivée.",
         "deleteLocked": "Une catégorie système ne peut pas être supprimée.",
         "edit": "Modifier {{name}}",
@@ -445,8 +445,8 @@
         "archive": "Archiver {{name}}",
         "restore": "Restaurer {{name}}",
         "delete": "Supprimer {{name}}",
-        "showArchived": "Afficher les archivées ({{count}})",
-        "hideArchived": "Masquer les archivées ({{count}})",
+        "showArchived": "Afficher les catégories archivées ({{count}})",
+        "hideArchived": "Masquer les catégories archivées ({{count}})",
         "empty": "Aucune catégorie pour l'instant.",
         "actionError": "Impossible d'enregistrer cette modification. Veuillez réessayer.",
         "newTitle": "Nouvelle catégorie",
@@ -475,7 +475,7 @@
         "tagsCount_other": "{{count}} étiquettes",
         "nameLabel": "Nom de l'étiquette",
         "add": "Ajouter",
-        "empty": "Aucune étiquette pour l'instant. Les étiquettes sont des libellés libres et n'entrent dans aucun total.",
+        "empty": "Aucune étiquette pour l'instant. Ajoutez des étiquettes pour organiser vos transactions ; elles n'interviennent pas dans le calcul des totaux.",
         "edit": "Modifier {{name}}",
         "delete": "Supprimer {{name}}",
         "save": "Enregistrer",
@@ -494,21 +494,21 @@
       "listPrefs": {
         "title": "Affichage de la liste",
         "showChecked": "Colonne de pointage",
-        "showCheckedHint": "Ajoute une case à cocher sur chaque transaction pour faire votre propre pointage. Les catégories ne sont pas modifiées."
+        "showCheckedHint": "Ajoute une case à cocher à chaque transaction pour vous aider à pointer vos comptes, sans modifier les catégories."
       },
       "ai": {
         "title": "Catégorisation par IA",
         "enable": "Catégoriser automatiquement",
-        "enableHint": "Les nouvelles transactions, ainsi que les anciennes, sont envoyées au fournisseur d'IA configuré par votre administrateur.",
+        "enableHint": "Vos transactions nouvelles et passées sont envoyées au fournisseur d'IA configuré par votre administrateur.",
         "threshold": "Seuil de vérification",
-        "thresholdHint": "Les suggestions dont la confiance est inférieure à ce seuil sont à vérifier.",
+        "thresholdHint": "Les suggestions dont le niveau de confiance est inférieur à ce seuil vous sont soumises pour vérification.",
         "notConfigured": "Demandez à votre administrateur de configurer un fournisseur d'IA."
       }
     }
   },
   "connectionCallback": {
     "connecting": "Connexion à votre banque…",
-    "connectingBody": "Finalisation de la connexion avec votre banque. Cela peut prendre quelques secondes.",
+    "connectingBody": "La connexion à votre banque est en cours de finalisation. Cela peut prendre quelques secondes.",
     "errorTitle": "Votre banque n'a pas pu être connectée",
     "errorBody": "Rien n'a été enregistré. Vous pouvez réessayer.",
     "backToConnections": "Retour aux connexions"
@@ -576,7 +576,7 @@
       "banknote": "Billet",
       "book-open": "Livre ouvert",
       "circle-dashed": "Cercle pointillé",
-      "circle-plus": "Cercle plus",
+      "circle-plus": "Cercle avec un signe plus",
       "coins": "Pièces",
       "eye-off": "Œil barré",
       "film": "Pellicule",
@@ -594,7 +594,7 @@
       "plane": "Avion",
       "plug-zap": "Prise électrique",
       "receipt": "Reçu",
-      "repeat": "Répéter",
+      "repeat": "Flèches en boucle",
       "shield": "Bouclier",
       "shirt": "T-shirt",
       "shopping-bag": "Sac de courses",
@@ -602,7 +602,7 @@
       "smartphone": "Smartphone",
       "train-front": "Train",
       "trending-up": "Courbe ascendante",
-      "undo-2": "Flèche retour",
+      "undo-2": "Flèche de retour",
       "utensils": "Couverts",
       "wallet": "Portefeuille",
       "zap": "Éclair"
@@ -616,15 +616,15 @@
     },
     "transactions": {
       "selectRow": "Sélectionner cette transaction",
-      "setCategory": "Définir une catégorie",
+      "setCategory": "Attribuer une catégorie",
       "addTags": "Ajouter des étiquettes",
       "checked": "Pointée",
-      "autoPaired": "Virement interne associé automatiquement",
-      "orphanTransfer": "Virement dissocié : cette opération n'est plus compensée par sa contrepartie",
+      "autoPaired": "Virement interne rapproché automatiquement",
+      "orphanTransfer": "Virement dissocié : le montant de cette transaction n'est plus compensé dans les totaux",
       "breakPair": {
-        "title": "Dissocier ce virement ?",
-        "body_one": "Cette transaction fait partie d'un virement interne associé automatiquement. En la catégorisant, vous dissociez les deux opérations : l'autre garde sa catégorie Virement interne mais ne sera plus compensée.",
-        "body_other": "{{count}} des transactions sélectionnées font partie de virements internes associés automatiquement. En les catégorisant, vous dissociez chaque paire : les opérations restantes gardent leur catégorie Virement interne mais ne seront plus compensées.",
+        "title": "Dissocier les transactions de ce virement ?",
+        "body_one": "Cette transaction fait partie d'un virement interne dont le débit et le crédit ont été rapprochés automatiquement. Lui attribuer une catégorie dissociera les deux transactions. L'autre restera dans la catégorie Virement interne, mais son montant ne sera plus compensé dans les totaux.",
+        "body_other": "{{count}} des transactions sélectionnées font partie de virements internes dont le débit et le crédit ont été rapprochés automatiquement. Leur attribuer une catégorie dissociera les transactions de chaque virement. Les transactions correspondantes resteront dans la catégorie Virement interne, mais leurs montants ne seront plus compensés dans les totaux.",
         "confirm": "Dissocier"
       },
       "columns": {
@@ -639,8 +639,8 @@
       },
       "emptyNothing": "Aucune transaction pour l'instant. Connectez un compte et lancez une synchronisation.",
       "emptyNoMatch": "Aucune transaction ne correspond à ces filtres.",
-      "clearAll": "Tout effacer",
-      "loadMore": "Charger plus",
+      "clearAll": "Réinitialiser les filtres",
+      "loadMore": "Afficher plus de transactions",
       "loadingMore": "Chargement…",
       "search": "Rechercher dans les libellés",
       "allAccounts": "Tous les comptes",
@@ -667,10 +667,10 @@
         "last12Months": "12 derniers mois",
         "custom": "Personnalisé…"
       },
-      "rowsSelected_one": "{{count}} ligne sélectionnée",
-      "rowsSelected_other": "{{count}} lignes sélectionnées",
+      "rowsSelected_one": "{{count}} transaction sélectionnée",
+      "rowsSelected_other": "{{count}} transactions sélectionnées",
       "assignCategory": "Attribuer une catégorie",
-      "markChecked": "Marquer comme pointée",
+      "markChecked": "Pointer la sélection",
       "clearSelection": "Annuler la sélection",
       "clear": "Effacer",
       "title": "Transactions",
@@ -681,8 +681,8 @@
       "applyToAllBody_one": "{{count}} autre transaction a le même libellé. Lui appliquer aussi cette catégorie ?",
       "applyToAllBody_other": "{{count}} autres transactions ont le même libellé. Leur appliquer aussi cette catégorie ?",
       "applyToAllConfirm": "Appliquer à toutes",
-      "bulkUpdated_one": "{{count}} ligne mise à jour.",
-      "bulkUpdated_other": "{{count}} lignes mises à jour.",
+      "bulkUpdated_one": "{{count}} transaction mise à jour.",
+      "bulkUpdated_other": "{{count}} transactions mises à jour.",
       "errors": {
         "duplicate": "Impossible d'enregistrer cette modification.",
         "gone": "Cette transaction n'existe plus. Actualisez la page.",
@@ -727,16 +727,16 @@
         "amount": "Montant",
         "share": "Part",
         "txnCount": "Transactions",
-        "vsAvg12": "vs moy. 12 mois",
+        "vsAvg12": "Écart à la moy. sur 12 mois",
         "open": "Voir ces transactions"
       },
       "trend": {
         "title": "12 derniers mois"
       },
       "empty": {
-        "title": "Rien dans cette période",
+        "title": "Aucune transaction sur cette période",
         "body": "Aucune transaction sur la période sélectionnée.",
-        "earlier": "Remonter plus loin"
+        "earlier": "Consulter les périodes précédentes"
       }
     },
     "modes": {
@@ -747,20 +747,20 @@
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} traitées",
       "title": "Suggestions incertaines",
-      "belowThreshold": "confiance inférieure à {{threshold}} %",
+      "belowThreshold": "niveau de confiance inférieur à {{threshold}} %",
       "accept": "Accepter",
       "correct": "Corriger",
       "undo": "Annuler",
-      "clearResolved": "Masquer les traitées",
-      "kept": "conservée en {{category}}",
-      "correctedTo": "corrigée en {{category}}",
-      "appliedAs": "passée en {{category}} (même libellé)",
-      "applyToOthers_one": "Appliquer à {{count}} autre",
-      "applyToOthers_other": "Appliquer à {{count}} autres",
-      "appliedToOthers_one": "appliquée à {{count}} autre",
-      "appliedToOthers_other": "appliquée à {{count}} autres",
+      "clearResolved": "Masquer les suggestions traitées",
+      "kept": "catégorie confirmée : {{category}}",
+      "correctedTo": "catégorie corrigée : {{category}}",
+      "appliedAs": "catégorie attribuée : {{category}} (même libellé)",
+      "applyToOthers_one": "Appliquer à {{count}} autre transaction",
+      "applyToOthers_other": "Appliquer à {{count}} autres transactions",
+      "appliedToOthers_one": "catégorie appliquée à {{count}} autre transaction",
+      "appliedToOthers_other": "catégorie appliquée à {{count}} autres transactions",
       "hidesMoney": "exclut le montant des totaux",
-      "emptyTitle": "Tout est à jour",
+      "emptyTitle": "Vérification terminée",
       "emptyBody": "Toutes les suggestions ont été vérifiées.",
       "backToOverview": "Retour à la vue d'ensemble"
     },
@@ -770,8 +770,8 @@
       "reviewCta": "Vérifier ({{count}})",
       "failedTitle": "La catégorisation automatique a échoué",
       "retry": "Réessayer",
-      "running_one": "Catégorisation de l'historique en cours ({{count}} restante)",
-      "running_other": "Catégorisation de l'historique en cours ({{count}} restantes)"
+      "running_one": "Catégorisation de l'historique en cours ({{count}} transaction restante)",
+      "running_other": "Catégorisation de l'historique en cours ({{count}} transactions restantes)"
     }
   },
   "investments": {
@@ -781,7 +781,7 @@
     "figures": {
       "invested": "Investi",
       "value": "Valeur actuelle",
-      "unrealised": "Plus-value latente"
+      "unrealised": "Plus-value / moins-value latente"
     },
     "returns": {
       "title": "Rendements",
@@ -790,7 +790,7 @@
       "perYearShort": "/an",
       "invested": "INVESTI",
       "value": "VALEUR ACTUELLE",
-      "unrealised": "PLUS-VALUE LATENTE"
+      "unrealised": "GAIN/PERTE LATENTE"
     },
     "span": {
       "over": "sur {{span}}",
@@ -802,13 +802,13 @@
       "days_other": "{{count}} jours"
     },
     "missing": {
-      "dotTitle": "Exclu, achats non renseignés : {{names}}",
+      "dotTitle": "Positions exclues du calcul du rendement, car les achats ne sont pas renseignés : {{names}}",
       "noReturn": "aucun achat renseigné"
     },
     "exposure": {
       "title": "Exposition",
-      "regions": "Par régions et pays",
-      "sectors": "Par secteurs",
+      "regions": "Par région et pays",
+      "sectors": "Par secteur",
       "indices": "Par indice",
       "stocks": "Actions",
       "center": "Valeur",
@@ -822,7 +822,7 @@
     },
     "empty": {
       "title": "Aucun investissement",
-      "body": "Aucun de vos comptes ne détient de titres. Les liquidités ne sont pas comptées sur cette page."
+      "body": "Aucun de vos comptes ne détient de titres. Les liquidités sont exclues de cette vue."
     }
   }
 }

@@ -10,7 +10,7 @@
     "loading": "Loading…",
     "retry": "Retry",
     "cantReachServer": "Can't reach the server",
-    "apiUnavailable": "The API is unavailable right now.",
+    "apiUnavailable": "The service is temporarily unavailable.",
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
@@ -65,8 +65,8 @@
       "title": "Edit account",
       "accountName": "Account name",
       "type": "Type",
-      "color": "Color",
-      "colorLabel": "Color {{color}}",
+      "color": "Colour",
+      "colorLabel": "Colour {{color}}",
       "customColor": "Custom colour",
       "saveError": "Could not save changes. Please try again.",
       "save": "Save changes",
@@ -74,8 +74,8 @@
     }
   },
   "dashboard": {
-    "fxMissing": "No exchange rate yet for this currency — the value is not counted. It should arrive on the next sync.",
-    "reportingFxMissing": "No exchange rate for {{currency}} yet — the figures below are still in the app’s base currency, not converted. It should arrive on the next sync.",
+    "fxMissing": "The exchange rate for this currency is not available yet. This amount is excluded from totals until the rate is fetched on the next sync.",
+    "reportingFxMissing": "The exchange rate to {{currency}} is not available yet. The figures below are shown in the app’s base currency. The rate will be fetched on the next sync.",
     "netWorth": {
       "title": "Net Worth",
       "over": "over {{range}}",
@@ -88,7 +88,7 @@
     "holdings": {
       "title": "Holdings",
       "assetsCount": "{{count}} assets",
-      "searchPlaceholder": "Search assets ...",
+      "searchPlaceholder": "Search assets…",
       "all": "All",
       "multipleAccounts": "Multiple accounts",
       "columns": {
@@ -97,17 +97,17 @@
         "account": "ACCOUNT",
         "accountType": "ACCOUNT TYPE",
         "value": "VALUE",
-        "unrealizedPnl": "UNREALIZED P/L",
+        "unrealizedPnl": "UNREALISED P/L",
         "thirtyDays": "30D"
       },
       "gap": {
         "open": "Record buy/sell history",
-        "tooltipShort": "{{qty}} shares have no recorded buy or sell — record them to fix the cost basis and the past chart.",
-        "tooltipExcess": "{{qty}} more shares are recorded than are actually held — check the history.",
+        "tooltipShort": "The recorded purchases and sales do not account for {{qty}} shares you hold. Complete the history to correct the cost basis and chart.",
+        "tooltipExcess": "The history shows {{qty}} more shares than you hold. Check the recorded entries.",
         "title": "Record buy/sell history",
         "stripTitle": "Incomplete buy/sell history",
-        "stripBodyShort": "{{qty}} shares have no recorded buy or sell.",
-        "stripBodyExcess": "{{qty}} more shares are recorded than are actually held.",
+        "stripBodyShort": "The recorded purchases and sales do not account for {{qty}} shares you hold.",
+        "stripBodyExcess": "The history shows {{qty}} more shares than you hold.",
         "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> shares accounted for",
         "columns": {
           "type": "TYPE",
@@ -122,13 +122,13 @@
         "addBuy": "Add purchase",
         "addSell": "Add sale",
         "delete": "Delete entry",
-        "empty": "No buys or sales recorded yet.",
+        "empty": "No purchases or sales recorded yet.",
         "prefilled": "{{count}} row pre-filled from your transactions. Check it before saving.",
         "prefilled_other": "{{count}} rows pre-filled from your transactions. Check them before saving.",
-        "figures": "Resulting figures",
+        "figures": "Summary",
         "figuresProvisional": "provisional until quantities match",
         "capitalInvested": "Capital invested",
-        "meanPricePerShare": "Mean price / share",
+        "meanPricePerShare": "Cost basis per share",
         "realisedPnl": "Realised P/L",
         "unrealisedPnl": "Unrealised P/L",
         "cancel": "Cancel",
@@ -145,14 +145,14 @@
       "positionValue": "Position value",
       "invested": "Invested",
       "quantityOwned": "Quantity owned",
-      "meanPricePerShare": "Mean price / share",
+      "meanPricePerShare": "Cost basis per share",
       "capitalInvested": "Capital invested",
       "currentValue": "Current value",
-      "totalUnrealizedPnl": "Total unrealized P/L",
+      "totalUnrealizedPnl": "Total unrealised P/L",
       "about": "About",
       "type": "Type",
       "account": "Account",
-      "weightOfNetWorth": "Weight of net worth",
+      "weightOfNetWorth": "Share of net worth",
       "purchaseHistory": "Purchase history",
       "noPurchases": "No purchases.",
       "countryDistribution": "Country distribution",
@@ -168,7 +168,7 @@
   },
   "welcome": {
     "title": "Welcome, {{name}}",
-    "privacy": "This gripsou instance is run by the person who invited you. As its owner, they can technically see your data. Your bank passwords are typed on the connection provider's page and never reach gripsou.",
+    "privacy": "This gripsou instance is hosted by the person who invited you. As the server owner, they can access your data. You enter your bank passwords on the connection provider's website; they are never sent to gripsou.",
     "edit": "Edit",
     "continue": "Continue",
     "finish": "Finish",
@@ -195,11 +195,11 @@
       "connectError": "Could not start the connection. Please try again."
     },
     "ai": {
-      "title": "Sort your spending automatically",
+      "title": "Categorise your transactions automatically",
       "toggle": "Categorise my transactions with AI",
       "body": "Each new transaction's description and amount are sent to an AI service chosen by the server owner.",
-      "suggestions": "Its guesses are only suggestions: the ones it isn't sure of wait for your review.",
-      "later": "You can change it anytime in Settings › Budget.",
+      "suggestions": "AI suggests categories. Uncertain suggestions are sent to you for review.",
+      "later": "You can change this setting anytime in Settings › Budget.",
       "on": "AI categorisation on",
       "off": "AI categorisation off"
     }
@@ -239,11 +239,11 @@
     "adminBadge": "Admin",
     "general": {
       "title": "General",
-      "localization": "Localization",
+      "localization": "Language & region",
       "language": "Language",
       "interfaceLanguage": "Interface language",
-      "timeZone": "Timezone",
-      "timeZoneHint": "Defines today for syncs, reports and date ranges.",
+      "timeZone": "Time zone",
+      "timeZoneHint": "Determines the current date used for syncs, reports and date ranges.",
       "dateFormat": "Date format",
       "today": "Today: {{date}}",
       "numbersCurrency": "Numbers & currency",
@@ -259,7 +259,7 @@
       "preview": "Preview",
       "privacy": "Privacy",
       "privateMode": "Private mode",
-      "privateModeHint": "Hide your net worth behind asterisks"
+      "privateModeHint": "Replace amounts with asterisks"
     },
     "account": {
       "title": "Account",
@@ -290,7 +290,7 @@
       "sessionDetails": "Session details",
       "signedInOn": "Signed in {{date}}",
       "lastActive": "Last active {{time}}",
-      "revokeSession": "Revoke",
+      "revokeSession": "Log out",
       "logOutOtherSessions": "Log out all other sessions",
       "dangerZone": "Danger zone",
       "deleteAccount": "Delete account",
@@ -347,7 +347,7 @@
       "about": "About",
       "version": "Version",
       "providers": "Data providers",
-      "providersHint": "Aggregators used to fetch banking and brokerage data. Enable the ones you hold API credentials for.",
+      "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",
       "cors": "CORS origins",
       "corsHint": "Browser origins allowed to call the gripsou API. Add the address you use to reach this dashboard.",
       "corsPlaceholder": "https://gripsou.example.com",
@@ -358,8 +358,8 @@
       "budgetAiModel": "Model",
       "budgetAiModelsError": "The provider's model list could not be loaded; type the model's name.",
       "budgetAiOff": "off",
-      "budgetAiCost": "AI categorization cost",
-      "budgetAiCostHint": "Prices are per million tokens, in USD. Enter them from your provider's pricing page.",
+      "budgetAiCost": "AI categorisation cost",
+      "budgetAiCostHint": "Prices per million tokens, in US dollars (USD). Enter the rates listed on your provider's pricing page.",
       "budgetAiCostModel": "Model",
       "budgetAiCostRuns": "Runs",
       "budgetAiCostTokensIn": "Tokens in",
@@ -373,7 +373,7 @@
       "budgetAiCostNoUsage_one": "{{count}} run without usage data (not counted)",
       "budgetAiCostNoUsage_other": "{{count}} runs without usage data (not counted)",
       "budgetAiCostTotal": "Total",
-      "budgetAiCostEmpty": "No AI categorization runs yet.",
+      "budgetAiCostEmpty": "No AI categorisation runs yet.",
       "budgetAiSaveError": "That change could not be saved. Please try again."
     },
     "connections": {
@@ -406,16 +406,16 @@
         "partial": "Partial update",
         "stale": "Outdated data",
         "attention": "Needs attention",
-        "bankUpdated": "Bank updated",
+        "bankUpdated": "Last bank update",
         "providerError": "Powens reports an issue ({{state}}).",
         "staleMessage": "Bank data has not updated since {{date}}. Powens reports no error.",
         "unknownMessage": "Unable to verify the bank update status. Try syncing again.",
         "retry": "Powens has scheduled a retry for {{date}}.",
         "states": {
           "bug": "The provider encountered a synchronization issue.",
-          "wrongpass": "The bank rejected your credentials. Manage this connection to sign in again.",
-          "SCARequired": "The bank requires authentication. Manage this connection to continue.",
-          "webauthRequired": "The bank requires approval. Manage this connection to continue.",
+          "wrongpass": "The bank rejected your credentials. Select Manage to sign in again.",
+          "SCARequired": "The bank requires authentication. Select Manage to continue.",
+          "webauthRequired": "The bank requires approval. Select Manage to continue.",
           "decoupled": "Approval is pending in your bank app."
         }
       },
@@ -433,7 +433,7 @@
         "colCategory": "CATEGORY",
         "colKind": "KIND",
         "colHint": "HINT FOR THE AI",
-        "colRows": "ROWS",
+        "colRows": "TRANSACTIONS",
         "noHint": "—",
         "system": "SYSTEM",
         "archivedBadge": "ARCHIVED",
@@ -456,7 +456,7 @@
         "fieldColor": "Colour",
         "fieldIcon": "Icon",
         "fieldHint": "Hint for the AI",
-        "kindLocked": "This kind is fixed for the system category.",
+        "kindLocked": "The type of a system category cannot be changed.",
         "create": "Create category",
         "save": "Save changes",
         "colorLabel": "Colour {{color}}",
@@ -475,7 +475,7 @@
         "tagsCount_other": "{{count}} tags",
         "nameLabel": "Tag name",
         "add": "Add",
-        "empty": "No tags yet. Tags are free-form labels; they never count towards a total.",
+        "empty": "No tags yet. Use tags to organise your transactions; they do not affect totals.",
         "edit": "Modify {{name}}",
         "delete": "Delete {{name}}",
         "save": "Save",
@@ -501,7 +501,7 @@
         "enable": "Categorise automatically",
         "enableHint": "New and past transactions are sent to the AI provider your administrator configured.",
         "threshold": "Review threshold",
-        "thresholdHint": "Guesses below this confidence go to the review queue.",
+        "thresholdHint": "Suggestions with a confidence score below this threshold are sent to you for review.",
         "notConfigured": "Ask your administrator to configure an AI provider."
       }
     }
@@ -619,12 +619,12 @@
       "setCategory": "Set a category",
       "addTags": "Add tags",
       "checked": "Checked",
-      "autoPaired": "Auto paired transfer",
-      "orphanTransfer": "Transfer pairing removed — this half no longer nets out",
+      "autoPaired": "Automatically paired internal transfer",
+      "orphanTransfer": "Transfer unpaired: this transaction’s amount is no longer offset in totals",
       "breakPair": {
         "title": "Break the transfer pairing?",
-        "body_one": "This transaction is one half of an auto-paired internal transfer. Categorising it unlinks both halves; the other half keeps its Internal transfer category and will no longer net out.",
-        "body_other": "{{count}} of the selected transactions are halves of auto-paired internal transfers. Categorising them unlinks both halves of each pair; the other halves keep their Internal transfer category and will no longer net out.",
+        "body_one": "This transaction belongs to an internal transfer whose debit and credit were paired automatically. Assigning a category unlinks the two transactions. The other keeps its Internal transfer category, but its amount will no longer be offset in totals.",
+        "body_other": "{{count}} of the selected transactions belong to internal transfers whose debits and credits were paired automatically. Assigning a category unlinks the transactions in each transfer. The corresponding transactions keep their Internal transfer category, but their amounts will no longer be offset in totals.",
         "confirm": "Break pairing"
       },
       "columns": {
@@ -670,7 +670,7 @@
       "clear": "Clear",
       "title": "Transactions",
       "selectAllShown": "Select all shown",
-      "selectAllShownDisabledLots": "Investment lots carry no budget, so there is nothing to select.",
+      "selectAllShownDisabledLots": "Investment transactions do not count towards the budget, so there is nothing to select.",
       "deselectAll": "Deselect all",
       "applyToAllTitle": "Apply to similar transactions",
       "applyToAllBody_one": "{{count}} other transaction has this description. Apply the category to it as well?",
@@ -729,31 +729,31 @@
         "title": "Last 12 months"
       },
       "empty": {
-        "title": "Nothing in this period",
-        "body": "No transaction falls in the selected period, so there is nothing to break down yet.",
-        "earlier": "Keep looking earlier"
+        "title": "No transactions in this period",
+        "body": "No transactions fall within the selected period.",
+        "earlier": "View earlier periods"
       }
     },
     "modes": { "overview": "Overview", "transactions": "Transactions", "review": "Review" },
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} resolved",
-      "title": "Low confidence guesses",
+      "title": "Uncertain category suggestions",
       "belowThreshold": "below {{threshold}}% confidence",
       "accept": "Accept",
       "correct": "Correct",
       "undo": "Undo",
-      "clearResolved": "Clear resolved",
+      "clearResolved": "Hide reviewed suggestions",
       "kept": "kept {{category}}",
       "correctedTo": "corrected to {{category}}",
-      "appliedAs": "set to {{category}}, same name",
+      "appliedAs": "category set to {{category}} (same description)",
       "applyToOthers_one": "Apply to {{count}} other",
       "applyToOthers_other": "Apply to {{count}} others",
       "appliedToOthers_one": "applied to {{count}} other",
       "appliedToOthers_other": "applied to {{count}} others",
-      "hidesMoney": "hides money from totals",
+      "hidesMoney": "excludes the amount from totals",
       "emptyTitle": "All caught up",
-      "emptyBody": "Every guess has been reviewed.",
-      "backToOverview": "Back to Overview"
+      "emptyBody": "All category suggestions have been reviewed.",
+      "backToOverview": "Back to overview"
     },
     "ai": {
       "reviewNeeded_one": "{{count}} transaction needs review",
@@ -772,7 +772,7 @@
     "figures": {
       "invested": "Invested",
       "value": "Current value",
-      "unrealised": "Unrealised gain"
+      "unrealised": "Unrealised P/L"
     },
     "returns": {
       "title": "Returns",
@@ -781,7 +781,7 @@
       "perYearShort": "/yr",
       "invested": "INVESTED",
       "value": "CURRENT VALUE",
-      "unrealised": "UNREALISED GAIN"
+      "unrealised": "UNREALISED P/L"
     },
     "span": {
       "over": "over {{span}}",
@@ -793,13 +793,13 @@
       "days_other": "{{count}} days"
     },
     "missing": {
-      "dotTitle": "Left out, purchases not recorded: {{names}}",
+      "dotTitle": "Holdings excluded from the return calculation because purchases are not recorded: {{names}}",
       "noReturn": "no purchases recorded"
     },
     "exposure": {
       "title": "Exposure",
-      "regions": "By regions and countries",
-      "sectors": "By sectors",
+      "regions": "By region and country",
+      "sectors": "By sector",
       "indices": "By index",
       "stocks": "Stocks",
       "center": "Value",
