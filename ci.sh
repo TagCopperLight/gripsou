@@ -22,6 +22,9 @@ step "fmt"    bash -c 'cd backend && cargo fmt --all --check'
 step "clippy" bash -c 'cd backend && cargo clippy --all-targets -- -D warnings'
 step "test"   bash -c 'cd backend && cargo test'
 
+# Benchmark correctness only; one sample cannot satisfy a performance goal.
+step "benchmark smoke" bash -c 'cd backend && cargo run --quiet -p gripsou-bench -- run --profile smoke --only portfolio.holdings,transactions.search.rare,transactions.bulk.category --samples 1 --warmups 0 --save /tmp/gripsou-ci-bench.json'
+
 # frontend job
 step "install" bash -c 'cd frontend && bun install --frozen-lockfile'
 step "lint"    bash -c 'cd frontend && bun run lint'

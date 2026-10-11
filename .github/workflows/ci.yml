@@ -82,6 +82,11 @@ jobs:
         env:
           SQLX_OFFLINE: "true"
 
+      - name: Benchmark correctness smoke (no latency gate)
+        run: cargo run --quiet -p gripsou-bench -- run --profile smoke --only portfolio.holdings,transactions.search.rare,transactions.bulk.category --samples 1 --warmups 0 --save /tmp/gripsou-ci-bench.json
+        env:
+          SQLX_OFFLINE: "true"
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
