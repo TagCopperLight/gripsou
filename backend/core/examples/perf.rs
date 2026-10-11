@@ -281,7 +281,7 @@ fn report(results: &BTreeMap<String, Timing>, args: &Args) -> anyhow::Result<()>
 
 /// A portfolio shaped like a real one: two accounts (a checking account and a
 /// PEA), a EUR cash line and a USD cash line, and `holdings - 2` securities
-/// spread across the two accounts, each with daily prices, buys and sells, and
+/// spread across the two accounts, each with weekly prices, buy/sell lots, and
 /// snapshots every 30 days so the backfill has real gaps to fill.
 async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid, Uuid)> {
     use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
@@ -357,7 +357,7 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
             },
         )
         .await?;
-        holding_ids.push(holding_id);
+        holding_ids.push((holding_id, None));
         // A USD rate so the foreign cash line is valuable.
         if *currency == "USD" {
             insert_price(
@@ -373,6 +373,8 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
 
     // Securities.
     for n in 0..holdings.saturating_sub(2) {
+        let sell_qty = Decimal::from(if n == 0 { 100 } else { 10 });
+        let remaining_qty = Decimal::from(100) - sell_qty;
         let iref = InstrumentRef {
             kind: "equity".into(),
             symbol: Some(format!("PERF{n}")),
@@ -389,13 +391,17 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
             &CanonicalHolding {
                 account_external_id: ext.clone(),
                 instrument: iref,
-                quantity: Decimal::from(100),
+                quantity: if days >= 400 {
+                    remaining_qty
+                } else {
+                    Decimal::from(100)
+                },
                 cost_basis: Decimal::from(1000),
                 valuation: Some(Decimal::from(1500)),
             },
         )
         .await?;
-        holding_ids.push(holding_id);
+        holding_ids.push((holding_id, Some(remaining_qty)));
 
         // Weekly prices, so the price lookup has something to seek through.
         let mut d = start;
@@ -413,35 +419,31 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
             d += ChronoDuration::days(7);
         }
 
-        // A buy and a sell, so the lot walk and the mean-buy price are
-        // exercised. Security 0 is sold in full (-100, matching the buy) so it
+        // A buy and a sell lot, so the lot walk and the mean-buy price are
+        // exercised. Security 0 is sold in full (100, matching the buy) so it
         // becomes a zero-quantity position — see the snapshot loop below,
         // which stamps its later snapshots at quantity 0. That exercises the
         // `uv` lateral in backfill.rs (~209-215), which filters
         // `hs.quantity <> 0` to value a fully-sold position by searching
         // backwards past its zero snapshots; the other securities keep a
         // partial sell so the ordinary lot walk is exercised too.
-        let sell_qty = if n == 0 {
-            Decimal::from(-100)
-        } else {
-            Decimal::from(-10)
-        };
         for (kind, day, qty) in [
-            ("buy", start + ChronoDuration::days(10), Decimal::from(60)),
+            ("buy", start + ChronoDuration::days(10), Decimal::from(100)),
             ("sell", start + ChronoDuration::days(400), sell_qty),
         ] {
+            if day > today {
+                continue;
+            }
             sqlx::query(
-                "insert into transaction \
-                 (account_id, instrument_id, ts, type, quantity, unit_price, amount, external_id) \
-                 values ($1, $2, $3, $4, $5, $6, $7, $8)",
+                "insert into lot \
+                 (holding_id, acquired_on, side, quantity, unit_price, source, external_id) \
+                 values ($1, $2, $3, $4, $5, 'provider', $6)",
             )
-            .bind(account_id)
-            .bind(instrument_id)
-            .bind(day.and_hms_opt(12, 0, 0).unwrap().and_utc())
+            .bind(holding_id)
+            .bind(day)
             .bind(kind)
-            .bind(qty.abs())
+            .bind(qty)
             .bind(Decimal::from(12))
-            .bind(qty * Decimal::from(12))
             .bind(format!("perf-{n}-{kind}"))
             .execute(&mut *conn)
             .await?;
@@ -474,30 +476,24 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
         i += 1;
     }
 
-    // The fully-sold security (see above): its sell lands at start+400 days,
-    // so snapshots from that point on are stamped at quantity 0.
-    let sold_holding_id = if holdings.saturating_sub(2) > 0 {
-        Some(holding_ids[2])
-    } else {
-        None
-    };
+    // Sells land at start+400 days. Later snapshots carry the remaining
+    // quantity, including zero for the fully-sold security.
     let sold_day = start + ChronoDuration::days(400);
 
     // Snapshots every 30 days, plus today, so the backfill has gaps to fill.
-    for holding_id in &holding_ids {
-        let is_sold = Some(*holding_id) == sold_holding_id;
+    for (holding_id, remaining_qty) in &holding_ids {
         let mut d = start;
         while d <= today {
-            let qty = if is_sold && d >= sold_day {
-                Decimal::ZERO
+            let qty = if d >= sold_day {
+                remaining_qty.unwrap_or(Decimal::from(100))
             } else {
                 Decimal::from(100)
             };
             stamp_snapshot(&mut conn, *holding_id, d, qty, Decimal::from(1500)).await?;
             d += ChronoDuration::days(30);
         }
-        let final_qty = if is_sold {
-            Decimal::ZERO
+        let final_qty = if today >= sold_day {
+            remaining_qty.unwrap_or(Decimal::from(100))
         } else {
             Decimal::from(100)
         };
@@ -512,4 +508,74 @@ async fn seed(pool: &PgPool, holdings: usize, days: i64) -> anyhow::Result<(Uuid
     }
 
     Ok((user_id, connection_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn seed_uses_lots_and_preserves_sold_position(pool: PgPool) -> anyhow::Result<()> {
+        let (user_id, connection_id) = seed(&pool, 4, 450).await?;
+
+        let holdings: i64 = sqlx::query_scalar(
+            "select count(*) from holding h join account a on a.id = h.account_id \
+             where a.connection_id = $1",
+        )
+        .bind(connection_id)
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(holdings, 4);
+
+        let lots: i64 = sqlx::query_scalar("select count(*) from lot")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(lots, 4);
+
+        let cash_movements: i64 = sqlx::query_scalar("select count(*) from transaction")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(cash_movements, 151);
+
+        let positions: Vec<(String, Decimal, Decimal)> = sqlx::query_as(
+            "select i.name, h.quantity, \
+             sum(case l.side when 'buy' then l.quantity else -l.quantity end) \
+             from holding h join instrument i on i.id = h.instrument_id \
+             join lot l on l.holding_id = h.id \
+             group by i.name, h.quantity order by i.name",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            positions,
+            vec![
+                ("Perf Equity 0".into(), Decimal::ZERO, Decimal::ZERO),
+                ("Perf Equity 1".into(), Decimal::from(90), Decimal::from(90)),
+            ]
+        );
+
+        let mut conn = pool.acquire().await?;
+        assert!(gripsou_core::backfill::backfill_connection(&mut conn, connection_id).await? > 0);
+        let sold_history: Vec<Decimal> = sqlx::query_scalar(
+            "select hb.quantity from holding_backfill hb \
+             join holding h on h.id = hb.holding_id \
+             join instrument i on i.id = h.instrument_id \
+             where i.name = 'Perf Equity 0' and hb.as_of in ($1, $2) \
+             order by hb.as_of",
+        )
+        .bind(Utc::now().date_naive() - ChronoDuration::days(51))
+        .bind(Utc::now().date_naive() - ChronoDuration::days(49))
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(sold_history, vec![Decimal::from(100), Decimal::ZERO]);
+        let series = gripsou_core::repo::query::net_worth_series(
+            &pool,
+            user_id,
+            Utc::now().date_naive() - ChronoDuration::days(450),
+            Utc::now().date_naive(),
+        )
+        .await?;
+        assert!(!series.is_empty());
+        Ok(())
+    }
 }
