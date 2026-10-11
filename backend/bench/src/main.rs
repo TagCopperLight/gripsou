@@ -41,17 +41,7 @@ async fn dispatch() -> anyhow::Result<i32> {
             if c.save.is_none() {
                 println!("{}", serde_json::to_string_pretty(&set)?);
             }
-            Ok(
-                if set.runs.iter().all(|r| {
-                    r.errors.is_empty()
-                        && !r.measurements.is_empty()
-                        && r.measurements.iter().all(|m| m.correct)
-                }) {
-                    0
-                } else {
-                    1
-                },
-            )
+            Ok(if set.succeeded() { 0 } else { 1 })
         }
         Command::Cleanup(path) => {
             gripsou_bench::database::ScratchRun::cleanup_manifest(

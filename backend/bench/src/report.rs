@@ -68,6 +68,15 @@ impl Measurement {
     }
 }
 impl RunSet {
+    /// Same success rule as the CLI exit code: no run error, and every
+    /// run measured something and verified all of it.
+    pub fn succeeded(&self) -> bool {
+        self.runs.iter().all(|r| {
+            r.errors.is_empty()
+                && !r.measurements.is_empty()
+                && r.measurements.iter().all(|m| m.correct)
+        })
+    }
     pub fn validate(&self) -> anyhow::Result<()> {
         ensure!(
             self.schema_version == 1 && !self.runs.is_empty(),

@@ -18,3 +18,5 @@ pub mod browser;
 pub mod load;
 
 pub mod diagnostics;
+
+pub mod progress;
