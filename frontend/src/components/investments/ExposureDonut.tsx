@@ -70,6 +70,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
   };
   const option: EChartsOption = {
     backgroundColor: "transparent",
+    animation: false,
     tooltip: { show: false },
     series: [
       {

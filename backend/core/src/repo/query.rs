@@ -1146,33 +1146,34 @@ pub async fn transaction_counts(
             select amount, account_currency, (ts at time zone 'utc')::date as day
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ),
-        -- Only the days the filter kept are priced: a one-month filter does
-        -- not pay for the whole history.
-        days as (select distinct day from matching),
-        grid as materialized (
-            select as_of, currency, unit_value
-            from valuation_grid($1, array(select day from days)::date[])
-            where kind = 'cash'
-        ),
         reporting as (
             select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
         ),
+        -- One FX row per needed day and account currency, with both legs.
+        -- Keeping reporting FX on the same row avoids a separate join whose
+        -- generic plan estimates one reporting row and repeatedly scans the
+        -- entire date grid for every matching transaction. Scalar FX reads
+        -- also avoid pricing held securities that this cash total never uses.
+        fx as materialized (
+            select day, account_currency,
+                   fx_asof(account_currency, day) as account_rate,
+                   fx_asof((select code from reporting), day) as reporting_rate
+            from (select distinct day, account_currency from matching) needed
+        ),
         totals as (
             select count(*) as n,
-                   coalesce(sum(m.amount * afx.unit_value
-                                / coalesce(nullif(rfx.unit_value, 0), 1)), 0) as total,
+                   coalesce(sum(m.amount * fx.account_rate
+                                / coalesce(nullif(fx.reporting_rate, 0), 1)), 0) as total,
                    -- Keyed on the account leg only: a missing reporting rate
                    -- degrades to the pivot rather than dropping anything from
                    -- the sum, so it must not set this.
-                   coalesce(bool_or(afx.unit_value is null), false) as fx_missing,
+                   coalesce(bool_or(fx.account_rate is null), false) as fx_missing,
                    -- Read off the same divisor the sum just used, so the flag
                    -- is set exactly when that divisor fell back to 1.
-                   coalesce(bool_or(coalesce(rfx.unit_value, 0) = 0), false)
+                   coalesce(bool_or(coalesce(fx.reporting_rate, 0) = 0), false)
                        as reporting_fx_missing
             from matching m
-            left join grid afx on afx.as_of = m.day and afx.currency = m.account_currency
-            left join grid rfx on rfx.as_of = m.day
-                              and rfx.currency = (select code from reporting)
+            left join fx on fx.day = m.day and fx.account_currency = m.account_currency
         ),
         everything as (
             select count(*) as n,

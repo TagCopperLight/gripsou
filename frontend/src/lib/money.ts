@@ -47,19 +47,37 @@ type RenderOptions = {
   signed: boolean;
 };
 
+// Constructing Intl formatters is expensive across a ledger's cells. Only
+// number structure belongs in the key: separators and currency still come
+// from the current prefs on every call. Bound the cache for option overrides.
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(o: RenderOptions): Intl.NumberFormat {
+  const key = `${o.style}:${o.minFrac}:${o.maxFrac}:${o.signed}`;
+  let formatter = numberFormats.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("en-US", {
+      style: o.style,
+      useGrouping: "always",
+      minimumFractionDigits: o.minFrac,
+      maximumFractionDigits: o.maxFrac,
+      signDisplay: o.signed ? "exceptZero" : "auto",
+    });
+    if (numberFormats.size >= 32) {
+      numberFormats.delete(numberFormats.keys().next().value!);
+    }
+    numberFormats.set(key, formatter);
+  }
+  return formatter;
+}
+
 // Format with Intl for structure, swap separators, and return the sign apart
 // from the body so callers can place a currency symbol between them.
 function renderParts(
   value: string | number,
   o: RenderOptions,
 ): { sign: string; body: string } {
-  const parts = new Intl.NumberFormat("en-US", {
-    style: o.style,
-    useGrouping: "always",
-    minimumFractionDigits: o.minFrac,
-    maximumFractionDigits: o.maxFrac,
-    signDisplay: o.signed ? "exceptZero" : "auto",
-  }).formatToParts(value as unknown as number);
+  const parts = numberFormat(o).formatToParts(value as unknown as number);
 
   let sign = "";
   let body = "";

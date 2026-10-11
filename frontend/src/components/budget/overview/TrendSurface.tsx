@@ -36,15 +36,15 @@ export function TrendSurface({
   );
 
   // Memoised on the data and the language: the option holds closures, so a
-  // fresh object every render would make the chart reset and replay its entry
-  // animation whenever the page re-renders for an unrelated reason.
+  // fresh object every render would make the chart reset whenever the page
+  // re-renders for an unrelated reason.
   const option = useMemo<EChartsOption>(() => {
     const short = new Intl.DateTimeFormat(language, { month: "short" });
     const axisLabels = trend.months.map((m) => short.format(monthStart(m)));
 
     return {
       backgroundColor: "transparent",
-      animationDuration: 300,
+      animation: false,
       grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
       tooltip: {
         trigger: "item",
@@ -129,7 +129,7 @@ export function TrendSurface({
 
   const onEvents = useMemo(() => {
     // Update only the colours: rebuilding the React option on every hover
-    // would reset this notMerge chart and replay its entry animation.
+    // would reset this notMerge chart.
     const colorMonth = (chart: EChartsType, activeIndex: number | null) => {
       chart.setOption({
         series: trend.series.map((_, rank) => ({

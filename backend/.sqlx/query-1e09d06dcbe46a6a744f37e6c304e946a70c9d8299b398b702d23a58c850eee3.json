@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with matching as (\n            select amount, account_currency, (ts at time zone 'utc')::date as day\n            from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n        ),\n        reporting as (\n            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code\n        ),\n        -- One FX row per needed day and account currency, with both legs.\n        -- Keeping reporting FX on the same row avoids a separate join whose\n        -- generic plan estimates one reporting row and repeatedly scans the\n        -- entire date grid for every matching transaction. Scalar FX reads\n        -- also avoid pricing held securities that this cash total never uses.\n        fx as materialized (\n            select day, account_currency,\n                   fx_asof(account_currency, day) as account_rate,\n                   fx_asof((select code from reporting), day) as reporting_rate\n            from (select distinct day, account_currency from matching) needed\n        ),\n        totals as (\n            select count(*) as n,\n                   coalesce(sum(m.amount * fx.account_rate\n                                / coalesce(nullif(fx.reporting_rate, 0), 1)), 0) as total,\n                   -- Keyed on the account leg only: a missing reporting rate\n                   -- degrades to the pivot rather than dropping anything from\n                   -- the sum, so it must not set this.\n                   coalesce(bool_or(fx.account_rate is null), false) as fx_missing,\n                   -- Read off the same divisor the sum just used, so the flag\n                   -- is set exactly when that divisor fell back to 1.\n                   coalesce(bool_or(coalesce(fx.reporting_rate, 0) = 0), false)\n                       as reporting_fx_missing\n            from matching m\n            left join fx on fx.day = m.day and fx.account_currency = m.account_currency\n        ),\n        everything as (\n            select count(*) as n,\n                   count(*) filter (where source = 'cash' and category_id is null)\n                       as uncategorized\n            from budget_transaction_rows($1, $2)\n        )\n        select t.n as \"matching!\", t.total as \"matching_total!\",\n               t.fx_missing as \"fx_missing!\",\n               t.reporting_fx_missing as \"reporting_fx_missing!\",\n               e.n as \"total!\", e.uncategorized as \"uncategorized!\"\n        from totals t, everything e\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "matching!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "matching_total!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "reporting_fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "uncategorized!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric",
+        "Text",
+        "Uuid",
+        "Date",
+        "Date",
+        "Text",
+        "UuidArray",
+        "UuidArray",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1e09d06dcbe46a6a744f37e6c304e946a70c9d8299b398b702d23a58c850eee3"
+}

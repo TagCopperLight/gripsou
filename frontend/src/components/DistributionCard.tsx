@@ -34,6 +34,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
 
   const option: EChartsOption = {
     backgroundColor: "transparent",
+    animation: false,
     tooltip: { show: false },
     series: [
       {
