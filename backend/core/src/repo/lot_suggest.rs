@@ -42,7 +42,7 @@ pub struct Jump {
     pub candidates: Vec<Candidate>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Suggestion {
     pub holding_id: Uuid,
     pub side: &'static str,

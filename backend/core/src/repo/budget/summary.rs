@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::error::CoreError;
 
 /// One (day, category) bucket, already in the reader's reporting currency.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DayCategoryRow {
     pub day: NaiveDate,
     /// `None` is the Uncategorised slice — on day one, most of them.

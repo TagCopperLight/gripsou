@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 /// One dated amount, negative when money goes in (a buy), positive when it
 /// comes out (a sale, a dividend, today's value). In the reporting currency.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Flow {
     pub day: NaiveDate,
     pub amount: f64,
@@ -62,7 +62,7 @@ pub fn xirr(flows: &[Flow]) -> Option<f64> {
 
 /// One non-cash holding in scope. `value`/`invested` are the Holdings table's
 /// figures (reporting currency); a sold-out holding has both at zero.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Position {
     pub holding_id: Uuid,
     pub account_id: Uuid,
@@ -79,7 +79,7 @@ pub struct Position {
 /// carry no instrument, so dividends belong to the account), signed like
 /// `Flow`, converted to the reporting currency on its own day. `amount` is
 /// `None` when that day's rate is missing.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CashFlow {
     pub holding_id: Option<Uuid>,
     pub account_id: Uuid,
@@ -88,13 +88,13 @@ pub struct CashFlow {
 }
 
 /// A holding left out of the return because its purchases aren't recorded.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Missing {
     pub holding_id: Uuid,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ScopeReturn {
     /// Per year, as a ratio (0.071 = +7.1 %/yr).
     pub annualised: Option<f64>,
@@ -105,13 +105,13 @@ pub struct ScopeReturn {
     pub missing: Vec<Missing>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct AccountReturn {
     pub account_id: Uuid,
     pub figures: ScopeReturn,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Returns {
     pub total: ScopeReturn,
     /// Accounts with at least one position, largest value first.
