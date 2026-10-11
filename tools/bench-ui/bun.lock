@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "bench-ui",
+      "name": "gripsou-bench-ui",
       "dependencies": {
         "@tanstack/react-query": "^5.104.1",
         "echarts": "^6.1.0",
