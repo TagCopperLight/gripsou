@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 // router.test.tsx stubs the Dashboard's chart cards outright. TrendSurface's
 // own test mocks this module for the same reason; mirror it here rather than
 // let an environment limitation flake the page assembly's tests.
-vi.mock("echarts-for-react", () => ({
+vi.mock("../../components/EChart", () => ({
   default: () => <div data-testid="chart-stub" />,
 }));
 

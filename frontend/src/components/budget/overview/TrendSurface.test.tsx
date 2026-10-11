@@ -12,7 +12,7 @@ type ChartSeries = { data: number[]; itemStyle: { color: (p: { dataIndex: number
 
 let capturedEvents: Record<string, (...args: unknown[]) => void> | undefined;
 
-vi.mock("echarts-for-react", () => ({
+vi.mock("../../EChart", () => ({
   // Capture the chart option and handlers; the tooltip formatter runs here as the
   // real component builds it, while browser checks cover SVG rendering.
   default: (props: { option: EChartsOption; onEvents?: Record<string, (...args: unknown[]) => void> }) => {

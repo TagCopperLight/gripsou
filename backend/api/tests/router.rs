@@ -54,3 +54,56 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
     assert_eq!(r.status(), StatusCode::PAYLOAD_TOO_LARGE);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test]
+async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@localhost/unused")
+        .unwrap();
+    let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<html>SPA fixture</html>".repeat(10),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("assets/index-abc.js"),
+        "console.log(1);".repeat(100),
+    )
+    .unwrap();
+    let app = gripsou_api::router(db, &dir, vec![]);
+    let get = |path: &str| {
+        Request::builder()
+            .uri(path)
+            .header("accept-encoding", "br, gzip")
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    let r = app
+        .clone()
+        .oneshot(get("/assets/index-abc.js"))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(r.headers()["content-encoding"], "br");
+    assert_eq!(
+        r.headers()["cache-control"],
+        "public, max-age=31536000, immutable"
+    );
+
+    // Only hashed assets get the long cache: never the page naming them, nor a
+    // missing asset.
+    for (path, status) in [
+        ("/", StatusCode::OK),
+        ("/assets/gone.js", StatusCode::NOT_FOUND),
+    ] {
+        let r = app.clone().oneshot(get(path)).await.unwrap();
+        assert_eq!(r.status(), status);
+        assert!(!r.headers().contains_key("cache-control"), "{path}");
+    }
+    let r = app.oneshot(get("/")).await.unwrap();
+    assert_eq!(r.headers()["content-encoding"], "br");
+    std::fs::remove_dir_all(dir).unwrap();
+}

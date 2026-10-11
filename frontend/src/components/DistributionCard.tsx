@@ -1,7 +1,7 @@
 import { chartReadinessEvents, chartReady } from "./chartReadiness";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import ReactECharts from "echarts-for-react";
+import ReactECharts from "./EChart";
 import type { EChartsOption } from "echarts";
 
 import { Surface } from "./Surface";

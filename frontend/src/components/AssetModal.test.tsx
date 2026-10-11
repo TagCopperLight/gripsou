@@ -8,7 +8,7 @@ import type { Holding } from "../api/types";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
 // the chart mid-test — stub it out, as FxMissingWarning.test.tsx does.
-vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="chart" /> }));
+vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
   id: "h1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
