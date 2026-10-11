@@ -143,6 +143,7 @@ pub struct RunConfig {
     pub save: Option<PathBuf>,
     pub database_url: Option<String>,
     pub diagnostics: bool,
+    pub progress: bool,
     pub concurrency: usize,
 }
 pub enum Command {
@@ -179,10 +180,15 @@ pub fn parse_cli(args: Vec<String>) -> Result<Command> {
     ensure!(action == "run", "unknown command {action}");
     let mut pairs = std::collections::BTreeMap::new();
     let mut diagnostics = false;
+    let mut progress = false;
     let mut i = 1;
     while i < args.len() {
-        if args[i] == "--diagnostics" {
-            diagnostics = true;
+        if args[i] == "--diagnostics" || args[i] == "--progress" {
+            if args[i] == "--diagnostics" {
+                diagnostics = true;
+            } else {
+                progress = true;
+            }
             i += 1;
             continue;
         }
@@ -286,6 +292,7 @@ pub fn parse_cli(args: Vec<String>) -> Result<Command> {
         save: pairs.get("--save").map(PathBuf::from),
         database_url: pairs.get("--database-url").map(|v| (*v).into()),
         diagnostics,
+        progress,
         concurrency,
     })))
 }

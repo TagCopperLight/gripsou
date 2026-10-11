@@ -295,7 +295,11 @@ pub async fn write_decisions(
     let txn_ids: Vec<Uuid> = decisions.iter().map(|d| d.txn_id).collect();
     let categories: Vec<Option<Uuid>> = decisions.iter().map(|d| d.category_id).collect();
     let confidences: Vec<Option<Decimal>> = decisions.iter().map(|d| d.confidence).collect();
-    Ok(sqlx::query!(
+    // Many rows in one unordered update: queue behind a sync of another of the
+    // user's connections rather than deadlock with its pairing pass.
+    let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let written = sqlx::query!(
         r#"
         update transaction t
            set budget_category_id   = c.id,
@@ -317,9 +321,11 @@ pub async fn write_decisions(
         &categories as &[Option<Uuid>],
         &confidences as &[Option<Decimal>],
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?
-    .rows_affected())
+    .rows_affected();
+    tx.commit().await?;
+    Ok(written)
 }
 
 /// Opens the run's log row, marked `running`, at the real start of the run.

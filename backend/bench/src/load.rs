@@ -354,6 +354,7 @@ pub async fn measure(
                 "load had {failed} unsuccessful requests; retained failed_trial accounting"
             );
         }
+        crate::progress::emit_trial(config, &case.id, trial);
     }
     m.diagnostics.remove("last_trial");
     m.diagnostics.insert("requests".into(), json!(stats));

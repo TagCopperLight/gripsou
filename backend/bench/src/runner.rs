@@ -1,3 +1,4 @@
+use crate::progress::{emit, emit_trial};
 use crate::{
     catalog,
     config::RunConfig,
@@ -10,12 +11,17 @@ use serde_json::json;
 use std::{collections::BTreeMap, panic::AssertUnwindSafe, time::Instant};
 pub async fn run(config: &RunConfig) -> anyhow::Result<RunSet> {
     let cases = catalog::select(config)?;
+    emit(
+        config,
+        json!({"type":"start","cases":cases.iter().map(|c| &c.id).collect::<Vec<_>>(),"repeat":config.repeat,"warmups":config.warmups,"samples":config.samples}),
+    );
     let base = config
         .database_url
         .clone()
         .or_else(|| std::env::var("DATABASE_URL").ok())
         .ok_or_else(|| anyhow::anyhow!("DATABASE_URL required"))?;
     let frontend = if config.suite == "browser" {
+        emit(config, json!({"type":"phase","name":"frontend_build"}));
         Some(crate::browser::build().await?)
     } else {
         None
@@ -25,8 +31,16 @@ pub async fn run(config: &RunConfig) -> anyhow::Result<RunSet> {
         schema_version: 1,
         runs: vec![],
     };
-    for _ in 0..config.repeat {
+    for index in 0..config.repeat {
+        emit(
+            config,
+            json!({"type":"repeat","index":index + 1,"of":config.repeat}),
+        );
         let mut scratch = ScratchRun::new(&base).await?;
+        emit(
+            config,
+            json!({"type":"manifest","path":scratch.manifest_path}),
+        );
         let mut report = RunReport {
             id: uuid::Uuid::new_v4().to_string(),
             commit: commit.clone(),
@@ -48,6 +62,7 @@ pub async fn run(config: &RunConfig) -> anyhow::Result<RunSet> {
             Ok(Err(e)) => report.errors.push(e.to_string()),
             Err(_) => report.errors.push("benchmark panicked".into()),
         }
+        emit(config, json!({"type":"phase","name":"cleanup"}));
         if let Err(e) = scratch.cleanup().await {
             report.errors.push(e.to_string());
         }
@@ -61,6 +76,7 @@ pub async fn run(config: &RunConfig) -> anyhow::Result<RunSet> {
             report::write_atomic(path, &set)?;
         }
     }
+    emit(config, json!({"type":"done","ok":set.succeeded()}));
     Ok(set)
 }
 async fn run_inner(
@@ -72,11 +88,16 @@ async fn run_inner(
     let setup = Instant::now();
     let (template, pool) = scratch.create_db(None).await?;
     report.environment = metadata::environment(&pool).await?;
+    emit(config, json!({"type":"phase","name":"seeding"}));
     let f = fixture::seed(&pool, &config.fixture).await?;
     pool.close().await;
     // Setup cost is recorded outside compatibility metadata and measured intervals.
     let setup_ms = setup.elapsed().as_secs_f64() * 1000.;
-    for case in cases {
+    for (index, case) in cases.iter().enumerate() {
+        emit(
+            config,
+            json!({"type":"case_start","id":case.id,"index":index + 1,"of":cases.len()}),
+        );
         let mut m = Measurement {
             id: case.id.clone(),
             parameters: json!({"limit":200,"deep_offset":if case.id.contains("deep"){10000}else{0},"anchor":config.fixture.anchor}),
@@ -132,6 +153,13 @@ async fn run_inner(
             case.id,
             m.samples_ms.len(),
             if m.correct { "verified" } else { "FAILED" }
+        );
+        let stats = (!m.samples_ms.is_empty())
+            .then(|| report::statistics(&m.samples_ms).ok())
+            .flatten();
+        emit(
+            config,
+            json!({"type":"case_end","id":case.id,"correct":m.correct,"median_ms":stats.map(|s| s.1),"p95_ms":stats.map(|s| s.2),"errors":m.errors}),
         );
         if m.id.starts_with("load.")
             && let Some(samples) = m
@@ -234,6 +262,7 @@ async fn measure(
         if let Some((name, _)) = fresh {
             scratch.remove_db(&name).await?;
         }
+        emit_trial(config, &case.id, trial);
     }
     if let Some(server) = server {
         server.shutdown().await?;

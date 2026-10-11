@@ -1012,3 +1012,40 @@ async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
     assert_eq!(row_state(&pool, ids[2]).await.3, Some(ids[1]));
     Ok(())
 }
+
+/// A budget write waits for a sync of the same user (which holds the user's
+/// write lock) instead of racing it for row locks, so the two cannot deadlock.
+#[sqlx::test(migrations = "../migrations")]
+async fn bulk_apply_waits_for_a_sync_in_progress(pool: PgPool) -> anyhow::Result<()> {
+    let (user_id, _, ids) = fixture(&pool, &["LECLERC", "LIDL"]).await?;
+
+    let mut sync = pool.begin().await?;
+    sqlx::query("select pg_advisory_xact_lock(hashtext($1))")
+        .bind(user_id.to_string())
+        .execute(&mut *sync)
+        .await?;
+
+    let write_pool = pool.clone();
+    let write_ids = ids.clone();
+    let mut write = tokio::spawn(async move {
+        bulk_apply(
+            &write_pool,
+            user_id,
+            &write_ids,
+            BulkChanges {
+                checked: Some(true),
+                ..Default::default()
+            },
+            false,
+        )
+        .await
+    });
+
+    let early = tokio::time::timeout(std::time::Duration::from_millis(300), &mut write).await;
+    assert!(early.is_err(), "the write ran while a sync held the lock");
+
+    sync.commit().await?;
+    let outcome = tokio::time::timeout(std::time::Duration::from_secs(5), write).await???;
+    assert!(matches!(outcome, WriteOutcome::Done(2)));
+    Ok(())
+}

@@ -201,6 +201,20 @@ scripts/bench cleanup /tmp/gripsou-bench-<run>.json
 Replace `<run>` with the ID from the actual filename. This is a cleanup record,
 not a benchmark result file such as `/tmp/before.json`.
 
+## Using the web interface
+
+`tools/bench-ui` is a small local web page to launch benchmarks with progress
+bars and compare saved runs with charts. It runs the same `scripts/bench`
+commands as above, on the code currently on disk.
+
+```sh
+(cd tools/bench-ui && bun install && bun run start)
+```
+
+Open <http://127.0.0.1:5174>. It uses `DATABASE_URL` from your shell, or finds
+the Docker database by itself. Results are saved in `benchmarks/results/`
+(ignored by git); result files made with `--save` can be copied there too.
+
 ## Optional investigation tools
 
 Add `--diagnostics` when you need more clues about a backend operation. It runs

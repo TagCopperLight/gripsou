@@ -333,6 +333,7 @@ pub async fn set_category(
     category_id: Option<Uuid>,
 ) -> Result<bool, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     let written = write_category(&mut tx, user_id, &[txn_id], category_id).await?;
     tx.commit().await?;
     Ok(!written.is_empty())
@@ -348,6 +349,7 @@ pub async fn set_tags(
     tag_ids: &[Uuid],
 ) -> Result<bool, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     if lock_owned(&mut tx, user_id, &[txn_id]).await?.is_empty() {
         return Ok(false);
     }
@@ -362,8 +364,11 @@ pub async fn set_checked(
     txn_id: Uuid,
     checked: bool,
 ) -> Result<bool, CoreError> {
-    let mut conn = pool.acquire().await?;
-    Ok(write_checked(&mut conn, user_id, &[txn_id], checked).await? > 0)
+    let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let written = write_checked(&mut tx, user_id, &[txn_id], checked).await?;
+    tx.commit().await?;
+    Ok(written > 0)
 }
 
 pub async fn bulk_set_category(
@@ -373,6 +378,7 @@ pub async fn bulk_set_category(
     category_id: Option<Uuid>,
 ) -> Result<u64, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     let written = write_category(&mut tx, user_id, txn_ids, category_id).await?;
     tx.commit().await?;
     Ok(written.len() as u64)
@@ -388,8 +394,11 @@ pub async fn bulk_add_tags(
     txn_ids: &[Uuid],
     tag_ids: &[Uuid],
 ) -> Result<u64, CoreError> {
-    let mut conn = pool.acquire().await?;
-    add_tags(&mut conn, user_id, txn_ids, tag_ids).await
+    let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let touched = add_tags(&mut tx, user_id, txn_ids, tag_ids).await?;
+    tx.commit().await?;
+    Ok(touched)
 }
 
 pub async fn bulk_set_checked(
@@ -398,8 +407,11 @@ pub async fn bulk_set_checked(
     txn_ids: &[Uuid],
     checked: bool,
 ) -> Result<u64, CoreError> {
-    let mut conn = pool.acquire().await?;
-    write_checked(&mut conn, user_id, txn_ids, checked).await
+    let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let written = write_checked(&mut tx, user_id, txn_ids, checked).await?;
+    tx.commit().await?;
+    Ok(written)
 }
 
 /// What a single-row save changes. `None` leaves a field alone;
@@ -425,6 +437,7 @@ pub async fn patch_transaction(
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<()>, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     let Some(&(_, paired)) = lock_owned(&mut tx, user_id, &[txn_id]).await?.first() else {
         return Ok(WriteOutcome::NotFound);
     };
@@ -611,6 +624,7 @@ pub async fn apply_category_to_same_description(
     category_id: Option<Uuid>,
 ) -> Result<Vec<Uuid>, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     let rows = same_description_rows(&mut tx, user_id, txn_id, true, SameDescription::All).await?;
     let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
     let written = write_category(&mut tx, user_id, &ids, category_id).await?;
@@ -632,6 +646,7 @@ pub async fn apply_to_description(
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<Vec<Uuid>>, CoreError> {
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     if lock_owned(&mut tx, user_id, &[txn_id]).await?.is_empty() {
         return Ok(WriteOutcome::NotFound);
     }
@@ -678,6 +693,7 @@ pub async fn bulk_apply(
 ) -> Result<WriteOutcome<u64>, CoreError> {
     let add_tag_ids = changes.add_tag_ids.filter(|t| !t.is_empty());
     let mut tx = pool.begin().await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
     let rows = lock_owned(&mut tx, user_id, ids).await?;
     if let Some(category_id) = changes.category_id
         && !category_is_mine(&mut tx, user_id, category_id).await?
