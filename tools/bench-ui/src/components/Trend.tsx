@@ -9,7 +9,12 @@ export function Trend() {
   const all = (runs.data ?? []).filter((r) => !r.error)
   const benchmarks = [...new Set(all.flatMap((r) => r.benchmarks))].sort()
   const [benchmark, setBenchmark] = useState('')
-  const b = benchmarks.includes(benchmark) ? benchmark : benchmarks[0] ?? ''
+  // Default: the benchmark whose largest trend group has the most runs (ties: alphabetical).
+  const busiest = benchmarks.reduce((best, id) => {
+    const size = Math.max(0, ...trendGroups(all, id).map((g) => g.runs.length))
+    return size > best.size ? { id, size } : best
+  }, { id: benchmarks[0] ?? '', size: -1 }).id
+  const b = benchmarks.includes(benchmark) ? benchmark : busiest
   const groups = trendGroups(all, b)
   const [groupKey, setGroupKey] = useState('')
   const group = groups.find((g) => g.key === groupKey) ?? groups[0]
@@ -21,12 +26,13 @@ export function Trend() {
   const groupLabel = (g: (typeof groups)[number]) => {
     const label = baseLabel(g)
     const shared = groups.filter((o) => baseLabel(o) === label).length > 1
-    return `${label}${shared ? ` #${(g.runs[0].fixtureFingerprint ?? '').slice(0, 6)}` : ''} (${g.runs.length} runs)`
+    const count = g.runs.length === 1 ? '1 run' : `${g.runs.length} runs`
+    return `${label}${shared ? ` #${(g.runs[0].fixtureFingerprint ?? '').slice(0, 6)}` : ''} (${count})`
   }
   const option = {
     animation: false,
-    grid: { left: 70, right: 24, top: 30, bottom: 60 },
-    legend: { data: ['median', 'p95'] },
+    grid: { left: 70, right: 24, top: 40, bottom: 70 },
+    legend: { top: 0, right: 0, data: ['median', 'p95'] },
     xAxis: { type: 'category', data: points.map((p) => p.timestamp.slice(0, 16).replace('T', ' ')), axisLabel: { rotate: 30 } },
     yAxis: { type: 'value', name: 'ms', min: 0 },
     tooltip: {
