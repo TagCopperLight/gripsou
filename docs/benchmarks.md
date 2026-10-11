@@ -17,7 +17,7 @@ Defaults are 3 warmups and 30 measured samples. First execution is separate, and
 
 `smoke` uses 2 accounts/4 holdings/600 transactions. `typical`, `large-ledger`, `active-investor`, `long-history`, `multi-currency`, `transfer-heavy`, `shared-database`, and `large-portfolio` stress different dimensions. Overrides include accounts, connections, holdings, days, transactions, lots, users, anchor and strides; version 1 supports fixed seed 1. Deep-page reads require more than 10200 cash rows and are skipped in default smaller profiles; explicitly selecting an unsupported case fails before opening a database.
 
-Use `--samples 1 --warmups 0 --profile smoke` for correctness smoke checks. CI checks correctness only and applies no wall-time thresholds to shared runners. Raw artifacts are versioned JSON with atomic writes; schemas live in `benchmarks/`. Failed measurements retain completed samples and reasons.
+Use `--samples 1 --warmups 0 --profile smoke` for correctness smoke checks. Raw artifacts are versioned JSON with atomic writes; schemas live in `benchmarks/`. Failed measurements retain completed samples and reasons.
 
 To add a target, register its stable ID, suite, measurement boundary and reset policy in `backend/bench/src/catalog.rs`; prepare inputs outside the timer, call the real operation, then verify against persisted fixture inputs or a hand-calculated expectation. Add a corruption test that rejects plausible but incorrect output. SQL/RSS diagnostics are optional and separate from primary timing; absent metrics are null, never fabricated zeroes. Provider mapping, composition parsing and log throughput can be added with recorded inputs using the same contract.
 
@@ -41,4 +41,4 @@ Different-user ingestion requires `--users 2` or `shared-database`; same-user in
 
 `--diagnostics` runs an additional reset clone after score samples. A subscriber scoped to the actual backend operation counts sqlx::query events; setup and oracle queries are excluded, and the production global subscriber is untouched. SQL plans are supported for the explicitly equivalent holding-price query only. Other targets report unsupported plan data. EXPLAIN ANALYZE BUFFERS runs on the separate clone, never on the source database or inside score timing. RSS/peak RSS describe the Rust benchmark/application process only, excluding PostgreSQL and Chromium, observed through Linux /proc/self/status. Missing platform/event/plan support is null with a reason. Add equivalent SQL and an equivalence test before exposing a new plan diagnostic.
 
-The manually triggered Benchmarks workflow collects release artifacts on an isolated PostgreSQL service with normal durability settings. It applies no timing threshold. Keep baseline/candidate measurements on the same controlled host for optimization assignments.
+Keep baseline/candidate measurements on the same controlled host for optimization assignments.
