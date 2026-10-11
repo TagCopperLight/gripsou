@@ -42,26 +42,18 @@ pub async fn ingest(
 ) -> Result<IngestSummary, CoreError> {
     let mut tx = pool.begin().await?;
 
-    // Serialise this user's whole ingest, not just its pairing pass.
-    // The budget pipeline reads and writes across every account the user owns,
-    // while a sync runs per connection and the scheduler fans connections out in
-    // parallel — so two of one user's connections syncing at once would otherwise
-    // take row locks in opposite orders and deadlock, aborting one sync entirely.
-    // Taken here rather than inside the pairing pass because the upserts below
-    // already hold row locks by the time pairing starts, which leaves the cycle
-    // open. Transaction-scoped: released on commit or rollback, never stranded.
+    // Serialise this user's whole ingest, not just its pairing pass (see
+    // `lock_user_writes`). Two of one user's connections syncing at once would
+    // otherwise take row locks in opposite orders. Taken here rather than inside
+    // the pairing pass because the upserts below already hold row locks by the
+    // time pairing starts, which leaves the cycle open.
     let user_id = sqlx::query_scalar!(
         "select user_id from connection where id = $1",
         connection_id
     )
     .fetch_one(&mut *tx)
     .await?;
-    sqlx::query!(
-        "select pg_advisory_xact_lock(hashtext($1))",
-        user_id.to_string()
-    )
-    .execute(&mut *tx)
-    .await?;
+    crate::db::lock_user_writes(&mut tx, user_id).await?;
 
     let today = sqlx::query_scalar!("select user_today($1) as \"day!\"", user_id)
         .fetch_one(&mut *tx)
