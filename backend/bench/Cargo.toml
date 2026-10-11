@@ -5,6 +5,8 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+gripsou-api = { path = "../api" }
+axum.workspace = true
 gripsou-core = { path = "../core" }
 anyhow.workspace = true
 tokio.workspace = true
