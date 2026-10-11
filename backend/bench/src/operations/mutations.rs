@@ -70,11 +70,14 @@ pub async fn execute(c: &PreparedCase, p: &sqlx::PgPool) -> anyhow::Result<Execu
     let input = c.mutation.as_ref().unwrap();
     match c.case.id.as_str() {
         "portfolio.backfill" => {
-            timed(async {
+            let mut e = timed(async {
                 let mut conn = p.acquire().await?;
                 Ok(gripsou_core::backfill::backfill_connection(&mut conn, f.syncs[0].0).await?)
             })
-            .await
+            .await?;
+            let state = backfill_state(p, f.syncs[0].0).await?;
+            e.outcome = serde_json::json!({"rows_written": e.outcome, "state": state});
+            Ok(e)
         }
         "transactions.bulk.category" | "transactions.bulk.tags" | "transactions.bulk.checked" => {
             timed(async {
@@ -315,8 +318,33 @@ pub async fn verify(c: &PreparedCase, p: &sqlx::PgPool, e: &Execution) -> anyhow
             );
         }
         "portfolio.backfill" => {
-            let bad:i64=sqlx::query_scalar("select count(*) from holding_snapshot s join holding h on h.id=s.holding_id join instrument i on i.id=h.instrument_id where s.as_of=$1 and (s.quantity<>h.quantity or (i.kind<>'cash' and s.value<>h.quantity*12))").bind(f.today()).fetch_one(p).await?;
-            ensure!(bad == 0, "backfill changed end quantities");
+            // Generate the expected fixture history from cash inputs and signed
+            // lot quantities, independently of the backward-walk implementation.
+            let (expected, bad): (i64, i64) = sqlx::query_as(r#"
+                with expected as (
+                  select h.id, d::date as day, i.kind, h.cost_basis,
+                    (select min(s.as_of) from holding_snapshot s where s.holding_id=h.id and s.as_of>d::date) as anchor,
+                    exists(select 1 from holding_snapshot s where s.holding_id=h.id and s.quantity<>0) as valued,
+                    case when i.kind='cash' then 10000 + (select coalesce(sum(t.amount),0) from transaction t where t.account_id=h.account_id and t.booked_on<=d::date)
+                    else (select coalesce(sum(case l.side when 'buy' then l.quantity else -l.quantity end),0) from lot l where l.holding_id=h.id and l.acquired_on<=d::date) end as qty
+                  from holding h join account a on a.id=h.account_id join instrument i on i.id=h.instrument_id
+                  cross join generate_series($2::date,$3::date,interval '1 day') d
+                  where a.connection_id=$1 and not exists(select 1 from holding_snapshot s where s.holding_id=h.id and s.as_of=d::date)
+                ), adjusted as (select *, qty+greatest(0,-min(qty) over(partition by id,anchor)) as adjusted_qty from expected)
+                select count(*), count(*) filter(where b.holding_id is null or b.quantity<>e.adjusted_qty or b.value<>case when e.kind='cash' then e.adjusted_qty when e.valued then e.adjusted_qty*12 else e.cost_basis end)
+                from adjusted e left join holding_backfill b on b.holding_id=e.id and b.as_of=e.day
+            "#).bind(f.syncs[0].0).bind(f.from()-chrono::Duration::days(1)).bind(f.today()).fetch_one(p).await?;
+            let actual: i64 = sqlx::query_scalar("select count(*) from holding_backfill b join holding h on h.id=b.holding_id join account a on a.id=h.account_id where a.connection_id=$1").bind(f.syncs[0].0).fetch_one(p).await?;
+            ensure!(
+                bad == 0
+                    && expected == actual
+                    && e.outcome["rows_written"].as_i64() == Some(actual),
+                "wrong derived backfill coverage/quantity/value: expected={expected} actual={actual} bad={bad}"
+            );
+            ensure!(
+                e.outcome["state"] == backfill_state(p, f.syncs[0].0).await?,
+                "backfill state changed after execution"
+            );
         }
         "ai.prepare" => {
             ensure!(
@@ -334,4 +362,9 @@ pub async fn verify(c: &PreparedCase, p: &sqlx::PgPool, e: &Execution) -> anyhow
         _ => anyhow::bail!("mutation missing correctness check"),
     }
     Ok(())
+}
+
+async fn backfill_state(p: &sqlx::PgPool, connection: uuid::Uuid) -> anyhow::Result<String> {
+    let rows: Vec<(uuid::Uuid, chrono::NaiveDate, rust_decimal::Decimal, rust_decimal::Decimal)> = sqlx::query_as("select b.holding_id,b.as_of,b.quantity,b.value from holding_backfill b join holding h on h.id=b.holding_id join account a on a.id=h.account_id where a.connection_id=$1 order by b.holding_id,b.as_of").bind(connection).fetch_all(p).await?;
+    crate::report::fingerprint(&rows)
 }

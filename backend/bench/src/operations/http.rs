@@ -116,6 +116,10 @@ pub async fn verify(
                     (0..f.config.accounts).any(|n| id == crate::fixture::id(3, 0, n)),
                     "foreign HTTP account"
                 );
+                ensure!(
+                    decimal(&row["value"])? == super::fixture_value(pool, f, Some(id)).await?,
+                    "wrong HTTP account value"
+                );
             }
         }
         "http.net-worth" => {
@@ -158,16 +162,27 @@ pub async fn verify(
             "wrong trend axis"
         ),
         "http.budget-summary" => {
+            let expected = super::budget::expected_figures(
+                pool,
+                f,
+                gripsou_core::budget::overview::Month::containing(f.today()),
+            )
+            .await?;
             ensure!(
-                body["figures"]["income"].is_object() && body["figures"]["expenses"].is_object(),
-                "missing budget figures"
+                decimal(&body["figures"]["income"]["amount"])? == expected.income
+                    && decimal(&body["figures"]["expenses"]["amount"])? == expected.expenses
+                    && decimal(&body["figures"]["net"]["amount"])? == expected.net,
+                "wrong HTTP budget figures"
             );
         }
         "http.lot-preview" => ensure!(
             decimal(&body["meanPrice"])? == rust_decimal::Decimal::new(1201, 2),
             "wrong HTTP preview"
         ),
-        "http.lot-suggestions" => ensure!(body.is_array(), "suggestions not array"),
+        "http.lot-suggestions" => ensure!(
+            body.as_array().is_some_and(Vec::is_empty),
+            "fixture must not suggest invented lots"
+        ),
         "http.transaction-counts" => ensure!(
             body["total"].as_i64().unwrap_or(0) > 0,
             "missing transaction counts"

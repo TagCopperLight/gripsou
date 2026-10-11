@@ -29,6 +29,16 @@ async fn committed_trials_start_identically_and_offline_paths_are_verified() -> 
             scratch.remove_db(&name).await?;
         }
     }
+    let case = catalog::catalog()
+        .into_iter()
+        .find(|c| c.id == "portfolio.backfill")
+        .unwrap();
+    let (name, pool) = scratch.create_db(Some(&template)).await?;
+    let prepared = operations::prepare(&case, &pool, &fixture).await?;
+    let result = operations::execute(&prepared, &pool).await?;
+    sqlx::query("update holding_backfill set quantity=quantity+1,value=value+12 where (holding_id,as_of)=(select holding_id,as_of from holding_backfill order by holding_id,as_of limit 1)").execute(&pool).await?;
+    assert!(operations::verify(&prepared, &pool, &result).await.is_err());
+    scratch.remove_db(&name).await?;
     scratch.cleanup().await?;
     Ok(())
 }

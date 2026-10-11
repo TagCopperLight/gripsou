@@ -1,7 +1,7 @@
 export type Target = { id: string; boundary: string; reset: string };
 export type Handshake = {
   origin: string; token: string; anchor: string; samples: number; warmups: number;
-  target: Target; expected: { netWorth: number; holding: string; holdingCount: number; accountCount: number };
+  target: Target; expected: { netWorth: number; holding: string; holdingCount: number; accountCount: number; lotCount: number };
 };
 export type Measurement = {
  id: string; parameters: Record<string, unknown>; boundary: string; reset: string;

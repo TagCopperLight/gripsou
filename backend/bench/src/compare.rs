@@ -47,6 +47,10 @@ impl Goal {
                 && self.primary.min_improvement_percent <= 100.,
             "invalid improvement threshold"
         );
+        ensure!(
+            !self.companions.is_empty(),
+            "goal requires at least one companion guard"
+        );
         let mut ids = BTreeSet::new();
         for (id, metric) in std::iter::once((&self.primary.id, &self.primary.metric))
             .chain(self.companions.iter().map(|c| (&c.id, &c.metric)))

@@ -93,3 +93,28 @@ async fn fixture_balances_quantities_and_semantics_are_repeatable() -> anyhow::R
     s.cleanup().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn source_database_is_read_only_and_cannot_be_seeded() -> anyhow::Result<()> {
+    let base = std::env::var("DATABASE_URL")?;
+    let source = sqlx::PgPool::connect(&base).await?;
+    let before:Vec<String>=sqlx::query_scalar("select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='user_today' order by p.oid").fetch_all(&source).await?;
+    assert!(
+        fixture::seed(&source, &FixtureConfig::profile("smoke")?)
+            .await
+            .is_err()
+    );
+    let mut s = ScratchRun::new(&base).await?;
+    let (_, p) = s.create_db(None).await?;
+    fixture::seed(&p, &FixtureConfig::profile("smoke")?).await?;
+    s.cleanup().await?;
+    let after:Vec<String>=sqlx::query_scalar("select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='user_today' order by p.oid").fetch_all(&source).await?;
+    assert_eq!(before, after);
+    let helper: bool =
+        sqlx::query_scalar("select exists(select 1 from pg_proc where proname='bench_id')")
+            .fetch_one(&source)
+            .await?;
+    assert!(!helper);
+    source.close().await;
+    Ok(())
+}

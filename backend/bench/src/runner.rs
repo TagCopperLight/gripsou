@@ -102,12 +102,16 @@ async fn run_inner(
         match result {
             Ok(Ok(())) => m.correct = true,
             Ok(Err(e)) => {
+                m.correct = false;
                 let error = e.to_string();
                 if !m.errors.contains(&error) {
                     m.errors.push(error);
                 }
             }
-            Err(_) => m.errors.push("operation panicked".into()),
+            Err(_) => {
+                m.correct = false;
+                m.errors.push("operation panicked".into());
+            }
         }
         if config.diagnostics && m.correct {
             match crate::diagnostics::collect(case, scratch, &template, &f).await {

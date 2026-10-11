@@ -77,7 +77,11 @@ async fn black_box_smoke_rejects_performance_goal() -> anyhow::Result<()> {
             metric: "median_ms".into(),
             min_improvement_percent: 25.,
         },
-        companions: vec![],
+        companions: vec![gripsou_bench::compare::Companion {
+            id: "transactions.search.rare".into(),
+            metric: "median_ms".into(),
+            max_regression_percent: 10.,
+        }],
         minimum_samples: 30,
         required_runs: 3,
         max_noise_percent: 10.,

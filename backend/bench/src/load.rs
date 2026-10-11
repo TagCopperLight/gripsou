@@ -308,11 +308,31 @@ pub async fn measure(
         let t = Instant::now();
         let (name, pool) = scratch.create_db(Some(template)).await?;
         m.reset_ms += t.elapsed().as_secs_f64() * 1000.;
-        let result =
-            tokio::time::timeout(Duration::from_secs(120), scenario(config, case, f, &pool)).await;
+        let expected = final_state(
+            &pool,
+            if case.id == "load.bulk-during-ingest" {
+                (100..120).map(|n| crate::fixture::id(7, 0, n)).collect()
+            } else {
+                vec![]
+            },
+        )
+        .await?;
+        let result = async {
+            let traffic=tokio::time::timeout(Duration::from_secs(120), scenario(config, case, f, &pool)).await.map_err(|_|anyhow::anyhow!("load scenario exceeded 120 seconds"))??;
+            // Keep complete status/latency accounting even if final-state
+            // verification below rejects the operation.
+            m.diagnostics.insert("last_trial".into(),json!(traffic.0));
+            let actual=final_state(&pool,vec![]).await?;
+            anyhow::ensure!(actual==expected,"load changed portfolio, cash inputs, lots, user categories, tags or checked state unexpectedly");
+            let bad:i64=sqlx::query_scalar("select count(*) from transaction t join account a on a.id=t.account_id join connection c on c.id=a.connection_id left join transaction partner on partner.id=t.transfer_pair_id left join account pa on pa.id=partner.account_id left join connection pc on pc.id=pa.connection_id where t.transfer_pair_id is not null and (partner.transfer_pair_id is distinct from t.id or c.user_id<>pc.user_id)").fetch_one(&pool).await?;
+            anyhow::ensure!(bad==0,"load pairing asymmetric or crossed owners");
+            let edges:Vec<(uuid::Uuid,uuid::Uuid)>=sqlx::query_as("select id,transfer_pair_id from transaction where transfer_pair_id is not null order by id").fetch_all(&pool).await?;
+            verify_pair_edges(case,f,&edges)?;
+            let paired=edges.len();
+            Ok::<_,anyhow::Error>((traffic,crate::report::fingerprint(&(actual,edges))?,paired))
+        }.await;
         scratch.remove_db(&name).await?;
-        let (traffic, background) =
-            result.map_err(|_| anyhow::anyhow!("load scenario exceeded 120 seconds"))??;
+        let ((traffic, background), state, paired) = result?;
         let failed = traffic.failed;
         if failed > 0 {
             m.diagnostics.insert("failed_trial".into(), json!(traffic));
@@ -321,7 +341,7 @@ pub async fn measure(
             m.first_ms = Some(crate::report::statistics(&traffic.latencies)?.1);
             m.diagnostics
                 .insert("background_first_ms".into(), json!(background));
-            m.outcome = json!({"offered":traffic.offered,"success":traffic.success,"failed":traffic.failed,"fixture":crate::report::fingerprint(&f.config)?});
+            m.outcome = json!({"offered":traffic.offered,"success":traffic.success,"failed":traffic.failed,"fixture":crate::report::fingerprint(&f.config)?,"state":state,"paired_rows":paired});
             m.rows = traffic.success;
         } else if trial > config.warmups {
             m.samples_ms.extend(&traffic.latencies);
@@ -335,9 +355,56 @@ pub async fn measure(
             );
         }
     }
+    m.diagnostics.remove("last_trial");
     m.diagnostics.insert("requests".into(), json!(stats));
     m.diagnostics
         .insert("background_samples_ms".into(), json!(bg));
     m.diagnostics.insert("sample_unit".into(),json!("scheduled-to-completed request, including client and pool queueing plus correctness validation"));
+    Ok(())
+}
+
+// Normalized persisted inputs after load; volatile audit timestamps are excluded.
+// Pairing may classify eligible transfers, but must preserve user assignments.
+async fn final_state(
+    pool: &sqlx::PgPool,
+    checked_ids: Vec<uuid::Uuid>,
+) -> anyhow::Result<serde_json::Value> {
+    Ok(sqlx::query_scalar(r#"select jsonb_build_object(
+      'accounts',(select jsonb_agg(jsonb_build_array(id,connection_id,external_id,currency,type_key) order by id) from account),
+      'holdings',(select jsonb_agg(jsonb_build_array(id,account_id,instrument_id,quantity,cost_basis) order by id) from holding),
+      'cash',(select jsonb_agg(jsonb_build_array(id,account_id,external_id,type,ts,booked_on,amount,description,checked_at is not null or id=any($1),case when category_source='user' then budget_category_id else null end) order by id) from transaction),
+      'lots',(select jsonb_agg(jsonb_build_array(id,holding_id,side,acquired_on,quantity,unit_price,fee) order by id) from lot),
+      'tags',(select jsonb_agg(jsonb_build_array(transaction_id,tag_id) order by transaction_id,tag_id) from budget_transaction_tag)
+    )"#).bind(checked_ids).fetch_one(pool).await?)
+}
+
+pub fn verify_pair_edges(
+    case: &Case,
+    f: &Fixture,
+    edges: &[(uuid::Uuid, uuid::Uuid)],
+) -> anyhow::Result<()> {
+    let mut expected = std::collections::BTreeSet::new();
+    if case.id.contains("ingest") {
+        let users = if case.id == "load.ingest.different-users" {
+            2
+        } else {
+            1
+        };
+        for user in 0..users {
+            for g in 0..f.config.transactions / f.config.transfer_fraction / 3 {
+                if g % f.config.ambiguous_every != 0 && g != 1 {
+                    let a = crate::fixture::id(7, user, g * 3);
+                    let b = crate::fixture::id(7, user, g * 3 + 1);
+                    expected.insert((a, b));
+                    expected.insert((b, a));
+                }
+            }
+        }
+    }
+    let actual: std::collections::BTreeSet<_> = edges.iter().copied().collect();
+    anyhow::ensure!(
+        actual == expected && actual.len() == edges.len(),
+        "wrong deterministic load transfer pair identities"
+    );
     Ok(())
 }

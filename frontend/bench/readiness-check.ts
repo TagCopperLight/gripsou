@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import { ready } from "./readiness";
+import { visibleTransactions } from "./semantics";
 const browser=await chromium.launch({headless:true});
 try {
  const page=await browser.newPage();
@@ -15,5 +16,13 @@ try {
  await assert.rejects(ready(page,contract,()=>0,()=>true,60));
  await page.evaluate(()=>document.querySelector('.animate-pulse')?.remove());
  await ready(page,contract,()=>0,()=>true,1000);
- console.log("Browser readiness checks passed");
+ const expected=Array.from({length:200},(_,n)=>({id:`filtered-${n}`,accountName:"Account 0",amount:"-12.00"}));
+ const table=(stale:boolean)=>`<table><tbody>${expected.map((row,n)=>`<tr data-testid="tx-row" data-transaction-id="${stale?`previous-${n}`:row.id}"><td></td><td></td><td>${stale?"Account 1":row.accountName}</td><td data-testid="tx-amount">-12.00 €</td></tr>`).join("")}</tbody></table>`;
+ await page.setContent(table(true));
+ await assert.rejects(visibleTransactions(page,expected));
+ await page.setContent(table(false));
+ await visibleTransactions(page,expected);
+ await page.locator('[data-testid="tx-amount"]').first().evaluate(el=>{el.textContent="-99.00 €";});
+ await assert.rejects(visibleTransactions(page,expected));
+ console.log("Browser readiness and visible transaction checks passed");
 } finally {await browser.close();}

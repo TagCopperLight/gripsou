@@ -110,6 +110,9 @@ fn goal_requires_real_improvement_and_complete_compatible_correct_runs() {
         }
         assert_ne!(check(&b, &c, &goal()).0, 0, "{fault}");
     }
+    let mut unguarded = goal();
+    unguarded["companions"] = json!([]);
+    assert_ne!(check(&base, &report(75.), &unguarded).0, 0);
     let mut g = goal();
     g["primary"]["metric"] = json!("p95_ms");
     assert_ne!(check(&base, &report(75.), &g).0, 0);

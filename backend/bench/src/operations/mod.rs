@@ -150,8 +150,9 @@ pub async fn verify(
                     decimal(&row["mean_price"])? == rust_decimal::Decimal::new(1201, 2),
                     "fee-inclusive mean price changed"
                 );
+                let explained:rust_decimal::Decimal=sqlx::query_scalar("select coalesce(sum(case side when 'buy' then quantity else -quantity end),0) from lot where holding_id=$1").bind(id).fetch_one(pool).await?;
                 ensure!(
-                    decimal(&row["unexplained_quantity"])? == rust_decimal::Decimal::ZERO,
+                    decimal(&row["unexplained_quantity"])? == quantity - explained,
                     "lot coverage changed"
                 );
             }
@@ -329,7 +330,57 @@ pub async fn verify(
                 "wrong trend period"
             );
         }
-        _ => {}
+        "lots.suggestions" => ensure!(
+            out.as_array().is_some_and(Vec::is_empty),
+            "covered fixture must not suggest invented lots"
+        ),
+        "budget.overview.projection" => {
+            let expected = budget::expected_figures(
+                pool,
+                f,
+                gripsou_core::budget::overview::Month::containing(f.today()),
+            )
+            .await?;
+            ensure!(
+                out["figures"] == serde_json::to_value(expected)?,
+                "wrong budget projection figures"
+            );
+            let sources = out["sankey"]["sources"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("missing Sankey sources"))?;
+            let destinations = out["sankey"]["destinations"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("missing Sankey destinations"))?;
+            let sum = |rows: &[Value]| -> anyhow::Result<rust_decimal::Decimal> {
+                Ok(rows
+                    .iter()
+                    .map(|r| decimal(&r["amount"]))
+                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .into_iter()
+                    .sum())
+            };
+            ensure!(
+                sum(sources)? == expected.income && sum(destinations)? == expected.expenses,
+                "wrong Sankey totals"
+            );
+            ensure!(out["breakdown"].is_array(), "missing breakdown");
+        }
+        "returns.xirr.valid"
+        | "returns.xirr.no-solution"
+        | "portfolio.holdings"
+        | "portfolio.net-worth"
+        | "prices.history.short"
+        | "prices.history.full"
+        | "transactions.counts"
+        | "transactions.tags"
+        | "budget.day-totals"
+        | "transactions.page.first"
+        | "transactions.page.deep"
+        | "transactions.search.common"
+        | "transactions.search.rare"
+        | "transactions.search.absent"
+        | "transactions.filters.combined" => {}
+        _ => anyhow::bail!("target missing correctness oracle: {}", case.case.id),
     }
     Ok(())
 }
