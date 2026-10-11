@@ -60,7 +60,7 @@ describe("AiCostSurface", () => {
   it("shows an empty state when there are no runs", async () => {
     stub({ currency: "USD", models: [], totalCost: "0" });
     renderSurface();
-    expect(await screen.findByText("No AI categorization runs yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No AI categorisation runs yet.")).toBeInTheDocument();
   });
 
   it("sends the full price map when a price is edited", async () => {
@@ -92,7 +92,7 @@ describe("AiCostSurface", () => {
   it("keeps its panel while loading, and offers a retry when the server cannot be reached", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 500 })));
     renderSurface();
-    expect(screen.getByText("AI categorization cost")).toBeVisible();
+    expect(screen.getByText("AI categorisation cost")).toBeVisible();
     expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
   });
 

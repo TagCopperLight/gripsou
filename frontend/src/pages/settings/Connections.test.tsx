@@ -188,7 +188,7 @@ describe("SettingsConnections", () => {
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
-    expect(await screen.findByText(/No providers enabled/)).toBeInTheDocument();
+    expect(await screen.findByText(/No data providers are enabled/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/connections/init")).toBe(false);
   });

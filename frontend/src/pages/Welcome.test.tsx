@@ -128,7 +128,7 @@ describe("Welcome", () => {
     const connect = await screen.findByRole("button", { name: "Connect a bank" });
     await waitFor(() => expect(connect).toBeEnabled());
     fireEvent.click(connect);
-    expect(await screen.findByText(/No providers enabled/)).toBeInTheDocument();
+    expect(await screen.findByText(/No data providers are enabled/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(posted("/connections/init")).toHaveLength(0);
   });

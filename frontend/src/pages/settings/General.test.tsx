@@ -45,7 +45,7 @@ describe("SettingsGeneral auto-save", () => {
 
   it("persists a timezone change through the existing preference flow", async () => {
     renderPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "Timezone" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Time zone" }), {
       target: { value: "America/Los_Angeles" },
     });
     await waitFor(() =>

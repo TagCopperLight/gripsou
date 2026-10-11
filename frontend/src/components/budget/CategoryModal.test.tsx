@@ -194,7 +194,7 @@ describe("CategoryModal — edit", () => {
     const kind = screen.getByLabelText("Kind");
     expect(kind).toBeDisabled();
     expect(kind).toHaveTextContent("Neutral");
-    expect(screen.getByText("This kind is fixed for the system category.")).toBeVisible();
+    expect(screen.getByText("The type of a system category cannot be changed.")).toBeVisible();
 
     expect(screen.getByLabelText("Hint for the AI")).toBeDisabled();
 

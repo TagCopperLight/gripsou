@@ -70,7 +70,7 @@ it("shows source errors while collapsed and bank dates inline when expanded", ()
   expect(screen.queryByText("Connected")).toBeNull();
   expect(screen.getByText(/Synced/)).toBeInTheDocument();
   expand();
-  const date = screen.getAllByTitle("Bank updated")[0];
+  const date = screen.getAllByTitle("Last bank update")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
   expect(date.querySelector("span")).toHaveClass("mr-3");
 });

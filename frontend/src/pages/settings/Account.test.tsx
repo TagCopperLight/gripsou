@@ -150,7 +150,7 @@ describe("SettingsAccount sessions card", () => {
     // session appears twice.
     expect(screen.getAllByText("Chrome on macOS")).not.toHaveLength(0);
     expect(screen.getAllByText(/this device/i)).not.toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: /revoke/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     expect(revokeSpy).toHaveBeenCalledWith("2");
   });
 
