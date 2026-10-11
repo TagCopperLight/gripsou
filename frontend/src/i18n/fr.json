@@ -507,7 +507,9 @@
   "connectionCallback": {
     "callbackError": "Une erreur s'est produite lors de la connexion de votre compte.",
     "callbackErrorBody": "Le fournisseur a renvoyé une erreur. Vous pouvez réessayer depuis la page Connexions.",
-    "backToConnections": "Retour aux connexions"
+    "backToConnections": "Retour aux connexions",
+    "callbackErrorBodySetup": "Le fournisseur a renvoyé une erreur. Vous pouvez réessayer depuis la page de configuration.",
+    "backToSetup": "Retour à la configuration"
   },
   "sectors": {
     "Technologie": "Technologie",

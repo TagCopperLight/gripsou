@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../components/Button";
+import { useAuth } from "../auth/context";
 import { useCompleteConnection, useDeleteConnection } from "../api/hooks";
 
 function parseCallbackParams(): {
@@ -21,7 +22,14 @@ export function ConnectionCallback() {
   const navigate = useNavigate();
   const complete = useCompleteConnection();
   const deleteConnection = useDeleteConnection();
+  const { user } = useAuth();
   const { connectionId, rest } = parseCallbackParams();
+  // Mid-welcome, the bank step lives on the welcome screen, not in Settings.
+  const inWelcome = user?.welcomeDone === false;
+  const goBack = () =>
+    inWelcome
+      ? navigate({ to: "/welcome", search: { step: "bank" } })
+      : navigate({ to: "/settings/connections" });
   // Powens echoes our `state` (the connectionId) plus an `error` param when the
   // user cancels or the flow fails.
   const [failed, setFailed] = useState(() => !connectionId || !!rest.error);
@@ -39,7 +47,7 @@ export function ConnectionCallback() {
     }
 
     complete.mutateAsync({ connectionId, params: rest })
-      .then(() => navigate({ to: "/settings/connections" }))
+      .then(() => goBack())
       .catch(() => setFailed(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -51,10 +59,18 @@ export function ConnectionCallback() {
             {t("connectionCallback.callbackError")}
           </p>
           <p className="text-sm text-fg-faint">
-            {t("connectionCallback.callbackErrorBody")}
+            {t(
+              inWelcome
+                ? "connectionCallback.callbackErrorBodySetup"
+                : "connectionCallback.callbackErrorBody",
+            )}
           </p>
-          <Button onClick={() => navigate({ to: "/settings/connections" })}>
-            {t("connectionCallback.backToConnections")}
+          <Button onClick={goBack}>
+            {t(
+              inWelcome
+                ? "connectionCallback.backToSetup"
+                : "connectionCallback.backToConnections",
+            )}
           </Button>
         </div>
       </div>

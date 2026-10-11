@@ -3,17 +3,34 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, type ReactNode } from "react";
 import { ConnectionCallback } from "./ConnectionCallback";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-function withClient(children: ReactNode) {
+function withClient(children: ReactNode, welcomeDone = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const auth: AuthValue = {
+    isAuthenticated: true,
+    user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone },
+    isBootstrapping: false,
+    prefs: DEFAULT_PREFS,
+    login: async () => {},
+    adoptSession: () => {},
+    logout: async () => {},
+    updateUser: () => {},
+    updatePrefs: async () => {},
+  };
+  return (
+    <QueryClientProvider client={client}>
+      <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
+    </QueryClientProvider>
+  );
 }
 
 /** Land on the callback page with the query string Powens redirected to. */
@@ -115,5 +132,20 @@ describe("ConnectionCallback", () => {
       expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" }),
     );
     expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1);
+  });
+
+  it("goes back to the welcome screen's bank step while the welcome isn't finished", async () => {
+    landWith("?state=c42&code=abc&connection_id=7");
+    render(withClient(<ConnectionCallback />, false));
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" } }),
+    );
+  });
+
+  it("offers to go back to setup after a failure while the welcome isn't finished", async () => {
+    landWith("?state=c42&error=access_denied");
+    render(withClient(<ConnectionCallback />, false));
+    fireEvent.click(await screen.findByRole("button", { name: "Back to setup" }));
+    expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" } });
   });
 });

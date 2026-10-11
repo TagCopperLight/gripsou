@@ -507,7 +507,9 @@
   "connectionCallback": {
     "callbackError": "Something went wrong connecting your account.",
     "callbackErrorBody": "The provider returned an error. You can try again from the Connections page.",
-    "backToConnections": "Back to connections"
+    "backToConnections": "Back to connections",
+    "callbackErrorBodySetup": "The provider returned an error. You can try again from the setup page.",
+    "backToSetup": "Back to setup"
   },
   "sectors": {
     "Technologie": "Technology",
