@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { caseFraction, overallFraction } from '../../shared/progress'
 import type { Phase } from '../../shared/types'
 import { cancelJob, useJobs } from '../api'
@@ -14,6 +15,19 @@ const PHASES: Record<Phase, string> = {
 
 export function JobView({ id }: { id: string }) {
   const job = useJobs().find((j) => j.id === id)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  async function cancel() {
+    setCancelError(null)
+    setCancelling(true)
+    try {
+      await cancelJob(id)
+    } catch (err) {
+      setCancelError((err as Error).message)
+    } finally {
+      setCancelling(false)
+    }
+  }
   if (!job) return <p className="muted">This job is no longer in memory. Its result, if saved, is in the run list.</p>
   const c = job.current
   const caseValue = caseFraction(job)
@@ -44,7 +58,8 @@ export function JobView({ id }: { id: string }) {
           <ProgressBar value={job.phase === 'measuring' && c ? caseValue : null} />
         </>
       )}
-      {active && <button onClick={() => void cancelJob(job.id)}>Cancel</button>}
+      {cancelError && <div className="error">Could not cancel: {cancelError}</div>}
+      {active && <button disabled={cancelling} onClick={() => void cancel()}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
       {job.finished.length > 0 && (
         <>
           <h2>Finished</h2>
@@ -62,7 +77,7 @@ export function JobView({ id }: { id: string }) {
           </table>
         </>
       )}
-      <details open={job.status === 'failed'}>
+      <details key={job.status === 'failed' ? 'failed' : 'other'} open={job.status === 'failed'}>
         <summary>Runner output ({job.log.length} lines)</summary>
         <pre className="log">{job.log.join('\n')}</pre>
       </details>

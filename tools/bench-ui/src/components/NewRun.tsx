@@ -24,6 +24,11 @@ export function NewRun({ onStarted }: { onStarted(job: Job): void }) {
   const targets = catalog.data!.targets.filter((t) => t.suite === suite)
   const profiles = catalog.data!.profiles.map((p) => p.profile)
   const db = health.data?.database
+  const isInt = (v: number, min: number) => Number.isInteger(v) && v >= min
+  const invalid =
+    !isInt(samples, 1) || !isInt(repeat, 1) || !isInt(warmups, 0) ||
+    (concurrency !== '' && !isInt(Number(concurrency), 1)) ||
+    Object.values(overrides).some((v) => v !== undefined && v !== '' && !isInt(Number(v), 1))
   const allPicked = targets.length > 0 && targets.every((t) => picked.includes(t.id))
 
   async function submit(e: FormEvent) {
@@ -93,7 +98,8 @@ export function NewRun({ onStarted }: { onStarted(job: Job): void }) {
           <input type="checkbox" checked={diagnostics} onChange={(e) => setDiagnostics(e.target.checked)} /> Diagnostics (SQL counts, memory, query plan; extra pass outside the timings)
         </label>
       </details>
-      <button className="primary" style={{ width: 'auto' }} disabled={busy || picked.length === 0 || !name.trim()}>Start</button>
+      {invalid && <p className="bad">Samples and repeat need whole numbers of at least 1, warmups a whole number of at least 0; concurrency and the size overrides must be empty or whole numbers of at least 1.</p>}
+      <button className="primary" style={{ width: 'auto' }} disabled={busy || invalid || picked.length === 0 || !name.trim()}>Start</button>
     </form>
   )
 }
