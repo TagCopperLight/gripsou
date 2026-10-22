@@ -25,6 +25,8 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_default();
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
     let app = gripsou_api::router(db.clone(), std::path::Path::new(&static_dir), initial_cors);
+    // Hash the dummy password now so the first login isn't slower.
+    std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;

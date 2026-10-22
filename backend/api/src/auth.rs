@@ -93,6 +93,24 @@ pub fn verify_password(plain: &str, hash: &str) -> bool {
     }
 }
 
+/// Hash checked when the email matches no account, so a login answers in the
+/// same time whether or not the email exists. Computed once, on first use.
+pub static DUMMY_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    hash_password("gripsou-dummy-password").expect("hashing a constant cannot fail")
+});
+
+/// `verify_password`, or the same amount of work against `DUMMY_HASH` when
+/// there is no account (`hash` is `None`), which never succeeds.
+pub fn verify_password_or_dummy(plain: &str, hash: Option<&str>) -> bool {
+    match hash {
+        Some(h) => verify_password(plain, h),
+        None => {
+            let _ = verify_password(plain, &DUMMY_HASH);
+            false
+        }
+    }
+}
+
 pub const PASSWORD_MIN_CHARS: usize = 8;
 pub const PASSWORD_MAX_CHARS: usize = 128;
 
@@ -164,6 +182,25 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dummy_hash_is_a_real_argon2_hash() {
+        // A malformed dummy would fail fast and bring the timing gap back.
+        assert!(PasswordHash::new(&DUMMY_HASH).is_ok());
+    }
+
+    #[test]
+    fn verify_or_dummy_never_accepts_a_missing_user() {
+        assert!(!verify_password_or_dummy("gripsou-dummy-password", None));
+        assert!(!verify_password_or_dummy("", None));
+    }
+
+    #[test]
+    fn verify_or_dummy_checks_a_real_hash() {
+        let hash = hash_password("hunter22").unwrap();
+        assert!(verify_password_or_dummy("hunter22", Some(&hash)));
+        assert!(!verify_password_or_dummy("wrong", Some(&hash)));
+    }
+
     #[test]
     fn new_password_length_bounds() {
         assert!(validate_new_password(&"a".repeat(7)).is_err());

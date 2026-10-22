@@ -891,17 +891,17 @@ pub async fn login(
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
     let ip = client_ip(&headers, peer);
-    let Some(creds) = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
+    let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
-        .map_err(internal)?
-    else {
+        .map_err(internal)?;
+    let ok = auth::verify_password_or_dummy(
+        &body.password,
+        creds.as_ref().map(|c| c.password_hash.as_str()),
+    );
+    let Some(creds) = creds.filter(|_| ok) else {
         tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
-    if !auth::verify_password(&body.password, &creds.password_hash) {
-        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
-        return Err(unauthorized());
-    }
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
