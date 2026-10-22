@@ -320,6 +320,9 @@
       "uploadImage": "Importer une image",
       "removeImage": "Supprimer"
     },
+    "security": {
+      "title": "Sécurité"
+    },
     "users": {
       "title": "Utilisateurs",
       "usersCount_one": "{{count}} membre",

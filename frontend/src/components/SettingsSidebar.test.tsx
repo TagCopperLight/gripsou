@@ -2,10 +2,11 @@ import { describe, it, expect } from "vitest";
 import { settingsNavItems } from "./settingsNav";
 
 describe("settingsNavItems", () => {
-  it("defines the six settings sections in order", () => {
+  it("defines the seven settings sections in order", () => {
     expect(settingsNavItems.map((item) => item.to)).toEqual([
       "/settings/general",
       "/settings/account",
+      "/settings/security",
       "/settings/connections",
       "/settings/budget",
       "/settings/users",
@@ -27,6 +28,7 @@ describe("settingsNavItems", () => {
     expect(labels).toEqual([
       "settings.general.title",
       "settings.account.title",
+      "settings.security.title",
       "settings.connections.title",
       "settings.budget.title",
     ]);

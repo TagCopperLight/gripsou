@@ -320,6 +320,9 @@
       "uploadImage": "Upload image",
       "removeImage": "Remove"
     },
+    "security": {
+      "title": "Security"
+    },
     "users": {
       "title": "Users",
       "usersCount_one": "{{count}} member",
