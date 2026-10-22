@@ -15,6 +15,7 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
     for (path, status) in [
         ("/api/health", StatusCode::OK),
         ("/api/holdings", StatusCode::UNAUTHORIZED),
+        ("/api/auth/mfa/status", StatusCode::UNAUTHORIZED),
         ("/bookmarked/path", StatusCode::NOT_FOUND),
     ] {
         let response = app
@@ -166,4 +167,23 @@ frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
         .unwrap();
     assert_eq!(r.headers()["strict-transport-security"], "max-age=31536000");
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn totp_setup_without_a_token_is_unauthorized() {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@localhost/unused")
+        .unwrap();
+    let app = gripsou_api::router(db, std::path::Path::new("/nonexistent"), vec![]);
+    let r = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/mfa/totp/setup")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }

@@ -65,7 +65,7 @@ async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, 
 
 /// Client IP, reverse-proxy aware: first X-Forwarded-For hop, then X-Real-IP,
 /// then the direct peer address.
-fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
+pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
     if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         let first = xff.split(',').next().unwrap_or("").trim();
         if !first.is_empty() {

@@ -3,6 +3,7 @@ mod budget;
 mod dto;
 mod factors;
 mod handlers;
+mod mfa;
 mod security_headers;
 pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
@@ -75,6 +76,15 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
         .route("/auth/login", post(handlers::login))
         .route("/auth/login/verify", post(handlers::login_verify))
         .route("/auth/features", get(handlers::features))
+        .route("/auth/reauth", post(mfa::reauth))
+        .route("/auth/mfa/status", get(mfa::status))
+        .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
+        .route("/auth/mfa/totp/confirm", post(mfa::totp_confirm))
+        .route("/auth/mfa/totp", delete(mfa::totp_remove))
+        .route(
+            "/auth/mfa/recovery/regenerate",
+            post(mfa::recovery_regenerate),
+        )
         .route(
             "/auth/me",
             get(handlers::me).patch(handlers::update_profile),

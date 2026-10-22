@@ -1266,3 +1266,44 @@ mod budget_ai_contract_tests {
         assert_eq!(p.output, "0");
     }
 }
+
+#[derive(Deserialize)]
+pub struct ReauthReq {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReauthResponse {
+    pub reauth: String,
+}
+
+#[derive(Deserialize)]
+pub struct ReauthTokenReq {
+    pub reauth: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MfaStatus {
+    pub totp: bool,
+    pub recovery_remaining: i64,
+    pub available: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotpSetup {
+    pub secret: String,
+    pub qr_svg: String,
+}
+
+#[derive(Deserialize)]
+pub struct TotpConfirmReq {
+    pub code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryCodes {
+    pub recovery_codes: Vec<String>,
+}

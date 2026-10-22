@@ -1,6 +1,4 @@
 //! Second-factor helpers: TOTP codes, the QR for enrolment, and recovery codes.
-// Used by the 2FA handlers; Task 4 removes this allow.
-#![cfg_attr(not(test), allow(dead_code))]
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use totp_rs::{Builder, Secret};
