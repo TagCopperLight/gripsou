@@ -113,11 +113,15 @@ pub async fn status(
 }
 
 /// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one.
+/// Needs a fresh reauth token: otherwise a stolen session could enrol its own
+/// authenticator and lock the owner out.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
     State(key): State<TotpKey>,
     AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
+    require_reauth(&pool, user_id, &body.reauth).await?;
     let key = key_of(&key)?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await
@@ -169,7 +173,7 @@ pub async fn totp_confirm(
         .iter()
         .map(|c| factors::hash_recovery_code(c))
         .collect();
-    if !mfa::confirm_totp(&pool, user_id, step as i64, &hashes)
+    if !mfa::confirm_totp(&pool, user_id, &row.secret_enc, step as i64, &hashes)
         .await
         .map_err(internal)?
     {
@@ -306,7 +310,24 @@ mod tests {
         pool: &PgPool,
         a: &AuthUser,
     ) -> Result<Json<dto::TotpSetup>, (StatusCode, String)> {
-        totp_setup(State(pool.clone()), State(key()), who(a)).await
+        let token = reauth_token(pool, a, "hunter22").await;
+        setup_with(pool, a, &token).await
+    }
+
+    async fn setup_with(
+        pool: &PgPool,
+        a: &AuthUser,
+        token: &str,
+    ) -> Result<Json<dto::TotpSetup>, (StatusCode, String)> {
+        totp_setup(
+            State(pool.clone()),
+            State(key()),
+            who(a),
+            Json(dto::ReauthTokenReq {
+                reauth: token.into(),
+            }),
+        )
+        .await
     }
 
     async fn stored_secret(pool: &PgPool, user_id: Uuid) -> Vec<u8> {
@@ -434,6 +455,53 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
+    async fn setup_needs_a_fresh_reauth_of_the_caller(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let other_uid = seed_user(&pool, "b@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        let other = seed_session(&pool, other_uid).await;
+        for bad in ["", "random-token"] {
+            let err = setup_with(&pool, &me, bad).await.unwrap_err();
+            assert_eq!(
+                err,
+                (
+                    StatusCode::UNAUTHORIZED,
+                    "reauthentication required".to_string()
+                )
+            );
+        }
+        let theirs = reauth_token(&pool, &other, "hunter22").await;
+        assert_eq!(
+            setup_with(&pool, &me, &theirs).await.unwrap_err().0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert!(repo::totp(&pool, uid).await.unwrap().is_none());
+        // Single use.
+        let tok = reauth_token(&pool, &me, "hunter22").await;
+        assert!(setup_with(&pool, &me, &tok).await.is_ok());
+        assert_eq!(
+            setup_with(&pool, &me, &tok).await.unwrap_err().0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn removal_with_only_a_pending_setup_is_not_found_and_keeps_sessions(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        let _other = seed_session(&pool, uid).await;
+        let _ = setup(&pool, &me).await.unwrap();
+        let tok = reauth_token(&pool, &me, "hunter22").await;
+        assert_eq!(
+            remove(&pool, &me, &tok).await.unwrap_err().0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(sessions(&pool, uid).await, 2);
+        // The pending setup is discarded.
+        assert!(repo::totp(&pool, uid).await.unwrap().is_none());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
     async fn setup_after_confirm_is_a_conflict(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -447,9 +515,15 @@ mod tests {
     async fn setup_without_a_key_is_unavailable(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
-        let err = totp_setup(State(pool.clone()), State(crate::TotpKey(None)), who(&me))
-            .await
-            .unwrap_err();
+        let token = reauth_token(&pool, &me, "hunter22").await;
+        let err = totp_setup(
+            State(pool.clone()),
+            State(crate::TotpKey(None)),
+            who(&me),
+            Json(dto::ReauthTokenReq { reauth: token }),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err.0, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(err.1, "authenticator unavailable");
         let st = status(State(pool.clone()), State(crate::TotpKey(None)), who(&me))

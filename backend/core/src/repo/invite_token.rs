@@ -361,7 +361,7 @@ mod tests {
             crate::repo::mfa::upsert_unconfirmed_totp(&pool, who, "s")
                 .await
                 .unwrap();
-            crate::repo::mfa::confirm_totp(&pool, who, 1, &[vec![cred], vec![cred + 10]])
+            crate::repo::mfa::confirm_totp(&pool, who, "s", 1, &[vec![cred], vec![cred + 10]])
                 .await
                 .unwrap();
             sqlx::query(

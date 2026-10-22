@@ -1839,7 +1839,11 @@ mod auth_tests {
             .iter()
             .map(|c| crate::factors::hash_recovery_code(c))
             .collect();
-        assert!(mfa::confirm_totp(pool, user_id, 0, &hashes).await.unwrap());
+        assert!(
+            mfa::confirm_totp(pool, user_id, &enc, 0, &hashes)
+                .await
+                .unwrap()
+        );
         (secret, codes)
     }
 

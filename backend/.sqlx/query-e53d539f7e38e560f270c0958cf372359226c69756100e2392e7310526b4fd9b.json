@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from user_totp where user_id = $1\n           returning confirmed_at is not null as \"confirmed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "confirmed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e53d539f7e38e560f270c0958cf372359226c69756100e2392e7310526b4fd9b"
+}

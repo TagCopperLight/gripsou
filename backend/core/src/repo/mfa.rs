@@ -46,20 +46,23 @@ pub async fn upsert_unconfirmed_totp(
 }
 
 /// Finish TOTP setup in one transaction: confirms the unconfirmed row (stamping
-/// the accepted `step`) and replaces the recovery codes. `false`, with nothing
-/// written, when there is no unconfirmed row.
+/// the accepted `step`) and replaces the recovery codes. Only the row still
+/// holding `secret_enc` (the secret the code was checked against) is confirmed;
+/// `false`, with nothing written, when there is no such unconfirmed row.
 pub async fn confirm_totp(
     pool: &sqlx::PgPool,
     user_id: Uuid,
+    secret_enc: &str,
     step: i64,
     code_hashes: &[Vec<u8>],
 ) -> Result<bool, CoreError> {
     let mut tx = pool.begin().await?;
     let res = sqlx::query!(
         r#"update user_totp set confirmed_at = now(), last_used_step = $2
-           where user_id = $1 and confirmed_at is null"#,
+           where user_id = $1 and confirmed_at is null and secret_enc = $3"#,
         user_id,
         step,
+        secret_enc,
     )
     .execute(&mut *tx)
     .await?;
@@ -113,8 +116,9 @@ pub async fn use_totp_step(
     Ok(res.rows_affected() == 1)
 }
 
-/// Remove TOTP and every recovery code in one transaction. `true` when a TOTP
-/// row existed.
+/// Remove TOTP and every recovery code in one transaction. `true` only when a
+/// confirmed TOTP existed; a pending (unconfirmed) setup is discarded too but
+/// reports `false`.
 pub async fn delete_totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
     let mut tx = pool.begin().await?;
     sqlx::query!(
@@ -123,11 +127,15 @@ pub async fn delete_totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, Cor
     )
     .execute(&mut *tx)
     .await?;
-    let res = sqlx::query!(r#"delete from user_totp where user_id = $1"#, user_id)
-        .execute(&mut *tx)
-        .await?;
+    let confirmed = sqlx::query_scalar!(
+        r#"delete from user_totp where user_id = $1
+           returning confirmed_at is not null as "confirmed!""#,
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     tx.commit().await?;
-    Ok(res.rows_affected() == 1)
+    Ok(confirmed == Some(true))
 }
 
 /// Replace the user's recovery codes (used or not) with `code_hashes`, in one
@@ -285,6 +293,26 @@ mod tests {
         id
     }
 
+    #[sqlx::test(migrations = "../migrations")]
+    async fn confirm_with_a_stale_secret_changes_nothing(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
+        upsert_unconfirmed_totp(&pool, u, "b").await.unwrap();
+        assert!(!confirm_totp(&pool, u, "a", 1, &codes(3)).await.unwrap());
+        let st = status(&pool, u).await.unwrap();
+        assert!(!st.totp);
+        assert_eq!(st.recovery_remaining, 0);
+        assert!(confirm_totp(&pool, u, "b", 1, &codes(3)).await.unwrap());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn delete_discards_a_pending_setup_but_reports_false(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
+        assert!(!delete_totp(&pool, u).await.unwrap());
+        assert!(totp(&pool, u).await.unwrap().is_none());
+    }
+
     fn codes(n: u8) -> Vec<Vec<u8>> {
         (0..n).map(|i| vec![i]).collect()
     }
@@ -310,7 +338,7 @@ mod tests {
         assert_eq!(row.secret_enc, "two");
         assert!(!row.confirmed);
 
-        assert!(confirm_totp(&pool, u, 5, &codes(10)).await.unwrap());
+        assert!(confirm_totp(&pool, u, "two", 5, &codes(10)).await.unwrap());
         assert!(!upsert_unconfirmed_totp(&pool, u, "three").await.unwrap());
         let row = totp(&pool, u).await.unwrap().unwrap();
         assert_eq!(row.secret_enc, "two");
@@ -321,10 +349,10 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn confirm_needs_unconfirmed_row(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
-        assert!(!confirm_totp(&pool, u, 1, &codes(3)).await.unwrap());
+        assert!(!confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
-        assert!(confirm_totp(&pool, u, 1, &codes(3)).await.unwrap());
-        assert!(!confirm_totp(&pool, u, 2, &codes(3)).await.unwrap());
+        assert!(confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
+        assert!(!confirm_totp(&pool, u, "s", 2, &codes(3)).await.unwrap());
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -335,7 +363,7 @@ mod tests {
             !use_totp_step(&pool, u, 10).await.unwrap(),
             "unconfirmed row never accepts a step"
         );
-        confirm_totp(&pool, u, 1, &codes(1)).await.unwrap();
+        confirm_totp(&pool, u, "s", 1, &codes(1)).await.unwrap();
         assert!(use_totp_step(&pool, u, 10).await.unwrap());
         assert!(!use_totp_step(&pool, u, 10).await.unwrap());
         assert!(!use_totp_step(&pool, u, 9).await.unwrap());
@@ -372,7 +400,7 @@ mod tests {
 
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(!status(&pool, u).await.unwrap().totp);
-        confirm_totp(&pool, u, 1, &codes(10)).await.unwrap();
+        confirm_totp(&pool, u, "s", 1, &codes(10)).await.unwrap();
         use_recovery_code(&pool, u, &[0]).await.unwrap();
         let s = status(&pool, u).await.unwrap();
         assert!(s.totp);
@@ -391,7 +419,7 @@ mod tests {
         let u = seed_user(&pool, "a@t.local").await;
         assert!(!delete_totp(&pool, u).await.unwrap());
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
-        confirm_totp(&pool, u, 1, &codes(10)).await.unwrap();
+        confirm_totp(&pool, u, "s", 1, &codes(10)).await.unwrap();
         assert!(delete_totp(&pool, u).await.unwrap());
         assert!(totp(&pool, u).await.unwrap().is_none());
         assert_eq!(status(&pool, u).await.unwrap().recovery_remaining, 0);
@@ -403,7 +431,7 @@ mod tests {
         let other = seed_user(&pool, "b@t.local").await;
         for who in [u, other] {
             upsert_unconfirmed_totp(&pool, who, "s").await.unwrap();
-            confirm_totp(&pool, who, 1, &codes(10)).await.unwrap();
+            confirm_totp(&pool, who, "s", 1, &codes(10)).await.unwrap();
         }
         add_passkey(&pool, u, &[1]).await;
         add_passkey(&pool, u, &[2]).await;
@@ -433,7 +461,7 @@ mod tests {
         let other = seed_user(&pool, "b@t.local").await;
         for who in [u, other] {
             upsert_unconfirmed_totp(&pool, who, "s").await.unwrap();
-            confirm_totp(&pool, who, 1, &codes(3)).await.unwrap();
+            confirm_totp(&pool, who, "s", 1, &codes(3)).await.unwrap();
             sqlx::query(
                 "insert into session (user_id, token_hash, remembered, expires_at) \
                  values ($1, decode('00','hex') || $1::text::bytea, false, now() + interval '1 day')",
