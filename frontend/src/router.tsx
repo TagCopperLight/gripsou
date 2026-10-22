@@ -17,7 +17,6 @@ import { Login } from "./pages/Login";
 import { SettingsLayout } from "./components/SettingsLayout";
 import { SettingsGeneral } from "./pages/settings/General";
 import { SettingsAccount } from "./pages/settings/Account";
-import { SettingsSecurity } from "./pages/settings/Security";
 import { SettingsConnections } from "./pages/settings/Connections";
 import { SettingsBudget } from "./pages/settings/Budget";
 import { SettingsUsers } from "./pages/settings/Users";
@@ -153,12 +152,6 @@ const settingsAccountRoute = createRoute({
   component: SettingsAccount,
 });
 
-const settingsSecurityRoute = createRoute({
-  getParentRoute: () => settingsRoute,
-  path: "security",
-  component: SettingsSecurity,
-});
-
 const settingsConnectionsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "connections",
@@ -225,7 +218,6 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
   settingsIndexRoute,
   settingsGeneralRoute,
   settingsAccountRoute,
-  settingsSecurityRoute,
   settingsConnectionsRoute,
   settingsBudgetRoute,
   settingsUsersRoute,

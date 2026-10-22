@@ -1,7 +1,6 @@
 import {
   SlidersHorizontal,
   User,
-  ShieldCheck,
   Link2,
   Users,
   Server,
@@ -20,7 +19,6 @@ export type SettingsNavItem = {
 export const settingsNavItems: SettingsNavItem[] = [
   { to: "/settings/general",     labelKey: "settings.general.title",     icon: SlidersHorizontal, adminOnly: false },
   { to: "/settings/account",     labelKey: "settings.account.title",     icon: User,              adminOnly: false },
-  { to: "/settings/security",    labelKey: "settings.security.title",    icon: ShieldCheck,       adminOnly: false },
   { to: "/settings/connections", labelKey: "settings.connections.title", icon: Link2,             adminOnly: false },
   { to: "/settings/budget",      labelKey: "settings.budget.title",      icon: BudgetIcon,        adminOnly: false },
   { to: "/settings/users",       labelKey: "settings.users.title",       icon: Users,             adminOnly: true  },

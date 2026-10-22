@@ -64,7 +64,6 @@ export function Reset() {
           <div className="flex flex-col pb-1">
             <div className="text-lg font-semibold text-fg">{t("auth.resetPassword")}</div>
             <div className="text-sm text-fg-faint">{t("auth.setUpToContinue")}</div>
-            <div className="text-sm text-fg-faint">{t("auth.resetClearsTwoFactor")}</div>
             <div className="mt-1 text-sm font-medium text-fg-dim">{guard.info?.email}</div>
           </div>
           <label className="flex flex-col gap-2">

@@ -54,9 +54,6 @@ describe("Reset", () => {
 
     await screen.findByLabelText("New password");
     expect(screen.getByText("u@t.local")).toBeInTheDocument();
-    expect(
-      screen.getByText("If two-factor authentication is on, it will be turned off. You can set it up again in Settings."),
-    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter22" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));

@@ -7,13 +7,12 @@ type LinkModalProps = {
   title: string;
   subtitle: string;
   body: string;
-  note?: string; // extra line under the body
   link: string | null; // null while the token is still being generated
   error: boolean;
   onClose: () => void;
 };
 
-export function LinkModal({ title, subtitle, body, note, link, error, onClose }: LinkModalProps) {
+export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkModalProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -63,7 +62,6 @@ export function LinkModal({ title, subtitle, body, note, link, error, onClose }:
         </div>
         <div className="px-6 pt-3 pb-5">
           <p className="text-sm text-fg-dim">{body}</p>
-          {note && <p className="mt-2 text-sm text-fg-dim">{note}</p>}
           {error ? (
             <p className="mt-4 text-sm text-red">{t("settings.users.linkError")}</p>
           ) : (

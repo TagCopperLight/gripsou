@@ -240,7 +240,6 @@ export function SettingsUsers() {
           title={t("settings.users.reset.title")}
           subtitle={t("settings.users.reset.heading")}
           body={t("settings.users.reset.body", { name: resetTarget.name })}
-          note={t("settings.users.resetClearsTwoFactor")}
           link={linkFor("/reset", resetLink.data?.token)}
           error={resetLink.isError}
           onClose={() => {

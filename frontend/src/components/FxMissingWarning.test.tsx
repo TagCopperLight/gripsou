@@ -22,7 +22,7 @@ const authValue: AuthValue = {
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: async () => null,
-    verifyLogin: async () => {},
+  verifyLogin: async () => {},
   adoptSession: () => {},
   logout: async () => {},
   updateUser: () => {},
