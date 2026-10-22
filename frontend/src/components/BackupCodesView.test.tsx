@@ -31,7 +31,8 @@ describe("BackupCodesView", () => {
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
-  it("downloads a text file and releases the object URL", () => {
+  it("downloads a text file and releases the object URL after the click", () => {
+    vi.useFakeTimers();
     const create = vi.fn<(blob: Blob) => string>(() => "blob:codes");
     const revoke = vi.fn();
     Object.defineProperty(URL, "createObjectURL", { value: create, configurable: true });
@@ -39,12 +40,18 @@ describe("BackupCodesView", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
       expect(this.download).toBe("gripsou-backup-codes.txt");
       expect(this.href).toBe("blob:codes");
+      expect(document.body.contains(this)).toBe(true);
     });
     render(<BackupCodesView codes={["a-1", "b-2"]} />);
     fireEvent.click(screen.getByRole("button", { name: "Download" }));
     const blob = create.mock.calls[0][0];
     expect(blob.type).toBe("text/plain");
     expect(click).toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(document.querySelector("a[download]")).toBeNull();
+    act(() => {
+      vi.runAllTimers();
+    });
     expect(revoke).toHaveBeenCalledWith("blob:codes");
   });
 });

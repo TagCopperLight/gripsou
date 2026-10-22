@@ -102,6 +102,19 @@ describe("TotpSetupModal", () => {
     expect(screen.getByLabelText("Authentication code")).toHaveValue("");
   });
 
+  it("shows a generic error, not a wrong-code one, when confirming fails otherwise", async () => {
+    stubApi({
+      "/api/auth/mfa/totp/setup": setupOk,
+      "/api/auth/mfa/totp/confirm": () => new Response("boom", { status: 500 }),
+    });
+    renderModal();
+    await screen.findByRole("img");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(screen.getByLabelText("Authentication code"), { target: { value: "000000" } });
+    expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
+    expect(screen.queryByText("That code didn't work. Try again.")).toBeNull();
+  });
+
   it("shows the wait when confirming is throttled", async () => {
     stubApi({
       "/api/auth/mfa/totp/setup": setupOk,

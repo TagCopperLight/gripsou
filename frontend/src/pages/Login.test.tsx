@@ -148,6 +148,37 @@ describe("Login", () => {
       await waitFor(() => expect(input).toHaveFocus());
     });
 
+    it("does not send an incomplete authenticator code on Enter", async () => {
+      const fetchMock = mockFetch(() => json({ token: "tok", user }));
+      await toCodeStep();
+      const input = screen.getByLabelText("Authentication code");
+      fireEvent.change(input, { target: { value: "12345" } });
+      fireEvent.submit(input.closest("form")!);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(verifyBody(fetchMock)).toBeNull();
+      expect(input).toHaveValue("12345");
+    });
+
+    it("shows a generic error, not a wrong-code one, when the server fails", async () => {
+      mockFetch(() => new Response("boom", { status: 500 }));
+      await toCodeStep();
+      fireEvent.change(screen.getByLabelText("Authentication code"), { target: { value: "123456" } });
+      expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
+      expect(screen.queryByText("That code didn't work. Try again.")).toBeNull();
+    });
+
+    it("shows a generic error when the network fails", async () => {
+      const fetchMock = vi.fn<(url: string) => Promise<Response>>(async (url) => {
+        if (url === "/api/auth/login/verify") throw new TypeError("Failed to fetch");
+        return challenge();
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      await toCodeStep();
+      fireEvent.change(screen.getByLabelText("Authentication code"), { target: { value: "123456" } });
+      expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
+      expect(screen.queryByText("That code didn't work. Try again.")).toBeNull();
+    });
+
     it("sends a backup code as recoveryCode", async () => {
       const fetchMock = mockFetch(() => json({ token: "tok", user }));
       await toCodeStep();

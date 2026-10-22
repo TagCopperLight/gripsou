@@ -27,7 +27,7 @@ export function TotpSetupModal({
   const confirm = useTotpConfirm();
   const [step, setStep] = useState<Step>("scan");
   const [code, setCode] = useState("");
-  const [error, setError] = useState<null | "invalid" | { minutes: number }>(null);
+  const [error, setError] = useState<null | "invalid" | "failed" | { minutes: number }>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   // The token is single use: StrictMode runs effects twice in development, and
   // a second call would be refused.
@@ -57,7 +57,10 @@ export function TotpSetupModal({
       onSuccess: () => setStep("codes"),
       onError: (err) => {
         const minutes = throttleMinutes(err);
-        setError(minutes === null ? "invalid" : { minutes });
+        if (minutes !== null) setError({ minutes });
+        else if (err instanceof ApiError && err.status === 400) setError("invalid");
+        // A server or network failure says nothing about the code.
+        else setError("failed");
         setCode("");
       },
     });
@@ -142,6 +145,7 @@ export function TotpSetupModal({
             />
           </label>
           {error === "invalid" && <p className="text-sm text-red">{t("auth.invalidCode")}</p>}
+          {error === "failed" && <p className="text-sm text-red">{t("settings.security.actionFailed")}</p>}
           {error !== null && typeof error === "object" && (
             <p className="text-sm text-red">{t("auth.tooManyAttempts", { count: error.minutes })}</p>
           )}

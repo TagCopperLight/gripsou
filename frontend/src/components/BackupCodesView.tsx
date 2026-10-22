@@ -27,8 +27,12 @@ export function BackupCodesView({ codes }: { codes: string[] }) {
     const a = document.createElement("a");
     a.href = url;
     a.download = "gripsou-backup-codes.txt";
+    // In the document during the click, and the URL kept until the click has
+    // been handled: some browsers cancel the download otherwise.
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   return (

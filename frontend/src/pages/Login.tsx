@@ -13,8 +13,10 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  // null, a credentials error, or a throttle wait in whole minutes.
-  const [error, setError] = useState<null | "credentials" | "invalidCode" | "expired" | { minutes: number }>(null);
+  // null, a named error, or a throttle wait in whole minutes.
+  const [error, setError] = useState<
+    null | "credentials" | "invalidCode" | "expired" | "failed" | { minutes: number }
+  >(null);
   const [pending, setPending] = useState(false);
   // Set once the password was right and the account asks for a second factor.
   const [mfa, setMfa] = useState<MfaRequired | null>(null);
@@ -53,8 +55,11 @@ export function Login() {
         setError(wait);
       } else if (err instanceof ApiError && err.status === 401) {
         backToPassword("expired");
-      } else {
+      } else if (err instanceof ApiError && err.status === 400) {
         setError("invalidCode");
+      } else {
+        // A server or network failure says nothing about the code.
+        setError("failed");
       }
       setCode("");
     } finally {
@@ -74,7 +79,10 @@ export function Login() {
 
   const submitCode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.trim()) void verify(code.trim());
+    if (pending) return;
+    // An authenticator code is sent only once complete (typing the sixth
+    // digit sends it): a short one would just spend a throttled attempt.
+    if (useBackup ? code.trim() : code.length === 6) void verify(code.trim());
   };
 
   // No navigation here: a successful login flips auth, and the /login route
@@ -102,6 +110,7 @@ export function Login() {
       {error === "credentials" && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
       {error === "invalidCode" && <p className="text-sm text-red">{t("auth.invalidCode")}</p>}
       {error === "expired" && <p className="text-sm text-red">{t("auth.challengeExpired")}</p>}
+      {error === "failed" && <p className="text-sm text-red">{t("settings.security.actionFailed")}</p>}
       {error !== null && typeof error === "object" && (
         <p className="text-sm text-red">{t("auth.tooManyAttempts", { count: error.minutes })}</p>
       )}
