@@ -107,3 +107,47 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
     assert_eq!(r.headers()["content-encoding"], "br");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test]
+async fn every_response_carries_the_security_headers() {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@localhost/unused")
+        .unwrap();
+    let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
+    let app = gripsou_api::router(db, &dir, vec![]);
+
+    for path in ["/api/health", "/api/holdings", "/", "/some/spa/route"] {
+        let r = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let h = r.headers();
+        let csp = h["content-security-policy"].to_str().unwrap();
+        assert!(csp.contains("script-src 'self';"), "{path}: {csp}");
+        assert!(csp.contains("frame-ancestors 'none'"), "{path}");
+        assert!(csp.contains("https://cdn.brandfetch.io"), "{path}");
+        assert_eq!(h["x-content-type-options"], "nosniff", "{path}");
+        assert_eq!(h["referrer-policy"], "no-referrer", "{path}");
+        assert_eq!(h["x-frame-options"], "DENY", "{path}");
+        assert!(
+            !h.contains_key("strict-transport-security"),
+            "{path}: plain http"
+        );
+    }
+
+    let r = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .header("x-forwarded-proto", "https")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.headers()["strict-transport-security"], "max-age=31536000");
+    std::fs::remove_dir_all(dir).unwrap();
+}

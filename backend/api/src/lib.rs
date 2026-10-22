@@ -2,6 +2,7 @@ pub mod auth;
 mod budget;
 mod dto;
 mod handlers;
+mod security_headers;
 pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, Response};
@@ -243,6 +244,9 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     Router::new()
         .nest("/api", api.layer(cors_layer).layer(trace_layer))
         .merge(static_files)
+        .layer(axum::middleware::from_fn(
+            security_headers::security_headers,
+        ))
 }
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
