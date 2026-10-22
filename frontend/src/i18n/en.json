@@ -239,7 +239,7 @@
     "emailExists": "An account with this email already exists",
     "createAccountButton": "Create account",
     "resetPassword": "Reset your password",
-    "resetClearsTwoFactor": "Two-factor authentication will be turned off. You can set it up again in Settings.",
+    "resetClearsTwoFactor": "If two-factor authentication is on, it will be turned off. You can set it up again in Settings.",
     "resetForEmail": "Set a new password for {{email}}.",
     "newPassword": "New password",
     "updatePasswordButton": "Update password",
