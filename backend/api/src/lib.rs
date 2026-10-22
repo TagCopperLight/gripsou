@@ -2,6 +2,7 @@ pub mod auth;
 mod budget;
 mod dto;
 mod handlers;
+pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, Response};
 use axum::{
