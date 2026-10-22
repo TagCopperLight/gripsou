@@ -213,6 +213,8 @@
     "email": "E-mail",
     "password": "Mot de passe",
     "invalidCredentials": "E-mail ou mot de passe incorrect",
+    "tooManyAttempts_one": "Trop de tentatives. Réessayez dans {{count}} minute.",
+    "tooManyAttempts_other": "Trop de tentatives. Réessayez dans {{count}} minutes.",
     "logOut": "Se déconnecter",
     "logOutConfirmTitle": "Se déconnecter ?",
     "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",

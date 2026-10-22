@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
-import { ApiError, getAuthToken, getJson, setAuthToken, setUnauthorizedHandler } from "./client";
+import { ApiError, getAuthToken, getJson, postJson, setAuthToken, setUnauthorizedHandler } from "./client";
 
 beforeEach(() => {
   localStorage.clear();
@@ -58,5 +58,23 @@ describe("ApiError", () => {
     expect(onUnauthorized).toHaveBeenCalled();
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(401);
+  });
+});
+
+describe("ApiError.retryAfter", () => {
+  it("carries Retry-After seconds from a 429", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response("too many attempts", { status: 429, headers: { "Retry-After": "240" } }),
+    ));
+    const err = await postJson("/auth/login", {}, { skipGlobalUnauthorized: true }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(429);
+    expect((err as ApiError).retryAfter).toBe(240);
+  });
+
+  it("is null without the header", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 500 })));
+    const err = (await postJson("/x", {}).catch((e: unknown) => e)) as ApiError;
+    expect(err.retryAfter).toBeNull();
   });
 });

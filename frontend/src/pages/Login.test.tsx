@@ -68,6 +68,18 @@ describe("Login", () => {
     expect(await screen.findByText("Invalid email or password")).toBeInTheDocument();
   });
 
+  it("says how long to wait when throttled", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response("too many attempts", { status: 429, headers: { "Retry-After": "181" } }),
+    ));
+    render(wrap(<Login />));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Too many attempts. Try again in 4 minutes.")).toBeInTheDocument();
+    expect(screen.queryByText("Invalid email or password")).toBeNull();
+  });
+
   it("passes remember=true when checked", async () => {
     const login = vi.fn().mockResolvedValue(undefined);
     render(wrapWithMock(login, <Login />));

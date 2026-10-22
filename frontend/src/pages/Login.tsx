@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
+import { ApiError } from "../api/client";
 
 export function Login() {
   const { t } = useTranslation();
@@ -10,19 +11,24 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  const [error, setError] = useState(false);
+  // null, a credentials error, or a throttle wait in whole minutes.
+  const [error, setError] = useState<null | "credentials" | { minutes: number }>(null);
   const [pending, setPending] = useState(false);
 
   // No navigation here: a successful login flips auth, and the /login route
   // guard redirects to the dashboard once the router context refreshes.
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(false);
+    setError(null);
     setPending(true);
     try {
       await login(email, password, remember);
-    } catch {
-      setError(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setError({ minutes: Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)) });
+      } else {
+        setError("credentials");
+      }
     } finally {
       setPending(false);
     }
@@ -76,7 +82,10 @@ export function Login() {
             </span>
             {t("auth.rememberMe")}
           </label>
-          {error && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
+          {error === "credentials" && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
+          {error !== null && error !== "credentials" && (
+            <p className="text-sm text-red">{t("auth.tooManyAttempts", { count: error.minutes })}</p>
+          )}
           <Button type="submit" disabled={pending} className="mt-1">
             {t("auth.signIn")}
           </Button>
