@@ -75,7 +75,6 @@ export function Reset() {
               className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
-          <p className="-mt-2 text-xs text-fg-faint">{t("auth.passwordHint")}</p>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.confirmPassword")}</span>
             <input

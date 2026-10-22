@@ -223,7 +223,6 @@
     "setUpToContinue": "Set up your account to get started.",
     "name": "Name",
     "confirmPassword": "Confirm password",
-    "passwordHint": "At least 8 characters",
     "passwordLength": "Your password must be 8 to 128 characters long.",
     "passwordsDontMatch": "Passwords don't match",
     "emailExists": "An account with this email already exists",

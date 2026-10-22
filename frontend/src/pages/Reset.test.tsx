@@ -74,7 +74,7 @@ describe("Reset", () => {
     render(wrap(<Reset />));
 
     await screen.findByLabelText("New password");
-    expect(screen.getByText("At least 8 characters")).toBeInTheDocument();
+    expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "1234567" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "1234567" } });
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));

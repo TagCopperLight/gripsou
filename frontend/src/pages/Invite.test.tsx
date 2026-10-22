@@ -71,7 +71,7 @@ describe("Invite", () => {
     render(wrap(<Invite />));
 
     await screen.findByLabelText("Name");
-    expect(screen.getByText("At least 8 characters")).toBeInTheDocument();
+    expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Short" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "1234567" } });

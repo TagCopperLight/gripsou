@@ -1502,7 +1502,7 @@ pub async fn redeem_invite(
     if email.is_empty() || name.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "email, name and password are required".to_string(),
+            "email and name are required".to_string(),
         ));
     }
     auth::validate_new_password(&body.password)?;

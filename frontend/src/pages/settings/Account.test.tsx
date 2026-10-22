@@ -101,18 +101,43 @@ describe("SettingsAccount password update", () => {
 });
 
 describe("SettingsAccount password length", () => {
-  it("enables the button only from 8 characters", () => {
-    vi.stubGlobal("fetch", vi.fn());
+  const set = (label: string, value: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const lengthError = "Your password must be 8 to 128 characters long.";
+
+  it("refuses a too-short password on click without calling the server", () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
     render(withClient(<SettingsAccount />));
-    const set = (label: string, value: string) =>
-      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
     set("Current password", "old-password");
     set("New password", "1234567");
     set("Confirm new password", "1234567");
-    expect(screen.getByRole("button", { name: "Update password" })).toBeDisabled();
+    const button = screen.getByRole("button", { name: "Update password" });
+    expect(button).toBeEnabled();
+    expect(screen.queryByText(lengthError)).not.toBeInTheDocument();
+    fireEvent.click(button);
+    expect(screen.getByText(lengthError)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/auth/change-password", expect.anything());
+    // Editing the new password clears the error.
+    set("New password", "12345678");
+    expect(screen.queryByText(lengthError)).not.toBeInTheDocument();
+  });
+
+  it("sends a password of 8 characters", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(withClient(<SettingsAccount />));
+    set("Current password", "old-password");
     set("New password", "12345678");
     set("Confirm new password", "12345678");
-    expect(screen.getByRole("button", { name: "Update password" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/auth/change-password",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
   });
 });
 
