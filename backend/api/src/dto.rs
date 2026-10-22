@@ -848,11 +848,6 @@ pub struct LoginVerifyReq {
     pub recovery_code: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct Features {
-    pub totp: bool,
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProfileReq {
@@ -1287,7 +1282,6 @@ pub struct ReauthTokenReq {
 pub struct MfaStatus {
     pub totp: bool,
     pub recovery_remaining: i64,
-    pub available: bool,
 }
 
 #[derive(Debug, Serialize)]

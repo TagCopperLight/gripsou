@@ -25,13 +25,6 @@ fn unauthorized() -> ApiError {
     (StatusCode::UNAUTHORIZED, "unauthorized".to_string())
 }
 
-fn key_of(key: &TotpKey) -> Result<&str, ApiError> {
-    key.0.as_deref().ok_or((
-        StatusCode::SERVICE_UNAVAILABLE,
-        "authenticator unavailable".to_string(),
-    ))
-}
-
 /// Consume a reauth token. Single use either way: a token that belongs to
 /// someone else is burnt and refused.
 async fn require_reauth(pool: &PgPool, user_id: Uuid, token: &str) -> Result<(), ApiError> {
@@ -101,29 +94,27 @@ pub async fn reauth(
 
 pub async fn status(
     State(pool): State<PgPool>,
-    State(key): State<TotpKey>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<dto::MfaStatus>, ApiError> {
     let st = mfa::status(&pool, user_id).await.map_err(internal)?;
     Ok(Json(dto::MfaStatus {
         totp: st.totp,
         recovery_remaining: st.recovery_remaining,
-        available: key.0.is_some(),
     }))
 }
 
 /// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one
 /// and restarts its 10-minute confirmation window.
 /// Needs a fresh reauth token: otherwise a stolen session could enrol its own
-/// authenticator and lock the owner out. The checks that need no password
-/// (no key, already set up) come first, so they don't spend the token.
+/// authenticator and lock the owner out. The check that needs no password
+/// (already set up) comes first, so it doesn't spend the token.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
     State(key): State<TotpKey>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
-    let key = key_of(&key)?;
+    let key = &*key.0;
     let already = || {
         (
             StatusCode::CONFLICT,
@@ -171,7 +162,7 @@ pub async fn totp_confirm(
     }: AuthUser,
     Json(body): Json<dto::TotpConfirmReq>,
 ) -> Result<Json<dto::RecoveryCodes>, LoginError> {
-    let key = key_of(&key)?;
+    let key = &*key.0;
     let no_setup = || (StatusCode::CONFLICT, "no setup in progress".to_string());
     let row = mfa::totp(&pool, user_id)
         .await
@@ -289,7 +280,7 @@ mod tests {
     const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     fn key() -> crate::TotpKey {
-        crate::TotpKey(Some(Arc::from(KEY)))
+        crate::TotpKey(Arc::from(KEY))
     }
 
     async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
@@ -487,11 +478,8 @@ mod tests {
             .0
             .recovery_codes;
         assert_eq!(codes.len(), 10);
-        let st = status(State(pool.clone()), State(key()), who(&me))
-            .await
-            .unwrap()
-            .0;
-        assert!(st.totp && st.available);
+        let st = status(State(pool.clone()), who(&me)).await.unwrap().0;
+        assert!(st.totp);
         assert_eq!(st.recovery_remaining, 10);
         assert_eq!(sessions(&pool, uid).await, 1);
         let left: Uuid = sqlx::query_scalar("select id from session where user_id = $1")
@@ -639,32 +627,6 @@ mod tests {
             (StatusCode::CONFLICT, "no setup in progress".to_string())
         );
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn setup_without_a_key_is_unavailable(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local").await;
-        let me = seed_session(&pool, uid).await;
-        let token = reauth_token(&pool, &me, "hunter22").await;
-        let err = totp_setup(
-            State(pool.clone()),
-            State(crate::TotpKey(None)),
-            who(&me),
-            Json(dto::ReauthTokenReq {
-                reauth: token.clone(),
-            }),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(err.1, "authenticator unavailable");
-        // The password prompt isn't wasted.
-        assert!(reauth_valid(&pool, &token).await);
-        let st = status(State(pool.clone()), State(crate::TotpKey(None)), who(&me))
-            .await
-            .unwrap()
-            .0;
-        assert!(!st.available);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -833,14 +795,8 @@ mod tests {
         let sa = seed_session(&pool, a).await;
         let sb = seed_session(&pool, b).await;
         enrol(&pool, &sa).await;
-        let st_a = status(State(pool.clone()), State(key()), who(&sa))
-            .await
-            .unwrap()
-            .0;
-        let st_b = status(State(pool.clone()), State(key()), who(&sb))
-            .await
-            .unwrap()
-            .0;
+        let st_a = status(State(pool.clone()), who(&sa)).await.unwrap().0;
+        let st_b = status(State(pool.clone()), who(&sb)).await.unwrap().0;
         assert!(st_a.totp);
         assert_eq!(st_a.recovery_remaining, 10);
         assert!(!st_b.totp);

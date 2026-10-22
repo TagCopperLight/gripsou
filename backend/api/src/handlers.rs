@@ -1031,10 +1031,7 @@ pub async fn login_verify(
     // The TOTP step is worked out before the transaction (no DB write).
     let totp_step = match (&body.totp, &body.recovery_code) {
         (Some(code), None) => {
-            let key = key
-                .0
-                .as_deref()
-                .ok_or_else(|| internal("two-factor key missing: ENCRYPTION_KEY is not set"))?;
+            let key = &*key.0;
             let row = mfa::totp(&pool, user_id)
                 .await
                 .map_err(internal)?
@@ -1103,13 +1100,6 @@ pub async fn login_verify(
     let resp = issue_session(&pool, &headers, peer, user_id, remember).await?;
     tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent.unwrap_or(""), method, "login succeeded");
     Ok(Json(resp))
-}
-
-/// Which optional sign-in features this instance offers.
-pub async fn features(State(key): State<crate::TotpKey>) -> Json<dto::Features> {
-    Json(dto::Features {
-        totp: key.0.is_some(),
-    })
 }
 
 pub async fn me(
@@ -1828,7 +1818,7 @@ mod auth_tests {
     }
 
     fn test_key() -> crate::TotpKey {
-        crate::TotpKey(Some(Arc::from("a".repeat(64))))
+        crate::TotpKey(Arc::from("a".repeat(64)))
     }
 
     /// Enrol TOTP for `user_id` with a secret encrypted under the test key and
@@ -2216,12 +2206,6 @@ mod auth_tests {
         let _ = verify(&pool, &throttle, &ch, None, Some(codes[1].clone()))
             .await
             .expect("right code on the same challenge");
-    }
-
-    #[tokio::test]
-    async fn features_follow_the_key() {
-        assert!(features(State(test_key())).await.0.totp);
-        assert!(!features(State(crate::TotpKey(None))).await.0.totp);
     }
 
     /// Seed an admin user and return their id — mirrors what `seed_user` does for

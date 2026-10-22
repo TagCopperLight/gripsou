@@ -26,7 +26,9 @@ impl ServerHandle {
         .await?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);
-        let app = gripsou_api::router(pool.clone(), static_dir, vec![]);
+        // Benchmarks never decrypt a second factor; any valid key will do.
+        let key = gripsou_api::TotpKey::parse(Some(&"0".repeat(64))).map_err(anyhow::Error::msg)?;
+        let app = gripsou_api::router(pool.clone(), static_dir, vec![], key);
         let (tx, rx) = oneshot::channel();
         let task = tokio::spawn(async move {
             axum::serve(

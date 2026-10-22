@@ -33,25 +33,26 @@ pub struct AppState {
     pub totp_key: TotpKey,
 }
 
-/// `ENCRYPTION_KEY` as the second-factor handlers see it. `None` when unset,
-/// empty or not a valid key: two-factor is then unavailable rather than
-/// half-working.
+/// `ENCRYPTION_KEY` as the second-factor handlers see it. Always present and
+/// valid: the server refuses to start without one (see [`TotpKey::parse`]), so
+/// two-factor authentication is always available.
 #[derive(Clone)]
-pub struct TotpKey(pub Option<Arc<str>>);
+pub struct TotpKey(pub Arc<str>);
 
 impl TotpKey {
-    /// From the raw env value. A key `crypto` would reject counts as absent,
-    /// with one warning (the value is never logged).
-    pub fn from_env_value(raw: Option<String>) -> TotpKey {
-        let raw = raw.filter(|k| !k.is_empty());
-        let valid = raw.filter(|k| {
-            let ok = gripsou_core::crypto::parse_key(k).is_ok();
-            if !ok {
-                tracing::warn!("encryption key invalid");
-            }
-            ok
-        });
-        TotpKey(valid.map(Arc::from))
+    /// Check the raw `ENCRYPTION_KEY` value once, at startup. The error says
+    /// what is wrong without ever repeating the value.
+    pub fn parse(raw: Option<&str>) -> Result<TotpKey, String> {
+        match raw {
+            None | Some("") => Err(
+                "ENCRYPTION_KEY must be set (generate one with `openssl rand -hex 32`)".into(),
+            ),
+            Some(k) if gripsou_core::crypto::parse_key(k).is_err() => Err(
+                "ENCRYPTION_KEY is not a valid key: expected 64 hex characters (`openssl rand -hex 32`)"
+                    .into(),
+            ),
+            Some(k) => Ok(TotpKey(Arc::from(k))),
+        }
     }
 }
 
@@ -85,14 +86,19 @@ impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
     }
 }
 
-pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<String>) -> Router {
+pub fn router(
+    db: sqlx::PgPool,
+    static_dir: &std::path::Path,
+    initial_cors: Vec<String>,
+    totp_key: TotpKey,
+) -> Router {
     let cors_origins = Arc::new(RwLock::new(initial_cors));
     let app_state = AppState {
         db: db.clone(),
         cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
         second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
-        totp_key: TotpKey::from_env_value(std::env::var("ENCRYPTION_KEY").ok()),
+        totp_key,
     };
 
     let index_html = static_dir.join("index.html");
@@ -101,7 +107,6 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
         .route("/health", get(health))
         .route("/auth/login", post(handlers::login))
         .route("/auth/login/verify", post(handlers::login_verify))
-        .route("/auth/features", get(handlers::features))
         .route("/auth/reauth", post(mfa::reauth))
         .route("/auth/mfa/status", get(mfa::status))
         .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
@@ -314,38 +319,24 @@ mod tests {
 
     #[test]
     fn a_valid_key_is_kept() {
-        assert_eq!(
-            TotpKey::from_env_value(Some(GOOD.into())).0.as_deref(),
-            Some(GOOD)
-        );
+        assert_eq!(&*TotpKey::parse(Some(GOOD)).unwrap().0, GOOD);
     }
 
     #[test]
-    fn a_missing_empty_or_malformed_key_counts_as_absent() {
-        for raw in [None, Some(""), Some("short"), Some(&"zz".repeat(32)[..])] {
-            assert!(TotpKey::from_env_value(raw.map(String::from)).0.is_none());
+    fn a_missing_or_empty_key_is_refused() {
+        for raw in [None, Some("")] {
+            let err = TotpKey::parse(raw).err().unwrap();
+            assert!(err.contains("must be set"), "{err}");
         }
     }
 
-    /// One warning for a malformed key, none for an empty one, and the value
-    /// never reaches the log.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn a_malformed_key_is_warned_about_without_its_value(pool: sqlx::PgPool) {
-        let (_g, mut writer) = gripsou_core::logs::capture(100);
-        TotpKey::from_env_value(Some("not-a-hex-key-value".into()));
-        TotpKey::from_env_value(Some(String::new()));
-        writer.flush(&pool).await;
-        let rows: Vec<(String, String, serde_json::Value)> =
-            sqlx::query_as("select level, message, fields from log")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
-        let warns: Vec<_> = rows
-            .iter()
-            .filter(|(_, m, _)| m == "encryption key invalid")
-            .collect();
-        assert_eq!(warns.len(), 1);
-        assert_eq!(warns[0].0, "warn");
-        assert!(!warns[0].2.to_string().contains("not-a-hex"));
+    #[test]
+    fn a_malformed_key_is_refused_without_its_value() {
+        let zz = "zz".repeat(32);
+        for raw in ["short", "not-a-hex-key-value", &zz, &format!("{GOOD}00")] {
+            let err = TotpKey::parse(Some(raw)).err().unwrap();
+            assert!(err.contains("not a valid key"), "{err}");
+            assert!(!err.contains(raw));
+        }
     }
 }
