@@ -71,8 +71,8 @@ function withClient(children: ReactNode) {
 
 function fillPasswords() {
   fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "old" } });
-  fireEvent.change(screen.getByLabelText("New password"), { target: { value: "newpass" } });
-  fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "newpass" } });
+  fireEvent.change(screen.getByLabelText("New password"), { target: { value: "newpass12" } });
+  fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "newpass12" } });
 }
 
 describe("SettingsAccount password update", () => {
@@ -97,6 +97,22 @@ describe("SettingsAccount password update", () => {
     fillPasswords();
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
     expect(await screen.findByText("Current password is incorrect")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount password length", () => {
+  it("enables the button only from 8 characters", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(withClient(<SettingsAccount />));
+    const set = (label: string, value: string) =>
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    set("Current password", "old-password");
+    set("New password", "1234567");
+    set("Confirm new password", "1234567");
+    expect(screen.getByRole("button", { name: "Update password" })).toBeDisabled();
+    set("New password", "12345678");
+    set("Confirm new password", "12345678");
+    expect(screen.getByRole("button", { name: "Update password" })).toBeEnabled();
   });
 });
 

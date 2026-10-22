@@ -57,12 +57,29 @@ describe("Invite", () => {
     await screen.findByLabelText("Name");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@t.local" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter2" } });
-    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter2" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter22" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     await waitFor(() => expect(adopt).toHaveBeenCalledWith("sess", expect.objectContaining({ id: "u1" })));
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("refuses a too-short password without calling the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(tokenOk());
+    vi.stubGlobal("fetch", fetchMock);
+    render(wrap(<Invite />));
+
+    await screen.findByLabelText("Name");
+    expect(screen.getByText("At least 8 characters")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Short" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "1234567" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "1234567" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("Your password must be 8 to 128 characters long.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/redeem"))).toBe(false);
   });
 
   it("shows an email-exists error on 409", async () => {
@@ -76,8 +93,8 @@ describe("Invite", () => {
     await screen.findByLabelText("Name");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Dup" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter2" } });
-    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter2" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter22" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     expect(await screen.findByText("An account with this email already exists")).toBeInTheDocument();

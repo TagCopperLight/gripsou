@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 import { useTokenGuard } from "../auth/useTokenGuard";
+import { passwordLengthOk } from "../lib/password";
 import { postJson } from "../api/client";
 import type { SessionUser } from "../api/types";
 
@@ -25,6 +26,10 @@ export function Reset() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!passwordLengthOk(password)) {
+      setError(t("auth.passwordLength"));
+      return;
+    }
     if (password !== confirm) {
       setError(t("auth.passwordsDontMatch"));
       return;
@@ -70,6 +75,7 @@ export function Reset() {
               className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
+          <p className="-mt-2 text-xs text-fg-faint">{t("auth.passwordHint")}</p>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.confirmPassword")}</span>
             <input

@@ -1,3 +1,4 @@
+import { passwordLengthOk } from "../../lib/password";
 import { useState, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -57,6 +58,7 @@ export function SettingsAccount() {
   const canUpdatePassword =
     currentPassword !== "" &&
     newPassword !== "" &&
+    passwordLengthOk(newPassword) &&
     newPassword === confirmPassword;
 
   const saveProfile = () => {
@@ -182,6 +184,7 @@ export function SettingsAccount() {
               ariaLabel={t("settings.account.newPassword")}
             />
           </Field>
+          <p className="-mt-3 text-xs text-fg-faint">{t("auth.passwordHint")}</p>
           <Field label={t("settings.account.confirmNewPassword")}>
             <TextInput
               type="password"

@@ -53,11 +53,33 @@ describe("Reset", () => {
 
     await screen.findByLabelText("New password");
     expect(screen.getByText("u@t.local")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter2" } });
-    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter2" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter22" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
 
     await waitFor(() => expect(adopt).toHaveBeenCalledWith("sess", expect.objectContaining({ id: "u1" })));
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("refuses a too-short password without calling the server", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ type: "reset", email: "u@t.local" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(wrap(<Reset />));
+
+    await screen.findByLabelText("New password");
+    expect(screen.getByText("At least 8 characters")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "1234567" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "1234567" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+
+    expect(await screen.findByText("Your password must be 8 to 128 characters long.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/redeem"))).toBe(false);
   });
 });

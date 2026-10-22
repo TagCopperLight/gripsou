@@ -223,6 +223,8 @@
     "setUpToContinue": "Renseignez vos informations pour commencer.",
     "name": "Nom",
     "confirmPassword": "Confirmer le mot de passe",
+    "passwordHint": "Au moins 8 caractères",
+    "passwordLength": "Le mot de passe doit contenir entre 8 et 128 caractères.",
     "passwordsDontMatch": "Les mots de passe ne correspondent pas",
     "emailExists": "Un compte avec cet e-mail existe déjà",
     "createAccountButton": "Créer le compte",
