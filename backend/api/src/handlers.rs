@@ -875,22 +875,57 @@ pub async fn users(
     ))
 }
 
+/// Login's error: the usual status + message, plus `Retry-After` seconds when
+/// throttled. Other handlers keep `(StatusCode, String)`; `?` converts it.
+#[derive(Debug)]
+pub struct LoginError(pub StatusCode, pub String, pub Option<u64>);
+
+impl From<(StatusCode, String)> for LoginError {
+    fn from((status, message): (StatusCode, String)) -> Self {
+        LoginError(status, message, None)
+    }
+}
+
+impl axum::response::IntoResponse for LoginError {
+    fn into_response(self) -> axum::response::Response {
+        let mut res = (self.0, self.1).into_response();
+        if let Some(secs) = self.2 {
+            res.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from(secs),
+            );
+        }
+        res
+    }
+}
+
 pub async fn login(
     State(pool): State<PgPool>,
+    State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginReq>,
-) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+) -> Result<Json<dto::LoginResponse>, LoginError> {
     let unauthorized = || {
-        (
+        LoginError(
             StatusCode::UNAUTHORIZED,
             "invalid email or password".to_string(),
+            None,
         )
     };
     let user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
     let ip = client_ip(&headers, peer);
+    let now = std::time::Instant::now();
+    if let Err(blocked) = throttle.check(&body.email, &ip, now) {
+        tracing::warn!(email = %body.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+        return Err(LoginError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many attempts".to_string(),
+            Some(blocked.retry_after_secs()),
+        ));
+    }
     let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
         .map_err(internal)?;
@@ -899,9 +934,11 @@ pub async fn login(
         creds.as_ref().map(|c| c.password_hash.as_str()),
     );
     let Some(creds) = creds.filter(|_| ok) else {
+        throttle.record_failure(&body.email, &ip, now);
         tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
+    throttle.record_success(&body.email);
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
@@ -1515,7 +1552,88 @@ mod auth_tests {
     use super::*;
     use crate::auth;
     use crate::dto::{ChangePasswordReq, LoginReq};
+    use crate::throttle::LoginThrottle;
+    use axum::response::IntoResponse;
     use sqlx::PgPool;
+    use std::sync::Arc;
+
+    fn no_throttle() -> State<Arc<LoginThrottle>> {
+        State(Arc::new(LoginThrottle::default()))
+    }
+
+    async fn try_login(
+        pool: &PgPool,
+        throttle: &Arc<LoginThrottle>,
+        email: &str,
+        pw: &str,
+    ) -> Result<Json<dto::LoginResponse>, LoginError> {
+        login(
+            State(pool.clone()),
+            State(throttle.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(LoginReq {
+                email: email.into(),
+                password: pw.into(),
+                remember: false,
+            }),
+        )
+        .await
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn sixth_attempt_after_five_failures_is_refused_with_retry_after(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..5 {
+            let err = try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        }
+        // Even the right password waits: the check happens before any verify.
+        let err = try_login(&pool, &throttle, "a@t.local", "hunter22")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(matches!(err.2, Some(s) if (1..=60).contains(&s)));
+        let resp = err.into_response();
+        assert!(resp.headers().contains_key(axum::http::header::RETRY_AFTER));
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_successful_login_clears_earlier_failures(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..4 {
+            try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+        }
+        let _ = try_login(&pool, &throttle, "a@t.local", "hunter22")
+            .await
+            .expect("login ok");
+        for _ in 0..4 {
+            let err = try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn unknown_emails_are_throttled_like_real_ones(pool: PgPool) {
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..5 {
+            try_login(&pool, &throttle, "nobody@t.local", "x")
+                .await
+                .unwrap_err();
+        }
+        let err = try_login(&pool, &throttle, "nobody@t.local", "x")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+    }
 
     /// Seed an admin user and return their id — mirrors what `seed_user` does for
     /// the existing tests (role "admin", email "a@t.local").
@@ -1547,6 +1665,7 @@ mod auth_tests {
     async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
         login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1655,6 +1774,7 @@ mod auth_tests {
         );
         let failed = login(
             State(pool.clone()),
+            no_throttle(),
             ua,
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1704,6 +1824,7 @@ mod auth_tests {
 
         let resp = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1724,6 +1845,7 @@ mod auth_tests {
 
         let err = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1742,6 +1864,7 @@ mod auth_tests {
         seed_user(&pool, "a@t.local", "hunter2").await;
         let resp = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -4168,6 +4291,7 @@ mod auth_tests {
     async fn can_login(pool: &PgPool, email: &str, pw: &str) -> bool {
         login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {

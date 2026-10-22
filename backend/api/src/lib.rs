@@ -18,15 +18,24 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
+use crate::throttle::LoginThrottle;
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub cors_origins: Arc<RwLock<Vec<String>>>,
+    pub login_throttle: Arc<LoginThrottle>,
 }
 
 impl FromRef<AppState> for sqlx::PgPool {
     fn from_ref(state: &AppState) -> sqlx::PgPool {
         state.db.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<LoginThrottle> {
+    fn from_ref(state: &AppState) -> Arc<LoginThrottle> {
+        state.login_throttle.clone()
     }
 }
 
@@ -41,6 +50,7 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     let app_state = AppState {
         db: db.clone(),
         cors_origins: cors_origins.clone(),
+        login_throttle: Arc::new(LoginThrottle::default()),
     };
 
     let index_html = static_dir.join("index.html");
