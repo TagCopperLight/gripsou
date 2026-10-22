@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into login_challenge (token_hash, user_id, kind, state, expires_at)\n           values ($1, $2, $3, $4, now() + interval '5 minutes')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "61f7c6e65817d69357aebec01ab4784f8fa6c058bba44b2f4b0c7eae3afd12a7"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update user_recovery_code set used_at = now()\n           where id = (select id from user_recovery_code\n                       where user_id = $1 and code_hash = $2 and used_at is null\n                       limit 1)\n             and used_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "126c2a5954997df23e95174ec00402a71c4e87d75fa59e923c4956a97eb2e828"
+}

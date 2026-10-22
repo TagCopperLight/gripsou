@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into user_totp (user_id, secret_enc) values ($1, $2)\n           on conflict (user_id) do update\n             set secret_enc = excluded.secret_enc,\n                 last_used_step = null,\n                 created_at = now()\n             where user_totp.confirmed_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1455c1f81e415486f968cacf95b6bf514f572c306f42df2508200bc3e221e9d9"
+}

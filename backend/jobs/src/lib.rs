@@ -282,6 +282,11 @@ async fn prune_sessions(db: Db) {
     loop {
         tick.tick().await;
         sweep("sessions", gripsou_core::repo::session::delete_expired(&db)).await;
+        sweep(
+            "login_challenges",
+            gripsou_core::repo::login_challenge::delete_expired(&db),
+        )
+        .await;
     }
 }
 
