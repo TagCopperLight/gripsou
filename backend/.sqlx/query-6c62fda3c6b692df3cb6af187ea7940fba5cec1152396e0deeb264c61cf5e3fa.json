@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from user_totp\n           where confirmed_at is null\n             and created_at <= now() - make_interval(mins => $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c62fda3c6b692df3cb6af187ea7940fba5cec1152396e0deeb264c61cf5e3fa"
+}

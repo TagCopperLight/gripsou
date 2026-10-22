@@ -78,10 +78,10 @@ pub async fn redeem_invite(
     Ok(Some(user_id))
 }
 
-/// Redeem a reset token: set the new password, consume the token, and revoke
-/// every existing session for the user and turn off their second factors — all
-/// atomically. `Ok(None)` if the
-/// token is invalid or its target user has since been deleted.
+/// Redeem a reset token: set the new password, consume the token, revoke every
+/// existing session of the user and turn off their second factors, all
+/// atomically. `Ok(None)` if the token is invalid or its target user has since
+/// been deleted.
 pub async fn redeem_reset(
     pool: &sqlx::PgPool,
     token_hash: &str,

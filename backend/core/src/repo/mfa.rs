@@ -4,19 +4,29 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
+/// How long an unconfirmed setup can still be confirmed. Past it the row is
+/// dead (and swept): a stolen session can't keep guessing codes against a
+/// setup the owner abandoned.
+pub const SETUP_TTL_MINUTES: i32 = 10;
+
 pub struct TotpRow {
     pub secret_enc: String,
     pub confirmed: bool,
     pub last_used_step: Option<i64>,
+    /// Unconfirmed and started less than [`SETUP_TTL_MINUTES`] ago.
+    pub pending: bool,
 }
 
 /// The user's TOTP row, confirmed or not.
 pub async fn totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<TotpRow>, CoreError> {
     let row = sqlx::query_as!(
         TotpRow,
-        r#"select secret_enc, confirmed_at is not null as "confirmed!", last_used_step
+        r#"select secret_enc, confirmed_at is not null as "confirmed!", last_used_step,
+                  (confirmed_at is null
+                   and created_at > now() - make_interval(mins => $2)) as "pending!"
            from user_totp where user_id = $1"#,
         user_id,
+        SETUP_TTL_MINUTES,
     )
     .fetch_optional(pool)
     .await?;
@@ -47,8 +57,9 @@ pub async fn upsert_unconfirmed_totp(
 
 /// Finish TOTP setup in one transaction: confirms the unconfirmed row (stamping
 /// the accepted `step`) and replaces the recovery codes. Only the row still
-/// holding `secret_enc` (the secret the code was checked against) is confirmed;
-/// `false`, with nothing written, when there is no such unconfirmed row.
+/// holding `secret_enc` (the secret the code was checked against) and started
+/// less than [`SETUP_TTL_MINUTES`] ago is confirmed; `false`, with nothing
+/// written, when there is no such unconfirmed row.
 pub async fn confirm_totp(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -59,10 +70,12 @@ pub async fn confirm_totp(
     let mut tx = pool.begin().await?;
     let res = sqlx::query!(
         r#"update user_totp set confirmed_at = now(), last_used_step = $2
-           where user_id = $1 and confirmed_at is null and secret_enc = $3"#,
+           where user_id = $1 and confirmed_at is null and secret_enc = $3
+             and created_at > now() - make_interval(mins => $4)"#,
         user_id,
         step,
         secret_enc,
+        SETUP_TTL_MINUTES,
     )
     .execute(&mut *tx)
     .await?;
@@ -97,10 +110,23 @@ async fn write_codes(
     Ok(())
 }
 
+/// Housekeeping: drop unconfirmed setups too old to be confirmed.
+pub async fn delete_stale_setups(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
+    let res = sqlx::query!(
+        r#"delete from user_totp
+           where confirmed_at is null
+             and created_at <= now() - make_interval(mins => $1)"#,
+        SETUP_TTL_MINUTES,
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Accept a TOTP step at most once: a single atomic update that only moves
 /// `last_used_step` forward on a confirmed row. `true` when this call won.
 pub async fn use_totp_step(
-    pool: &sqlx::PgPool,
+    db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
     step: i64,
 ) -> Result<bool, CoreError> {
@@ -111,7 +137,7 @@ pub async fn use_totp_step(
         user_id,
         step,
     )
-    .execute(pool)
+    .execute(db)
     .await?;
     Ok(res.rows_affected() == 1)
 }
@@ -153,13 +179,13 @@ pub async fn replace_recovery_codes(
 
 /// Spend an unused recovery code: one atomic mark-used, so a code works once
 /// even under concurrent requests. `Some(remaining unused)` on success, `None`
-/// when no unused code matches.
+/// when no unused code matches. Takes a connection so the caller can make it
+/// part of its own transaction (login spends the challenge in the same one).
 pub async fn use_recovery_code(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     user_id: Uuid,
     code_hash: &[u8],
 ) -> Result<Option<i64>, CoreError> {
-    let mut tx = pool.begin().await?;
     let res = sqlx::query!(
         r#"update user_recovery_code set used_at = now()
            where id = (select id from user_recovery_code
@@ -169,7 +195,7 @@ pub async fn use_recovery_code(
         user_id,
         code_hash,
     )
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     if res.rows_affected() != 1 {
         return Ok(None);
@@ -179,9 +205,8 @@ pub async fn use_recovery_code(
            where user_id = $1 and used_at is null"#,
         user_id,
     )
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
-    tx.commit().await?;
     Ok(Some(remaining))
 }
 
@@ -305,6 +330,50 @@ mod tests {
         assert!(confirm_totp(&pool, u, "b", 1, &codes(3)).await.unwrap());
     }
 
+    async fn age_setup(pool: &PgPool, user: Uuid, minutes: i32) {
+        sqlx::query(
+            "update user_totp set created_at = now() - make_interval(mins => $2) \
+             where user_id = $1",
+        )
+        .bind(user)
+        .bind(minutes)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_setup_older_than_ten_minutes_cannot_be_confirmed(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
+        assert!(totp(&pool, u).await.unwrap().unwrap().pending);
+        age_setup(&pool, u, 11).await;
+        assert!(!totp(&pool, u).await.unwrap().unwrap().pending);
+        assert!(!confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
+        // Starting again resets the clock.
+        upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
+        assert!(totp(&pool, u).await.unwrap().unwrap().pending);
+        assert!(confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
+        assert!(!totp(&pool, u).await.unwrap().unwrap().pending);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn the_sweep_drops_only_stale_unconfirmed_setups(pool: PgPool) {
+        let stale = seed_user(&pool, "a@t.local").await;
+        let fresh = seed_user(&pool, "b@t.local").await;
+        let done = seed_user(&pool, "c@t.local").await;
+        for u in [stale, fresh, done] {
+            upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
+        }
+        confirm_totp(&pool, done, "s", 1, &codes(1)).await.unwrap();
+        age_setup(&pool, stale, 11).await;
+        age_setup(&pool, done, 60).await;
+        assert_eq!(delete_stale_setups(&pool).await.unwrap(), 1);
+        assert!(totp(&pool, stale).await.unwrap().is_none());
+        assert!(totp(&pool, fresh).await.unwrap().is_some());
+        assert!(totp(&pool, done).await.unwrap().is_some());
+    }
+
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_discards_a_pending_setup_but_reports_false(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
@@ -374,10 +443,30 @@ mod tests {
     async fn recovery_code_is_single_use(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         replace_recovery_codes(&pool, u, &codes(10)).await.unwrap();
-        assert_eq!(use_recovery_code(&pool, u, &[0]).await.unwrap(), Some(9));
-        assert_eq!(use_recovery_code(&pool, u, &[0]).await.unwrap(), None);
-        assert_eq!(use_recovery_code(&pool, u, &[99]).await.unwrap(), None);
-        assert_eq!(use_recovery_code(&pool, u, &[1]).await.unwrap(), Some(8));
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[0])
+                .await
+                .unwrap(),
+            Some(9)
+        );
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[0])
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[99])
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[1])
+                .await
+                .unwrap(),
+            Some(8)
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -387,8 +476,18 @@ mod tests {
         replace_recovery_codes(&pool, u, &[vec![200], vec![201]])
             .await
             .unwrap();
-        assert_eq!(use_recovery_code(&pool, u, &[0]).await.unwrap(), None);
-        assert_eq!(use_recovery_code(&pool, u, &[200]).await.unwrap(), Some(1));
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[0])
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[200])
+                .await
+                .unwrap(),
+            Some(1)
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -401,7 +500,9 @@ mod tests {
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(!status(&pool, u).await.unwrap().totp);
         confirm_totp(&pool, u, "s", 1, &codes(10)).await.unwrap();
-        use_recovery_code(&pool, u, &[0]).await.unwrap();
+        use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[0])
+            .await
+            .unwrap();
         let s = status(&pool, u).await.unwrap();
         assert!(s.totp);
         assert_eq!(s.recovery_remaining, 9);

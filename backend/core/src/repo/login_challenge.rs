@@ -57,9 +57,10 @@ pub async fn find_valid(
 
 /// Use a challenge exactly once: a single atomic delete, so of two concurrent
 /// callers only one gets `Some`. `None` when it was already used, expired, or
-/// is of another kind (a wrong-kind call leaves the row alone).
+/// is of another kind (a wrong-kind call leaves the row alone). Runs on a pool
+/// or inside a caller's transaction (rolled back, the challenge is back).
 pub async fn consume(
-    pool: &sqlx::PgPool,
+    db: impl sqlx::PgExecutor<'_>,
     token_hash: &[u8],
     kind: &str,
 ) -> Result<Option<Challenge>, CoreError> {
@@ -71,7 +72,7 @@ pub async fn consume(
         token_hash,
         kind,
     )
-    .fetch_optional(pool)
+    .fetch_optional(db)
     .await?;
     Ok(row)
 }

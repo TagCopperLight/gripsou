@@ -287,6 +287,11 @@ async fn prune_sessions(db: Db) {
             gripsou_core::repo::login_challenge::delete_expired(&db),
         )
         .await;
+        sweep(
+            "totp_setups",
+            gripsou_core::repo::mfa::delete_stale_setups(&db),
+        )
+        .await;
     }
 }
 

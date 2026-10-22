@@ -1,5 +1,6 @@
 pub mod auth;
 mod budget;
+pub mod cli;
 mod dto;
 mod factors;
 mod handlers;
@@ -21,20 +22,38 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
-use crate::throttle::LoginThrottle;
+use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub cors_origins: Arc<RwLock<Vec<String>>>,
     pub login_throttle: Arc<LoginThrottle>,
+    pub second_factor_throttle: Arc<SecondFactorThrottle>,
     pub totp_key: TotpKey,
 }
 
-/// `ENCRYPTION_KEY` as the second-factor handlers see it. `None` when unset:
-/// two-factor is then unavailable rather than half-working.
+/// `ENCRYPTION_KEY` as the second-factor handlers see it. `None` when unset,
+/// empty or not a valid key: two-factor is then unavailable rather than
+/// half-working.
 #[derive(Clone)]
 pub struct TotpKey(pub Option<Arc<str>>);
+
+impl TotpKey {
+    /// From the raw env value. A key `crypto` would reject counts as absent,
+    /// with one warning (the value is never logged).
+    pub fn from_env_value(raw: Option<String>) -> TotpKey {
+        let raw = raw.filter(|k| !k.is_empty());
+        let valid = raw.filter(|k| {
+            let ok = gripsou_core::crypto::parse_key(k).is_ok();
+            if !ok {
+                tracing::warn!("encryption key invalid");
+            }
+            ok
+        });
+        TotpKey(valid.map(Arc::from))
+    }
+}
 
 impl FromRef<AppState> for TotpKey {
     fn from_ref(state: &AppState) -> TotpKey {
@@ -54,6 +73,12 @@ impl FromRef<AppState> for Arc<LoginThrottle> {
     }
 }
 
+impl FromRef<AppState> for Arc<SecondFactorThrottle> {
+    fn from_ref(state: &AppState) -> Arc<SecondFactorThrottle> {
+        state.second_factor_throttle.clone()
+    }
+}
+
 impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
     fn from_ref(state: &AppState) -> Arc<RwLock<Vec<String>>> {
         state.cors_origins.clone()
@@ -66,7 +91,8 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
         db: db.clone(),
         cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
-        totp_key: TotpKey(std::env::var("ENCRYPTION_KEY").ok().map(Arc::from)),
+        second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
+        totp_key: TotpKey::from_env_value(std::env::var("ENCRYPTION_KEY").ok()),
     };
 
     let index_html = static_dir.join("index.html");
@@ -278,4 +304,48 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
 }
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TotpKey;
+
+    const GOOD: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    #[test]
+    fn a_valid_key_is_kept() {
+        assert_eq!(
+            TotpKey::from_env_value(Some(GOOD.into())).0.as_deref(),
+            Some(GOOD)
+        );
+    }
+
+    #[test]
+    fn a_missing_empty_or_malformed_key_counts_as_absent() {
+        for raw in [None, Some(""), Some("short"), Some(&"zz".repeat(32)[..])] {
+            assert!(TotpKey::from_env_value(raw.map(String::from)).0.is_none());
+        }
+    }
+
+    /// One warning for a malformed key, none for an empty one, and the value
+    /// never reaches the log.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_malformed_key_is_warned_about_without_its_value(pool: sqlx::PgPool) {
+        let (_g, mut writer) = gripsou_core::logs::capture(100);
+        TotpKey::from_env_value(Some("not-a-hex-key-value".into()));
+        TotpKey::from_env_value(Some(String::new()));
+        writer.flush(&pool).await;
+        let rows: Vec<(String, String, serde_json::Value)> =
+            sqlx::query_as("select level, message, fields from log")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let warns: Vec<_> = rows
+            .iter()
+            .filter(|(_, m, _)| m == "encryption key invalid")
+            .collect();
+        assert_eq!(warns.len(), 1);
+        assert_eq!(warns[0].0, "warn");
+        assert!(!warns[0].2.to_string().contains("not-a-hex"));
+    }
 }

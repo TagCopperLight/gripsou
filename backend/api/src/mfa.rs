@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::handlers::{LoginError, client_ip, internal};
-use crate::throttle::LoginThrottle;
+use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 use crate::{TotpKey, factors};
 
 const REAUTH_KIND: &str = "reauth";
@@ -112,31 +112,40 @@ pub async fn status(
     }))
 }
 
-/// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one.
+/// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one
+/// and restarts its 10-minute confirmation window.
 /// Needs a fresh reauth token: otherwise a stolen session could enrol its own
-/// authenticator and lock the owner out.
+/// authenticator and lock the owner out. The checks that need no password
+/// (no key, already set up) come first, so they don't spend the token.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
     State(key): State<TotpKey>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
-    require_reauth(&pool, user_id, &body.reauth).await?;
     let key = key_of(&key)?;
+    let already = || {
+        (
+            StatusCode::CONFLICT,
+            "authenticator already set up".to_string(),
+        )
+    };
+    if mfa::status(&pool, user_id).await.map_err(internal)?.totp {
+        return Err(already());
+    }
+    require_reauth(&pool, user_id, &body.reauth).await?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await
         .map_err(internal)?
         .ok_or_else(unauthorized)?;
     let secret = factors::new_totp_secret();
     let enc = gripsou_core::crypto::encrypt(key, &secret).map_err(internal)?;
+    // Still refuses to replace a confirmed row, should one appear meanwhile.
     if !mfa::upsert_unconfirmed_totp(&pool, user_id, &enc)
         .await
         .map_err(internal)?
     {
-        return Err((
-            StatusCode::CONFLICT,
-            "authenticator already set up".to_string(),
-        ));
+        return Err(already());
     }
     let qr_svg =
         factors::qr_svg(&factors::otpauth_uri(&secret, &profile.email)).map_err(internal)?;
@@ -147,27 +156,52 @@ pub async fn totp_setup(
 }
 
 /// Prove the app works by entering a code; turns the factor on, hands out the
-/// backup codes once, and signs out every other session.
+/// backup codes once, and signs out every other session. Only a setup started
+/// in the last 10 minutes can be confirmed, and wrong codes count on the
+/// second-factor throttle: a stolen session (which can't start a setup without
+/// the password) must not be able to guess its way into a setup the owner
+/// abandoned, and so to the backup codes.
 pub async fn totp_confirm(
     State(pool): State<PgPool>,
     State(key): State<TotpKey>,
+    State(sf_throttle): State<Arc<SecondFactorThrottle>>,
     AuthUser {
         user_id,
         session_id,
     }: AuthUser,
     Json(body): Json<dto::TotpConfirmReq>,
-) -> Result<Json<dto::RecoveryCodes>, ApiError> {
+) -> Result<Json<dto::RecoveryCodes>, LoginError> {
     let key = key_of(&key)?;
     let no_setup = || (StatusCode::CONFLICT, "no setup in progress".to_string());
     let row = mfa::totp(&pool, user_id)
         .await
         .map_err(internal)?
-        .filter(|r| !r.confirmed)
+        .filter(|r| r.pending)
         .ok_or_else(no_setup)?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(unauthorized)?;
+    if let Err(blocked) = sf_throttle.try_attempt(&profile.email, std::time::Instant::now()) {
+        if blocked.first_refusal {
+            tracing::warn!(email = %profile.email, user_id = %user_id, reason = blocked.reason.as_str(), "login throttled");
+        }
+        return Err(LoginError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many attempts".to_string(),
+            Some(blocked.retry_after_secs()),
+        ));
+    }
     let secret = gripsou_core::crypto::decrypt(key, &row.secret_enc).map_err(internal)?;
     let now = Utc::now().timestamp().max(0) as u64;
-    let step = factors::match_totp(&secret, &body.code, now)
-        .ok_or((StatusCode::BAD_REQUEST, "invalid code".to_string()))?;
+    let Some(step) = factors::match_totp(&secret, &body.code, now) else {
+        tracing::warn!(user_id = %user_id, "totp confirm failed");
+        return Err(LoginError(
+            StatusCode::BAD_REQUEST,
+            "invalid code".to_string(),
+            None,
+        ));
+    };
     let codes = factors::new_recovery_codes();
     let hashes: Vec<Vec<u8>> = codes
         .iter()
@@ -177,8 +211,9 @@ pub async fn totp_confirm(
         .await
         .map_err(internal)?
     {
-        return Err(no_setup());
+        return Err(no_setup().into());
     }
+    sf_throttle.record_success(&profile.email);
     session::delete_others(&pool, user_id, session_id)
         .await
         .map_err(internal)?;
@@ -242,7 +277,7 @@ mod tests {
     use crate::auth::{self, AuthUser};
     use crate::factors;
     use crate::handlers::LoginError;
-    use crate::throttle::LoginThrottle;
+    use crate::throttle::{LoginThrottle, SecondFactorThrottle};
     use axum::Json;
     use axum::extract::State;
     use axum::http::StatusCode;
@@ -345,13 +380,40 @@ mod tests {
         a: &AuthUser,
         code: String,
     ) -> Result<Json<dto::RecoveryCodes>, (StatusCode, String)> {
+        confirm_with(pool, a, code, &Arc::new(SecondFactorThrottle::default()))
+            .await
+            .map_err(|e| (e.0, e.1))
+    }
+
+    async fn confirm_with(
+        pool: &PgPool,
+        a: &AuthUser,
+        code: String,
+        throttle: &Arc<SecondFactorThrottle>,
+    ) -> Result<Json<dto::RecoveryCodes>, LoginError> {
         totp_confirm(
             State(pool.clone()),
             State(key()),
+            State(throttle.clone()),
             who(a),
             Json(dto::TotpConfirmReq { code }),
         )
         .await
+    }
+
+    fn wrong_code(secret: &[u8]) -> String {
+        if code_now(secret) == "000000" {
+            "000001".into()
+        } else {
+            "000000".into()
+        }
+    }
+
+    async fn reauth_valid(pool: &PgPool, token: &str) -> bool {
+        login_challenge::find_valid(pool, &auth::hash_token(token), "reauth")
+            .await
+            .unwrap()
+            .is_some()
     }
 
     /// Set up and confirm; returns the secret and the recovery codes.
@@ -502,13 +564,81 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn setup_after_confirm_is_a_conflict(pool: PgPool) {
+    async fn setup_after_confirm_is_a_conflict_and_keeps_the_token(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
         enrol(&pool, &me).await;
-        let err = setup(&pool, &me).await.unwrap_err();
+        let token = reauth_token(&pool, &me, "hunter22").await;
+        let err = setup_with(&pool, &me, &token).await.unwrap_err();
         assert_eq!(err.0, StatusCode::CONFLICT);
         assert_eq!(err.1, "authenticator already set up");
+        assert!(reauth_valid(&pool, &token).await);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn wrong_confirm_codes_are_throttled_and_a_right_one_clears(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        let throttle = Arc::new(SecondFactorThrottle::default());
+        let _ = setup(&pool, &me).await.unwrap();
+        let secret = stored_secret(&pool, uid).await;
+        for _ in 0..4 {
+            let err = confirm_with(&pool, &me, wrong_code(&secret), &throttle)
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        }
+        // A right code clears the four failures.
+        let _ = confirm_with(&pool, &me, code_now(&secret), &throttle)
+            .await
+            .unwrap();
+        throttle
+            .try_attempt("a@t.local", std::time::Instant::now())
+            .expect("cleared");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn the_sixth_confirm_attempt_waits(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        let throttle = Arc::new(SecondFactorThrottle::default());
+        let _ = setup(&pool, &me).await.unwrap();
+        let secret = stored_secret(&pool, uid).await;
+        for _ in 0..5 {
+            let err = confirm_with(&pool, &me, wrong_code(&secret), &throttle)
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        }
+        // Even the right code is refused during the wait.
+        let err = confirm_with(&pool, &me, code_now(&secret), &throttle)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err.2, Some(60));
+        assert!(!repo::status(&pool, uid).await.unwrap().totp);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn an_abandoned_setup_cannot_be_confirmed(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        let _ = setup(&pool, &me).await.unwrap();
+        let secret = stored_secret(&pool, uid).await;
+        sqlx::query(
+            "update user_totp set created_at = now() - interval '11 minutes' \
+             where user_id = $1",
+        )
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let err = confirm(&pool, &me, code_now(&secret)).await.unwrap_err();
+        assert_eq!(
+            err,
+            (StatusCode::CONFLICT, "no setup in progress".to_string())
+        );
+        assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -520,12 +650,16 @@ mod tests {
             State(pool.clone()),
             State(crate::TotpKey(None)),
             who(&me),
-            Json(dto::ReauthTokenReq { reauth: token }),
+            Json(dto::ReauthTokenReq {
+                reauth: token.clone(),
+            }),
         )
         .await
         .unwrap_err();
         assert_eq!(err.0, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(err.1, "authenticator unavailable");
+        // The password prompt isn't wasted.
+        assert!(reauth_valid(&pool, &token).await);
         let st = status(State(pool.clone()), State(crate::TotpKey(None)), who(&me))
             .await
             .unwrap()
@@ -541,13 +675,7 @@ mod tests {
         assert_eq!(err.0, StatusCode::CONFLICT);
         let _ = setup(&pool, &me).await.unwrap();
         let secret = stored_secret(&pool, uid).await;
-        let right = code_now(&secret);
-        let wrong = if right == "000000" {
-            "000001"
-        } else {
-            "000000"
-        };
-        let err = confirm(&pool, &me, wrong.into()).await.unwrap_err();
+        let err = confirm(&pool, &me, wrong_code(&secret)).await.unwrap_err();
         assert_eq!(err, (StatusCode::BAD_REQUEST, "invalid code".to_string()));
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
@@ -652,17 +780,25 @@ mod tests {
         assert_eq!(sessions(&pool, uid).await, 1);
         for c in &old {
             assert!(
-                repo::use_recovery_code(&pool, uid, &factors::hash_recovery_code(c))
-                    .await
-                    .unwrap()
-                    .is_none()
+                repo::use_recovery_code(
+                    &mut pool.acquire().await.unwrap(),
+                    uid,
+                    &factors::hash_recovery_code(c)
+                )
+                .await
+                .unwrap()
+                .is_none()
             );
         }
         assert!(
-            repo::use_recovery_code(&pool, uid, &factors::hash_recovery_code(&new[0]))
-                .await
-                .unwrap()
-                .is_some()
+            repo::use_recovery_code(
+                &mut pool.acquire().await.unwrap(),
+                uid,
+                &factors::hash_recovery_code(&new[0])
+            )
+            .await
+            .unwrap()
+            .is_some()
         );
         // The token was single use.
         let err = recovery_regenerate(
