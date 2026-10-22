@@ -41,6 +41,19 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
         r.headers()["access-control-allow-origin"],
         "http://example.test"
     );
+    // A throttled login's wait must be readable from another origin.
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .header("origin", "http://example.test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.headers()["access-control-expose-headers"], "retry-after");
     let r = app
         .oneshot(
             Request::builder()
@@ -125,10 +138,13 @@ async fn every_response_carries_the_security_headers() {
             .await
             .unwrap();
         let h = r.headers();
-        let csp = h["content-security-policy"].to_str().unwrap();
-        assert!(csp.contains("script-src 'self';"), "{path}: {csp}");
-        assert!(csp.contains("frame-ancestors 'none'"), "{path}");
-        assert!(csp.contains("https://cdn.brandfetch.io"), "{path}");
+        assert_eq!(
+            h["content-security-policy"],
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+img-src 'self' data: blob: https://cdn.brandfetch.io; font-src 'self' data:; connect-src 'self'; \
+frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+            "{path}"
+        );
         assert_eq!(h["x-content-type-options"], "nosniff", "{path}");
         assert_eq!(h["referrer-policy"], "no-referrer", "{path}");
         assert_eq!(h["x-frame-options"], "DENY", "{path}");

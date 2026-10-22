@@ -187,6 +187,8 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
             Method::OPTIONS,
         ])
         .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
+        // So a throttled login on another origin can say how long to wait.
+        .expose_headers(vec![axum::http::header::RETRY_AFTER])
         .allow_credentials(true);
 
     // Per-request span: every line a handler logs carries request_id, method,
