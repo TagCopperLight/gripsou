@@ -22,8 +22,10 @@ import type {
   PricePoint,
   Provider,
   ProviderGroup,
+  MfaStatus,
   Session,
   SessionUser,
+  TotpSetup,
   Transaction,
   TransactionCounts,
   TransactionFilterQuery,
@@ -39,6 +41,7 @@ import {
   afterLotsSaved,
   afterProviderChange,
   afterCorsOriginsChange,
+  afterMfaChange,
   afterSessionChange,
   afterSyncRequested,
   afterUserChange,
@@ -291,6 +294,62 @@ export function useRevokeOtherSessions() {
   return useMutation({
     mutationFn: () => deleteJson<void>("/auth/sessions"),
     onSuccess: () => afterSessionChange(qc),
+  });
+}
+
+export function useMfaStatus() {
+  return useQuery({
+    queryKey: keys.mfaStatus(),
+    queryFn: ({ signal }) => getJson<MfaStatus>("/auth/mfa/status", { signal }),
+  });
+}
+
+// The reauth routes answer 401 for a bad or used token, which is not a lost
+// login: skip the global handler that would sign the user out.
+const KEEP_SESSION = { skipGlobalUnauthorized: true } as const;
+
+export function useReauth() {
+  return useMutation({
+    mutationFn: (password: string) =>
+      postJson<{ reauth: string }>("/auth/reauth", { password }, KEEP_SESSION),
+  });
+}
+
+export function useTotpSetup() {
+  return useMutation({
+    mutationFn: (reauth: string) =>
+      postJson<TotpSetup>("/auth/mfa/totp/setup", { reauth }, KEEP_SESSION),
+  });
+}
+
+export function useTotpConfirm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) =>
+      postJson<{ recoveryCodes: string[] }>("/auth/mfa/totp/confirm", { code }),
+    onSuccess: () => afterMfaChange(qc),
+  });
+}
+
+export function useRemoveTotp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reauth: string) =>
+      deleteJson<void>("/auth/mfa/totp", { reauth }, KEEP_SESSION),
+    onSuccess: () => afterMfaChange(qc),
+  });
+}
+
+export function useRegenerateRecovery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reauth: string) =>
+      postJson<{ recoveryCodes: string[] }>(
+        "/auth/mfa/recovery/regenerate",
+        { reauth },
+        KEEP_SESSION,
+      ),
+    onSuccess: () => afterMfaChange(qc),
   });
 }
 

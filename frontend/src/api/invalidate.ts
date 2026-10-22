@@ -106,6 +106,12 @@ export function afterSessionChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.sessions()]);
 }
 
+// Setting up, removing or renewing a second factor changes the status card, and
+// confirming a setup signs the user's other sessions out.
+export function afterMfaChange(qc: QueryClient) {
+  return invalidateAll(qc, [keys.mfaStatus(), keys.sessions()]);
+}
+
 export function afterUserChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.users()]);
 }

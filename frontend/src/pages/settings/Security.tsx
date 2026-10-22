@@ -4,13 +4,21 @@ import { ChevronRight } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
+import { Dialog } from "../../components/Dialog";
+import { ReauthModal } from "../../components/ReauthModal";
+import { TotpSetupModal } from "../../components/TotpSetupModal";
+import { BackupCodesView } from "../../components/BackupCodesView";
 import { SessionDetailModal } from "../../components/SessionDetailModal";
 import {
   useChangePassword,
+  useMfaStatus,
+  useRemoveTotp,
+  useRegenerateRecovery,
   useSessions,
   useRevokeSession,
   useRevokeOtherSessions,
 } from "../../api/hooks";
+import { ApiError } from "../../api/client";
 import type { Session } from "../../api/types";
 import { formatDate, formatRelative } from "../../lib/date";
 import { passwordLengthOk } from "../../lib/password";
@@ -61,6 +69,35 @@ export function SettingsSecurity() {
   const revokeOthers = useRevokeOtherSessions();
   const hasOthers = sessions.some((s) => !s.current);
 
+
+  const { data: mfa } = useMfaStatus();
+  const removeTotp = useRemoveTotp();
+  const regenerate = useRegenerateRecovery();
+  // What the password prompt is for; the token it earns is spent right away.
+  const [asking, setAsking] = useState<null | "setup" | "remove" | "regenerate">(null);
+  const [setupToken, setSetupToken] = useState<string | null>(null);
+  const [newCodes, setNewCodes] = useState<string[] | null>(null);
+  const [mfaError, setMfaError] = useState<null | "expired" | "failed">(null);
+
+  const failWith = (err: unknown) =>
+    setMfaError(err instanceof ApiError && err.status === 401 ? "expired" : "failed");
+  const onReauthed = (token: string) => {
+    const action = asking;
+    setAsking(null);
+    setMfaError(null);
+    if (action === "setup") setSetupToken(token);
+    else if (action === "remove") removeTotp.mutate(token, { onError: failWith });
+    else if (action === "regenerate")
+      regenerate.mutate(token, {
+        onSuccess: (res) => setNewCodes(res.recoveryCodes),
+        onError: failWith,
+      });
+  };
+  const ask = (action: "setup" | "remove" | "regenerate") => {
+    setMfaError(null);
+    setAsking(action);
+  };
+  const mfaBusy = removeTotp.isPending || regenerate.isPending;
 
   const [detail, setDetail] = useState<Session | null>(null);
 
@@ -117,6 +154,69 @@ export function SettingsSecurity() {
             </Button>
           </div>
         </div>
+      </Surface>
+
+      <Surface className="p-6 h-full flex flex-col">
+        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.security.twoFactor")}</h2>
+        <p className="mb-5 text-sm text-fg-faint">{t("settings.security.twoFactorDescription")}</p>
+        {mfa && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[15px] text-fg">{t("settings.security.authenticatorApp")}</span>
+                {mfa.totp && (
+                  <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                    {t("settings.security.on")}
+                  </span>
+                )}
+                {!mfa.available && !mfa.totp && (
+                  <span className="text-sm text-fg-faint">{t("settings.security.totpUnavailable")}</span>
+                )}
+              </div>
+              {mfa.totp ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => ask("remove")}
+                  disabled={mfaBusy}
+                  className="shrink-0 text-red hover:text-red"
+                >
+                  {t("settings.security.remove")}
+                </Button>
+              ) : (
+                mfa.available && (
+                  <Button variant="ghost" onClick={() => ask("setup")} className="shrink-0">
+                    {t("settings.security.setUp")}
+                  </Button>
+                )
+              )}
+            </div>
+            {mfa.totp && (
+              <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-[15px] text-fg">{t("settings.security.backupCodes")}</span>
+                  <span className="text-sm text-fg-faint">
+                    {t("settings.security.codesLeft", { count: mfa.recoveryRemaining })}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => ask("regenerate")}
+                  disabled={mfaBusy}
+                  className="shrink-0"
+                >
+                  {t("settings.security.regenerate")}
+                </Button>
+              </div>
+            )}
+            {mfaError && (
+              <p className="text-sm text-red">
+                {mfaError === "expired"
+                  ? t("settings.security.reauthExpired")
+                  : t("settings.security.actionFailed")}
+              </p>
+            )}
+          </div>
+        )}
       </Surface>
       </div>
 
@@ -201,6 +301,31 @@ export function SettingsSecurity() {
           </div>
         )}
       </Surface>
+
+      {asking && <ReauthModal onConfirmed={onReauthed} onClose={() => setAsking(null)} />}
+
+      {setupToken && (
+        <TotpSetupModal
+          reauth={setupToken}
+          onClose={() => setSetupToken(null)}
+          onReauthExpired={() => {
+            setSetupToken(null);
+            setMfaError("expired");
+          }}
+        />
+      )}
+
+      {newCodes && (
+        <Dialog
+          title={t("settings.security.backupCodesTitle")}
+          // The codes are shown only once: the button is the way out.
+          onClose={() => {}}
+          busy
+          footer={<Button onClick={() => setNewCodes(null)}>{t("settings.security.savedThem")}</Button>}
+        >
+          <BackupCodesView codes={newCodes} />
+        </Dialog>
+      )}
 
       {detail && (
         <SessionDetailModal

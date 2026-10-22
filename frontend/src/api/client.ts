@@ -128,7 +128,7 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return bodyOf<T>(res);
 }
 
-export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {
+export async function deleteJson<T>(path: string, body?: unknown, opts?: HandleOptions): Promise<T> {
   const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method: "DELETE",
@@ -138,7 +138,7 @@ export async function deleteJson<T>(path: string, body?: unknown): Promise<T> {
         : authHeaders({ "Content-Type": "application/json" }),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  handle(res, path, "DELETE", requestToken);
+  handle(res, path, "DELETE", requestToken, opts);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { SettingsSecurity } from "./Security";
+
 import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
 
@@ -166,3 +167,128 @@ describe("SettingsSecurity sessions card", () => {
   });
 });
 
+
+type Status = { totp: boolean; recoveryRemaining: number; available: boolean };
+const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+function stubMfa(status: Status, extra: Record<string, () => Response> = {}) {
+  const routes: Record<string, () => Response> = {
+    "/api/auth/mfa/status": () => jsonRes(status),
+    "/api/auth/reauth": () => jsonRes({ reauth: "tok-1" }),
+    ...extra,
+  };
+  const fetchMock = vi.fn(async (url: string) => {
+    const route = routes[url];
+    if (!route) throw new Error(`unexpected ${url}`);
+    return route();
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+async function confirmReauth() {
+  fireEvent.change(await screen.findByLabelText("Password", { selector: "input[autocomplete=current-password]" }), {
+    target: { value: "hunter2hunter2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+}
+
+describe("SettingsSecurity two-factor card", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("offers Set up when no authenticator is registered", async () => {
+    stubMfa({ totp: false, recoveryRemaining: 0, available: true });
+    render(withClient(<SettingsSecurity />));
+    expect(await screen.findByRole("button", { name: "Set up" })).toBeInTheDocument();
+    expect(screen.getByText("Authenticator app")).toBeInTheDocument();
+    expect(screen.queryByText("Backup codes")).not.toBeInTheDocument();
+  });
+
+  it("shows On, Remove and the codes left when it is registered", async () => {
+    stubMfa({ totp: true, recoveryRemaining: 7, available: true });
+    render(withClient(<SettingsSecurity />));
+    expect(await screen.findByText("On")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    expect(screen.getByText("7 left")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regenerate" })).toBeInTheDocument();
+  });
+
+  it("uses the singular for one code left", async () => {
+    stubMfa({ totp: true, recoveryRemaining: 1, available: true });
+    render(withClient(<SettingsSecurity />));
+    expect(await screen.findByText("1 left")).toBeInTheDocument();
+  });
+
+  it("says so, with no button, when the server cannot do it", async () => {
+    stubMfa({ totp: false, recoveryRemaining: 0, available: false });
+    render(withClient(<SettingsSecurity />));
+    expect(await screen.findByText("Not available on this server.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set up" })).not.toBeInTheDocument();
+  });
+
+  it("asks for the password, then opens the setup with the reauth token", async () => {
+    const fetchMock = stubMfa(
+      { totp: false, recoveryRemaining: 0, available: true },
+      {
+        "/api/auth/mfa/totp/setup": () => jsonRes({ secret: "ABCDEFGH", qrSvg: "<svg/>" }),
+      },
+    );
+    render(withClient(<SettingsSecurity />));
+    fireEvent.click(await screen.findByRole("button", { name: "Set up" }));
+    await confirmReauth();
+    expect(await screen.findByRole("img")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/mfa/totp/setup",
+      expect.objectContaining({ body: JSON.stringify({ reauth: "tok-1" }) }),
+    );
+  });
+
+  it("shows the expiry message when the setup token was rejected", async () => {
+    stubMfa(
+      { totp: false, recoveryRemaining: 0, available: true },
+      { "/api/auth/mfa/totp/setup": () => new Response("no", { status: 401 }) },
+    );
+    render(withClient(<SettingsSecurity />));
+    fireEvent.click(await screen.findByRole("button", { name: "Set up" }));
+    await confirmReauth();
+    expect(await screen.findByText("Confirmation expired. Please try again.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("removes the authenticator after reauthenticating, sending the token in the body", async () => {
+    const fetchMock = stubMfa(
+      { totp: true, recoveryRemaining: 5, available: true },
+      { "/api/auth/mfa/totp": () => new Response(null, { status: 204 }) },
+    );
+    render(withClient(<SettingsSecurity />));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await confirmReauth();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/auth/mfa/totp",
+        expect.objectContaining({ method: "DELETE", body: JSON.stringify({ reauth: "tok-1" }) }),
+      ),
+    );
+  });
+
+  it("regenerates the backup codes and shows them", async () => {
+    const fetchMock = stubMfa(
+      { totp: true, recoveryRemaining: 2, available: true },
+      {
+        "/api/auth/mfa/recovery/regenerate": () =>
+          jsonRes({ recoveryCodes: ["aaaa-1111", "bbbb-2222"] }),
+      },
+    );
+    render(withClient(<SettingsSecurity />));
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    await confirmReauth();
+    expect(await screen.findByText("aaaa-1111")).toBeInTheDocument();
+    expect(screen.getByText("bbbb-2222")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/mfa/recovery/regenerate",
+      expect.objectContaining({ body: JSON.stringify({ reauth: "tok-1" }) }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "I've saved them" }));
+    expect(screen.queryByText("aaaa-1111")).not.toBeInTheDocument();
+  });
+});

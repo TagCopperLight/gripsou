@@ -366,3 +366,6 @@ export type InvestmentReturns = {
 
 export type MfaMethod = "totp" | "recovery";
 export type MfaRequired = { mfaRequired: true; challenge: string; methods: MfaMethod[] };
+
+export type MfaStatus = { totp: boolean; recoveryRemaining: number; available: boolean };
+export type TotpSetup = { secret: string; qrSvg: string };

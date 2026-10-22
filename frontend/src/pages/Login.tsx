@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 import { ApiError } from "../api/client";
+import { sixDigits, throttleMinutes } from "../lib/mfa";
 import type { MfaRequired } from "../api/types";
 
 export function Login() {
@@ -27,10 +28,10 @@ export function Login() {
     if (mfa && !pending) codeRef.current?.focus();
   }, [mfa, useBackup, pending]);
 
-  const throttled = (err: unknown) =>
-    err instanceof ApiError && err.status === 429
-      ? { minutes: Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)) }
-      : null;
+  const throttled = (err: unknown) => {
+    const minutes = throttleMinutes(err);
+    return minutes === null ? null : { minutes };
+  };
 
   const backToPassword = (next: typeof error = null) => {
     setMfa(null);
@@ -66,7 +67,7 @@ export function Login() {
       setCode(raw);
       return;
     }
-    const digits = raw.replace(/\D/g, "").slice(0, 6);
+    const digits = sixDigits(raw);
     setCode(digits);
     if (digits.length === 6) void verify(digits);
   };
