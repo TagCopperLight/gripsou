@@ -27,6 +27,18 @@ pub struct AppState {
     pub db: sqlx::PgPool,
     pub cors_origins: Arc<RwLock<Vec<String>>>,
     pub login_throttle: Arc<LoginThrottle>,
+    pub totp_key: TotpKey,
+}
+
+/// `ENCRYPTION_KEY` as the second-factor handlers see it. `None` when unset:
+/// two-factor is then unavailable rather than half-working.
+#[derive(Clone)]
+pub struct TotpKey(pub Option<Arc<str>>);
+
+impl FromRef<AppState> for TotpKey {
+    fn from_ref(state: &AppState) -> TotpKey {
+        state.totp_key.clone()
+    }
 }
 
 impl FromRef<AppState> for sqlx::PgPool {
@@ -53,6 +65,7 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
         db: db.clone(),
         cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
+        totp_key: TotpKey(std::env::var("ENCRYPTION_KEY").ok().map(Arc::from)),
     };
 
     let index_html = static_dir.join("index.html");
@@ -60,6 +73,8 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     let api = Router::new()
         .route("/health", get(health))
         .route("/auth/login", post(handlers::login))
+        .route("/auth/login/verify", post(handlers::login_verify))
+        .route("/auth/features", get(handlers::features))
         .route(
             "/auth/me",
             get(handlers::me).patch(handlers::update_profile),

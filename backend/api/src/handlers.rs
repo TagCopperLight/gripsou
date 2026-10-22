@@ -907,7 +907,7 @@ pub async fn login(
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginReq>,
-) -> Result<Json<dto::LoginResponse>, LoginError> {
+) -> Result<Json<dto::LoginOutcome>, LoginError> {
     let unauthorized = || {
         LoginError(
             StatusCode::UNAUTHORIZED,
@@ -947,33 +947,161 @@ pub async fn login(
         tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
+    let status = gripsou_core::repo::mfa::status(&pool, creds.id)
+        .await
+        .map_err(internal)?;
+    if gripsou_core::repo::mfa::has_second_factor(&status) {
+        // The password alone proves nothing yet: the attempt stays counted
+        // until the second factor is right (see `login_verify`).
+        let token = auth::generate_token();
+        gripsou_core::repo::login_challenge::create(
+            &pool,
+            &auth::hash_token(&token),
+            Some(creds.id),
+            "mfa",
+            serde_json::json!({ "remember": body.remember }),
+        )
+        .await
+        .map_err(internal)?;
+        let mut methods = Vec::new();
+        if status.totp {
+            methods.extend(["totp", "recovery"]);
+        }
+        tracing::info!(user_id = %creds.id, ip = %ip, "mfa challenge issued");
+        return Ok(Json(dto::LoginOutcome::Mfa(dto::MfaRequired {
+            mfa_required: true,
+            challenge: token,
+            methods,
+        })));
+    }
     throttle.record_success(&body.email, &ip);
 
-    let token = auth::generate_token();
-    let hash = auth::hash_token(&token);
-    let ttl = if body.remember {
-        Duration::days(30)
-    } else {
-        Duration::days(1)
-    };
-    let expires_at = Utc::now() + ttl;
-    gripsou_core::repo::session::create(
-        &pool,
-        creds.id,
-        &hash,
-        user_agent,
-        Some(ip.as_str()),
-        body.remember,
-        expires_at,
-    )
-    .await
-    .map_err(internal)?;
+    let resp = issue_session(&pool, &headers, peer, creds.id, body.remember).await?;
+    tracing::info!(user_id = %creds.id, ip = %ip, user_agent = user_agent.unwrap_or(""), method = "password", "login succeeded");
+    Ok(Json(dto::LoginOutcome::Session(resp)))
+}
 
-    tracing::info!(user_id = %creds.id, ip = %ip, user_agent = user_agent.unwrap_or(""), "login succeeded");
-    Ok(Json(dto::LoginResponse {
-        token,
-        user: dto::SessionUser::from_credentials(&creds),
-    }))
+/// Second login step: a challenge from `login` plus a TOTP or recovery code
+/// becomes a session.
+pub async fn login_verify(
+    State(pool): State<PgPool>,
+    State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
+    State(key): State<crate::TotpKey>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(body): Json<dto::LoginVerifyReq>,
+) -> Result<Json<dto::LoginResponse>, LoginError> {
+    use gripsou_core::repo::{login_challenge, mfa};
+    let expired = || {
+        LoginError(
+            StatusCode::UNAUTHORIZED,
+            "challenge expired".to_string(),
+            None,
+        )
+    };
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
+    let ip = client_ip(&headers, peer);
+    let challenge_hash = auth::hash_token(&body.challenge);
+    let challenge = login_challenge::find_valid(&pool, &challenge_hash, "mfa")
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    let user_id = challenge.user_id.ok_or_else(expired)?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    if let Err(blocked) = throttle.try_attempt(&profile.email, &ip, std::time::Instant::now()) {
+        if blocked.first_refusal {
+            tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+        }
+        return Err(LoginError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many attempts".to_string(),
+            Some(blocked.retry_after_secs()),
+        ));
+    }
+
+    let method = match (&body.totp, &body.recovery_code) {
+        (Some(code), None) => {
+            let key = key
+                .0
+                .as_deref()
+                .ok_or_else(|| internal("two-factor key missing: ENCRYPTION_KEY is not set"))?;
+            let row = mfa::totp(&pool, user_id)
+                .await
+                .map_err(internal)?
+                .filter(|r| r.confirmed);
+            let step = match row {
+                Some(row) => {
+                    let secret =
+                        gripsou_core::crypto::decrypt(key, &row.secret_enc).map_err(internal)?;
+                    let now = Utc::now().timestamp().max(0) as u64;
+                    crate::factors::match_totp(&secret, code, now)
+                }
+                None => None,
+            };
+            let accepted = match step {
+                Some(step) => mfa::use_totp_step(&pool, user_id, step as i64)
+                    .await
+                    .map_err(internal)?,
+                None => false,
+            };
+            accepted.then_some("totp")
+        }
+        (None, Some(code)) => {
+            let hash = crate::factors::hash_recovery_code(code);
+            match mfa::use_recovery_code(&pool, user_id, &hash)
+                .await
+                .map_err(internal)?
+            {
+                Some(remaining) => {
+                    tracing::info!(user_id = %user_id, remaining, "recovery code used");
+                    Some("recovery")
+                }
+                None => None,
+            }
+        }
+        _ => {
+            return Err(LoginError(
+                StatusCode::BAD_REQUEST,
+                "code required".to_string(),
+                None,
+            ));
+        }
+    };
+    let Some(method) = method else {
+        tracing::warn!(email = %profile.email, ip = %ip, user_agent = user_agent.unwrap_or(""), step = "second_factor", "login failed");
+        return Err(LoginError(
+            StatusCode::BAD_REQUEST,
+            "invalid code".to_string(),
+            None,
+        ));
+    };
+
+    // A parallel request with the same right code may have won already.
+    let challenge = login_challenge::consume(&pool, &challenge_hash, "mfa")
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    throttle.record_success(&profile.email, &ip);
+    let remember = challenge
+        .state
+        .get("remember")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let resp = issue_session(&pool, &headers, peer, user_id, remember).await?;
+    tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent.unwrap_or(""), method, "login succeeded");
+    Ok(Json(resp))
+}
+
+/// Which optional sign-in features this instance offers.
+pub async fn features(State(key): State<crate::TotpKey>) -> Json<dto::Features> {
+    Json(dto::Features {
+        totp: key.0.is_some(),
+    })
 }
 
 pub async fn me(
@@ -1433,13 +1561,15 @@ pub async fn webhook(
     }
 }
 
-/// Issue a 30-day session for `user_id` and build the login-shaped response.
-/// Shared by the invite/reset redeem handlers — both auto-log-in the user.
+/// Issue a session for `user_id` (30 days when remembered, else 1 day) and
+/// build the login-shaped response. Shared by login, its second step and the
+/// invite/reset redeem handlers. Logs nothing: each caller words its own line.
 async fn issue_session(
     pool: &PgPool,
     headers: &HeaderMap,
     peer: SocketAddr,
     user_id: Uuid,
+    remember: bool,
 ) -> Result<dto::LoginResponse, (StatusCode, String)> {
     let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
         .await
@@ -1454,14 +1584,19 @@ async fn issue_session(
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
     let ip = client_ip(headers, peer);
-    let expires_at = Utc::now() + Duration::days(30);
+    let ttl = if remember {
+        Duration::days(30)
+    } else {
+        Duration::days(1)
+    };
+    let expires_at = Utc::now() + ttl;
     gripsou_core::repo::session::create(
         pool,
         user_id,
         &hash,
         user_agent,
         Some(ip.as_str()),
-        true,
+        remember,
         expires_at,
     )
     .await
@@ -1515,7 +1650,7 @@ pub async fn redeem_invite(
                 "an account with this email already exists",
             ))?
             .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
-    let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    let resp = issue_session(&pool, &headers, peer, user_id, true).await?;
     tracing::info!(user_id = %user_id, "invite redeemed");
     Ok(Json(resp))
 }
@@ -1535,7 +1670,7 @@ pub async fn redeem_reset(
         .await
         .map_err(internal)?
         .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
-    let resp = issue_session(&pool, &headers, peer, user_id).await?;
+    let resp = issue_session(&pool, &headers, peer, user_id, true).await?;
     tracing::info!(user_id = %user_id, "reset link redeemed");
     Ok(Json(resp))
 }
@@ -1575,7 +1710,7 @@ mod auth_tests {
         throttle: &Arc<LoginThrottle>,
         email: &str,
         pw: &str,
-    ) -> Result<Json<dto::LoginResponse>, LoginError> {
+    ) -> Result<Json<dto::LoginOutcome>, LoginError> {
         login(
             State(pool.clone()),
             State(throttle.clone()),
@@ -1681,6 +1816,305 @@ mod auth_tests {
         assert_eq!(throttle.tracked_keys(), (0, 0));
     }
 
+    fn test_key() -> crate::TotpKey {
+        crate::TotpKey(Some(Arc::from("a".repeat(64))))
+    }
+
+    /// Enrol TOTP for `user_id` with a secret encrypted under the test key and
+    /// ten recovery codes; returns the secret and the plain recovery codes.
+    async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
+        use gripsou_core::repo::mfa;
+        let secret = crate::factors::new_totp_secret();
+        let enc = gripsou_core::crypto::encrypt(&"a".repeat(64), &secret).unwrap();
+        assert!(
+            mfa::upsert_unconfirmed_totp(pool, user_id, &enc)
+                .await
+                .unwrap()
+        );
+        let codes = crate::factors::new_recovery_codes();
+        let hashes: Vec<Vec<u8>> = codes
+            .iter()
+            .map(|c| crate::factors::hash_recovery_code(c))
+            .collect();
+        assert!(mfa::confirm_totp(pool, user_id, 0, &hashes).await.unwrap());
+        (secret, codes)
+    }
+
+    fn now_code(secret: &[u8]) -> String {
+        let now = Utc::now().timestamp() as u64;
+        crate::factors::totp_code(secret, crate::factors::current_step(now))
+    }
+
+    async fn login_outcome(
+        pool: &PgPool,
+        throttle: &Arc<LoginThrottle>,
+        email: &str,
+        pw: &str,
+        remember: bool,
+    ) -> dto::LoginOutcome {
+        login(
+            State(pool.clone()),
+            State(throttle.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(LoginReq {
+                email: email.into(),
+                password: pw.into(),
+                remember,
+            }),
+        )
+        .await
+        .expect("login ok")
+        .0
+    }
+
+    async fn mfa_challenge(pool: &PgPool, throttle: &Arc<LoginThrottle>, remember: bool) -> String {
+        match login_outcome(pool, throttle, "a@t.local", "hunter22", remember).await {
+            dto::LoginOutcome::Mfa(m) => m.challenge,
+            other => panic!("expected mfa, got {other:?}"),
+        }
+    }
+
+    async fn verify(
+        pool: &PgPool,
+        throttle: &Arc<LoginThrottle>,
+        challenge: &str,
+        totp: Option<String>,
+        recovery: Option<String>,
+    ) -> Result<Json<dto::LoginResponse>, LoginError> {
+        login_verify(
+            State(pool.clone()),
+            State(throttle.clone()),
+            State(test_key()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(dto::LoginVerifyReq {
+                challenge: challenge.into(),
+                totp,
+                recovery_code: recovery,
+            }),
+        )
+        .await
+    }
+
+    async fn session_count(pool: &PgPool, user_id: Uuid) -> i64 {
+        sqlx::query_scalar("select count(*) from session where user_id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn login_without_second_factor_gives_a_session(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let out = login_outcome(&pool, &throttle, "a@t.local", "hunter22", false).await;
+        assert!(matches!(out, dto::LoginOutcome::Session(_)));
+        assert_eq!(session_count(&pool, uid).await, 1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn login_with_totp_asks_for_a_code_and_makes_no_session(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        match login_outcome(&pool, &throttle, "a@t.local", "hunter22", false).await {
+            dto::LoginOutcome::Mfa(m) => {
+                assert!(m.mfa_required);
+                assert_eq!(m.methods, vec!["totp", "recovery"]);
+                assert!(!m.challenge.is_empty());
+            }
+            other => panic!("expected mfa, got {other:?}"),
+        }
+        assert_eq!(session_count(&pool, uid).await, 0);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn correct_totp_gives_a_session_that_keeps_remember(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let (secret, _) = enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let ch = mfa_challenge(&pool, &throttle, true).await;
+        let resp = verify(&pool, &throttle, &ch, Some(now_code(&secret)), None)
+            .await
+            .expect("verify ok");
+        assert_eq!(resp.0.user.email, "a@t.local");
+        let remembered: bool =
+            sqlx::query_scalar("select remembered from session where user_id = $1")
+                .bind(uid)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(remembered);
+        assert_eq!(session_count(&pool, uid).await, 1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_totp_code_works_once(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let (secret, _) = enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let code = now_code(&secret);
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let _ = verify(&pool, &throttle, &ch, Some(code.clone()), None)
+            .await
+            .expect("first use");
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let err = verify(&pool, &throttle, &ch, Some(code), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_wrong_code_keeps_the_challenge(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let (secret, _) = enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let wrong = if now_code(&secret) == "000000" {
+            "000001"
+        } else {
+            "000000"
+        };
+        let err = verify(&pool, &throttle, &ch, Some(wrong.into()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            (err.0, err.1.as_str()),
+            (StatusCode::BAD_REQUEST, "invalid code")
+        );
+        let _ = verify(&pool, &throttle, &ch, Some(now_code(&secret)), None)
+            .await
+            .expect("right code on the same challenge");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn exactly_one_code_kind_is_required(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let none = verify(&pool, &throttle, &ch, None, None).await.unwrap_err();
+        assert_eq!(
+            (none.0, none.1.as_str()),
+            (StatusCode::BAD_REQUEST, "code required")
+        );
+        let both = verify(&pool, &throttle, &ch, Some("1".into()), Some("x".into()))
+            .await
+            .unwrap_err();
+        assert_eq!(both.1, "code required");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_recovery_code_works_once(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let (_, codes) = enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let _ = verify(&pool, &throttle, &ch, None, Some(codes[0].clone()))
+            .await
+            .expect("recovery ok");
+        let status = gripsou_core::repo::mfa::status(&pool, uid).await.unwrap();
+        assert_eq!(status.recovery_remaining, 9);
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let err = verify(&pool, &throttle, &ch, None, Some(codes[0].clone()))
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn unusable_challenges_are_refused(pool: PgPool) {
+        use gripsou_core::repo::login_challenge;
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let (secret, _) = enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let code = now_code(&secret);
+
+        let err = verify(&pool, &throttle, "nope", Some(code.clone()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            (err.0, err.1.as_str()),
+            (StatusCode::UNAUTHORIZED, "challenge expired")
+        );
+
+        login_challenge::create(
+            &pool,
+            &auth::hash_token("re"),
+            Some(uid),
+            "reauth",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+        let err = verify(&pool, &throttle, "re", Some(code.clone()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        sqlx::query("update login_challenge set expires_at = now() - interval '1 minute' where token_hash = $1")
+            .bind(auth::hash_token(&ch))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let err = verify(&pool, &throttle, &ch, Some(code.clone()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let _ = verify(&pool, &throttle, &ch, Some(code), None)
+            .await
+            .expect("first use");
+        let err = verify(&pool, &throttle, &ch, Some("123456".into()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn wrong_codes_are_throttled(pool: PgPool) {
+        use gripsou_core::repo::login_challenge;
+        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        enable_totp(&pool, uid).await;
+        let throttle = Arc::new(LoginThrottle::default());
+        // Issued directly: `login` itself counts one attempt.
+        login_challenge::create(
+            &pool,
+            &auth::hash_token("ch"),
+            Some(uid),
+            "mfa",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+        for _ in 0..5 {
+            let err = verify(&pool, &throttle, "ch", Some("000000".into()), None)
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        }
+        let err = verify(&pool, &throttle, "ch", Some("000000".into()), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            err.into_response()
+                .headers()
+                .contains_key(axum::http::header::RETRY_AFTER)
+        );
+    }
+
+    #[tokio::test]
+    async fn features_follow_the_key() {
+        assert!(features(State(test_key())).await.0.totp);
+        assert!(!features(State(crate::TotpKey(None))).await.0.totp);
+    }
+
     /// Seed an admin user and return their id — mirrors what `seed_user` does for
     /// the existing tests (role "admin", email "a@t.local").
     async fn seed_admin_user(pool: &PgPool) -> Uuid {
@@ -1709,7 +2143,7 @@ mod auth_tests {
     }
 
     async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
-        login(
+        let outcome = login(
             State(pool.clone()),
             no_throttle(),
             axum::http::HeaderMap::new(),
@@ -1721,9 +2155,15 @@ mod auth_tests {
             }),
         )
         .await
-        .expect("login ok")
-        .0
-        .token
+        .expect("login ok");
+        session_of(outcome).token
+    }
+
+    fn session_of(outcome: Json<dto::LoginOutcome>) -> dto::LoginResponse {
+        match outcome.0 {
+            dto::LoginOutcome::Session(r) => r,
+            other => panic!("expected a session, got {other:?}"),
+        }
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1881,8 +2321,9 @@ mod auth_tests {
         )
         .await
         .expect("login ok");
-        assert!(!resp.0.token.is_empty());
-        assert_eq!(resp.0.user.email, "a@t.local");
+        let resp = session_of(resp);
+        assert!(!resp.token.is_empty());
+        assert_eq!(resp.user.email, "a@t.local");
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1922,7 +2363,7 @@ mod auth_tests {
         .await
         .expect("login ok");
 
-        let hash = auth::hash_token(&resp.0.token);
+        let hash = auth::hash_token(&session_of(resp).token);
         let session = gripsou_core::repo::session::find_valid_by_hash(&pool, &hash)
             .await
             .unwrap();
