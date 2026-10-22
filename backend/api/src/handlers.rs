@@ -899,6 +899,8 @@ impl axum::response::IntoResponse for LoginError {
     }
 }
 
+const MAX_EMAIL_LEN: usize = 254;
+
 pub async fn login(
     State(pool): State<PgPool>,
     State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
@@ -916,10 +918,18 @@ pub async fn login(
     let user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
+    // No real address is longer (RFC 5321). Refused before the email can
+    // become a throttle key or a log field.
+    if body.email.len() > MAX_EMAIL_LEN {
+        return Err(unauthorized());
+    }
     let ip = client_ip(&headers, peer);
     let now = std::time::Instant::now();
-    if let Err(blocked) = throttle.check(&body.email, &ip, now) {
-        tracing::warn!(email = %body.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+    // Counts the attempt as a failure until the password proves right.
+    if let Err(blocked) = throttle.try_attempt(&body.email, &ip, now) {
+        if blocked.first_refusal {
+            tracing::warn!(email = %body.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+        }
         return Err(LoginError(
             StatusCode::TOO_MANY_REQUESTS,
             "too many attempts".to_string(),
@@ -934,11 +944,10 @@ pub async fn login(
         creds.as_ref().map(|c| c.password_hash.as_str()),
     );
     let Some(creds) = creds.filter(|_| ok) else {
-        throttle.record_failure(&body.email, &ip, now);
         tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
-    throttle.record_success(&body.email);
+    throttle.record_success(&body.email, &ip);
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
@@ -1633,6 +1642,43 @@ mod auth_tests {
             .await
             .unwrap_err();
         assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    /// A burst sent all at once gets no more guesses than the same requests
+    /// sent one by one: each attempt is counted before the password is checked.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let mut set = tokio::task::JoinSet::new();
+        for _ in 0..10 {
+            let (pool, throttle) = (pool.clone(), throttle.clone());
+            set.spawn(async move {
+                try_login(&pool, &throttle, "a@t.local", "wrong")
+                    .await
+                    .unwrap_err()
+                    .0
+            });
+        }
+        let statuses = set.join_all().await;
+        let count = |s| statuses.iter().filter(|&&x| x == s).count();
+        assert_eq!(count(StatusCode::UNAUTHORIZED), 5, "{statuses:?}");
+        assert_eq!(count(StatusCode::TOO_MANY_REQUESTS), 5, "{statuses:?}");
+    }
+
+    /// An oversized email is refused like a wrong one, before it can become a
+    /// throttle key (or a log field).
+    #[sqlx::test(migrations = "../migrations")]
+    async fn an_oversized_email_is_refused_without_counting(pool: PgPool) {
+        let throttle = Arc::new(LoginThrottle::default());
+        let email = format!("{}@t.local", "a".repeat(292));
+        assert_eq!(email.len(), 300);
+        for _ in 0..6 {
+            let err = try_login(&pool, &throttle, &email, "x").await.unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+            assert_eq!(err.1, "invalid email or password");
+        }
+        assert_eq!(throttle.tracked_keys(), (0, 0));
     }
 
     /// Seed an admin user and return their id — mirrors what `seed_user` does for
