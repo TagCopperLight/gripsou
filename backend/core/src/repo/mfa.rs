@@ -243,6 +243,29 @@ pub async fn clear_all(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<C
     })
 }
 
+/// Operator escape hatch: turn off every second factor of the user with this
+/// email and sign them out everywhere, in one transaction. `None` when no such
+/// user exists; otherwise what was removed and how many sessions ended.
+pub async fn reset_for_email(
+    pool: &sqlx::PgPool,
+    email: &str,
+) -> Result<Option<(Cleared, u64)>, CoreError> {
+    let mut tx = pool.begin().await?;
+    let Some(user_id) = sqlx::query_scalar!(r#"select id from users where email = $1"#, email)
+        .fetch_optional(&mut *tx)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let cleared = clear_all(&mut tx, user_id).await?;
+    let sessions = sqlx::query!(r#"delete from session where user_id = $1"#, user_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+    tx.commit().await?;
+    Ok(Some((cleared, sessions)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,5 +425,48 @@ mod tests {
 
         let mut conn = pool.acquire().await.unwrap();
         assert!(!clear_all(&mut conn, u).await.unwrap().any());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn reset_for_email_clears_and_signs_out(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let other = seed_user(&pool, "b@t.local").await;
+        for who in [u, other] {
+            upsert_unconfirmed_totp(&pool, who, "s").await.unwrap();
+            confirm_totp(&pool, who, 1, &codes(3)).await.unwrap();
+            sqlx::query(
+                "insert into session (user_id, token_hash, remembered, expires_at) \
+                 values ($1, decode('00','hex') || $1::text::bytea, false, now() + interval '1 day')",
+            )
+            .bind(who)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        add_passkey(&pool, u, &[1]).await;
+
+        let (cleared, sessions) = reset_for_email(&pool, "a@t.local").await.unwrap().unwrap();
+        assert_eq!(
+            (cleared.totp, cleared.recovery_codes, cleared.passkeys),
+            (1, 3, 1)
+        );
+        assert_eq!(sessions, 1);
+        assert!(!has_second_factor(&status(&pool, u).await.unwrap()));
+        assert!(has_second_factor(&status(&pool, other).await.unwrap()));
+        let left: i64 = sqlx::query_scalar("select count(*) from session")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn reset_for_email_unknown_is_none(pool: PgPool) {
+        assert!(
+            reset_for_email(&pool, "nobody@t.local")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }

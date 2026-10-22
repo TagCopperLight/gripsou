@@ -1666,10 +1666,13 @@ pub async fn redeem_reset(
     auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
-    let user_id = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
+    let (user_id, cleared) = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+    if cleared.any() {
+        tracing::info!(user_id = %user_id, reason = "reset", "second factors cleared");
+    }
     let resp = issue_session(&pool, &headers, peer, user_id, true).await?;
     tracing::info!(user_id = %user_id, "reset link redeemed");
     Ok(Json(resp))

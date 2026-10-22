@@ -228,6 +228,7 @@
     "emailExists": "Un compte avec cet e-mail existe déjà",
     "createAccountButton": "Créer le compte",
     "resetPassword": "Réinitialiser votre mot de passe",
+    "resetClearsTwoFactor": "La double authentification sera désactivée. Vous pourrez la réactiver dans les paramètres.",
     "resetForEmail": "Définissez un nouveau mot de passe pour {{email}}.",
     "newPassword": "Nouveau mot de passe",
     "updatePasswordButton": "Mettre à jour le mot de passe",
@@ -328,6 +329,7 @@
         "heading": "Envoyez ce lien à usage unique",
         "body": "Toute personne qui ouvre ce lien peut créer son propre compte. Le lien expire dans 24 heures."
       },
+      "resetClearsTwoFactor": "Ce lien désactive aussi sa double authentification.",
       "reset": {
         "title": "Réinitialiser le mot de passe",
         "heading": "Envoyez ce lien à usage unique",

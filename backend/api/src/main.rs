@@ -18,6 +18,13 @@ async fn main() -> anyhow::Result<()> {
     // The log table exists from here; lines queued since startup are written too.
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
+
+    if env::args().nth(1).as_deref() == Some("reset-2fa") {
+        let code = reset_two_factor(&db, env::args().nth(2)).await;
+        log_handle.shutdown().await;
+        std::process::exit(code);
+    }
+
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone()));
 
     let initial_cors = gripsou_core::repo::settings::cors_origins(&db)
@@ -40,6 +47,46 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("server stopped");
     log_handle.shutdown().await;
     Ok(())
+}
+
+/// `gripsou reset-2fa <email>`: turn off every second factor of that user and
+/// sign them out everywhere. Returns the process exit code.
+async fn reset_two_factor(db: &sqlx::PgPool, email: Option<String>) -> i32 {
+    let Some(email) = email else {
+        eprintln!("usage: gripsou reset-2fa <email>");
+        return 2;
+    };
+    let user = match gripsou_core::repo::user::credentials_by_email(db, &email).await {
+        Ok(user) => user,
+        Err(e) => {
+            tracing::error!(error = %gripsou_core::logs::error_chain(&e), "second factor reset failed");
+            eprintln!("could not look up the user");
+            return 1;
+        }
+    };
+    let Some(user) = user else {
+        eprintln!("no user with that email");
+        return 1;
+    };
+    match gripsou_core::repo::mfa::reset_for_email(db, &email).await {
+        Ok(Some((cleared, sessions))) => {
+            tracing::info!(user_id = %user.id, reason = "cli", "second factors cleared");
+            println!(
+                "removed: authenticator {}, backup codes {}, passkeys {}, sessions {}",
+                cleared.totp, cleared.recovery_codes, cleared.passkeys, sessions
+            );
+            0
+        }
+        Ok(None) => {
+            eprintln!("no user with that email");
+            1
+        }
+        Err(e) => {
+            tracing::error!(error = %gripsou_core::logs::error_chain(&e), "second factor reset failed");
+            eprintln!("could not reset the second factors");
+            1
+        }
+    }
 }
 
 /// Ctrl-C locally, SIGTERM from `docker stop`.

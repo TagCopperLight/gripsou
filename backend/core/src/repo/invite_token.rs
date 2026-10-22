@@ -5,6 +5,8 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::repo::mfa::{self, Cleared};
+
 use crate::error::CoreError;
 
 /// A token that is currently redeemable: row exists, unused, unexpired.
@@ -77,13 +79,14 @@ pub async fn redeem_invite(
 }
 
 /// Redeem a reset token: set the new password, consume the token, and revoke
-/// every existing session for the user — all atomically. `Ok(None)` if the
+/// every existing session for the user and turn off their second factors — all
+/// atomically. `Ok(None)` if the
 /// token is invalid or its target user has since been deleted.
 pub async fn redeem_reset(
     pool: &sqlx::PgPool,
     token_hash: &str,
     password_hash: &str,
-) -> Result<Option<Uuid>, CoreError> {
+) -> Result<Option<(Uuid, Cleared)>, CoreError> {
     let mut tx = pool.begin().await?;
     let email = sqlx::query_scalar!(
         r#"select email from invite_token
@@ -117,8 +120,11 @@ pub async fn redeem_reset(
     sqlx::query!("delete from session where user_id = $1", user_id)
         .execute(&mut *tx)
         .await?;
+    // Whoever holds a reset link has proven control the second factor was
+    // meant to guard (an admin vouched for them), so the reset turns it off.
+    let cleared = mfa::clear_all(&mut tx, user_id).await?;
     tx.commit().await?;
-    Ok(Some(user_id))
+    Ok(Some((user_id, cleared)))
 }
 
 /// Insert a one-time token. `kind` is `"invite"` or `"reset"`; `email` is the
@@ -319,11 +325,12 @@ mod tests {
         .await
         .unwrap();
 
-        let uid = redeem_reset(&pool, "rst-1", "new-hash")
+        let (uid, cleared) = redeem_reset(&pool, "rst-1", "new-hash")
             .await
             .unwrap()
             .unwrap();
         assert_eq!(uid, admin);
+        assert!(!cleared.any());
 
         let hash: String = sqlx::query_scalar("select password_hash from users where id = $1")
             .bind(admin)
@@ -338,6 +345,59 @@ mod tests {
             .unwrap();
         assert_eq!(sessions, 0);
         assert!(find_valid(&pool, "rst-1").await.unwrap().is_none());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn redeem_reset_clears_second_factors_of_that_user_only(pool: PgPool) {
+        let admin = seed_admin(&pool).await; // a@t.local
+        let other: Uuid = sqlx::query_scalar(
+            "insert into users (email, name, password_hash, role) \
+             values ('b@t.local', 'B', 'h', 'user') returning id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        for (who, cred) in [(admin, 1_u8), (other, 2_u8)] {
+            crate::repo::mfa::upsert_unconfirmed_totp(&pool, who, "s")
+                .await
+                .unwrap();
+            crate::repo::mfa::confirm_totp(&pool, who, 1, &[vec![cred], vec![cred + 10]])
+                .await
+                .unwrap();
+            sqlx::query(
+                "insert into user_passkey (user_id, credential_id, passkey, name) \
+                 values ($1, $2, '{}', 'k')",
+            )
+            .bind(who)
+            .bind(vec![cred])
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        create(
+            &pool,
+            "reset",
+            Some("a@t.local"),
+            admin,
+            "rst-2",
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+        let (_, cleared) = redeem_reset(&pool, "rst-2", "new-hash")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cleared.totp, 1);
+        assert_eq!(cleared.recovery_codes, 2);
+        assert_eq!(cleared.passkeys, 1);
+
+        let mine = crate::repo::mfa::status(&pool, admin).await.unwrap();
+        assert!(!crate::repo::mfa::has_second_factor(&mine));
+        let theirs = crate::repo::mfa::status(&pool, other).await.unwrap();
+        assert!(theirs.totp && theirs.passkeys == 1);
+        assert_eq!(theirs.recovery_remaining, 2);
     }
 
     #[sqlx::test(migrations = "../migrations")]

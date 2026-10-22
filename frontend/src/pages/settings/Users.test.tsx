@@ -41,6 +41,15 @@ describe("SettingsUsers", () => {
     expect(screen.getAllByLabelText("Delete user")).toHaveLength(2);
   });
 
+  it("tells the admin that the reset link also turns off two-factor", async () => {
+    render(withClient(<SettingsUsers />));
+    await screen.findAllByText("Marie Laurent");
+    fireEvent.click(screen.getAllByLabelText("Reset password")[0]);
+    expect(
+      await screen.findByText("Using this link also turns off their two-factor authentication."),
+    ).toBeInTheDocument();
+  });
+
   it("locks the self row's role (a non-button badge)", async () => {
     render(withClient(<SettingsUsers />));
     await screen.findAllByText("Jules Bernard");
