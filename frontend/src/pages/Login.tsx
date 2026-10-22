@@ -1,19 +1,80 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 import { ApiError } from "../api/client";
+import type { MfaRequired } from "../api/types";
 
 export function Login() {
   const { t } = useTranslation();
-  const { login } = useAuth();
+  const { login, verifyLogin } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   // null, a credentials error, or a throttle wait in whole minutes.
-  const [error, setError] = useState<null | "credentials" | { minutes: number }>(null);
+  const [error, setError] = useState<null | "credentials" | "invalidCode" | "expired" | { minutes: number }>(null);
   const [pending, setPending] = useState(false);
+  // Set once the password was right and the account asks for a second factor.
+  const [mfa, setMfa] = useState<MfaRequired | null>(null);
+  const [useBackup, setUseBackup] = useState(false);
+  const [code, setCode] = useState("");
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  // Focus the code field on entering the step, on switching kind and after each
+  // request (a disabled field loses focus while it is pending).
+  useEffect(() => {
+    if (mfa && !pending) codeRef.current?.focus();
+  }, [mfa, useBackup, pending]);
+
+  const throttled = (err: unknown) =>
+    err instanceof ApiError && err.status === 429
+      ? { minutes: Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)) }
+      : null;
+
+  const backToPassword = (next: typeof error = null) => {
+    setMfa(null);
+    setUseBackup(false);
+    setCode("");
+    setPassword("");
+    setError(next);
+  };
+
+  const verify = async (value: string) => {
+    if (!mfa) return;
+    setError(null);
+    setPending(true);
+    try {
+      await verifyLogin(mfa.challenge, useBackup ? { recoveryCode: value } : { totp: value }, remember);
+    } catch (err) {
+      const wait = throttled(err);
+      if (wait) {
+        setError(wait);
+      } else if (err instanceof ApiError && err.status === 401) {
+        backToPassword("expired");
+      } else {
+        setError("invalidCode");
+      }
+      setCode("");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const onCodeChange = (raw: string) => {
+    if (useBackup) {
+      setCode(raw);
+      return;
+    }
+    const digits = raw.replace(/\D/g, "").slice(0, 6);
+    setCode(digits);
+    if (digits.length === 6) void verify(digits);
+  };
+
+  const submitCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.trim()) void verify(code.trim());
+  };
 
   // No navigation here: a successful login flips auth, and the /login route
   // guard redirects to the dashboard once the router context refreshes.
@@ -22,17 +83,93 @@ export function Login() {
     setError(null);
     setPending(true);
     try {
-      await login(email, password, remember);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        setError({ minutes: Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)) });
-      } else {
-        setError("credentials");
+      const res = await login(email, password, remember);
+      if (res) {
+        setMfa(res);
+        setCode("");
+        setUseBackup(false);
       }
+    } catch (err) {
+      setError(throttled(err) ?? "credentials");
     } finally {
       setPending(false);
     }
   };
+
+  const errorLine = (
+    <>
+      {error === "credentials" && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
+      {error === "invalidCode" && <p className="text-sm text-red">{t("auth.invalidCode")}</p>}
+      {error === "expired" && <p className="text-sm text-red">{t("auth.challengeExpired")}</p>}
+      {error !== null && typeof error === "object" && (
+        <p className="text-sm text-red">{t("auth.tooManyAttempts", { count: error.minutes })}</p>
+      )}
+    </>
+  );
+  const inputClass =
+    "w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green h-10.25 disabled:opacity-40";
+  const linkClass = "self-start text-sm text-fg-dim hover:text-fg disabled:opacity-40";
+
+  if (mfa) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-10">
+        <div className="w-100 max-w-full">
+          <div className="mb-8 sm:mb-15 text-center whitespace-nowrap font-wordmark text-[clamp(2.5rem,15vw,75px)] font-semibold tracking-tight text-fg">
+            gripsou
+          </div>
+          <form onSubmit={submitCode} className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
+            <div className="flex flex-col pb-1">
+              <div className="text-lg font-semibold text-fg">{t("auth.twoFactorTitle")}</div>
+              <div className="text-sm text-fg-faint">
+                {useBackup ? t("auth.enterBackupCode") : t("auth.enterCode")}
+              </div>
+            </div>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-fg-dim">
+                {useBackup ? t("auth.backupCode") : t("auth.codeLabel")}
+              </span>
+              <input
+                key={useBackup ? "backup" : "totp"}
+                ref={codeRef}
+                type="text"
+                value={code}
+                onChange={(e) => onCodeChange(e.target.value)}
+                disabled={pending}
+                autoFocus
+                {...(useBackup
+                  ? { autoComplete: "off" }
+                  : { inputMode: "numeric" as const, autoComplete: "one-time-code", maxLength: 6 })}
+                className={inputClass}
+              />
+            </label>
+            {errorLine}
+            {useBackup && (
+              <Button type="submit" disabled={pending} className="mt-1">
+                {t("auth.verify")}
+              </Button>
+            )}
+            {mfa.methods.includes("recovery") && (
+              <button
+                type="button"
+                disabled={pending}
+                className={linkClass}
+                onClick={() => {
+                  setUseBackup(!useBackup);
+                  setCode("");
+                  setError(null);
+                }}
+              >
+                {useBackup ? t("auth.useAuthenticator") : t("auth.useBackupCode")}
+              </button>
+            )}
+            <button type="button" disabled={pending} className={linkClass} onClick={() => backToPassword()}>
+              {t("auth.back")}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-10">
@@ -82,10 +219,7 @@ export function Login() {
             </span>
             {t("auth.rememberMe")}
           </label>
-          {error === "credentials" && <p className="text-sm text-red">{t("auth.invalidCredentials")}</p>}
-          {error !== null && error !== "credentials" && (
-            <p className="text-sm text-red">{t("auth.tooManyAttempts", { count: error.minutes })}</p>
-          )}
+          {errorLine}
           <Button type="submit" disabled={pending} className="mt-1">
             {t("auth.signIn")}
           </Button>
