@@ -13,6 +13,8 @@ type DialogProps = {
   icon?: ReactNode;
   busy?: boolean;
   large?: boolean;
+  /** Shown in the header, just before the close button (e.g. step progress). */
+  aside?: ReactNode;
 };
 
 const FOCUSABLE =
@@ -22,7 +24,7 @@ const FOCUSABLE =
  *  focus handed back to whatever was focused before it opened. Inert while
  *  `busy`, so a write in flight cannot be abandoned half-way. */
 export function Dialog({
-  title, heading, onClose, children, footer, icon, busy = false, large = false,
+  title, heading, onClose, children, footer, icon, busy = false, large = false, aside,
 }: DialogProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
@@ -113,6 +115,8 @@ export function Dialog({
             {icon}
             {heading ?? title}
           </h2>
+          <div className="flex items-center gap-3">
+          {aside}
           <button
             type="button"
             onClick={onClose}
@@ -122,6 +126,7 @@ export function Dialog({
           >
             <X className="size-5" />
           </button>
+          </div>
         </div>
         <div ref={bodyRef} className="px-6 py-4">{children}</div>
         {footer && (

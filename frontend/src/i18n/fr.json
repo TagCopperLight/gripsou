@@ -205,6 +205,18 @@
     }
   },
   "auth": {
+    "mfa": {
+      "codeTitle": "Saisissez votre code",
+      "backupTitle": "Saisissez un code de secours",
+      "codeLabel": "Code à 6 chiffres",
+      "backupLabel": "Code de secours",
+      "change": "Modifier",
+      "useBackup": "Utiliser un code de secours",
+      "useApp": "Utiliser l'application",
+      "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
+      "expired": "Le délai est dépassé. Reconnectez-vous.",
+      "failed": "Une erreur s'est produite. Réessayez."
+    },
     "signIn": "Se connecter",
     "welcomeBack": "Heureux de vous retrouver",
     "signInToContinue": "Connectez-vous pour continuer.",
@@ -283,7 +295,6 @@
       "currentPasswordIncorrect": "Mot de passe actuel incorrect",
       "passwordUpdateFailed": "Impossible de mettre à jour le mot de passe",
       "sessions": "Sessions actives",
-      "sessionsDescription": "Appareils actuellement connectés à votre compte.",
       "thisDevice": "Cet appareil",
       "sessionRemembered": "Connexion mémorisée · 30 jours",
       "sessionSingle": "Connexion non mémorisée",
@@ -305,8 +316,14 @@
       "deleteAccountPending": "Suppression…",
       "deleteAccountError": "Impossible de supprimer votre compte",
       "avatar": "Photo de profil",
-      "uploadImage": "Importer une image",
-      "removeImage": "Supprimer"
+      "removeImage": "Supprimer",
+      "editProfile": "Modifier le profil",
+      "changePicture": "Changer la photo",
+      "security": "Sécurité",
+      "changePassword": "Modifier",
+      "changePasswordTitle": "Changer le mot de passe",
+      "twoFactor": "Double authentification",
+      "manage": "Gérer"
     },
     "users": {
       "title": "Utilisateurs",
@@ -828,5 +845,37 @@
       "title": "Aucun investissement",
       "body": "Aucun de vos comptes ne détient de titres. Les liquidités sont exclues de cette vue."
     }
+  },
+  "twoFactor": {
+    "setupTitle": "Activer la double authentification",
+    "codesTitle": "Enregistrez vos codes de secours",
+    "stepOf": "Étape {{step}} sur {{total}}",
+    "continue": "Continuer",
+    "next": "Suivant",
+    "back": "Retour",
+    "done": "Terminé",
+    "scanIntro": "Scannez ce QR code avec votre application d'authentification.",
+    "qrAlt": "QR code à scanner avec votre application d'authentification",
+    "cantScan": "Impossible de le scanner ? Saisissez plutôt cette clé dans l'application :",
+    "copyKey": "Copier la clé",
+    "codeIntro": "Saisissez le code à 6 chiffres affiché par l'application pour gripsou.",
+    "codeLabel": "Code à 6 chiffres",
+    "codesIntro": "Si vous perdez votre téléphone, chacun de ces codes vous permet de vous connecter une fois. Ils ne seront plus affichés.",
+    "copy": "Copier",
+    "copied": "Copié",
+    "download": "Télécharger",
+    "wrongPassword": "Mot de passe incorrect.",
+    "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
+    "expired": "La configuration a pris trop de temps et a expiré. Saisissez votre mot de passe pour recommencer.",
+    "failed": "Une erreur s'est produite. Réessayez.",
+    "manageTitle": "Double authentification",
+    "backupCodes": "Codes de secours",
+    "codesLeft_one": "{{count}} sur 10 restant",
+    "codesLeft_other": "{{count}} sur 10 restants",
+    "newCodes": "Nouveaux codes",
+    "newCodesTitle": "Nouveaux codes de secours",
+    "turnOff": "Désactiver",
+    "turnOffTitle": "Désactiver la double authentification ?",
+    "turnOffBody": "Vous vous connecterez avec votre mot de passe seulement."
   }
 }

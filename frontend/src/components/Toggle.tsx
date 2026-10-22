@@ -3,9 +3,11 @@ type ToggleProps = {
   onChange: (next: boolean) => void;
   disabled?: boolean;
   "aria-label"?: string;
+  /** Track colour when off; the default suits a toggle on a plain surface. */
+  offClassName?: string;
 };
 
-export function Toggle({ checked, onChange, disabled = false, ...rest }: ToggleProps) {
+export function Toggle({ checked, onChange, disabled = false, offClassName = "bg-surface-2", ...rest }: ToggleProps) {
   return (
     <button
       type="button"
@@ -14,7 +16,7 @@ export function Toggle({ checked, onChange, disabled = false, ...rest }: ToggleP
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-        checked ? "bg-green" : "bg-surface-2"
+        checked ? "bg-green" : offClassName
       }`}
       {...rest}
     >
