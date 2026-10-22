@@ -93,6 +93,22 @@ pub fn verify_password(plain: &str, hash: &str) -> bool {
     }
 }
 
+pub const PASSWORD_MIN_CHARS: usize = 8;
+pub const PASSWORD_MAX_CHARS: usize = 128;
+
+/// The one rule for a password being set (invite, reset, change): length
+/// only, counted in characters. Existing shorter passwords keep working.
+pub fn validate_new_password(pw: &str) -> Result<(), (StatusCode, String)> {
+    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&pw.chars().count()) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "password must be 8 to 128 characters".to_string(),
+        ))
+    }
+}
+
 /// The authenticated principal, resolved from the opaque bearer token by DB
 /// lookup. Carries the session id so handlers can mark/skip the current session.
 #[derive(Debug)]
@@ -148,6 +164,20 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn new_password_length_bounds() {
+        assert!(validate_new_password(&"a".repeat(7)).is_err());
+        assert!(validate_new_password(&"a".repeat(8)).is_ok());
+        assert!(validate_new_password(&"a".repeat(128)).is_ok());
+        assert!(validate_new_password(&"a".repeat(129)).is_err());
+        assert!(validate_new_password("").is_err());
+        // Counted in characters, not bytes: 8 accented letters are 16 bytes.
+        assert!(validate_new_password("éééééééé").is_ok());
+        let err = validate_new_password("short").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1, "password must be 8 to 128 characters");
+    }
+
     use super::*;
     use axum::http::{Request, header::AUTHORIZATION};
     use chrono::Duration;

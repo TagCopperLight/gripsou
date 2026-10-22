@@ -1123,6 +1123,7 @@ pub async fn change_password(
             "current password is incorrect".to_string(),
         ));
     }
+    auth::validate_new_password(&body.new_password)?;
     let new_hash = auth::hash_password(&body.new_password).map_err(internal)?;
     gripsou_core::repo::user::update_password(&pool, user_id, &new_hash)
         .await
@@ -1452,12 +1453,13 @@ pub async fn redeem_invite(
 ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
     let email = body.email.trim();
     let name = body.name.trim();
-    if email.is_empty() || name.is_empty() || body.password.is_empty() {
+    if email.is_empty() || name.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             "email, name and password are required".to_string(),
         ));
     }
+    auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
     let user_id =
@@ -1480,9 +1482,7 @@ pub async fn redeem_reset(
     Path(token): Path<String>,
     Json(body): Json<dto::RedeemResetReq>,
 ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
-    if body.password.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "password is required".to_string()));
-    }
+    auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
     let user_id = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
@@ -2810,7 +2810,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "new@t.local".into(),
                 name: "New".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -2841,7 +2841,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "new@t.local".into(),
                 name: "New".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -2890,7 +2890,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "a@t.local".into(),
                 name: "Dup".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -4222,7 +4222,7 @@ mod auth_tests {
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
-        let resp = call_redeem_reset(&pool, "raw-reset", "new-pw")
+        let resp = call_redeem_reset(&pool, "raw-reset", "new-password")
             .await
             .expect("redeem ok")
             .0;
@@ -4234,7 +4234,7 @@ mod auth_tests {
                 .is_some(),
             "the response logs the user in"
         );
-        assert!(can_login(&pool, "t@t.local", "new-pw").await);
+        assert!(can_login(&pool, "t@t.local", "new-password").await);
         assert!(!can_login(&pool, "t@t.local", "old-pw").await);
         assert!(!session_alive(&pool, old_session.session_id).await);
     }
@@ -4264,7 +4264,7 @@ mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
         seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
-        let err = call_redeem_reset(&pool, "never-minted", "new-pw")
+        let err = call_redeem_reset(&pool, "never-minted", "new-password")
             .await
             .expect_err("unknown token must fail");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
@@ -4277,11 +4277,74 @@ mod auth_tests {
         seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(-1)).await;
 
-        let err = call_redeem_reset(&pool, "raw-reset", "new-pw")
+        let err = call_redeem_reset(&pool, "raw-reset", "new-password")
             .await
             .expect_err("expired token must fail");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn reset_refuses_a_short_password(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-password", "user").await;
+        mint_reset(&pool, "raw-short", "t@t.local", Duration::hours(1)).await;
+        let err = call_redeem_reset(&pool, "raw-short", "1234567")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        // The link was not spent: a valid password still works with it.
+        assert!(
+            call_redeem_reset(&pool, "raw-short", "12345678")
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn change_password_refuses_a_short_password(pool: PgPool) {
+        seed_user_role(&pool, "c@t.local", "old-password", "user").await;
+        let who = principal_for(&pool, "c@t.local", "old-password").await;
+        let err = change_password(
+            State(pool.clone()),
+            who,
+            Json(dto::ChangePasswordReq {
+                current_password: "old-password".into(),
+                new_password: "short".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert!(can_login(&pool, "c@t.local", "old-password").await);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn invite_refuses_a_short_password(pool: PgPool) {
+        let admin = seed_admin_user(&pool).await;
+        gripsou_core::repo::invite_token::create(
+            &pool,
+            "invite",
+            None,
+            admin,
+            &auth::hash_token_str("raw-invite"),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+        let err = redeem_invite(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path("raw-invite".to_string()),
+            Json(dto::RedeemInviteReq {
+                email: "new@t.local".into(),
+                name: "New".into(),
+                password: "1234567".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
     }
 
     /// An empty new password is a 400 and does not burn the link, so the user
