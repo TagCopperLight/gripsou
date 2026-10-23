@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
+import { TextInput } from "./TextInput";
 import { ApiError } from "../api/client";
 import { useChangePassword } from "../api/hooks";
 import { throttleMinutes } from "../lib/mfa";
@@ -46,12 +47,11 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   const input = (label: string, value: string, onChange: (v: string) => void, autoComplete: string) => (
     <label className="flex flex-col gap-2">
       <span className="text-sm text-fg-faint">{label}</span>
-      <input
+      <TextInput
         type="password"
         autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
       />
     </label>
   );

@@ -5,11 +5,13 @@ import { Copy, Check } from "lucide-react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { ApiError } from "../api/client";
-import { useReauth, useTotpConfirm, useTotpSetup } from "../api/hooks";
+import { useTotpConfirm, useTotpSetup } from "../api/hooks";
 import type { TotpSetup } from "../api/types";
 import { throttleMinutes } from "../lib/mfa";
 import { CodeInput } from "./CodeInput";
 import { BackupCodes } from "./BackupCodes";
+import { PasswordField } from "./PasswordField";
+import { useReauthStep } from "./useReauthStep";
 
 type Step = "password" | "scan" | "code" | "codes";
 const STEPS: Step[] = ["password", "scan", "code", "codes"];
@@ -23,17 +25,15 @@ function groups(secret: string) {
 export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("password");
-  const [password, setPassword] = useState("");
+  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
 
-  const reauth = useReauth();
   const start = useTotpSetup();
   const confirm = useTotpConfirm();
-  const busy = reauth.isPending || start.isPending || confirm.isPending;
+  const busy = checking || start.isPending || confirm.isPending;
 
   const fail = (err: unknown, otherwise: string) => {
     const minutes = throttleMinutes(err);
@@ -42,14 +42,8 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
 
   const submitPassword = async () => {
     if (!password || busy) return;
-    setError(null);
-    let token: string;
-    try {
-      token = (await reauth.mutateAsync(password)).reauth;
-    } catch (err) {
-      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongPassword") : t("twoFactor.failed"));
-      return;
-    }
+    const token = await check();
+    if (!token) return;
     try {
       setSetup(await start.mutateAsync(token));
       setStep("scan");
@@ -96,18 +90,13 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   );
 
   const errorLine = error && <p className="text-sm text-red">{error}</p>;
-  const inputClass =
-    "h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green";
 
   let body;
   let footer;
   if (step === "password") {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-fg-faint">{t("settings.account.currentPassword")}</span>
-          <input type="password" autoComplete="current-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
-        </label>
+        <PasswordField value={password} onChange={setPassword} autoFocus />
         {errorLine}
         <button type="submit" hidden />
       </form>

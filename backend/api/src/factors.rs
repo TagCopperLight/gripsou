@@ -66,6 +66,17 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// The step `code` matches for this encrypted secret, at the current time.
+pub fn check_totp(
+    key: &crate::EncryptionKey,
+    secret_enc: &str,
+    code: &str,
+) -> Result<Option<u64>, gripsou_core::crypto::CryptoError> {
+    let secret = key.decrypt(secret_enc)?;
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    Ok(match_totp(&secret, code, now))
+}
+
 /// The step the code matches among the previous, current and next step.
 /// Every candidate is compared, without early exit.
 pub fn match_totp(secret: &[u8], code: &str, now_unix: u64) -> Option<u64> {

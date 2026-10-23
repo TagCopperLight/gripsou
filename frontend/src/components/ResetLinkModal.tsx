@@ -4,39 +4,26 @@ import { useTranslation } from "react-i18next";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { LinkModal } from "./LinkModal";
-import { ApiError } from "../api/client";
-import { useCreateResetLink, useReauth } from "../api/hooks";
-import { throttleMinutes } from "../lib/mfa";
+import { PasswordField } from "./PasswordField";
+import { useReauthStep } from "./useReauthStep";
+import { useCreateResetLink } from "../api/hooks";
 import type { User } from "../api/types";
 
 /** A reset link for another user: the admin's password first (redeeming the
  *  link clears the user's second factors), then the link to share. */
 export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => void }) {
   const { t } = useTranslation();
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { password, setPassword, error, setError, checking, check } = useReauthStep(
+    t("settings.users.linkError"),
+  );
   const [token, setToken] = useState<string | null>(null);
-  const reauth = useReauth();
   const create = useCreateResetLink();
-  const busy = reauth.isPending || create.isPending;
+  const busy = checking || create.isPending;
 
   const submit = async () => {
     if (!password || busy) return;
-    setError(null);
-    let proof: string;
-    try {
-      proof = (await reauth.mutateAsync(password)).reauth;
-    } catch (err) {
-      const minutes = throttleMinutes(err);
-      setError(
-        minutes !== null
-          ? t("auth.tooManyAttempts", { count: minutes })
-          : err instanceof ApiError && err.status === 400
-            ? t("twoFactor.wrongPassword")
-            : t("settings.users.linkError"),
-      );
-      return;
-    }
+    const proof = await check();
+    if (!proof) return;
     try {
       setToken((await create.mutateAsync({ id: user.id, reauth: proof })).token);
     } catch {
@@ -73,16 +60,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
     >
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <p className="text-sm text-fg-dim">{t("settings.users.reset.confirm", { name: user.name })}</p>
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-fg-faint">{t("settings.account.currentPassword")}</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
-          />
-        </label>
+        <PasswordField value={password} onChange={setPassword} />
         {error && <p className="text-sm text-red">{error}</p>}
         <button type="submit" hidden />
       </form>

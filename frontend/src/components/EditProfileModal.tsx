@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { Avatar } from "./Avatar";
+import { TextInput } from "./TextInput";
 import { useUpdateProfile } from "../api/hooks";
 import { useAuth } from "../auth/context";
 import { fileToAvatarDataUrl } from "../lib/avatar";
@@ -115,19 +116,17 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-5">
             <label className="flex flex-col gap-2">
               <span className="text-sm text-fg-faint">{t("settings.account.name")}</span>
-              <input
+              <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
               />
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm text-fg-faint">{t("settings.account.email")}</span>
-              <input
+              <TextInput
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
               />
             </label>
           </div>

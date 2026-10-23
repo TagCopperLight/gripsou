@@ -18,7 +18,7 @@ use webauthn_rs_proto::ResidentKeyRequirement;
 
 use crate::auth::{self, AuthUser};
 use crate::dto;
-use crate::handlers::{LoginError, client_ip, internal, issue_session};
+use crate::handlers::{LoginError, client_ip, internal, issue_session, user_agent};
 use crate::mfa::{ApiError, check_reauth, require_reauth};
 use crate::throttle::{Blocked, LoginThrottle};
 
@@ -218,27 +218,12 @@ pub async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn too_many(blocked: &Blocked) -> LoginError {
-    LoginError(
-        StatusCode::TOO_MANY_REQUESTS,
-        "too many attempts".to_string(),
-        Some(blocked.retry_after_secs()),
-    )
-}
-
 /// A throttled passwordless sign-in: no account is known, only the IP.
 fn throttled_ip(blocked: Blocked, ip: &str) -> LoginError {
     if blocked.first_refusal {
         tracing::warn!(ip = %ip, reason = blocked.reason.as_str(), "login throttled");
     }
-    too_many(&blocked)
-}
-
-fn user_agent(headers: &HeaderMap) -> &str {
-    headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
+    blocked.into()
 }
 
 /// Start a passwordless sign-in: the browser offers the passkeys it has for

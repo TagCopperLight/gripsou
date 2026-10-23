@@ -4,6 +4,7 @@ import { Fingerprint, LoaderCircle } from "lucide-react";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { Button } from "../components/Button";
 import { CodeInput } from "../components/CodeInput";
+import { TextInput } from "../components/TextInput";
 import { useAuth } from "../auth/context";
 import { ApiError } from "../api/client";
 import { throttleMinutes } from "../lib/mfa";
@@ -113,8 +114,6 @@ export function Login() {
   };
 
   const errorLine = error && <p className="text-sm text-red">{error}</p>;
-  const inputClass =
-    "w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green h-10.25";
 
   // The account being signed into, with a way back to the password. Leaving
   // a step is disabled while its code is checked, so the answer can't land on
@@ -210,7 +209,7 @@ export function Login() {
         {account}
         <label className="flex flex-col gap-2">
           <span className="text-sm text-fg-dim">{t("auth.mfa.backupLabel")}</span>
-          <input
+          <TextInput
             autoFocus
             autoComplete="off"
             spellCheck={false}
@@ -220,7 +219,7 @@ export function Login() {
               setError(null);
             }}
             placeholder="xxxxx-xxxxx"
-            className={`${inputClass} font-mono placeholder:text-fg-faint/50`}
+            className="font-mono placeholder:text-fg-faint/50"
           />
         </label>
         {errorLine}
@@ -239,11 +238,11 @@ export function Login() {
         </div>
         <label className="flex flex-col gap-2">
           <span className="text-sm text-fg-dim">{t("auth.email")}</span>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="flex flex-col gap-2">
           <span className="text-sm text-fg-dim">{t("auth.password")}</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+          <TextInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-fg-dim">
           <span className="relative inline-flex h-5 w-9 shrink-0 rounded-full bg-surface-3 transition-colors has-checked:bg-green">

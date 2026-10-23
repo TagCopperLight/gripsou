@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "../components/Button";
+import { TextInput } from "../components/TextInput";
 import { useAuth } from "../auth/context";
 import { useTokenGuard } from "../auth/useTokenGuard";
 import { passwordLengthOk } from "../lib/password";
@@ -71,38 +72,34 @@ export function Invite() {
           </div>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.email")}</span>
-            <input
+            <TextInput
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.name")}</span>
-            <input
+            <TextInput
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.password")}</span>
-            <input
+            <TextInput
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.confirmPassword")}</span>
-            <input
+            <TextInput
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="w-full rounded-xl bg-surface-2 px-4 py-3 text-fg outline-none focus:ring-1 focus:ring-green h-10.25"
             />
           </label>
           {error && <p className="text-sm text-red">{error}</p>}

@@ -4,7 +4,6 @@
 use axum::Json;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode};
-use chrono::Utc;
 use gripsou_core::repo::{login_challenge, mfa, session};
 use sqlx::PgPool;
 use std::net::SocketAddr;
@@ -84,11 +83,7 @@ pub(crate) async fn check_password(
         if blocked.first_refusal {
             tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
         }
-        return Err(LoginError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many attempts".to_string(),
-            Some(blocked.retry_after_secs()),
-        ));
+        return Err(blocked.into());
     }
     let hash = gripsou_core::repo::user::password_hash(pool, user_id)
         .await
@@ -220,15 +215,10 @@ pub async fn totp_confirm(
         if blocked.first_refusal {
             tracing::warn!(email = %profile.email, user_id = %user_id, reason = blocked.reason.as_str(), "login throttled");
         }
-        return Err(LoginError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many attempts".to_string(),
-            Some(blocked.retry_after_secs()),
-        ));
+        return Err(blocked.into());
     }
-    let secret = key.decrypt(&row.secret_enc).map_err(internal)?;
-    let now = Utc::now().timestamp().max(0) as u64;
-    let Some(step) = factors::match_totp(&secret, &body.code, now) else {
+    let Some(step) = factors::check_totp(&key, &row.secret_enc, &body.code).map_err(internal)?
+    else {
         tracing::warn!(user_id = %user_id, "totp confirm failed");
         return Err(LoginError(
             StatusCode::BAD_REQUEST,

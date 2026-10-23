@@ -67,6 +67,13 @@ async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, 
 /// (earlier hops come from the client), else the direct peer address.
 /// The per-IP login limit relies on it, so the backend must sit behind a
 /// proxy that sets the header; Caddy replaces it, others append to it.
+pub(crate) fn user_agent(headers: &HeaderMap) -> &str {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+}
+
 pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
     headers
         .get("x-forwarded-for")
@@ -842,6 +849,16 @@ impl From<(StatusCode, String)> for LoginError {
     }
 }
 
+impl From<crate::throttle::Blocked> for LoginError {
+    fn from(blocked: crate::throttle::Blocked) -> Self {
+        LoginError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many attempts".to_string(),
+            Some(blocked.retry_after_secs()),
+        )
+    }
+}
+
 impl axum::response::IntoResponse for LoginError {
     fn into_response(self) -> axum::response::Response {
         let mut res = (self.0, self.1).into_response();
@@ -871,9 +888,7 @@ pub async fn login(
             None,
         )
     };
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok());
+    let user_agent = user_agent(&headers);
     // No real address is longer (RFC 5321). Refused before the email can
     // become a throttle key or a log field.
     if body.email.len() > MAX_EMAIL_LEN {
@@ -886,11 +901,7 @@ pub async fn login(
         if blocked.first_refusal {
             tracing::warn!(email = %body.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
         }
-        return Err(LoginError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many attempts".to_string(),
-            Some(blocked.retry_after_secs()),
-        ));
+        return Err(blocked.into());
     }
     let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
@@ -900,7 +911,7 @@ pub async fn login(
         creds.as_ref().map(|c| c.password_hash.as_str()),
     );
     let Some(creds) = creds.filter(|_| ok) else {
-        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
+        tracing::warn!(email = %body.email, ip = %ip, user_agent, "login failed");
         return Err(unauthorized());
     };
     let status = gripsou_core::repo::mfa::status(&pool, creds.id)
@@ -928,7 +939,7 @@ pub async fn login(
     throttle.record_success(&body.email, &ip);
 
     let resp = issue_session(&pool, &headers, peer, creds.id, body.remember).await?;
-    tracing::info!(user_id = %creds.id, ip = %ip, user_agent = user_agent.unwrap_or(""), method = "password", "login succeeded");
+    tracing::info!(user_id = %creds.id, ip = %ip, user_agent, method = "password", "login succeeded");
     Ok(Json(dto::LoginOutcome::Session(resp)))
 }
 
@@ -952,9 +963,7 @@ pub async fn login_verify(
             None,
         )
     };
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok());
+    let user_agent = user_agent(&headers);
     let ip = client_ip(&headers, peer);
     let challenge_hash = auth::hash_token(&body.challenge);
     let challenge = login_challenge::find_valid(&pool, &challenge_hash, "mfa")
@@ -972,11 +981,7 @@ pub async fn login_verify(
         if blocked.first_refusal {
             tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
         }
-        return Err(LoginError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many attempts".to_string(),
-            Some(blocked.retry_after_secs()),
-        ));
+        return Err(blocked.into());
     }
 
     // The TOTP step is worked out before the transaction (no DB write).
@@ -988,9 +993,7 @@ pub async fn login_verify(
                 .filter(|r| r.confirmed);
             match row {
                 Some(row) => {
-                    let secret = key.decrypt(&row.secret_enc).map_err(internal)?;
-                    let now = Utc::now().timestamp().max(0) as u64;
-                    crate::factors::match_totp(&secret, code, now)
+                    crate::factors::check_totp(&key, &row.secret_enc, code).map_err(internal)?
                 }
                 None => None,
             }
@@ -1029,7 +1032,7 @@ pub async fn login_verify(
     };
     let Some((method, remaining)) = method else {
         drop(tx);
-        tracing::warn!(email = %profile.email, ip = %ip, user_agent = user_agent.unwrap_or(""), step = "second_factor", "login failed");
+        tracing::warn!(email = %profile.email, ip = %ip, user_agent, step = "second_factor", "login failed");
         return Err(LoginError(
             StatusCode::BAD_REQUEST,
             "invalid code".to_string(),
@@ -1047,7 +1050,7 @@ pub async fn login_verify(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let resp = issue_session(&pool, &headers, peer, user_id, remember).await?;
-    tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent.unwrap_or(""), method, "login succeeded");
+    tracing::info!(user_id = %user_id, ip = %ip, user_agent, method, "login succeeded");
     Ok(Json(resp))
 }
 
@@ -1521,9 +1524,7 @@ pub(crate) async fn issue_session(
         ))?;
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok());
+    let user_agent = Some(user_agent(headers)).filter(|ua| !ua.is_empty());
     let ip = client_ip(headers, peer);
     let ttl = if remember {
         Duration::days(30)
