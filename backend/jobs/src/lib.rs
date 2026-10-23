@@ -14,6 +14,10 @@ use uuid::Uuid;
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
 const PENDING_TIMEOUT_MINS: i32 = 10;
+/// A sync still going after this is stopped and recorded as failed: a provider
+/// that never answers must not hold the connection's lock. Comfortably longer
+/// than the slowest observed sync.
+const SYNC_TIME_LIMIT: Duration = Duration::from_secs(30 * 60);
 
 /// One cleanup pass: logs `sweep finished` with the count when it changed
 /// something, `sweep failed` (error: whatever it cleans stays stuck) when
@@ -82,6 +86,8 @@ pub struct SyncDeps {
     pub accounts: HashMap<String, Box<dyn AccountProvider>>,
     pub prices: Vec<Box<dyn PriceProvider>>,
     pub composition: Box<dyn CompositionProvider>,
+    /// How long a sync may run before it is stopped.
+    pub time_limit: Duration,
 }
 
 impl SyncDeps {
@@ -102,6 +108,7 @@ impl SyncDeps {
                 .collect(),
             prices: price_providers(pivot),
             composition: Box::new(composition_provider()),
+            time_limit: SYNC_TIME_LIMIT,
         }
     }
 }
@@ -147,7 +154,7 @@ pub async fn run_scheduler(db: Db) {
     // Boot sweep: every 'syncing' row predates this process, so whatever held
     // the lock is gone. The scheduler runs in the API process and the app is
     // single-instance, so there is no sibling whose live claim this could steal.
-    sweep("boot_sync_locks", connection::clear_stale_syncing(&db, 0)).await;
+    sweep("boot_sync_locks", connection::clear_syncing(&db)).await;
     sweep(
         "boot_ai_runs",
         gripsou_core::repo::budget::ai::close_abandoned_runs(&db, None),
@@ -177,14 +184,6 @@ async fn reap_awaiting(db: Db) {
         for row in rows {
             claim_and_spawn(&db, row.user_id, row.id, Trigger::WebhookTimeout).await;
         }
-
-        // A sync whose task died without a restart (panic, lost DB connection)
-        // holds its lock until this clears it — see connection::clear_stale_syncing.
-        sweep(
-            "stale_sync_locks",
-            connection::clear_stale_syncing(&db, connection::SYNC_LOCK_STALE_MINS),
-        )
-        .await;
 
         // Backstop for abandoned webview flows whose callback never ran.
         sweep(
@@ -627,29 +626,39 @@ async fn sync_connection_data(db: Db, connection_id: Uuid) -> bool {
 
 /// [`sync_connection_data`] with its adapters passed in (tests use fakes).
 /// Runs inside a `sync_span`, and logs `sync started`, one line per step and
-/// exactly one `sync finished`, a panic included: the sync runs in its own
-/// task, and if that task panics the connection's lock is released now (not
-/// by the stale-lock sweep) and `sync finished` says `failed_step = "panic"`.
+/// exactly one `sync finished`, a panic or a timeout included: the sync runs
+/// in its own task, and if that task panics or outlives `deps.time_limit` it
+/// is stopped, the connection's lock is released and `sync finished` says
+/// `failed_step = "panic"` or `"timeout"`.
 pub async fn sync_connection_data_with(db: Db, connection_id: Uuid, deps: SyncDeps) -> bool {
     let started = std::time::Instant::now();
+    let limit = deps.time_limit;
     let task_db = db.clone();
     let task = async move { run_sync_logged(&task_db, connection_id, &deps).await };
-    let e = match tokio::spawn(task.in_current_span()).await {
-        Ok(ok) => return ok,
-        Err(e) => e,
+    let mut handle = tokio::spawn(task.in_current_span());
+    let (step, message, error) = match tokio::time::timeout(limit, &mut handle).await {
+        Ok(Ok(ok)) => return ok,
+        // The panic payload is in JoinError's Display.
+        Ok(Err(e)) => ("panic", "sync crashed", e.to_string()),
+        Err(_) => {
+            // Dropping the handle would leave the task running: stop it. Its
+            // open DB transaction, if any, is rolled back.
+            handle.abort();
+            let error = format!("still running after {} minutes", limit.as_secs() / 60);
+            ("timeout", "sync took too long", error)
+        }
     };
-    if let Err(e) = connection::mark_synced_error(&db, connection_id, "sync crashed").await {
+    if let Err(e) = connection::mark_synced_error(&db, connection_id, message).await {
         tracing::error!(
             error = %gripsou_core::logs::error_chain(&e),
             "sync failure not recorded"
         );
     }
     // The sync-history line: keep its shape (jobs/tests/sync_log.rs).
-    // The panic payload is in JoinError's Display.
     tracing::error!(
         outcome = "failed",
-        failed_step = "panic",
-        error = %e,
+        failed_step = step,
+        error = %error,
         duration_ms = started.elapsed().as_millis() as u64,
         "sync finished"
     );
@@ -664,8 +673,8 @@ async fn run_sync_logged(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool 
     match run_sync(db, connection_id, deps).await {
         Ok(s) => {
             // The write that releases the lock. If it fails the data is
-            // already committed but the connection would sit on a spinner;
-            // the stale-lock sweep is what eventually frees it.
+            // already committed but the connection sits on a spinner until
+            // the next restart clears it.
             if let Err(e) = connection::mark_synced_ok(db, connection_id).await {
                 tracing::error!(
                     error = %gripsou_core::logs::error_chain(&e),

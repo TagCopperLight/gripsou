@@ -2,6 +2,7 @@
 //! These tests pin its shape: one per sync, with the agreed fields.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use gripsou_core::dto::{Composition, InstrumentRef, SyncResult};
@@ -21,6 +22,7 @@ enum Mode {
     Ok,
     Fail,
     Panic,
+    Hang,
 }
 
 struct FakeBank {
@@ -45,6 +47,7 @@ impl AccountProvider for FakeBank {
                 "GET /accounts failed: 503 Service Unavailable".into(),
             )),
             Mode::Panic => panic!("adapter bug"),
+            Mode::Hang => std::future::pending().await,
         }
     }
 }
@@ -71,6 +74,7 @@ fn deps(mode: Mode) -> SyncDeps {
         accounts,
         prices: Vec::new(),
         composition: Box::new(NoComposition),
+        time_limit: Duration::from_millis(500),
     }
 }
 
@@ -196,13 +200,50 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
     assert_eq!(f["connection_id"], conn.to_string());
     assert!(f["duration_ms"].is_u64());
 
-    // The lock is released now, not by the 30-minute stale-lock sweep.
     let status: String = sqlx::query_scalar("select status from connection where id = $1")
         .bind(conn)
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_ne!(status, "syncing");
+}
+
+/// A provider that never answers must not hold the connection: the sync is
+/// stopped at its time limit and recorded like any other failure.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) {
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
+    let (user, conn) = seed(&pool).await;
+    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
+        .await
+        .unwrap();
+
+    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Hang))
+        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
+        .await;
+    assert!(!ok);
+    writer.flush(&pool).await;
+
+    let lines = finished_lines(&pool).await;
+    assert_eq!(
+        lines.len(),
+        1,
+        "exactly one sync finished, even on a timeout"
+    );
+    let (level, f) = &lines[0];
+    assert_eq!(level, "error");
+    assert_eq!(f["outcome"], "failed");
+    assert_eq!(f["failed_step"], "timeout");
+    assert!(f["duration_ms"].is_u64());
+
+    let (status, last_error): (String, Option<String>) =
+        sqlx::query_as("select status, last_error from connection where id = $1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "error");
+    assert_eq!(last_error.as_deref(), Some("sync took too long"));
 }
 
 #[sqlx::test(migrations = "../migrations")]

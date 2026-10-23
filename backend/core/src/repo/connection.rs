@@ -116,19 +116,10 @@ pub enum BeginSync {
     NotFound,
 }
 
-/// How long a 'syncing' claim may stand before it is considered abandoned.
-/// The process that held it is gone (crash, restart, panicked task), so the
-/// lock is taken over rather than waited on. Comfortably longer than the
-/// slowest observed sync.
-pub const SYNC_LOCK_STALE_MINS: i32 = 30;
-
 /// Atomically claim a connection for syncing: flip status→'syncing' only if it
 /// is owned by `user_id` and not already syncing. This is the per-connection
-/// lock that prevents double runs.
-///
-/// A claim older than `SYNC_LOCK_STALE_MINS` (or one with no stamp, which only
-/// pre-`0027` rows have) is taken over: nothing else releases a lock whose
-/// owner died, so refusing forever is worse than the small risk of a double run.
+/// lock that prevents double runs. A sync always releases it: it ends, fails,
+/// panics or hits its time limit, and a restart clears it at boot.
 pub async fn begin_sync(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -138,16 +129,12 @@ pub async fn begin_sync(
         ConnectionState,
         r#"
         update connection
-           set status = 'syncing', sync_started_at = now()
-         where id = $1 and user_id = $2
-           and (status <> 'syncing'
-                or sync_started_at is null
-                or sync_started_at < now() - make_interval(mins => $3))
+           set status = 'syncing'
+         where id = $1 and user_id = $2 and status <> 'syncing'
         returning id as "id!", status as "status!", last_sync_at, last_error
         "#,
         id,
         user_id,
-        SYNC_LOCK_STALE_MINS,
     )
     .fetch_optional(pool)
     .await?;
@@ -174,7 +161,7 @@ pub async fn begin_sync(
 pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection
-            set status='ok', last_sync_at=now(), last_error=null, sync_started_at=null
+            set status='ok', last_sync_at=now(), last_error=null
           where id=$1",
         id,
     )
@@ -186,7 +173,7 @@ pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreErr
 /// Mark a finished sync as failed, recording the message.
 pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
     sqlx::query!(
-        "update connection set status='error', last_error=$2, sync_started_at=null where id=$1",
+        "update connection set status='error', last_error=$2 where id=$1",
         id,
         msg,
     )
@@ -279,20 +266,16 @@ pub async fn connections_awaiting_timeout(
     Ok(rows)
 }
 
-/// Release sync locks held longer than `minutes` — the process that claimed
-/// them is gone, so the sync behind them will never finish or report. They are
-/// marked 'error' rather than 'ok': a user looking at the connection must see
-/// that the sync did not complete, and 'error' is what the daily sweep and
-/// `begin_sync` both accept again. Returns the number of rows released.
-pub async fn clear_stale_syncing(pool: &sqlx::PgPool, minutes: i32) -> Result<u64, CoreError> {
+/// Boot sweep: release every sync lock. The process that claimed them is
+/// gone, so the syncs behind them will never finish or report. They are marked
+/// 'error' rather than 'ok': a user looking at the connection must see that
+/// the sync did not complete. Returns the number of rows released.
+pub async fn clear_syncing(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "update connection
             set status='error',
-                last_error='sync interrupted (the server restarted or the sync crashed)'
-          where status='syncing'
-            and (sync_started_at is null
-                 or sync_started_at < now() - make_interval(mins => $1))",
-        minutes,
+                last_error='sync interrupted (the server restarted)'
+          where status='syncing'",
     )
     .execute(pool)
     .await?;
@@ -391,10 +374,7 @@ pub async fn connection_for_sync(
 }
 
 /// Atomically transition an owned connection to 'awaiting' (force-refresh
-/// requested). Rejects if already 'syncing' or 'awaiting' — except for a
-/// 'syncing' claim past `SYNC_LOCK_STALE_MINS`, which is abandoned and taken
-/// over exactly as in `begin_sync`. Webhook providers reach a sync through
-/// here, so without that a wedged lock would still block them.
+/// requested). Rejects if already 'syncing' or 'awaiting'.
 pub async fn begin_await(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -404,18 +384,12 @@ pub async fn begin_await(
         ConnectionState,
         r#"
         update connection
-           set status='awaiting', sync_requested_at=now(), last_error=null,
-               sync_started_at=null
-         where id=$1 and user_id=$2
-           and (status not in ('syncing','awaiting')
-                or (status='syncing'
-                    and (sync_started_at is null
-                         or sync_started_at < now() - make_interval(mins => $3))))
+           set status='awaiting', sync_requested_at=now(), last_error=null
+         where id=$1 and user_id=$2 and status not in ('syncing','awaiting')
         returning id as "id!", status as "status!", last_sync_at, last_error
         "#,
         id,
         user_id,
-        SYNC_LOCK_STALE_MINS,
     )
     .fetch_optional(pool)
     .await?;
