@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from connection where id = $1 and user_id = $2 and status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0062bdcd6b7435c62f02a02a1969a61b914094ab4409868009cbd9c0eb9abbb"
+}

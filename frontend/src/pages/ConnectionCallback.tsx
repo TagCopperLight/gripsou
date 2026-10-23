@@ -5,7 +5,7 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
-import { useCompleteConnection, useDeleteConnection } from "../api/hooks";
+import { useCompleteConnection } from "../api/hooks";
 import { parseCallbackParams } from "../lib/connectionCallback";
 
 /** Where the bank provider sends the user back to. Mid-setup the page is never
@@ -14,7 +14,6 @@ export function ConnectionCallback() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const complete = useCompleteConnection();
-  const deleteConnection = useDeleteConnection();
   const { user } = useAuth();
   const search = window.location.search;
   const { connectionId, rest } = parseCallbackParams(search);
@@ -38,19 +37,12 @@ export function ConnectionCallback() {
     }
     if (!connectionId) return;
 
-    // Drop the orphaned pending row instead of leaving it stuck on "Connecting…".
-    if (rest.error) {
-      deleteConnection.mutate(connectionId);
-      return;
-    }
-
+    // Sent even when the provider reported an error: a failed complete deletes
+    // the pending connection server-side.
     complete
       .mutateAsync({ connectionId, params: rest })
       .then(() => navigate({ to: "/settings/connections" }))
-      .catch(() => {
-        setFailed(true);
-        deleteConnection.mutate(connectionId);
-      });
+      .catch(() => setFailed(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (inWelcome) return null;

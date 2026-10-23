@@ -428,6 +428,24 @@ pub async fn find_by_external_connection_id(
     Ok(row.map(|r| (r.id, r.user_id)))
 }
 
+/// Delete `user_id`'s connection `id` if it is still 'pending': a connect
+/// that failed or was cancelled. An active connection is never touched.
+pub async fn delete_pending(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<bool, CoreError> {
+    let n = sqlx::query!(
+        "delete from connection where id = $1 and user_id = $2 and status = 'pending'",
+        id,
+        user_id,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(n > 0)
+}
+
 /// Delete a connection and all its cascade-deleted data.
 /// Returns true if a row was deleted, false if not found or not owned by `user_id`.
 pub async fn delete_connection(

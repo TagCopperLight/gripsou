@@ -48,6 +48,7 @@ import {
   afterCorsOriginsChange,
   afterMfaChange,
   afterSessionChange,
+  afterConnectFailed,
   afterSyncRequested,
   afterUserChange,
 } from "./invalidate";
@@ -517,6 +518,7 @@ export function useCompleteConnection() {
     // A completed connect kicks an initial sync server-side, so the poll that
     // `afterSyncRequested` starts is what eventually refreshes the data views.
     onSuccess: () => afterSyncRequested(qc),
+    onError: () => afterConnectFailed(qc),
   });
 }
 

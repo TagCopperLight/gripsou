@@ -1062,8 +1062,30 @@ pub async fn init_connection(
 }
 
 /// Complete a pending connection: call `complete_connect()`, encrypt the
-/// returned credentials, and flip status to 'ok'.
+/// returned credentials, and flip status to 'ok'. On failure (including a
+/// callback the user cancelled) the pending row is deleted, so it never shows
+/// as "Connecting…"; the stale-pending sweep covers callbacks that never come.
 pub async fn complete_connection(
+    db: Db,
+    user_id: uuid::Uuid,
+    connection_id: uuid::Uuid,
+    params: &std::collections::HashMap<String, String>,
+) -> Result<(), gripsou_core::provider::ProviderError> {
+    let result = finish_connection(db.clone(), user_id, connection_id, params).await;
+    if result.is_err()
+        && let Err(e) =
+            gripsou_core::repo::connection::delete_pending(&db, user_id, connection_id).await
+    {
+        tracing::error!(
+            connection_id = %connection_id,
+            error = %gripsou_core::logs::error_chain(&e),
+            "pending connection delete failed"
+        );
+    }
+    result
+}
+
+async fn finish_connection(
     db: Db,
     user_id: uuid::Uuid,
     connection_id: uuid::Uuid,

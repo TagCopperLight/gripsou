@@ -3351,6 +3351,46 @@ pub(crate) mod auth_tests {
         assert!(err.0 == StatusCode::BAD_REQUEST || err.0 == StatusCode::NOT_FOUND);
     }
 
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_failed_complete_deletes_the_pending_connection_only(pool: PgPool) {
+        use gripsou_core::repo::connection;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let pending = connection::insert_pending(&pool, user, "powens", "Bank")
+            .await
+            .unwrap();
+        let active = connection::insert_pending(&pool, user, "powens", "Bank")
+            .await
+            .unwrap();
+        sqlx::query("update connection set status = 'ok' where id = $1")
+            .bind(active)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        for id in [pending, active] {
+            complete_connection(
+                State(pool.clone()),
+                auth::AuthUser {
+                    user_id: user,
+                    session_id: Uuid::new_v4(),
+                },
+                Json(dto::CompleteConnectionReq {
+                    connection_id: id.to_string(),
+                    params: [("error".to_string(), "access_denied".to_string())].into(),
+                }),
+            )
+            .await
+            .unwrap_err();
+        }
+
+        let left: Vec<Uuid> = sqlx::query_scalar("select id from connection where user_id = $1")
+            .bind(user)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, vec![active]);
+    }
+
     async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth::AuthUser {
         let token = login_token(pool, email, pw).await;
         let session =

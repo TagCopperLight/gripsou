@@ -63,6 +63,11 @@ export async function afterSyncRequested(qc: QueryClient) {
   if (!before && next && !hasSyncing(next)) await afterSyncFinished(qc);
 }
 
+// A failed connect: the server deleted the pending connection.
+export function afterConnectFailed(qc: QueryClient) {
+  return invalidateAll(qc, [keys.connections()]);
+}
+
 // Renaming/recolouring/retyping an account. The holdings and transactions
 // tables both render the account's name and colour from their own payloads, so
 // they go stale too — that omission was C-18.

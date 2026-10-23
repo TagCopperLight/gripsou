@@ -87,17 +87,20 @@ describe("ConnectionCallback", () => {
     expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
   });
 
-  it("deletes the pending connection and shows the failure when the provider reports an error", async () => {
+  it("passes a provider error on to complete, which cleans up, and shows the failure", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : noContent(),
+    );
     landWith("?state=c42&error=access_denied");
     render(withClient(<ConnectionCallback />));
 
     expect(screen.getByText(ERROR_TITLE)).toBeInTheDocument();
     await waitFor(() =>
-      expect(callsTo(fetchMock, "/connections/c42")).toEqual([
-        { method: "DELETE", body: undefined },
+      expect(callsTo(fetchMock, "/connections/complete")).toEqual([
+        { method: "POST", body: { connectionId: "c42", params: { error: "access_denied" } } },
       ]),
     );
-    expect(callsTo(fetchMock, "/connections/complete")).toEqual([]);
+    expect(callsTo(fetchMock, "/connections/c42")).toEqual([]);
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -114,7 +117,7 @@ describe("ConnectionCallback", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("deletes the pending connection and shows the failure when completing fails", async () => {
+  it("shows the failure, with no delete of its own, when completing fails", async () => {
     fetchMock.mockImplementation(async (url: string) =>
       url === "/api/connections/complete" ? new Response("boom", { status: 500 }) : noContent(),
     );
@@ -122,11 +125,7 @@ describe("ConnectionCallback", () => {
     render(withClient(<ConnectionCallback />));
 
     expect(await screen.findByText(ERROR_TITLE)).toBeInTheDocument();
-    await waitFor(() =>
-      expect(callsTo(fetchMock, "/connections/c42")).toEqual([
-        { method: "DELETE", body: undefined },
-      ]),
-    );
+    expect(callsTo(fetchMock, "/connections/c42")).toEqual([]);
     expect(navigate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to connections" }));

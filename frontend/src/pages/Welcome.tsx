@@ -12,7 +12,6 @@ import { postJson } from "../api/client";
 import {
   useCompleteConnection,
   useConnections,
-  useDeleteConnection,
   useEnabledProviders,
   useInitConnection,
 } from "../api/hooks";
@@ -50,7 +49,6 @@ export function Welcome() {
   const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
   const initConnection = useInitConnection();
   const completeConnection = useCompleteConnection();
-  const deleteConnection = useDeleteConnection();
 
   const [step, setStep] = useState<Step>(backFromBank ? 2 : 1);
   const [done, setDone] = useState<Record<Step, boolean>>({ 1: backFromBank, 2: false, 3: false });
@@ -73,13 +71,13 @@ export function Welcome() {
     const fail = () => {
       setBankFailed(true);
       setConnecting(false);
-      // Don't leave the orphaned pending row stuck on "Connecting…".
-      if (connectionId) deleteConnection.mutate(connectionId);
     };
-    if (!connectionId || rest.error) {
+    if (!connectionId) {
       fail();
       return;
     }
+    // A failed complete (a provider error included) deletes the pending
+    // connection server-side.
     completeConnection
       .mutateAsync({ connectionId, params: rest })
       .then(() => setConnecting(false))

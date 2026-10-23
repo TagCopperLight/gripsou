@@ -41,6 +41,9 @@ function routes(url: string, init?: RequestInit) {
     }]);
   if (url === "/api/connections/init" && method === "POST") return json({ connectionId: "c9", redirectUrl: null });
   if (url === "/api/auth/welcome" && method === "POST") return new Response(null, { status: 204 });
+  // Like the server: a provider error fails the complete.
+  if (url === "/api/connections/complete")
+    return new Response(null, { status: String(init?.body).includes('"error"') ? 400 : 204 });
   return json([]);
 }
 
@@ -207,6 +210,8 @@ describe("Welcome", () => {
 
   describe("finishing a bank connection", () => {
     const completeBody = { connectionId: "c9", params: { code: "abc" } };
+    const deletes = () =>
+      fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE");
 
     it("completes the connection, clears the callback from the URL and locks the bank step meanwhile", async () => {
       search = { step: "bank", callback: "state=c9&code=abc" };
@@ -232,7 +237,7 @@ describe("Welcome", () => {
       expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
     });
 
-    it("deletes the pending connection and offers to try again when completing fails", async () => {
+    it("offers to try again, with no delete of its own, when completing fails", async () => {
       search = { step: "bank", callback: "state=c9&code=abc" };
       fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
         url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : routes(url, init),
@@ -240,22 +245,21 @@ describe("Welcome", () => {
       renderWelcome();
 
       expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      await waitFor(() =>
-        expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE")).toHaveLength(1),
-      );
+      expect(deletes()).toHaveLength(0);
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
     });
 
-    it("deletes the pending connection without completing when the provider reported an error", async () => {
+    it("passes a provider error on to complete, which cleans up", async () => {
       search = { step: "bank", callback: "state=c9&error=access_denied" };
       renderWelcome();
 
       expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      await waitFor(() =>
-        expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE")).toHaveLength(1),
-      );
-      expect(posted("/connections/complete")).toHaveLength(0);
+      expect(JSON.parse((posted("/connections/complete")[0][1] as RequestInit).body as string)).toEqual({
+        connectionId: "c9",
+        params: { error: "access_denied" },
+      });
+      expect(deletes()).toHaveLength(0);
     });
 
     it("keeps the normal actions next to the failure when another bank is already connected", async () => {
@@ -278,8 +282,6 @@ describe("Welcome", () => {
       expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
     });
 
-    const deletes = () =>
-      fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE");
     const pendingRow = {
       providerKey: "p1", providerName: "Provider",
       connections: [{ id: "c9", displayName: "Bank 9", status: "pending", lastSyncAt: null, lastError: null, accounts: [], logo: null }],
@@ -308,17 +310,6 @@ describe("Welcome", () => {
       await waitFor(() => expect(posted("/connections/complete")).toHaveLength(1));
       await new Promise((r) => setTimeout(r, 20));
       expect(posted("/connections/complete")).toHaveLength(1);
-    });
-
-    it("deletes the pending connection only once under StrictMode when completing fails", async () => {
-      search = { step: "bank", callback: "state=c9&code=abc" };
-      fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
-        url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : routes(url, init),
-      );
-      renderWelcome({}, true);
-      await waitFor(() => expect(deletes()).toHaveLength(1));
-      await new Promise((r) => setTimeout(r, 20));
-      expect(deletes()).toHaveLength(1);
     });
 
     it("shows the failure, with no request to complete, for a callback without a state", async () => {
