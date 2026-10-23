@@ -275,9 +275,9 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
 
 /// A transaction on an account the sync never emitted must not destroy an
 /// otherwise good sync. Powens' transactions endpoint is user-scoped, so it can
-/// name a liability or deleted account that the mapper skipped on purpose; that
-/// used to abort the whole ingest transaction and, since the condition is
-/// permanent, fail every subsequent sync forever.
+/// name a liability or deleted account that the mapper skipped on purpose.
+/// Failing on it would fail every later sync too, since the row never goes
+/// away.
 #[sqlx::test(migrations = "../migrations")]
 async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;

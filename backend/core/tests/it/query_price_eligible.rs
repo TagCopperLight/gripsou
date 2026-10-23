@@ -116,7 +116,7 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
     Ok(())
 }
 
-/// C-3: the reporting currency is a divisor and nothing else — no holding,
+/// The reporting currency is a divisor and nothing else — no holding,
 /// price or account carries it — so it would never become rate-eligible on its
 /// own, and `reporting_fx_asof` would fall back to the pivot forever while the
 /// UI wore the chosen currency's symbol.

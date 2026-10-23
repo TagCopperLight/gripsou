@@ -367,9 +367,9 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                lot.unexplained_cost as "unexplained_cost!",
                -- Two separate failures, one flag: the position could not be
                -- valued at all, OR it is priceable but its account's currency
-               -- has no rate, so `invested` above coalesced to zero. The second
-               -- used to pass unflagged, showing a real value against a zero
-               -- cost basis and an invented gain.
+               -- has no rate, so `invested` above coalesced to zero. Unflagged,
+               -- the second would show a real value against a zero cost basis
+               -- and an invented gain.
                ((unit_value_asof(i.id, (select d from today)) is null
                  and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
                 or (coalesce(lot.basis, 0) <> 0

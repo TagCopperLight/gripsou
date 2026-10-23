@@ -123,7 +123,7 @@ impl PowensProvider {
     /// A fetch that cannot be walked to the end is an **error, never a short
     /// list**: the ingest reads "holding absent from this sync" as "position
     /// sold" and stamps a zero snapshot for it, so a truncated page would not
-    /// merely under-report — it would destroy that position's history (C-4).
+    /// merely under-report — it would destroy that position's history.
     async fn fetch_all<P: ListPage>(
         &self,
         auth_token: &str,

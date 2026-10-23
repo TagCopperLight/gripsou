@@ -2092,7 +2092,7 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// C-3: picking a reporting currency the install has no rate for must not
+/// Picking a reporting currency the install has no rate for must not
 /// silently relabel pivot figures with the wrong symbol. The fallback to the
 /// pivot stays — it beats collapsing every figure to NULL — but the row now
 /// says the conversion did not happen so the UI can too.
@@ -2145,9 +2145,9 @@ async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// C-6: a position can be perfectly priceable while the account it sits in has
-/// no rate. Net worth counts it; `invested` used to drop its basis on the floor
-/// with no flag, which reads as a several-hundred-percent gain out of nowhere.
+/// A position can be perfectly priceable while the account it sits in has no
+/// rate. Net worth counts it, so `invested` must flag the basis it could not
+/// convert: dropping it silently reads as a several-hundred-percent gain.
 #[sqlx::test(migrations = "../migrations")]
 async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;

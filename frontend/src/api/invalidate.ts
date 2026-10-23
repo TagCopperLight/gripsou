@@ -31,8 +31,8 @@ function invalidateQuietly(
 }
 
 // Everything whose numbers come out of synced data. `transactions` is in here
-// because ingesting transactions is the main thing a sync does — its absence
-// was C-17, which left the Transactions page showing pre-sync rows.
+// because ingesting transactions is the main thing a sync does: without it the
+// Transactions page keeps showing pre-sync rows.
 export function afterSyncFinished(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.netWorth(),
@@ -69,7 +69,7 @@ export function afterConnectFailed(qc: QueryClient) {
 
 // Renaming/recolouring/retyping an account. The holdings and transactions
 // tables both render the account's name and colour from their own payloads, so
-// they go stale too — that omission was C-18.
+// they go stale too.
 export function afterAccountEdit(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.accounts(),
@@ -154,7 +154,7 @@ export function afterBudgetTagChange(qc: QueryClient) {
 
 // Assigning a category, tagging a row, or any bulk write. The counts feed the
 // header and the `matching / total` readout, so they go stale with the list
-// itself — the same omission that was C-17 for the list.
+// itself.
 export function afterTransactionChange(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.budgetCategories(),

@@ -122,8 +122,8 @@ describe("useUpdateAccount invalidation", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
-    // The last two are C-18: both tables print accountName/accountColor from
-    // their own payload, so a rename left them showing the old value.
+    // The last two: both tables print accountName/accountColor from their own
+    // payload, so a rename would leave them showing the old value.
     expect(invalidatedKeys).toEqual([
       ["accounts"],
       ["connections"],
