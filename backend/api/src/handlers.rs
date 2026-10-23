@@ -98,7 +98,7 @@ pub async fn investment_returns(
                 id: a.account_id.to_string(),
                 name: acc.name.clone(),
                 color: acc.color.clone(),
-                source: acc.source_name.clone().unwrap_or_default(),
+                source: dto::source_name(acc),
                 missing: a
                     .figures
                     .missing
@@ -473,23 +473,24 @@ pub async fn transactions(
 
 pub async fn connections(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::ProviderGroup>>, ApiError> {
     let conns = gripsou_core::repo::connection::list_connections(&pool, user_id).await?;
     let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
-    Ok(Json(dto::ProviderGroup::tree(conns, accounts)))
+    Ok(Json(dto::ProviderGroup::tree(conns, accounts, &jobs)))
 }
 
 pub async fn sync_connection(
     State(pool): State<PgPool>,
-    State(key): State<crate::EncryptionKey>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<dto::ConnectionState>), ApiError> {
     use gripsou_core::repo::connection::BeginSync;
     match gripsou_jobs::request_sync(
         pool.clone(),
-        &key,
+        &jobs,
         user_id,
         id,
         gripsou_jobs::Trigger::Manual,
@@ -510,7 +511,7 @@ pub async fn sync_connection(
 
 pub async fn sync_all(
     State(pool): State<PgPool>,
-    State(key): State<crate::EncryptionKey>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     use gripsou_core::repo::connection::BeginSync;
@@ -519,7 +520,7 @@ pub async fn sync_all(
     for id in ids {
         if let BeginSync::Started(_) = gripsou_jobs::request_sync(
             pool.clone(),
-            &key,
+            &jobs,
             user_id,
             id,
             gripsou_jobs::Trigger::Manual,
@@ -568,9 +569,12 @@ pub async fn providers(
     State(pool): State<PgPool>,
     _: AdminUser,
 ) -> Result<Json<Vec<dto::Provider>>, ApiError> {
-    let rows = gripsou_core::repo::provider::account_providers(&pool).await?;
+    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
     Ok(Json(
-        rows.into_iter().map(dto::Provider::from_row).collect(),
+        gripsou_jobs::ACCOUNT_PROVIDERS
+            .iter()
+            .map(|k| dto::Provider::new(k, enabled.iter().any(|e| e == k.key)))
+            .collect(),
     ))
 }
 
@@ -704,18 +708,12 @@ pub async fn set_provider(
     Path(key): Path<String>,
     Json(body): Json<dto::SetProviderReq>,
 ) -> Result<Json<dto::Provider>, ApiError> {
-    // Reject unknown / non-account providers before mutating.
-    let row = gripsou_core::repo::provider::account_provider(&pool, &key)
-        .await?
-        .ok_or(ApiError::NotFound("provider not found"))?;
+    // Reject unknown providers before mutating.
+    let kind =
+        gripsou_jobs::account_provider(&key).ok_or(ApiError::NotFound("provider not found"))?;
     gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled).await?;
     tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
-    Ok(Json(dto::Provider {
-        key: row.key,
-        display_name: row.display_name,
-        description: row.description,
-        enabled: body.enabled,
-    }))
+    Ok(Json(dto::Provider::new(kind, body.enabled)))
 }
 
 pub async fn users(
@@ -1127,27 +1125,29 @@ pub async fn enabled_providers(
     State(pool): State<PgPool>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<dto::EnabledProvider>>, ApiError> {
-    let rows = gripsou_core::repo::provider::enabled_account_providers(&pool).await?;
+    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
     Ok(Json(
-        rows.into_iter()
-            .map(dto::EnabledProvider::from_row)
+        gripsou_jobs::ACCOUNT_PROVIDERS
+            .iter()
+            .filter(|k| enabled.iter().any(|e| e == k.key))
+            .map(dto::EnabledProvider::new)
             .collect(),
     ))
 }
 
 pub async fn manage_connection(
     State(pool): State<PgPool>,
-    State(key): State<crate::EncryptionKey>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>), ApiError> {
     let conn = gripsou_core::repo::connection::connection_for_sync(&pool, user_id, id)
         .await?
         .ok_or(ApiError::NotFound("connection not found"))?;
-    if !gripsou_jobs::supports_manage(&conn.provider_key) {
+    if !jobs.supports_manage(&conn.provider_key) {
         return Err(ApiError::bad_request("connection management unavailable"));
     }
-    let init = gripsou_jobs::manage_connection(&key, &conn)
+    let init = gripsou_jobs::manage_connection(&jobs, &conn)
         .await
         .map_err(|_| {
             // The temporary access URL and provider response must never enter logs.
@@ -1167,20 +1167,26 @@ pub async fn manage_connection(
 
 pub async fn init_connection(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::InitConnectionReq>,
 ) -> Result<(StatusCode, Json<dto::InitConnectionResp>), ApiError> {
-    // Validate provider is enabled (also fetches display_name for the row).
-    let enabled = gripsou_core::repo::provider::enabled_account_providers(&pool).await?;
-    let provider = enabled
-        .iter()
-        .find(|p| p.key == body.provider_key)
+    // Validate provider is known and enabled (also gives the row's name).
+    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
+    let provider = gripsou_jobs::account_provider(&body.provider_key)
+        .filter(|k| enabled.iter().any(|e| e == k.key))
         .ok_or_else(|| {
             ApiError::BadRequest(format!("provider '{}' is not enabled", body.provider_key))
         })?;
 
-    match gripsou_jobs::init_connection(pool, user_id, &body.provider_key, &provider.display_name)
-        .await
+    match gripsou_jobs::init_connection(
+        pool,
+        &jobs,
+        user_id,
+        &body.provider_key,
+        provider.display_name,
+    )
+    .await
     {
         Ok((connection_id, init)) => Ok((
             StatusCode::CREATED,
@@ -1198,7 +1204,7 @@ pub async fn init_connection(
 
 pub async fn complete_connection(
     State(pool): State<PgPool>,
-    State(key): State<crate::EncryptionKey>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::CompleteConnectionReq>,
 ) -> Result<StatusCode, ApiError> {
@@ -1208,7 +1214,7 @@ pub async fn complete_connection(
         .map_err(|_| ApiError::bad_request("invalid connection_id"))?;
 
     use gripsou_jobs::CompleteError;
-    match gripsou_jobs::complete_connection(pool, &key, user_id, connection_id, &body.params).await
+    match gripsou_jobs::complete_connection(pool, &jobs, user_id, connection_id, &body.params).await
     {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(CompleteError::NotFound) => Err(ApiError::NotFound("connection not found")),
@@ -1222,7 +1228,7 @@ pub async fn complete_connection(
 
 pub async fn webhook(
     State(pool): State<PgPool>,
-    State(key): State<crate::EncryptionKey>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     Path(provider): Path<String>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
     headers: HeaderMap,
@@ -1237,7 +1243,8 @@ pub async fn webhook(
                 .map(|s| (k.as_str().to_lowercase(), s.to_string()))
         })
         .collect();
-    match gripsou_jobs::handle_webhook(pool, &key, &provider, uri.path(), hmap, body.to_vec()).await
+    match gripsou_jobs::handle_webhook(pool, &jobs, &provider, uri.path(), hmap, body.to_vec())
+        .await
     {
         WebhookOutcome::Accepted => StatusCode::OK,
         WebhookOutcome::Unauthorized => StatusCode::UNAUTHORIZED,
@@ -2506,7 +2513,7 @@ pub(crate) mod auth_tests {
         for target in [id, Uuid::new_v4()] {
             let error = manage_connection(
                 State(pool.clone()),
-                State(gripsou_core::testkit::encryption_key()),
+                State(crate::testkit::deps()),
                 principal(),
                 Path(target),
             )
@@ -2526,7 +2533,6 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn sync_connection_guards_and_orchestrator_errors(pool: PgPool) {
         let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
-        // `powens` provider is seeded by migration 0002 (the FK requires it).
         let conn = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -2546,7 +2552,7 @@ pub(crate) mod auth_tests {
         // Unknown connection → 404.
         let nf = sync_connection(
             State(pool.clone()),
-            State(gripsou_core::testkit::encryption_key()),
+            State(crate::testkit::deps()),
             principal(),
             Path(Uuid::new_v4()),
         )
@@ -2562,7 +2568,7 @@ pub(crate) mod auth_tests {
             .unwrap();
         let busy = sync_connection(
             State(pool.clone()),
-            State(gripsou_core::testkit::encryption_key()),
+            State(crate::testkit::deps()),
             principal(),
             Path(conn),
         )
@@ -2577,8 +2583,7 @@ pub(crate) mod auth_tests {
             .execute(&pool)
             .await
             .unwrap();
-        gripsou_jobs::sync_connection(pool.clone(), gripsou_core::testkit::encryption_key(), conn)
-            .await;
+        gripsou_jobs::sync_connection(pool.clone(), crate::testkit::deps(), conn).await;
         let (status, err): (String, Option<String>) =
             sqlx::query_as("select status, last_error from connection where id=$1")
                 .bind(conn)
@@ -2592,13 +2597,6 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn connections_returns_provider_tree(pool: PgPool) {
         let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
-        sqlx::query(
-            "insert into provider (key, display_name, kind, enabled) \
-             values ('powens','Powens','account',true) on conflict (key) do nothing",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
         let conn = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -2620,6 +2618,7 @@ pub(crate) mod auth_tests {
 
         let groups = connections(
             State(pool.clone()),
+            State(crate::testkit::deps()),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),
@@ -2671,7 +2670,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
-        // yahoo is kind='price' and must be excluded; powens is enabled via seed.
+        // powens is enabled via seed.
         let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
         let principal = AdminUser { user_id: admin };
 
@@ -2680,11 +2679,11 @@ pub(crate) mod auth_tests {
             .expect("ok")
             .0;
 
-        assert_eq!(list.len(), 1, "only account-kind providers are listed");
+        assert_eq!(list.len(), 1, "only account providers are listed");
         assert_eq!(list[0].key, "powens");
         assert_eq!(list[0].display_name, "Powens");
         assert!(list[0].enabled, "powens is in the seeded enabled_providers");
-        assert!(list[0].description.is_some());
+        assert!(!list[0].description.is_empty());
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2734,7 +2733,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
-        // 'yahoo' is a price provider, not an account provider → treated as not found.
+        // 'yahoo' is a price provider, not an account provider: not found.
         for key in ["nope", "yahoo"] {
             let err = set_provider(
                 State(pool.clone()),
@@ -2750,7 +2749,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
-        // Seed: powens is enabled via migration 0002; yahoo is price kind.
+        // Seed: powens is enabled via migration 0002.
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let rows = enabled_providers(
             State(pool.clone()),
@@ -2763,7 +2762,7 @@ pub(crate) mod auth_tests {
         .expect("ok")
         .0;
 
-        // Only account-kind AND in enabled_providers list.
+        // Only account providers in the enabled_providers list.
         assert!(
             rows.iter().all(|p| p.key != "yahoo"),
             "price providers must be excluded"
@@ -2780,6 +2779,7 @@ pub(crate) mod auth_tests {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = init_connection(
             State(pool.clone()),
+            State(crate::testkit::deps()),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),
@@ -2798,6 +2798,7 @@ pub(crate) mod auth_tests {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let resp = init_connection(
             State(pool.clone()),
+            State(crate::testkit::deps()),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),
@@ -2875,7 +2876,7 @@ pub(crate) mod auth_tests {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = complete_connection(
             State(pool.clone()),
-            State(gripsou_core::testkit::encryption_key()),
+            State(crate::testkit::deps()),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),
@@ -2909,7 +2910,7 @@ pub(crate) mod auth_tests {
         for id in [pending, active] {
             complete_connection(
                 State(pool.clone()),
-                State(gripsou_core::testkit::encryption_key()),
+                State(crate::testkit::deps()),
                 auth::AuthUser {
                     user_id: user,
                     session_id: Uuid::new_v4(),

@@ -2,6 +2,7 @@
 //! These tests pin its shape: one per sync, with the agreed fields.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -9,7 +10,7 @@ use gripsou_core::dto::{Composition, InstrumentRef, SyncResult};
 use gripsou_core::provider::{
     AccountProvider, CompleteConnect, CompositionProvider, ConnectInit, ProviderError,
 };
-use gripsou_jobs::{SyncDeps, Trigger};
+use gripsou_jobs::{Deps, Trigger};
 use serde_json::Value;
 use sqlx::PgPool;
 use tracing::Instrument;
@@ -65,21 +66,19 @@ impl CompositionProvider for NoComposition {
     }
 }
 
-fn deps(mode: Mode) -> SyncDeps {
+fn deps(mode: Mode) -> Arc<Deps> {
     let mut accounts: HashMap<String, Box<dyn AccountProvider>> = HashMap::new();
     accounts.insert("fake".into(), Box::new(FakeBank { mode }));
-    SyncDeps {
+    Arc::new(Deps {
         key: gripsou_core::testkit::encryption_key(),
         accounts,
         prices: Vec::new(),
         composition: Box::new(NoComposition),
         time_limit: Duration::from_millis(500),
-    }
+    })
 }
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
-    sqlx::query("insert into provider (key, display_name, kind, enabled) values ('fake','fake','account',true) on conflict (key) do nothing")
-        .execute(pool).await.unwrap();
     let user = gripsou_core::testkit::seed_user(pool).await;
     let ct = gripsou_core::testkit::encryption_key()
         .encrypt(br#"{"auth_token":"tok"}"#)
@@ -107,7 +106,7 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Ok))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Ok), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(ok);
@@ -152,7 +151,7 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Fail))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Fail), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Daily))
         .await;
     assert!(!ok);
@@ -183,7 +182,7 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Panic))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Panic), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(!ok);
@@ -218,7 +217,7 @@ async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) 
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Hang))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Hang), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(!ok);
@@ -255,15 +254,9 @@ async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
         .unwrap();
 
     // Already syncing: the second request is refused and says why.
-    let r = gripsou_jobs::request_sync(
-        pool.clone(),
-        &gripsou_core::testkit::encryption_key(),
-        user,
-        conn,
-        Trigger::Manual,
-    )
-    .await
-    .unwrap();
+    let r = gripsou_jobs::request_sync(pool.clone(), &deps(Mode::Ok), user, conn, Trigger::Manual)
+        .await
+        .unwrap();
     assert!(matches!(
         r,
         gripsou_core::repo::connection::BeginSync::AlreadySyncing

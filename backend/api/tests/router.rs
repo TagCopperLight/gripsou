@@ -4,7 +4,11 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use gripsou_core::testkit::encryption_key as test_key;
+/// The job deps with whatever adapters the environment configures.
+fn test_deps() -> std::sync::Arc<gripsou_jobs::Deps> {
+    let key = gripsou_core::testkit::encryption_key();
+    std::sync::Arc::new(gripsou_jobs::Deps::from_env(key, "EUR".into()))
+}
 fn test_passkeys() -> gripsou_api::Passkeys {
     gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap()
 }
@@ -20,7 +24,7 @@ async fn public_health_auth_static_fallback_and_webhook_limit() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, test_key(), test_passkeys());
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
     for (path, status) in [
         ("/api/health", StatusCode::OK),
         ("/api/holdings", StatusCode::UNAUTHORIZED),
@@ -79,7 +83,7 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
         "console.log(1);".repeat(100),
     )
     .unwrap();
-    let app = gripsou_api::router(db, &dir, test_key(), test_passkeys());
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
     let get = |path: &str| {
         Request::builder()
             .uri(path)
@@ -123,7 +127,7 @@ async fn every_response_carries_the_security_headers() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, test_key(), test_passkeys());
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
 
     for path in ["/api/health", "/api/holdings", "/", "/some/spa/route"] {
         let r = app
@@ -170,7 +174,7 @@ async fn totp_setup_without_a_token_is_unauthorized() {
     let app = gripsou_api::router(
         db,
         std::path::Path::new("/nonexistent"),
-        test_key(),
+        test_deps(),
         test_passkeys(),
     );
     let r = app
@@ -203,7 +207,7 @@ async fn admin_routes_refuse_members(pool: sqlx::PgPool) {
     .await
     .unwrap();
     let dir = std::env::temp_dir();
-    let app = gripsou_api::router(pool, &dir, test_key(), test_passkeys());
+    let app = gripsou_api::router(pool, &dir, test_deps(), test_passkeys());
     let id = uuid::Uuid::new_v4();
     for (method, path) in [
         ("GET", "/api/users".to_string()),

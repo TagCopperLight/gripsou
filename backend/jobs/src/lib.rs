@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use gripsou_core::budget::ai::RunOutcome;
@@ -82,8 +82,9 @@ pub fn sync_span(user_id: Uuid, connection_id: Uuid, trigger: Trigger) -> tracin
     )
 }
 
-/// The key and adapters one sync uses. Built per sync (prices need the pivot).
-pub struct SyncDeps {
+/// The key and the adapters every job uses: built once at startup and shared
+/// (tests build their own, with fakes).
+pub struct Deps {
     pub key: EncryptionKey,
     pub accounts: HashMap<String, Box<dyn AccountProvider>>,
     pub prices: Vec<Box<dyn PriceProvider>>,
@@ -92,8 +93,9 @@ pub struct SyncDeps {
     pub time_limit: Duration,
 }
 
-impl SyncDeps {
-    pub async fn new(db: &Db, key: EncryptionKey) -> SyncDeps {
+impl Deps {
+    /// The adapters the environment configures, with the stored pivot.
+    pub async fn new(db: &Db, key: EncryptionKey) -> Deps {
         let pivot = gripsou_core::repo::settings::base_currency(db)
             .await
             .unwrap_or_else(|e| {
@@ -103,16 +105,29 @@ impl SyncDeps {
                 );
                 "EUR".to_string()
             });
-        SyncDeps {
+        Deps::from_env(key, pivot)
+    }
+
+    /// The adapters the environment configures. `pivot` is the FX storage
+    /// currency, which Yahoo's FX symbols need.
+    pub fn from_env(key: EncryptionKey, pivot: String) -> Deps {
+        Deps {
             key,
-            accounts: account_providers()
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v))
+            accounts: ACCOUNT_PROVIDERS
+                .iter()
+                .filter_map(|k| Some((k.key.to_string(), (k.build)()?)))
                 .collect(),
             prices: price_providers(pivot),
             composition: Box::new(composition_provider()),
             time_limit: SYNC_TIME_LIMIT,
         }
+    }
+
+    /// Whether the connection's provider can open its management page.
+    pub fn supports_manage(&self, provider_key: &str) -> bool {
+        self.accounts
+            .get(provider_key)
+            .is_some_and(|p| p.supports_manage())
     }
 }
 
@@ -130,15 +145,15 @@ fn skipped(reason: &'static str, user_id: Uuid, connection_id: Uuid, trigger: Tr
 }
 
 /// Run a claimed sync in the background, inside its `sync` span.
-fn spawn_sync(db: Db, key: EncryptionKey, user_id: Uuid, connection_id: Uuid, trigger: Trigger) {
+fn spawn_sync(db: Db, deps: Arc<Deps>, user_id: Uuid, connection_id: Uuid, trigger: Trigger) {
     let span = sync_span(user_id, connection_id, trigger);
-    tokio::spawn(sync_connection(db, key, connection_id).instrument(span));
+    tokio::spawn(sync_connection(db, deps, connection_id).instrument(span));
 }
 
 /// Claim the connection and spawn its sync, or log `sync skipped`.
-async fn claim_and_spawn(db: &Db, key: &EncryptionKey, user_id: Uuid, id: Uuid, trigger: Trigger) {
+async fn claim_and_spawn(db: &Db, deps: &Arc<Deps>, user_id: Uuid, id: Uuid, trigger: Trigger) {
     match connection::begin_sync(db, user_id, id).await {
-        Ok(BeginSync::Started(_)) => spawn_sync(db.clone(), key.clone(), user_id, id, trigger),
+        Ok(BeginSync::Started(_)) => spawn_sync(db.clone(), deps.clone(), user_id, id, trigger),
         Ok(BeginSync::AlreadySyncing) => skipped("already_running", user_id, id, trigger),
         Ok(BeginSync::NotFound) => skipped("not_found", user_id, id, trigger),
         Err(e) => {
@@ -153,7 +168,7 @@ async fn claim_and_spawn(db: &Db, key: &EncryptionKey, user_id: Uuid, id: Uuid, 
 }
 
 /// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
-pub async fn run_scheduler(db: Db, key: EncryptionKey) {
+pub async fn run_scheduler(db: Db, deps: Arc<Deps>) {
     // Boot sweep: every 'syncing' row predates this process, so whatever held
     // the lock is gone. The scheduler runs in the API process and the app is
     // single-instance, so there is no sibling whose live claim this could steal.
@@ -165,11 +180,11 @@ pub async fn run_scheduler(db: Db, key: EncryptionKey) {
     .await;
     tokio::spawn(prune_sessions(db.clone()));
     tokio::spawn(prune_logs(db.clone()));
-    tokio::spawn(sync_all_daily(db.clone(), key.clone()));
-    tokio::spawn(reap_awaiting(db, key));
+    tokio::spawn(sync_all_daily(db.clone(), deps.clone()));
+    tokio::spawn(reap_awaiting(db, deps));
 }
 
-async fn reap_awaiting(db: Db, key: EncryptionKey) {
+async fn reap_awaiting(db: Db, deps: Arc<Deps>) {
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     loop {
         tick.tick().await;
@@ -185,7 +200,7 @@ async fn reap_awaiting(db: Db, key: EncryptionKey) {
             }
         };
         for row in rows {
-            claim_and_spawn(&db, &key, row.user_id, row.id, Trigger::WebhookTimeout).await;
+            claim_and_spawn(&db, &deps, row.user_id, row.id, Trigger::WebhookTimeout).await;
         }
 
         // Backstop for abandoned webview flows whose callback never ran.
@@ -197,7 +212,7 @@ async fn reap_awaiting(db: Db, key: EncryptionKey) {
     }
 }
 
-async fn sync_all_daily(db: Db, key: EncryptionKey) {
+async fn sync_all_daily(db: Db, deps: Arc<Deps>) {
     // Check every hour for connections that haven't been synced in ~24h
     let mut tick = tokio::time::interval(Duration::from_secs(3600));
     loop {
@@ -223,7 +238,7 @@ async fn sync_all_daily(db: Db, key: EncryptionKey) {
                     started += 1;
                     let span = sync_span(row.user_id, row.id, Trigger::Daily);
                     per_user.entry(row.user_id).or_default().push(tokio::spawn(
-                        sync_connection_data(db.clone(), key.clone(), row.id).instrument(span),
+                        sync_connection_data(db.clone(), deps.clone(), row.id).instrument(span),
                     ));
                 }
                 Ok(BeginSync::AlreadySyncing) => {
@@ -304,14 +319,31 @@ async fn prune_logs(db: Db) {
     }
 }
 
-/// Account-provider adapters keyed by provider key. Providers absent from env
-/// are omitted rather than panicking — the caller sees "no adapter" errors.
-fn account_providers() -> HashMap<&'static str, Box<dyn AccountProvider>> {
-    let mut m: HashMap<&'static str, Box<dyn AccountProvider>> = HashMap::new();
-    if let Some(p) = gripsou_providers::powens::PowensProvider::from_env() {
-        m.insert("powens", Box::new(p));
-    }
-    m
+/// One account provider this build knows: what the admin and the connect
+/// page show, and how to build its adapter. This table is the only list of
+/// account providers, so adding one touches no schema; the admin turns it on
+/// in `app_settings.enabled_providers`.
+pub struct AccountProviderKind {
+    pub key: &'static str,
+    pub display_name: &'static str,
+    pub description: &'static str,
+    /// None when the environment lacks its credentials: the provider is then
+    /// listed but has no adapter, and its connections fail with "no adapter".
+    build: fn() -> Option<Box<dyn AccountProvider>>,
+}
+
+pub const ACCOUNT_PROVIDERS: &[AccountProviderKind] = &[AccountProviderKind {
+    key: "powens",
+    display_name: "Powens",
+    description: "European bank & brokerage aggregation. Connects checking, savings, PEA and brokerage accounts.",
+    build: || {
+        gripsou_providers::powens::PowensProvider::from_env()
+            .map(|p| Box::new(p) as Box<dyn AccountProvider>)
+    },
+}];
+
+pub fn account_provider(key: &str) -> Option<&'static AccountProviderKind> {
+    ACCOUNT_PROVIDERS.iter().find(|k| k.key == key)
 }
 
 /// Price-provider adapters. Yahoo needs no credentials, so it is always
@@ -578,8 +610,8 @@ fn decrypt_credentials(
 /// Run one connection's sync to completion, updating its status, then
 /// categorise the user's new rows. Fetches and decrypts credentials from the
 /// DB before calling the adapter.
-pub async fn sync_connection(db: Db, key: EncryptionKey, connection_id: Uuid) {
-    if !sync_connection_data(db.clone(), key, connection_id).await {
+pub async fn sync_connection(db: Db, deps: Arc<Deps>, connection_id: Uuid) {
+    if !sync_connection_data(db.clone(), deps, connection_id).await {
         return;
     }
     // After the lock is released: categorising must never hold a sync.
@@ -610,19 +642,12 @@ fn failure(step: &'static str, error: impl Into<String>) -> SyncFailure {
 }
 
 /// The sync itself, without the AI run. True when the data was ingested.
-/// Runs inside a `sync_span`.
-async fn sync_connection_data(db: Db, key: EncryptionKey, connection_id: Uuid) -> bool {
-    let deps = SyncDeps::new(&db, key).await;
-    sync_connection_data_with(db, connection_id, deps).await
-}
-
-/// [`sync_connection_data`] with its adapters passed in (tests use fakes).
 /// Runs inside a `sync_span`, and logs `sync started`, one line per step and
 /// exactly one `sync finished`, a panic or a timeout included: the sync runs
 /// in its own task, and if that task panics or outlives `deps.time_limit` it
 /// is stopped, the connection's lock is released and `sync finished` says
 /// `failed_step = "panic"` or `"timeout"`.
-pub async fn sync_connection_data_with(db: Db, connection_id: Uuid, deps: SyncDeps) -> bool {
+pub async fn sync_connection_data(db: Db, deps: Arc<Deps>, connection_id: Uuid) -> bool {
     let started = std::time::Instant::now();
     let limit = deps.time_limit;
     let task_db = db.clone();
@@ -658,8 +683,8 @@ pub async fn sync_connection_data_with(db: Db, connection_id: Uuid, deps: SyncDe
 }
 
 /// One sync, start to `sync finished`, unsupervised: only
-/// [`sync_connection_data_with`] calls it.
-async fn run_sync_logged(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool {
+/// [`sync_connection_data`] calls it.
+async fn run_sync_logged(db: &Db, connection_id: Uuid, deps: &Deps) -> bool {
     let started = std::time::Instant::now();
     tracing::info!("sync started");
     match run_sync(db, connection_id, deps).await {
@@ -710,7 +735,7 @@ async fn run_sync_logged(db: &Db, connection_id: Uuid, deps: &SyncDeps) -> bool 
 async fn run_sync(
     db: &Db,
     connection_id: Uuid,
-    deps: &SyncDeps,
+    deps: &Deps,
 ) -> Result<gripsou_core::ingest::IngestSummary, SyncFailure> {
     use gripsou_core::logs::error_chain;
     let provider_key = connection::provider_key(db, connection_id)
@@ -814,14 +839,13 @@ pub enum WebhookOutcome {
 /// signature so the provider stops retrying.
 pub async fn handle_webhook(
     db: Db,
-    key: &EncryptionKey,
+    deps: &Arc<Deps>,
     provider: &str,
     path: &str,
     headers: std::collections::HashMap<String, String>,
     body: Vec<u8>,
 ) -> WebhookOutcome {
-    let providers = account_providers();
-    let Some(adapter) = providers.get(provider) else {
+    let Some(adapter) = deps.accounts.get(provider) else {
         tracing::warn!(provider, reason = "unknown_provider", "webhook rejected");
         return WebhookOutcome::NotFound;
     };
@@ -847,7 +871,7 @@ pub async fn handle_webhook(
     {
         Ok(Some((id, user_id))) => {
             tracing::info!(provider, outcome = "matched", connection_id = %id, "webhook received");
-            claim_and_spawn(&db, key, user_id, id, Trigger::Webhook).await;
+            claim_and_spawn(&db, deps, user_id, id, Trigger::Webhook).await;
         }
         Ok(None) => tracing::warn!(
             provider,
@@ -867,7 +891,7 @@ pub async fn handle_webhook(
 /// Others: direct full-fetch under `trigger`. Err only on a database failure.
 pub async fn request_sync(
     db: Db,
-    key: &EncryptionKey,
+    deps: &Arc<Deps>,
     user_id: Uuid,
     id: Uuid,
     trigger: Trigger,
@@ -877,13 +901,13 @@ pub async fn request_sync(
         return Ok(BeginSync::NotFound);
     };
 
-    let providers = account_providers();
     let has_external_id = conn
         .provider_meta
         .get("external_connection_id")
         .and_then(|v| v.as_str())
         .is_some_and(|s| !s.is_empty());
-    let webhook = providers
+    let webhook = deps
+        .accounts
         .get(conn.provider_key.as_str())
         .map(|a| a.webhooks_enabled())
         .unwrap_or(false)
@@ -904,11 +928,11 @@ pub async fn request_sync(
                     "refresh requested"
                 );
                 tokio::spawn(
-                    do_request_refresh(db.clone(), key.clone(), user_id, id, conn)
+                    do_request_refresh(db.clone(), deps.clone(), user_id, id, conn)
                         .in_current_span(),
                 );
             } else {
-                spawn_sync(db.clone(), key.clone(), user_id, id, trigger);
+                spawn_sync(db.clone(), deps.clone(), user_id, id, trigger);
             }
             Ok(BeginSync::Started(state))
         }
@@ -940,20 +964,19 @@ async fn refresh_failed(db: &Db, id: Uuid, msg: impl Into<String>) {
 /// Decrypt creds and ask the provider to refresh. On failure, surface as error.
 async fn do_request_refresh(
     db: Db,
-    key: EncryptionKey,
+    deps: Arc<Deps>,
     user_id: Uuid,
     id: Uuid,
     conn: connection::ConnForSync,
 ) {
-    let creds = match decrypt_credentials(&key, &conn.credentials) {
+    let creds = match decrypt_credentials(&deps.key, &conn.credentials) {
         Ok(c) => c,
         Err(e) => {
             refresh_failed(&db, id, e).await;
             return;
         }
     };
-    let providers = account_providers();
-    let Some(adapter) = providers.get(conn.provider_key.as_str()) else {
+    let Some(adapter) = deps.accounts.get(conn.provider_key.as_str()) else {
         refresh_failed(
             &db,
             id,
@@ -973,7 +996,7 @@ async fn do_request_refresh(
             tracing::info!(connection_id = %id, "refresh refused as already up to date");
             match connection::begin_sync(&db, user_id, id).await {
                 Ok(BeginSync::Started(_)) => {
-                    sync_connection(db.clone(), key, id)
+                    sync_connection(db.clone(), deps, id)
                         .instrument(sync_span(user_id, id, Trigger::AlreadyFresh))
                         .await
                 }
@@ -995,24 +1018,18 @@ async fn do_request_refresh(
     }
 }
 
-pub fn supports_manage(provider_key: &str) -> bool {
-    account_providers()
-        .get(provider_key)
-        .is_some_and(|p| p.supports_manage())
-}
-
 /// Credentials never leave the server; the returned URL contains a single-use code.
 pub async fn manage_connection(
-    key: &EncryptionKey,
+    deps: &Deps,
     conn: &gripsou_core::repo::connection::ConnForSync,
 ) -> Result<gripsou_core::provider::ConnectInit, gripsou_core::provider::ProviderError> {
     use gripsou_core::provider::ProviderError;
-    let providers = account_providers();
-    let adapter = providers
+    let adapter = deps
+        .accounts
         .get(conn.provider_key.as_str())
         .filter(|p| p.supports_manage())
         .ok_or(ProviderError::NotImplemented)?;
-    let credentials = decrypt_credentials(key, &conn.credentials)
+    let credentials = decrypt_credentials(&deps.key, &conn.credentials)
         .map_err(|_| ProviderError::Other("connection credentials unavailable".into()))?;
     adapter.manage(&credentials, &conn.provider_meta).await
 }
@@ -1024,6 +1041,7 @@ pub async fn manage_connection(
 /// pending rows when the provider refuses (e.g. env vars not set).
 pub async fn init_connection(
     db: Db,
+    deps: &Deps,
     user_id: uuid::Uuid,
     provider_key: &str,
     display_name: &str,
@@ -1031,8 +1049,8 @@ pub async fn init_connection(
 {
     use gripsou_core::provider::ConnectInit;
 
-    let providers = account_providers();
-    let adapter = providers
+    let adapter = deps
+        .accounts
         .get(provider_key)
         .ok_or_else(|| ProviderError::Other(format!("no adapter for provider '{provider_key}'")))?;
 
@@ -1077,12 +1095,12 @@ impl From<ProviderError> for CompleteError {
 /// as "Connecting…"; the stale-pending sweep covers callbacks that never come.
 pub async fn complete_connection(
     db: Db,
-    key: &EncryptionKey,
+    deps: &Arc<Deps>,
     user_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     params: &std::collections::HashMap<String, String>,
 ) -> Result<(), CompleteError> {
-    let result = finish_connection(db.clone(), key, user_id, connection_id, params).await;
+    let result = finish_connection(db.clone(), deps, user_id, connection_id, params).await;
     if result.is_err()
         && let Err(e) =
             gripsou_core::repo::connection::delete_pending(&db, user_id, connection_id).await
@@ -1098,7 +1116,7 @@ pub async fn complete_connection(
 
 async fn finish_connection(
     db: Db,
-    key: &EncryptionKey,
+    deps: &Arc<Deps>,
     user_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     params: &std::collections::HashMap<String, String>,
@@ -1111,8 +1129,8 @@ async fn finish_connection(
         .map_err(internal)?
         .ok_or(CompleteError::NotFound)?;
 
-    let providers = account_providers();
-    let adapter = providers
+    let adapter = deps
+        .accounts
         .get(provider_key.as_str())
         .ok_or_else(|| CompleteError::Internal(format!("no adapter for '{provider_key}'")))?;
 
@@ -1124,7 +1142,7 @@ async fn finish_connection(
 
     let completed = adapter.complete_connect(&query).await?;
     let encrypted =
-        encrypt_credentials(key, &completed.credentials).map_err(CompleteError::Internal)?;
+        encrypt_credentials(&deps.key, &completed.credentials).map_err(CompleteError::Internal)?;
 
     let updated = gripsou_core::repo::connection::finish_connect(
         &db,
@@ -1142,7 +1160,7 @@ async fn finish_connection(
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
     // The connect itself has succeeded either way, so a failure here is logged,
     // not returned — but it must not be invisible.
-    match request_sync(db.clone(), key, user_id, connection_id, Trigger::Initial).await {
+    match request_sync(db.clone(), deps, user_id, connection_id, Trigger::Initial).await {
         Ok(_) => {} // started or skipped: both already logged
         Err(e) => tracing::error!(
             connection_id = %connection_id,

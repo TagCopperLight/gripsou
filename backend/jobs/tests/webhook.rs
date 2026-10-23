@@ -1,10 +1,5 @@
 //! Integration tests for `gripsou_jobs::handle_webhook`.
 //!
-//! Env-isolation note: Cargo runs integration tests in a single process; env
-//! vars are process-global. All three tests use the same POWENS_WEBHOOK_SECRET
-//! value so concurrent runs don't race on the secret (they all agree). A
-//! `Mutex<()>` serialises the critical env→call section to avoid TOCTOU.
-//!
 //! Determinism note: `handle_webhook` awaits `begin_sync` *before* spawning
 //! `sync_connection`, so the 'syncing' status transition is committed
 //! synchronously. The test queries the DB immediately after `handle_webhook`
@@ -17,20 +12,32 @@
 //! the connection exists, and rely on the synchronous begin_sync for the
 //! status check right after handle_webhook returns).
 
+use std::sync::Arc;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
+use gripsou_core::provider::AccountProvider;
 use gripsou_core::testkit;
+use gripsou_jobs::Deps;
+use gripsou_providers::powens::PowensProvider;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use sqlx::PgPool;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
-/// All webhook tests share this secret so concurrent runs agree on the
-/// value that `account_providers()` reads from the environment.
-const WEBHOOK_SECRET: &str = "shared-test-webhook-secret-42";
+const WEBHOOK_SECRET: &str = "test-webhook-secret";
 
-/// Serialises the env-set + handle_webhook window across concurrent tests.
-static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+/// Deps whose only account adapter is Powens with [`WEBHOOK_SECRET`], its
+/// server unreachable.
+fn deps() -> Arc<Deps> {
+    let mut deps = Deps::from_env(testkit::encryption_key(), "EUR".into());
+    let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
+    deps.accounts = [(
+        "powens".to_string(),
+        Box::new(powens) as Box<dyn AccountProvider>,
+    )]
+    .into();
+    Arc::new(deps)
+}
 
 /// Compute the BI-Signature for a Powens webhook.
 fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
@@ -62,18 +69,6 @@ async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uui
     conn_id
 }
 
-/// Set all POWENS_* env vars required by PowensProvider::from_env().
-/// Always uses WEBHOOK_SECRET so concurrent tests agree on the value.
-fn set_powens_env() {
-    unsafe {
-        std::env::set_var("POWENS_CLIENT_ID", "test-client");
-        std::env::set_var("POWENS_CLIENT_SECRET", "test-secret");
-        std::env::set_var("POWENS_DOMAIN", "127.0.0.1:0"); // unreachable — no HTTP calls in webhook path
-        std::env::set_var("POWENS_REDIRECT_URI", "https://gripsou.test/callback");
-        std::env::set_var("POWENS_WEBHOOK_SECRET", WEBHOOK_SECRET);
-    }
-}
-
 // ── valid signature + known connection ───────────────────────────────────────
 
 /// A correctly-signed webhook with a known connection id claims the connection
@@ -98,19 +93,15 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
     headers.insert("bi-signature-date".to_string(), date.to_string());
     headers.insert("bi-signature".to_string(), sig);
 
-    let outcome = {
-        let _guard = ENV_LOCK.lock().await;
-        set_powens_env();
-        gripsou_jobs::handle_webhook(
-            pool.clone(),
-            &testkit::encryption_key(),
-            "powens",
-            path,
-            headers,
-            body.as_bytes().to_vec(),
-        )
-        .await
-    };
+    let outcome = gripsou_jobs::handle_webhook(
+        pool.clone(),
+        &deps(),
+        "powens",
+        path,
+        headers,
+        body.as_bytes().to_vec(),
+    )
+    .await;
 
     assert!(
         matches!(outcome, gripsou_jobs::WebhookOutcome::Accepted),
@@ -156,19 +147,15 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
         "bm90LXRoZS1yaWdodC1zaWc=".to_string(),
     );
 
-    let outcome = {
-        let _guard = ENV_LOCK.lock().await;
-        set_powens_env();
-        gripsou_jobs::handle_webhook(
-            pool.clone(),
-            &testkit::encryption_key(),
-            "powens",
-            path,
-            headers,
-            body.as_bytes().to_vec(),
-        )
-        .await
-    };
+    let outcome = gripsou_jobs::handle_webhook(
+        pool.clone(),
+        &deps(),
+        "powens",
+        path,
+        headers,
+        body.as_bytes().to_vec(),
+    )
+    .await;
 
     assert!(
         matches!(outcome, gripsou_jobs::WebhookOutcome::Unauthorized),
@@ -217,19 +204,15 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
     headers.insert("bi-signature-date".to_string(), date.to_string());
     headers.insert("bi-signature".to_string(), sig);
 
-    let outcome = {
-        let _guard = ENV_LOCK.lock().await;
-        set_powens_env();
-        gripsou_jobs::handle_webhook(
-            pool.clone(),
-            &testkit::encryption_key(),
-            "powens",
-            path,
-            headers,
-            body.as_bytes().to_vec(),
-        )
-        .await
-    };
+    let outcome = gripsou_jobs::handle_webhook(
+        pool.clone(),
+        &deps(),
+        "powens",
+        path,
+        headers,
+        body.as_bytes().to_vec(),
+    )
+    .await;
 
     assert!(
         matches!(outcome, gripsou_jobs::WebhookOutcome::Accepted),

@@ -442,12 +442,13 @@ pub struct Account {
     pub value: String,
     pub fx_missing: bool,
     pub last_sync_at: Option<i64>,
-    pub source_name: Option<String>,
+    pub source_name: String,
     pub source_logo: Option<String>,
 }
 
 impl Account {
     pub fn from_row(r: gripsou_core::repo::query::AccountRow) -> Self {
+        let source_name = source_name(&r);
         Account {
             id: r.account_id.to_string(),
             connection_id: r.connection_id.to_string(),
@@ -459,7 +460,7 @@ impl Account {
             fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
             source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),
-            source_name: r.source_name,
+            source_name,
         }
     }
 }
@@ -595,6 +596,7 @@ impl ProviderGroup {
     pub fn tree(
         conns: Vec<gripsou_core::repo::connection::ConnectionListRow>,
         accounts: Vec<gripsou_core::repo::connection::ConnectionAccountRow>,
+        jobs: &gripsou_jobs::Deps,
     ) -> Vec<ProviderGroup> {
         use std::collections::HashMap;
         let mut by_conn: HashMap<uuid::Uuid, Vec<SyncAccount>> = HashMap::new();
@@ -618,7 +620,7 @@ impl ProviderGroup {
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {
             let conn = SyncConnection {
-                can_manage: gripsou_jobs::supports_manage(&c.provider_key),
+                can_manage: jobs.supports_manage(&c.provider_key),
                 health: c
                     .provider_meta
                     .get("sync_health")
@@ -636,8 +638,8 @@ impl ProviderGroup {
             match groups.last_mut() {
                 Some(g) if g.provider_key == c.provider_key => g.connections.push(conn),
                 _ => groups.push(ProviderGroup {
+                    provider_name: provider_name(&c.provider_key).to_string(),
                     provider_key: c.provider_key,
-                    provider_name: c.provider_name,
                     connections: vec![conn],
                 }),
             }
@@ -853,17 +855,17 @@ pub struct DeleteUserReq {
 pub struct Provider {
     pub key: String,
     pub display_name: String,
-    pub description: Option<String>,
+    pub description: String,
     pub enabled: bool,
 }
 
 impl Provider {
-    pub fn from_row(r: gripsou_core::repo::provider::ProviderRow) -> Self {
+    pub fn new(k: &gripsou_jobs::AccountProviderKind, enabled: bool) -> Self {
         Provider {
-            key: r.key,
-            display_name: r.display_name,
-            description: r.description,
-            enabled: r.enabled,
+            key: k.key.into(),
+            display_name: k.display_name.into(),
+            description: k.description.into(),
+            enabled,
         }
     }
 }
@@ -878,17 +880,29 @@ pub struct SetProviderReq {
 pub struct EnabledProvider {
     pub key: String,
     pub display_name: String,
-    pub description: Option<String>,
+    pub description: String,
 }
 
 impl EnabledProvider {
-    pub fn from_row(r: gripsou_core::repo::provider::EnabledProviderRow) -> Self {
+    pub fn new(k: &gripsou_jobs::AccountProviderKind) -> Self {
         EnabledProvider {
-            key: r.key,
-            display_name: r.display_name,
-            description: r.description,
+            key: k.key.into(),
+            display_name: k.display_name.into(),
+            description: k.description.into(),
         }
     }
+}
+
+/// A provider's display name, or its key for one this build no longer knows.
+fn provider_name(key: &str) -> &str {
+    gripsou_jobs::account_provider(key).map_or(key, |k| k.display_name)
+}
+
+/// Where an account comes from: its bank once known, else its provider.
+pub fn source_name(r: &gripsou_core::repo::query::AccountRow) -> String {
+    r.institution_name
+        .clone()
+        .unwrap_or_else(|| provider_name(&r.provider_key).to_string())
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -1044,7 +1058,6 @@ mod tests {
             id: Uuid::from_u128(1),
             provider_meta: serde_json::json!({}),
             provider_key: "powens".into(),
-            provider_name: "Powens".into(),
             display_name: "My bank".into(),
             institution_key: institution_key.map(|s| s.to_string()),
             institution_name: Some("BNP Paribas".into()),
@@ -1058,7 +1071,11 @@ mod tests {
     fn connection_logo_derives_from_institution_key() {
         // logo must come from the connector key via the core helper — not be
         // hardcoded and not derived from the name.
-        let groups = ProviderGroup::tree(vec![conn_row(Some("some-key"))], vec![]);
+        let groups = ProviderGroup::tree(
+            vec![conn_row(Some("some-key"))],
+            vec![],
+            &crate::testkit::deps(),
+        );
         let conn = &groups[0].connections[0];
         assert_eq!(
             conn.logo,
@@ -1068,7 +1085,7 @@ mod tests {
 
     #[test]
     fn connection_logo_none_without_institution_key() {
-        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![]);
+        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![], &crate::testkit::deps());
         assert_eq!(groups[0].connections[0].logo, None);
     }
 }

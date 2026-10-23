@@ -546,7 +546,8 @@ pub struct AccountRow {
     pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub institution_key: Option<String>,
-    pub source_name: Option<String>,
+    pub institution_name: Option<String>,
+    pub provider_key: String,
 }
 
 /// One row per account: latest snapshot value per holding, summed, with the
@@ -619,14 +620,14 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
-               coalesce(c.institution_name, p.display_name) as source_name
+               c.institution_name,
+               c.provider_key
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
-        join provider p     on p.key = c.provider_key
-        group by a.id, c.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, p.display_name
+        group by a.id, c.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
         order by sum(l.value) desc
         "#,
         user_id,

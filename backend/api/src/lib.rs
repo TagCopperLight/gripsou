@@ -35,13 +35,19 @@ pub struct AppState {
     pub db: sqlx::PgPool,
     pub login_throttle: Arc<LoginThrottle>,
     pub second_factor_throttle: Arc<SecondFactorThrottle>,
-    pub encryption_key: EncryptionKey,
+    pub jobs: Arc<gripsou_jobs::Deps>,
     pub passkeys: Passkeys,
 }
 
 impl FromRef<AppState> for EncryptionKey {
     fn from_ref(state: &AppState) -> EncryptionKey {
-        state.encryption_key.clone()
+        state.jobs.key.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<gripsou_jobs::Deps> {
+    fn from_ref(state: &AppState) -> Arc<gripsou_jobs::Deps> {
+        state.jobs.clone()
     }
 }
 
@@ -72,14 +78,14 @@ impl FromRef<AppState> for Arc<SecondFactorThrottle> {
 pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
-    encryption_key: EncryptionKey,
+    jobs: Arc<gripsou_jobs::Deps>,
     passkeys: Passkeys,
 ) -> Router {
     let app_state = AppState {
         db: db.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
         second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
-        encryption_key,
+        jobs,
         passkeys,
     };
 

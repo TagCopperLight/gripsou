@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               p.display_name  as \"provider_name!\",\n               c.display_name  as \"display_name!\",\n               c.institution_name,\n               c.institution_key,\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error,\n               c.provider_meta as \"provider_meta!\"\n        from connection c\n        join provider p on p.key = c.provider_key\n        where c.user_id = $1\n        order by p.display_name, c.display_name, c.id\n        ",
+  "query": "\n        select c.id           as \"id!\",\n               c.provider_key  as \"provider_key!\",\n               c.display_name  as \"display_name!\",\n               c.institution_name,\n               c.institution_key,\n               c.status        as \"status!\",\n               c.last_sync_at,\n               c.last_error,\n               c.provider_meta as \"provider_meta!\"\n        from connection c\n        where c.user_id = $1\n        order by c.provider_key, c.display_name, c.id\n        ",
   "describe": {
     "columns": [
       {
@@ -27,17 +27,6 @@
       },
       {
         "ordinal": 2,
-        "name": "provider_name!",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "provider",
-            "name": "display_name"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
         "name": "display_name!",
         "type_info": "Text",
         "origin": {
@@ -48,7 +37,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "institution_name",
         "type_info": "Text",
         "origin": {
@@ -59,7 +48,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "institution_key",
         "type_info": "Text",
         "origin": {
@@ -70,7 +59,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "status!",
         "type_info": "Text",
         "origin": {
@@ -81,7 +70,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "last_sync_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "last_error",
         "type_info": "Text",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "provider_meta!",
         "type_info": "Jsonb",
         "origin": {
@@ -123,7 +112,6 @@
       false,
       false,
       false,
-      false,
       true,
       true,
       false,
@@ -132,5 +120,5 @@
       false
     ]
   },
-  "hash": "251632566a6c82b1de82840e2c169cfdf346f9c76e4b52d0c92368719e617f7b"
+  "hash": "15bb8646c862c2bf2a825ae27b80efcb43a3a8f5ed4cb6ae2cd224b33892e31b"
 }

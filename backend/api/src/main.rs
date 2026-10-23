@@ -40,10 +40,16 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(code);
     };
 
-    tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), key.clone()));
+    let jobs = std::sync::Arc::new(gripsou_jobs::Deps::new(&db, key).await);
+    tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), jobs.clone()));
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
-    let app = gripsou_api::router(db.clone(), std::path::Path::new(&static_dir), key, passkeys);
+    let app = gripsou_api::router(
+        db.clone(),
+        std::path::Path::new(&static_dir),
+        jobs,
+        passkeys,
+    );
     // Hash the dummy password now so the first login isn't slower.
     std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
 

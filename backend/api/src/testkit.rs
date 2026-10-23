@@ -6,6 +6,12 @@ use gripsou_core::repo::session;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// The job deps with whatever adapters the environment configures.
+pub(crate) fn deps() -> std::sync::Arc<gripsou_jobs::Deps> {
+    let key = gripsou_core::testkit::encryption_key();
+    std::sync::Arc::new(gripsou_jobs::Deps::from_env(key, "EUR".into()))
+}
+
 /// The password `seed_user` gives its users.
 pub(crate) const PASSWORD: &str = "hunter22";
 

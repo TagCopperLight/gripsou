@@ -1,22 +1,41 @@
 //! Integration tests for `gripsou_jobs::request_sync`.
 //!
-//! Env-isolation note: Cargo runs integration tests within a single process and
-//! env vars are process-global.
-//!
-//! - `request_sync_direct_path_marks_syncing` uses a custom provider key
-//!   ('no-adapter') that has no entry in `account_providers()`, so it takes the
-//!   direct path deterministically without touching any POWENS_* vars.
-//! - `request_sync_webhook_path_marks_awaiting` sets the full POWENS_* set and
-//!   asserts the *synchronous* status transition (`begin_await` commits before
-//!   the spawn fires). The spawned `do_request_refresh` will fail (fake domain
-//!   has no server) and may race to call `mark_synced_error`; in practice the
-//!   status check runs before the HTTP call resolves, but this is not
-//!   guaranteed. If this test ever flips to 'error', that is the documented
-//!   race — see task-5-report.md.
+//! `request_sync_webhook_path_marks_awaiting` asserts the *synchronous* status
+//! transition (`begin_await` commits before the spawn fires). The spawned
+//! `do_request_refresh` will fail (the adapter's server is unreachable) and may
+//! race to call `mark_synced_error`; in practice the status check runs before
+//! the HTTP call resolves, but this is not guaranteed.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use gripsou_core::provider::AccountProvider;
 use gripsou_core::testkit;
+use gripsou_jobs::Deps;
+use gripsou_providers::powens::PowensProvider;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// Deps with the given account adapters only.
+fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
+    let mut deps = Deps::from_env(testkit::encryption_key(), "EUR".into());
+    deps.accounts = accounts
+        .into_iter()
+        .map(|(k, a)| (k.to_string(), a))
+        .collect::<HashMap<_, _>>();
+    Arc::new(deps)
+}
+
+/// A webhook-enabled Powens adapter whose server is unreachable.
+fn powens_with_webhooks() -> Arc<Deps> {
+    deps(vec![(
+        "powens",
+        Box::new(PowensProvider::for_test_with_secret(
+            "http://127.0.0.1:1",
+            "test-secret-webhook",
+        )),
+    )])
+}
 
 /// Encrypt `creds` with the test key and return the blob stored in the DB.
 fn make_encrypted_creds(creds: serde_json::Value) -> serde_json::Value {
@@ -50,31 +69,13 @@ async fn seed_connection(
     conn_id
 }
 
-/// Insert a provider with the given key (for tests needing a custom provider key).
-async fn seed_provider(pool: &PgPool, key: &str) {
-    sqlx::query(
-        "insert into provider (key, display_name, kind, enabled) \
-         values ($1, $1, 'account', true) on conflict (key) do nothing",
-    )
-    .bind(key)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
 // ── direct path ──────────────────────────────────────────────────────────────
 
 /// When the connection's provider has no registered adapter, request_sync takes
 /// the direct path (webhook=false): status becomes 'syncing' synchronously.
 ///
-/// Uses a custom provider key ('no-adapter') that does not match any entry in
-/// `account_providers()`, so the result is deterministic regardless of which
-/// POWENS_* env vars happen to be set by other tests running concurrently.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<()> {
-    // Insert a provider that has no adapter — no POWENS_* vars needed.
-    seed_provider(&pool, "no-adapter").await;
-
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     let meta = serde_json::json!({ "external_connection_id": "42" });
@@ -82,7 +83,7 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
-        &testkit::encryption_key(),
+        &deps(vec![]),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -107,21 +108,11 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
 /// When a Powens adapter is configured with a webhook secret, request_sync takes
 /// the webhook path: status becomes 'awaiting' and sync_requested_at is stamped.
 ///
-/// The spawned `do_request_refresh` will fail (fake POWENS_DOMAIN has no
-/// server). The status assertion runs synchronously before the HTTP call
+/// The spawned `do_request_refresh` will fail (the adapter's server is
+/// unreachable). The status assertion runs synchronously before the HTTP call
 /// resolves; see module doc for the documented race window.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Result<()> {
-    // Set all vars required by PowensProvider::from_env() + the webhook secret.
-    // Use a fake domain that cannot be reached so the spawn fails cleanly.
-    unsafe {
-        std::env::set_var("POWENS_CLIENT_ID", "test-client");
-        std::env::set_var("POWENS_CLIENT_SECRET", "test-secret");
-        std::env::set_var("POWENS_DOMAIN", "127.0.0.1:0"); // unreachable
-        std::env::set_var("POWENS_REDIRECT_URI", "https://gripsou.test/callback");
-        std::env::set_var("POWENS_WEBHOOK_SECRET", "test-secret-webhook");
-    }
-
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     let meta = serde_json::json!({ "external_connection_id": "99" });
@@ -129,7 +120,7 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
-        &testkit::encryption_key(),
+        &powens_with_webhooks(),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -170,15 +161,6 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
 /// `complete_connect_without_connection_id`).
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> anyhow::Result<()> {
-    // Same POWENS_* env as the webhook test so the adapter is webhook-enabled.
-    unsafe {
-        std::env::set_var("POWENS_CLIENT_ID", "test-client");
-        std::env::set_var("POWENS_CLIENT_SECRET", "test-secret");
-        std::env::set_var("POWENS_DOMAIN", "127.0.0.1:0"); // unreachable
-        std::env::set_var("POWENS_REDIRECT_URI", "https://gripsou.test/callback");
-        std::env::set_var("POWENS_WEBHOOK_SECRET", "test-secret-webhook");
-    }
-
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     // provider_meta has NO external_connection_id — mimics the incomplete OAuth callback.
@@ -187,7 +169,7 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
-        &testkit::encryption_key(),
+        &powens_with_webhooks(),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -218,7 +200,7 @@ async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow:
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
-        &testkit::encryption_key(),
+        &deps(vec![]),
         user_id,
         Uuid::new_v4(),
         gripsou_jobs::Trigger::Manual,

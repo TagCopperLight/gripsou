@@ -9,7 +9,6 @@ use crate::error::CoreError;
 pub struct ConnectionListRow {
     pub id: Uuid,
     pub provider_key: String,
-    pub provider_name: String,
     pub display_name: String,
     pub institution_name: Option<String>,
     pub institution_key: Option<String>,
@@ -19,8 +18,8 @@ pub struct ConnectionListRow {
     pub provider_meta: serde_json::Value,
 }
 
-/// All of a user's connections joined to their provider, ordered so that
-/// connections of the same provider are adjacent (the API groups on that).
+/// All of a user's connections, ordered so that connections of the same
+/// provider are adjacent (the API groups on that).
 pub async fn list_connections(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -30,7 +29,6 @@ pub async fn list_connections(
         r#"
         select c.id           as "id!",
                c.provider_key  as "provider_key!",
-               p.display_name  as "provider_name!",
                c.display_name  as "display_name!",
                c.institution_name,
                c.institution_key,
@@ -39,9 +37,8 @@ pub async fn list_connections(
                c.last_error,
                c.provider_meta as "provider_meta!"
         from connection c
-        join provider p on p.key = c.provider_key
         where c.user_id = $1
-        order by p.display_name, c.display_name, c.id
+        order by c.provider_key, c.display_name, c.id
         "#,
         user_id,
     )
