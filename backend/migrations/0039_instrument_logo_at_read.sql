@@ -1,0 +1,52 @@
+-- Instrument logos are built at read time, like institution logos: a stored
+-- URL froze the Brandfetch client id of the first sync. Lot rows carry what
+-- the URL is built from instead.
+alter type budget_transaction_row
+    drop attribute logo_url,
+    add attribute instrument_kind text,
+    add attribute instrument_isin text,
+    add attribute instrument_symbol text;
+
+create or replace function budget_transaction_rows(p_user uuid, p_threshold numeric)
+returns setof budget_transaction_row
+language sql stable as $$
+    select t.id, t.ts, t.type, t.description, t.amount,
+           'cash'::text, null::text, null::numeric, null::numeric, null::numeric,
+           a.id, a.name, a.color, a.currency,
+           t.budget_category_id, bc.name, bc.default_key, bc.color, bc.icon, bc.kind,
+           t.category_source, t.category_confidence,
+           coalesce(budget_needs_review(t.category_source, t.category_reviewed_at,
+                                        t.category_confidence, bc.kind, p_threshold), false),
+           t.checked_at is not null,
+           t.transfer_pair_id is not null,
+           coalesce(t.category_source = 'pair' and t.transfer_pair_id is null, false),
+           coalesce(bc.system_key = 'internal_transfer', false),
+           null::text, null::text, null::text
+    from transaction t
+    join account a    on a.id = t.account_id
+    join connection c on c.id = a.connection_id
+    left join budget_category bc on bc.id = t.budget_category_id
+    where c.user_id = p_user
+      and not budget_investment_leg(t.type)
+
+    union all
+
+    select l.id, l.acquired_on::timestamp at time zone 'UTC', l.side, null::text,
+           case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
+                else l.quantity * l.unit_price - l.fee end,
+           'lot'::text,
+           coalesce(i.symbol, i.meta->>'yahoo_symbol', i.isin, i.name),
+           l.quantity, l.unit_price, l.fee,
+           a.id, a.name, a.color, a.currency,
+           null::uuid, null::text, null::text, null::text, null::text, null::text,
+           null::text, null::numeric, false, false, false, false, false,
+           i.kind, i.isin, i.symbol
+    from lot l
+    join holding h    on h.id = l.holding_id
+    join instrument i on i.id = h.instrument_id
+    join account a    on a.id = h.account_id
+    join connection c on c.id = a.connection_id
+    where c.user_id = p_user
+$$;
+
+alter table instrument drop column logo_url;

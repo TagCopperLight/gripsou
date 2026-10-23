@@ -428,7 +428,13 @@ impl Transaction {
             account_color: r.account_color,
             source: r.source,
             ticker: r.ticker,
-            logo: r.logo_url,
+            logo: r.instrument_kind.as_deref().and_then(|kind| {
+                gripsou_core::logo::instrument_logo_url(
+                    kind,
+                    r.instrument_isin.as_deref(),
+                    r.instrument_symbol.as_deref(),
+                )
+            }),
             quantity: r.quantity.map(|d| d.to_string()),
             unit_price: r.unit_price.map(|d| d.to_string()),
             fee: r.fee.map(|d| d.to_string()),

@@ -1,5 +1,5 @@
-//! Logo URL construction for institutions (banks/brokers), mirroring the
-//! Brandfetch parameters used for instrument logos in `repo/instrument.rs`.
+//! Brandfetch logo URLs for institutions (banks/brokers) and instruments,
+//! built at read time so a change of `BRANDFETCH_CLIENT_ID` reaches every logo.
 
 // To add a bank, find its connector uuid + name with:
 //   select distinct institution_key, institution_name
@@ -46,9 +46,9 @@ const INSTITUTION_DOMAINS: &[(&str, &str)] = &[
     ("5b6a646f-893d-5235-a57d-4b072860363c", "traderepublic.com"),
 ];
 
-/// Apply the same Brandfetch parameters the instrument logos use:
-/// `/fallback/404/theme/light` and `?c={BRANDFETCH_CLIENT_ID}` when set.
-pub(crate) fn brandfetch_decorate(base: &str) -> String {
+/// The Brandfetch parameters every logo uses: `/fallback/404/theme/light` and
+/// `?c={BRANDFETCH_CLIENT_ID}` when set.
+fn brandfetch_decorate(base: &str) -> String {
     let mut url = format!("{base}/fallback/404/theme/light");
     if let Ok(c) = std::env::var("BRANDFETCH_CLIENT_ID") {
         url.push_str(&format!("?c={c}"));
@@ -74,17 +74,55 @@ pub fn institution_logo_url(institution_key: Option<&str>) -> Option<String> {
     )))
 }
 
+/// Logo URL for an instrument: by symbol for crypto, by ISIN (else ticker)
+/// otherwise. `None` for cash or when there is nothing to look it up by.
+pub fn instrument_logo_url(kind: &str, isin: Option<&str>, symbol: Option<&str>) -> Option<String> {
+    let path = match kind {
+        "cash" => return None,
+        "crypto" => format!("crypto/{}", symbol?),
+        _ => match (isin, symbol) {
+            (Some(isin), _) => format!("isin/{isin}"),
+            (None, Some(symbol)) => format!("ticker/{symbol}"),
+            (None, None) => return None,
+        },
+    };
+    Some(brandfetch_decorate(&format!(
+        "https://cdn.brandfetch.io/{path}"
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn decorate_uses_instrument_logo_params() {
+    fn decorate_adds_the_fallback_params() {
         let url = brandfetch_decorate("https://cdn.brandfetch.io/x.fr");
         assert!(
             url.starts_with("https://cdn.brandfetch.io/x.fr/fallback/404/theme/light"),
             "got {url}"
         );
+    }
+
+    #[test]
+    fn instrument_logo_prefers_isin_over_ticker() {
+        let url = instrument_logo_url("etf", Some("IE00B5BMR087"), Some("CSPX")).unwrap();
+        assert!(
+            url.starts_with("https://cdn.brandfetch.io/isin/IE00B5BMR087/"),
+            "got {url}"
+        );
+        let url = instrument_logo_url("equity", None, Some("AAPL")).unwrap();
+        assert!(
+            url.starts_with("https://cdn.brandfetch.io/ticker/AAPL/"),
+            "got {url}"
+        );
+        let url = instrument_logo_url("crypto", Some("x"), Some("BTC")).unwrap();
+        assert!(
+            url.starts_with("https://cdn.brandfetch.io/crypto/BTC/"),
+            "got {url}"
+        );
+        assert_eq!(instrument_logo_url("cash", None, Some("EUR")), None);
+        assert_eq!(instrument_logo_url("equity", None, None), None);
     }
 
     #[test]

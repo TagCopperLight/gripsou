@@ -241,7 +241,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         symbol: Option<String>,
         instrument_name: String,
         kind: String,
-        logo_url: Option<String>,
+        isin: Option<String>,
+        raw_symbol: Option<String>,
         currency: String,
         price_currency: Option<String>,
         account_currency: String,
@@ -292,7 +293,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                )               as "symbol",
                i.name          as "instrument_name!",
                i.kind          as "kind!",
-               i.logo_url,
+               i.isin,
+               i.symbol        as "raw_symbol",
                i.meta->'composition' as "composition?",
                i.currency      as "currency!",
                px.currency     as "price_currency?",
@@ -415,8 +417,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             holding_id: b.holding_id,
             symbol: b.symbol,
             instrument_name: b.instrument_name,
+            logo_url: crate::logo::instrument_logo_url(
+                &b.kind,
+                b.isin.as_deref(),
+                b.raw_symbol.as_deref(),
+            ),
             kind: b.kind,
-            logo_url: b.logo_url,
             currency: b.currency,
             price_currency: b.price_currency,
             account_currency: b.account_currency,
@@ -828,8 +834,11 @@ pub struct TransactionListRow {
     /// frontend's i18n and per-user number formatting render the lot fields.
     pub source: String,
     pub ticker: Option<String>,
-    /// The instrument's logo on a lot row; null on a cash row.
-    pub logo_url: Option<String>,
+    /// What a lot row's logo is built from (`logo::instrument_logo_url`);
+    /// null on a cash row.
+    pub instrument_kind: Option<String>,
+    pub instrument_isin: Option<String>,
+    pub instrument_symbol: Option<String>,
     pub quantity: Option<Decimal>,
     pub unit_price: Option<Decimal>,
     pub fee: Option<Decimal>,
@@ -1001,7 +1010,8 @@ pub async fn transactions(
                coalesce(filtered.amount * afx.unit_value
                         / coalesce(nullif(rfx.unit_value, 0), 1), 0)
                    as "amount_reporting!",
-               source as "source!", ticker, logo_url, quantity, unit_price, fee,
+               source as "source!", ticker, instrument_kind, instrument_isin,
+               instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color, account_currency as "account_currency!",
                filtered.category_id, category_name, category_default_key, category_color,
