@@ -371,6 +371,27 @@ describe("Login", () => {
       expect(screen.getByRole("button", { name: "Use a passkey" })).toBeInTheDocument();
     });
 
+    it("opens no browser window when the user left before the options arrived", async () => {
+      let answer!: (v: unknown) => void;
+      postJson.mockReturnValue(new Promise((r) => { answer = r; }));
+      await signInWithPassword(vi.fn());
+      fireEvent.click(await screen.findByRole("button", { name: "Use your code instead" }));
+      await act(async () => answer({ options }));
+      expect(startAuthentication).not.toHaveBeenCalled();
+      expect(screen.getByText("Enter your code")).toBeInTheDocument();
+    });
+
+    it("hides the passkey option without a message when none is left (409)", async () => {
+      postJson.mockRejectedValue(new ApiError("no passkeys", 409));
+      await signInWithPassword(vi.fn());
+      expect(await screen.findByText("Enter your code")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Use a passkey" })).toBeNull();
+      expect(screen.queryByText("or")).toBeNull();
+      expect(screen.queryByText(refused)).toBeNull();
+      expect(screen.queryByText("Something went wrong. Try again.")).toBeNull();
+      expect(startAuthentication).not.toHaveBeenCalled();
+    });
+
     it("keeps today's code page when the account has no passkey", async () => {
       await signInWithPassword(vi.fn(), { mfaRequired: true, challenge: "ch1", methods: ["totp", "recovery"] });
       expect(await screen.findByText("Enter your code")).toBeInTheDocument();
@@ -404,6 +425,14 @@ describe("Login", () => {
 
       it("goes back to the form with a message when the server refused (400)", async () => {
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("bad", 400));
+        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+        expect(await screen.findByText(refused)).toBeInTheDocument();
+        expect(screen.getByLabelText("Email")).toBeInTheDocument();
+      });
+
+      it("goes back to the form with a message when the challenge expired (401)", async () => {
+        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 401));
         render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText(refused)).toBeInTheDocument();

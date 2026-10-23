@@ -48,7 +48,9 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
     setStep("waiting");
     try {
       const { challenge, options: optionsJSON } = await options.mutateAsync(reauthToken);
+      if (closed.current) return;
       const credential = await startRegistration({ optionsJSON });
+      if (closed.current) return;
       const added = await register.mutateAsync({ reauth: reauthToken, challenge, credential });
       if (closed.current) return;
       setName(added.name);

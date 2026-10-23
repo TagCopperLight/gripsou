@@ -89,6 +89,8 @@ export function Login() {
         { challenge: forChallenge },
         { skipGlobalUnauthorized: true },
       );
+      // Left this step while the options were on their way: no browser window.
+      if (sent !== attempt.current) return;
       const passkey = await startAuthentication({ optionsJSON: options });
       if (sent !== attempt.current) return;
       await verifyLogin(forChallenge, { passkey }, remember);
@@ -99,6 +101,11 @@ export function Login() {
         return;
       }
       setStep("code");
+      // The account's last passkey was removed meanwhile: the code page, without the option.
+      if (err instanceof ApiError && err.status === 409) {
+        setHasPasskey(false);
+        return;
+      }
       if (err instanceof ApiError) {
         setError(tooMany(err) ?? (err.status === 400 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")));
       }
@@ -117,8 +124,12 @@ export function Login() {
     } catch (err) {
       if (sent !== attempt.current) return;
       setStep("password");
+      // 401: the sign-in's challenge expired while the browser window was open.
       if (err instanceof ApiError) {
-        setError(tooMany(err) ?? (err.status === 400 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")));
+        setError(
+          tooMany(err) ??
+            (err.status === 400 || err.status === 401 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
+        );
       }
     }
   };

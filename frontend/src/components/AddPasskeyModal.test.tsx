@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser";
@@ -114,6 +114,40 @@ describe("AddPasskeyModal", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens no browser window when closed before the options arrived", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
+      const path = url.replace(/^\/api/, "");
+      if (path === "/auth/mfa/passkeys/register/options") await held;
+      const reply = OK[path as keyof typeof OK];
+      return json(reply ?? { status: 200, body: {} });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { onClose, user } = renderModal();
+
+    await submitPassword(user);
+    expect(await screen.findByText("Waiting for your browser…")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(calls(fetchMock, "/auth/mfa/passkeys/register/options")).toHaveLength(1));
+    expect(mockedStart).not.toHaveBeenCalled();
+  });
+
+  it("registers nothing when the browser answers after the window closed", async () => {
+    const fetchMock = stubApi({ ...OK });
+    let answer!: (v: unknown) => void;
+    mockedStart.mockReturnValue(new Promise((r) => { answer = r; }) as never);
+    const { user } = renderModal();
+
+    await submitPassword(user);
+    await waitFor(() => expect(mockedStart).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await act(async () => answer(CREDENTIAL));
+    expect(calls(fetchMock, "/auth/mfa/passkeys/register")).toHaveLength(0);
   });
 
   it("says the password is wrong on a 400", async () => {
