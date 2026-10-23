@@ -5182,7 +5182,7 @@ mod budget_ai_usage_tests {
         }
         sqlx::query(
             "insert into budget_ai_run (user_id, model, tokens_in, tokens_out, outcome) \
-             values ($1, 'gemini:x', 10, 10, 'ok')",
+             values ($1, 'alpha:x', 10, 10, 'ok')",
         )
         .bind(admin)
         .execute(&pool)
@@ -5214,7 +5214,7 @@ mod budget_ai_usage_tests {
             serde_json::json!({
                 "currency": "USD",
                 "models": [
-                    {"model": "gemini:x", "runs": 1, "runsWithoutUsage": 0,
+                    {"model": "alpha:x", "runs": 1, "runsWithoutUsage": 0,
                      "tokensIn": 10, "tokensOut": 10,
                      "priceIn": null, "priceOut": null, "cost": null},
                     {"model": "jev:jev-latest", "runs": 2, "runsWithoutUsage": 1,

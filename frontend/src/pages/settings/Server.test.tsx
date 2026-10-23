@@ -16,7 +16,7 @@ const budgetAiRes = (url: string) =>
     JSON.stringify(
       url.endsWith("/usage")
         ? { currency: "USD", models: [], totalCost: "0" }
-        : { provider: null, model: null, available: [], defaults: { gemini: "g", jev: "j" } },
+        : { provider: null, model: null, available: [], defaults: { jev: "j" } },
     ),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );

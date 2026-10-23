@@ -343,26 +343,15 @@ struct CategorizerKind {
     build: fn(&str) -> Option<Box<dyn Categorizer>>,
 }
 
-const CATEGORIZERS: &[CategorizerKind] = &[
-    CategorizerKind {
-        key: "gemini",
-        default_model: gripsou_providers::gemini::GeminiCategorizer::DEFAULT_MODEL,
-        configured: || gripsou_providers::gemini::GeminiCategorizer::api_key_from_env().is_some(),
-        build: |model| {
-            gripsou_providers::gemini::GeminiCategorizer::from_env(model)
-                .map(|c| Box::new(c) as Box<dyn Categorizer>)
-        },
+const CATEGORIZERS: &[CategorizerKind] = &[CategorizerKind {
+    key: "jev",
+    default_model: gripsou_providers::jev::JevCategorizer::DEFAULT_MODEL,
+    configured: || gripsou_providers::jev::JevCategorizer::api_key_from_env().is_some(),
+    build: |model| {
+        gripsou_providers::jev::JevCategorizer::from_env(model)
+            .map(|c| Box::new(c) as Box<dyn Categorizer>)
     },
-    CategorizerKind {
-        key: "jev",
-        default_model: gripsou_providers::jev::JevCategorizer::DEFAULT_MODEL,
-        configured: || gripsou_providers::jev::JevCategorizer::api_key_from_env().is_some(),
-        build: |model| {
-            gripsou_providers::jev::JevCategorizer::from_env(model)
-                .map(|c| Box::new(c) as Box<dyn Categorizer>)
-        },
-    },
-];
+}];
 
 fn categorizer_kind(key: &str) -> Option<&'static CategorizerKind> {
     CATEGORIZERS.iter().find(|k| k.key == key)
@@ -1158,24 +1147,24 @@ mod categorize_gate_tests {
 
     #[test]
     fn closed_when_the_server_has_no_provider() {
-        assert_eq!(gate(&s(None, None), true, &["gemini"]), None);
+        assert_eq!(gate(&s(None, None), true, &["jev"]), None);
     }
 
     #[test]
     fn closed_when_the_user_has_not_opted_in() {
-        assert_eq!(gate(&s(Some("gemini"), None), false, &["gemini"]), None);
+        assert_eq!(gate(&s(Some("jev"), None), false, &["jev"]), None);
     }
 
     #[test]
     fn closed_when_the_key_is_missing() {
-        assert_eq!(gate(&s(Some("jev"), None), true, &["gemini"]), None);
+        assert_eq!(gate(&s(Some("jev"), None), true, &[]), None);
     }
 
     #[test]
     fn open_with_the_default_model_when_none_is_set() {
         assert_eq!(
-            gate(&s(Some("gemini"), Some("  ")), true, &["gemini"]),
-            Some(("gemini".to_string(), "gemini-3.5-flash-lite".to_string()))
+            gate(&s(Some("jev"), Some("  ")), true, &["jev"]),
+            Some(("jev".to_string(), "jev-latest".to_string()))
         );
         assert_eq!(
             gate(&s(Some("jev"), Some("jev-2")), true, &["jev"]),
@@ -1193,7 +1182,7 @@ mod open_gate_tests {
     use super::*;
     use sqlx::PgPool;
 
-    const AVAILABLE: &[&str] = &["gemini"];
+    const AVAILABLE: &[&str] = &["jev"];
 
     /// Insert a user with `budget_ai_enabled = opted_in`.
     async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
@@ -1235,7 +1224,7 @@ mod open_gate_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn closed_when_only_the_admin_enabled_it(pool: PgPool) {
         let user = seed_user(&pool, false).await;
-        set_admin_provider(&pool, Some("gemini")).await;
+        set_admin_provider(&pool, Some("jev")).await;
         assert!(!ready(&pool, user).await);
     }
 
@@ -1253,13 +1242,10 @@ mod open_gate_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn open_when_admin_and_user_both_enabled_it(pool: PgPool) {
         let user = seed_user(&pool, true).await;
-        set_admin_provider(&pool, Some("gemini")).await;
+        set_admin_provider(&pool, Some("jev")).await;
         assert_eq!(
             open_gate_with(&pool, user, AVAILABLE).await,
-            Some((
-                "gemini".to_string(),
-                default_model("gemini").unwrap().to_string()
-            ))
+            Some(("jev".to_string(), default_model("jev").unwrap().to_string()))
         );
     }
 
@@ -1277,7 +1263,7 @@ mod open_gate_tests {
     async fn one_users_opt_in_does_not_open_the_gate_for_another(pool: PgPool) {
         let opted_in = seed_user(&pool, true).await;
         let other = seed_user(&pool, false).await;
-        set_admin_provider(&pool, Some("gemini")).await;
+        set_admin_provider(&pool, Some("jev")).await;
         assert!(ready(&pool, opted_in).await);
         assert!(!ready(&pool, other).await);
     }

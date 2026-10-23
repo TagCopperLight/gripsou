@@ -291,7 +291,7 @@ export type AiStatus = {
   lastRun: { outcome: AiRunOutcome; error: string | null; startedAt: string } | null;
 };
 
-export type BudgetAiProvider = "gemini" | "jev";
+export type BudgetAiProvider = "jev";
 
 export type BudgetAiSettings = {
   provider: BudgetAiProvider | null;

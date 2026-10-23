@@ -11,7 +11,7 @@ const USAGE: BudgetAiUsage = {
   models: [
     { model: "jev:jev-latest", runs: 3, runsWithoutUsage: 0, tokensIn: 9495459, tokensOut: 4484808,
       priceIn: "0.042", priceOut: "0", cost: "0.3988" },
-    { model: "gemini:gemini-3.5-flash-lite", runs: 2, runsWithoutUsage: 1, tokensIn: 1000, tokensOut: 500,
+    { model: "alpha:model-1", runs: 2, runsWithoutUsage: 1, tokensIn: 1000, tokensOut: 500,
       priceIn: null, priceOut: null, cost: null },
   ],
   totalCost: "0.3988",
@@ -42,7 +42,7 @@ describe("AiCostSurface", () => {
     stub();
     renderSurface();
     expect(await screen.findByText("jev:jev-latest")).toBeInTheDocument();
-    expect(screen.getByText("gemini:gemini-3.5-flash-lite")).toBeInTheDocument();
+    expect(screen.getByText("alpha:model-1")).toBeInTheDocument();
     expect(screen.getByTestId("ai-cost-total")).toHaveTextContent(
       formatMoney("0.3988", { currency: "USD", fractionDigits: 2 }),
     );
@@ -52,7 +52,7 @@ describe("AiCostSurface", () => {
   it("marks unpriced models and runs without usage", async () => {
     stub();
     renderSurface();
-    await screen.findByText("gemini:gemini-3.5-flash-lite");
+    await screen.findByText("alpha:model-1");
     expect(screen.getByText("No price set")).toBeInTheDocument();
     expect(screen.getByText("1 run without usage data (not counted)")).toBeInTheDocument();
   });
@@ -66,13 +66,13 @@ describe("AiCostSurface", () => {
   it("sends the full price map when a price is edited", async () => {
     const puts = stub();
     renderSurface();
-    const input = await screen.findByLabelText("Input price for gemini:gemini-3.5-flash-lite");
+    const input = await screen.findByLabelText("Input price for alpha:model-1");
     fireEvent.change(input, { target: { value: "0.10" } });
     fireEvent.blur(input);
     await waitFor(() =>
       expect(puts.at(-1)).toEqual({
         "jev:jev-latest": { in: "0.042", out: "0" },
-        "gemini:gemini-3.5-flash-lite": { in: "0.10", out: "0" },
+        "alpha:model-1": { in: "0.10", out: "0" },
       }),
     );
   });
@@ -103,7 +103,7 @@ describe("AiCostSurface", () => {
       return Response.json(url === "/api/settings/budget-ai/usage" ? USAGE : null);
     });
     renderSurface();
-    const input = await screen.findByLabelText("Input price for gemini:gemini-3.5-flash-lite");
+    const input = await screen.findByLabelText("Input price for alpha:model-1");
     fireEvent.change(input, { target: { value: "0.10" } });
     fireEvent.blur(input);
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be saved");

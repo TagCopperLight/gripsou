@@ -88,11 +88,11 @@ async fn usage_sums_every_user_per_model(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?;
     insert_run(&pool, bob, &run("jev:jev-latest", None, Some(5))).await?;
-    insert_run(&pool, alice, &run("gemini:flash", Some(1), None)).await?;
+    insert_run(&pool, alice, &run("alpha:flash", Some(1), None)).await?;
 
     let rows = usage_by_model(&pool).await?;
     assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].model, "gemini:flash");
+    assert_eq!(rows[0].model, "alpha:flash");
     assert_eq!(rows[0].runs, 1);
     assert_eq!(rows[0].runs_without_usage, 1);
     assert_eq!(rows[0].tokens_in, 1);
@@ -124,7 +124,7 @@ async fn report_prices_known_models_only(pool: PgPool) -> anyhow::Result<()> {
     insert_run(
         &pool,
         user,
-        &run("gemini:flash", Some(1_000_000), Some(1_000_000)),
+        &run("alpha:flash", Some(1_000_000), Some(1_000_000)),
     )
     .await?;
     set_budget_ai_prices(
@@ -155,10 +155,10 @@ async fn report_prices_known_models_only(pool: PgPool) -> anyhow::Result<()> {
         2,
         "priced-but-unused models are omitted"
     );
-    let gemini = &report.models[0];
-    assert_eq!(gemini.model, "gemini:flash");
-    assert_eq!(gemini.price, None);
-    assert_eq!(gemini.cost, None);
+    let other = &report.models[0];
+    assert_eq!(other.model, "alpha:flash");
+    assert_eq!(other.price, None);
+    assert_eq!(other.cost, None);
     let jev = &report.models[1];
     assert_eq!(jev.runs, 3);
     assert_eq!(jev.runs_without_usage, 1);

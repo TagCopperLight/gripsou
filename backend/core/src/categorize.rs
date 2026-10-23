@@ -134,7 +134,7 @@ pub enum CategorizeError {
 
 #[async_trait]
 pub trait Categorizer: Send + Sync {
-    /// `"gemini"` | `"jev"` — recorded on every run.
+    /// `"jev"` — recorded on every run.
     fn key(&self) -> &str;
     fn model(&self) -> &str;
     /// How many items one `categorize` call takes. Also the run's checkpoint size.

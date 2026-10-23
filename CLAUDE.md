@@ -63,7 +63,7 @@ Older migrations cite sections of design docs (`TRANSACTIONS.md §6.1`, `ARCHITE
 Adding a provider must never need a migration. The crate split enforces this at compile time:
 
 - `core` — canonical DTOs (`dto.rs`), the provider ports (`provider.rs`: `AccountProvider`, `PriceProvider`, `CompositionProvider`; `categorize.rs`: `Categorizer`), repositories, ingest, backfill, price/composition sync, and the budget pipeline (`budget/`).
-- `providers` — adapters translating native payloads into canonical DTOs: `powens` (accounts), `yahoo` (prices and FX), `boursorama` (ETF composition), `gemini` / `jev` (budget categorisation). **Depends on `core`, never the reverse** — never import a provider's native types into `core`.
+- `providers` — adapters translating native payloads into canonical DTOs: `powens` (accounts), `yahoo` (prices and FX), `boursorama` (ETF composition), `jev` (budget categorisation). **Depends on `core`, never the reverse** — never import a provider's native types into `core`.
 - `jobs` — the in-process tokio scheduler and sync orchestration (per-connection tasks, one lock each; the `CATEGORIZERS` registry).
 - `api` — axum handlers, auth, routing, static files.
 
