@@ -16,12 +16,12 @@ use webauthn_rs::prelude::{
 };
 use webauthn_rs_proto::ResidentKeyRequirement;
 
+use crate::auth::login::{client_ip, issue_session, user_agent};
+use crate::auth::mfa::{check_reauth, require_reauth};
+use crate::auth::throttle::{Blocked, LoginThrottle};
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::error::ApiError;
-use crate::handlers::{client_ip, issue_session, user_agent};
-use crate::mfa::{check_reauth, require_reauth};
-use crate::throttle::{Blocked, LoginThrottle};
 
 /// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
 /// to start without a usable address. Every saved passkey is bound to its
@@ -408,9 +408,9 @@ pub(crate) mod tests {
     use super::soft::{Soft, passkeys};
     use super::*;
     use crate::auth::AuthUser;
-    use crate::mfa::tests::reauth_token;
+    use crate::auth::mfa::tests::reauth_token;
+    use crate::auth::throttle::LoginThrottle;
     use crate::testkit::{seed_session, seed_user, sessions, who};
-    use crate::throttle::LoginThrottle;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
     use sqlx::PgPool;
     use std::sync::Arc;
@@ -494,7 +494,7 @@ pub(crate) mod tests {
         let (info, _) = add_passkey(&pool, &a, &mut Soft::new()).await;
         assert_eq!(info.name, "Firefox on Linux");
         assert_eq!(sessions(&pool, u).await, 1);
-        let st = crate::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
             .await
             .unwrap()
             .0;
@@ -591,7 +591,7 @@ pub(crate) mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(ren(&a, "  Phone  ").await.unwrap(), StatusCode::NO_CONTENT);
-        let st = crate::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
             .await
             .unwrap()
             .0;
@@ -729,7 +729,7 @@ pub(crate) mod tests {
             .expect("signed in");
         assert_eq!(resp.user.email, "a@t.local");
         assert_eq!(sessions(&pool, u).await, 2);
-        let st = crate::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
             .await
             .unwrap()
             .0;
@@ -817,7 +817,7 @@ pub(crate) mod tests {
         let t = Arc::new(LoginThrottle::default());
         // The IP policy's free failures (30): each is let through and refused.
         // The options call counted it; the refusal adds nothing.
-        for _ in 0..crate::throttle::IP.free_failures {
+        for _ in 0..crate::auth::throttle::IP.free_failures {
             let e = passwordless(&pool, &t, &mut soft, &cred, v)
                 .await
                 .err()
@@ -834,7 +834,7 @@ pub(crate) mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn passwordless_options_alone_are_throttled_per_ip(pool: PgPool) {
         let t = Arc::new(LoginThrottle::default());
-        for _ in 0..crate::throttle::IP.free_failures {
+        for _ in 0..crate::auth::throttle::IP.free_failures {
             start_passwordless(&pool, &t).await.expect("let through");
         }
         let e = start_passwordless(&pool, &t).await.err().unwrap();
@@ -850,7 +850,7 @@ pub(crate) mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(stored, i64::from(crate::throttle::IP.free_failures));
+        assert_eq!(stored, i64::from(crate::auth::throttle::IP.free_failures));
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -861,7 +861,7 @@ pub(crate) mod tests {
         let mut soft = Soft::new();
         let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
         let t = Arc::new(LoginThrottle::default());
-        for _ in 0..crate::throttle::IP.free_failures - 1 {
+        for _ in 0..crate::auth::throttle::IP.free_failures - 1 {
             let _ = passwordless(&pool, &t, &mut soft, &cred, v).await;
         }
         passwordless(&pool, &t, &mut soft, &cred, u)
@@ -970,7 +970,7 @@ pub(crate) mod tests {
     /// password alone signs in; with it, the code is still asked.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_passkey_never_turns_two_factor_on(pool: PgPool) {
-        use crate::handlers::auth_tests::{Throttles, enable_totp, login_outcome};
+        use crate::testkit::{Throttles, enable_totp, login_outcome};
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
         add_passkey(&pool, &a, &mut Soft::new()).await;

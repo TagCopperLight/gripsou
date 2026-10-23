@@ -1,5 +1,5 @@
 //! Budget HTTP surface: the taxonomy, its tags, and what a user does to a
-//! transaction. Kept out of `handlers.rs`, which is already 2 884 lines.
+//! transaction.
 
 use axum::{
     Json,
@@ -795,7 +795,7 @@ pub struct BulkBody {
     /// The list's own query parameters, decoded by the same
     /// `filters_from_params`, so an absent `includeTransfers` hides transfers
     /// here exactly as it does in the list.
-    pub filter: Option<crate::handlers::TransactionParams>,
+    pub filter: Option<crate::accounts::TransactionParams>,
     #[serde(default, deserialize_with = "double_option")]
     pub category_id: Option<Option<Uuid>>,
     pub add_tag_ids: Option<Vec<Uuid>>,
@@ -826,7 +826,7 @@ pub async fn bulk_transactions(
         (Some(ids), None) => ids,
         (None, Some(params)) => {
             let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
-            let filters = crate::handlers::filters_from_params(params, threshold)?;
+            let filters = crate::accounts::filters_from_params(params, threshold)?;
             matching_transaction_ids(&pool, user_id, &filters).await?
         }
         (None, None) => return Err(ApiError::bad_request("ids or filter required")),
@@ -881,10 +881,10 @@ pub struct CountsDto {
 pub async fn transaction_count_summary(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-    Query(p): Query<crate::handlers::TransactionParams>,
+    Query(p): Query<crate::accounts::TransactionParams>,
 ) -> Result<Json<CountsDto>, ApiError> {
     let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
-    let filters = crate::handlers::filters_from_params(p, threshold)?;
+    let filters = crate::accounts::filters_from_params(p, threshold)?;
     let c = transaction_counts(&pool, user_id, &filters).await?;
     Ok(Json(CountsDto {
         matching: c.matching,

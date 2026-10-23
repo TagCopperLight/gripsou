@@ -100,8 +100,8 @@ impl IntoResponse for ApiError {
     }
 }
 
-impl From<crate::throttle::Blocked> for ApiError {
-    fn from(blocked: crate::throttle::Blocked) -> Self {
+impl From<crate::auth::throttle::Blocked> for ApiError {
+    fn from(blocked: crate::auth::throttle::Blocked) -> Self {
         ApiError::TooMany {
             retry_after: blocked.retry_after_secs(),
         }

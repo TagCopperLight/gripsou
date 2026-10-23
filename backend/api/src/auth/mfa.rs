@@ -10,12 +10,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::EncryptionKey;
+use crate::auth::factors;
+use crate::auth::login::client_ip;
+use crate::auth::throttle::{LoginThrottle, SecondFactorThrottle};
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::error::ApiError;
-use crate::handlers::client_ip;
-use crate::throttle::{LoginThrottle, SecondFactorThrottle};
-use crate::{EncryptionKey, factors};
 
 const REAUTH_KIND: &str = "reauth";
 
@@ -245,10 +246,10 @@ pub async fn recovery_regenerate(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::auth::factors;
+    use crate::auth::throttle::{LoginThrottle, SecondFactorThrottle};
     use crate::auth::{self, AuthUser};
-    use crate::factors;
     use crate::testkit::{seed_session, seed_user, sessions, who};
-    use crate::throttle::{LoginThrottle, SecondFactorThrottle};
     use axum::Json;
     use axum::extract::State;
     use axum::http::StatusCode;

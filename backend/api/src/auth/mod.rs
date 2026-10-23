@@ -2,6 +2,14 @@
 //! generation/hashing, User-Agent parsing, and the `AuthUser` request extractor.
 //! Sessions are DB-backed: the raw token is never stored, only its SHA-256 hash.
 
+pub mod account;
+pub mod factors;
+pub mod invite;
+pub mod login;
+pub mod mfa;
+pub mod passkey;
+pub mod throttle;
+
 use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::FromRef;

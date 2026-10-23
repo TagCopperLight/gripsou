@@ -1,16 +1,15 @@
+mod accounts;
+mod admin;
 pub mod auth;
 mod budget;
 pub mod cli;
+mod connections;
 mod dto;
 pub mod error;
-mod factors;
-mod handlers;
-mod mfa;
-pub mod passkey;
+mod holdings;
 mod security_headers;
 #[cfg(test)]
 mod testkit;
-pub mod throttle;
 use axum::http::header::CACHE_CONTROL;
 use axum::http::{HeaderValue, Response};
 use axum::{
@@ -20,15 +19,17 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
+
+use crate::auth::{account, invite, login, mfa, passkey};
 use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
+pub use auth::passkey::Passkeys;
 pub use gripsou_core::crypto::EncryptionKey;
-pub use passkey::Passkeys;
 
-use crate::throttle::{LoginThrottle, SecondFactorThrottle};
+use crate::auth::throttle::{LoginThrottle, SecondFactorThrottle};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -93,8 +94,8 @@ pub fn router(
 
     let api = Router::new()
         .route("/health", get(health))
-        .route("/auth/login", post(handlers::login))
-        .route("/auth/login/verify", post(handlers::login_verify))
+        .route("/auth/login", post(login::login))
+        .route("/auth/login/verify", post(login::login_verify))
         .route("/auth/passkey/options", post(passkey::sign_in_options))
         .route("/auth/passkey", post(passkey::sign_in))
         .route("/auth/reauth", post(mfa::reauth))
@@ -115,28 +116,25 @@ pub fn router(
             "/auth/mfa/passkeys/{id}",
             patch(passkey::rename).delete(passkey::remove),
         )
-        .route(
-            "/auth/me",
-            get(handlers::me).patch(handlers::update_profile),
-        )
-        .route("/auth/logout", post(handlers::logout))
-        .route("/auth/token/{token}", get(handlers::token_info))
-        .route("/auth/invite/{token}/redeem", post(handlers::redeem_invite))
-        .route("/auth/reset/{token}/redeem", post(handlers::redeem_reset))
-        .route("/auth/prefs", patch(handlers::update_prefs))
-        .route("/auth/welcome", post(handlers::finish_welcome))
-        .route("/auth/change-password", post(handlers::change_password))
-        .route("/auth/account", delete(handlers::delete_account))
+        .route("/auth/me", get(account::me).patch(account::update_profile))
+        .route("/auth/logout", post(account::logout))
+        .route("/auth/token/{token}", get(invite::token_info))
+        .route("/auth/invite/{token}/redeem", post(invite::redeem_invite))
+        .route("/auth/reset/{token}/redeem", post(invite::redeem_reset))
+        .route("/auth/prefs", patch(account::update_prefs))
+        .route("/auth/welcome", post(account::finish_welcome))
+        .route("/auth/change-password", post(account::change_password))
+        .route("/auth/account", delete(account::delete_account))
         .route(
             "/auth/sessions",
-            get(handlers::list_sessions).delete(handlers::revoke_other_sessions),
+            get(account::list_sessions).delete(account::revoke_other_sessions),
         )
-        .route("/auth/sessions/{id}", delete(handlers::revoke_session))
-        .route("/dashboard/net-worth", get(handlers::net_worth))
-        .route("/accounts", get(handlers::accounts))
-        .route("/accounts/series", get(handlers::account_series))
-        .route("/accounts/{id}", patch(handlers::update_account))
-        .route("/transactions", get(handlers::transactions))
+        .route("/auth/sessions/{id}", delete(account::revoke_session))
+        .route("/dashboard/net-worth", get(accounts::net_worth))
+        .route("/accounts", get(accounts::accounts))
+        .route("/accounts/series", get(accounts::account_series))
+        .route("/accounts/{id}", patch(accounts::update_account))
+        .route("/transactions", get(accounts::transactions))
         .route(
             "/transactions/counts",
             get(budget::transaction_count_summary),
@@ -170,52 +168,55 @@ pub fn router(
             "/budget/tags/{id}",
             patch(budget::update_tag).delete(budget::delete_tag),
         )
-        .route("/account-types", get(handlers::account_types))
-        .route("/connections", get(handlers::connections))
-        .route("/connections/{id}/sync", post(handlers::sync_connection))
+        .route("/account-types", get(accounts::account_types))
+        .route("/connections", get(connections::connections))
+        .route("/connections/{id}/sync", post(connections::sync_connection))
         .route(
             "/connections/{id}/manage",
-            post(handlers::manage_connection),
+            post(connections::manage_connection),
         )
-        .route("/sync", post(handlers::sync_all))
-        .route("/users", get(handlers::users))
-        .route("/invites", post(handlers::create_invite))
-        .route("/users/{id}/reset-link", post(handlers::create_reset_link))
-        .route("/users/{id}", delete(handlers::delete_user))
-        .route("/providers", get(handlers::providers))
-        .route("/providers/{key}", patch(handlers::set_provider))
-        .route("/providers/enabled", get(handlers::enabled_providers))
+        .route("/sync", post(connections::sync_all))
+        .route("/users", get(admin::users))
+        .route("/invites", post(admin::create_invite))
+        .route("/users/{id}/reset-link", post(admin::create_reset_link))
+        .route("/users/{id}", delete(admin::delete_user))
+        .route("/providers", get(admin::providers))
+        .route("/providers/{key}", patch(admin::set_provider))
+        .route("/providers/enabled", get(connections::enabled_providers))
         .route(
             "/settings/budget-ai",
-            get(handlers::budget_ai_settings).patch(handlers::set_budget_ai_settings),
+            get(admin::budget_ai_settings).patch(admin::set_budget_ai_settings),
         )
-        .route("/settings/budget-ai/usage", get(handlers::budget_ai_usage))
+        .route("/settings/budget-ai/usage", get(admin::budget_ai_usage))
         .route(
             "/settings/budget-ai/models/{provider}",
-            get(handlers::budget_ai_models),
+            get(admin::budget_ai_models),
         )
         .route(
             "/settings/budget-ai/prices",
-            put(handlers::set_budget_ai_prices),
+            put(admin::set_budget_ai_prices),
         )
-        .route("/connections/init", post(handlers::init_connection))
-        .route("/connections/complete", post(handlers::complete_connection))
-        .route("/connections/{id}", delete(handlers::delete_connection))
+        .route("/connections/init", post(connections::init_connection))
+        .route(
+            "/connections/complete",
+            post(connections::complete_connection),
+        )
+        .route("/connections/{id}", delete(connections::delete_connection))
         .route(
             "/webhooks/{provider}",
-            post(handlers::webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+            post(connections::webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
         )
-        .route("/holdings", get(handlers::holdings))
-        .route("/investments/returns", get(handlers::investment_returns))
-        .route("/holdings/{id}/prices", get(handlers::holding_prices))
+        .route("/holdings", get(holdings::holdings))
+        .route("/investments/returns", get(holdings::investment_returns))
+        .route("/holdings/{id}/prices", get(holdings::holding_prices))
         .route(
             "/holdings/{id}/lots",
-            get(handlers::holding_lots).put(handlers::save_lots),
+            get(holdings::holding_lots).put(holdings::save_lots),
         )
-        .route("/holdings/{id}/lots/preview", post(handlers::preview_lots))
+        .route("/holdings/{id}/lots/preview", post(holdings::preview_lots))
         .route(
             "/holdings/{id}/lots/suggestions",
-            get(handlers::lot_suggestions),
+            get(holdings::lot_suggestions),
         )
         .with_state(app_state);
 
