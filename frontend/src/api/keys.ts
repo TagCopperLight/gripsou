@@ -71,5 +71,4 @@ export const keys = {
   connections: () => ["connections"] as const,
   providers: () => ["providers"] as const,
   providersEnabled: () => ["providers-enabled"] as const,
-  corsOrigins: () => ["cors-origins"] as const,
 };

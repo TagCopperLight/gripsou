@@ -659,35 +659,6 @@ pub async fn providers(
     ))
 }
 
-pub async fn cors_origins(
-    State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<String>>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
-    let origins = gripsou_core::repo::settings::cors_origins(&pool)
-        .await
-        .map_err(internal)?;
-    Ok(Json(origins))
-}
-
-pub async fn set_cors_origins(
-    State(pool): State<PgPool>,
-    State(cors_state): State<std::sync::Arc<std::sync::RwLock<Vec<String>>>>,
-    AuthUser { user_id, .. }: AuthUser,
-    Json(origins): Json<Vec<String>>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
-    gripsou_core::repo::settings::set_cors_origins(&pool, &origins)
-        .await
-        .map_err(internal)?;
-    match cors_state.write() {
-        Ok(mut cache) => *cache = origins.clone(),
-        Err(_) => tracing::error!("cors cache poisoned; saved origins not applied until restart"),
-    }
-    tracing::info!(by = %user_id, count = origins.len() as u64, "cors origins changed");
-    Ok(StatusCode::NO_CONTENT)
-}
-
 pub async fn budget_ai_settings(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -4320,77 +4291,6 @@ pub(crate) mod auth_tests {
     }
 
     // ── admin-only server settings ──────────────────────────────────────────
-
-    fn cors_cache(initial: Vec<String>) -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
-        std::sync::Arc::new(std::sync::RwLock::new(initial))
-    }
-
-    /// A member must not read the CORS allow-list: it is server config, admin-only.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn cors_origins_requires_admin(pool: PgPool) {
-        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let err = cors_origins(State(pool.clone()), auth(member))
-            .await
-            .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-    }
-
-    /// A member must not widen the CORS allow-list — not in the DB, not in the
-    /// live cache the CORS layer reads.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn set_cors_origins_requires_admin_and_changes_nothing(pool: PgPool) {
-        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let before = gripsou_core::repo::settings::cors_origins(&pool)
-            .await
-            .unwrap();
-        let cache = cors_cache(before.clone());
-
-        let err = set_cors_origins(
-            State(pool.clone()),
-            State(cache.clone()),
-            auth(member),
-            Json(vec!["https://evil.example".to_string()]),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-        assert_eq!(
-            gripsou_core::repo::settings::cors_origins(&pool)
-                .await
-                .unwrap(),
-            before
-        );
-        assert_eq!(*cache.read().unwrap(), before);
-    }
-
-    /// An admin's CORS write persists and reaches the live cache, so the change
-    /// takes effect without a restart.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn set_cors_origins_persists_and_refreshes_cache(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let cache = cors_cache(vec![]);
-        let wanted = vec![
-            "https://one.example".to_string(),
-            "https://two.example".to_string(),
-        ];
-
-        let status = set_cors_origins(
-            State(pool.clone()),
-            State(cache.clone()),
-            auth(admin),
-            Json(wanted.clone()),
-        )
-        .await
-        .expect("admin may set origins");
-        assert_eq!(status, StatusCode::NO_CONTENT);
-
-        let read = cors_origins(State(pool.clone()), auth(admin))
-            .await
-            .expect("admin may read origins")
-            .0;
-        assert_eq!(read, wanted);
-        assert_eq!(*cache.read().unwrap(), wanted);
-    }
 
     /// A member must not read the budget AI settings: they are admin-only config.
     #[sqlx::test(migrations = "../migrations")]

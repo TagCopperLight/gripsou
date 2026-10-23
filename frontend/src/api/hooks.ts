@@ -45,7 +45,6 @@ import {
   afterConnectionDeleted,
   afterLotsSaved,
   afterProviderChange,
-  afterCorsOriginsChange,
   afterMfaChange,
   afterSessionChange,
   afterConnectFailed,
@@ -468,21 +467,6 @@ export function useEnabledProviders() {
   return useQuery({
     queryKey: keys.providersEnabled(),
     queryFn: ({ signal }) => getJson<EnabledProvider[]>("/providers/enabled", { signal }),
-  });
-}
-
-export function useCorsOrigins() {
-  return useQuery({
-    queryKey: keys.corsOrigins(),
-    queryFn: ({ signal }) => getJson<string[]>("/settings/cors", { signal }),
-  });
-}
-
-export function useSetCorsOrigins() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
-    onSuccess: () => afterCorsOriginsChange(qc),
   });
 }
 

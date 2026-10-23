@@ -42,17 +42,8 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), key.clone()));
 
-    let initial_cors = gripsou_core::repo::settings::cors_origins(&db)
-        .await
-        .unwrap_or_default();
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
-    let app = gripsou_api::router(
-        db.clone(),
-        std::path::Path::new(&static_dir),
-        initial_cors,
-        key,
-        passkeys,
-    );
+    let app = gripsou_api::router(db.clone(), std::path::Path::new(&static_dir), key, passkeys);
     // Hash the dummy password now so the first login isn't slower.
     std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
 

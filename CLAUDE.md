@@ -109,7 +109,7 @@ Per-user categories (`budget_category`, seeded by a trigger on `users` insert) a
 ## Conventions
 
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings; the frontend formats them with the user's prefs through `Intl`.
-- **Config split:** secrets and infra in env (see `.env.example`); admin-tunable values in the `app_settings` row (`cors_origins`, `enabled_providers`, `budget_ai_*`); per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Config split:** secrets and infra in env (see `.env.example`); admin-tunable values in the `app_settings` row (`enabled_providers`, `budget_ai_*`); per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next (en/fr in `src/i18n/` — every UI string in both). Pure logic lives in `src/lib/` with tests beside it.
 - **Translation quality:** Always review added or changed UI text in both English and French for natural phrasing, clarity, grammar and consistent terminology; preserve interpolation placeholders, pluralisation keys and rich-text tags.
 - ESLint's `react-refresh/only-export-components` forbids exporting anything but components from a component file; put shared constants/types in a sibling `.ts`. `bun run build` won't catch it — run `bun run lint`.

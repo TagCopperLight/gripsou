@@ -234,7 +234,3 @@ export function afterBudgetAiPricesChange(qc: QueryClient) {
 export function afterProviderChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.providers(), keys.providersEnabled()]);
 }
-
-export function afterCorsOriginsChange(qc: QueryClient) {
-  return invalidateAll(qc, [keys.corsOrigins()]);
-}

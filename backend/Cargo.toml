@@ -10,7 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 tokio = { version = "1.53.2", features = ["full"] }
 axum = "0.8.9"
-tower-http = { version = "0.6.11", features = ["fs", "cors", "trace", "compression-br", "compression-gzip", "set-header"] }
+tower-http = { version = "0.6.11", features = ["fs", "trace", "compression-br", "compression-gzip", "set-header"] }
 sqlx = { version = "0.9.0", default-features = false, features = [
     "runtime-tokio", "postgres", "macros", "migrate",
     "uuid", "chrono", "rust_decimal", "json",

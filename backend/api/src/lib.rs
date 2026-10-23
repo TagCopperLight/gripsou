@@ -10,17 +10,16 @@ mod security_headers;
 #[cfg(test)]
 mod testkit;
 pub mod throttle;
-use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
-use axum::http::{HeaderValue, Method, Response};
+use axum::http::header::CACHE_CONTROL;
+use axum::http::{HeaderValue, Response};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, FromRef},
     routing::{delete, get, patch, post, put},
 };
 use serde_json::{Value, json};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
@@ -33,7 +32,6 @@ use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
-    pub cors_origins: Arc<RwLock<Vec<String>>>,
     pub login_throttle: Arc<LoginThrottle>,
     pub second_factor_throttle: Arc<SecondFactorThrottle>,
     pub encryption_key: EncryptionKey,
@@ -70,23 +68,14 @@ impl FromRef<AppState> for Arc<SecondFactorThrottle> {
     }
 }
 
-impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
-    fn from_ref(state: &AppState) -> Arc<RwLock<Vec<String>>> {
-        state.cors_origins.clone()
-    }
-}
-
 pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
-    initial_cors: Vec<String>,
     encryption_key: EncryptionKey,
     passkeys: Passkeys,
 ) -> Router {
-    let cors_origins = Arc::new(RwLock::new(initial_cors));
     let app_state = AppState {
         db: db.clone(),
-        cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
         second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
         encryption_key,
@@ -196,10 +185,6 @@ pub fn router(
         .route("/providers/{key}", patch(handlers::set_provider))
         .route("/providers/enabled", get(handlers::enabled_providers))
         .route(
-            "/settings/cors",
-            get(handlers::cors_origins).patch(handlers::set_cors_origins),
-        )
-        .route(
             "/settings/budget-ai",
             get(handlers::budget_ai_settings).patch(handlers::set_budget_ai_settings),
         )
@@ -232,29 +217,6 @@ pub fn router(
             get(handlers::lot_suggestions),
         )
         .with_state(app_state);
-
-    let cors_layer = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(
-            move |origin: &axum::http::HeaderValue, _| {
-                let origin_str = origin.to_str().unwrap_or("");
-                if let Ok(origins) = cors_origins.read() {
-                    origins.iter().any(|o| o == origin_str)
-                } else {
-                    false
-                }
-            },
-        ))
-        .allow_methods(vec![
-            Method::GET,
-            Method::POST,
-            Method::PATCH,
-            Method::DELETE,
-            Method::OPTIONS,
-        ])
-        .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
-        // So a throttled login on another origin can say how long to wait.
-        .expose_headers(vec![axum::http::header::RETRY_AFTER])
-        .allow_credentials(true);
 
     // Per-request span: every line a handler logs carries request_id, method,
     // the route pattern (not the raw path, full of ids) and, once the session is
@@ -309,7 +271,7 @@ pub fn router(
         .layer(CompressionLayer::new());
 
     Router::new()
-        .nest("/api", api.layer(cors_layer).layer(trace_layer))
+        .nest("/api", api.layer(trace_layer))
         .merge(static_files)
         .layer(axum::middleware::from_fn(
             security_headers::security_headers,
