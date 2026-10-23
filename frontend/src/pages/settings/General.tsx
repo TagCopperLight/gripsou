@@ -30,9 +30,9 @@ export function SettingsGeneral() {
   const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
 
-  // Auto-save: every change persists the whole prefs object and applies app-wide.
+  // Auto-save: every change persists that one setting and applies app-wide.
   const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
-    void updatePrefs({ ...prefs, [key]: value });
+    void updatePrefs({ [key]: value });
 
   // Drive the preview from the reactive context prefs, not the module singleton
   // that formatMoney reads by default — the singleton isn't a React-tracked

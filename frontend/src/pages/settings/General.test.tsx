@@ -39,9 +39,7 @@ describe("SettingsGeneral auto-save", () => {
     renderPage();
     fireEvent.click(screen.getByText("Français"));
     await waitFor(() =>
-      expect(updatePrefsSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ uiLanguage: "fr" }),
-      ),
+      expect(updatePrefsSpy).toHaveBeenCalledWith({ uiLanguage: "fr" }),
     );
   });
 
@@ -51,9 +49,7 @@ describe("SettingsGeneral auto-save", () => {
       target: { value: "America/Los_Angeles" },
     });
     await waitFor(() =>
-      expect(updatePrefsSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ timeZone: "America/Los_Angeles" }),
-      ),
+      expect(updatePrefsSpy).toHaveBeenCalledWith({ timeZone: "America/Los_Angeles" }),
     );
   });
 
@@ -67,9 +63,7 @@ describe("SettingsGeneral auto-save", () => {
     renderPage();
     fireEvent.click(screen.getByRole("switch", { name: "Private mode" }));
     await waitFor(() =>
-      expect(updatePrefsSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ privateMode: true }),
-      ),
+      expect(updatePrefsSpy).toHaveBeenCalledWith({ privateMode: true }),
     );
   });
 });

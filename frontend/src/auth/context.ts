@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/browser";
 import type { MfaRequired, SessionUser } from "../api/types";
 
-import type { UserPrefs } from "../lib/prefs";
+import type { PrefsPatch, UserPrefs } from "../lib/prefs";
 
 export type SecondFactor =
   | { totp: string }
@@ -32,8 +32,9 @@ export type AuthValue = {
   logout: () => Promise<void>;
   /** Replace the cached profile after the user edits their own account. */
   updateUser: (user: SessionUser) => void;
-  /** Persist new prefs (PATCH /auth/prefs), applying them app-wide. */
-  updatePrefs: (next: UserPrefs) => Promise<void>;
+  /** Show the changed settings at once and save them (PATCH /auth/prefs).
+   *  Rejects when the save fails; the stored prefs are then shown again. */
+  updatePrefs: (patch: PrefsPatch) => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthValue | null>(null);

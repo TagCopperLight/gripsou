@@ -117,7 +117,7 @@ describe("EditProfileModal", () => {
     const file = new File(["x"], "me.png", { type: "image/png" });
     fireEvent.change(fileInput(container), { target: { files: [file] } });
     await waitFor(() =>
-      expect(updatePrefs).toHaveBeenCalledWith({ ...DEFAULT_PREFS, avatar: "data:image/webp;base64,NEW" }),
+      expect(updatePrefs).toHaveBeenCalledWith({ avatar: "data:image/webp;base64,NEW" }),
     );
   });
 
@@ -139,6 +139,6 @@ describe("EditProfileModal", () => {
     const prefs = { ...DEFAULT_PREFS, avatar: "data:image/webp;base64,OLD" };
     const { updatePrefs } = renderModal(prefs);
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    expect(updatePrefs).toHaveBeenCalledWith({ ...prefs, avatar: undefined });
+    expect(updatePrefs).toHaveBeenCalledWith({ avatar: null });
   });
 });

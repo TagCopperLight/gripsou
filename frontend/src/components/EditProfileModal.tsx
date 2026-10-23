@@ -29,7 +29,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
     setPictureError(false);
     try {
       const avatar = await fileToAvatarDataUrl(file);
-      void updatePrefs({ ...prefs, avatar });
+      void updatePrefs({ avatar });
     } catch {
       setPictureError(true);
     }
@@ -97,7 +97,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             {prefs.avatar && (
               <button
                 type="button"
-                onClick={() => void updatePrefs({ ...prefs, avatar: undefined })}
+                onClick={() => void updatePrefs({ avatar: null })}
                 className="cursor-pointer text-xs font-medium text-red hover:opacity-70"
               >
                 {t("settings.account.removeImage")}

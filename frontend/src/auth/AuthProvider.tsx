@@ -7,7 +7,7 @@ import {
 } from "@simplewebauthn/browser";
 import { AuthContext, type AuthValue, type SecondFactor } from "./context";
 import i18n from "../i18n";
-import { DEFAULT_PREFS, setPrefs, type UserPrefs } from "../lib/prefs";
+import { DEFAULT_PREFS, setPrefs, withPatch, type PrefsPatch } from "../lib/prefs";
 import { afterCategorizeRequested, afterReviewThresholdChange } from "../api/invalidate";
 import { queryClient } from "../queryClient";
 
@@ -17,20 +17,18 @@ type LoginResponse = SessionResponse | MfaRequired;
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const savedUser = useRef<SessionUser | null>(null);
-  const preferenceQueue = useRef<Promise<void>>(Promise.resolve());
-  const preferenceRequest = useRef(0);
+  // The user as shown, readable by two saves made in the same tick.
+  const shown = useRef<SessionUser | null>(null);
+  const prefsSaves = useRef<Promise<unknown>>(Promise.resolve());
 
   const resetSession = useCallback(() => {
-    preferenceQueue.current = Promise.resolve();
-    preferenceRequest.current++;
-    savedUser.current = null;
+    shown.current = null;
     queryClient.clear();
   }, []);
 
   // Apply a user's prefs everywhere: the formatter singleton + i18n language.
   const applyUser = useCallback((u: SessionUser) => {
-    savedUser.current = u;
+    shown.current = u;
     setUser(u);
     setPrefs(u.prefs);
     if (i18n.language !== u.prefs.uiLanguage) void i18n.changeLanguage(u.prefs.uiLanguage);
@@ -154,55 +152,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [resetSession]);
 
-  const updateUser = useCallback((next: SessionUser) => {
-    if (savedUser.current?.id !== next.id) return;
-    // A profile response updates identity fields, not a later preference save.
-    savedUser.current = { ...next, prefs: savedUser.current.prefs };
-    setUser((current) => current ? { ...next, prefs: current.prefs } : null);
-  }, []);
-
-  const updatePrefs = useCallback(
-    (next: UserPrefs) => {
-      const token = getAuthToken();
-      const requestId = ++preferenceRequest.current;
-      // Keep controls responsive while full preference writes are serialized.
-      setUser((u) => (u ? { ...u, prefs: next } : u));
-      setPrefs(next);
-      if (i18n.language !== next.uiLanguage) void i18n.changeLanguage(next.uiLanguage);
-
-      const request = preferenceQueue.current.then(async () => {
-        if (token !== getAuthToken()) return;
-        try {
-          const updated = await patchJson<SessionUser>("/auth/prefs", next);
-          if (token !== getAuthToken()) return;
-          const prev = savedUser.current;
-          const acknowledged = prev ? { ...prev, prefs: updated.prefs } : updated;
-          savedUser.current = acknowledged;
-          // Keep later profile edits and optimistic preference choices.
-          if (requestId === preferenceRequest.current) applyUser(acknowledged);
-          const refreshes: Promise<unknown>[] = [];
-          if (updated.prefs.timeZone !== prev?.prefs.timeZone || updated.prefs.currency !== prev?.prefs.currency) {
-            refreshes.push(queryClient.cancelQueries().then(() => {
-              if (token === getAuthToken()) return queryClient.invalidateQueries();
-            }));
-          } else if (updated.prefs.budgetAiThreshold !== prev?.prefs.budgetAiThreshold) {
-            refreshes.push(afterReviewThresholdChange(queryClient));
-          }
-          if (updated.prefs.budgetAiEnabled !== prev?.prefs.budgetAiEnabled)
-            refreshes.push(afterCategorizeRequested(queryClient));
-          return { refreshed: Promise.all(refreshes) };
-        } catch (error) {
-          if (token === getAuthToken() && requestId === preferenceRequest.current && savedUser.current)
-            applyUser(savedUser.current);
-          throw error;
-        }
-      });
-      // Serialize writes, not the potentially slow chart/table reads that
-      // follow them. A rejected save must not block the next queued save.
-      preferenceQueue.current = request.then(() => {}, () => {});
-      return request.then((saved) => saved?.refreshed).then(() => {});
+  // A profile response carries the prefs as they were stored; keep the shown
+  // ones, which may include a save still on its way.
+  const updateUser = useCallback(
+    (next: SessionUser) => {
+      if (shown.current) applyUser({ ...next, prefs: shown.current.prefs });
     },
     [applyUser],
+  );
+
+  const showStoredPrefs = useCallback(async () => {
+    try {
+      const stored = await getJson<SessionUser>("/auth/me");
+      if (shown.current) applyUser({ ...shown.current, prefs: stored.prefs });
+    } catch {
+      // Offline or signed out: the next load shows the stored prefs.
+    }
+  }, [applyUser]);
+
+  const updatePrefs = useCallback(
+    async (patch: PrefsPatch) => {
+      const u = shown.current;
+      if (!u) return;
+      applyUser({ ...u, prefs: withPatch(u.prefs, patch) });
+      // One save at a time, so two changes of one setting are stored in order.
+      const save = prefsSaves.current.then(() => patchJson<SessionUser>("/auth/prefs", patch));
+      prefsSaves.current = save.catch(() => {});
+      try {
+        await save;
+      } catch (err) {
+        // Show what is stored, once the saves queued behind this one are in.
+        prefsSaves.current = prefsSaves.current.then(showStoredPrefs);
+        throw err;
+      }
+      if ("currency" in patch || "timeZone" in patch) {
+        await queryClient.cancelQueries();
+        await queryClient.invalidateQueries();
+      } else if ("budgetAiThreshold" in patch) {
+        await afterReviewThresholdChange(queryClient);
+      }
+      if ("budgetAiEnabled" in patch) await afterCategorizeRequested(queryClient);
+    },
+    [applyUser, showStoredPrefs],
   );
 
   const value = useMemo<AuthValue>(

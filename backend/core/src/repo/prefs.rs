@@ -107,29 +107,83 @@ pub async fn review_threshold(
     Ok(rust_decimal::Decimal::new(pct as i64, 2))
 }
 
-/// Replaces the user's preferences and says whether AI categorisation was on
-/// before, in one statement: the row is locked while it is read, so of two
-/// concurrent requests turning AI on, only one sees it as having been off.
-/// `None` when the user does not exist.
-pub async fn replace_prefs(
+/// Why [`patch_prefs`] wrote nothing.
+#[derive(Debug, thiserror::Error)]
+pub enum PrefsError {
+    /// The merged preferences break a rule; the message says which.
+    #[error("{0}")]
+    Invalid(String),
+    #[error(transparent)]
+    Core(#[from] crate::error::CoreError),
+}
+
+impl From<sqlx::Error> for PrefsError {
+    fn from(e: sqlx::Error) -> Self {
+        Self::Core(e.into())
+    }
+}
+
+/// Applies `patch`, some of the API object's keys, to the user's preferences:
+/// a key set to `null` goes back to its default (or, for `avatar`, is removed).
+/// The row stays locked from read to write, so two saves of different settings
+/// never undo each other. Returns whether AI categorisation was on before, or
+/// `None` when the user does not exist. Nothing is written on an error.
+pub async fn patch_prefs(
     pool: &sqlx::PgPool,
     user_id: uuid::Uuid,
-    prefs: &UserPrefs,
-) -> Result<Option<bool>, crate::error::CoreError> {
-    let was_enabled = sqlx::query_scalar!(
-        r#"
-        with old as (
-            select id, budget_ai_enabled as enabled
-            from users where id = $1
-            for update
-        )
-        update users u
-           set prefs = $2, currency = $3, time_zone = $4,
-               budget_ai_enabled = $5, budget_ai_threshold = $6
-          from old
-         where u.id = old.id
-        returning old.enabled
-        "#,
+    patch: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<bool>, PrefsError> {
+    let mut tx = pool.begin().await?;
+    let Some(row) = sqlx::query!(
+        r#"select prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
+                  currency, time_zone, budget_ai_enabled, budget_ai_threshold
+             from users where id = $1
+              for update"#,
+        user_id,
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let was_enabled = row.budget_ai_enabled;
+    let stored = UserPrefs {
+        display: row.prefs.0,
+        currency: row.currency,
+        time_zone: row.time_zone,
+        budget_ai_enabled: row.budget_ai_enabled,
+        budget_ai_threshold: row.budget_ai_threshold as u8,
+    };
+
+    let serde_json::Value::Object(mut merged) =
+        serde_json::to_value(&stored).map_err(crate::error::CoreError::from)?
+    else {
+        unreachable!("UserPrefs serializes to an object");
+    };
+    for (key, value) in patch {
+        if value.is_null() {
+            merged.remove(key);
+        } else {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    let prefs: UserPrefs = serde_json::from_value(serde_json::Value::Object(merged))
+        .map_err(|e| PrefsError::Invalid(e.to_string()))?;
+    let saved = serde_json::to_value(&prefs).map_err(crate::error::CoreError::from)?;
+    if let Some(key) = patch
+        .iter()
+        .find(|(k, v)| !v.is_null() && saved.get(k.as_str()).is_none())
+        .map(|(k, _)| k)
+    {
+        return Err(PrefsError::Invalid(format!("unknown preference '{key}'")));
+    }
+    check(&mut tx, &prefs).await?;
+
+    sqlx::query!(
+        "update users
+            set prefs = $2, currency = $3, time_zone = $4,
+                budget_ai_enabled = $5, budget_ai_threshold = $6
+          where id = $1",
         user_id,
         sqlx::types::Json(&prefs.display) as _,
         prefs.currency,
@@ -137,9 +191,37 @@ pub async fn replace_prefs(
         prefs.budget_ai_enabled,
         prefs.budget_ai_threshold as i16,
     )
-    .fetch_optional(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(was_enabled)
+    tx.commit().await?;
+    Ok(Some(was_enabled))
+}
+
+/// The rules a saved set of preferences must follow.
+async fn check(db: &mut sqlx::PgConnection, prefs: &UserPrefs) -> Result<(), PrefsError> {
+    let invalid = |msg: &str| Err(PrefsError::Invalid(msg.to_string()));
+    if !valid_time_zone(&mut *db, &prefs.time_zone).await? {
+        return invalid("timeZone must be a recognized IANA timezone");
+    }
+    if !valid_currency(&prefs.currency) {
+        return invalid("currency must be an ISO 4217 code");
+    }
+    if let Some(avatar) = &prefs.display.avatar {
+        if !avatar.starts_with("data:image/") {
+            return invalid("avatar must be an image data URL");
+        }
+        if avatar.len() > 200 * 1024 {
+            return invalid("avatar too large");
+        }
+    }
+    if !BUDGET_AI_THRESHOLD_RANGE.contains(&prefs.budget_ai_threshold) {
+        return Err(PrefsError::Invalid(format!(
+            "budgetAiThreshold must be between {} and {}",
+            BUDGET_AI_THRESHOLD_RANGE.start(),
+            BUDGET_AI_THRESHOLD_RANGE.end()
+        )));
+    }
+    Ok(())
 }
 
 /// Whether this user has opted in to AI categorisation.
@@ -166,15 +248,15 @@ pub async fn today(
     )
 }
 
-pub async fn valid_time_zone(
-    pool: &sqlx::PgPool,
+async fn valid_time_zone(
+    db: impl sqlx::PgExecutor<'_>,
     zone: &str,
 ) -> Result<bool, crate::error::CoreError> {
     Ok(sqlx::query_scalar!(
         "select exists(select 1 from pg_timezone_names where name = $1 and (name = 'UTC' or name like '%/%') and name not like 'posix/%' and name not like 'right/%') as \"valid!\"",
         zone
     )
-    .fetch_one(pool)
+    .fetch_one(db)
     .await?)
 }
 

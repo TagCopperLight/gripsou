@@ -91,9 +91,7 @@ describe("Welcome", () => {
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const auth = renderWelcome();
     await waitFor(() =>
-      expect(auth.updatePrefs).toHaveBeenCalledWith(
-        expect.objectContaining({ uiLanguage: "fr", timeZone: browserZone, currency: "EUR" }),
-      ),
+      expect(auth.updatePrefs).toHaveBeenCalledWith({ uiLanguage: "fr", timeZone: browserZone }),
     );
   });
 
@@ -159,7 +157,7 @@ describe("Welcome", () => {
     await waitFor(() => expect(next).toBeEnabled());
     fireEvent.click(next);
     fireEvent.click(await screen.findByRole("switch", { name: "Categorise my transactions with AI" }));
-    expect(auth.updatePrefs).toHaveBeenCalledWith(expect.objectContaining({ budgetAiEnabled: true }));
+    expect(auth.updatePrefs).toHaveBeenCalledWith({ budgetAiEnabled: true });
   });
 
   it("does not rewrite prefs that already match the browser", async () => {

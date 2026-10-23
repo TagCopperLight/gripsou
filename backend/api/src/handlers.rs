@@ -1125,60 +1125,29 @@ pub async fn finish_welcome(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Saves only the settings in the body (see `prefs::patch_prefs`), so two
+/// settings changed at once never overwrite each other.
 pub async fn update_prefs(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-    Json(prefs): Json<gripsou_core::repo::prefs::UserPrefs>,
+    Json(patch): Json<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
-    if !gripsou_core::repo::prefs::valid_time_zone(&pool, &prefs.time_zone)
-        .await
-        .map_err(internal)?
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "timeZone must be a recognized IANA timezone".to_string(),
-        ));
-    }
-    if !gripsou_core::repo::prefs::valid_currency(&prefs.currency) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "currency must be an ISO 4217 code".to_string(),
-        ));
-    }
-    if let Some(avatar) = &prefs.display.avatar {
-        if !avatar.starts_with("data:image/") {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "avatar must be an image data URL".to_string(),
-            ));
-        }
-        if avatar.len() > 200 * 1024 {
-            return Err((StatusCode::BAD_REQUEST, "avatar too large".to_string()));
-        }
-    }
-    let range = gripsou_core::repo::prefs::BUDGET_AI_THRESHOLD_RANGE;
-    if !range.contains(&prefs.budget_ai_threshold) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!(
-                "budgetAiThreshold must be between {} and {}",
-                range.start(),
-                range.end()
-            ),
-        ));
-    }
-    let was_enabled = gripsou_core::repo::prefs::replace_prefs(&pool, user_id, &prefs)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+    use gripsou_core::repo::prefs::{PrefsError, patch_prefs};
+    let was_enabled = match patch_prefs(&pool, user_id, &patch).await {
+        Ok(Some(was)) => was,
+        Ok(None) => return Err((StatusCode::UNAUTHORIZED, "unauthorized".to_string())),
+        Err(PrefsError::Invalid(msg)) => return Err((StatusCode::BAD_REQUEST, msg)),
+        Err(PrefsError::Core(e)) => return Err(internal(e)),
+    };
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
-    if prefs.budget_ai_enabled != was_enabled {
-        tracing::info!(user_id = %user_id, enabled = prefs.budget_ai_enabled, "ai opt-in changed");
+    let enabled = profile.prefs.budget_ai_enabled;
+    if enabled != was_enabled {
+        tracing::info!(user_id = %user_id, enabled, "ai opt-in changed");
     }
-    if prefs.budget_ai_enabled && !was_enabled {
+    if enabled && !was_enabled {
         gripsou_jobs::request_categorize(pool.clone(), user_id);
     }
     Ok(Json(dto::SessionUser::from_profile(&profile)))
@@ -1715,6 +1684,7 @@ pub(crate) mod auth_tests {
     use crate::testkit::seed_user_with_password;
     use crate::throttle::LoginThrottle;
     use axum::response::IntoResponse;
+    use serde_json::json;
     use sqlx::PgPool;
     use std::sync::Arc;
 
@@ -2882,53 +2852,6 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn update_prefs_persists_and_me_reflects_it(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
-        let token = login_token(&pool, "a@t.local", "pw").await;
-        let session =
-            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
-                .await
-                .unwrap()
-                .unwrap();
-        let principal = auth::AuthUser {
-            user_id: session.user_id,
-            session_id: session.id,
-        };
-
-        let mut next = prefs_of(&pool, principal.user_id).await;
-        next.display.ui_language = "fr".into();
-        next.display.currency_position = "before".into();
-        next.currency = "USD".into();
-        next.time_zone = "America/Los_Angeles".into();
-
-        let updated = update_prefs(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: principal.user_id,
-                session_id: principal.session_id,
-            },
-            Json(next),
-        )
-        .await
-        .expect("update prefs ok");
-        assert_eq!(updated.0.prefs.display.ui_language, "fr");
-        assert_eq!(updated.0.prefs.currency, "USD");
-
-        // Persisted: a fresh /auth/me sees the new prefs.
-        let me_resp = me(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: principal.user_id,
-                session_id: principal.session_id,
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(me_resp.0.prefs.display.currency_position, "before");
-        assert_eq!(me_resp.0.prefs.time_zone, "America/Los_Angeles");
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
         let owner = seed_user_with_password(&pool, "owner@t.local", "pw", "user").await;
         let other = seed_user_with_password(&pool, "other@t.local", "pw", "user").await;
@@ -3753,31 +3676,88 @@ pub(crate) mod auth_tests {
         assert_eq!(err.0, StatusCode::NOT_FOUND);
     }
 
+    async fn patch_prefs(
+        pool: &PgPool,
+        user_id: Uuid,
+        patch: serde_json::Value,
+    ) -> Result<dto::SessionUser, (StatusCode, String)> {
+        let serde_json::Value::Object(patch) = patch else {
+            panic!("a patch is an object")
+        };
+        update_prefs(
+            State(pool.clone()),
+            auth::AuthUser {
+                user_id,
+                session_id: Uuid::new_v4(),
+            },
+            Json(patch),
+        )
+        .await
+        .map(|Json(user)| user)
+    }
+
     #[sqlx::test(migrations = "../migrations")]
-    async fn update_prefs_rejects_invalid_timezone_or_currency_without_writing(pool: PgPool) {
+    async fn update_prefs_saves_only_the_settings_sent(pool: PgPool) {
+        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        let updated = patch_prefs(
+            &pool,
+            user_id,
+            json!({ "uiLanguage": "fr", "currency": "USD" }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.prefs.display.ui_language, "fr");
+        assert_eq!(updated.prefs.currency, "USD");
+
+        patch_prefs(&pool, user_id, json!({ "timeZone": "America/Los_Angeles" }))
+            .await
+            .unwrap();
+        let after = prefs_of(&pool, user_id).await;
+        assert_eq!(
+            (after.display.ui_language.as_str(), after.currency.as_str()),
+            ("fr", "USD")
+        );
+        assert_eq!(after.time_zone, "America/Los_Angeles");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn two_settings_saved_at_once_both_stick(pool: PgPool) {
+        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        let (a, b) = tokio::join!(
+            patch_prefs(&pool, user_id, json!({ "currency": "USD" })),
+            patch_prefs(&pool, user_id, json!({ "numberDecimals": 0 })),
+        );
+        a.unwrap();
+        b.unwrap();
+        let after = prefs_of(&pool, user_id).await;
+        assert_eq!(
+            (after.currency.as_str(), after.display.number_decimals),
+            ("USD", 0)
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_prefs_rejects_bad_values_without_writing(pool: PgPool) {
         let user_id = seed_user_with_password(&pool, "tz@example.com", "pw", "user").await;
         let before = prefs_of(&pool, user_id).await;
-        let zones = ["", "Europe/NotAPlace", "+02:00", "posix/Europe/Paris"].map(|zone| {
-            let mut p = before.clone();
-            p.time_zone = zone.to_string();
-            p
-        });
-        let currencies = ["usd", "EURO", ""].map(|code| {
-            let mut p = before.clone();
-            p.currency = code.to_string();
-            p
-        });
-        for prefs in zones.into_iter().chain(currencies) {
-            let label = format!("{} {}", prefs.time_zone, prefs.currency);
-            let result = update_prefs(
-                State(pool.clone()),
-                auth::AuthUser {
-                    user_id,
-                    session_id: Uuid::new_v4(),
-                },
-                Json(prefs),
-            )
-            .await;
+        let big = format!("data:image/webp;base64,{}", "A".repeat(200 * 1024));
+        let bad = [
+            json!({ "timeZone": "" }),
+            json!({ "timeZone": "Europe/NotAPlace" }),
+            json!({ "timeZone": "+02:00" }),
+            json!({ "timeZone": "posix/Europe/Paris" }),
+            json!({ "currency": "usd" }),
+            json!({ "currency": "EURO" }),
+            json!({ "currency": null }),
+            json!({ "budgetAiThreshold": 40 }),
+            json!({ "numberDecimals": "two" }),
+            json!({ "avatar": "data:text/html,<script>" }),
+            json!({ "avatar": big }),
+            json!({ "uiLanguage": "fr", "noSuchPref": true }),
+        ];
+        for patch in bad {
+            let label = patch.to_string();
+            let result = patch_prefs(&pool, user_id, patch).await;
             assert!(
                 matches!(result, Err((StatusCode::BAD_REQUEST, _))),
                 "{label}"
@@ -3785,9 +3765,26 @@ pub(crate) mod auth_tests {
         }
         let after = prefs_of(&pool, user_id).await;
         assert_eq!(
-            (after.time_zone, after.currency),
-            (before.time_zone, before.currency)
+            serde_json::to_value(&after).unwrap(),
+            serde_json::to_value(&before).unwrap()
         );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_null_removes_the_avatar(pool: PgPool) {
+        let user_id = seed_user_with_password(&pool, "av@example.com", "pw", "user").await;
+        patch_prefs(
+            &pool,
+            user_id,
+            json!({ "avatar": "data:image/webp;base64,UklGRg==" }),
+        )
+        .await
+        .unwrap();
+        assert!(prefs_of(&pool, user_id).await.display.avatar.is_some());
+        patch_prefs(&pool, user_id, json!({ "avatar": null }))
+            .await
+            .unwrap();
+        assert!(prefs_of(&pool, user_id).await.display.avatar.is_none());
     }
 
     async fn prefs_of(pool: &PgPool, user_id: Uuid) -> gripsou_core::repo::prefs::UserPrefs {
@@ -3806,59 +3803,6 @@ pub(crate) mod auth_tests {
             range_window("7d", today),
             (NaiveDate::from_ymd_opt(2026, 12, 25).unwrap(), today)
         );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn update_prefs_rejects_bad_avatar(pool: PgPool) {
-        seed_user_with_password(&pool, "av@example.com", "pw", "user").await;
-        let token = login_token(&pool, "av@example.com", "pw").await;
-        let session =
-            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
-                .await
-                .unwrap()
-                .unwrap();
-        let user_id = session.user_id;
-        let session_id = session.id;
-
-        // Non-image data URL rejected.
-        let mut prefs = prefs_of(&pool, user_id).await;
-        prefs.display.avatar = Some("data:text/html,<script>".to_string());
-        let bad = update_prefs(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id,
-                session_id,
-            },
-            Json(prefs.clone()),
-        )
-        .await;
-        assert!(matches!(bad, Err((StatusCode::BAD_REQUEST, _))));
-
-        // Oversized avatar rejected.
-        prefs.display.avatar = Some(format!("data:image/webp;base64,{}", "A".repeat(200 * 1024)));
-        let big = update_prefs(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id,
-                session_id,
-            },
-            Json(prefs.clone()),
-        )
-        .await;
-        assert!(matches!(big, Err((StatusCode::BAD_REQUEST, _))));
-
-        // Valid small avatar accepted.
-        prefs.display.avatar = Some("data:image/webp;base64,UklGRg==".to_string());
-        let ok = update_prefs(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id,
-                session_id,
-            },
-            Json(prefs),
-        )
-        .await;
-        assert!(ok.is_ok());
     }
 
     /// Insert a user + connection, returning the connection id (mirrors

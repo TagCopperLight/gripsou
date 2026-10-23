@@ -22,6 +22,7 @@ import { TIME_ZONES } from "../lib/timeZoneList";
 import { goTo } from "../lib/navigate";
 import { parseCallbackParams } from "../lib/connectionCallback";
 import { prefillFromBrowser } from "../lib/welcome";
+import type { PrefsPatch } from "../lib/prefs";
 
 type Step = 1 | 2 | 3;
 
@@ -37,8 +38,8 @@ export function Welcome() {
   // A failed save is rolled back by AuthProvider (the control shows the old
   // value again), and the user can retry here or later in Settings, so the
   // rejection is swallowed.
-  const save = (next: typeof prefs) => {
-    updatePrefs(next).catch(() => {});
+  const save = (patch: PrefsPatch) => {
+    updatePrefs(patch).catch(() => {});
   };
 
   const connections = flattenConnections(useConnections().data);
@@ -93,7 +94,7 @@ export function Welcome() {
     const filled = prefillFromBrowser(prefs);
     if (filled.uiLanguage !== prefs.uiLanguage || filled.timeZone !== prefs.timeZone) {
       // The user can still set these in step 1 / Settings; AuthProvider rolls back.
-      updatePrefs(filled).catch(() => {});
+      updatePrefs({ uiLanguage: filled.uiLanguage, timeZone: filled.timeZone }).catch(() => {});
     }
   }, [backFromBank, prefs, updatePrefs]);
 
@@ -167,7 +168,7 @@ export function Welcome() {
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.language")}</span>
                 <SegmentedControl
                   value={prefs.uiLanguage}
-                  onChange={(lng) => save({ ...prefs, uiLanguage: lng as typeof prefs.uiLanguage })}
+                  onChange={(lng) => save({ uiLanguage: lng as typeof prefs.uiLanguage })}
                   options={[
                     { value: "en", label: "English" },
                     { value: "fr", label: "Français" },
@@ -178,7 +179,7 @@ export function Welcome() {
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
                 <Select
                   value={prefs.currency}
-                  onChange={(currency) => save({ ...prefs, currency })}
+                  onChange={(currency) => save({ currency })}
                   options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
                 />
               </div>
@@ -186,7 +187,7 @@ export function Welcome() {
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
                 <select
                   value={prefs.timeZone}
-                  onChange={(e) => save({ ...prefs, timeZone: e.target.value })}
+                  onChange={(e) => save({ timeZone: e.target.value })}
                   className="w-full rounded-xl bg-surface-2 px-3.5 py-2.25 text-sm text-fg"
                 >
                   {[...new Set([...TIME_ZONES, prefs.timeZone])].map((zone) => (
@@ -257,7 +258,7 @@ export function Welcome() {
                   <span className="text-sm font-medium text-fg">{t("welcome.ai.toggle")}</span>
                   <Toggle
                     checked={prefs.budgetAiEnabled}
-                    onChange={(on) => save({ ...prefs, budgetAiEnabled: on })}
+                    onChange={(on) => save({ budgetAiEnabled: on })}
                     aria-label={t("welcome.ai.toggle")}
                   />
                 </div>
