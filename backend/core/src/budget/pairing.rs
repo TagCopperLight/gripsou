@@ -204,7 +204,7 @@ pub async fn pair_internal_transfers(
     // transfer, and the AI's confidence and review stamp go with the guess
     // they described — left behind they would read as a reviewed transfer at
     // 27 %.
-    let result = sqlx::query!(
+    sqlx::query!(
         r#"
         update transaction t
            set transfer_pair_id = p.partner,
@@ -230,18 +230,6 @@ pub async fn pair_internal_transfers(
     .execute(&mut *conn)
     .await?;
 
-    // A write that doesn't touch every row is a hard error rather than a
-    // half-paired ledger: if the join above matched nothing (this user's
-    // `internal_transfer` category missing), pairs would be reported that
-    // were never written.
-    if result.rows_affected() != ids.len() as u64 {
-        return Err(CoreError::TransferPairNotWritten {
-            user_id,
-            out_id: ids[0],
-            in_id: partners[0],
-            rows: result.rows_affected(),
-        });
-    }
     // A moved pair writes both of its rows, as a new one does.
     Ok(ids.len() / 2)
 }

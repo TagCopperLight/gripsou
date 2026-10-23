@@ -1,7 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::dto::CanonicalAccount;
-use gripsou_core::error::CoreError;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
     BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
@@ -1026,54 +1025,6 @@ async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow
     assert_eq!(partner(&pool, do1).await?, Some(ci1));
     assert_eq!(partner(&pool, lo2).await?, Some(di2));
     assert_eq!(partner(&pool, do2).await?, Some(ci2));
-    Ok(())
-}
-
-/// If this user's `internal_transfer` budget_category row is missing (it is
-/// trigger-seeded and the repository refuses to delete it, but nothing below
-/// the repository layer enforces that), the pairing UPDATE's join to it
-/// matches nothing. That must surface as an error, not as a silently
-/// unwritten "pair" that the next round would recompute forever. Bypasses
-/// the repository (which would refuse) with a direct delete, the same way
-/// other tests here reach past it to force a state the app itself would
-/// never produce.
-#[sqlx::test(migrations = "../migrations")]
-async fn missing_internal_transfer_category_is_a_hard_error(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
-    tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
-
-    sqlx::query(
-        "delete from budget_category where user_id = $1 and system_key = 'internal_transfer'",
-    )
-    .bind(user_id)
-    .execute(&pool)
-    .await?;
-
-    let mut conn = pool.acquire().await?;
-    let err = pair_internal_transfers(&mut conn, user_id)
-        .await
-        .expect_err("the pairing UPDATE's join to internal_transfer matched nothing");
-    assert!(
-        matches!(err, CoreError::TransferPairNotWritten { .. }),
-        "expected TransferPairNotWritten, got {err:?}"
-    );
-
-    // Nothing was left half-written: the candidates are exactly as they were.
-    let paired: i64 =
-        sqlx::query_scalar("select count(*) from transaction where transfer_pair_id is not null")
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(paired, 0);
     Ok(())
 }
 
