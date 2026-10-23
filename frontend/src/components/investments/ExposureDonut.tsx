@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "../EChart";
 import type { EChartsOption } from "echarts";
@@ -17,6 +17,10 @@ type ExposureDonutProps = {
   total: number;
   /** Full-width card: the legend spreads over two columns on desktop. */
   wide?: boolean;
+  /** What the middle says over the total; "Value" by default. */
+  centerLabel?: string;
+  /** Shown under the title instead of the chart (loading, error). */
+  placeholder?: ReactNode;
   className?: string;
 };
 
@@ -32,7 +36,15 @@ const LEGEND_DIM = 0.45;
 /** A donut and its legend, the legend always showing every row so nothing
  *  moves under the pointer. Items with children (regions and their
  *  countries) get a thin outer ring in shades of their colour. */
-export function ExposureDonut({ title, items, total, wide = false, className = "" }: ExposureDonutProps) {
+export function ExposureDonut({
+  title,
+  items,
+  total,
+  wide = false,
+  centerLabel,
+  placeholder,
+  className = "",
+}: ExposureDonutProps) {
   const { t } = useTranslation();
   const [active, setActive] = useState<string | null>(null);
   const nested = items.some((i) => i.children && i.children.length > 0);
@@ -117,13 +129,27 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
         className={`shrink-0 rounded-sm ${child ? "size-2" : "size-3"}`}
         style={swatch(item)}
       />
-      <span className={`min-w-0 truncate ${child ? "text-xs text-fg-dim" : "text-sm text-fg"}`}>{item.label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={`min-w-0 truncate ${child ? "text-xs text-fg-dim" : "text-sm text-fg"}`}>{item.label}</span>
+        {item.tag && (
+          <span className="hidden shrink-0 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-faint md:inline">
+            {item.tag}
+          </span>
+        )}
+      </span>
       <Percent value={item.share} fractionDigits={1} className={`text-right text-fg ${child ? "text-xs" : "text-sm"}`} />
-      <Money
-        value={item.share * total}
-        fractionDigits={0}
-        className={`min-w-14 text-right text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
-      />
+      <span className="flex min-w-14 items-center justify-end gap-1.5">
+        {item.warning && (
+          <span title={item.warning} aria-label={item.warning} className="text-fg-faint text-xs leading-none">
+            ⚠
+          </span>
+        )}
+        <Money
+          value={item.value ?? item.share * total}
+          fractionDigits={0}
+          className={`text-right text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
+        />
+      </span>
     </div>
   );
 
@@ -131,6 +157,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
         <p className="text-fg font-semibold text-sm">{title}</p>
+        {placeholder ?? (
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
             <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
@@ -142,7 +169,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
                 </>
               ) : (
                 <>
-                  <span className="text-fg-faint text-xs">{t("investments.exposure.center")}</span>
+                  <span className="text-fg-faint text-xs">{centerLabel ?? t("investments.exposure.center")}</span>
                   <Money value={total} fractionDigits={0} className="whitespace-nowrap text-fg text-lg font-semibold tracking-tight" />
                 </>
               )}
@@ -158,6 +185,7 @@ export function ExposureDonut({ title, items, total, wide = false, className = "
             ))}
           </div>
         </div>
+        )}
       </div>
     </Surface>
   );
