@@ -129,6 +129,15 @@ pub fn router(
             post(mfa::recovery_regenerate),
         )
         .route(
+            "/auth/mfa/passkeys/register/options",
+            post(passkey::register_options),
+        )
+        .route("/auth/mfa/passkeys/register", post(passkey::register))
+        .route(
+            "/auth/mfa/passkeys/{id}",
+            patch(passkey::rename).delete(passkey::remove),
+        )
+        .route(
             "/auth/me",
             get(handlers::me).patch(handlers::update_profile),
         )

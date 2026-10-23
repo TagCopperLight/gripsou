@@ -1282,6 +1282,49 @@ pub struct ReauthTokenReq {
 pub struct MfaStatus {
     pub totp: bool,
     pub recovery_remaining: i64,
+    pub passkeys: Vec<PasskeyInfo>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyInfo {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<gripsou_core::repo::passkey::PasskeyRow> for PasskeyInfo {
+    fn from(r: gripsou_core::repo::passkey::PasskeyRow) -> Self {
+        PasskeyInfo {
+            id: r.id,
+            name: r.name,
+            created_at: r.created_at,
+            last_used_at: r.last_used_at,
+        }
+    }
+}
+
+/// A WebAuthn ceremony to run in the browser: `options` is the
+/// `publicKey` member, as `@simplewebauthn/browser` takes it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyOptions {
+    pub challenge: String,
+    pub options: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyRegisterReq {
+    pub reauth: String,
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::RegisterPublicKeyCredential,
+}
+
+#[derive(Deserialize)]
+pub struct RenamePasskeyReq {
+    pub name: String,
 }
 
 #[derive(Debug, Serialize)]

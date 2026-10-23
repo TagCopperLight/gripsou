@@ -19,25 +19,49 @@ use crate::{TotpKey, factors};
 
 const REAUTH_KIND: &str = "reauth";
 
-type ApiError = (StatusCode, String);
+pub(crate) type ApiError = (StatusCode, String);
 
 fn unauthorized() -> ApiError {
     (StatusCode::UNAUTHORIZED, "unauthorized".to_string())
 }
 
 /// Consume a reauth token. Single use either way: a token that belongs to
-/// someone else is burnt and refused.
-async fn require_reauth(pool: &PgPool, user_id: Uuid, token: &str) -> Result<(), ApiError> {
-    let challenge = login_challenge::consume(pool, &auth::hash_token(token), REAUTH_KIND)
+/// someone else is burnt and refused. Runs on a pool or in a transaction.
+pub(crate) async fn require_reauth(
+    db: impl sqlx::PgExecutor<'_>,
+    user_id: Uuid,
+    token: &str,
+) -> Result<(), ApiError> {
+    let challenge = login_challenge::consume(db, &auth::hash_token(token), REAUTH_KIND)
         .await
         .map_err(internal)?;
     match challenge {
         Some(c) if c.user_id == Some(user_id) => Ok(()),
-        _ => Err((
-            StatusCode::UNAUTHORIZED,
-            "reauthentication required".to_string(),
-        )),
+        _ => Err(reauth_required()),
     }
+}
+
+/// Check a reauth token without spending it (a ceremony that finishes later
+/// spends it).
+pub(crate) async fn check_reauth(
+    pool: &PgPool,
+    user_id: Uuid,
+    token: &str,
+) -> Result<(), ApiError> {
+    match login_challenge::find_valid(pool, &auth::hash_token(token), REAUTH_KIND)
+        .await
+        .map_err(internal)?
+    {
+        Some(c) if c.user_id == Some(user_id) => Ok(()),
+        _ => Err(reauth_required()),
+    }
+}
+
+fn reauth_required() -> ApiError {
+    (
+        StatusCode::UNAUTHORIZED,
+        "reauthentication required".to_string(),
+    )
 }
 
 /// Trade the password for a short-lived token that authorises one sensitive
@@ -100,6 +124,12 @@ pub async fn status(
     Ok(Json(dto::MfaStatus {
         totp: st.totp,
         recovery_remaining: st.recovery_remaining,
+        passkeys: gripsou_core::repo::passkey::list(&pool, user_id)
+            .await
+            .map_err(internal)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
     }))
 }
 
@@ -263,7 +293,7 @@ pub async fn recovery_regenerate(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::auth::{self, AuthUser};
     use crate::factors;
@@ -283,7 +313,7 @@ mod tests {
         crate::TotpKey(Arc::from(KEY))
     }
 
-    async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
+    pub(crate) async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
         let id = Uuid::new_v4();
         let hash = auth::hash_password("hunter22").unwrap();
         sqlx::query(
@@ -299,7 +329,7 @@ mod tests {
         id
     }
 
-    async fn seed_session(pool: &PgPool, user_id: Uuid) -> AuthUser {
+    pub(crate) async fn seed_session(pool: &PgPool, user_id: Uuid) -> AuthUser {
         let s = session::create(
             pool,
             user_id,
@@ -317,14 +347,14 @@ mod tests {
         }
     }
 
-    fn who(a: &AuthUser) -> AuthUser {
+    pub(crate) fn who(a: &AuthUser) -> AuthUser {
         AuthUser {
             user_id: a.user_id,
             session_id: a.session_id,
         }
     }
 
-    async fn sessions(pool: &PgPool, user_id: Uuid) -> i64 {
+    pub(crate) async fn sessions(pool: &PgPool, user_id: Uuid) -> i64 {
         sqlx::query_scalar("select count(*) from session where user_id = $1")
             .bind(user_id)
             .fetch_one(pool)
@@ -419,7 +449,7 @@ mod tests {
         (secret, codes)
     }
 
-    async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) -> String {
+    pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) -> String {
         let throttle = Arc::new(LoginThrottle::default());
         try_reauth(pool, &throttle, a, password)
             .await
