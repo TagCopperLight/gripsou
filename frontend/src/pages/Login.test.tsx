@@ -174,7 +174,7 @@ describe("Login", () => {
     });
 
     it("returns to the password step when the challenge expired, keeping the email", async () => {
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("challenge expired", 401));
+      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("challenge expired", 410));
       await toCodeStep(verifyLogin);
       typeCode("123456");
       expect(await screen.findByText("That took too long. Sign in again.")).toBeInTheDocument();
@@ -322,8 +322,8 @@ describe("Login", () => {
         expect(screen.getByLabelText("Email")).toBeInTheDocument();
       });
 
-      it("goes back to the form with a message when the challenge expired (401)", async () => {
-        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 401));
+      it("goes back to the form with a message when the challenge expired (410)", async () => {
+        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 410));
         render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText(refused)).toBeInTheDocument();

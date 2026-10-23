@@ -11,8 +11,9 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use uuid::Uuid;
 
-use crate::auth::{self, AuthUser};
+use crate::auth::{self, AdminUser, AuthUser};
 use crate::dto;
+use crate::error::ApiError;
 
 /// Inclusive calendar-day windows, anchored to the caller's saved timezone.
 fn range_window(range: &str, today: NaiveDate) -> (NaiveDate, NaiveDate) {
@@ -35,32 +36,6 @@ pub struct RangeParams {
 }
 fn default_range() -> String {
     "6mo".to_string()
-}
-
-/// The real error goes to the log; the client gets a fixed, non-descriptive
-/// message. sqlx/Postgres error strings quote the failing statement and its
-/// parameters, so returning them hands an untrusted caller a view of the schema
-/// and of whatever input reached the query. The request span supplies the
-/// route and request_id.
-pub(crate) fn internal(e: impl std::fmt::Display) -> (StatusCode, String) {
-    tracing::error!(error = %e, "internal error");
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "internal server error".to_string(),
-    )
-}
-
-/// Resolve the caller and require the admin role. Server config and provider
-/// management are admin-only: `app_settings` is the admin-tunable config.
-async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, String)> {
-    let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
-    if profile.role != "admin" {
-        return Err((StatusCode::FORBIDDEN, "admin access required".to_string()));
-    }
-    Ok(())
 }
 
 /// Client IP: the last X-Forwarded-For hop, which the nearest proxy wrote
@@ -88,37 +63,27 @@ pub async fn net_worth(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<RangeParams>,
-) -> Result<Json<dto::NetWorthResponse>, (StatusCode, String)> {
-    let today = gripsou_core::repo::prefs::today(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<dto::NetWorthResponse>, ApiError> {
+    let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
-    let rows = gripsou_core::repo::query::net_worth_series(&pool, user_id, from, to)
-        .await
-        .map_err(internal)?;
+    let rows = gripsou_core::repo::query::net_worth_series(&pool, user_id, from, to).await?;
     Ok(Json(dto::NetWorthResponse::from_rows(&rows)))
 }
 
 pub async fn holdings(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::Holding>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::query::holdings(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::Holding>>, ApiError> {
+    let rows = gripsou_core::repo::query::holdings(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(dto::Holding::from_row).collect()))
 }
 
 pub async fn investment_returns(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<dto::InvestmentReturns>, (StatusCode, String)> {
-    let inputs = gripsou_core::repo::returns::load(&pool, user_id)
-        .await
-        .map_err(internal)?;
-    let accounts = gripsou_core::repo::query::accounts(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<dto::InvestmentReturns>, ApiError> {
+    let inputs = gripsou_core::repo::returns::load(&pool, user_id).await?;
+    let accounts = gripsou_core::repo::query::accounts(&pool, user_id).await?;
     let r = gripsou_core::returns::returns(&inputs.positions, &inputs.flows, inputs.today);
 
     // `query::accounts` lists every account it can value from snapshots, which
@@ -160,10 +125,8 @@ pub async fn holding_prices(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Query(p): Query<RangeParams>,
-) -> Result<Json<Vec<dto::PricePoint>>, (StatusCode, String)> {
-    let today = gripsou_core::repo::prefs::today(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::PricePoint>>, ApiError> {
+    let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
     let rows = gripsou_core::repo::query::holding_prices(
         &pool,
@@ -172,8 +135,7 @@ pub async fn holding_prices(
         from.and_hms_opt(0, 0, 0).unwrap().and_utc(),
         to.and_hms_opt(23, 59, 59).unwrap().and_utc(),
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     Ok(Json(
         rows.into_iter().map(dto::PricePoint::from_row).collect(),
     ))
@@ -186,8 +148,8 @@ pub async fn holding_prices(
 /// inputs.
 fn parse_lot_adds(
     adds: &[dto::LotEntry],
-) -> Result<Vec<gripsou_core::repo::lot::PreviewLot>, (StatusCode, String)> {
-    let bad = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
+) -> Result<Vec<gripsou_core::repo::lot::PreviewLot>, ApiError> {
+    let bad = ApiError::bad_request;
 
     let mut parsed = Vec::with_capacity(adds.len());
     for a in adds {
@@ -259,7 +221,7 @@ pub async fn save_lots(
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
     Json(req): Json<dto::SaveLotsReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     // Validate EVERY add before writing anything, so a rejected batch leaves no
     // trace — the transaction would roll back anyway, but failing early keeps
     // the error attributable to a row rather than to the batch.
@@ -271,7 +233,7 @@ pub async fn save_lots(
     deletes.sort();
     deletes.dedup();
 
-    let mut tx = pool.begin().await.map_err(internal)?;
+    let mut tx = pool.begin().await?;
 
     // Ownership check and the connection the backfill must rebuild, in one
     // query: the connection is *derived* from the holding, never taken from the
@@ -288,23 +250,21 @@ pub async fn save_lots(
         user_id,
     )
     .fetch_optional(&mut *tx)
-    .await
-    .map_err(internal)?;
+    .await?;
     // A holding the caller does not own reads as 404, so the endpoint does not
     // confirm the existence of ids the caller cannot see.
     let Some(connection_id) = connection_id else {
-        return Err((StatusCode::NOT_FOUND, "unknown holding".to_string()));
+        return Err(ApiError::NotFound("unknown holding"));
     };
 
     if !deletes.is_empty() {
-        let deleted = gripsou_core::repo::lot::delete_lots(&mut tx, holding_id, user_id, &deletes)
-            .await
-            .map_err(internal)?;
+        let deleted =
+            gripsou_core::repo::lot::delete_lots(&mut tx, holding_id, user_id, &deletes).await?;
         // Anything the predicate refused — another user's row, a provider row,
         // another holding's row, an id that never existed — lands here as the
         // same 404, and takes the adds down with it.
         if deleted != deletes.len() as u64 {
-            return Err((StatusCode::NOT_FOUND, "unknown entry".to_string()));
+            return Err(ApiError::NotFound("unknown entry"));
         }
     }
 
@@ -319,12 +279,11 @@ pub async fn save_lots(
             p.unit_price,
             p.fee,
         )
-        .await
-        .map_err(internal)?;
+        .await?;
         if inserted.is_none() {
             // The check above already gated on ownership; the write's own
             // predicate is belt and braces — 404, never a 500 from an empty row.
-            return Err((StatusCode::NOT_FOUND, "unknown holding".to_string()));
+            return Err(ApiError::NotFound("unknown holding"));
         }
     }
 
@@ -332,12 +291,10 @@ pub async fn save_lots(
     // must move now — not at the next daily sync, a day later. Once, after all
     // the writes, not per row.
     if !parsed.is_empty() || !deletes.is_empty() {
-        gripsou_core::backfill::backfill_connection(&mut tx, connection_id)
-            .await
-            .map_err(internal)?;
+        gripsou_core::backfill::backfill_connection(&mut tx, connection_id).await?;
     }
 
-    tx.commit().await.map_err(internal)?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -345,10 +302,8 @@ pub async fn holding_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
-) -> Result<Json<Vec<dto::Lot>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::lot::list_lots(&pool, user_id, holding_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::Lot>>, ApiError> {
+    let rows = gripsou_core::repo::lot::list_lots(&pool, user_id, holding_id).await?;
     Ok(Json(rows.into_iter().map(dto::Lot::from_row).collect()))
 }
 
@@ -358,11 +313,10 @@ pub async fn lot_suggestions(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
-) -> Result<Json<Vec<dto::LotSuggestion>>, (StatusCode, String)> {
+) -> Result<Json<Vec<dto::LotSuggestion>>, ApiError> {
     let rows = gripsou_core::repo::lot_suggest::suggest_lots(&pool, user_id, holding_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "unknown holding".to_string()))?;
+        .await?
+        .ok_or(ApiError::NotFound("unknown holding"))?;
     Ok(Json(
         rows.into_iter()
             .map(dto::LotSuggestion::from_suggestion)
@@ -408,7 +362,7 @@ pub async fn preview_lots(
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
     Json(req): Json<dto::PreviewLotsReq>,
-) -> Result<Json<dto::BasisPreview>, (StatusCode, String)> {
+) -> Result<Json<dto::BasisPreview>, ApiError> {
     let rows = parse_lot_adds(&req.rows)?;
     // `None` is an unowned or unknown holding. It must read as 404, exactly as
     // `save_lots` does — that handler's comment states the reason: the endpoint
@@ -416,12 +370,9 @@ pub async fn preview_lots(
     // fall through as a 500 would diverge from the sibling endpoint on the same
     // resource.
     let f = gripsou_core::repo::lot::basis_preview(&pool, user_id, holding_id, &rows)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "unknown holding".to_string()))?;
-    let price = current_price(&pool, user_id, holding_id)
-        .await
-        .map_err(internal)?;
+        .await?
+        .ok_or(ApiError::NotFound("unknown holding"))?;
+    let price = current_price(&pool, user_id, holding_id).await?;
     let unrealised = f.explained_qty * price - f.basis;
     Ok(Json(dto::BasisPreview {
         mean_price: f.mean_price.to_string(),
@@ -434,10 +385,8 @@ pub async fn preview_lots(
 pub async fn accounts(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::Account>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::query::accounts(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::Account>>, ApiError> {
+    let rows = gripsou_core::repo::query::accounts(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(dto::Account::from_row).collect()))
 }
 
@@ -445,14 +394,10 @@ pub async fn account_series(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<RangeParams>,
-) -> Result<Json<dto::AccountSeriesResponse>, (StatusCode, String)> {
-    let today = gripsou_core::repo::prefs::today(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<dto::AccountSeriesResponse>, ApiError> {
+    let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
-    let rows = gripsou_core::repo::query::account_series(&pool, user_id, from, to)
-        .await
-        .map_err(internal)?;
+    let rows = gripsou_core::repo::query::account_series(&pool, user_id, from, to).await?;
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
@@ -484,7 +429,7 @@ pub struct TransactionParams {
 pub fn filters_from_params(
     p: TransactionParams,
     review_threshold: rust_decimal::Decimal,
-) -> Result<gripsou_core::repo::query::TransactionFilters, (StatusCode, String)> {
+) -> Result<gripsou_core::repo::query::TransactionFilters, ApiError> {
     use gripsou_core::repo::query::TransactionFilters;
     Ok(TransactionFilters {
         search: p.search.filter(|s| !s.trim().is_empty()),
@@ -510,18 +455,12 @@ pub async fn transactions(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TransactionParams>,
-) -> Result<Json<Vec<dto::Transaction>>, (StatusCode, String)> {
-    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::Transaction>>, ApiError> {
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
     let filters = filters_from_params(p, threshold)?;
-    let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters)
-        .await
-        .map_err(internal)?;
+    let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters).await?;
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-    let mut tags = gripsou_core::repo::query::tags_for_transactions(&pool, user_id, &ids)
-        .await
-        .map_err(internal)?;
+    let mut tags = gripsou_core::repo::query::tags_for_transactions(&pool, user_id, &ids).await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| {
@@ -535,13 +474,9 @@ pub async fn transactions(
 pub async fn connections(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::ProviderGroup>>, (StatusCode, String)> {
-    let conns = gripsou_core::repo::connection::list_connections(&pool, user_id)
-        .await
-        .map_err(internal)?;
-    let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::ProviderGroup>>, ApiError> {
+    let conns = gripsou_core::repo::connection::list_connections(&pool, user_id).await?;
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
     Ok(Json(dto::ProviderGroup::tree(conns, accounts)))
 }
 
@@ -550,7 +485,7 @@ pub async fn sync_connection(
     State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<dto::ConnectionState>), ApiError> {
     use gripsou_core::repo::connection::BeginSync;
     match gripsou_jobs::request_sync(
         pool.clone(),
@@ -559,8 +494,7 @@ pub async fn sync_connection(
         id,
         gripsou_jobs::Trigger::Manual,
     )
-    .await
-    .map_err(internal)?
+    .await?
     {
         BeginSync::Started(state) => {
             tracing::info!(connection_id = %id, "sync requested");
@@ -569,11 +503,8 @@ pub async fn sync_connection(
                 Json(dto::ConnectionState::from_row(state)),
             ))
         }
-        BeginSync::AlreadySyncing => Err((
-            StatusCode::CONFLICT,
-            "connection is already syncing".to_string(),
-        )),
-        BeginSync::NotFound => Err((StatusCode::NOT_FOUND, "connection not found".to_string())),
+        BeginSync::AlreadySyncing => Err(ApiError::Conflict("connection is already syncing")),
+        BeginSync::NotFound => Err(ApiError::NotFound("connection not found")),
     }
 }
 
@@ -581,11 +512,9 @@ pub async fn sync_all(
     State(pool): State<PgPool>,
     State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     use gripsou_core::repo::connection::BeginSync;
-    let ids = gripsou_core::repo::connection::ids_for_user(&pool, user_id)
-        .await
-        .map_err(internal)?;
+    let ids = gripsou_core::repo::connection::ids_for_user(&pool, user_id).await?;
     let mut started = 0u32;
     for id in ids {
         if let BeginSync::Started(_) = gripsou_jobs::request_sync(
@@ -595,8 +524,7 @@ pub async fn sync_all(
             id,
             gripsou_jobs::Trigger::Manual,
         )
-        .await
-        .map_err(internal)?
+        .await?
         {
             started += 1;
         }
@@ -610,10 +538,8 @@ pub async fn sync_all(
 
 pub async fn account_types(
     State(pool): State<PgPool>,
-) -> Result<Json<Vec<dto::AccountType>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::query::account_types(&pool)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::AccountType>>, ApiError> {
+    let rows = gripsou_core::repo::query::account_types(&pool).await?;
     Ok(Json(
         rows.into_iter().map(dto::AccountType::from_row).collect(),
     ))
@@ -624,7 +550,7 @@ pub async fn update_account(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(body): Json<dto::UpdateAccountReq>,
-) -> Result<Json<dto::UpdatedAccount>, (StatusCode, String)> {
+) -> Result<Json<dto::UpdatedAccount>, ApiError> {
     let updated = gripsou_core::repo::account::update_account(
         &pool,
         user_id,
@@ -633,20 +559,16 @@ pub async fn update_account(
         &body.type_key,
         &body.color,
     )
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::NOT_FOUND, "account not found".to_string()))?;
+    .await?
+    .ok_or(ApiError::NotFound("account not found"))?;
     Ok(Json(dto::UpdatedAccount::from_row(updated)))
 }
 
 pub async fn providers(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::Provider>>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
-    let rows = gripsou_core::repo::provider::account_providers(&pool)
-        .await
-        .map_err(internal)?;
+    _: AdminUser,
+) -> Result<Json<Vec<dto::Provider>>, ApiError> {
+    let rows = gripsou_core::repo::provider::account_providers(&pool).await?;
     Ok(Json(
         rows.into_iter().map(dto::Provider::from_row).collect(),
     ))
@@ -654,12 +576,9 @@ pub async fn providers(
 
 pub async fn budget_ai_settings(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<dto::BudgetAiSettingsDto>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
-    let s = gripsou_core::repo::settings::budget_ai(&pool)
-        .await
-        .map_err(internal)?;
+    _: AdminUser,
+) -> Result<Json<dto::BudgetAiSettingsDto>, ApiError> {
+    let s = gripsou_core::repo::settings::budget_ai(&pool).await?;
     let defaults = gripsou_jobs::categorizer_keys()
         .into_iter()
         .filter_map(|k| gripsou_jobs::default_model(k).map(|m| (k, m)))
@@ -674,26 +593,23 @@ pub async fn budget_ai_settings(
 
 pub async fn set_budget_ai_settings(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    AdminUser { user_id }: AdminUser,
     Json(body): Json<dto::SetBudgetAiSettingsReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<StatusCode, ApiError> {
     let provider = body
         .provider
         .as_deref()
         .map(str::trim)
         .filter(|p| !p.is_empty());
     if provider.is_some_and(|p| !gripsou_jobs::categorizer_keys().contains(&p)) {
-        return Err((StatusCode::BAD_REQUEST, "unknown provider".into()));
+        return Err(ApiError::bad_request("unknown provider"));
     }
     let model = body
         .model
         .as_deref()
         .map(str::trim)
         .filter(|m| !m.is_empty());
-    gripsou_core::repo::settings::set_budget_ai(&pool, provider, model)
-        .await
-        .map_err(internal)?;
+    gripsou_core::repo::settings::set_budget_ai(&pool, provider, model).await?;
     tracing::info!(
         by = %user_id,
         provider = provider.unwrap_or(""),
@@ -706,35 +622,27 @@ pub async fn set_budget_ai_settings(
 /// The models the provider offers, for the admin's model dropdown. Asked of
 /// the provider on every call: the list is short and only read by an admin.
 pub async fn budget_ai_models(
-    State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    _: AdminUser,
     Path(provider): Path<String>,
-) -> Result<Json<Vec<String>>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<Json<Vec<String>>, ApiError> {
     if !gripsou_jobs::categorizer_keys().contains(&provider.as_str()) {
-        return Err((StatusCode::NOT_FOUND, "unknown provider".into()));
+        return Err(ApiError::NotFound("unknown provider"));
     }
     match gripsou_jobs::categorizer_models(&provider).await {
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
             tracing::warn!(provider = %provider, error = %gripsou_core::logs::error_chain(&e), "ai model list failed");
-            Err((StatusCode::BAD_GATEWAY, e.to_string()))
+            Err(ApiError::BadGateway(e.to_string()))
         }
-        None => Err((
-            StatusCode::CONFLICT,
-            "provider has no API key on this server".into(),
-        )),
+        None => Err(ApiError::Conflict("provider has no API key on this server")),
     }
 }
 
 pub async fn budget_ai_usage(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<dto::BudgetAiUsageDto>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
-    let report = gripsou_core::budget::ai_cost::usage_report(&pool)
-        .await
-        .map_err(internal)?;
+    _: AdminUser,
+) -> Result<Json<dto::BudgetAiUsageDto>, ApiError> {
+    let report = gripsou_core::budget::ai_cost::usage_report(&pool).await?;
     let money = |d: Decimal| d.round_dp(4).normalize().to_string();
     Ok(Json(dto::BudgetAiUsageDto {
         currency: "USD",
@@ -760,28 +668,22 @@ pub async fn budget_ai_usage(
 /// string (USD per million tokens); anything else is a 400 and saves nothing.
 pub async fn set_budget_ai_prices(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    AdminUser { user_id }: AdminUser,
     Json(body): Json<std::collections::BTreeMap<String, dto::BudgetAiPriceReq>>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<StatusCode, ApiError> {
     let parse = |model: &str, v: &str| {
         v.trim()
             .parse::<Decimal>()
             .ok()
             .filter(|d| *d >= Decimal::ZERO)
             .map(|d| if d.is_zero() { Decimal::ZERO } else { d })
-            .ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("invalid price for {model}: {v:?}"),
-                )
-            })
+            .ok_or_else(|| ApiError::BadRequest(format!("invalid price for {model}: {v:?}")))
     };
     let mut prices = gripsou_core::repo::settings::ModelPrices::new();
     for (model, p) in &body {
         let model = model.trim();
         if model.is_empty() {
-            return Err((StatusCode::BAD_REQUEST, "empty model key".into()));
+            return Err(ApiError::bad_request("empty model key"));
         }
         prices.insert(
             model.to_string(),
@@ -791,28 +693,22 @@ pub async fn set_budget_ai_prices(
             },
         );
     }
-    gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices)
-        .await
-        .map_err(internal)?;
+    gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices).await?;
     tracing::info!(by = %user_id, models = prices.len() as u64, "ai prices changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn set_provider(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    AdminUser { user_id }: AdminUser,
     Path(key): Path<String>,
     Json(body): Json<dto::SetProviderReq>,
-) -> Result<Json<dto::Provider>, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<Json<dto::Provider>, ApiError> {
     // Reject unknown / non-account providers before mutating.
     let row = gripsou_core::repo::provider::account_provider(&pool, &key)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "provider not found".to_string()))?;
-    gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled)
-        .await
-        .map_err(internal)?;
+        .await?
+        .ok_or(ApiError::NotFound("provider not found"))?;
+    gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled).await?;
     tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
     Ok(Json(dto::Provider {
         key: row.key,
@@ -824,52 +720,15 @@ pub async fn set_provider(
 
 pub async fn users(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::User>>, (StatusCode, String)> {
+    AdminUser { user_id }: AdminUser,
+) -> Result<Json<Vec<dto::User>>, ApiError> {
     // Listing every account (names/emails/roles) is admin-only.
-    require_admin(&pool, user_id).await?;
-    let rows = gripsou_core::repo::query::users(&pool)
-        .await
-        .map_err(internal)?;
+    let rows = gripsou_core::repo::query::users(&pool).await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| dto::User::from_row(r, user_id))
             .collect(),
     ))
-}
-
-/// Login's error: the usual status + message, plus `Retry-After` seconds when
-/// throttled. Other handlers keep `(StatusCode, String)`; `?` converts it.
-#[derive(Debug)]
-pub struct LoginError(pub StatusCode, pub String, pub Option<u64>);
-
-impl From<(StatusCode, String)> for LoginError {
-    fn from((status, message): (StatusCode, String)) -> Self {
-        LoginError(status, message, None)
-    }
-}
-
-impl From<crate::throttle::Blocked> for LoginError {
-    fn from(blocked: crate::throttle::Blocked) -> Self {
-        LoginError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many attempts".to_string(),
-            Some(blocked.retry_after_secs()),
-        )
-    }
-}
-
-impl axum::response::IntoResponse for LoginError {
-    fn into_response(self) -> axum::response::Response {
-        let mut res = (self.0, self.1).into_response();
-        if let Some(secs) = self.2 {
-            res.headers_mut().insert(
-                axum::http::header::RETRY_AFTER,
-                axum::http::HeaderValue::from(secs),
-            );
-        }
-        res
-    }
 }
 
 const MAX_EMAIL_LEN: usize = 254;
@@ -880,14 +739,8 @@ pub async fn login(
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginReq>,
-) -> Result<Json<dto::LoginOutcome>, LoginError> {
-    let unauthorized = || {
-        LoginError(
-            StatusCode::UNAUTHORIZED,
-            "invalid email or password".to_string(),
-            None,
-        )
-    };
+) -> Result<Json<dto::LoginOutcome>, ApiError> {
+    let unauthorized = || ApiError::InvalidCredentials;
     let user_agent = user_agent(&headers);
     // No real address is longer (RFC 5321). Refused before the email can
     // become a throttle key or a log field.
@@ -903,9 +756,7 @@ pub async fn login(
         }
         return Err(blocked.into());
     }
-    let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
-        .await
-        .map_err(internal)?;
+    let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email).await?;
     let ok = auth::verify_password_or_dummy(
         &body.password,
         creds.as_ref().map(|c| c.password_hash.as_str()),
@@ -914,9 +765,7 @@ pub async fn login(
         tracing::warn!(email = %body.email, ip = %ip, user_agent, "login failed");
         return Err(unauthorized());
     };
-    let status = gripsou_core::repo::mfa::status(&pool, creds.id)
-        .await
-        .map_err(internal)?;
+    let status = gripsou_core::repo::mfa::status(&pool, creds.id).await?;
     if gripsou_core::repo::mfa::has_second_factor(&status) {
         // The password alone proves nothing yet: the attempt stays counted
         // until the second factor is right (see `login_verify`).
@@ -928,8 +777,7 @@ pub async fn login(
             "mfa",
             serde_json::json!({ "remember": body.remember }),
         )
-        .await
-        .map_err(internal)?;
+        .await?;
         tracing::info!(user_id = %creds.id, ip = %ip, "mfa challenge issued");
         return Ok(Json(dto::LoginOutcome::Mfa(dto::MfaRequired {
             mfa_required: true,
@@ -954,26 +802,18 @@ pub async fn login_verify(
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginVerifyReq>,
-) -> Result<Json<dto::LoginResponse>, LoginError> {
+) -> Result<Json<dto::LoginResponse>, ApiError> {
     use gripsou_core::repo::{login_challenge, mfa};
-    let expired = || {
-        LoginError(
-            StatusCode::UNAUTHORIZED,
-            "challenge expired".to_string(),
-            None,
-        )
-    };
+    let expired = || ApiError::ChallengeExpired;
     let user_agent = user_agent(&headers);
     let ip = client_ip(&headers, peer);
     let challenge_hash = auth::hash_token(&body.challenge);
     let challenge = login_challenge::find_valid(&pool, &challenge_hash, "mfa")
-        .await
-        .map_err(internal)?
+        .await?
         .ok_or_else(expired)?;
     let user_id = challenge.user_id.ok_or_else(expired)?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
+        .await?
         .ok_or_else(expired)?;
     if let Err(blocked) =
         sf_throttle.try_login(&throttle, &profile.email, &ip, std::time::Instant::now())
@@ -987,45 +827,33 @@ pub async fn login_verify(
     // The TOTP step is worked out before the transaction (no DB write).
     let totp_step = match (&body.totp, &body.recovery_code) {
         (Some(code), None) => {
-            let row = mfa::totp(&pool, user_id)
-                .await
-                .map_err(internal)?
-                .filter(|r| r.confirmed);
+            let row = mfa::totp(&pool, user_id).await?.filter(|r| r.confirmed);
             match row {
-                Some(row) => {
-                    crate::factors::check_totp(&key, &row.secret_enc, code).map_err(internal)?
-                }
+                Some(row) => crate::factors::check_totp(&key, &row.secret_enc, code)?,
                 None => None,
             }
         }
         (None, Some(_)) => None,
         _ => {
-            return Err(LoginError(
-                StatusCode::BAD_REQUEST,
-                "code required".to_string(),
-                None,
-            ));
+            return Err(ApiError::bad_request("code required"));
         }
     };
 
     // Spending the challenge and the code is one transaction: a request that
     // loses the race for the challenge (a parallel one won) rolls back and
     // leaves its code unspent, and a wrong code leaves the challenge usable.
-    let mut tx = pool.begin().await.map_err(internal)?;
+    let mut tx = pool.begin().await?;
     let challenge = login_challenge::consume(&mut *tx, &challenge_hash, "mfa")
-        .await
-        .map_err(internal)?
+        .await?
         .ok_or_else(expired)?;
     let method = match (totp_step, &body.recovery_code) {
         (Some(step), _) => mfa::use_totp_step(&mut *tx, user_id, step as i64)
-            .await
-            .map_err(internal)?
+            .await?
             .then_some(("totp", None)),
         (None, Some(code)) => {
             let hash = crate::factors::hash_recovery_code(code);
             mfa::use_recovery_code(&mut tx, user_id, &hash)
-                .await
-                .map_err(internal)?
+                .await?
                 .map(|remaining| ("recovery", Some(remaining)))
         }
         (None, None) => None,
@@ -1033,13 +861,9 @@ pub async fn login_verify(
     let Some((method, remaining)) = method else {
         drop(tx);
         tracing::warn!(email = %profile.email, ip = %ip, user_agent, step = "second_factor", "login failed");
-        return Err(LoginError(
-            StatusCode::BAD_REQUEST,
-            "invalid code".to_string(),
-            None,
-        ));
+        return Err(ApiError::bad_request("invalid code"));
     };
-    tx.commit().await.map_err(internal)?;
+    tx.commit().await?;
     if let Some(remaining) = remaining {
         tracing::info!(user_id = %user_id, remaining, "recovery code used");
     }
@@ -1057,11 +881,10 @@ pub async fn login_verify(
 pub async fn me(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+) -> Result<Json<dto::SessionUser>, ApiError> {
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
@@ -1069,12 +892,9 @@ pub async fn me(
 pub async fn finish_welcome(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<StatusCode, (StatusCode, String)> {
-    if !gripsou_core::repo::user::finish_welcome(&pool, user_id)
-        .await
-        .map_err(internal)?
-    {
-        return Err((StatusCode::UNAUTHORIZED, "unauthorized".to_string()));
+) -> Result<StatusCode, ApiError> {
+    if !gripsou_core::repo::user::finish_welcome(&pool, user_id).await? {
+        return Err(ApiError::Unauthorized);
     }
     tracing::info!(user_id = %user_id, "welcome finished");
     Ok(StatusCode::NO_CONTENT)
@@ -1086,18 +906,17 @@ pub async fn update_prefs(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(patch): Json<serde_json::Map<String, serde_json::Value>>,
-) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+) -> Result<Json<dto::SessionUser>, ApiError> {
     use gripsou_core::repo::prefs::{PrefsError, patch_prefs};
     let was_enabled = match patch_prefs(&pool, user_id, &patch).await {
         Ok(Some(was)) => was,
-        Ok(None) => return Err((StatusCode::UNAUTHORIZED, "unauthorized".to_string())),
-        Err(PrefsError::Invalid(msg)) => return Err((StatusCode::BAD_REQUEST, msg)),
-        Err(PrefsError::Core(e)) => return Err(internal(e)),
+        Ok(None) => return Err(ApiError::Unauthorized),
+        Err(PrefsError::Invalid(msg)) => return Err(ApiError::BadRequest(msg)),
+        Err(PrefsError::Core(e)) => return Err(ApiError::internal(e)),
     };
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     let enabled = profile.prefs.budget_ai_enabled;
     if enabled != was_enabled {
         tracing::info!(user_id = %user_id, enabled, "ai opt-in changed");
@@ -1112,35 +931,18 @@ pub async fn update_profile(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::UpdateProfileReq>,
-) -> Result<Json<dto::SessionUser>, (StatusCode, String)> {
+) -> Result<Json<dto::SessionUser>, ApiError> {
     let name = body.name.trim();
     let email = body.email.trim();
     if name.is_empty() || email.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "name and email are required".to_string(),
-        ));
+        return Err(ApiError::bad_request("name and email are required"));
     }
     let profile = gripsou_core::repo::user::update_profile(&pool, user_id, name, email)
         .await
-        .map_err(unique_or_internal("email is already in use"))?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+        .map_err(ApiError::conflict_on_unique("email is already in use"))?
+        .ok_or(ApiError::Unauthorized)?;
     tracing::info!(user_id = %user_id, "profile changed");
     Ok(Json(dto::SessionUser::from_profile(&profile)))
-}
-
-/// Map a unique-constraint violation to 409 with `msg`; anything else to 500.
-fn unique_or_internal(
-    msg: &'static str,
-) -> impl Fn(gripsou_core::error::CoreError) -> (StatusCode, String) {
-    move |e| match &e {
-        gripsou_core::error::CoreError::Db(sqlx::Error::Database(db))
-            if db.is_unique_violation() =>
-        {
-            (StatusCode::CONFLICT, msg.to_string())
-        }
-        _ => internal(e),
-    }
 }
 
 pub async fn logout(
@@ -1149,10 +951,8 @@ pub async fn logout(
         user_id,
         session_id,
     }: AuthUser,
-) -> Result<StatusCode, (StatusCode, String)> {
-    gripsou_core::repo::session::delete(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+) -> Result<StatusCode, ApiError> {
+    gripsou_core::repo::session::delete(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "logout");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1163,10 +963,8 @@ pub async fn list_sessions(
         user_id,
         session_id,
     }: AuthUser,
-) -> Result<Json<Vec<dto::SessionDto>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::session::list_for_user(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::SessionDto>>, ApiError> {
+    let rows = gripsou_core::repo::session::list_for_user(&pool, user_id).await?;
     Ok(Json(
         rows.into_iter()
             .map(|s| dto::SessionDto::from_row(s, session_id))
@@ -1178,15 +976,13 @@ pub async fn revoke_session(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let deleted = gripsou_core::repo::session::delete(&pool, user_id, id)
-        .await
-        .map_err(internal)?;
+) -> Result<StatusCode, ApiError> {
+    let deleted = gripsou_core::repo::session::delete(&pool, user_id, id).await?;
     if deleted {
         tracing::info!(user_id = %user_id, session_id = %id, "session revoked");
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err((StatusCode::NOT_FOUND, "session not found".to_string()))
+        Err(ApiError::NotFound("session not found"))
     }
 }
 
@@ -1196,10 +992,8 @@ pub async fn revoke_other_sessions(
         user_id,
         session_id,
     }: AuthUser,
-) -> Result<StatusCode, (StatusCode, String)> {
-    gripsou_core::repo::session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+) -> Result<StatusCode, ApiError> {
+    gripsou_core::repo::session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "other sessions revoked");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1214,7 +1008,7 @@ pub async fn change_password(
         session_id,
     }: AuthUser,
     Json(body): Json<dto::ChangePasswordReq>,
-) -> Result<StatusCode, LoginError> {
+) -> Result<StatusCode, ApiError> {
     auth::validate_new_password(&body.new_password)?;
     crate::mfa::check_password(
         &pool,
@@ -1225,13 +1019,9 @@ pub async fn change_password(
         &body.current_password,
     )
     .await?;
-    let new_hash = auth::hash_password(&body.new_password).map_err(internal)?;
-    gripsou_core::repo::user::update_password(&pool, user_id, &new_hash)
-        .await
-        .map_err(internal)?;
-    gripsou_core::repo::session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+    let new_hash = auth::hash_password(&body.new_password)?;
+    gripsou_core::repo::user::update_password(&pool, user_id, &new_hash).await?;
+    gripsou_core::repo::session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "password changed");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1243,44 +1033,30 @@ pub async fn delete_account(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::DeleteAccountReq>,
-) -> Result<StatusCode, LoginError> {
+) -> Result<StatusCode, ApiError> {
     crate::mfa::check_password(&pool, &throttle, &headers, peer, user_id, &body.password).await?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     // Refuse to delete the last admin: doing so would lock everyone out of the
     // admin-only settings (user management, server config) for good.
-    if profile.role == "admin"
-        && gripsou_core::repo::user::count_admins(&pool)
-            .await
-            .map_err(internal)?
-            <= 1
-    {
-        return Err(LoginError(
-            StatusCode::CONFLICT,
-            "cannot delete the last admin".to_string(),
-            None,
-        ));
+    if profile.role == "admin" && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
+        return Err(ApiError::Conflict("cannot delete the last admin"));
     }
-    gripsou_core::repo::user::delete_user(&pool, user_id)
-        .await
-        .map_err(internal)?;
+    gripsou_core::repo::user::delete_user(&pool, user_id).await?;
     tracing::info!(user_id = %user_id, "account deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn create_invite(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<(StatusCode, Json<dto::InviteLinkResp>), (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+    AdminUser { user_id }: AdminUser,
+) -> Result<(StatusCode, Json<dto::InviteLinkResp>), ApiError> {
     let raw = auth::generate_token();
     let stored = auth::hash_token_str(&raw);
     let expires_at = Utc::now() + Duration::hours(24);
     gripsou_core::repo::invite_token::create(&pool, "invite", None, user_id, &stored, expires_at)
-        .await
-        .map_err(internal)?;
+        .await?;
     tracing::info!(by = %user_id, "invite created");
     Ok((
         StatusCode::CREATED,
@@ -1293,21 +1069,18 @@ pub async fn create_invite(
 /// own password): a stolen admin session must not get past two-factor.
 pub async fn create_reset_link(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    AdminUser { user_id }: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<dto::ReauthTokenReq>,
-) -> Result<(StatusCode, Json<dto::InviteLinkResp>), (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<(StatusCode, Json<dto::InviteLinkResp>), ApiError> {
     if id == user_id {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "cannot create a reset link for yourself".to_string(),
+        return Err(ApiError::bad_request(
+            "cannot create a reset link for yourself",
         ));
     }
     let target = gripsou_core::repo::user::profile_by_id(&pool, id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+        .await?
+        .ok_or(ApiError::NotFound("user not found"))?;
     crate::mfa::require_reauth(&pool, user_id, &body.reauth).await?;
     let raw = auth::generate_token();
     let stored = auth::hash_token_str(&raw);
@@ -1320,8 +1093,7 @@ pub async fn create_reset_link(
         &stored,
         expires_at,
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     tracing::info!(by = %user_id, target_user_id = %id, "reset link created");
     Ok((
         StatusCode::CREATED,
@@ -1331,37 +1103,22 @@ pub async fn create_reset_link(
 
 pub async fn delete_user(
     State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
+    AdminUser { user_id }: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<dto::DeleteUserReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&pool, user_id).await?;
+) -> Result<StatusCode, ApiError> {
     let target = gripsou_core::repo::user::profile_by_id(&pool, id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+        .await?
+        .ok_or(ApiError::NotFound("user not found"))?;
     // Confirm the typed email matches the user being deleted (case-insensitive).
     if body.email.trim().to_lowercase() != target.email.to_lowercase() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "email does not match user".to_string(),
-        ));
+        return Err(ApiError::bad_request("email does not match user"));
     }
     // Refuse to delete the last admin: it would lock everyone out of admin-only settings.
-    if target.role == "admin"
-        && gripsou_core::repo::user::count_admins(&pool)
-            .await
-            .map_err(internal)?
-            <= 1
-    {
-        return Err((
-            StatusCode::CONFLICT,
-            "cannot delete the last admin".to_string(),
-        ));
+    if target.role == "admin" && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
+        return Err(ApiError::Conflict("cannot delete the last admin"));
     }
-    gripsou_core::repo::user::delete_user(&pool, id)
-        .await
-        .map_err(internal)?;
+    gripsou_core::repo::user::delete_user(&pool, id).await?;
     tracing::info!(by = %user_id, target_user_id = %id, "user deleted");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1369,10 +1126,8 @@ pub async fn delete_user(
 pub async fn enabled_providers(
     State(pool): State<PgPool>,
     _auth: AuthUser,
-) -> Result<Json<Vec<dto::EnabledProvider>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::provider::enabled_account_providers(&pool)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<dto::EnabledProvider>>, ApiError> {
+    let rows = gripsou_core::repo::provider::enabled_account_providers(&pool).await?;
     Ok(Json(
         rows.into_iter()
             .map(dto::EnabledProvider::from_row)
@@ -1385,26 +1140,19 @@ pub async fn manage_connection(
     State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<(HeaderMap, Json<serde_json::Value>), (StatusCode, String)> {
+) -> Result<(HeaderMap, Json<serde_json::Value>), ApiError> {
     let conn = gripsou_core::repo::connection::connection_for_sync(&pool, user_id, id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "connection not found".into()))?;
+        .await?
+        .ok_or(ApiError::NotFound("connection not found"))?;
     if !gripsou_jobs::supports_manage(&conn.provider_key) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "connection management unavailable".into(),
-        ));
+        return Err(ApiError::bad_request("connection management unavailable"));
     }
     let init = gripsou_jobs::manage_connection(&key, &conn)
         .await
         .map_err(|_| {
             // The temporary access URL and provider response must never enter logs.
             tracing::warn!(connection_id = %id, "connection management failed");
-            (
-                StatusCode::BAD_GATEWAY,
-                "Unable to open connection management. Please try again.".into(),
-            )
+            ApiError::BadGateway("Unable to open connection management. Please try again.".into())
         })?;
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -1421,19 +1169,14 @@ pub async fn init_connection(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::InitConnectionReq>,
-) -> Result<(StatusCode, Json<dto::InitConnectionResp>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<dto::InitConnectionResp>), ApiError> {
     // Validate provider is enabled (also fetches display_name for the row).
-    let enabled = gripsou_core::repo::provider::enabled_account_providers(&pool)
-        .await
-        .map_err(internal)?;
+    let enabled = gripsou_core::repo::provider::enabled_account_providers(&pool).await?;
     let provider = enabled
         .iter()
         .find(|p| p.key == body.provider_key)
         .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("provider '{}' is not enabled", body.provider_key),
-            )
+            ApiError::BadRequest(format!("provider '{}' is not enabled", body.provider_key))
         })?;
 
     match gripsou_jobs::init_connection(pool, user_id, &body.provider_key, &provider.display_name)
@@ -1448,7 +1191,7 @@ pub async fn init_connection(
         )),
         Err(e) => {
             tracing::warn!(provider = %body.provider_key, step = "init", error = %gripsou_core::logs::error_chain(&e), "connect failed");
-            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            Err(ApiError::Internal)
         }
     }
 }
@@ -1458,24 +1201,22 @@ pub async fn complete_connection(
     State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::CompleteConnectionReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     let connection_id = body
         .connection_id
         .parse::<Uuid>()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid connection_id".to_string()))?;
+        .map_err(|_| ApiError::bad_request("invalid connection_id"))?;
 
+    use gripsou_jobs::CompleteError;
     match gripsou_jobs::complete_connection(pool, &key, user_id, connection_id, &body.params).await
     {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
-        Err(e) => {
+        Err(CompleteError::NotFound) => Err(ApiError::NotFound("connection not found")),
+        Err(CompleteError::Provider(e)) => {
             tracing::warn!(connection_id = %connection_id, step = "complete", error = %gripsou_core::logs::error_chain(&e), "connect failed");
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                Err((StatusCode::NOT_FOUND, msg))
-            } else {
-                Err((StatusCode::BAD_REQUEST, msg))
-            }
+            Err(ApiError::BadRequest(e.to_string()))
         }
+        Err(CompleteError::Internal(e)) => Err(ApiError::internal(e)),
     }
 }
 
@@ -1514,14 +1255,10 @@ pub(crate) async fn issue_session(
     peer: SocketAddr,
     user_id: Uuid,
     remember: bool,
-) -> Result<dto::LoginResponse, (StatusCode, String)> {
+) -> Result<dto::LoginResponse, ApiError> {
     let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "user vanished".to_string(),
-        ))?;
+        .await?
+        .ok_or_else(|| ApiError::internal("user vanished"))?;
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
     let user_agent = Some(user_agent(headers)).filter(|ua| !ua.is_empty());
@@ -1541,8 +1278,7 @@ pub(crate) async fn issue_session(
         remember,
         expires_at,
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     Ok(dto::LoginResponse {
         token,
         user: dto::SessionUser::from_profile(&profile),
@@ -1554,12 +1290,11 @@ pub(crate) async fn issue_session(
 pub async fn token_info(
     State(pool): State<PgPool>,
     Path(token): Path<String>,
-) -> Result<Json<dto::TokenInfoResp>, (StatusCode, String)> {
+) -> Result<Json<dto::TokenInfoResp>, ApiError> {
     let hash = auth::hash_token_str(&token);
     let info = gripsou_core::repo::invite_token::find_valid(&pool, &hash)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+        .await?
+        .ok_or(ApiError::NotFound("invalid token"))?;
     Ok(Json(dto::TokenInfoResp {
         token_type: info.token_type,
         email: info.email,
@@ -1573,25 +1308,22 @@ pub async fn redeem_invite(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Path(token): Path<String>,
     Json(body): Json<dto::RedeemInviteReq>,
-) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+) -> Result<Json<dto::LoginResponse>, ApiError> {
     let email = body.email.trim();
     let name = body.name.trim();
     if email.is_empty() || name.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "email and name are required".to_string(),
-        ));
+        return Err(ApiError::bad_request("email and name are required"));
     }
     auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
-    let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
+    let pw_hash = auth::hash_password(&body.password)?;
     let user_id =
         gripsou_core::repo::invite_token::redeem_invite(&pool, &hash, email, name, &pw_hash)
             .await
-            .map_err(unique_or_internal(
+            .map_err(ApiError::conflict_on_unique(
                 "an account with this email already exists",
             ))?
-            .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+            .ok_or(ApiError::NotFound("invalid token"))?;
     let resp = issue_session(&pool, &headers, peer, user_id, true).await?;
     tracing::info!(user_id = %user_id, "invite redeemed");
     Ok(Json(resp))
@@ -1604,14 +1336,13 @@ pub async fn redeem_reset(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Path(token): Path<String>,
     Json(body): Json<dto::RedeemResetReq>,
-) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+) -> Result<Json<dto::LoginResponse>, ApiError> {
     auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
-    let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
+    let pw_hash = auth::hash_password(&body.password)?;
     let (user_id, cleared) = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "invalid token".to_string()))?;
+        .await?
+        .ok_or(ApiError::NotFound("invalid token"))?;
     if cleared.any() {
         tracing::info!(user_id = %user_id, reason = "reset", "second factors cleared");
     }
@@ -1624,15 +1355,13 @@ pub async fn delete_connection(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let deleted = gripsou_core::repo::connection::delete_connection(&pool, user_id, id)
-        .await
-        .map_err(internal)?;
+) -> Result<StatusCode, ApiError> {
+    let deleted = gripsou_core::repo::connection::delete_connection(&pool, user_id, id).await?;
     if deleted {
         tracing::info!(user_id = %user_id, connection_id = %id, "connection deleted");
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err((StatusCode::NOT_FOUND, "connection not found".to_string()))
+        Err(ApiError::NotFound("connection not found"))
     }
 }
 
@@ -1669,7 +1398,7 @@ pub(crate) mod auth_tests {
         throttle: &Arc<LoginThrottle>,
         email: &str,
         pw: &str,
-    ) -> Result<Json<dto::LoginOutcome>, LoginError> {
+    ) -> Result<Json<dto::LoginOutcome>, ApiError> {
         login(
             State(pool.clone()),
             State(throttle.clone()),
@@ -1692,14 +1421,16 @@ pub(crate) mod auth_tests {
             let err = try_login(&pool, &throttle, "a@t.local", "wrong")
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+            assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
         }
         // Even the right password waits: the check happens before any verify.
         let err = try_login(&pool, &throttle, "a@t.local", "hunter22")
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
-        assert!(matches!(err.2, Some(s) if (1..=60).contains(&s)));
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            matches!(err, ApiError::TooMany { retry_after } if (1..=60).contains(&retry_after))
+        );
         let resp = err.into_response();
         assert!(resp.headers().contains_key(axum::http::header::RETRY_AFTER));
     }
@@ -1720,7 +1451,7 @@ pub(crate) mod auth_tests {
             let err = try_login(&pool, &throttle, "a@t.local", "wrong")
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+            assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
         }
     }
 
@@ -1735,7 +1466,7 @@ pub(crate) mod auth_tests {
         let err = try_login(&pool, &throttle, "nobody@t.local", "x")
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     /// A burst sent all at once gets no more guesses than the same requests
@@ -1751,7 +1482,7 @@ pub(crate) mod auth_tests {
                 try_login(&pool, &throttle, "a@t.local", "wrong")
                     .await
                     .unwrap_err()
-                    .0
+                    .status()
             });
         }
         let statuses = set.join_all().await;
@@ -1769,8 +1500,8 @@ pub(crate) mod auth_tests {
         assert_eq!(email.len(), 300);
         for _ in 0..6 {
             let err = try_login(&pool, &throttle, &email, "x").await.unwrap_err();
-            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-            assert_eq!(err.1, "invalid email or password");
+            assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(err.message(), "invalid email or password");
         }
         assert_eq!(throttle.tracked_keys(), (0, 0));
     }
@@ -1847,7 +1578,7 @@ pub(crate) mod auth_tests {
         challenge: &str,
         totp: Option<String>,
         recovery: Option<String>,
-    ) -> Result<Json<dto::LoginResponse>, LoginError> {
+    ) -> Result<Json<dto::LoginResponse>, ApiError> {
         login_verify(
             State(pool.clone()),
             State(throttle.pw.clone()),
@@ -1930,7 +1661,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, &ch, Some(code), None)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1948,7 +1679,7 @@ pub(crate) mod auth_tests {
             .await
             .unwrap_err();
         assert_eq!(
-            (err.0, err.1.as_str()),
+            (err.status(), err.message()),
             (StatusCode::BAD_REQUEST, "invalid code")
         );
         let _ = verify(&pool, &throttle, &ch, Some(now_code(&secret)), None)
@@ -1964,13 +1695,13 @@ pub(crate) mod auth_tests {
         let ch = mfa_challenge(&pool, &throttle, false).await;
         let none = verify(&pool, &throttle, &ch, None, None).await.unwrap_err();
         assert_eq!(
-            (none.0, none.1.as_str()),
+            (none.status(), none.message()),
             (StatusCode::BAD_REQUEST, "code required")
         );
         let both = verify(&pool, &throttle, &ch, Some("1".into()), Some("x".into()))
             .await
             .unwrap_err();
-        assert_eq!(both.1, "code required");
+        assert_eq!(both.message(), "code required");
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1988,7 +1719,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, &ch, None, Some(codes[0].clone()))
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2003,8 +1734,8 @@ pub(crate) mod auth_tests {
             .await
             .unwrap_err();
         assert_eq!(
-            (err.0, err.1.as_str()),
-            (StatusCode::UNAUTHORIZED, "challenge expired")
+            (err.status(), err.message()),
+            (StatusCode::GONE, "challenge expired")
         );
 
         login_challenge::create(
@@ -2019,7 +1750,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, "re", Some(code.clone()), None)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::GONE);
 
         let ch = mfa_challenge(&pool, &throttle, false).await;
         sqlx::query("update login_challenge set expires_at = now() - interval '1 minute' where token_hash = $1")
@@ -2030,7 +1761,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, &ch, Some(code.clone()), None)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::GONE);
 
         let ch = mfa_challenge(&pool, &throttle, false).await;
         let _ = verify(&pool, &throttle, &ch, Some(code), None)
@@ -2039,7 +1770,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, &ch, Some("123456".into()), None)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::GONE);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2062,12 +1793,12 @@ pub(crate) mod auth_tests {
             let err = verify(&pool, &throttle, "ch", Some("000000".into()), None)
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
         let err = verify(&pool, &throttle, "ch", Some("000000".into()), None)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(
             err.into_response()
                 .headers()
@@ -2093,14 +1824,14 @@ pub(crate) mod auth_tests {
             let err = verify(&pool, &throttle, &ch, Some(wrong.into()), None)
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
         for _ in 0..3 {
             let err = verify(&pool, &throttle, &ch, Some(now_code(&secret)), None)
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
-            assert_eq!(err.2, Some(60));
+            assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
+            assert_eq!(err, ApiError::TooMany { retry_after: 60 });
         }
         // The password step still answers (a fresh challenge), not 429.
         let _ = mfa_challenge(&pool, &throttle, false).await;
@@ -2140,7 +1871,7 @@ pub(crate) mod auth_tests {
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         winner.commit().await.unwrap();
         let err = loser.await.unwrap().unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::GONE);
         let status = gripsou_core::repo::mfa::status(&pool, uid).await.unwrap();
         assert_eq!(status.recovery_remaining, 10);
     }
@@ -2155,7 +1886,7 @@ pub(crate) mod auth_tests {
         let err = verify(&pool, &throttle, &ch, None, Some("nope-nope".into()))
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         let _ = verify(&pool, &throttle, &ch, None, Some(codes[1].clone()))
             .await
             .expect("right code on the same challenge");
@@ -2300,15 +2031,9 @@ pub(crate) mod auth_tests {
         )
         .await;
         assert!(failed.is_err());
-        let (_, Json(invite)) = create_invite(
-            State(pool.clone()),
-            AuthUser {
-                user_id: admin,
-                session_id: Uuid::nil(),
-            },
-        )
-        .await
-        .unwrap();
+        let (_, Json(invite)) = create_invite(State(pool.clone()), AdminUser { user_id: admin })
+            .await
+            .unwrap();
         writer.flush(&pool).await;
 
         let rows: Vec<(String, serde_json::Value)> =
@@ -2372,7 +2097,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2591,7 +2316,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
         assert!(
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
                 .await
@@ -2659,7 +2384,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
         assert!(
             gripsou_core::repo::user::profile_by_id(&pool, principal.user_id)
                 .await
@@ -2690,46 +2415,6 @@ pub(crate) mod auth_tests {
                 .unwrap()
                 .is_none()
         );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn users_endpoint_requires_admin(pool: PgPool) {
-        seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
-        seed_user_with_password(&pool, "member@t.local", "pw", "user").await;
-
-        let admin_tok = login_token(&pool, "admin@t.local", "pw").await;
-        let admin_sess =
-            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&admin_tok))
-                .await
-                .unwrap()
-                .unwrap();
-        let list = users(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: admin_sess.user_id,
-                session_id: admin_sess.id,
-            },
-        )
-        .await
-        .expect("admin can list users");
-        assert_eq!(list.0.len(), 2);
-
-        let member_tok = login_token(&pool, "member@t.local", "pw").await;
-        let member_sess =
-            gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&member_tok))
-                .await
-                .unwrap()
-                .unwrap();
-        let err = users(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: member_sess.user_id,
-                session_id: member_sess.id,
-            },
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2788,7 +2473,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
 
         // Colliding with another user's email returns 409.
         let conflict = update_profile(
@@ -2804,7 +2489,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(conflict.0, StatusCode::CONFLICT);
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -2827,7 +2512,7 @@ pub(crate) mod auth_tests {
             )
             .await
             .unwrap_err();
-            assert_eq!(error.0, StatusCode::NOT_FOUND);
+            assert_eq!(error.status(), StatusCode::NOT_FOUND);
         }
         let stored = gripsou_core::repo::connection::connection_for_sync(&pool, owner, id)
             .await
@@ -2867,7 +2552,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(nf.0, StatusCode::NOT_FOUND);
+        assert_eq!(nf.status(), StatusCode::NOT_FOUND);
 
         // Force a 'syncing' claim, then a trigger → 409.
         sqlx::query("update connection set status='syncing' where id=$1")
@@ -2883,7 +2568,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(busy.0, StatusCode::CONFLICT);
+        assert_eq!(busy.status(), StatusCode::CONFLICT);
 
         // Reset, then run the orchestrator directly (deterministic — no spawn):
         // the stub adapter returns NotImplemented, so status becomes 'error'.
@@ -2981,17 +2666,14 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
         // yahoo is kind='price' and must be excluded; powens is enabled via seed.
         let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
-        let principal = auth::AuthUser {
-            user_id: admin,
-            session_id: Uuid::new_v4(),
-        };
+        let principal = AdminUser { user_id: admin };
 
         let list = providers(State(pool.clone()), principal)
             .await
@@ -3006,27 +2688,9 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn providers_requires_admin(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "user@t.local", "pw", "user").await;
-        let err = providers(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: user,
-                session_id: Uuid::new_v4(),
-            },
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
-        let principal = || auth::AuthUser {
-            user_id: admin,
-            session_id: Uuid::new_v4(),
-        };
+        let principal = || AdminUser { user_id: admin };
 
         // Disable powens (seeded enabled).
         let off = set_provider(
@@ -3074,34 +2738,14 @@ pub(crate) mod auth_tests {
         for key in ["nope", "yahoo"] {
             let err = set_provider(
                 State(pool.clone()),
-                auth::AuthUser {
-                    user_id: admin,
-                    session_id: Uuid::new_v4(),
-                },
+                AdminUser { user_id: admin },
                 Path(key.to_string()),
                 Json(dto::SetProviderReq { enabled: true }),
             )
             .await
             .unwrap_err();
-            assert_eq!(err.0, StatusCode::NOT_FOUND, "key {key}");
+            assert_eq!(err.status(), StatusCode::NOT_FOUND, "key {key}");
         }
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn set_provider_requires_admin(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "user@t.local", "pw", "user").await;
-        let err = set_provider(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: user,
-                session_id: Uuid::new_v4(),
-            },
-            Path("powens".to_string()),
-            Json(dto::SetProviderReq { enabled: false }),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -3146,7 +2790,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -3202,7 +2846,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         // Correct user → 204.
         let ok = delete_connection(
@@ -3227,7 +2871,7 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn complete_connection_unknown_id_returns_error(pool: PgPool) {
+    async fn complete_connection_unknown_id_is_not_found(pool: PgPool) {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = complete_connection(
             State(pool.clone()),
@@ -3243,8 +2887,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        // Unknown connection_id → jobs returns "connection not found" → 400
-        assert!(err.0 == StatusCode::BAD_REQUEST || err.0 == StatusCode::NOT_FOUND);
+        assert_eq!(err, ApiError::NotFound("connection not found"));
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -3302,18 +2945,17 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn create_invite_requires_admin(pool: PgPool) {
-        seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let who = principal_for(&pool, "m@t.local", "pw").await;
-        let err = create_invite(State(pool.clone()), who).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn create_invite_writes_invite_row(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
-        let resp = create_invite(State(pool.clone()), who).await.expect("ok");
+        let resp = create_invite(
+            State(pool.clone()),
+            AdminUser {
+                user_id: who.user_id,
+            },
+        )
+        .await
+        .expect("ok");
         assert_eq!(resp.0, StatusCode::CREATED);
         assert!(!resp.1.0.token.is_empty());
 
@@ -3344,7 +2986,9 @@ pub(crate) mod auth_tests {
         let reauth = crate::mfa::tests::reauth_token(&pool, &who, "pw").await;
         let resp = create_reset_link(
             State(pool.clone()),
-            who,
+            AdminUser {
+                user_id: who.user_id,
+            },
             Path(target),
             Json(dto::ReauthTokenReq { reauth }),
         )
@@ -3376,9 +3020,8 @@ pub(crate) mod auth_tests {
         let create = |id, reauth: &str| {
             create_reset_link(
                 State(pool.clone()),
-                auth::AuthUser {
+                AdminUser {
                     user_id: who.user_id,
-                    session_id: who.session_id,
                 },
                 Path(id),
                 Json(dto::ReauthTokenReq {
@@ -3388,16 +3031,16 @@ pub(crate) mod auth_tests {
         };
 
         let err = create(target, "forged").await.unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::FORBIDDEN);
         let reauth = crate::mfa::tests::reauth_token(&pool, &who, "pw").await;
         let err = create(admin, &reauth).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         // Refusing oneself did not spend the token.
         let (status, _) = create(target, &reauth).await.expect("ok");
         assert_eq!(status, StatusCode::CREATED);
         // Single use.
         let err = create(target, &reauth).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -3411,7 +3054,7 @@ pub(crate) mod auth_tests {
                 State(throttle.clone()),
                 axum::http::HeaderMap::new(),
                 axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
-                auth::AuthUser {
+                AuthUser {
                     user_id: who.user_id,
                     session_id: who.session_id,
                 },
@@ -3423,13 +3066,12 @@ pub(crate) mod auth_tests {
         };
         for _ in 0..5 {
             assert_eq!(
-                attempt("wrong").await.unwrap_err().0,
+                attempt("wrong").await.unwrap_err().status(),
                 StatusCode::BAD_REQUEST
             );
         }
         let err = attempt("old-password").await.unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
-        assert!(err.2.is_some());
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(can_login(&pool, "c@t.local", "old-password").await);
     }
 
@@ -3441,7 +3083,9 @@ pub(crate) mod auth_tests {
 
         let err = delete_user(
             State(pool.clone()),
-            who,
+            AdminUser {
+                user_id: who.user_id,
+            },
             Path(target),
             Json(dto::DeleteUserReq {
                 email: "wrong@t.local".into(),
@@ -3449,7 +3093,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         assert!(
             gripsou_core::repo::user::profile_by_id(&pool, target)
                 .await
@@ -3465,7 +3109,9 @@ pub(crate) mod auth_tests {
 
         let err = delete_user(
             State(pool.clone()),
-            who,
+            AdminUser {
+                user_id: who.user_id,
+            },
             Path(admin),
             Json(dto::DeleteUserReq {
                 email: "boss@t.local".into(),
@@ -3473,7 +3119,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -3485,7 +3131,9 @@ pub(crate) mod auth_tests {
         // Case-insensitive email match succeeds.
         let ok = delete_user(
             State(pool.clone()),
-            who,
+            AdminUser {
+                user_id: who.user_id,
+            },
             Path(target),
             Json(dto::DeleteUserReq {
                 email: "TARGET@t.local".into(),
@@ -3500,24 +3148,6 @@ pub(crate) mod auth_tests {
                 .unwrap()
                 .is_none()
         );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn delete_user_requires_admin(pool: PgPool) {
-        seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let target = seed_user_with_password(&pool, "t@t.local", "pw", "user").await;
-        let who = principal_for(&pool, "m@t.local", "pw").await;
-        let err = delete_user(
-            State(pool.clone()),
-            who,
-            Path(target),
-            Json(dto::DeleteUserReq {
-                email: "t@t.local".into(),
-            }),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 
     // ── invite/reset redemption endpoint tests ──────────────────────────────
@@ -3629,7 +3259,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
         // Token left unconsumed.
         assert!(
             gripsou_core::repo::invite_token::find_valid(
@@ -3647,14 +3277,14 @@ pub(crate) mod auth_tests {
         let err = token_info(State(pool.clone()), Path("does-not-exist".to_string()))
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     async fn patch_prefs(
         pool: &PgPool,
         user_id: Uuid,
         patch: serde_json::Value,
-    ) -> Result<dto::SessionUser, (StatusCode, String)> {
+    ) -> Result<dto::SessionUser, ApiError> {
         let serde_json::Value::Object(patch) = patch else {
             panic!("a patch is an object")
         };
@@ -3732,10 +3362,7 @@ pub(crate) mod auth_tests {
         for patch in bad {
             let label = patch.to_string();
             let result = patch_prefs(&pool, user_id, patch).await;
-            assert!(
-                matches!(result, Err((StatusCode::BAD_REQUEST, _))),
-                "{label}"
-            );
+            assert!(matches!(result, Err(ApiError::BadRequest(_))), "{label}");
         }
         let after = prefs_of(&pool, user_id).await;
         assert_eq!(
@@ -3956,7 +3583,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect_err("unknown delete id must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let written: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
             .bind(holding_id)
@@ -3991,7 +3618,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect_err("provider row must not delete");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(id)
@@ -4087,7 +3714,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect_err("a row from a different holding of the same user must not delete");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(lot_on_a)
@@ -4141,7 +3768,7 @@ pub(crate) mod auth_tests {
         .await
         .expect_err("cross-user delete must fail");
         // 404, not 403: the endpoint must not confirm that this holding exists.
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
             .bind(victim)
@@ -4171,7 +3798,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect_err("zero quantity must fail");
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
 
         let written: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
             .bind(holding_id)
@@ -4195,7 +3822,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect_err("only buy and sell are writable here");
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     /// Manual entry is the main path for securities, so the derived history
@@ -4270,59 +3897,13 @@ pub(crate) mod auth_tests {
 
     // ── admin-only server settings ──────────────────────────────────────────
 
-    /// A member must not read the budget AI settings: they are admin-only config.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn budget_ai_settings_requires_admin(pool: PgPool) {
-        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let err = budget_ai_settings(State(pool.clone()), auth(member))
-            .await
-            .err()
-            .expect("forbidden");
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-    }
-
-    /// A member must not list the provider's models: it spends the server's key.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn budget_ai_models_requires_admin(pool: PgPool) {
-        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let key = gripsou_jobs::categorizer_keys()[0];
-        let err = budget_ai_models(State(pool.clone()), auth(member), Path(key.to_string()))
-            .await
-            .expect_err("forbidden");
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-    }
-
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let err = budget_ai_models(State(pool.clone()), auth(admin), Path("nope".into()))
+        let err = budget_ai_models(AdminUser { user_id: admin }, Path("nope".into()))
             .await
             .expect_err("not found");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
-    }
-
-    /// A member must not switch the budget AI provider — that decides where
-    /// every user's transactions are sent.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn set_budget_ai_settings_requires_admin_and_changes_nothing(pool: PgPool) {
-        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
-        let key = gripsou_jobs::categorizer_keys()[0];
-
-        let err = set_budget_ai_settings(
-            State(pool.clone()),
-            auth(member),
-            Json(dto::SetBudgetAiSettingsReq {
-                provider: Some(key.to_string()),
-                model: Some("m".into()),
-            }),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-        let s = gripsou_core::repo::settings::budget_ai(&pool)
-            .await
-            .unwrap();
-        assert_eq!((s.provider, s.model), (None, None));
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     /// An admin's budget AI choice persists (trimmed) and reads back as written.
@@ -4333,7 +3914,7 @@ pub(crate) mod auth_tests {
 
         let status = set_budget_ai_settings(
             State(pool.clone()),
-            auth(admin),
+            AdminUser { user_id: admin },
             Json(dto::SetBudgetAiSettingsReq {
                 provider: Some(format!("  {key} ")),
                 model: Some(" some-model ".into()),
@@ -4343,7 +3924,7 @@ pub(crate) mod auth_tests {
         .expect("admin may set");
         assert_eq!(status, StatusCode::NO_CONTENT);
 
-        let read = budget_ai_settings(State(pool.clone()), auth(admin))
+        let read = budget_ai_settings(State(pool.clone()), AdminUser { user_id: admin })
             .await
             .expect("admin may read")
             .0;
@@ -4363,7 +3944,7 @@ pub(crate) mod auth_tests {
 
         set_budget_ai_settings(
             State(pool.clone()),
-            auth(admin),
+            AdminUser { user_id: admin },
             Json(dto::SetBudgetAiSettingsReq {
                 provider: Some("   ".into()),
                 model: Some("".into()),
@@ -4389,7 +3970,7 @@ pub(crate) mod auth_tests {
 
         let err = set_budget_ai_settings(
             State(pool.clone()),
-            auth(admin),
+            AdminUser { user_id: admin },
             Json(dto::SetBudgetAiSettingsReq {
                 provider: Some("no-such-provider".into()),
                 model: Some("other".into()),
@@ -4397,7 +3978,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         let s = gripsou_core::repo::settings::budget_ai(&pool)
             .await
             .unwrap();
@@ -4482,7 +4063,7 @@ pub(crate) mod auth_tests {
         .await
         .err()
         .expect("cross-user update must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let name: String = sqlx::query_scalar("select name from account where id = $1")
             .bind(alice.account)
@@ -4542,7 +4123,7 @@ pub(crate) mod auth_tests {
         .await
         .err()
         .expect("unknown type must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let (name, type_key): (String, String) =
             sqlx::query_as("select name, type_key from account where id = $1")
@@ -4600,7 +4181,7 @@ pub(crate) mod auth_tests {
             .await
             .err()
             .expect("cross-user read must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     /// Another user's price history is not served through their holding id.
@@ -4676,7 +4257,7 @@ pub(crate) mod auth_tests {
         .await
         .err()
         .expect("cross-user preview must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let lots: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
             .bind(alice.holding)
@@ -4933,7 +4514,7 @@ pub(crate) mod auth_tests {
         pool: &PgPool,
         raw: &str,
         password: &str,
-    ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+    ) -> Result<Json<dto::LoginResponse>, ApiError> {
         redeem_reset(
             State(pool.clone()),
             axum::http::HeaderMap::new(),
@@ -4987,7 +4568,7 @@ pub(crate) mod auth_tests {
         let err = call_redeem_reset(&pool, "raw-reset", "second-pw")
             .await
             .expect_err("replay must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert!(can_login(&pool, "t@t.local", "first-pw").await);
         assert!(!can_login(&pool, "t@t.local", "second-pw").await);
     }
@@ -4999,7 +4580,7 @@ pub(crate) mod auth_tests {
         let err = call_redeem_reset(&pool, "never-minted", "new-password")
             .await
             .expect_err("unknown token must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
     }
 
@@ -5012,7 +4593,7 @@ pub(crate) mod auth_tests {
         let err = call_redeem_reset(&pool, "raw-reset", "new-password")
             .await
             .expect_err("expired token must fail");
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
     }
 
@@ -5023,7 +4604,7 @@ pub(crate) mod auth_tests {
         let err = call_redeem_reset(&pool, "raw-short", "1234567")
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         // The link was not spent: a valid password still works with it.
         assert!(
             call_redeem_reset(&pool, "raw-short", "12345678")
@@ -5049,7 +4630,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         assert!(can_login(&pool, "c@t.local", "old-password").await);
     }
 
@@ -5079,7 +4660,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     /// An empty new password is a 400 and does not burn the link, so the user
@@ -5092,7 +4673,7 @@ pub(crate) mod auth_tests {
         let err = call_redeem_reset(&pool, "raw-reset", "")
             .await
             .expect_err("empty password must fail");
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
         assert!(
             gripsou_core::repo::invite_token::find_valid(&pool, &auth::hash_token_str("raw-reset"))
@@ -5113,11 +4694,8 @@ mod budget_ai_usage_tests {
         gripsou_core::testkit::seed_user_as(pool, &email, role, "x").await
     }
 
-    fn who(user_id: Uuid) -> AuthUser {
-        AuthUser {
-            user_id,
-            session_id: Uuid::nil(),
-        }
+    fn who(user_id: Uuid) -> AdminUser {
+        AdminUser { user_id }
     }
 
     fn price(i: &str, o: &str) -> dto::BudgetAiPriceReq {
@@ -5223,7 +4801,7 @@ mod budget_ai_usage_tests {
             )
             .await
             .expect_err("rejected");
-            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{i} / {o}");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{i} / {o}");
         }
         assert!(
             gripsou_core::repo::settings::budget_ai_prices(&pool)
@@ -5231,19 +4809,5 @@ mod budget_ai_usage_tests {
                 .unwrap()
                 .is_empty()
         );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn members_are_forbidden(pool: PgPool) {
-        let member = seed(&pool, "user").await;
-        let err = budget_ai_usage(State(pool.clone()), who(member))
-            .await
-            .err()
-            .expect("forbidden");
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
-        let err = set_budget_ai_prices(State(pool.clone()), who(member), Json(BTreeMap::new()))
-            .await
-            .expect_err("forbidden");
-        assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

@@ -15,7 +15,7 @@ use crate::auth::AuthUser;
 use gripsou_core::repo::budget::{ai as ai_repo, assign, category, review, tag};
 use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transaction_counts};
 
-use crate::handlers::internal;
+use crate::error::ApiError;
 use chrono::NaiveDate;
 use gripsou_core::budget::overview::{
     BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline_figures,
@@ -24,26 +24,6 @@ use gripsou_core::budget::overview::{
 use std::collections::BTreeMap;
 
 use gripsou_core::repo::budget::summary::{DayCategoryRow, day_category_totals};
-
-fn not_found() -> (StatusCode, String) {
-    (StatusCode::NOT_FOUND, "not found".into())
-}
-
-/// Maps a `(user_id, name)` unique-constraint violation to 409, leaving every
-/// other error as a 500. Shared by every category/tag write site so a
-/// duplicate name never surfaces as an opaque "internal error" — renaming
-/// onto an existing name is an ordinary thing a user does in the UI.
-fn conflict_on_duplicate_name(
-    e: gripsou_core::error::CoreError,
-    msg: &'static str,
-) -> (StatusCode, String) {
-    if let gripsou_core::error::CoreError::Db(sqlx::Error::Database(ref db)) = e
-        && db.is_unique_violation()
-    {
-        return (StatusCode::CONFLICT, msg.into());
-    }
-    internal(e)
-}
 
 // ── Categories ──────────────────────────────────────────────────────────────
 
@@ -99,10 +79,8 @@ const KINDS: [&str; 3] = ["expense", "income", "neutral"];
 pub async fn list_categories(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<CategoryDto>>, (StatusCode, String)> {
-    let rows = category::list_categories(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<Vec<CategoryDto>>, ApiError> {
+    let rows = category::list_categories(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(CategoryDto::from).collect()))
 }
 
@@ -110,9 +88,9 @@ pub async fn create_category(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<CategoryBody>,
-) -> Result<(StatusCode, Json<CategoryDto>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<CategoryDto>), ApiError> {
     if b.name.trim().is_empty() || !KINDS.contains(&b.kind.as_str()) {
-        return Err((StatusCode::BAD_REQUEST, "invalid name or kind".into()));
+        return Err(ApiError::bad_request("invalid name or kind"));
     }
     let row = category::create_category(
         &pool,
@@ -126,7 +104,9 @@ pub async fn create_category(
         },
     )
     .await
-    .map_err(|e| conflict_on_duplicate_name(e, "a category with this name exists"))?;
+    .map_err(ApiError::conflict_on_unique(
+        "a category with this name exists",
+    ))?;
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
@@ -135,9 +115,9 @@ pub async fn update_category(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(b): Json<CategoryBody>,
-) -> Result<Json<CategoryDto>, (StatusCode, String)> {
+) -> Result<Json<CategoryDto>, ApiError> {
     if b.name.trim().is_empty() || !KINDS.contains(&b.kind.as_str()) {
-        return Err((StatusCode::BAD_REQUEST, "invalid name or kind".into()));
+        return Err(ApiError::bad_request("invalid name or kind"));
     }
     let row = category::update_category(
         &pool,
@@ -153,8 +133,10 @@ pub async fn update_category(
         },
     )
     .await
-    .map_err(|e| conflict_on_duplicate_name(e, "a category with this name exists"))?
-    .ok_or_else(not_found)?;
+    .map_err(ApiError::conflict_on_unique(
+        "a category with this name exists",
+    ))?
+    .ok_or(ApiError::NotFound("not found"))?;
     Ok(Json(row.into()))
 }
 
@@ -162,18 +144,14 @@ pub async fn delete_category(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     // A system row is refused with 409, not 404: the UI draws a lock for it,
     // and "not found" would read as a bug.
-    match category::delete_category(&pool, user_id, id)
-        .await
-        .map_err(internal)?
-    {
+    match category::delete_category(&pool, user_id, id).await? {
         category::DeleteCategory::Deleted => Ok(StatusCode::NO_CONTENT),
-        category::DeleteCategory::NotFound => Err(not_found()),
-        category::DeleteCategory::System => Err((
-            StatusCode::CONFLICT,
-            "this category is written to by internal-transfer pairing and cannot be deleted".into(),
+        category::DeleteCategory::NotFound => Err(ApiError::NotFound("not found")),
+        category::DeleteCategory::System => Err(ApiError::Conflict(
+            "this category is written to by internal-transfer pairing and cannot be deleted",
         )),
     }
 }
@@ -193,26 +171,24 @@ pub async fn reorder_categories(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<ReorderBody>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     let ids = b
         .ids
         .iter()
         .map(|i| Uuid::parse_str(i))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid id".to_string()))?;
+        .map_err(|_| ApiError::bad_request("invalid id"))?;
     if ids.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "no ids".into()));
+        return Err(ApiError::bad_request("no ids"));
     }
     if ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
-        return Err((StatusCode::BAD_REQUEST, "duplicate id".into()));
+        return Err(ApiError::bad_request("duplicate id"));
     }
-    let done = category::reorder_categories(&pool, user_id, &ids)
-        .await
-        .map_err(internal)?;
+    let done = category::reorder_categories(&pool, user_id, &ids).await?;
     // Every id has to be one of this user's rows: a partial write would leave
     // the list in an order nobody asked for.
     if done != ids.len() as u64 {
-        return Err(not_found());
+        return Err(ApiError::NotFound("not found"));
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -249,8 +225,8 @@ pub struct TagBody {
 pub async fn list_tags(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<TagDto>>, (StatusCode, String)> {
-    let rows = tag::list_tags(&pool, user_id).await.map_err(internal)?;
+) -> Result<Json<Vec<TagDto>>, ApiError> {
+    let rows = tag::list_tags(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(TagDto::from).collect()))
 }
 
@@ -258,13 +234,13 @@ pub async fn create_tag(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<TagBody>,
-) -> Result<(StatusCode, Json<TagDto>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<TagDto>), ApiError> {
     if b.name.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "name is required".into()));
+        return Err(ApiError::bad_request("name is required"));
     }
     let row = tag::create_tag(&pool, user_id, b.name.trim(), b.color.as_deref())
         .await
-        .map_err(|e| conflict_on_duplicate_name(e, "a tag with this name exists"))?;
+        .map_err(ApiError::conflict_on_unique("a tag with this name exists"))?;
     Ok((StatusCode::CREATED, Json(row.into())))
 }
 
@@ -273,14 +249,14 @@ pub async fn update_tag(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(b): Json<TagBody>,
-) -> Result<Json<TagDto>, (StatusCode, String)> {
+) -> Result<Json<TagDto>, ApiError> {
     if b.name.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "name is required".into()));
+        return Err(ApiError::bad_request("name is required"));
     }
     let row = tag::update_tag(&pool, user_id, id, b.name.trim(), b.color.as_deref())
         .await
-        .map_err(|e| conflict_on_duplicate_name(e, "a tag with this name exists"))?
-        .ok_or_else(not_found)?;
+        .map_err(ApiError::conflict_on_unique("a tag with this name exists"))?
+        .ok_or(ApiError::NotFound("not found"))?;
     Ok(Json(row.into()))
 }
 
@@ -288,14 +264,11 @@ pub async fn delete_tag(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    if tag::delete_tag(&pool, user_id, id)
-        .await
-        .map_err(internal)?
-    {
+) -> Result<StatusCode, ApiError> {
+    if tag::delete_tag(&pool, user_id, id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(not_found())
+        Err(ApiError::NotFound("not found"))
     }
 }
 
@@ -402,26 +375,22 @@ pub struct SummaryParams {
 /// `from`/`to` alone cannot express the distinction: "September 2026" and "a
 /// custom range that happens to run 1-30 September" are the same two dates and
 /// must produce different payloads.
-fn period_from(
-    p: &SummaryParams,
-) -> Result<(NaiveDate, NaiveDate, Option<Month>), (StatusCode, String)> {
+fn period_from(p: &SummaryParams) -> Result<(NaiveDate, NaiveDate, Option<Month>), ApiError> {
     match (&p.month, p.from, p.to) {
         (Some(m), None, None) => {
             let month =
-                Month::parse(m).ok_or((StatusCode::BAD_REQUEST, format!("invalid month: {m}")))?;
+                Month::parse(m).ok_or(ApiError::BadRequest(format!("invalid month: {m}")))?;
             let (from, to) = month.bounds();
             Ok((from, to, Some(month)))
         }
         (None, Some(from), Some(to)) if from <= to => Ok((from, to, None)),
-        (None, Some(from), Some(to)) => Err((
-            StatusCode::BAD_REQUEST,
-            format!("from {from} is after to {to}"),
-        )),
+        (None, Some(from), Some(to)) => Err(ApiError::BadRequest(format!(
+            "from {from} is after to {to}"
+        ))),
         // Same loud-failure rule as parse_ids/parse_bucket: an ambiguous
         // period must never be silently resolved to one reading.
-        _ => Err((
-            StatusCode::BAD_REQUEST,
-            "pass either month, or both from and to".into(),
+        _ => Err(ApiError::bad_request(
+            "pass either month, or both from and to",
         )),
     }
 }
@@ -442,13 +411,8 @@ fn slice_dto(slice: Slice, refs: &[CategoryRefDto]) -> SliceDto {
     }
 }
 
-async fn category_refs(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<CategoryRefDto>, (StatusCode, String)> {
-    let rows = category::category_refs(pool, user_id)
-        .await
-        .map_err(internal)?;
+async fn category_refs(pool: &PgPool, user_id: Uuid) -> Result<Vec<CategoryRefDto>, ApiError> {
+    let rows = category::category_refs(pool, user_id).await?;
     Ok(rows
         .into_iter()
         .map(|r| CategoryRefDto {
@@ -480,7 +444,7 @@ pub async fn summary(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<SummaryParams>,
-) -> Result<Json<SummaryDto>, (StatusCode, String)> {
+) -> Result<Json<SummaryDto>, ApiError> {
     let (from, to, month) = period_from(&p)?;
 
     // One fetch wide enough for the period AND its baseline, so nothing here
@@ -490,9 +454,7 @@ pub async fn summary(
         Some(m) => m.minus(BASELINE_MONTHS).bounds().0,
         None => from,
     };
-    let all = day_category_totals(&pool, user_id, window_from, to)
-        .await
-        .map_err(internal)?;
+    let all = day_category_totals(&pool, user_id, window_from, to).await?;
 
     // A month period reads its rows, its previous month and its baseline off
     // one grouping of the window. A custom range fetched exactly its own
@@ -605,24 +567,21 @@ pub async fn trend_handler(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TrendParams>,
-) -> Result<Json<TrendDto>, (StatusCode, String)> {
-    let anchor = Month::parse(&p.anchor).ok_or((
-        StatusCode::BAD_REQUEST,
-        format!("invalid anchor: {}", p.anchor),
-    ))?;
+) -> Result<Json<TrendDto>, ApiError> {
+    let anchor = Month::parse(&p.anchor).ok_or(ApiError::BadRequest(format!(
+        "invalid anchor: {}",
+        p.anchor
+    )))?;
     let months = p.months.unwrap_or(TREND_DEFAULT_MONTHS);
     if months == 0 || months > MAX_TREND_MONTHS {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("months must be 1..={MAX_TREND_MONTHS}"),
-        ));
+        return Err(ApiError::BadRequest(format!(
+            "months must be 1..={MAX_TREND_MONTHS}"
+        )));
     }
 
     let from = anchor.minus(months - 1).bounds().0;
     let to = anchor.bounds().1;
-    let rows = day_category_totals(&pool, user_id, from, to)
-        .await
-        .map_err(internal)?;
+    let rows = day_category_totals(&pool, user_id, from, to).await?;
 
     let refs = category_refs(&pool, user_id).await?;
     // By its seeded key, not its name: the user may rename it.
@@ -679,13 +638,11 @@ async fn same_description(
     pool: &PgPool,
     user_id: Uuid,
     scope: Scope,
-) -> Result<assign::SameDescription, (StatusCode, String)> {
+) -> Result<assign::SameDescription, ApiError> {
     Ok(match scope {
         Scope::All => assign::SameDescription::All,
         Scope::Review => assign::SameDescription::NeedsReview(
-            gripsou_core::repo::prefs::review_threshold(pool, user_id)
-                .await
-                .map_err(internal)?,
+            gripsou_core::repo::prefs::review_threshold(pool, user_id).await?,
         ),
     })
 }
@@ -713,17 +670,13 @@ pub struct PatchTransactionResponse {
 }
 
 /// The refusals every assignment write shares.
-fn write_refused<T>(o: assign::WriteOutcome<T>) -> (StatusCode, String) {
+fn write_refused<T>(o: assign::WriteOutcome<T>) -> ApiError {
     match o {
-        assign::WriteOutcome::NotFound => not_found(),
-        assign::WriteOutcome::UnknownCategory => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "unknown category".into())
-        }
-        assign::WriteOutcome::UnknownTag => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "unknown tag".into())
-        }
+        assign::WriteOutcome::NotFound => ApiError::NotFound("not found"),
+        assign::WriteOutcome::UnknownCategory => ApiError::Unprocessable("unknown category"),
+        assign::WriteOutcome::UnknownTag => ApiError::Unprocessable("unknown tag"),
         assign::WriteOutcome::Done(_) | assign::WriteOutcome::PendingPairBreaks(_) => {
-            internal("write_refused called on an accepted write")
+            ApiError::internal("write_refused called on an accepted write")
         }
     }
 }
@@ -734,19 +687,16 @@ pub async fn patch_transaction(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(b): Json<PatchTransactionBody>,
-) -> Result<Json<PatchTransactionResponse>, (StatusCode, String)> {
+) -> Result<Json<PatchTransactionResponse>, ApiError> {
     if b.category_id.is_none() && b.tag_ids.is_none() && b.checked.is_none() {
-        return Err((StatusCode::BAD_REQUEST, "nothing to change".into()));
+        return Err(ApiError::bad_request("nothing to change"));
     }
     let patch = assign::TransactionPatch {
         category_id: b.category_id,
         tag_ids: b.tag_ids.as_deref(),
         checked: b.checked,
     };
-    match assign::patch_transaction(&pool, user_id, id, &patch, b.confirm_break_pairs)
-        .await
-        .map_err(internal)?
-    {
+    match assign::patch_transaction(&pool, user_id, id, &patch, b.confirm_break_pairs).await? {
         assign::WriteOutcome::Done(()) => {}
         assign::WriteOutcome::PendingPairBreaks(n) => {
             return Ok(Json(PatchTransactionResponse {
@@ -760,11 +710,7 @@ pub async fn patch_transaction(
     let same_description_count = match b.category_id {
         Some(_) => {
             let scope = same_description(&pool, user_id, b.offer_scope).await?;
-            Some(
-                assign::count_same_description(&pool, user_id, id, scope)
-                    .await
-                    .map_err(internal)?,
-            )
+            Some(assign::count_same_description(&pool, user_id, id, scope).await?)
         }
         None => None,
     };
@@ -812,7 +758,7 @@ pub async fn apply_to_description(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(b): Json<ApplyToDescriptionBody>,
-) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
+) -> Result<Json<UpdatedResponse>, ApiError> {
     let scope = same_description(&pool, user_id, b.scope).await?;
     match assign::apply_to_description(
         &pool,
@@ -822,8 +768,7 @@ pub async fn apply_to_description(
         scope,
         b.confirm_break_pairs,
     )
-    .await
-    .map_err(internal)?
+    .await?
     {
         assign::WriteOutcome::Done(ids) => Ok(Json(UpdatedResponse {
             updated: ids.len() as i64,
@@ -868,31 +813,23 @@ pub async fn bulk_transactions(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<BulkBody>,
-) -> Result<Json<UpdatedResponse>, (StatusCode, String)> {
+) -> Result<Json<UpdatedResponse>, ApiError> {
     let ids = match (b.ids, b.filter) {
         (Some(_), Some(_)) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "send ids or filter, not both".into(),
-            ));
+            return Err(ApiError::bad_request("send ids or filter, not both"));
         }
         (Some(ids), None) if ids.len() > MAX_BULK_IDS => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("at most {MAX_BULK_IDS} ids; use a filter"),
-            ));
+            return Err(ApiError::BadRequest(format!(
+                "at most {MAX_BULK_IDS} ids; use a filter"
+            )));
         }
         (Some(ids), None) => ids,
         (None, Some(params)) => {
-            let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
-                .await
-                .map_err(internal)?;
+            let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
             let filters = crate::handlers::filters_from_params(params, threshold)?;
-            matching_transaction_ids(&pool, user_id, &filters)
-                .await
-                .map_err(internal)?
+            matching_transaction_ids(&pool, user_id, &filters).await?
         }
-        (None, None) => return Err((StatusCode::BAD_REQUEST, "ids or filter required".into())),
+        (None, None) => return Err(ApiError::bad_request("ids or filter required")),
     };
 
     match assign::bulk_apply(
@@ -906,8 +843,7 @@ pub async fn bulk_transactions(
         },
         b.confirm_break_pairs,
     )
-    .await
-    .map_err(internal)?
+    .await?
     {
         assign::WriteOutcome::Done(n) => Ok(Json(UpdatedResponse {
             updated: n as i64,
@@ -946,14 +882,10 @@ pub async fn transaction_count_summary(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<crate::handlers::TransactionParams>,
-) -> Result<Json<CountsDto>, (StatusCode, String)> {
-    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<CountsDto>, ApiError> {
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
     let filters = crate::handlers::filters_from_params(p, threshold)?;
-    let c = transaction_counts(&pool, user_id, &filters)
-        .await
-        .map_err(internal)?;
+    let c = transaction_counts(&pool, user_id, &filters).await?;
     Ok(Json(CountsDto {
         matching: c.matching,
         total: c.total,
@@ -969,7 +901,7 @@ pub async fn transaction_count_summary(
 /// one, so any component that fails to parse as a uuid is a 400 — not a
 /// dropped id, which would quietly widen the result set (or, on the bulk
 /// endpoint, the write) beyond what the caller asked for.
-pub fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, (StatusCode, String)> {
+pub fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, ApiError> {
     match raw {
         None => Ok(vec![]),
         // A present-but-blank filter means the same thing as an absent one —
@@ -979,7 +911,7 @@ pub fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, (StatusCode, String)> {
             .split(',')
             .map(|p| {
                 Uuid::parse_str(p.trim())
-                    .map_err(|_| (StatusCode::BAD_REQUEST, format!("invalid id: {p}")))
+                    .map_err(|_| ApiError::BadRequest(format!("invalid id: {p}")))
             })
             .collect(),
     }
@@ -987,39 +919,31 @@ pub fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, (StatusCode, String)> {
 
 /// Same loud-failure rule as [`parse_ids`]: an unrecognised bucket is a 400,
 /// not a silent fall-through to `all`.
-pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, (StatusCode, String)> {
+pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, ApiError> {
     match raw {
         None => Ok(TypeBucket::default()),
         // A present-but-blank bucket means the same thing as an absent one.
         Some(s) if s.trim().is_empty() => Ok(TypeBucket::default()),
-        Some(s) => {
-            TypeBucket::parse(s).ok_or((StatusCode::BAD_REQUEST, format!("invalid bucket: {s}")))
-        }
+        Some(s) => TypeBucket::parse(s).ok_or(ApiError::BadRequest(format!("invalid bucket: {s}"))),
     }
 }
 
 pub async fn categorize_status(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<crate::dto::AiStatusDto>, (StatusCode, String)> {
-    let settings = gripsou_core::repo::settings::budget_ai(&pool)
-        .await
-        .map_err(internal)?;
+) -> Result<Json<crate::dto::AiStatusDto>, ApiError> {
+    let settings = gripsou_core::repo::settings::budget_ai(&pool).await?;
     let configured = settings
         .provider
         .as_deref()
         .is_some_and(|p| gripsou_jobs::available_categorizers().contains(&p));
-    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id)
-        .await
-        .map_err(internal)?;
-    let last = ai_repo::last_run(&pool, user_id).await.map_err(internal)?;
+    let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
+    let last = ai_repo::last_run(&pool, user_id).await?;
     Ok(Json(crate::dto::AiStatusDto {
         configured,
         running: gripsou_jobs::ai_running(user_id),
-        remaining: ai_repo::remaining(&pool, user_id).await.map_err(internal)?,
-        review_count: review::review_count(&pool, user_id, threshold)
-            .await
-            .map_err(internal)?,
+        remaining: ai_repo::remaining(&pool, user_id).await?,
+        review_count: review::review_count(&pool, user_id, threshold).await?,
         last_run: last.map(|r| crate::dto::AiLastRunDto {
             outcome: r.outcome,
             error: r.error,
@@ -1039,11 +963,11 @@ pub async fn request_categorize(
     StatusCode::ACCEPTED
 }
 
-fn review_status(w: review::ReviewWrite) -> StatusCode {
+fn review_result(w: review::ReviewWrite) -> Result<StatusCode, ApiError> {
     match w {
-        review::ReviewWrite::Done => StatusCode::NO_CONTENT,
-        review::ReviewWrite::NotFound => StatusCode::NOT_FOUND,
-        review::ReviewWrite::Refused => StatusCode::CONFLICT,
+        review::ReviewWrite::Done => Ok(StatusCode::NO_CONTENT),
+        review::ReviewWrite::NotFound => Err(ApiError::NotFound("not found")),
+        review::ReviewWrite::Refused => Err(ApiError::Conflict("not in review")),
     }
 }
 
@@ -1059,15 +983,10 @@ pub async fn accept_review(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<AcceptReviewResponse>, (StatusCode, String)> {
-    match review::accept(&pool, user_id, id).await.map_err(internal)? {
-        review::ReviewWrite::Done => {}
-        other => return Err((review_status(other), String::new())),
-    }
+) -> Result<Json<AcceptReviewResponse>, ApiError> {
+    review_result(review::accept(&pool, user_id, id).await?)?;
     let scope = same_description(&pool, user_id, Scope::Review).await?;
-    let same_description_count = assign::count_same_description(&pool, user_id, id, scope)
-        .await
-        .map_err(internal)?;
+    let same_description_count = assign::count_same_description(&pool, user_id, id, scope).await?;
     Ok(Json(AcceptReviewResponse {
         same_description_count,
     }))
@@ -1078,22 +997,15 @@ pub async fn undo_review(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
     Json(body): Json<crate::dto::UndoReviewReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     // The only range check: the repository stores what it is given.
     if body
         .confidence
         .is_some_and(|c| c < Decimal::ZERO || c > Decimal::ONE)
     {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "confidence must be between 0 and 1".into(),
-        ));
+        return Err(ApiError::bad_request("confidence must be between 0 and 1"));
     }
-    Ok(review_status(
-        review::undo(&pool, user_id, id, body.category_id, body.confidence)
-            .await
-            .map_err(internal)?,
-    ))
+    review_result(review::undo(&pool, user_id, id, body.category_id, body.confidence).await?)
 }
 
 #[cfg(test)]
@@ -1117,11 +1029,11 @@ mod parse_tests {
     #[test]
     fn malformed_id_is_still_a_400() {
         let err = parse_ids(Some("not-a-uuid")).unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
 
         let valid = Uuid::new_v4();
         let err = parse_ids(Some(&format!("{valid},also-not-a-uuid"))).unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
@@ -1143,7 +1055,7 @@ mod parse_tests {
     #[test]
     fn unrecognised_bucket_is_still_a_400() {
         let err = parse_bucket(Some("bogus")).unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 }
 
@@ -1216,7 +1128,7 @@ mod handler_tests {
         user_id: Uuid,
         id: Uuid,
         body: serde_json::Value,
-    ) -> Result<PatchTransactionResponse, (StatusCode, String)> {
+    ) -> Result<PatchTransactionResponse, ApiError> {
         patch_transaction(
             State(pool.clone()),
             auth(user_id),
@@ -1231,7 +1143,7 @@ mod handler_tests {
         pool: &PgPool,
         user_id: Uuid,
         body: serde_json::Value,
-    ) -> Result<UpdatedResponse, (StatusCode, String)> {
+    ) -> Result<UpdatedResponse, ApiError> {
         bulk_transactions(
             State(pool.clone()),
             auth(user_id),
@@ -1263,7 +1175,7 @@ mod handler_tests {
         assert_eq!(row(&pool, id).await, (Some(groceries), true, 0));
 
         let err = patch(&pool, user_id, id, json!({})).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1285,13 +1197,13 @@ mod handler_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(row(&pool, id).await, (None, false, 0));
 
         let err = patch(&pool, stranger, id, json!({ "checked": true }))
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1372,13 +1284,13 @@ mod handler_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
 
         let too_many: Vec<Uuid> = (0..=MAX_BULK_IDS).map(|_| Uuid::new_v4()).collect();
         let err = bulk(&pool, user_id, json!({ "ids": too_many, "checked": true }))
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
 
         let err = bulk(
             &pool,
@@ -1387,7 +1299,7 @@ mod handler_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST, "unknown bucket");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST, "unknown bucket");
         assert!(!row(&pool, id).await.1);
     }
 
@@ -1403,11 +1315,11 @@ mod handler_tests {
             async move { delete_category(State(pool), auth(who), Path(id)).await }
         };
         assert_eq!(
-            del(stranger, groceries).await.unwrap_err().0,
+            del(stranger, groceries).await.unwrap_err().status(),
             StatusCode::NOT_FOUND
         );
         assert_eq!(
-            del(user_id, internal).await.unwrap_err().0,
+            del(user_id, internal).await.unwrap_err().status(),
             StatusCode::CONFLICT
         );
         assert_eq!(
@@ -1415,7 +1327,7 @@ mod handler_tests {
             StatusCode::NO_CONTENT
         );
         assert_eq!(
-            del(user_id, groceries).await.unwrap_err().0,
+            del(user_id, groceries).await.unwrap_err().status(),
             StatusCode::NOT_FOUND
         );
     }
@@ -1433,7 +1345,7 @@ mod handler_tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
@@ -1509,7 +1421,7 @@ mod handler_tests {
         user_id: Uuid,
         name: &str,
         kind: &str,
-    ) -> Result<CategoryDto, (StatusCode, String)> {
+    ) -> Result<CategoryDto, ApiError> {
         create_category(
             State(pool.clone()),
             auth(user_id),
@@ -1527,17 +1439,13 @@ mod handler_tests {
         user_id: Uuid,
         id: Uuid,
         body: CategoryBody,
-    ) -> Result<CategoryDto, (StatusCode, String)> {
+    ) -> Result<CategoryDto, ApiError> {
         update_category(State(pool.clone()), auth(user_id), Path(id), Json(body))
             .await
             .map(|j| j.0)
     }
 
-    async fn new_tag(
-        pool: &PgPool,
-        user_id: Uuid,
-        name: &str,
-    ) -> Result<TagDto, (StatusCode, String)> {
+    async fn new_tag(pool: &PgPool, user_id: Uuid, name: &str) -> Result<TagDto, ApiError> {
         create_tag(State(pool.clone()), auth(user_id), Json(tag_body(name)))
             .await
             .map(|(s, j)| {
@@ -1551,7 +1459,7 @@ mod handler_tests {
         user_id: Uuid,
         id: Uuid,
         name: &str,
-    ) -> Result<TagDto, (StatusCode, String)> {
+    ) -> Result<TagDto, ApiError> {
         update_tag(
             State(pool.clone()),
             auth(user_id),
@@ -1587,7 +1495,7 @@ mod handler_tests {
         user_id: Uuid,
         txn: Uuid,
         body: serde_json::Value,
-    ) -> Result<StatusCode, (StatusCode, String)> {
+    ) -> Result<StatusCode, ApiError> {
         undo_review(
             State(pool.clone()),
             auth(user_id),
@@ -1601,7 +1509,7 @@ mod handler_tests {
         pool: &PgPool,
         user_id: Uuid,
         params: serde_json::Value,
-    ) -> Result<SummaryDto, (StatusCode, String)> {
+    ) -> Result<SummaryDto, ApiError> {
         summary(
             State(pool.clone()),
             auth(user_id),
@@ -1615,7 +1523,7 @@ mod handler_tests {
         pool: &PgPool,
         user_id: Uuid,
         params: serde_json::Value,
-    ) -> Result<TrendDto, (StatusCode, String)> {
+    ) -> Result<TrendDto, ApiError> {
         trend_handler(
             State(pool.clone()),
             auth(user_id),
@@ -1642,7 +1550,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert!(
             category_names(&pool, owner)
                 .await
@@ -1661,7 +1569,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert_eq!(tag_names(&pool, owner).await, vec!["Holiday".to_string()]);
     }
 
@@ -1677,7 +1585,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert_eq!(tag_names(&pool, owner).await, vec!["Holiday".to_string()]);
     }
 
@@ -1741,7 +1649,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
         assert_eq!(
             review_state(&pool, txn).await,
             (Some(groceries), Some("ai".into()), false)
@@ -1800,7 +1708,7 @@ mod handler_tests {
         .await
         .err()
         .unwrap();
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     /// Descriptions like "LECLERC" are shared by every user; "apply to all"
@@ -1851,7 +1759,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     /// Renaming a category onto another's name is the same 409.
@@ -1873,7 +1781,7 @@ mod handler_tests {
         .await
         .err()
         .unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     /// Names are unique per user, not globally: a second user may reuse one.
@@ -1897,7 +1805,7 @@ mod handler_tests {
         let other = new_tag(&pool, user_id, "Work").await.unwrap();
 
         let err = new_tag(&pool, user_id, "Holiday").await.err().unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
         let err = edit_tag(
             &pool,
             user_id,
@@ -1907,7 +1815,7 @@ mod handler_tests {
         .await
         .err()
         .unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     /// A blank name or a kind outside expense/income/neutral would create a
@@ -1921,7 +1829,7 @@ mod handler_tests {
                 .await
                 .err()
                 .unwrap();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{name:?}/{kind}");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{name:?}/{kind}");
         }
         assert_eq!(category_names(&pool, user_id).await.len(), before);
     }
@@ -1936,7 +1844,7 @@ mod handler_tests {
                 .await
                 .err()
                 .unwrap();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{name:?}/{kind}");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{name:?}/{kind}");
         }
     }
 
@@ -1945,10 +1853,10 @@ mod handler_tests {
     async fn a_tag_needs_a_name(pool: PgPool) {
         let (user_id, _) = seed_user(&pool).await;
         let err = new_tag(&pool, user_id, "  ").await.err().unwrap();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         let id = Uuid::parse_str(&new_tag(&pool, user_id, "Holiday").await.unwrap().id).unwrap();
         let err = edit_tag(&pool, user_id, id, "").await.err().unwrap();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         assert_eq!(tag_names(&pool, user_id).await, vec!["Holiday".to_string()]);
     }
 
@@ -1969,7 +1877,7 @@ mod handler_tests {
                 .await
                 .err()
                 .unwrap_or_else(|| panic!("{params} was accepted"));
-            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{params}");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{params}");
         }
     }
 
@@ -1986,7 +1894,7 @@ mod handler_tests {
                 .await
                 .err()
                 .unwrap_or_else(|| panic!("{params} was accepted"));
-            assert_eq!(err.0, StatusCode::BAD_REQUEST, "{params}");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{params}");
         }
         assert!(
             trend_of(&pool, user_id, json!({ "anchor": "2026-03", "months": 24 }))
@@ -2028,7 +1936,7 @@ mod handler_tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     // ── Wiring ──────────────────────────────────────────────────────────────
@@ -2056,7 +1964,7 @@ mod handler_tests {
         assert_eq!(del(pool.clone()).await.unwrap(), StatusCode::NO_CONTENT);
         assert!(tag_names(&pool, user_id).await.is_empty());
         assert_eq!(
-            del(pool.clone()).await.err().unwrap().0,
+            del(pool.clone()).await.err().unwrap().status(),
             StatusCode::NOT_FOUND
         );
     }
@@ -2303,7 +2211,7 @@ mod handler_tests {
         );
 
         let err = counts(json!({ "bucket": "sideways" })).await.err().unwrap();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     /// With no AI provider configured (the default settings), the status
@@ -2342,11 +2250,11 @@ mod handler_tests {
         fn status(self) -> StatusCode;
     }
 
-    impl StatusOf for Result<StatusCode, (StatusCode, String)> {
+    impl StatusOf for Result<StatusCode, ApiError> {
         fn status(self) -> StatusCode {
             match self {
                 Ok(s) => s,
-                Err((s, _)) => s,
+                Err(e) => e.status(),
             }
         }
     }

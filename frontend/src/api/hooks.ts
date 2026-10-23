@@ -300,22 +300,17 @@ export function useMfaStatus() {
   });
 }
 
-// The routes that take a reauth token answer 401 for a bad or used token,
-// which is not a lost login: skip the global handler that would sign the user
-// out. /auth/reauth itself answers 400 for a wrong password.
-const KEEP_SESSION = { skipGlobalUnauthorized: true } as const;
-
 export function useReauth() {
   return useMutation({
     mutationFn: (password: string) =>
-      postJson<{ reauth: string }>("/auth/reauth", { password }, KEEP_SESSION),
+      postJson<{ reauth: string }>("/auth/reauth", { password }),
   });
 }
 
 export function useTotpSetup() {
   return useMutation({
     mutationFn: (reauth: string) =>
-      postJson<TotpSetup>("/auth/mfa/totp/setup", { reauth }, KEEP_SESSION),
+      postJson<TotpSetup>("/auth/mfa/totp/setup", { reauth }),
   });
 }
 
@@ -332,7 +327,7 @@ export function useRemoveTotp() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reauth: string) =>
-      deleteJson<void>("/auth/mfa/totp", { reauth }, KEEP_SESSION),
+      deleteJson<void>("/auth/mfa/totp", { reauth }),
     onSuccess: () => afterMfaChange(qc),
   });
 }
@@ -344,7 +339,6 @@ export function useRegenerateRecovery() {
       postJson<{ recoveryCodes: string[] }>(
         "/auth/mfa/recovery/regenerate",
         { reauth },
-        KEEP_SESSION,
       ),
     onSuccess: () => afterMfaChange(qc),
   });
@@ -359,7 +353,6 @@ export function usePasskeyRegisterOptions() {
       postJson<{ challenge: string; options: PublicKeyCredentialCreationOptionsJSON }>(
         "/auth/mfa/passkeys/register/options",
         { reauth },
-        KEEP_SESSION,
       ),
   });
 }
@@ -368,7 +361,7 @@ export function useRegisterPasskey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { reauth: string; challenge: string; credential: RegistrationResponseJSON }) =>
-      postJson<Passkey>("/auth/mfa/passkeys/register", body, KEEP_SESSION),
+      postJson<Passkey>("/auth/mfa/passkeys/register", body),
     onSuccess: () => afterMfaChange(qc),
   });
 }
@@ -507,7 +500,7 @@ export function useCreateInvite() {
 export function useCreateResetLink() {
   return useMutation({
     mutationFn: ({ id, reauth }: { id: string; reauth: string }) =>
-      postJson<{ token: string }>(`/users/${id}/reset-link`, { reauth }, KEEP_SESSION),
+      postJson<{ token: string }>(`/users/${id}/reset-link`, { reauth }),
   });
 }
 

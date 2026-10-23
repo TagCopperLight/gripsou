@@ -1054,6 +1054,23 @@ pub async fn init_connection(
     Ok((connection_id, init))
 }
 
+/// Why [`complete_connection`] failed.
+#[derive(Debug)]
+pub enum CompleteError {
+    /// No connection with this id belongs to the user.
+    NotFound,
+    /// The provider refused or failed the callback.
+    Provider(ProviderError),
+    /// Our side failed (database, encryption, a missing adapter).
+    Internal(String),
+}
+
+impl From<ProviderError> for CompleteError {
+    fn from(e: ProviderError) -> Self {
+        CompleteError::Provider(e)
+    }
+}
+
 /// Complete a pending connection: call `complete_connect()`, encrypt the
 /// returned credentials, and flip status to 'ok'. On failure (including a
 /// callback the user cancelled) the pending row is deleted, so it never shows
@@ -1064,7 +1081,7 @@ pub async fn complete_connection(
     user_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     params: &std::collections::HashMap<String, String>,
-) -> Result<(), gripsou_core::provider::ProviderError> {
+) -> Result<(), CompleteError> {
     let result = finish_connection(db.clone(), key, user_id, connection_id, params).await;
     if result.is_err()
         && let Err(e) =
@@ -1085,16 +1102,19 @@ async fn finish_connection(
     user_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     params: &std::collections::HashMap<String, String>,
-) -> Result<(), gripsou_core::provider::ProviderError> {
+) -> Result<(), CompleteError> {
+    let internal = |e: gripsou_core::error::CoreError| {
+        CompleteError::Internal(gripsou_core::logs::error_chain(&e))
+    };
     let provider_key = gripsou_core::repo::connection::provider_key(&db, connection_id)
         .await
-        .map_err(|e| ProviderError::Other(e.to_string()))?
-        .ok_or_else(|| ProviderError::Other("connection not found".to_string()))?;
+        .map_err(internal)?
+        .ok_or(CompleteError::NotFound)?;
 
     let providers = account_providers();
     let adapter = providers
         .get(provider_key.as_str())
-        .ok_or_else(|| ProviderError::Other(format!("no adapter for '{provider_key}'")))?;
+        .ok_or_else(|| CompleteError::Internal(format!("no adapter for '{provider_key}'")))?;
 
     let query: String = params
         .iter()
@@ -1104,7 +1124,7 @@ async fn finish_connection(
 
     let completed = adapter.complete_connect(&query).await?;
     let encrypted =
-        encrypt_credentials(key, &completed.credentials).map_err(ProviderError::Other)?;
+        encrypt_credentials(key, &completed.credentials).map_err(CompleteError::Internal)?;
 
     let updated = gripsou_core::repo::connection::finish_connect(
         &db,
@@ -1114,9 +1134,9 @@ async fn finish_connection(
         completed.provider_meta,
     )
     .await
-    .map_err(|e| ProviderError::Other(e.to_string()))?;
+    .map_err(internal)?;
     if !updated {
-        return Err(ProviderError::Other("connection not found".to_string()));
+        return Err(CompleteError::NotFound);
     }
     tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = %provider_key, "connection activated");
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).

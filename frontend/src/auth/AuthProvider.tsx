@@ -45,10 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        // A 401 here is expected (stale/invalid stored token) and must NOT
-        // trigger the global unauthorized handler (which would fire a spurious
-        // POST /auth/logout and navigate before isBootstrapping resolves).
-        const u = await getJson<SessionUser>("/auth/me", { skipGlobalUnauthorized: true });
+        const u = await getJson<SessionUser>("/auth/me");
         if (active) applyUser(u);
       } catch (err: unknown) {
         // Only a rejected token is cleared: network errors or 50x shouldn't log the user out.
@@ -72,7 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await postJson<LoginResponse>(
         "/auth/login",
         { email, password, remember },
-        { skipGlobalUnauthorized: true },
       );
       if ("mfaRequired" in res) return res;
       resetSession();
@@ -88,12 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { challenge, options } = await postJson<{
         challenge: string;
         options: PublicKeyCredentialRequestOptionsJSON;
-      }>("/auth/passkey/options", {}, { skipGlobalUnauthorized: true });
+      }>("/auth/passkey/options", {});
       const credential = await startAuthentication({ optionsJSON: options });
       const res = await postJson<SessionResponse>(
         "/auth/passkey",
         { challenge, credential, remember },
-        { skipGlobalUnauthorized: true },
       );
       resetSession();
       setAuthToken(res.token, remember);
@@ -108,11 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       code: SecondFactor,
       remember: boolean,
     ) => {
-      // A 401 here means "challenge expired", not "logged out".
       const res = await postJson<SessionResponse>(
         "/auth/login/verify",
         { challenge, ...code },
-        { skipGlobalUnauthorized: true },
       );
       resetSession();
       setAuthToken(res.token, remember);
@@ -133,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     // Capture the old token in the logout request, then clear locally at once:
     // a slow or failed request must not keep another user's cache alive.
-    const request = postJson<void>("/auth/logout", {}, { skipGlobalUnauthorized: true });
+    const request = postJson<void>("/auth/logout", {});
     setAuthToken(null);
     resetSession();
     setUser(null);

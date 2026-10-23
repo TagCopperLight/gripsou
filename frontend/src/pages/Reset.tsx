@@ -41,7 +41,6 @@ export function Reset() {
       const res = await postJson<RedeemResp>(
         `/auth/reset/${token}/redeem`,
         { password },
-        { skipGlobalUnauthorized: true },
       );
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });

@@ -12,17 +12,12 @@ use uuid::Uuid;
 
 use crate::auth::{self, AuthUser};
 use crate::dto;
-use crate::handlers::{LoginError, client_ip, internal};
+use crate::error::ApiError;
+use crate::handlers::client_ip;
 use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 use crate::{EncryptionKey, factors};
 
 const REAUTH_KIND: &str = "reauth";
-
-pub(crate) type ApiError = (StatusCode, String);
-
-fn unauthorized() -> ApiError {
-    (StatusCode::UNAUTHORIZED, "unauthorized".to_string())
-}
 
 /// Consume a reauth token. Single use either way: a token that belongs to
 /// someone else is burnt and refused. Runs on a pool or in a transaction.
@@ -31,12 +26,10 @@ pub(crate) async fn require_reauth(
     user_id: Uuid,
     token: &str,
 ) -> Result<(), ApiError> {
-    let challenge = login_challenge::consume(db, &auth::hash_token(token), REAUTH_KIND)
-        .await
-        .map_err(internal)?;
+    let challenge = login_challenge::consume(db, &auth::hash_token(token), REAUTH_KIND).await?;
     match challenge {
         Some(c) if c.user_id == Some(user_id) => Ok(()),
-        _ => Err(reauth_required()),
+        _ => Err(ApiError::ReauthRequired),
     }
 }
 
@@ -47,20 +40,10 @@ pub(crate) async fn check_reauth(
     user_id: Uuid,
     token: &str,
 ) -> Result<(), ApiError> {
-    match login_challenge::find_valid(pool, &auth::hash_token(token), REAUTH_KIND)
-        .await
-        .map_err(internal)?
-    {
+    match login_challenge::find_valid(pool, &auth::hash_token(token), REAUTH_KIND).await? {
         Some(c) if c.user_id == Some(user_id) => Ok(()),
-        _ => Err(reauth_required()),
+        _ => Err(ApiError::ReauthRequired),
     }
-}
-
-fn reauth_required() -> ApiError {
-    (
-        StatusCode::UNAUTHORIZED,
-        "reauthentication required".to_string(),
-    )
 }
 
 /// Check the signed-in user's password on the login throttle, keyed on their
@@ -73,11 +56,10 @@ pub(crate) async fn check_password(
     peer: SocketAddr,
     user_id: Uuid,
     password: &str,
-) -> Result<(), LoginError> {
+) -> Result<(), ApiError> {
     let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or_else(unauthorized)?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     let ip = client_ip(headers, peer);
     if let Err(blocked) = throttle.try_attempt(&profile.email, &ip, std::time::Instant::now()) {
         if blocked.first_refusal {
@@ -86,16 +68,11 @@ pub(crate) async fn check_password(
         return Err(blocked.into());
     }
     let hash = gripsou_core::repo::user::password_hash(pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or_else(unauthorized)?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     if !auth::verify_password(password, &hash) {
         tracing::warn!(user_id = %user_id, ip = %ip, "password check failed");
-        return Err(LoginError(
-            StatusCode::BAD_REQUEST,
-            "password is incorrect".to_string(),
-            None,
-        ));
+        return Err(ApiError::bad_request("password is incorrect"));
     }
     throttle.record_success(&profile.email, &ip);
     Ok(())
@@ -110,7 +87,7 @@ pub async fn reauth(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::ReauthReq>,
-) -> Result<Json<dto::ReauthResponse>, LoginError> {
+) -> Result<Json<dto::ReauthResponse>, ApiError> {
     check_password(&pool, &throttle, &headers, peer, user_id, &body.password).await?;
     let token = auth::generate_token();
     // `create` expires the challenge in 5 minutes.
@@ -121,8 +98,7 @@ pub async fn reauth(
         REAUTH_KIND,
         serde_json::json!({}),
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     Ok(Json(dto::ReauthResponse { reauth: token }))
 }
 
@@ -130,13 +106,12 @@ pub async fn status(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<dto::MfaStatus>, ApiError> {
-    let st = mfa::status(&pool, user_id).await.map_err(internal)?;
+    let st = mfa::status(&pool, user_id).await?;
     Ok(Json(dto::MfaStatus {
         totp: st.totp,
         recovery_remaining: st.recovery_remaining,
         passkeys: gripsou_core::repo::passkey::list(&pool, user_id)
-            .await
-            .map_err(internal)?
+            .await?
             .into_iter()
             .map(Into::into)
             .collect(),
@@ -154,31 +129,21 @@ pub async fn totp_setup(
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
-    let already = || {
-        (
-            StatusCode::CONFLICT,
-            "authenticator already set up".to_string(),
-        )
-    };
-    if mfa::status(&pool, user_id).await.map_err(internal)?.totp {
+    let already = || ApiError::Conflict("authenticator already set up");
+    if mfa::status(&pool, user_id).await?.totp {
         return Err(already());
     }
     require_reauth(&pool, user_id, &body.reauth).await?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or_else(unauthorized)?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     let secret = factors::new_totp_secret();
-    let enc = key.encrypt(&secret).map_err(internal)?;
+    let enc = key.encrypt(&secret)?;
     // Still refuses to replace a confirmed row, should one appear meanwhile.
-    if !mfa::upsert_unconfirmed_totp(&pool, user_id, &enc)
-        .await
-        .map_err(internal)?
-    {
+    if !mfa::upsert_unconfirmed_totp(&pool, user_id, &enc).await? {
         return Err(already());
     }
-    let qr_svg =
-        factors::qr_svg(&factors::otpauth_uri(&secret, &profile.email)).map_err(internal)?;
+    let qr_svg = factors::qr_svg(&factors::otpauth_uri(&secret, &profile.email))?;
     Ok(Json(dto::TotpSetup {
         secret: factors::base32_secret(&secret),
         qr_svg,
@@ -200,47 +165,35 @@ pub async fn totp_confirm(
         session_id,
     }: AuthUser,
     Json(body): Json<dto::TotpConfirmReq>,
-) -> Result<Json<dto::RecoveryCodes>, LoginError> {
-    let no_setup = || (StatusCode::CONFLICT, "no setup in progress".to_string());
+) -> Result<Json<dto::RecoveryCodes>, ApiError> {
+    let no_setup = || ApiError::Conflict("no setup in progress");
     let row = mfa::totp(&pool, user_id)
-        .await
-        .map_err(internal)?
+        .await?
         .filter(|r| r.pending)
         .ok_or_else(no_setup)?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or_else(unauthorized)?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     if let Err(blocked) = sf_throttle.try_attempt(&profile.email, std::time::Instant::now()) {
         if blocked.first_refusal {
             tracing::warn!(email = %profile.email, user_id = %user_id, reason = blocked.reason.as_str(), "login throttled");
         }
         return Err(blocked.into());
     }
-    let Some(step) = factors::check_totp(&key, &row.secret_enc, &body.code).map_err(internal)?
-    else {
+    let Some(step) = factors::check_totp(&key, &row.secret_enc, &body.code)? else {
         tracing::warn!(user_id = %user_id, "totp confirm failed");
-        return Err(LoginError(
-            StatusCode::BAD_REQUEST,
-            "invalid code".to_string(),
-            None,
-        ));
+        return Err(ApiError::bad_request("invalid code"));
     };
     let codes = factors::new_recovery_codes();
     let hashes: Vec<Vec<u8>> = codes
         .iter()
         .map(|c| factors::hash_recovery_code(c))
         .collect();
-    if !mfa::confirm_totp(&pool, user_id, &row.secret_enc, step as i64, &hashes)
-        .await
-        .map_err(internal)?
-    {
-        return Err(no_setup().into());
+    if !mfa::confirm_totp(&pool, user_id, &row.secret_enc, step as i64, &hashes).await? {
+        return Err(no_setup());
     }
     sf_throttle.record_success(&profile.email);
-    session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+    session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "totp enabled");
     Ok(Json(dto::RecoveryCodes {
         recovery_codes: codes,
@@ -256,12 +209,10 @@ pub async fn totp_remove(
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<StatusCode, ApiError> {
     require_reauth(&pool, user_id, &body.reauth).await?;
-    if !mfa::delete_totp(&pool, user_id).await.map_err(internal)? {
-        return Err((StatusCode::NOT_FOUND, "no authenticator set up".to_string()));
+    if !mfa::delete_totp(&pool, user_id).await? {
+        return Err(ApiError::NotFound("no authenticator set up"));
     }
-    session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+    session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "totp removed");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -275,20 +226,16 @@ pub async fn recovery_regenerate(
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::RecoveryCodes>, ApiError> {
     require_reauth(&pool, user_id, &body.reauth).await?;
-    if !mfa::status(&pool, user_id).await.map_err(internal)?.totp {
-        return Err((StatusCode::CONFLICT, "no authenticator set up".to_string()));
+    if !mfa::status(&pool, user_id).await?.totp {
+        return Err(ApiError::Conflict("no authenticator set up"));
     }
     let codes = factors::new_recovery_codes();
     let hashes: Vec<Vec<u8>> = codes
         .iter()
         .map(|c| factors::hash_recovery_code(c))
         .collect();
-    mfa::replace_recovery_codes(&pool, user_id, &hashes)
-        .await
-        .map_err(internal)?;
-    session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+    mfa::replace_recovery_codes(&pool, user_id, &hashes).await?;
+    session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "recovery codes regenerated");
     Ok(Json(dto::RecoveryCodes {
         recovery_codes: codes,
@@ -300,7 +247,6 @@ pub(crate) mod tests {
     use super::*;
     use crate::auth::{self, AuthUser};
     use crate::factors;
-    use crate::handlers::LoginError;
     use crate::testkit::{seed_session, seed_user, sessions, who};
     use crate::throttle::{LoginThrottle, SecondFactorThrottle};
     use axum::Json;
@@ -312,10 +258,7 @@ pub(crate) mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
 
-    async fn setup(
-        pool: &PgPool,
-        a: &AuthUser,
-    ) -> Result<Json<dto::TotpSetup>, (StatusCode, String)> {
+    async fn setup(pool: &PgPool, a: &AuthUser) -> Result<Json<dto::TotpSetup>, ApiError> {
         let token = reauth_token(pool, a, "hunter22").await;
         setup_with(pool, a, &token).await
     }
@@ -324,7 +267,7 @@ pub(crate) mod tests {
         pool: &PgPool,
         a: &AuthUser,
         token: &str,
-    ) -> Result<Json<dto::TotpSetup>, (StatusCode, String)> {
+    ) -> Result<Json<dto::TotpSetup>, ApiError> {
         totp_setup(
             State(pool.clone()),
             State(key()),
@@ -350,10 +293,8 @@ pub(crate) mod tests {
         pool: &PgPool,
         a: &AuthUser,
         code: String,
-    ) -> Result<Json<dto::RecoveryCodes>, (StatusCode, String)> {
-        confirm_with(pool, a, code, &Arc::new(SecondFactorThrottle::default()))
-            .await
-            .map_err(|e| (e.0, e.1))
+    ) -> Result<Json<dto::RecoveryCodes>, ApiError> {
+        confirm_with(pool, a, code, &Arc::new(SecondFactorThrottle::default())).await
     }
 
     async fn confirm_with(
@@ -361,7 +302,7 @@ pub(crate) mod tests {
         a: &AuthUser,
         code: String,
         throttle: &Arc<SecondFactorThrottle>,
-    ) -> Result<Json<dto::RecoveryCodes>, LoginError> {
+    ) -> Result<Json<dto::RecoveryCodes>, ApiError> {
         totp_confirm(
             State(pool.clone()),
             State(key()),
@@ -403,7 +344,6 @@ pub(crate) mod tests {
         let throttle = Arc::new(LoginThrottle::default());
         try_reauth(pool, &throttle, a, password)
             .await
-            .map_err(|e| (e.0, e.1))
             .unwrap()
             .0
             .reauth
@@ -414,7 +354,7 @@ pub(crate) mod tests {
         throttle: &Arc<LoginThrottle>,
         a: &AuthUser,
         password: &str,
-    ) -> Result<Json<dto::ReauthResponse>, LoginError> {
+    ) -> Result<Json<dto::ReauthResponse>, ApiError> {
         reauth(
             State(pool.clone()),
             State(throttle.clone()),
@@ -428,11 +368,7 @@ pub(crate) mod tests {
         .await
     }
 
-    async fn remove(
-        pool: &PgPool,
-        a: &AuthUser,
-        token: &str,
-    ) -> Result<StatusCode, (StatusCode, String)> {
+    async fn remove(pool: &PgPool, a: &AuthUser, token: &str) -> Result<StatusCode, ApiError> {
         totp_remove(
             State(pool.clone()),
             who(a),
@@ -480,7 +416,7 @@ pub(crate) mod tests {
         let second = stored_secret(&pool, uid).await;
         assert_ne!(first, second);
         let err = confirm(&pool, &me, code_now(&first)).await.unwrap_err();
-        assert_eq!(err, (StatusCode::BAD_REQUEST, "invalid code".to_string()));
+        assert_eq!(err, ApiError::bad_request("invalid code"));
         assert!(confirm(&pool, &me, code_now(&second)).await.is_ok());
     }
 
@@ -492,26 +428,20 @@ pub(crate) mod tests {
         let other = seed_session(&pool, other_uid).await;
         for bad in ["", "random-token"] {
             let err = setup_with(&pool, &me, bad).await.unwrap_err();
-            assert_eq!(
-                err,
-                (
-                    StatusCode::UNAUTHORIZED,
-                    "reauthentication required".to_string()
-                )
-            );
+            assert_eq!(err, ApiError::ReauthRequired);
         }
         let theirs = reauth_token(&pool, &other, "hunter22").await;
         assert_eq!(
-            setup_with(&pool, &me, &theirs).await.unwrap_err().0,
-            StatusCode::UNAUTHORIZED
+            setup_with(&pool, &me, &theirs).await.unwrap_err().status(),
+            StatusCode::FORBIDDEN
         );
         assert!(repo::totp(&pool, uid).await.unwrap().is_none());
         // Single use.
         let tok = reauth_token(&pool, &me, "hunter22").await;
         assert!(setup_with(&pool, &me, &tok).await.is_ok());
         assert_eq!(
-            setup_with(&pool, &me, &tok).await.unwrap_err().0,
-            StatusCode::UNAUTHORIZED
+            setup_with(&pool, &me, &tok).await.unwrap_err().status(),
+            StatusCode::FORBIDDEN
         );
     }
 
@@ -523,7 +453,7 @@ pub(crate) mod tests {
         let _ = setup(&pool, &me).await.unwrap();
         let tok = reauth_token(&pool, &me, "hunter22").await;
         assert_eq!(
-            remove(&pool, &me, &tok).await.unwrap_err().0,
+            remove(&pool, &me, &tok).await.unwrap_err().status(),
             StatusCode::NOT_FOUND
         );
         assert_eq!(sessions(&pool, uid).await, 2);
@@ -538,8 +468,8 @@ pub(crate) mod tests {
         enrol(&pool, &me).await;
         let token = reauth_token(&pool, &me, "hunter22").await;
         let err = setup_with(&pool, &me, &token).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
-        assert_eq!(err.1, "authenticator already set up");
+        assert_eq!(err.status(), StatusCode::CONFLICT);
+        assert_eq!(err.message(), "authenticator already set up");
         assert!(reauth_valid(&pool, &token).await);
     }
 
@@ -554,7 +484,7 @@ pub(crate) mod tests {
             let err = confirm_with(&pool, &me, wrong_code(&secret), &throttle)
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
         // A right code clears the four failures.
         let _ = confirm_with(&pool, &me, code_now(&secret), &throttle)
@@ -576,14 +506,14 @@ pub(crate) mod tests {
             let err = confirm_with(&pool, &me, wrong_code(&secret), &throttle)
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST);
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
         // Even the right code is refused during the wait.
         let err = confirm_with(&pool, &me, code_now(&secret), &throttle)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
-        assert_eq!(err.2, Some(60));
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err, ApiError::TooMany { retry_after: 60 });
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
@@ -602,10 +532,7 @@ pub(crate) mod tests {
         .await
         .unwrap();
         let err = confirm(&pool, &me, code_now(&secret)).await.unwrap_err();
-        assert_eq!(
-            err,
-            (StatusCode::CONFLICT, "no setup in progress".to_string())
-        );
+        assert_eq!(err, ApiError::Conflict("no setup in progress"));
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
@@ -614,11 +541,11 @@ pub(crate) mod tests {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
         let err = confirm(&pool, &me, "123456".into()).await.unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
         let _ = setup(&pool, &me).await.unwrap();
         let secret = stored_secret(&pool, uid).await;
         let err = confirm(&pool, &me, wrong_code(&secret)).await.unwrap_err();
-        assert_eq!(err, (StatusCode::BAD_REQUEST, "invalid code".to_string()));
+        assert_eq!(err, ApiError::bad_request("invalid code"));
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
@@ -633,18 +560,12 @@ pub(crate) mod tests {
 
         for bad in ["", "random-token"] {
             let err = remove(&pool, &me, bad).await.unwrap_err();
-            assert_eq!(
-                err,
-                (
-                    StatusCode::UNAUTHORIZED,
-                    "reauthentication required".to_string()
-                )
-            );
+            assert_eq!(err, ApiError::ReauthRequired);
         }
         let theirs = reauth_token(&pool, &other, "hunter22").await;
         assert_eq!(
-            remove(&pool, &me, &theirs).await.unwrap_err().0,
-            StatusCode::UNAUTHORIZED
+            remove(&pool, &me, &theirs).await.unwrap_err().status(),
+            StatusCode::FORBIDDEN
         );
         // Refused, and burnt.
         assert!(
@@ -665,8 +586,8 @@ pub(crate) mod tests {
         assert_eq!(st.recovery_remaining, 0);
         assert_eq!(sessions(&pool, uid).await, 1);
         assert_eq!(
-            remove(&pool, &me, &fresh).await.unwrap_err().0,
-            StatusCode::UNAUTHORIZED
+            remove(&pool, &me, &fresh).await.unwrap_err().status(),
+            StatusCode::FORBIDDEN
         );
     }
 
@@ -676,7 +597,7 @@ pub(crate) mod tests {
         let me = seed_session(&pool, uid).await;
         let tok = reauth_token(&pool, &me, "hunter22").await;
         assert_eq!(
-            remove(&pool, &me, &tok).await.unwrap_err().0,
+            remove(&pool, &me, &tok).await.unwrap_err().status(),
             StatusCode::NOT_FOUND
         );
     }
@@ -690,14 +611,13 @@ pub(crate) mod tests {
             let err = try_reauth(&pool, &throttle, &me, "wrong")
                 .await
                 .unwrap_err();
-            assert_eq!(err.0, StatusCode::BAD_REQUEST);
-            assert_eq!(err.1, "password is incorrect");
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(err.message(), "password is incorrect");
         }
         let err = try_reauth(&pool, &throttle, &me, "hunter22")
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
-        assert!(err.2.is_some());
+        assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -750,7 +670,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -765,7 +685,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
     #[sqlx::test(migrations = "../migrations")]

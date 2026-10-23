@@ -21,7 +21,10 @@ function InnerApp() {
 
 export function App() {
   const auth = useAuth();
+  // Not while bootstrapping: a stored token the server refuses is cleared by
+  // the bootstrap itself, before there is a page to leave.
   useEffect(() => {
+    if (auth.isBootstrapping) return;
     setUnauthorizedHandler(() => {
       auth.logout();
       router.navigate({ to: "/login" });

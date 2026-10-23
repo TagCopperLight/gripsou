@@ -56,7 +56,9 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
       setStep("done");
     } catch (err) {
       if (closed.current) return;
-      if (err instanceof ApiError && err.status === 401) {
+      // 403: the password check is used up; 410: the browser window stayed
+      // open past the challenge's 5 minutes.
+      if (err instanceof ApiError && (err.status === 403 || err.status === 410)) {
         backToPassword(t("passkeys.expired"));
         return;
       }

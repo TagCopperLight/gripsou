@@ -185,3 +185,51 @@ async fn totp_setup_without_a_token_is_unauthorized() {
         .unwrap();
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
+
+/// Every admin route refuses a member's session, before the handler runs.
+#[sqlx::test(migrations = "../migrations")]
+async fn admin_routes_refuse_members(pool: sqlx::PgPool) {
+    let member = gripsou_core::testkit::seed_user(&pool).await;
+    let token = gripsou_api::auth::generate_token();
+    gripsou_core::repo::session::create(
+        &pool,
+        member,
+        &gripsou_api::auth::hash_token(&token),
+        None,
+        None,
+        false,
+        chrono::Utc::now() + chrono::Duration::hours(1),
+    )
+    .await
+    .unwrap();
+    let dir = std::env::temp_dir();
+    let app = gripsou_api::router(pool, &dir, test_key(), test_passkeys());
+    let id = uuid::Uuid::new_v4();
+    for (method, path) in [
+        ("GET", "/api/users".to_string()),
+        ("POST", "/api/invites".to_string()),
+        ("POST", format!("/api/users/{id}/reset-link")),
+        ("DELETE", format!("/api/users/{id}")),
+        ("GET", "/api/providers".to_string()),
+        ("PATCH", "/api/providers/powens".to_string()),
+        ("GET", "/api/settings/budget-ai".to_string()),
+        ("PATCH", "/api/settings/budget-ai".to_string()),
+        ("GET", "/api/settings/budget-ai/usage".to_string()),
+        ("GET", "/api/settings/budget-ai/models/jev".to_string()),
+        ("PUT", "/api/settings/budget-ai/prices".to_string()),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(&path)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method} {path}");
+    }
+}

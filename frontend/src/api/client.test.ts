@@ -50,13 +50,23 @@ describe("ApiError", () => {
     expect(err.message).toBe("GET /budget/categories failed: 409");
   });
 
-  it("still routes 401 through the global handler", async () => {
+  it("routes a 401 to the current session through the global handler", async () => {
+    setAuthToken("tok");
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 401 })));
     const err = (await getJson("/budget/tags").catch((e: unknown) => e)) as ApiError;
     expect(onUnauthorized).toHaveBeenCalled();
     expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(401);
+  });
+
+  it("leaves a 401 to a request without a session to its caller", async () => {
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 401 })));
+    const err = (await postJson("/auth/login", {}).catch((e: unknown) => e)) as ApiError;
+    expect(onUnauthorized).not.toHaveBeenCalled();
     expect(err.status).toBe(401);
   });
 });
@@ -66,7 +76,7 @@ describe("ApiError.retryAfter", () => {
     vi.stubGlobal("fetch", vi.fn(async () =>
       new Response("too many attempts", { status: 429, headers: { "Retry-After": "240" } }),
     ));
-    const err = await postJson("/auth/login", {}, { skipGlobalUnauthorized: true }).catch((e: unknown) => e);
+    const err = await postJson("/auth/login", {}).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(429);
     expect((err as ApiError).retryAfter).toBe(240);

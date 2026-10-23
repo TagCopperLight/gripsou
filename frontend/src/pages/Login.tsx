@@ -73,11 +73,11 @@ export function Login() {
       await loginWithPasskey(remember);
     } catch (err) {
       setStep(from);
-      // 401: the sign-in's challenge expired while the browser window was open.
+      // 410: the sign-in's challenge expired while the browser window was open.
       if (err instanceof ApiError) {
         setError(
           tooMany(err) ??
-            (err.status === 400 || err.status === 401 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
+            (err.status === 400 || err.status === 410 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
         );
       }
     }
@@ -90,8 +90,8 @@ export function Login() {
     try {
       await verifyLogin(challenge, secret, remember);
     } catch (err) {
-      // 401: the challenge expired (5 minutes) or was used up; start over.
-      if (err instanceof ApiError && err.status === 401) {
+      // 410: the challenge expired (5 minutes) or was used up; start over.
+      if (err instanceof ApiError && err.status === 410) {
         backToPassword(t("auth.mfa.expired"));
         return;
       }

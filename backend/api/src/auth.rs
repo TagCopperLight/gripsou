@@ -6,7 +6,6 @@ use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::FromRef;
 use axum::extract::FromRequestParts;
-use axum::http::StatusCode;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 use base64::Engine as _;
@@ -14,6 +13,8 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
+
+use crate::error::ApiError;
 
 /// Only re-touch a session at most this often, so we don't write on every request.
 pub const TOUCH_THROTTLE_SECS: i64 = 5 * 60;
@@ -117,13 +118,12 @@ pub const PASSWORD_MAX_CHARS: usize = 128;
 
 /// The one rule for a password being set (invite, reset, change): length
 /// only, counted in characters. Existing shorter passwords keep working.
-pub fn validate_new_password(pw: &str) -> Result<(), (StatusCode, String)> {
+pub fn validate_new_password(pw: &str) -> Result<(), ApiError> {
     if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&pw.chars().count()) {
         Ok(())
     } else {
-        Err((
-            StatusCode::BAD_REQUEST,
-            "password must be 8 to 128 characters".to_string(),
+        Err(ApiError::bad_request(
+            "password must be 8 to 128 characters",
         ))
     }
 }
@@ -141,10 +141,10 @@ where
     S: Send + Sync,
     sqlx::PgPool: FromRef<S>,
 {
-    type Rejection = (StatusCode, String);
+    type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let unauthorized = || (StatusCode::UNAUTHORIZED, "unauthorized".to_string());
+        let unauthorized = || ApiError::Unauthorized;
         let token = parts
             .headers
             .get(AUTHORIZATION)
@@ -155,14 +155,7 @@ where
         let pool = sqlx::PgPool::from_ref(state);
         let hash = hash_token(token);
         let session = gripsou_core::repo::session::find_valid_by_hash(&pool, &hash)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %gripsou_core::logs::error_chain(&e), "session lookup failed");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal server error".to_string(),
-                )
-            })?
+            .await?
             .ok_or_else(unauthorized)?;
         tracing::Span::current().record("user_id", tracing::field::display(session.user_id));
 
@@ -181,8 +174,37 @@ where
     }
 }
 
+/// An [`AuthUser`] whose role is admin, else 403. Server config, providers
+/// and user management are admin-only: `app_settings` is the admin-tunable
+/// config.
+#[derive(Debug)]
+pub struct AdminUser {
+    pub user_id: Uuid,
+}
+
+impl<S> FromRequestParts<S> for AdminUser
+where
+    S: Send + Sync,
+    sqlx::PgPool: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthUser { user_id, .. } = AuthUser::from_request_parts(parts, state).await?;
+        let pool = sqlx::PgPool::from_ref(state);
+        let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+            .await?
+            .ok_or(ApiError::Unauthorized)?;
+        if profile.role != "admin" {
+            return Err(ApiError::Forbidden("admin access required"));
+        }
+        Ok(AdminUser { user_id })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use axum::http::StatusCode;
     #[test]
     fn dummy_hash_is_a_real_argon2_hash() {
         // A malformed dummy would fail fast and bring the timing gap back.
@@ -212,8 +234,8 @@ mod tests {
         // Counted in characters, not bytes: 8 accented letters are 16 bytes.
         assert!(validate_new_password("éééééééé").is_ok());
         let err = validate_new_password("short").unwrap_err();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
-        assert_eq!(err.1, "password must be 8 to 128 characters");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(err.message(), "password must be 8 to 128 characters");
     }
 
     use super::*;
@@ -265,7 +287,7 @@ mod tests {
         let err = AuthUser::from_request_parts(&mut parts, &pool)
             .await
             .expect_err("should fail with no Authorization header");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -274,7 +296,7 @@ mod tests {
         let err = AuthUser::from_request_parts(&mut parts, &pool)
             .await
             .expect_err("should fail for unknown token");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -299,7 +321,7 @@ mod tests {
         let err = AuthUser::from_request_parts(&mut parts, &pool)
             .await
             .expect_err("should fail for expired session");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
@@ -349,7 +371,7 @@ mod tests {
         let err = AuthUser::from_request_parts(&mut parts, &pool)
             .await
             .unwrap_err();
-        assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[test]

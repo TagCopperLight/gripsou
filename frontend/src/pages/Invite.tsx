@@ -6,7 +6,7 @@ import { TextInput } from "../components/TextInput";
 import { useAuth } from "../auth/context";
 import { useTokenGuard } from "../auth/useTokenGuard";
 import { passwordLengthOk } from "../lib/password";
-import { postJson } from "../api/client";
+import { ApiError, postJson } from "../api/client";
 import type { SessionUser } from "../api/types";
 
 type RedeemResp = { token: string; user: SessionUser };
@@ -44,12 +44,11 @@ export function Invite() {
       const res = await postJson<RedeemResp>(
         `/auth/invite/${token}/redeem`,
         { email, name, password },
-        { skipGlobalUnauthorized: true },
       );
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch (err: unknown) {
-      const exists = err instanceof Error && err.message.includes("failed: 409");
+      const exists = err instanceof ApiError && err.status === 409;
       setError(exists ? t("auth.emailExists") : t("auth.invalidCredentials"));
     } finally {
       setPending(false);

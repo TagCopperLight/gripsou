@@ -2,6 +2,7 @@ pub mod auth;
 mod budget;
 pub mod cli;
 mod dto;
+pub mod error;
 mod factors;
 mod handlers;
 mod mfa;
@@ -214,7 +215,7 @@ pub fn router(
 
     // Per-request span: every line a handler logs carries request_id, method,
     // the route pattern (not the raw path, full of ids) and, once the session is
-    // resolved, user_id. 5xx are logged by `internal()` with their cause, so the
+    // resolved, user_id. 5xx are logged by `ApiError::internal()` with their cause, so the
     // response line itself is debug.
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|req: &axum::http::Request<axum::body::Body>| {

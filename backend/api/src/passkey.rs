@@ -18,8 +18,9 @@ use webauthn_rs_proto::ResidentKeyRequirement;
 
 use crate::auth::{self, AuthUser};
 use crate::dto;
-use crate::handlers::{LoginError, client_ip, internal, issue_session, user_agent};
-use crate::mfa::{ApiError, check_reauth, require_reauth};
+use crate::error::ApiError;
+use crate::handlers::{client_ip, issue_session, user_agent};
+use crate::mfa::{check_reauth, require_reauth};
 use crate::throttle::{Blocked, LoginThrottle};
 
 /// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
@@ -72,11 +73,7 @@ const LOGIN_KIND: &str = "passkey_login";
 const MAX_NAME_CHARS: usize = 64;
 
 fn not_accepted() -> ApiError {
-    (StatusCode::BAD_REQUEST, "passkey not accepted".to_string())
-}
-
-fn expired() -> ApiError {
-    (StatusCode::UNAUTHORIZED, "challenge expired".to_string())
+    ApiError::bad_request("passkey not accepted")
 }
 
 /// "Firefox on Linux", from the browser adding the passkey.
@@ -101,18 +98,15 @@ pub async fn register_options(
 ) -> Result<Json<dto::PasskeyOptions>, ApiError> {
     check_reauth(&pool, user_id, &body.reauth).await?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     let exclude: Vec<CredentialID> = repo::credential_ids(&pool, user_id)
-        .await
-        .map_err(internal)?
+        .await?
         .into_iter()
         .map(CredentialID::from)
         .collect();
     let (mut ccr, reg) =
-        pk.0.start_passkey_registration(user_id, &profile.email, &profile.name, Some(exclude))
-            .map_err(internal)?;
+        pk.0.start_passkey_registration(user_id, &profile.email, &profile.name, Some(exclude))?;
     // Passwordless sign-in finds the passkey without an email: ask for one
     // the device can offer by itself (webauthn-rs leaves it optional).
     if let Some(sel) = ccr.public_key.authenticator_selection.as_mut() {
@@ -127,11 +121,10 @@ pub async fn register_options(
         REGISTER_KIND,
         serde_json::json!({ "reg": reg }),
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     Ok(Json(dto::PasskeyOptions {
         challenge: token,
-        options: serde_json::to_value(&ccr.public_key).map_err(internal)?,
+        options: serde_json::to_value(&ccr.public_key)?,
     }))
 }
 
@@ -148,23 +141,21 @@ pub async fn register(
     }: AuthUser,
     Json(body): Json<dto::PasskeyRegisterReq>,
 ) -> Result<Json<dto::PasskeyInfo>, ApiError> {
-    let mut tx = pool.begin().await.map_err(internal)?;
+    let mut tx = pool.begin().await?;
     let challenge =
         login_challenge::consume(&mut *tx, &auth::hash_token(&body.challenge), REGISTER_KIND)
-            .await
-            .map_err(internal)?
+            .await?
             .filter(|c| c.user_id == Some(user_id))
-            .ok_or_else(expired)?;
+            .ok_or(ApiError::ChallengeExpired)?;
     require_reauth(&mut *tx, user_id, &body.reauth).await?;
-    let reg: PasskeyRegistration =
-        serde_json::from_value(challenge.state["reg"].clone()).map_err(internal)?;
+    let reg: PasskeyRegistration = serde_json::from_value(challenge.state["reg"].clone())?;
     let passkey =
         pk.0.finish_passkey_registration(&body.credential, &reg)
             .map_err(|e| {
                 tracing::warn!(user_id = %user_id, reason = %e, "passkey registration failed");
                 not_accepted()
             })?;
-    let stored = serde_json::to_value(&passkey).map_err(internal)?;
+    let stored = serde_json::to_value(&passkey)?;
     let row = repo::insert(
         &mut *tx,
         user_id,
@@ -172,13 +163,10 @@ pub async fn register(
         &stored,
         &default_name(&headers),
     )
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::CONFLICT, "passkey already added".to_string()))?;
-    tx.commit().await.map_err(internal)?;
-    session::delete_others(&pool, user_id, session_id)
-        .await
-        .map_err(internal)?;
+    .await?
+    .ok_or(ApiError::Conflict("passkey already added"))?;
+    tx.commit().await?;
+    session::delete_others(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "passkey added");
     Ok(Json(row.into()))
 }
@@ -192,16 +180,10 @@ pub async fn rename(
     let name = body.name.trim();
     let len = name.chars().count();
     if len == 0 || len > MAX_NAME_CHARS {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "name must be 1 to 64 characters".to_string(),
-        ));
+        return Err(ApiError::bad_request("name must be 1 to 64 characters"));
     }
-    if !repo::rename(&pool, user_id, id, name)
-        .await
-        .map_err(internal)?
-    {
-        return Err((StatusCode::NOT_FOUND, "passkey not found".to_string()));
+    if !repo::rename(&pool, user_id, id, name).await? {
+        return Err(ApiError::NotFound("passkey not found"));
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -211,15 +193,15 @@ pub async fn remove(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    if !repo::delete(&pool, user_id, id).await.map_err(internal)? {
-        return Err((StatusCode::NOT_FOUND, "passkey not found".to_string()));
+    if !repo::delete(&pool, user_id, id).await? {
+        return Err(ApiError::NotFound("passkey not found"));
     }
     tracing::info!(user_id = %user_id, "passkey removed");
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// A throttled passwordless sign-in: no account is known, only the IP.
-fn throttled_ip(blocked: Blocked, ip: &str) -> LoginError {
+fn throttled_ip(blocked: Blocked, ip: &str) -> ApiError {
     if blocked.first_refusal {
         tracing::warn!(ip = %ip, reason = blocked.reason.as_str(), "login throttled");
     }
@@ -236,12 +218,12 @@ pub async fn sign_in_options(
     State(throttle): State<Arc<LoginThrottle>>,
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> Result<Json<dto::PasskeyOptions>, LoginError> {
+) -> Result<Json<dto::PasskeyOptions>, ApiError> {
     let ip = client_ip(&headers, peer);
     throttle
         .try_ip(&ip, Instant::now())
         .map_err(|b| throttled_ip(b, &ip))?;
-    let (mut rcr, state) = pk.0.start_discoverable_authentication().map_err(internal)?;
+    let (mut rcr, state) = pk.0.start_discoverable_authentication()?;
     // webauthn-rs asks for the autofill style; this runs from a button.
     rcr.mediation = None;
     let token = auth::generate_token();
@@ -252,11 +234,10 @@ pub async fn sign_in_options(
         LOGIN_KIND,
         serde_json::json!({ "auth": state }),
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     Ok(Json(dto::PasskeyOptions {
         challenge: token,
-        options: serde_json::to_value(&rcr.public_key).map_err(internal)?,
+        options: serde_json::to_value(&rcr.public_key)?,
     }))
 }
 
@@ -271,29 +252,25 @@ pub async fn sign_in(
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::PasskeySignInReq>,
-) -> Result<Json<dto::LoginResponse>, LoginError> {
+) -> Result<Json<dto::LoginResponse>, ApiError> {
     let ip = client_ip(&headers, peer);
     let challenge = login_challenge::consume(&pool, &auth::hash_token(&body.challenge), LOGIN_KIND)
-        .await
-        .map_err(internal)?
-        .ok_or_else(expired)?;
+        .await?
+        .ok_or(ApiError::ChallengeExpired)?;
     let refuse = |reason: &str| {
         tracing::warn!(ip = %ip, user_agent = user_agent(&headers), reason, "passkey login failed");
-        LoginError::from(not_accepted())
+        not_accepted()
     };
     let state: DiscoverableAuthentication =
-        serde_json::from_value(challenge.state["auth"].clone()).map_err(internal)?;
+        serde_json::from_value(challenge.state["auth"].clone())?;
     let (user_id, cred_id) =
         pk.0.identify_discoverable_authentication(&body.credential)
             .map_err(|_| refuse("no_user"))?;
     // Only the claimed user's own passkey: a handle naming someone else finds nothing.
-    let Some(row) = repo::find(&pool, user_id, cred_id)
-        .await
-        .map_err(internal)?
-    else {
+    let Some(row) = repo::find(&pool, user_id, cred_id).await? else {
         return Err(refuse("unknown_passkey"));
     };
-    let mut passkey: Passkey = serde_json::from_value(row.passkey).map_err(internal)?;
+    let mut passkey: Passkey = serde_json::from_value(row.passkey)?;
     let result =
         pk.0.finish_discoverable_authentication(
             &body.credential,
@@ -302,13 +279,7 @@ pub async fn sign_in(
         )
         .map_err(|_| refuse("invalid"))?;
     passkey.update_credential(&result);
-    repo::record_use(
-        &pool,
-        row.id,
-        &serde_json::to_value(&passkey).map_err(internal)?,
-    )
-    .await
-    .map_err(internal)?;
+    repo::record_use(&pool, row.id, &serde_json::to_value(&passkey)?).await?;
     throttle.refund_ip(&ip);
     let resp = issue_session(&pool, &headers, peer, user_id, body.remember).await?;
     tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent(&headers), method = "passkey", "login succeeded");
@@ -437,7 +408,6 @@ pub(crate) mod tests {
     use super::soft::{Soft, passkeys};
     use super::*;
     use crate::auth::AuthUser;
-    use crate::handlers::LoginError;
     use crate::mfa::tests::reauth_token;
     use crate::testkit::{seed_session, seed_user, sessions, who};
     use crate::throttle::LoginThrottle;
@@ -460,7 +430,7 @@ pub(crate) mod tests {
         pool: &PgPool,
         a: &AuthUser,
         reauth: &str,
-    ) -> Result<dto::PasskeyOptions, (StatusCode, String)> {
+    ) -> Result<dto::PasskeyOptions, ApiError> {
         register_options(
             State(pool.clone()),
             State(passkeys()),
@@ -479,7 +449,7 @@ pub(crate) mod tests {
         reauth: &str,
         o: &dto::PasskeyOptions,
         soft: &mut Soft,
-    ) -> Result<dto::PasskeyInfo, (StatusCode, String)> {
+    ) -> Result<dto::PasskeyInfo, ApiError> {
         register(
             State(pool.clone()),
             State(passkeys()),
@@ -539,13 +509,13 @@ pub(crate) mod tests {
         let a = seed_session(&pool, u).await;
         let b = seed_session(&pool, v).await;
         assert_eq!(
-            options(&pool, &a, "nope").await.err().unwrap().0,
-            StatusCode::UNAUTHORIZED
+            options(&pool, &a, "nope").await.err().unwrap().status(),
+            StatusCode::FORBIDDEN
         );
         let theirs = reauth_token(&pool, &b, "hunter22").await;
         assert_eq!(
-            options(&pool, &a, &theirs).await.err().unwrap().0,
-            StatusCode::UNAUTHORIZED
+            options(&pool, &a, &theirs).await.err().unwrap().status(),
+            StatusCode::FORBIDDEN
         );
         // Options don't spend the token; finishing does.
         let reauth = reauth_token(&pool, &a, "hunter22").await;
@@ -558,8 +528,8 @@ pub(crate) mod tests {
                 .await
                 .err()
                 .unwrap()
-                .0,
-            StatusCode::UNAUTHORIZED
+                .status(),
+            StatusCode::FORBIDDEN
         );
     }
 
@@ -587,7 +557,7 @@ pub(crate) mod tests {
         .await
         .err()
         .unwrap();
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         finish(&pool, &a, &reauth, &o, &mut soft)
             .await
             .expect("retry works");
@@ -608,13 +578,16 @@ pub(crate) mod tests {
                 Json(dto::RenamePasskeyReq { name: name.into() }),
             )
         };
-        assert_eq!(ren(&b, "x").await.err().unwrap().0, StatusCode::NOT_FOUND);
         assert_eq!(
-            ren(&a, "   ").await.err().unwrap().0,
+            ren(&b, "x").await.err().unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ren(&a, "   ").await.err().unwrap().status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            ren(&a, &"x".repeat(65)).await.err().unwrap().0,
+            ren(&a, &"x".repeat(65)).await.err().unwrap().status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(ren(&a, "  Phone  ").await.unwrap(), StatusCode::NO_CONTENT);
@@ -628,7 +601,7 @@ pub(crate) mod tests {
                 .await
                 .err()
                 .unwrap()
-                .0,
+                .status(),
             StatusCode::NOT_FOUND
         );
         assert_eq!(
@@ -694,7 +667,7 @@ pub(crate) mod tests {
         .await
         .err()
         .unwrap();
-        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert_eq!(err.status(), StatusCode::CONFLICT);
         // The transaction rolled back: the token and the ceremony are intact.
         check_reauth(&pool, u, &reauth).await.expect("token kept");
         assert_eq!(repo::list(&pool, u).await.unwrap().len(), 0);
@@ -707,7 +680,7 @@ pub(crate) mod tests {
     async fn start_passwordless(
         pool: &PgPool,
         t: &Arc<LoginThrottle>,
-    ) -> Result<dto::PasskeyOptions, LoginError> {
+    ) -> Result<dto::PasskeyOptions, ApiError> {
         sign_in_options(
             State(pool.clone()),
             State(passkeys()),
@@ -725,7 +698,7 @@ pub(crate) mod tests {
         soft: &mut Soft,
         cred: &[u8],
         user: Uuid,
-    ) -> Result<dto::LoginResponse, LoginError> {
+    ) -> Result<dto::LoginResponse, ApiError> {
         let o = start_passwordless(pool, t).await?;
         let credential = soft.sign(&o.options, Some(cred), Some(user));
         sign_in(
@@ -783,7 +756,7 @@ pub(crate) mod tests {
             .err()
             .unwrap();
         assert_eq!(
-            (e.0, e.1.as_str()),
+            (e.status(), e.message()),
             (StatusCode::BAD_REQUEST, "passkey not accepted")
         );
         // A challenge is spent by any attempt.
@@ -821,8 +794,8 @@ pub(crate) mod tests {
         .err()
         .unwrap();
         assert_eq!(
-            (e.0, e.1.as_str()),
-            (StatusCode::UNAUTHORIZED, "challenge expired")
+            (e.status(), e.message()),
+            (StatusCode::GONE, "challenge expired")
         );
         remove(State(pool.clone()), who(&a), Path(info.id))
             .await
@@ -831,7 +804,7 @@ pub(crate) mod tests {
             .await
             .err()
             .unwrap();
-        assert_eq!(e.0, StatusCode::BAD_REQUEST);
+        assert_eq!(e.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -849,14 +822,13 @@ pub(crate) mod tests {
                 .await
                 .err()
                 .unwrap();
-            assert_eq!(e.0, StatusCode::BAD_REQUEST);
+            assert_eq!(e.status(), StatusCode::BAD_REQUEST);
         }
         let e = passwordless(&pool, &t, &mut soft, &cred, u)
             .await
             .err()
             .unwrap();
-        assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
-        assert!(e.2.is_some());
+        assert_eq!(e.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -866,8 +838,11 @@ pub(crate) mod tests {
             start_passwordless(&pool, &t).await.expect("let through");
         }
         let e = start_passwordless(&pool, &t).await.err().unwrap();
-        assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
-        assert!(e.2.is_some_and(|s| s > 0), "says how long to wait");
+        assert_eq!(e.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            matches!(e, ApiError::TooMany { retry_after } if retry_after > 0),
+            "says how long to wait"
+        );
         // Refused before storing anything: no challenge row for it.
         let stored: i64 =
             sqlx::query_scalar("select count(*) from login_challenge where kind = $1")

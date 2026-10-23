@@ -54,15 +54,8 @@ it("applies prefs from /auth/me to the singleton and i18n on bootstrap", async (
   expect(i18n.language).toBe("fr");
 });
 
-test("stored token → /auth/me returns 401 → unauthenticated, global handler NOT called", async () => {
+test("stored token → /auth/me returns 401 → unauthenticated, token cleared", async () => {
   setAuthToken("expired-tok", true);
-
-  // Register a global unauthorized handler spy — it must NOT be called.
-  const unauthorizedSpy = vi.fn();
-  client.setUnauthorizedHandler(unauthorizedSpy);
-
-  // Simulate the real fetch path: getJson with skipGlobalUnauthorized = true
-  // means the 401 should never reach the global handler.
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response("Unauthorized", { status: 401 })),
@@ -71,9 +64,6 @@ test("stored token → /auth/me returns 401 → unauthenticated, global handler 
   render(<AuthProvider><Probe /></AuthProvider>);
   await waitFor(() => expect(screen.getByText("out")).toBeInTheDocument());
 
-  // Global handler must not have been triggered (no spurious POST /auth/logout).
-  expect(unauthorizedSpy).not.toHaveBeenCalled();
-  // The rejected token is cleared.
   expect(client.getAuthToken()).toBeNull();
 });
 
@@ -129,13 +119,12 @@ describe("passkeys", () => {
     const auth = await mountAuth();
     await act(async () => auth().loginWithPasskey(remember));
 
-    expect(post).toHaveBeenNthCalledWith(1, "/auth/passkey/options", {}, expect.anything());
+    expect(post).toHaveBeenNthCalledWith(1, "/auth/passkey/options", {});
     expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: options });
     expect(post).toHaveBeenNthCalledWith(
       2,
       "/auth/passkey",
       { challenge: "ch9", credential, remember },
-      expect.anything(),
     );
     expect(await screen.findByText("in Ann")).toBeInTheDocument();
     expect(client.getAuthToken()).toBe("tok");
@@ -163,7 +152,6 @@ describe("passkeys", () => {
     expect(post).toHaveBeenCalledWith(
       "/auth/login/verify",
       { challenge: "ch1", totp: "123456" },
-      expect.anything(),
     );
   });
 });
