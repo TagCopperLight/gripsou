@@ -17,7 +17,9 @@ pub enum CryptoError {
     InvalidBase64,
 }
 
-fn parse_key(key_hex: &str) -> Result<[u8; 32], CryptoError> {
+/// The 32 key bytes of `key_hex`, or `InvalidKey` unless it is exactly 64
+/// hex characters.
+pub fn parse_key(key_hex: &str) -> Result<[u8; 32], CryptoError> {
     if key_hex.len() != 64 {
         return Err(CryptoError::InvalidKey);
     }

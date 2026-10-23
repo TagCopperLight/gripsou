@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
-import type { SessionUser } from "../api/types";
+import type { MfaRequired, SessionUser } from "../api/types";
 import { AuthContext, type AuthValue } from "./context";
 import i18n from "../i18n";
 import { DEFAULT_PREFS, setPrefs, type UserPrefs } from "../lib/prefs";
 import { afterCategorizeRequested, afterReviewThresholdChange } from "../api/invalidate";
 import { queryClient } from "../queryClient";
 
-type LoginResponse = { token: string; user: SessionUser };
+type SessionResponse = { token: string; user: SessionUser };
+type LoginResponse = SessionResponse | MfaRequired;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -73,6 +74,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await postJson<LoginResponse>(
         "/auth/login",
         { email, password, remember },
+        { skipGlobalUnauthorized: true },
+      );
+      if ("mfaRequired" in res) return res;
+      resetSession();
+      setAuthToken(res.token, remember);
+      applyUser(res.user);
+      return null;
+    },
+    [applyUser, resetSession],
+  );
+
+  const verifyLogin = useCallback(
+    async (
+      challenge: string,
+      code: { totp: string } | { recoveryCode: string },
+      remember: boolean,
+    ) => {
+      // A 401 here means "challenge expired", not "logged out".
+      const res = await postJson<SessionResponse>(
+        "/auth/login/verify",
+        { challenge, ...code },
         { skipGlobalUnauthorized: true },
       );
       resetSession();
@@ -164,12 +186,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       prefs: user?.prefs ?? DEFAULT_PREFS,
       login,
+      verifyLogin,
       adoptSession,
       logout,
       updateUser,
       updatePrefs,
     }),
-    [user, isBootstrapping, login, adoptSession, logout, updateUser, updatePrefs],
+    [user, isBootstrapping, login, verifyLogin, adoptSession, logout, updateUser, updatePrefs],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

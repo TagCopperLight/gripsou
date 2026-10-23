@@ -769,17 +769,6 @@ pub struct SessionUser {
 }
 
 impl SessionUser {
-    pub fn from_credentials(c: &gripsou_core::repo::user::UserCredentials) -> Self {
-        SessionUser {
-            id: c.id.to_string(),
-            name: c.name.clone(),
-            email: c.email.clone(),
-            role: c.role.clone(),
-            prefs: c.prefs.clone(),
-            welcome_done: c.welcome_done,
-        }
-    }
-
     pub fn from_profile(p: &gripsou_core::repo::user::UserProfile) -> Self {
         SessionUser {
             id: p.id.to_string(),
@@ -829,6 +818,34 @@ impl SessionDto {
 pub struct LoginResponse {
     pub token: String,
     pub user: SessionUser,
+}
+
+/// What `/auth/login` answers: a session, or (second factor enrolled) a
+/// short-lived challenge to turn into one at `/auth/login/verify`.
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+// Built once per login and serialized at once: boxing would only add noise.
+#[allow(clippy::large_enum_variant)]
+pub enum LoginOutcome {
+    Session(LoginResponse),
+    Mfa(MfaRequired),
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MfaRequired {
+    /// Always true; lets the client tell this shape from a session.
+    pub mfa_required: bool,
+    pub challenge: String,
+    pub methods: Vec<&'static str>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginVerifyReq {
+    pub challenge: String,
+    pub totp: Option<String>,
+    pub recovery_code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1243,4 +1260,44 @@ mod budget_ai_contract_tests {
         assert_eq!(p.input, "0.042");
         assert_eq!(p.output, "0");
     }
+}
+
+#[derive(Deserialize)]
+pub struct ReauthReq {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReauthResponse {
+    pub reauth: String,
+}
+
+#[derive(Deserialize)]
+pub struct ReauthTokenReq {
+    pub reauth: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MfaStatus {
+    pub totp: bool,
+    pub recovery_remaining: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotpSetup {
+    pub secret: String,
+    pub qr_svg: String,
+}
+
+#[derive(Deserialize)]
+pub struct TotpConfirmReq {
+    pub code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryCodes {
+    pub recovery_codes: Vec<String>,
 }

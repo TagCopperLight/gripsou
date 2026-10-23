@@ -10,6 +10,16 @@ async fn main() -> anyhow::Result<()> {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
     );
 
+    // Every subcommand but `reset-2fa` serves the app, which needs the key:
+    // checked before touching the database, and the value is never printed.
+    let subcommand = env::args().nth(1);
+    let totp_key = if subcommand.as_deref() == Some("reset-2fa") {
+        None
+    } else {
+        let raw = env::var("ENCRYPTION_KEY").ok();
+        Some(gripsou_api::TotpKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?)
+    };
+
     let database_url =
         env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
     let db = gripsou_core::db::connect(&database_url).await?;
@@ -18,13 +28,25 @@ async fn main() -> anyhow::Result<()> {
     // The log table exists from here; lines queued since startup are written too.
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
+
+    let Some(totp_key) = totp_key else {
+        let code = gripsou_api::cli::reset_two_factor(&db, env::args().nth(2)).await;
+        log_handle.shutdown().await;
+        std::process::exit(code);
+    };
+
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone()));
 
     let initial_cors = gripsou_core::repo::settings::cors_origins(&db)
         .await
         .unwrap_or_default();
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
-    let app = gripsou_api::router(db.clone(), std::path::Path::new(&static_dir), initial_cors);
+    let app = gripsou_api::router(
+        db.clone(),
+        std::path::Path::new(&static_dir),
+        initial_cors,
+        totp_key,
+    );
     // Hash the dummy password now so the first login isn't slower.
     std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
 

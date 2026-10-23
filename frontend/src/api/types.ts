@@ -363,3 +363,9 @@ export type InvestmentReturns = {
   total: ReturnFigures;
   accounts: ReturnAccount[];
 };
+
+export type MfaMethod = "totp" | "recovery";
+export type MfaRequired = { mfaRequired: true; challenge: string; methods: MfaMethod[] };
+
+export type MfaStatus = { totp: boolean; recoveryRemaining: number };
+export type TotpSetup = { secret: string; qrSvg: string };

@@ -67,6 +67,7 @@ export const keys = {
 
   users: () => ["users"] as const,
   sessions: () => ["sessions"] as const,
+  mfaStatus: () => ["mfaStatus"] as const,
   connections: () => ["connections"] as const,
   providers: () => ["providers"] as const,
   providersEnabled: () => ["providers-enabled"] as const,

@@ -18,9 +18,11 @@ type AvatarProps = {
   color?: string;
   src?: string;
   className?: string;
+  /** Size of the initials; the default suits small avatars. */
+  initialsClassName?: string;
 };
 
-export function Avatar({ name, color, src, className = "size-9" }: AvatarProps) {
+export function Avatar({ name, color, src, className = "size-9", initialsClassName = "text-[13px]" }: AvatarProps) {
   if (src) {
     return (
       <img
@@ -35,7 +37,7 @@ export function Avatar({ name, color, src, className = "size-9" }: AvatarProps) 
       className={`flex items-center justify-center rounded-full shrink-0 font-semibold text-black leading-none ${className}`}
       style={{ background: color ?? colorForName(name) }}
     >
-      <span className="text-[13px]">{initials(name)}</span>
+      <span className={initialsClassName}>{initials(name)}</span>
     </span>
   );
 }

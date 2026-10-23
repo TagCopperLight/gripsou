@@ -28,6 +28,8 @@ uuid.workspace = true
 dotenvy.workspace = true
 sha2 = "0.10.9"
 base64 = "0.22.1"
+totp-rs = "6.0.0"
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }

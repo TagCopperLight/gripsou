@@ -1,7 +1,10 @@
 pub mod auth;
 mod budget;
+pub mod cli;
 mod dto;
+mod factors;
 mod handlers;
+mod mfa;
 mod security_headers;
 pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
@@ -19,13 +22,44 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
-use crate::throttle::LoginThrottle;
+use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub cors_origins: Arc<RwLock<Vec<String>>>,
     pub login_throttle: Arc<LoginThrottle>,
+    pub second_factor_throttle: Arc<SecondFactorThrottle>,
+    pub totp_key: TotpKey,
+}
+
+/// `ENCRYPTION_KEY` as the second-factor handlers see it. Always present and
+/// valid: the server refuses to start without one (see [`TotpKey::parse`]), so
+/// two-factor authentication is always available.
+#[derive(Clone)]
+pub struct TotpKey(pub Arc<str>);
+
+impl TotpKey {
+    /// Check the raw `ENCRYPTION_KEY` value once, at startup. The error says
+    /// what is wrong without ever repeating the value.
+    pub fn parse(raw: Option<&str>) -> Result<TotpKey, String> {
+        match raw {
+            None | Some("") => Err(
+                "ENCRYPTION_KEY must be set (generate one with `openssl rand -hex 32`)".into(),
+            ),
+            Some(k) if gripsou_core::crypto::parse_key(k).is_err() => Err(
+                "ENCRYPTION_KEY is not a valid key: expected 64 hex characters (`openssl rand -hex 32`)"
+                    .into(),
+            ),
+            Some(k) => Ok(TotpKey(Arc::from(k))),
+        }
+    }
+}
+
+impl FromRef<AppState> for TotpKey {
+    fn from_ref(state: &AppState) -> TotpKey {
+        state.totp_key.clone()
+    }
 }
 
 impl FromRef<AppState> for sqlx::PgPool {
@@ -40,18 +74,31 @@ impl FromRef<AppState> for Arc<LoginThrottle> {
     }
 }
 
+impl FromRef<AppState> for Arc<SecondFactorThrottle> {
+    fn from_ref(state: &AppState) -> Arc<SecondFactorThrottle> {
+        state.second_factor_throttle.clone()
+    }
+}
+
 impl FromRef<AppState> for Arc<RwLock<Vec<String>>> {
     fn from_ref(state: &AppState) -> Arc<RwLock<Vec<String>>> {
         state.cors_origins.clone()
     }
 }
 
-pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<String>) -> Router {
+pub fn router(
+    db: sqlx::PgPool,
+    static_dir: &std::path::Path,
+    initial_cors: Vec<String>,
+    totp_key: TotpKey,
+) -> Router {
     let cors_origins = Arc::new(RwLock::new(initial_cors));
     let app_state = AppState {
         db: db.clone(),
         cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
+        second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
+        totp_key,
     };
 
     let index_html = static_dir.join("index.html");
@@ -59,6 +106,16 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     let api = Router::new()
         .route("/health", get(health))
         .route("/auth/login", post(handlers::login))
+        .route("/auth/login/verify", post(handlers::login_verify))
+        .route("/auth/reauth", post(mfa::reauth))
+        .route("/auth/mfa/status", get(mfa::status))
+        .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
+        .route("/auth/mfa/totp/confirm", post(mfa::totp_confirm))
+        .route("/auth/mfa/totp", delete(mfa::totp_remove))
+        .route(
+            "/auth/mfa/recovery/regenerate",
+            post(mfa::recovery_regenerate),
+        )
         .route(
             "/auth/me",
             get(handlers::me).patch(handlers::update_profile),
@@ -252,4 +309,34 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
 }
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TotpKey;
+
+    const GOOD: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    #[test]
+    fn a_valid_key_is_kept() {
+        assert_eq!(&*TotpKey::parse(Some(GOOD)).unwrap().0, GOOD);
+    }
+
+    #[test]
+    fn a_missing_or_empty_key_is_refused() {
+        for raw in [None, Some("")] {
+            let err = TotpKey::parse(raw).err().unwrap();
+            assert!(err.contains("must be set"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_malformed_key_is_refused_without_its_value() {
+        let zz = "zz".repeat(32);
+        for raw in ["short", "not-a-hex-key-value", &zz, &format!("{GOOD}00")] {
+            let err = TotpKey::parse(Some(raw)).err().unwrap();
+            assert!(err.contains("not a valid key"), "{err}");
+            assert!(!err.contains(raw));
+        }
+    }
 }

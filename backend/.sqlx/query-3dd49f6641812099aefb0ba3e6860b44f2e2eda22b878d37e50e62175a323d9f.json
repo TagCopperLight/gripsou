@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select secret_enc, confirmed_at is not null as \"confirmed!\", last_used_step,\n                  (confirmed_at is null\n                   and created_at > now() - make_interval(mins => $2)) as \"pending!\"\n           from user_totp where user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "secret_enc",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_totp",
+            "name": "secret_enc"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "confirmed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_used_step",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "user_totp",
+            "name": "last_used_step"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pending!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "3dd49f6641812099aefb0ba3e6860b44f2e2eda22b878d37e50e62175a323d9f"
+}

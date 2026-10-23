@@ -3,6 +3,10 @@ use axum::{
     http::{Request, StatusCode},
 };
 use tower::ServiceExt;
+
+fn test_key() -> gripsou_api::TotpKey {
+    gripsou_api::TotpKey::parse(Some(&"a".repeat(64))).unwrap()
+}
 #[tokio::test]
 async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -11,10 +15,11 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, vec!["http://example.test".into()]);
+    let app = gripsou_api::router(db, &dir, vec!["http://example.test".into()], test_key());
     for (path, status) in [
         ("/api/health", StatusCode::OK),
         ("/api/holdings", StatusCode::UNAUTHORIZED),
+        ("/api/auth/mfa/status", StatusCode::UNAUTHORIZED),
         ("/bookmarked/path", StatusCode::NOT_FOUND),
     ] {
         let response = app
@@ -85,7 +90,7 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
         "console.log(1);".repeat(100),
     )
     .unwrap();
-    let app = gripsou_api::router(db, &dir, vec![]);
+    let app = gripsou_api::router(db, &dir, vec![], test_key());
     let get = |path: &str| {
         Request::builder()
             .uri(path)
@@ -129,7 +134,7 @@ async fn every_response_carries_the_security_headers() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, vec![]);
+    let app = gripsou_api::router(db, &dir, vec![], test_key());
 
     for path in ["/api/health", "/api/holdings", "/", "/some/spa/route"] {
         let r = app
@@ -166,4 +171,23 @@ frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
         .unwrap();
     assert_eq!(r.headers()["strict-transport-security"], "max-age=31536000");
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn totp_setup_without_a_token_is_unauthorized() {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://unused:unused@localhost/unused")
+        .unwrap();
+    let app = gripsou_api::router(db, std::path::Path::new("/nonexistent"), vec![], test_key());
+    let r = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/mfa/totp/setup")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }

@@ -205,6 +205,18 @@
     }
   },
   "auth": {
+    "mfa": {
+      "codeTitle": "Enter your code",
+      "backupTitle": "Enter a backup code",
+      "codeLabel": "6-digit code",
+      "backupLabel": "Backup code",
+      "change": "Change",
+      "useBackup": "Use a backup code instead",
+      "useApp": "Use the app instead",
+      "wrongCode": "That code didn't work. Try again.",
+      "expired": "That took too long. Sign in again.",
+      "failed": "Something went wrong. Try again."
+    },
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
     "signInToContinue": "Sign in to continue.",
@@ -266,11 +278,9 @@
     },
     "account": {
       "title": "Account",
-      "profile": "Profile",
       "name": "Name",
       "email": "Email",
       "saveChanges": "Save changes",
-      "profileUpdated": "Profile updated",
       "emailInUse": "That email is already in use",
       "profileUpdateFailed": "Couldn't save changes",
       "password": "Password",
@@ -283,7 +293,6 @@
       "currentPasswordIncorrect": "Current password is incorrect",
       "passwordUpdateFailed": "Couldn't update password",
       "sessions": "Active sessions",
-      "sessionsDescription": "Devices currently signed in to your account.",
       "thisDevice": "This device",
       "sessionRemembered": "Remembered · 30 days",
       "sessionSingle": "This session only",
@@ -305,8 +314,15 @@
       "deleteAccountPending": "Deleting…",
       "deleteAccountError": "Couldn't delete your account",
       "avatar": "Avatar",
-      "uploadImage": "Upload image",
-      "removeImage": "Remove"
+      "removeImage": "Remove",
+      "editProfile": "Edit profile",
+      "changePicture": "Change picture",
+      "pictureError": "That picture couldn't be used.",
+      "security": "Security",
+      "changePassword": "Change",
+      "changePasswordTitle": "Change password",
+      "twoFactor": "Two-factor authentication",
+      "manage": "Manage"
     },
     "users": {
       "title": "Users",
@@ -819,5 +835,37 @@
       "title": "No investments yet",
       "body": "None of your accounts holds securities. Cash isn't counted on this page."
     }
+  },
+  "twoFactor": {
+    "setupTitle": "Set up two-factor",
+    "codesTitle": "Save your backup codes",
+    "stepOf": "Step {{step}} of {{total}}",
+    "continue": "Continue",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "scanIntro": "Scan this QR code with your authenticator app.",
+    "qrAlt": "QR code to scan with your authenticator app",
+    "cantScan": "Can't scan it? Enter this key in the app instead:",
+    "copyKey": "Copy the key",
+    "codeIntro": "Enter the 6-digit code your app shows for gripsou.",
+    "codeLabel": "6-digit code",
+    "codesIntro": "If you lose your phone, each of these codes lets you sign in once. They won't be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "download": "Download",
+    "wrongPassword": "Wrong password.",
+    "wrongCode": "That code didn't work. Try again.",
+    "expired": "This setup took too long and expired. Enter your password to start again.",
+    "failed": "Something went wrong. Try again.",
+    "manageTitle": "Two-factor authentication",
+    "backupCodes": "Backup codes",
+    "codesLeft_one": "{{count}} of 10 left",
+    "codesLeft_other": "{{count}} of 10 left",
+    "newCodes": "New codes",
+    "newCodesTitle": "New backup codes",
+    "turnOff": "Turn off",
+    "turnOffTitle": "Turn off two-factor?",
+    "turnOffBody": "You'll sign in with your password only."
   }
 }

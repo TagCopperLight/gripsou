@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { SessionUser } from "../api/types";
+import type { MfaRequired, SessionUser } from "../api/types";
 import type { UserPrefs } from "../lib/prefs";
 
 export type AuthValue = {
@@ -8,7 +8,14 @@ export type AuthValue = {
   isBootstrapping: boolean;
   /** Current user's prefs, or defaults when logged out. */
   prefs: UserPrefs;
-  login: (email: string, password: string, remember: boolean) => Promise<void>;
+  /** `null` once signed in; the challenge when a second step is needed (nothing stored). */
+  login: (email: string, password: string, remember: boolean) => Promise<MfaRequired | null>;
+  /** Finish a two-factor sign-in with an authenticator or backup code. */
+  verifyLogin: (
+    challenge: string,
+    code: { totp: string } | { recoveryCode: string },
+    remember: boolean,
+  ) => Promise<void>;
   /** Adopt a session returned by invite/reset redemption (auto-login). */
   adoptSession: (token: string, user: SessionUser) => void;
   logout: () => Promise<void>;
