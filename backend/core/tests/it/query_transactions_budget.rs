@@ -1,6 +1,5 @@
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::budget::assign::{set_category, set_tags};
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
 use gripsou_core::repo::query::{
@@ -12,6 +11,7 @@ use gripsou_core::testkit::{
     self, checking_account, checking_account_in, rate_on, seed_cash_instrument,
     seed_user_and_connection, txn, txn_on_day,
 };
+use gripsou_core::testkit::{set_category, set_tags};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -65,7 +65,7 @@ async fn rows_carry_their_category(pool: PgPool) -> anyhow::Result<()> {
         .into_iter()
         .find(|c| c.default_key.as_deref() == Some("groceries"))
         .unwrap();
-    set_category(&pool, user_id, ids[1], Some(groceries.id)).await?;
+    set_category(&pool, user_id, ids[1], Some(groceries.id)).await;
 
     let rows = transactions(&pool, user_id, &filters()).await?;
     let leclerc = rows.iter().find(|r| r.id == ids[1]).unwrap();
@@ -141,8 +141,8 @@ async fn category_filter_is_or_and_tag_filter_is_and(pool: PgPool) -> anyhow::Re
         .find(|c| c.default_key.as_deref() == Some("subscriptions"))
         .unwrap()
         .id;
-    set_category(&pool, user_id, ids[1], Some(groceries)).await?;
-    set_category(&pool, user_id, ids[2], Some(subs)).await?;
+    set_category(&pool, user_id, ids[1], Some(groceries)).await;
+    set_category(&pool, user_id, ids[2], Some(subs)).await;
 
     let either = transactions(
         &pool,
@@ -157,8 +157,8 @@ async fn category_filter_is_or_and_tag_filter_is_and(pool: PgPool) -> anyhow::Re
 
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
     let work = create_tag(&pool, user_id, "Work", None).await?.id;
-    set_tags(&pool, user_id, ids[1], &[holiday, work]).await?;
-    set_tags(&pool, user_id, ids[2], &[holiday]).await?;
+    set_tags(&pool, user_id, ids[1], &[holiday, work]).await;
+    set_tags(&pool, user_id, ids[2], &[holiday]).await;
 
     let both = transactions(
         &pool,
@@ -184,7 +184,7 @@ async fn uncategorized_and_needs_review_filters(pool: PgPool) -> anyhow::Result<
         .unwrap()
         .id;
     // One row categorised by the user, one guessed by the AI at 0.40.
-    set_category(&pool, user_id, ids[1], Some(groceries)).await?;
+    set_category(&pool, user_id, ids[1], Some(groceries)).await;
     sqlx::query(
         "update transaction set budget_category_id = $1, category_source = 'ai', \
          category_confidence = 0.40 where id = $2",
@@ -246,7 +246,7 @@ async fn counts_report_matching_total_and_uncategorized(pool: PgPool) -> anyhow:
         .find(|c| c.default_key.as_deref() == Some("groceries"))
         .unwrap()
         .id;
-    set_category(&pool, user_id, ids[1], Some(groceries)).await?;
+    set_category(&pool, user_id, ids[1], Some(groceries)).await;
 
     let counts = transaction_counts(
         &pool,
@@ -423,7 +423,7 @@ async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<(
     let holiday = create_tag(&pool, user_id, "Holiday", Some("#5b9bf0"))
         .await?
         .id;
-    set_tags(&pool, user_id, ids[1], &[holiday]).await?;
+    set_tags(&pool, user_id, ids[1], &[holiday]).await;
 
     let map = tags_for_transactions(&pool, user_id, &ids).await?;
     assert_eq!(map.get(&ids[1]).map(|v| v.len()), Some(1));
@@ -467,7 +467,7 @@ async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyho
         .into_iter()
         .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
         .unwrap();
-    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await;
 
     let rows = transactions(&pool, user_id, &filters()).await?;
     let row = rows.iter().find(|r| r.id == ids[1]).unwrap();
@@ -508,7 +508,7 @@ async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow:
         .into_iter()
         .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
         .unwrap();
-    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await;
 
     let hidden = TransactionFilters {
         include_transfers: false,
@@ -690,9 +690,9 @@ async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyho
         .into_iter()
         .find(|c| c.system_key.as_deref() == Some("internal_transfer"))
         .unwrap();
-    set_category(&pool, user_id, ids[1], Some(internal.id)).await?;
+    set_category(&pool, user_id, ids[1], Some(internal.id)).await;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
-    set_tags(&pool, user_id, ids[2], &[holiday]).await?;
+    set_tags(&pool, user_id, ids[2], &[holiday]).await;
 
     let cases = [
         filters(),

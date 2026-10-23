@@ -4,11 +4,12 @@ use gripsou_core::dto::CanonicalAccount;
 use gripsou_core::error::CoreError;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    apply_category_to_same_description, bulk_set_category, count_paired, set_category,
+    BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
+    patch_transaction,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::transaction::upsert_transaction;
-use gripsou_core::testkit::{checking_account, seed_user_and_connection, txn};
+use gripsou_core::testkit::{checking_account, seed_user_and_connection, set_category, txn};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -702,7 +703,7 @@ async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::
 async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
-    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+    set_category(&pool, user_id, out, Some(groceries)).await;
 
     let (a, ts): (Uuid, DateTime<Utc>) =
         sqlx::query_as("select account_id, ts from transaction where id = $1")
@@ -1171,7 +1172,7 @@ async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<(
 async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let savings = by_key(&pool, user_id, "savings").await?;
-    assert!(set_category(&pool, user_id, out, Some(savings)).await?);
+    set_category(&pool, user_id, out, Some(savings)).await;
     assert_eq!(
         row(&pool, out).await?.1,
         Some(inn),
@@ -1202,7 +1203,7 @@ async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow
         .fetch_one(&pool)
         .await?;
     let groceries = a_category(&pool, user_id).await?;
-    assert!(set_category(&pool, user_id, stray, Some(groceries)).await?);
+    set_category(&pool, user_id, stray, Some(groceries)).await;
 
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
     assert_eq!(row(&pool, out).await?.1, Some(inn));
@@ -1214,7 +1215,7 @@ async fn categorising_one_half_unlinks_both(pool: PgPool) -> anyhow::Result<()> 
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
 
-    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+    set_category(&pool, user_id, out, Some(groceries)).await;
 
     let touched = row(&pool, out).await?;
     assert_eq!(touched.1, None, "the touched half keeps no pair link");
@@ -1235,7 +1236,7 @@ async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
     let before = row(&pool, inn).await?;
     let groceries = a_category(&pool, user_id).await?;
 
-    assert!(set_category(&pool, user_id, out, Some(groceries)).await?);
+    set_category(&pool, user_id, out, Some(groceries)).await;
 
     let after = row(&pool, inn).await?;
     assert_eq!(after.2, before.2, "category untouched");
@@ -1250,7 +1251,7 @@ async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
 async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
 
-    assert!(set_category(&pool, user_id, out, None).await?);
+    set_category(&pool, user_id, out, None).await;
 
     assert_eq!(row(&pool, out).await?.1, None);
     assert_eq!(row(&pool, inn).await?.1, None);
@@ -1261,27 +1262,23 @@ async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result
 #[sqlx::test(migrations = "../migrations")]
 async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, out, inn) = seeded_pair(&pool).await?;
-    let stranger = Uuid::new_v4();
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
 
-    assert!(!set_category(&pool, stranger, out, None).await?);
+    let outcome = patch_transaction(
+        &pool,
+        stranger,
+        out,
+        &TransactionPatch {
+            category_id: Some(None),
+            ..TransactionPatch::default()
+        },
+        true,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::NotFound);
 
     assert_eq!(row(&pool, out).await?.1, Some(inn));
     assert_eq!(row(&pool, inn).await?.1, Some(out));
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn a_bulk_category_write_unlinks_the_pairs_it_touches(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, out, inn) = seeded_pair(&pool).await?;
-    let groceries = a_category(&pool, user_id).await?;
-
-    assert_eq!(
-        bulk_set_category(&pool, user_id, &[out], Some(groceries)).await?,
-        1
-    );
-
-    assert_eq!(row(&pool, out).await?.1, None);
-    assert_eq!(row(&pool, inn).await?.1, None);
     Ok(())
 }
 
@@ -1293,8 +1290,8 @@ async fn a_bulk_write_covering_both_halves_unlinks_cleanly(pool: PgPool) -> anyh
     let groceries = a_category(&pool, user_id).await?;
 
     assert_eq!(
-        bulk_set_category(&pool, user_id, &[out, inn], Some(groceries)).await?,
-        2
+        bulk_apply(&pool, user_id, &[out, inn], category(groceries), true).await?,
+        WriteOutcome::Done(2)
     );
 
     assert_eq!(row(&pool, out).await?.1, None);
@@ -1311,11 +1308,16 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
 
     // Both halves are seeded with the same description ("VIREMENT"), so this
     // sweeps up the counterpart as well as the row it was launched from.
-    assert!(
-        !apply_category_to_same_description(&pool, user_id, out, Some(groceries))
-            .await?
-            .is_empty()
-    );
+    let outcome = apply_to_description(
+        &pool,
+        user_id,
+        out,
+        Some(groceries),
+        SameDescription::All,
+        true,
+    )
+    .await?;
+    assert!(matches!(outcome, WriteOutcome::Done(ids) if ids.len() == 2));
 
     assert_eq!(row(&pool, out).await?.1, None);
     assert_eq!(row(&pool, inn).await?.1, None);
@@ -1330,32 +1332,41 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
 // server counts them, and a caller that has not confirmed writes nothing.
 // ---------------------------------------------------------------------------
 
+/// A bulk category write over this selection, the way the Transactions page
+/// sends it.
+fn category(id: Uuid) -> BulkChanges<'static> {
+    BulkChanges {
+        category_id: Some(Some(id)),
+        ..BulkChanges::default()
+    }
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn counts_the_pairs_a_write_would_break(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
+    let groceries = a_category(&pool, user_id).await?;
 
-    assert_eq!(count_paired(&pool, user_id, &[out]).await?, 1);
     assert_eq!(
-        count_paired(&pool, user_id, &[out, inn]).await?,
-        2,
+        bulk_apply(&pool, user_id, &[out], category(groceries), false).await?,
+        WriteOutcome::PendingPairBreaks(1)
+    );
+    assert_eq!(
+        bulk_apply(&pool, user_id, &[out, inn], category(groceries), false).await?,
+        WriteOutcome::PendingPairBreaks(2),
         "both halves count: the modal reports rows affected, not pairs"
     );
     Ok(())
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn an_unpaired_selection_counts_nothing(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, a, _b) = two_accounts(&pool, "EUR").await?;
-    let lonely = tx_at(&pool, a, "acct-a", "x1", Decimal::new(-1200, 2), Utc::now()).await?;
-
-    assert_eq!(count_paired(&pool, user_id, &[lonely]).await?, 0);
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
 async fn another_users_pairs_are_not_counted(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, out, _inn) = seeded_pair(&pool).await?;
+    let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let theirs = a_category(&pool, stranger).await?;
 
-    assert_eq!(count_paired(&pool, Uuid::new_v4(), &[out]).await?, 0);
+    assert_eq!(
+        bulk_apply(&pool, stranger, &[out], category(theirs), false).await?,
+        WriteOutcome::Done(0)
+    );
     Ok(())
 }

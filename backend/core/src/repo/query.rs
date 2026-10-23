@@ -600,31 +600,11 @@ pub async fn account_series(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<AccountSeriesRow>, CoreError> {
-    account_series_with_target(
-        pool,
-        user_id,
-        from,
-        to,
-        crate::repo::series::CHART_TARGET_POINTS,
-    )
-    .await
-}
-
-/// Same as [`account_series`] but with the sample target exposed — see
-/// [`net_worth_series_with_target`] for why this seam exists. Not part of the
-/// public API.
-#[doc(hidden)]
-pub async fn account_series_with_target(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    from: NaiveDate,
-    to: NaiveDate,
-    target: usize,
-) -> Result<Vec<AccountSeriesRow>, CoreError> {
     let start = crate::repo::series::history_start(pool, user_id)
         .await?
         .map_or(from, |h| h.max(from));
-    let days = crate::repo::series::sample_days(start, to, target);
+    let days =
+        crate::repo::series::sample_days(start, to, crate::repo::series::CHART_TARGET_POINTS);
 
     let rows = sqlx::query_as!(
         AccountSeriesRow,
@@ -955,9 +935,9 @@ pub struct TransactionFilters {
     pub offset: i64,
 }
 
-impl TransactionFilters {
-    /// Everything, unfiltered — the base a caller mutates.
-    pub fn unfiltered() -> Self {
+/// Everything, unfiltered — the base a caller mutates.
+impl Default for TransactionFilters {
+    fn default() -> Self {
         Self {
             search: None,
             account_id: None,

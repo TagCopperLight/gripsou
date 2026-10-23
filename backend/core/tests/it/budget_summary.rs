@@ -1,10 +1,10 @@
 use chrono::NaiveDate;
 use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::budget::assign::set_category;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::summary::day_category_totals;
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{
     checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
     txn_on_day,
@@ -61,7 +61,7 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
         .fetch_all(&pool)
         .await?;
     for id in &ids {
-        set_category(&pool, user_id, *id, Some(groceries)).await?;
+        set_category(&pool, user_id, *id, Some(groceries)).await;
     }
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
@@ -196,7 +196,7 @@ async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<
     let id: Uuid = sqlx::query_scalar("select id from transaction")
         .fetch_one(&pool)
         .await?;
-    set_category(&pool, user_id, id, Some(ignore)).await?;
+    set_category(&pool, user_id, id, Some(ignore)).await;
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
     assert!(rows.is_empty(), "a neutral category appears nowhere");
@@ -227,7 +227,7 @@ async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
     let id: Uuid = sqlx::query_scalar("select id from transaction")
         .fetch_one(&pool)
         .await?;
-    set_category(&pool, user_id, id, Some(investments)).await?;
+    set_category(&pool, user_id, id, Some(investments)).await;
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
     assert!(

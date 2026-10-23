@@ -77,7 +77,7 @@ fn review_filter(threshold: Decimal) -> TransactionFilters {
         needs_review: true,
         include_transfers: true,
         review_threshold: threshold,
-        ..TransactionFilters::unfiltered()
+        ..TransactionFilters::default()
     }
 }
 

@@ -738,15 +738,9 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
             .fetch_one(&pool)
             .await?;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
-        &mut conn,
-        usd,
-        chrono::Utc::now(),
-        "0.90".parse()?,
-        "EUR",
-    )
-    .await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(&mut conn, usd, chrono::Utc::now(), "0.90".parse()?, "EUR")
+        .await?;
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity_id,
         chrono::Utc::now(),
@@ -885,15 +879,9 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
             .fetch_one(&pool)
             .await?;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
-        &mut conn,
-        usd,
-        chrono::Utc::now(),
-        "0.90".parse()?,
-        "EUR",
-    )
-    .await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(&mut conn, usd, chrono::Utc::now(), "0.90".parse()?, "EUR")
+        .await?;
+    gripsou_core::testkit::insert_price(
         &mut conn,
         cny_id,
         chrono::Utc::now(),
@@ -901,7 +889,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         "EUR",
     )
     .await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity_id,
         chrono::Utc::now(),
@@ -1022,7 +1010,7 @@ async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> a
             .fetch_one(&pool)
             .await?;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity_id,
         chrono::Utc::now(),
@@ -1085,7 +1073,7 @@ async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Re
             .fetch_one(&pool)
             .await?;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity_id,
         chrono::Utc::now(),

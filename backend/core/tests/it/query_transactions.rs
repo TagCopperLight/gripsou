@@ -15,7 +15,7 @@ fn all() -> TransactionFilters {
     TransactionFilters {
         limit: 100,
         offset: 0,
-        ..TransactionFilters::unfiltered()
+        ..TransactionFilters::default()
     }
 }
 

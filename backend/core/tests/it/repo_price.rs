@@ -1,5 +1,6 @@
 use chrono::{TimeZone, Utc};
-use gripsou_core::repo::price::{insert_price, insert_prices, latest_price_ts};
+use gripsou_core::repo::price::{insert_prices, latest_price_ts};
+use gripsou_core::testkit::insert_price;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;

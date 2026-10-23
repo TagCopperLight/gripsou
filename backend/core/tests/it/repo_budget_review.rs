@@ -1,9 +1,9 @@
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::budget::assign::set_category;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::review::{ReviewWrite, accept, review_count, undo};
 use gripsou_core::repo::query::{TransactionFilters, transaction_counts};
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{checking_account, seed_user_and_connection, txn};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -121,7 +121,7 @@ async fn undo_after_a_correction_restores_the_ai_guess(pool: PgPool) -> anyhow::
         .find(|c| c.default_key.as_deref() == Some("restaurants"))
         .unwrap()
         .id;
-    set_category(&pool, user_id, id, Some(other)).await?;
+    set_category(&pool, user_id, id, Some(other)).await;
     undo(
         &pool,
         user_id,
@@ -195,7 +195,7 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
             needs_review: true,
             include_transfers: true,
             review_threshold: threshold,
-            ..TransactionFilters::unfiltered()
+            ..TransactionFilters::default()
         };
         let listed = transaction_counts(&pool, user_id, &f).await?.matching;
         assert_eq!(listed, expected, "at {threshold}");

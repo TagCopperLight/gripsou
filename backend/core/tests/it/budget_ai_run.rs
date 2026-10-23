@@ -9,9 +9,9 @@ use gripsou_core::categorize::{
 };
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::ai::{last_run, remaining, work_chunk};
-use gripsou_core::repo::budget::assign::set_category;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::set_category;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -62,7 +62,7 @@ impl Categorizer for Mock {
         req: &CategorizeRequest,
     ) -> Result<CategorizeOutput, CategorizeError> {
         if let Some((pool, user, txn, cat)) = &self.edit_during_call {
-            set_category(pool, *user, *txn, Some(*cat)).await.unwrap();
+            set_category(pool, *user, *txn, Some(*cat)).await;
         }
         let n = {
             let mut seen = self.seen.lock().unwrap();
@@ -241,8 +241,8 @@ async fn confirmed_rows_with_the_same_description_are_evidence(pool: PgPool) -> 
         .unwrap()
         .id;
     // The two older rows are the user's own decisions.
-    set_category(&pool, user_id, ids[1], Some(subscriptions)).await?;
-    set_category(&pool, user_id, ids[2], Some(subscriptions)).await?;
+    set_category(&pool, user_id, ids[1], Some(subscriptions)).await;
+    set_category(&pool, user_id, ids[2], Some(subscriptions)).await;
     let mock = Mock::new(50, vec![abstain_all()]);
 
     run_for_user(&pool, user_id, &mock).await?;
@@ -278,7 +278,7 @@ async fn a_similar_confirmed_description_is_a_neighbour(pool: PgPool) -> anyhow:
         .find(|c| c.default_key.as_deref() == Some("groceries"))
         .unwrap()
         .id;
-    set_category(&pool, user_id, ids[1], Some(groceries)).await?;
+    set_category(&pool, user_id, ids[1], Some(groceries)).await;
     let mock = Mock::new(50, vec![abstain_all()]);
     run_for_user(&pool, user_id, &mock).await?;
     let ex = &mock.requests()[0].items[0].examples;

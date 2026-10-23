@@ -1,10 +1,8 @@
 use chrono::{DateTime, Utc};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, SameDescription, TransactionPatch, WriteOutcome,
-    apply_category_to_same_description, apply_to_description, bulk_add_tags, bulk_apply,
-    bulk_set_category, bulk_set_checked, count_paired_same_description, count_same_description,
-    patch_transaction, set_category, set_checked, set_tags,
+    BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
+    count_same_description, patch_transaction,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -46,11 +44,44 @@ async fn fixture(pool: &PgPool, descriptions: &[&str]) -> anyhow::Result<(Uuid, 
     Ok((user_id, groceries, ids))
 }
 
+/// A single-row save carrying only these changes.
+async fn patch(
+    pool: &PgPool,
+    user_id: Uuid,
+    id: Uuid,
+    patch: TransactionPatch<'_>,
+) -> anyhow::Result<WriteOutcome<()>> {
+    Ok(patch_transaction(pool, user_id, id, &patch, false).await?)
+}
+
+/// "Apply to every row with this description", unconfirmed; the ids written.
+async fn apply_to_all(
+    pool: &PgPool,
+    user_id: Uuid,
+    id: Uuid,
+    category_id: Option<Uuid>,
+) -> anyhow::Result<Vec<Uuid>> {
+    match apply_to_description(pool, user_id, id, category_id, SameDescription::All, false).await? {
+        WriteOutcome::Done(ids) => Ok(ids),
+        other => panic!("expected a write, got {other:?}"),
+    }
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn assigning_a_category_marks_it_as_the_users_own(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
 
-    assert!(set_category(&pool, user_id, ids[0], Some(groceries)).await?);
+    let outcome = patch(
+        &pool,
+        user_id,
+        ids[0],
+        TransactionPatch {
+            category_id: Some(Some(groceries)),
+            ..TransactionPatch::default()
+        },
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::Done(()));
 
     let (cat, source, reviewed): (Option<Uuid>, Option<String>, Option<chrono::DateTime<chrono::Utc>>) =
         sqlx::query_as("select budget_category_id, category_source, category_reviewed_at from transaction where id = $1")
@@ -69,9 +100,19 @@ async fn assigning_a_category_marks_it_as_the_users_own(pool: PgPool) -> anyhow:
 #[sqlx::test(migrations = "../migrations")]
 async fn clearing_a_category_returns_the_row_to_the_pipeline(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
-    set_category(&pool, user_id, ids[0], Some(groceries)).await?;
-
-    assert!(set_category(&pool, user_id, ids[0], None).await?);
+    for category_id in [Some(groceries), None] {
+        let outcome = patch(
+            &pool,
+            user_id,
+            ids[0],
+            TransactionPatch {
+                category_id: Some(category_id),
+                ..TransactionPatch::default()
+            },
+        )
+        .await?;
+        assert_eq!(outcome, WriteOutcome::Done(()));
+    }
 
     let (cat, source): (Option<Uuid>, Option<String>) =
         sqlx::query_as("select budget_category_id, category_source from transaction where id = $1")
@@ -84,33 +125,26 @@ async fn clearing_a_category_returns_the_row_to_the_pipeline(pool: PgPool) -> an
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn a_foreign_category_or_transaction_is_refused(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
-    let (stranger, _c) = seed_user_and_connection(&pool).await;
-    let stranger_category = list_categories(&pool, stranger).await?[0].id;
-
-    assert!(
-        !set_category(&pool, stranger, ids[0], None).await?,
-        "not their transaction"
-    );
-    assert!(
-        !set_category(&pool, user_id, ids[0], Some(stranger_category)).await?,
-        "not their category"
-    );
-    // The good pair still works, proving the refusals were specific.
-    assert!(set_category(&pool, user_id, ids[0], Some(groceries)).await?);
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn set_tags_replaces_the_whole_set(pool: PgPool) -> anyhow::Result<()> {
+async fn a_patch_replaces_the_whole_tag_set(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
     let work = create_tag(&pool, user_id, "Work", None).await?.id;
+    fn tags(tag_ids: &[Uuid]) -> TransactionPatch<'_> {
+        TransactionPatch {
+            tag_ids: Some(tag_ids),
+            ..TransactionPatch::default()
+        }
+    }
+    let (both, just_work) = ([holiday, work], [work]);
 
-    assert!(set_tags(&pool, user_id, ids[0], &[holiday, work]).await?);
-    assert!(set_tags(&pool, user_id, ids[0], &[work]).await?);
-
+    assert_eq!(
+        patch(&pool, user_id, ids[0], tags(&both)).await?,
+        WriteOutcome::Done(())
+    );
+    assert_eq!(
+        patch(&pool, user_id, ids[0], tags(&just_work)).await?,
+        WriteOutcome::Done(())
+    );
     let left: Vec<Uuid> =
         sqlx::query_scalar("select tag_id from budget_transaction_tag where transaction_id = $1")
             .bind(ids[0])
@@ -118,8 +152,9 @@ async fn set_tags_replaces_the_whole_set(pool: PgPool) -> anyhow::Result<()> {
             .await?;
     assert_eq!(left, vec![work]);
 
-    assert!(
-        set_tags(&pool, user_id, ids[0], &[]).await?,
+    assert_eq!(
+        patch(&pool, user_id, ids[0], tags(&[])).await?,
+        WriteOutcome::Done(()),
         "clearing is allowed"
     );
     let none: i64 =
@@ -134,8 +169,12 @@ async fn set_tags_replaces_the_whole_set(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn checked_is_a_timestamp_the_engine_never_reads(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let checked = |checked| TransactionPatch {
+        checked: Some(checked),
+        ..TransactionPatch::default()
+    };
 
-    assert!(set_checked(&pool, user_id, ids[0], true).await?);
+    patch(&pool, user_id, ids[0], checked(true)).await?;
     let stamped: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("select checked_at from transaction where id = $1")
             .bind(ids[0])
@@ -143,7 +182,7 @@ async fn checked_is_a_timestamp_the_engine_never_reads(pool: PgPool) -> anyhow::
             .await?;
     assert!(stamped.is_some());
 
-    assert!(set_checked(&pool, user_id, ids[0], false).await?);
+    patch(&pool, user_id, ids[0], checked(false)).await?;
     let cleared: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("select checked_at from transaction where id = $1")
             .bind(ids[0])
@@ -158,19 +197,36 @@ async fn bulk_operations_touch_only_the_users_rows(pool: PgPool) -> anyhow::Resu
     let (user_id, groceries, ids) = fixture(&pool, &["A", "B", "C"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
     let (stranger, _c) = seed_user_and_connection(&pool).await;
+    let holiday = [holiday];
+    let everything = || BulkChanges {
+        category_id: Some(Some(groceries)),
+        add_tag_ids: Some(&holiday),
+        checked: Some(true),
+    };
 
     assert_eq!(
-        bulk_set_category(&pool, user_id, &ids, Some(groceries)).await?,
-        3
+        bulk_apply(&pool, user_id, &ids, everything(), false).await?,
+        WriteOutcome::Done(3)
     );
-    assert_eq!(bulk_add_tags(&pool, user_id, &ids, &[holiday]).await?, 3);
-    assert_eq!(bulk_set_checked(&pool, user_id, &ids, true).await?, 3);
     // Re-adding the same tag is idempotent, not an error.
-    assert_eq!(bulk_add_tags(&pool, user_id, &ids, &[holiday]).await?, 3);
+    assert_eq!(
+        bulk_apply(&pool, user_id, &ids, everything(), false).await?,
+        WriteOutcome::Done(3)
+    );
 
     assert_eq!(
-        bulk_set_category(&pool, stranger, &ids, None).await?,
-        0,
+        bulk_apply(
+            &pool,
+            stranger,
+            &ids,
+            BulkChanges {
+                category_id: Some(None),
+                ..BulkChanges::default()
+            },
+            false,
+        )
+        .await?,
+        WriteOutcome::Done(0),
         "a stranger's bulk write hits nothing"
     );
     let still: i64 =
@@ -206,8 +262,7 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
         0
     );
 
-    let mut written =
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries)).await?;
+    let mut written = apply_to_all(&pool, user_id, ids[0], Some(groceries)).await?;
     written.sort();
     let mut twins = vec![ids[0], ids[1]];
     twins.sort();
@@ -225,10 +280,21 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
 /// touched by any definition, even though every id in `txn_ids` is this
 /// user's own and would otherwise count as "matched".
 #[sqlx::test(migrations = "../migrations")]
-async fn bulk_add_tags_with_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<()> {
+async fn a_bulk_adding_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["A", "B"]).await?;
 
-    assert_eq!(bulk_add_tags(&pool, user_id, &ids, &[]).await?, 0);
+    let outcome = bulk_apply(
+        &pool,
+        user_id,
+        &ids,
+        BulkChanges {
+            add_tag_ids: Some(&[]),
+            ..BulkChanges::default()
+        },
+        false,
+    )
+    .await?;
+    assert_eq!(outcome, WriteOutcome::Done(0));
 
     let none: i64 = sqlx::query_scalar("select count(*) from budget_transaction_tag")
         .fetch_one(&pool)
@@ -237,7 +303,7 @@ async fn bulk_add_tags_with_no_tags_touches_nothing(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// Regression: `apply_category_to_same_description` must
+/// Regression: applying to the same description must
 /// agree with `count_same_description` on which rows count as "the same
 /// merchant" — a blank (null) description never clusters with other blank
 /// descriptions, and an anchor whose own description is blank applies to
@@ -272,7 +338,7 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
         .id;
 
     assert_eq!(
-        apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+        apply_to_all(&pool, user_id, ids[0], Some(groceries))
             .await?
             .len(),
         0,
@@ -288,7 +354,7 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
 }
 
 /// Regression: `count_same_description` and
-/// `apply_category_to_same_description` must agree in both directions, not
+/// `apply_to_description` must agree in both directions, not
 /// just on a blank/null anchor. `budget_norm_description` collapses any run
 /// of 2+ digits, so two *unrelated* digit-only descriptions ("12345",
 /// "98765") both normalise to `''` and must not cluster as the same
@@ -300,7 +366,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     let (user_id, groceries, ids) = fixture(&pool, &["12345", "98765", "SPOTIFY"]).await?;
 
     let count = count_same_description(&pool, user_id, ids[0], SameDescription::All).await?;
-    let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+    let applied = apply_to_all(&pool, user_id, ids[0], Some(groceries))
         .await?
         .len();
 
@@ -319,7 +385,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
 /// present. Before this fix, `count_same_description`'s anchor subquery had
 /// no normalised-value guard, so it would report the digit-only sibling as
 /// "the same description" (both normalise to `''`) while
-/// `apply_category_to_same_description` correctly refused to touch anything.
+/// `apply_to_description` correctly refused to touch anything.
 /// The preview and the apply must show the same number: zero.
 #[sqlx::test(migrations = "../migrations")]
 async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
@@ -356,7 +422,7 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         .id;
 
     let count = count_same_description(&pool, user_id, ids[0], SameDescription::All).await?;
-    let applied = apply_category_to_same_description(&pool, user_id, ids[0], Some(groceries))
+    let applied = apply_to_all(&pool, user_id, ids[0], Some(groceries))
         .await?
         .len();
 
@@ -518,35 +584,6 @@ async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn counts_the_pairs_an_apply_to_description_would_break(pool: PgPool) -> anyhow::Result<()> {
-    // Both rows share a description, and one of them is half of a pair — so
-    // widening the correction to the description sweeps the pair up too.
-    let (user_id, _groceries, ids) = fixture(&pool, &["VIREMENT", "VIREMENT"]).await?;
-    sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
-        .bind(ids[1])
-        .bind(ids[0])
-        .execute(&pool)
-        .await?;
-
-    assert_eq!(
-        count_paired_same_description(&pool, user_id, ids[0]).await?,
-        1
-    );
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn an_unpaired_description_counts_nothing(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC", "LECLERC"]).await?;
-
-    assert_eq!(
-        count_paired_same_description(&pool, user_id, ids[0]).await?,
-        0
-    );
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // The checked writes the API calls: all or nothing, and pairs confirmed.
 // ---------------------------------------------------------------------------
@@ -611,10 +648,6 @@ async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resu
     .await?;
     assert_eq!(outcome, WriteOutcome::UnknownTag);
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
-
-    // The low-level writer leaves a foreign tag out rather than failing.
-    assert!(set_tags(&pool, user_id, ids[0], &[mine, theirs]).await?);
-    assert_eq!(row_state(&pool, ids[0]).await.2, 1);
     Ok(())
 }
 
@@ -646,30 +679,38 @@ async fn a_patch_saves_every_field_together(pool: PgPool) -> anyhow::Result<()> 
 /// Tags, ✓ and category on someone else's row: refused, and nothing moves.
 #[sqlx::test(migrations = "../migrations")]
 async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
+    let (_user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let (stranger, _c) = seed_user_and_connection(&pool).await;
     let their_tag = create_tag(&pool, stranger, "Work", None).await?.id;
-    let my_tag = create_tag(&pool, user_id, "Holiday", None).await?.id;
 
-    assert!(!set_tags(&pool, stranger, ids[0], &[their_tag]).await?);
-    assert!(!set_checked(&pool, stranger, ids[0], true).await?);
     assert_eq!(
-        bulk_add_tags(&pool, stranger, &ids, &[their_tag, my_tag]).await?,
-        0
-    );
-    assert_eq!(
-        patch_transaction(
+        patch(
             &pool,
             stranger,
             ids[0],
-            &TransactionPatch {
+            TransactionPatch {
+                tag_ids: Some(&[their_tag]),
                 checked: Some(true),
                 ..TransactionPatch::default()
+            },
+        )
+        .await?,
+        WriteOutcome::NotFound
+    );
+    assert_eq!(
+        bulk_apply(
+            &pool,
+            stranger,
+            &ids,
+            BulkChanges {
+                add_tag_ids: Some(&[their_tag]),
+                checked: Some(true),
+                ..BulkChanges::default()
             },
             false,
         )
         .await?,
-        WriteOutcome::NotFound
+        WriteOutcome::Done(0)
     );
     assert_eq!(
         apply_to_description(
@@ -682,11 +723,6 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
         )
         .await?,
         WriteOutcome::NotFound
-    );
-    assert!(
-        apply_category_to_same_description(&pool, stranger, ids[0], None)
-            .await?
-            .is_empty()
     );
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())

@@ -1336,9 +1336,7 @@ mod handler_tests {
         let spend = seed_txn(&pool, account, "LECLERC").await;
         let transfer = seed_txn(&pool, account, "VIREMENT").await;
         let internal = category(&pool, user_id, "internal_transfer").await;
-        assign::set_category(&pool, user_id, transfer, Some(internal))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, user_id, transfer, Some(internal)).await;
 
         let r = bulk(
             &pool,
@@ -1757,9 +1755,7 @@ mod handler_tests {
         let (stranger, _) = seed_user(&pool).await;
         let txn = seed_txn(&pool, account, "LECLERC").await;
         let groceries = category(&pool, owner, "groceries").await;
-        assign::set_category(&pool, owner, txn, Some(groceries))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, owner, txn, Some(groceries)).await;
         let before = review_state(&pool, txn).await;
 
         let err = undo(&pool, stranger, txn, json!({ "categoryId": null }))
@@ -1778,9 +1774,7 @@ mod handler_tests {
         let txn = seed_txn(&pool, account, "LECLERC").await;
         let groceries = category(&pool, owner, "groceries").await;
         let theirs = category(&pool, stranger, "groceries").await;
-        assign::set_category(&pool, owner, txn, Some(groceries))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, owner, txn, Some(groceries)).await;
         let before = review_state(&pool, txn).await;
 
         let status = undo(&pool, owner, txn, json!({ "categoryId": theirs }))
@@ -2008,9 +2002,7 @@ mod handler_tests {
         let (user_id, account) = seed_user(&pool).await;
         let txn = seed_txn(&pool, account, "LECLERC").await;
         let groceries = category(&pool, user_id, "groceries").await;
-        assign::set_category(&pool, user_id, txn, Some(groceries))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, user_id, txn, Some(groceries)).await;
         let before = review_state(&pool, txn).await;
         for c in ["-0.01", "1.01"] {
             let status = undo(
@@ -2228,9 +2220,7 @@ mod handler_tests {
         let groceries = category(&pool, user_id, "groceries").await;
         for (day, amount) in [("2026-02-10", -40), ("2026-03-10", -30)] {
             let t = seed_dated(&pool, account, day, amount, "LECLERC").await;
-            assign::set_category(&pool, user_id, t, Some(groceries))
-                .await
-                .unwrap();
+            gripsou_core::testkit::set_category(&pool, user_id, t, Some(groceries)).await;
         }
 
         let t = trend_of(&pool, user_id, json!({ "anchor": "2026-03", "months": 3 }))
@@ -2256,9 +2246,7 @@ mod handler_tests {
         let (user_id, account) = seed_user(&pool).await;
         let other = category(&pool, user_id, "other_expense").await;
         let t = seed_dated(&pool, account, "2026-03-10", -25, "MISC").await;
-        assign::set_category(&pool, user_id, t, Some(other))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, user_id, t, Some(other)).await;
 
         let t = trend_of(&pool, user_id, json!({ "anchor": "2026-03", "months": 3 }))
             .await
@@ -2286,9 +2274,7 @@ mod handler_tests {
         seed_dated(&pool, account, "2026-03-11", -20, "FNAC").await;
         seed_dated(&pool, stranger_account, "2026-03-11", -999, "FNAC").await;
         let groceries = category(&pool, user_id, "groceries").await;
-        assign::set_category(&pool, user_id, a, Some(groceries))
-            .await
-            .unwrap();
+        gripsou_core::testkit::set_category(&pool, user_id, a, Some(groceries)).await;
 
         let counts = |params: serde_json::Value| {
             let pool = pool.clone();

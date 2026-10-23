@@ -24,7 +24,7 @@ pub async fn prepare(
     pool: &sqlx::PgPool,
     fixture: &Fixture,
 ) -> anyhow::Result<PreparedCase> {
-    let mut filters = gripsou_core::repo::query::TransactionFilters::unfiltered();
+    let mut filters = gripsou_core::repo::query::TransactionFilters::default();
     match case.id.as_str() {
         "transactions.page.deep" => filters.offset = 10000,
         "transactions.search.common" => filters.search = Some("Market".into()),

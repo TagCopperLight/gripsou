@@ -9,6 +9,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
+use crate::error::CoreError;
+use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transaction};
 
 /// Insert a user with a unique email, role `user` and a password hash that
 /// matches nothing. Every other column keeps its default.
@@ -221,6 +223,18 @@ pub fn txn_on_day(
     }
 }
 
+/// Upsert one price point, in any currency.
+pub async fn insert_price(
+    conn: &mut sqlx::PgConnection,
+    instrument_id: Uuid,
+    ts: DateTime<Utc>,
+    unit_price: Decimal,
+    currency: &str,
+) -> Result<(), CoreError> {
+    crate::repo::price::insert_prices(conn, instrument_id, &[(ts, unit_price)], currency).await?;
+    Ok(())
+}
+
 /// Insert one price point for an instrument.
 pub async fn insert_price_on(
     pool: &PgPool,
@@ -229,7 +243,7 @@ pub async fn insert_price_on(
     unit_price: Decimal,
 ) {
     let mut conn = pool.acquire().await.unwrap();
-    crate::repo::price::insert_price(&mut conn, instrument_id, ts, unit_price, "EUR")
+    insert_price(&mut conn, instrument_id, ts, unit_price, "EUR")
         .await
         .unwrap();
 }
@@ -311,7 +325,7 @@ pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
 /// One rate for one currency on one day.
 pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
     let mut conn = pool.acquire().await.unwrap();
-    crate::repo::price::insert_price(
+    insert_price(
         &mut conn,
         instrument_id,
         d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
@@ -320,4 +334,42 @@ pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Dec
     )
     .await
     .unwrap();
+}
+
+/// File one of the user's rows under a category (or clear it) the way the
+/// user does, pair breaks confirmed. Panics when the row or the category is
+/// not the user's.
+pub async fn set_category(pool: &PgPool, user_id: Uuid, txn_id: Uuid, category_id: Option<Uuid>) {
+    patch(
+        pool,
+        user_id,
+        txn_id,
+        &TransactionPatch {
+            category_id: Some(category_id),
+            ..TransactionPatch::default()
+        },
+    )
+    .await;
+}
+
+/// Replace one of the user's rows' tags the way the user does. Panics when
+/// the row or a tag is not the user's.
+pub async fn set_tags(pool: &PgPool, user_id: Uuid, txn_id: Uuid, tag_ids: &[Uuid]) {
+    patch(
+        pool,
+        user_id,
+        txn_id,
+        &TransactionPatch {
+            tag_ids: Some(tag_ids),
+            ..TransactionPatch::default()
+        },
+    )
+    .await;
+}
+
+async fn patch(pool: &PgPool, user_id: Uuid, txn_id: Uuid, patch: &TransactionPatch<'_>) {
+    let outcome = patch_transaction(pool, user_id, txn_id, patch, true)
+        .await
+        .unwrap();
+    assert_eq!(outcome, WriteOutcome::Done(()));
 }

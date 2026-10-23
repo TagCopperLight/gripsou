@@ -52,7 +52,7 @@ async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> any
     let cny = cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
     for (d, rate) in [("2026-08-10", "0.10"), ("2026-08-12", "0.12")] {
-        gripsou_core::repo::price::insert_price(
+        gripsou_core::testkit::insert_price(
             &mut conn,
             cny,
             format!("{d}T00:00:00Z").parse()?,
@@ -85,7 +85,7 @@ async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> any
 async fn unit_value_asof_of_cash_is_the_fx_rate(pool: PgPool) -> anyhow::Result<()> {
     let cny = cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         cny,
         "2026-08-12T00:00:00Z".parse()?,
@@ -118,7 +118,7 @@ async fn unit_value_asof_converts_using_the_price_rows_own_currency(
     .await?;
 
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         usd,
         "2026-08-12T00:00:00Z".parse()?,
@@ -126,7 +126,7 @@ async fn unit_value_asof_converts_using_the_price_rows_own_currency(
         "EUR",
     )
     .await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity,
         "2026-08-12T00:00:00Z".parse()?,
@@ -153,7 +153,7 @@ async fn unit_value_asof_is_null_when_the_rate_is_missing(pool: PgPool) -> anyho
     .fetch_one(&pool)
     .await?;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         equity,
         "2026-08-12T00:00:00Z".parse()?,
@@ -192,7 +192,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
     // Reporting in USD with a known rate → that rate.
     let usd = cash_instrument(&pool, "USD").await;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         usd,
         "2026-08-12T00:00:00Z".parse()?,
@@ -256,7 +256,7 @@ async fn reporting_fx_degraded_is_false_when_the_conversion_really_happened(
 
     let usd = cash_instrument(&pool, "USD").await;
     let mut conn = pool.acquire().await?;
-    gripsou_core::repo::price::insert_price(
+    gripsou_core::testkit::insert_price(
         &mut conn,
         usd,
         "2026-08-12T00:00:00Z".parse()?,
