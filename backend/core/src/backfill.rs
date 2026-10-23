@@ -1,21 +1,15 @@
 //! Derive past holding values from transactions.
 //!
 //! Fills every (holding, day) that has no snapshot, walking quantity backward
-//! from the nearest *later* snapshot — never from today, so drift stays bounded
-//! inside one segment instead of accumulating across 3.5 years. Days after the
-//! last snapshot get nothing: with no later anchor there is nothing to walk
-//! from, and the sync stamps today anyway.
+//! from the nearest *later* snapshot — never from today, so drift stays inside
+//! one gap. Days after the last snapshot get nothing: there is no later anchor
+//! to walk from, and the sync stamps today anyway.
 //!
-//! Backward-walking needs no loop. quantity(d) is the anchor's quantity minus
-//! every movement strictly after d up to and including the anchor day, which is
-//! one correlated sum per day.
+//! quantity(d) is the anchor's quantity minus every movement strictly after d
+//! up to and including the anchor day, which is one suffix sum per day.
 //!
-//! ponytail: the whole connection is deleted and refilled every sync (~13k rows
-//! for 3.5 years × 10 holdings) rather than refilling only from the oldest
-//! changed transaction forward; the rewrite is smaller, always correct, and cheap at this size. Revisit if a
-//! connection ever carries hundreds of holdings.
-//! ponytail: runs inline in ingest; move to its own job if sync latency becomes
-//! visible.
+//! The whole connection is deleted and refilled on every run: simpler than an
+//! incremental refill and cheap at this size.
 
 use uuid::Uuid;
 
@@ -45,21 +39,12 @@ pub async fn backfill_connection(
         with scope as (
             select h.id as holding_id, h.account_id, h.instrument_id,
                    i.kind = 'cash' as is_cash,
-                   -- Not a cost-basis walk input (that rule is retired from
-                   -- this file, 0023). Just the holding's own stored figure,
-                   -- carried flat as the last-resort value fallback below when
-                   -- no snapshot of this holding ever carried a non-zero
-                   -- quantity, so there is nothing to carry a per-unit value
-                   -- forward from.
+                   -- Last-resort value for a holding no snapshot ever valued.
                    h.cost_basis as book_value,
                    i.currency = a.currency as is_account_currency,
-                   -- Whether this account's `booked_on` is a booking date at
-                   -- all. Some connectors send the *statement period* instead,
-                   -- stamping a whole fortnight onto the 1st or the 16th. The
-                   -- tell is a row booked before it was spent, which cannot
-                   -- happen: a savings account does it on 123 of 167 rows, a checking one
-                   -- never. Decided per account on every run, so a connector
-                   -- that starts sending real dates is picked up on its own.
+                   -- Some connectors send a statement period as `booked_on`
+                   -- (the 1st or the 16th). A row booked before it was spent
+                   -- gives them away; such an account is keyed on `ts`.
                    not exists (
                        select 1 from transaction t
                        where t.account_id = a.id
@@ -70,21 +55,9 @@ pub async fn backfill_connection(
             join instrument i on i.id = h.instrument_id
             where a.connection_id = $1
         ),
-        -- The horizon: as far back as *the whole user* has any evidence, plus
-        -- one day so the flat rule-3 tail before the earliest movement is
-        -- visible. Every holding is filled to the same date so a chart drawn
-        -- over the whole range has a value for each of them (with no evidence
-        -- of change before the earliest movement, they are held flat).
-        --
-        -- User-wide, not connection-wide: the read-side lateral in
-        -- net_worth_series is an inner join, so a holding contributes nothing
-        -- before its first derived row. Powens connectors expose very different
-        -- history depths (a brokerage account's can be only months), so a per-connection
-        -- horizon makes each bank pop into existence on its own date and steps
-        -- net worth up as it does. A chart that jumps is worse than one held
-        -- approximately right; everything else here stays per-connection.
-        --
-        -- Scoped to the owner of $1 — never across users.
+        -- One start day for all of the user's holdings, the day before their
+        -- earliest evidence, so every account appears on the chart at the same
+        -- date instead of each stepping net worth up when its history starts.
         owner as (
             select c.user_id from connection c where c.id = $1
         ),
@@ -101,9 +74,6 @@ pub async fn backfill_connection(
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
                          user_today((select user_id from owner))),
-                -- Securities move by `lot` now (0021), so a lot dated earlier
-                -- than any transaction or snapshot must extend the horizon
-                -- too, or the days it explains never get a derived row.
                 coalesce((select min(l.acquired_on) from lot l
                           join holding h    on h.id = l.holding_id
                           join account a    on a.id = h.account_id
@@ -112,32 +82,8 @@ pub async fn backfill_connection(
                          user_today((select user_id from owner)))
             ) - 1 as start_day
         ),
-        -- Signed daily movement per holding, keyed on the day the *balance*
-        -- moved (`booked_on`), not the day the user spent (`ts`). They disagree
-        -- on 70% of real Powens rows by up to five days, and the walk anchors on
-        -- the balance — keying on `ts` subtracts card spending before the
-        -- balance reflected it, which drove derived cash negative on 1,753 days.
-        -- `coalesce` keeps a provider that reports only one date working as before.
-        --
-        -- Cash moves by `amount`; a security moves by share count. Every
-        -- account counts every type, the PEA included: within the PEA's
-        -- own history each provider buy is funded by a transfer-in on record,
-        -- so counting both reproduces the bank's real balances.
-        --
-        -- `transaction` carries no currency, so `amount` is only meaningful for
-        -- the cash holding whose instrument currency matches the account's own
-        -- currency (the line the provider denominates `amount` in). A second
-        -- cash holding on the same account, in another currency, gets no
-        -- movement here and is held flat until `transaction` grows
-        -- a currency column to discriminate by.
-        -- `materialized` is load-bearing: inlined, this aggregate was re-run once
-        -- per derived row (9,072 times for 7 holdings × 3.5 years) instead of
-        -- once.
-        -- Per cash line that lots may move before the provider's history:
-        -- the day that history starts, and only where the user has also
-        -- entered cash rows by hand for the period before it (see the lot
-        -- branch of `moves`). Computed once per cash line here; inside that
-        -- branch both lookups ran again for every lot row.
+        -- Cash lines whose account has hand-entered rows before the provider's
+        -- history starts, with that start day (see the lot branch of `moves`).
         prehistory as materialized (
             select s.holding_id, s.account_id, ps.day as provider_start
             from scope s
@@ -155,14 +101,14 @@ pub async fn backfill_connection(
                     and txn_day(s.trust_booked_on, t.booked_on, t.ts) < ps.day
               )
         ),
+        -- Signed movement per (holding, day). `materialized` matters: inlined,
+        -- this aggregate runs once per derived row.
         moves as materialized (
-          -- One row per (holding, day): the cash line can move by a
-          -- transaction and a pre-history lot on the same day, and everything
-          -- downstream joins on the day.
           select holding_id, day, sum(delta) as delta from (
-            -- Cash moves by transaction amount, keyed on the day the BALANCE
-            -- moved. Every comment that used to sit above this aggregate still
-            -- applies to this branch and should be kept with it.
+            -- Cash moves by amount, on the day the balance moved (`booked_on`),
+            -- since the walk anchors on balances. `transaction` has no
+            -- currency: `amount` is in the account's currency, so a cash line
+            -- in another currency is held flat.
             select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
                    sum(t.amount) as delta
             from scope s
@@ -173,21 +119,11 @@ pub async fn backfill_connection(
 
             union all
 
-            -- Before the provider's history starts, a purchase has no provider
-            -- buy row to be its cash leg; the lot is the only record of the
-            -- cash leaving. So lots dated before the account's first provider
-            -- transaction move its cash line: a buy by -(qty x price + fee),
-            -- a sale by +(qty x price - fee). From that date on, the provider
-            -- row is the cash leg and the lot would count it twice.
-            --
-            -- Only where the user has also entered cash rows by hand for that
-            -- period. Lots are routinely entered for cost basis alone; counting
-            -- their purchases with no deposits to fund them would inflate the
-            -- cash line going back in time. Hand-entered rows are the signal
-            -- the pre-history record is complete enough to walk.
-            --
-            -- Lot prices are in the instrument's currency, so only lots whose
-            -- instrument matches the account currency move this line.
+            -- Before the provider's history, a lot has no provider row as its
+            -- cash leg, so the lot moves the cash line itself. Only where the
+            -- user also entered cash rows for that period: lots entered for
+            -- cost basis alone would otherwise drain cash with no deposits to
+            -- fund them.
             select p.holding_id, l.acquired_on as day,
                    sum(case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                             else l.quantity * l.unit_price - l.fee end) as delta
@@ -203,9 +139,7 @@ pub async fn backfill_connection(
 
             union all
 
-            -- Securities move by share count, and shares now live in `lot`.
-            -- `acquired_on` is already a date, so no txn_day() reconciliation
-            -- and no timezone cast is involved on this branch.
+            -- Securities move by share count, from lots.
             select l.holding_id, l.acquired_on as day,
                    sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as delta
             from scope s
@@ -222,25 +156,8 @@ pub async fn backfill_connection(
             cross join lateral generate_series(
                 hz.start_day, user_today((select user_id from owner)), '1 day') gs
         ),
-        -- The day axis the suffix sums are computed over. It must cover every
-        -- day a suffix sum is READ at, which is `as_of` and `anchor_day`.
-        --
-        -- `as_of` always comes from `days`. `anchor_day` is a snapshot day, and
-        -- `stamp_snapshot` puts no upper bound on those — a snapshot dated
-        -- after today would fall outside `days`, and the INNER join below would
-        -- then silently drop every derived row anchored on it. Hence the union
-        -- with `holding_snapshot`.
-        --
-        -- The union with `moves` is load-bearing, not defensive, whenever
-        -- `anchor_day > today`. `days` stops at today, so a movement dated in
-        -- `(today, anchor_day]` — inside the walk's window, and exactly what
-        -- `anchors_on_a_snapshot_dated_after_today` covers — is neither a
-        -- `days` entry nor a snapshot day. Without this branch that day would
-        -- have no row in `axis` at all, so the left join in `moves_after`
-        -- below would never see it and its delta would be silently missing
-        -- from both suffix sums, for every `as_of` on the walk-back side of
-        -- it — not just cancelled out, dropped. The old correlated subquery
-        -- had no such gap because it counted every row directly.
+        -- Every day a suffix sum is read at or summed over: snapshot days and
+        -- movement days can lie after today, past the end of `days`.
         axis as materialized (
             select holding_id, as_of as day from days
             union
@@ -250,28 +167,7 @@ pub async fn backfill_connection(
             from holding_snapshot hs
             join scope s on s.holding_id = hs.holding_id
         ),
-        -- `Σ delta for day > d`, computed once per (holding, day) instead of
-        -- once per derived row. The old correlated subquery was evaluated
-        -- TWICE per row — Postgres does not share it between `walked.quantity`
-        -- and the `min(w.quantity) over (...)` window in `lifted` that reads it
-        -- — which was 607 ms of a 764 ms statement.
-        --
-        -- Descending order with the frame excluding the current row is exactly
-        -- "strictly after this day". `sum` skips NULLs, so days with no
-        -- movement contribute nothing; the outer coalesce covers the newest day,
-        -- whose frame is empty.
-        --
-        -- `groups`, not `rows`: peer groups are defined by the `order by`
-        -- key (`a.day`), so "unbounded preceding to 1 preceding group" means
-        -- "every strictly-greater day" regardless of how many rows share a
-        -- day. `rows between unbounded preceding and 1 preceding` would only
-        -- coincide with that if `(holding_id, day)` were guaranteed unique in
-        -- this window's input — true today (`axis` is a `union`, which dedups,
-        -- and `moves` is grouped by `(holding_id, day)`), but a silent
-        -- invariant a future duplicate-day row could break without any query
-        -- change flagging it. `groups` costs nothing extra here (measured
-        -- within noise of `rows`, ~155-168ms either way against the 152ms
-        -- reference) so there is no reason to lean on that invariant.
+        -- Σ delta over the days strictly after each day.
         moves_after as materialized (
             select a.holding_id, a.day,
                    coalesce(sum(m.delta) over (
@@ -282,28 +178,14 @@ pub async fn backfill_connection(
             from axis a
             left join moves m on m.holding_id = a.holding_id and m.day = a.day
         ),
-        -- The derived days, each already carrying its own suffix total.
-        --
-        -- This is `days` again, read back off `moves_after` instead of joining
-        -- to it. Joining was the obvious shape and it was catastrophic: a CTE
-        -- carries no statistics and no index, so the planner estimated the
-        -- outer side at one row and nested-looped, rescanning all 3,234
-        -- `moves_after` rows per derived row — twice, the second scan nested
-        -- inside the first. 764 ms became over five minutes. Migration 0018's
-        -- comment describes the same trap from the other side.
-        --
-        -- Reading the total off the row removes the join entirely, so there is
-        -- nothing left for the planner to get wrong.
+        -- Read off `moves_after` rather than joined to it: a CTE has no
+        -- statistics, and the planner nested-looped that join.
         days_t as materialized (
             select ma.holding_id, ma.day as as_of, ma.total
             from moves_after ma
             cross join horizon hz
             where ma.day between hz.start_day and user_today((select user_id from owner))
         ),
-        -- The same totals restricted to snapshot days, which is all `anchor_day`
-        -- can ever be. Tiny (one row per holding per sync), so this join stays
-        -- cheap whichever strategy the planner picks — the property the
-        -- `moves_after` join above did not have.
         anchor_after as materialized (
             select ma.holding_id, ma.day, ma.total
             from moves_after ma
@@ -311,11 +193,7 @@ pub async fn backfill_connection(
             join holding_snapshot hs
               on hs.holding_id = ma.holding_id and hs.as_of = ma.day
         ),
-        -- Only days with no snapshot, each paired with the first snapshot after
-        -- it. A day past the last snapshot has no anchor and drops out here.
-        -- The `not exists` is what keeps the holding_point invariant from this
-        -- side: stamp_snapshot deletes a colliding backfill row, and this never
-        -- writes one for a day that already has a snapshot.
+        -- Days with no snapshot, each with the first snapshot after it.
         gaps as (
             select d.holding_id, d.as_of, d.total, nx.as_of as anchor_day,
                    nx.quantity as anchor_qty,
@@ -328,32 +206,10 @@ pub async fn backfill_connection(
                 order by hs.as_of
                 limit 1
             ) nx on true
-            -- The per-unit valuation carried onto this day comes from the
-            -- nearest snapshot that actually holds something, looking later
-            -- first and only then earlier. The quantity anchor above must stay
-            -- the nearest *later* snapshot, but a zero-quantity anchor carries
-            -- no per-unit information: for a fully-sold position every later
-            -- snapshot is zero, so the search has to reach back past the sale
-            -- or the held window would be valued at nothing.
-            --
-            -- Split into two index seeks rather than one `order by
-            -- (as_of <= day), abs(as_of - day) limit 1`. That ordering is on
-            -- expressions, which no index serves, so it top-N sorted this
-            -- holding's whole snapshot history on every one of the 9,072 rows —
-            -- 118 ms of a 764 ms statement. Both halves below are ordinary
-            -- seeks on the (holding_id, as_of) unique index.
-            --
-            -- `gaps` only contains days with no snapshot of their own, so
-            -- "strictly after" and "at or after" cannot differ here, and
-            -- neither can "before" and "at or before".
-            -- The two `coalesce`s are independent per column, so they could in
-            -- principle mix a quantity from `nxt` with a value from `prv` (or
-            -- vice versa) if one of `nxt`/`prv` matched and the other did not
-            -- on only one column. That never happens here because
-            -- `holding_snapshot.quantity` and `.value` are both `not null`
-            -- (see `backend/migrations/0001_initial_schema.sql`): a row that
-            -- matches at all supplies both columns together, so `nxt` and
-            -- `prv` are each all-or-nothing.
+            -- The per-unit value comes from the nearest snapshot that holds
+            -- something, later first, then earlier: after a full sale every
+            -- later snapshot is zero. Two seeks, because one ordering by
+            -- distance can't use the index.
             left join lateral (
                 select coalesce(nxt.quantity, prv.quantity) as quantity,
                        coalesce(nxt.value,    prv.value)    as value
@@ -386,39 +242,15 @@ pub async fn backfill_connection(
             select g.holding_id, g.as_of, g.anchor_day, s.is_cash,
                    g.unit_qty, g.unit_value, s.book_value,
                    -- Σ(as_of, anchor_day] = Σ(> as_of) − Σ(> anchor_day).
-                   -- `as_of < anchor_day` always holds (the anchor is the first
-                   -- snapshot strictly after the day), so this interval is never
-                   -- inverted or empty-by-inversion by construction — the sum
-                   -- itself can still be negative (any withdrawal makes it so).
-                   -- The join is INNER and safe: `axis` contains every snapshot
-                   -- day, so every anchor has a row.
                    g.anchor_qty - (g.total - aa.total) as quantity
             from gaps g
             join scope s on s.holding_id = g.holding_id
             join anchor_after aa
               on aa.holding_id = g.holding_id and aa.day = g.anchor_day
         ),
-        -- Nothing owned can be a negative amount, yet 2,435 derived days were:
-        -- the earliest snapshot anchors every day before it, so a
-        -- reconciliation gap on that one day becomes a constant bias over the
-        -- whole history. one bank's first snapshot sits 25.00 under its own
-        -- ledger (one card payment the balance had taken and the connector had
-        -- not yet booked) and that 25.00 is the entire negative population.
-        -- A brokerage account's is a small dividend that is still counted, walked back
-        -- from a near-zero balance.
-        --
-        -- The error is a constant, so each anchored stretch that dips below
-        -- zero is raised by its own shortfall. The shape of the line survives
-        -- exactly — every step stays where it was — and what it costs is a
-        -- discontinuity of at most the shortfall where the stretch meets its
-        -- anchor. That beats a line sitting under zero for 1,221 days.
-        --
-        -- Per stretch, not per holding: a gap between two sound snapshots must
-        -- not be dragged up by a shortfall on some older one.
-        --
-        -- ponytail: this treats the shortfall as an unknown opening balance and
-        -- spreads it flat. Attributing it to the transaction that actually went
-        -- missing would be exact, but nothing in the ledger says which one.
+        -- A row missing from the ledger shifts a whole stretch by a constant,
+        -- which can push it below zero. Each stretch (days sharing an anchor)
+        -- is raised by its own shortfall, keeping its shape.
         lifted as (
             select w.*,
                    greatest(0, -min(w.quantity) over (
@@ -427,24 +259,11 @@ pub async fn backfill_connection(
             from walked w
         )
         select w.holding_id, w.as_of, w.quantity + w.lift,
-               -- `value` is only the fallback branch of the read-side valuation
-               -- (quantity × unit_value_asof wins whenever a price exists), so
-               -- it matters solely for an instrument with no price row at all.
-               -- Cash mirrors the sync's convention; a security carries the
-               -- nearest valued snapshot's per-unit valuation flat onto this day
-               -- (the held-flat rule, applied to price), because writing 0 here would make
-               -- the chart dip to zero on every derived day and raise fx_missing
-               -- spuriously. Multiply before dividing so a day whose quantity is
-               -- unchanged reproduces the snapshot's value exactly. When no
-               -- valued snapshot exists at all (unit_qty null, i.e. no
-               -- snapshot of this holding ever carried a non-zero quantity),
-               -- there is no per-unit value to carry forward, so this falls
-               -- back to `book_value` (holding.cost_basis, read flat — NOT a
-               -- basis walk, that rule is retired from this file, 0023).
-               -- Valuing an owned asset at zero would be worse than valuing it
-               -- at book, and would ALSO spuriously raise fx_missing on the
-               -- read side (quantity <> 0 and unit_value is null and value =
-               -- 0 is exactly its trigger condition).
+               -- `value` is only read for an instrument with no price. A
+               -- security carries the nearest valued snapshot's per-unit value
+               -- (multiplied first, so an unchanged quantity gives the
+               -- snapshot's value exactly), else its book value: zero would
+               -- dip the chart and raise fx_missing.
                case
                    when w.is_cash then w.quantity + w.lift
                    else coalesce(
