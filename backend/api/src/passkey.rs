@@ -253,11 +253,20 @@ fn user_agent(headers: &HeaderMap) -> &str {
 }
 
 /// Start a passwordless sign-in: the browser offers the passkeys it has for
-/// this site, no email asked.
+/// this site, no email asked. Each call stores a challenge, so it is what
+/// counts per IP: it reserves one failure, given back when the sign-in
+/// succeeds ([`sign_in`]).
 pub async fn sign_in_options(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
-) -> Result<Json<dto::PasskeyOptions>, ApiError> {
+    State(throttle): State<Arc<LoginThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> Result<Json<dto::PasskeyOptions>, LoginError> {
+    let ip = client_ip(&headers, peer);
+    throttle
+        .try_ip(&ip, Instant::now())
+        .map_err(|b| throttled_ip(b, &ip))?;
     let (mut rcr, state) = pk.0.start_discoverable_authentication().map_err(internal)?;
     // webauthn-rs asks for the autofill style; this runs from a button.
     rcr.mediation = None;
@@ -279,7 +288,8 @@ pub async fn sign_in_options(
 
 /// Finish a passwordless sign-in. The passkey's own unlock (PIN or biometric,
 /// required) is the second factor, so this is a full sign-in even with
-/// two-factor on. Any attempt spends the challenge; failures count per IP.
+/// two-factor on. Any attempt spends the challenge. The failure its options
+/// call reserved on the IP stays unless the passkey proves right.
 pub async fn sign_in(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
@@ -289,10 +299,6 @@ pub async fn sign_in(
     Json(body): Json<dto::PasskeySignInReq>,
 ) -> Result<Json<dto::LoginResponse>, LoginError> {
     let ip = client_ip(&headers, peer);
-    // Counts the attempt as a failure until the passkey proves right.
-    throttle
-        .try_ip(&ip, Instant::now())
-        .map_err(|b| throttled_ip(b, &ip))?;
     let challenge = login_challenge::consume(&pool, &auth::hash_token(&body.challenge), LOGIN_KIND)
         .await
         .map_err(internal)?
@@ -833,6 +839,21 @@ pub(crate) mod tests {
         axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap())
     }
 
+    async fn start_passwordless(
+        pool: &PgPool,
+        t: &Arc<LoginThrottle>,
+    ) -> Result<dto::PasskeyOptions, LoginError> {
+        sign_in_options(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.clone()),
+            firefox(),
+            peer(),
+        )
+        .await
+        .map(|j| j.0)
+    }
+
     async fn passwordless(
         pool: &PgPool,
         t: &Arc<LoginThrottle>,
@@ -840,10 +861,7 @@ pub(crate) mod tests {
         cred: &[u8],
         user: Uuid,
     ) -> Result<dto::LoginResponse, LoginError> {
-        let o = sign_in_options(State(pool.clone()), State(passkeys()))
-            .await
-            .map_err(LoginError::from)?
-            .0;
+        let o = start_passwordless(pool, t).await?;
         let credential = soft.sign(&o.options, Some(cred), Some(user));
         sign_in(
             State(pool.clone()),
@@ -904,10 +922,7 @@ pub(crate) mod tests {
             (StatusCode::BAD_REQUEST, "passkey not accepted")
         );
         // A challenge is spent by any attempt.
-        let o = sign_in_options(State(pool.clone()), State(passkeys()))
-            .await
-            .unwrap()
-            .0;
+        let o = start_passwordless(&pool, &t).await.unwrap();
         let c1 = soft.sign(&o.options, Some(&cred), Some(u));
         let c2 = soft.sign(&o.options, Some(&cred), Some(u));
         let req = |credential| {
@@ -963,6 +978,7 @@ pub(crate) mod tests {
         let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
         let t = Arc::new(LoginThrottle::default());
         // The IP policy's free failures (30): each is let through and refused.
+        // The options call counted it; the refusal adds nothing.
         for _ in 0..crate::throttle::IP.free_failures {
             let e = passwordless(&pool, &t, &mut soft, &cred, v)
                 .await
@@ -976,6 +992,25 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
         assert!(e.2.is_some());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn passwordless_options_alone_are_throttled_per_ip(pool: PgPool) {
+        let t = Arc::new(LoginThrottle::default());
+        for _ in 0..crate::throttle::IP.free_failures {
+            start_passwordless(&pool, &t).await.expect("let through");
+        }
+        let e = start_passwordless(&pool, &t).await.err().unwrap();
+        assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(e.2.is_some_and(|s| s > 0), "says how long to wait");
+        // Refused before storing anything: no challenge row for it.
+        let stored: i64 =
+            sqlx::query_scalar("select count(*) from login_challenge where kind = $1")
+                .bind(LOGIN_KIND)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(stored, i64::from(crate::throttle::IP.free_failures));
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -996,6 +1031,99 @@ pub(crate) mod tests {
         passwordless(&pool, &t, &mut soft, &cred, u)
             .await
             .expect("not throttled");
+    }
+
+    fn b64(bytes: &[u8]) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+    }
+
+    /// A registration answer as `@simplewebauthn/browser` v14 posts it
+    /// (`RegistrationResponseJSON`), extra fields included.
+    fn browser_registration(
+        c: &webauthn_rs::prelude::RegisterPublicKeyCredential,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "id": c.id,
+            "rawId": b64(c.raw_id.as_ref()),
+            "response": {
+                "clientDataJSON": b64(c.response.client_data_json.as_ref()),
+                "attestationObject": b64(c.response.attestation_object.as_ref()),
+                "authenticatorData": b64(b"authenticator data"),
+                "transports": ["internal", "hybrid"],
+                "publicKeyAlgorithm": -7,
+                "publicKey": b64(b"spki public key"),
+            },
+            "authenticatorAttachment": "platform",
+            "clientExtensionResults": { "credProps": { "rk": true } },
+            "type": "public-key",
+        })
+    }
+
+    /// A sign-in answer as `@simplewebauthn/browser` v14 posts it
+    /// (`AuthenticationResponseJSON`).
+    fn browser_authentication(c: &webauthn_rs::prelude::PublicKeyCredential) -> serde_json::Value {
+        serde_json::json!({
+            "id": c.id,
+            "rawId": b64(c.raw_id.as_ref()),
+            "response": {
+                "clientDataJSON": b64(c.response.client_data_json.as_ref()),
+                "authenticatorData": b64(c.response.authenticator_data.as_ref()),
+                "signature": b64(c.response.signature.as_ref()),
+                "userHandle": c.response.user_handle.as_ref().map(|h| b64(h.as_ref())),
+            },
+            "authenticatorAttachment": "platform",
+            "clientExtensionResults": {},
+            "type": "public-key",
+        })
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn the_browser_librarys_json_is_accepted(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        let reauth = reauth_token(&pool, &a, "hunter22").await;
+        let o = options(&pool, &a, &reauth).await.unwrap();
+        let body: dto::PasskeyRegisterReq = serde_json::from_value(serde_json::json!({
+            "reauth": reauth,
+            "challenge": o.challenge,
+            "credential": browser_registration(&soft.register(&o.options)),
+        }))
+        .expect("registration JSON parses");
+        let info = register(
+            State(pool.clone()),
+            State(passkeys()),
+            firefox(),
+            who(&a),
+            Json(body),
+        )
+        .await
+        .expect("registered")
+        .0;
+        assert_eq!(info.name, "Firefox on Linux");
+        let cred = repo::credential_ids(&pool, u).await.unwrap().remove(0);
+
+        let t = Arc::new(LoginThrottle::default());
+        let o = start_passwordless(&pool, &t).await.unwrap();
+        let body: dto::PasskeySignInReq = serde_json::from_value(serde_json::json!({
+            "challenge": o.challenge,
+            "credential": browser_authentication(&soft.sign(&o.options, Some(&cred), Some(u))),
+            "remember": false,
+        }))
+        .expect("sign-in JSON parses");
+        let resp = sign_in(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.clone()),
+            firefox(),
+            peer(),
+            Json(body),
+        )
+        .await
+        .expect("signed in")
+        .0;
+        assert_eq!(resp.user.email, "a@t.local");
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1088,6 +1216,111 @@ pub(crate) mod tests {
         // The challenge is spent now.
         let again = start().await.err().unwrap();
         assert_eq!(again.0, StatusCode::UNAUTHORIZED);
+    }
+
+    /// `a@t.local` with a passkey and two-factor on, past the password step;
+    /// `b@t.local` with a passkey of its own. Returns the throttles, the mfa
+    /// challenge, both keys and b's credential id.
+    async fn code_step_with_a_stranger(
+        pool: &PgPool,
+    ) -> (
+        crate::handlers::auth_tests::Throttles,
+        String,
+        Soft,
+        Soft,
+        Vec<u8>,
+    ) {
+        use crate::handlers::auth_tests::{Throttles, enable_totp, login_outcome};
+        let u = seed_user(pool, "a@t.local").await;
+        let v = seed_user(pool, "b@t.local").await;
+        let a = seed_session(pool, u).await;
+        let b = seed_session(pool, v).await;
+        let mut mine = Soft::new();
+        add_passkey(pool, &a, &mut mine).await;
+        let mut theirs = Soft::new();
+        let (_, their_cred) = add_passkey(pool, &b, &mut theirs).await;
+        enable_totp(pool, u).await;
+        let t = Throttles::default();
+        let dto::LoginOutcome::Mfa(m) =
+            login_outcome(pool, &t, "a@t.local", "hunter22", false).await
+        else {
+            panic!("expected mfa")
+        };
+        (t, m.challenge, mine, theirs, their_cred)
+    }
+
+    async fn code_step(
+        pool: &PgPool,
+        t: &crate::handlers::auth_tests::Throttles,
+        challenge: &str,
+        sign: impl FnOnce(&serde_json::Value) -> webauthn_rs::prelude::PublicKeyCredential,
+    ) -> Result<dto::LoginResponse, LoginError> {
+        let o = verify_options(
+            State(pool.clone()),
+            State(passkeys()),
+            Json(dto::ChallengeReq {
+                challenge: challenge.into(),
+            }),
+        )
+        .await
+        .map_err(LoginError::from)?
+        .0;
+        verify(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.pw.clone()),
+            State(t.sf.clone()),
+            firefox(),
+            peer(),
+            Json(dto::LoginVerifyPasskeyReq {
+                challenge: challenge.into(),
+                credential: sign(&o.options),
+            }),
+        )
+        .await
+        .map(|j| j.0)
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn code_step_refuses_another_users_passkey_and_keeps_the_challenge(pool: PgPool) {
+        let (t, challenge, mut mine, mut theirs, their_cred) =
+            code_step_with_a_stranger(&pool).await;
+        let e = code_step(&pool, &t, &challenge, |o| {
+            theirs.sign(o, Some(&their_cred), None)
+        })
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(
+            (e.0, e.1.as_str()),
+            (StatusCode::BAD_REQUEST, "passkey not accepted")
+        );
+        let resp = code_step(&pool, &t, &challenge, |o| mine.sign(o, None, None))
+            .await
+            .expect("the challenge is still usable");
+        assert_eq!(resp.user.email, "a@t.local");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn code_step_passkey_failures_wait_on_the_second_factor_limiter(pool: PgPool) {
+        let (t, challenge, mut mine, mut theirs, their_cred) =
+            code_step_with_a_stranger(&pool).await;
+        for _ in 0..crate::throttle::SECOND_FACTOR.free_failures {
+            let e = code_step(&pool, &t, &challenge, |o| {
+                theirs.sign(o, Some(&their_cred), None)
+            })
+            .await
+            .err()
+            .unwrap();
+            assert_eq!(e.0, StatusCode::BAD_REQUEST);
+        }
+        // Even the right passkey now waits.
+        let e = code_step(&pool, &t, &challenge, |o| mine.sign(o, None, None))
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(e.2.is_some_and(|s| s > 0), "says how long to wait");
     }
 
     #[sqlx::test(migrations = "../migrations")]
