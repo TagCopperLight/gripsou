@@ -46,7 +46,7 @@ the JSON API, with Postgres alongside.
 
 ## Locked out of two-factor
 
-If you lose your authenticator app, your backup codes and your passkeys, run
+If you lose both your authenticator app and your backup codes, run
 this on the server:
 
 ```sh
