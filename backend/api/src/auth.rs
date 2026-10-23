@@ -356,9 +356,4 @@ mod tests {
     fn a_corrupt_stored_hash_is_not_a_match() {
         assert!(!verify_password("pw", "not-a-phc-string"));
     }
-
-    #[test]
-    fn verify_rejects_garbage_hash() {
-        assert!(!verify_password("anything", "not-a-phc-hash"));
-    }
 }

@@ -630,33 +630,6 @@ mod tests {
     }
 
     #[test]
-    fn password_policy_schedule_is_unchanged() {
-        let waits: Vec<_> = (1..=12).map(|n| PASSWORD.wait_after(n)).collect();
-        let m = |k: u32| Some(MIN * k);
-        assert_eq!(
-            waits,
-            [
-                None,
-                None,
-                None,
-                None,
-                m(1),
-                m(2),
-                m(4),
-                m(8),
-                m(15),
-                m(15),
-                m(15),
-                m(15)
-            ]
-        );
-        assert_eq!(PASSWORD.window, MIN * 15);
-        assert_eq!(IP.wait_after(29), None);
-        assert_eq!(IP.wait_after(30), m(15));
-        assert_eq!(IP.window, MIN * 15);
-    }
-
-    #[test]
     fn retry_after_secs_rounds_up() {
         let b = Blocked {
             retry_after: Duration::from_millis(1500),

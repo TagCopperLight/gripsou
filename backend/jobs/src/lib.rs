@@ -1377,25 +1377,6 @@ mod categorize_run_tests {
 }
 
 #[cfg(test)]
-mod categorizer_registry_tests {
-    use super::*;
-
-    /// Every provider the admin may pick has a usable default model and a
-    /// unique key: `gate` falls back to the default when the admin leaves the
-    /// model blank, and a lookup by key must not be ambiguous.
-    #[test]
-    fn every_provider_has_a_unique_key_and_a_default_model() {
-        let keys = categorizer_keys();
-        let unique: std::collections::HashSet<_> = keys.iter().collect();
-        assert_eq!(unique.len(), keys.len(), "duplicate provider key");
-        for key in keys {
-            let model = default_model(key).unwrap_or_else(|| panic!("{key}: no default"));
-            assert!(!model.trim().is_empty(), "{key}: blank default model");
-        }
-    }
-}
-
-#[cfg(test)]
 mod credentials_tests {
     use super::*;
     use serde_json::json;

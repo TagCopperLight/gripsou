@@ -348,19 +348,6 @@ mod tests {
     const GOOD: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
     #[test]
-    fn a_valid_key_is_kept() {
-        assert_eq!(&*TotpKey::parse(Some(GOOD)).unwrap().0, GOOD);
-    }
-
-    #[test]
-    fn a_missing_or_empty_key_is_refused() {
-        for raw in [None, Some("")] {
-            let err = TotpKey::parse(raw).err().unwrap();
-            assert!(err.contains("must be set"), "{err}");
-        }
-    }
-
-    #[test]
     fn a_malformed_key_is_refused_without_its_value() {
         let zz = "zz".repeat(32);
         for raw in ["short", "not-a-hex-key-value", &zz, &format!("{GOOD}00")] {

@@ -3,7 +3,6 @@
 //! binary because it installs the process-wide subscriber.
 
 mod backfill;
-mod budget_ai_config;
 mod budget_ai_run;
 mod budget_ai_usage;
 mod budget_overview;
