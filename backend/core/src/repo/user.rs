@@ -193,14 +193,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn lookup_update_roundtrip(pool: PgPool) -> anyhow::Result<()> {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'a@t.local', 'Ann', 'hash-1', 'admin')",
-        )
-        .bind(id)
-        .execute(&pool)
-        .await?;
+        let id = crate::testkit::seed_user_as(&pool, "a@t.local", "admin", "hash-1").await;
 
         let creds = credentials_by_email(&pool, "a@t.local").await?.unwrap();
         assert_eq!(creds.id, id);
@@ -221,14 +214,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn profile_returns_default_prefs_for_empty_jsonb(pool: PgPool) -> anyhow::Result<()> {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'p@t.local', 'Pia', 'hash', 'user')",
-        )
-        .bind(id)
-        .execute(&pool)
-        .await?;
+        let id = crate::testkit::seed_user_as(&pool, "p@t.local", "user", "hash").await;
 
         let profile = profile_by_id(&pool, id).await?.unwrap();
         assert_eq!(profile.prefs.display.ui_language, "en");
@@ -243,22 +229,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_profile_roundtrip_and_conflict(pool: PgPool) -> anyhow::Result<()> {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'a@t.local', 'Ann', 'hash', 'admin')",
-        )
-        .bind(id)
-        .execute(&pool)
-        .await?;
+        let id = crate::testkit::seed_user_as(&pool, "a@t.local", "admin", "hash").await;
         // A second user whose email we must not be able to collide with.
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'taken@t.local', 'Bob', 'hash', 'user')",
-        )
-        .bind(Uuid::new_v4())
-        .execute(&pool)
-        .await?;
+        crate::testkit::seed_user_email(&pool, "taken@t.local").await;
 
         let updated = update_profile(&pool, id, "Annie", "annie@t.local")
             .await?

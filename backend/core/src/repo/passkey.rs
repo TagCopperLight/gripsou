@@ -137,12 +137,7 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query("insert into users (id, email, name, password_hash, role) values ($1, $2, 'T', 'h', 'user')")
-            .bind(id).bind(email).execute(pool).await.unwrap();
-        id
-    }
+    use crate::testkit::seed_user_email;
 
     fn pk(n: u8) -> serde_json::Value {
         serde_json::json!({ "n": n })
@@ -150,8 +145,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn insert_list_find_and_scope(pool: PgPool) {
-        let a = seed_user(&pool, "a@t.local").await;
-        let b = seed_user(&pool, "b@t.local").await;
+        let a = seed_user_email(&pool, "a@t.local").await;
+        let b = seed_user_email(&pool, "b@t.local").await;
         let first = insert(&pool, a, &[1], &pk(1), "Firefox on Linux")
             .await
             .unwrap()
@@ -187,8 +182,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn record_use_rename_delete(pool: PgPool) {
-        let a = seed_user(&pool, "a@t.local").await;
-        let b = seed_user(&pool, "b@t.local").await;
+        let a = seed_user_email(&pool, "a@t.local").await;
+        let b = seed_user_email(&pool, "b@t.local").await;
         let row = insert(&pool, a, &[1], &pk(1), "old")
             .await
             .unwrap()

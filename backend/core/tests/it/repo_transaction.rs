@@ -1,8 +1,6 @@
-use crate::common;
-
-use common::{checking_account, seed_connection, txn};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::transaction::{TxnWrite, upsert_transaction};
+use gripsou_core::testkit::{checking_account, seed_connection, txn};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 

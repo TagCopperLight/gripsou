@@ -1,12 +1,10 @@
-use crate::common;
-
+use gripsou_core::testkit::{checking_account, equity_holding, seed_connection};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use common::{checking_account, equity_holding, seed_connection};
-use gripsou_core::dto::{Institution, InstrumentRef, PricePoint, SyncResult};
+use gripsou_core::dto::{InstrumentRef, PricePoint, SyncResult};
 use gripsou_core::ingest::ingest;
 use gripsou_core::price_sync::fetch_prices_for_connection;
 use gripsou_core::provider::{PriceProvider, ProviderError};
@@ -48,9 +46,6 @@ impl PriceProvider for MockProvider {
 async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
     let conn_id = seed_connection(pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
             "acct-1",
@@ -59,7 +54,7 @@ async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
             Decimal::new(450, 0),
             Some(Decimal::new(600, 0)),
         )],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(pool, conn_id, &sync).await.unwrap();
     conn_id

@@ -1,11 +1,9 @@
-use crate::common;
-
 use async_trait::async_trait;
-use common::{checking_account, equity_holding, seed_connection};
 use gripsou_core::composition_sync::fetch_composition_for_connection;
-use gripsou_core::dto::{Allocation, Composition, Institution, InstrumentRef, SyncResult};
+use gripsou_core::dto::{Allocation, Composition, InstrumentRef, SyncResult};
 use gripsou_core::ingest::ingest;
 use gripsou_core::provider::{CompositionProvider, ProviderError};
+use gripsou_core::testkit::{checking_account, equity_holding, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
@@ -43,9 +41,6 @@ impl CompositionProvider for MockComp {
 async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
     let conn_id = seed_connection(pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
             "acct-1",
@@ -54,7 +49,7 @@ async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
             Decimal::new(450, 0),
             Some(Decimal::new(600, 0)),
         )],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(pool, conn_id, &sync).await.unwrap();
     conn_id

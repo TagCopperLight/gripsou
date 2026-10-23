@@ -1164,15 +1164,14 @@ mod open_gate_tests {
 
     /// Insert a user with `budget_ai_enabled = opted_in`.
     async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
-        sqlx::query_scalar(
-            "insert into users (email, name, password_hash, budget_ai_enabled) \
-             values (gen_random_uuid()::text || '@t.local', 'Test', 'x', $1) \
-             returning id",
-        )
-        .bind(opted_in)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+        let id = gripsou_core::testkit::seed_user(pool).await;
+        sqlx::query("update users set budget_ai_enabled = $2 where id = $1")
+            .bind(id)
+            .bind(opted_in)
+            .execute(pool)
+            .await
+            .unwrap();
+        id
     }
 
     /// Set the admin's provider choice (`None` = AI off server-wide).
@@ -1323,12 +1322,7 @@ mod categorize_run_tests {
     /// every later request would be swallowed until a restart.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_run_that_cannot_start_frees_the_slot(pool: PgPool) {
-        let user: Uuid = sqlx::query_scalar(
-            "insert into users (email, name, password_hash) values ('s@x', 's', 'h') returning id",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let user = gripsou_core::testkit::seed_user(&pool).await;
         request_categorize(pool.clone(), user);
         let freed = async {
             while ai_runs().contains_key(&user) {
@@ -1345,12 +1339,7 @@ mod categorize_run_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn a_panicking_run_releases_the_lock_and_closes_its_row(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);
-        let user: Uuid = sqlx::query_scalar(
-            "insert into users (email, name, password_hash) values ('p@x', 'p', 'h') returning id",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let user = gripsou_core::testkit::seed_user(&pool).await;
         let p = pool.clone();
         guarded(&pool, user, async move {
             assert!(

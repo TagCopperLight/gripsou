@@ -1,10 +1,8 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::{checking_account, seed_connection};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
+use gripsou_core::testkit::{self, checking_account, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -64,7 +62,7 @@ async fn seed(pool: &PgPool, quantity: &str, cost_basis: &str) -> Uuid {
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(pool, account_id, "PUST", dec(quantity)).await;
+    let holding_id = testkit::seed_equity_holding(pool, account_id, "PUST", dec(quantity)).await;
     sqlx::query("update holding set cost_basis = $2 where id = $1")
         .bind(holding_id)
         .bind(dec(cost_basis))
@@ -181,15 +179,15 @@ async fn cash_basis_is_the_balance_on_that_day(pool: PgPool) {
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
         .unwrap();
-    let holding = common::cash_holding("acct-1", dec("500"));
+    let holding = testkit::cash_holding("acct-1", dec("500"));
     let instrument_id = resolve_instrument(&mut conn, &holding.instrument)
         .await
         .unwrap();
     let h = upsert_holding(&mut conn, account_id, instrument_id, &holding)
         .await
         .unwrap();
-    common::stamp_on(&pool, h, day("2026-01-15"), dec("300"), dec("300")).await;
-    common::stamp_on(&pool, h, day("2026-06-15"), dec("500"), dec("500")).await;
+    testkit::stamp_on(&pool, h, day("2026-01-15"), dec("300"), dec("300")).await;
+    testkit::stamp_on(&pool, h, day("2026-06-15"), dec("500"), dec("500")).await;
 
     let (january, _, _) = basis_on(&pool, h, "2026-01-20").await;
     let (september, _, _) = basis_on(&pool, h, "2026-09-14").await;

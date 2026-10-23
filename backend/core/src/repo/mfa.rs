@@ -305,23 +305,11 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'U', 'h', 'user')",
-        )
-        .bind(id)
-        .bind(email)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
+    use crate::testkit::seed_user_email;
 
     #[sqlx::test(migrations = "../migrations")]
     async fn confirm_with_a_stale_secret_changes_nothing(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
         upsert_unconfirmed_totp(&pool, u, "b").await.unwrap();
         assert!(!confirm_totp(&pool, u, "a", 1, &codes(3)).await.unwrap());
@@ -345,7 +333,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_setup_older_than_ten_minutes_cannot_be_confirmed(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(totp(&pool, u).await.unwrap().unwrap().pending);
         age_setup(&pool, u, 11).await;
@@ -360,9 +348,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn the_sweep_drops_only_stale_unconfirmed_setups(pool: PgPool) {
-        let stale = seed_user(&pool, "a@t.local").await;
-        let fresh = seed_user(&pool, "b@t.local").await;
-        let done = seed_user(&pool, "c@t.local").await;
+        let stale = seed_user_email(&pool, "a@t.local").await;
+        let fresh = seed_user_email(&pool, "b@t.local").await;
+        let done = seed_user_email(&pool, "c@t.local").await;
         for u in [stale, fresh, done] {
             upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         }
@@ -377,7 +365,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_discards_a_pending_setup_but_reports_false(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
         assert!(!delete_totp(&pool, u).await.unwrap());
         assert!(totp(&pool, u).await.unwrap().is_none());
@@ -401,7 +389,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn upsert_replaces_unconfirmed_not_confirmed(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         assert!(upsert_unconfirmed_totp(&pool, u, "one").await.unwrap());
         assert!(upsert_unconfirmed_totp(&pool, u, "two").await.unwrap());
         let row = totp(&pool, u).await.unwrap().unwrap();
@@ -418,7 +406,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn confirm_needs_unconfirmed_row(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         assert!(!confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
@@ -427,7 +415,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn totp_step_only_moves_forward(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(
             !use_totp_step(&pool, u, 10).await.unwrap(),
@@ -442,7 +430,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn recovery_code_is_single_use(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         replace_recovery_codes(&pool, u, &codes(10)).await.unwrap();
         assert_eq!(
             use_recovery_code(&mut pool.acquire().await.unwrap(), u, &[0])
@@ -472,7 +460,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn replace_drops_old_codes(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         replace_recovery_codes(&pool, u, &codes(10)).await.unwrap();
         replace_recovery_codes(&pool, u, &[vec![200], vec![201]])
             .await
@@ -493,7 +481,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn status_counts(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         let s = status(&pool, u).await.unwrap();
         assert!(!s.totp && s.recovery_remaining == 0 && s.passkeys == 0);
         assert!(!has_second_factor(&s));
@@ -518,7 +506,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_totp_removes_codes(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
         assert!(!delete_totp(&pool, u).await.unwrap());
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         confirm_totp(&pool, u, "s", 1, &codes(10)).await.unwrap();
@@ -529,8 +517,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn clear_all_counts_and_isolates(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
-        let other = seed_user(&pool, "b@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
+        let other = seed_user_email(&pool, "b@t.local").await;
         for who in [u, other] {
             upsert_unconfirmed_totp(&pool, who, "s").await.unwrap();
             confirm_totp(&pool, who, "s", 1, &codes(10)).await.unwrap();
@@ -559,8 +547,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn reset_for_email_clears_and_signs_out(pool: PgPool) {
-        let u = seed_user(&pool, "a@t.local").await;
-        let other = seed_user(&pool, "b@t.local").await;
+        let u = seed_user_email(&pool, "a@t.local").await;
+        let other = seed_user_email(&pool, "b@t.local").await;
         for who in [u, other] {
             upsert_unconfirmed_totp(&pool, who, "s").await.unwrap();
             confirm_totp(&pool, who, "s", 1, &codes(3)).await.unwrap();

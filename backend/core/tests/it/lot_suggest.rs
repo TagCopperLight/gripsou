@@ -1,4 +1,4 @@
-use crate::common;
+use gripsou_core::testkit;
 
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
@@ -24,19 +24,19 @@ struct Fx {
 /// A user with one account holding `held` shares of one ETF, priced 6.36 € on
 /// every day of the test window.
 async fn fixture(pool: &PgPool, held: &str) -> Fx {
-    let (user, conn_id) = common::seed_user_and_connection(pool).await;
+    let (user, conn_id) = testkit::seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding = common::seed_equity_holding(pool, account, "ETF1", dec(held)).await;
+    let holding = testkit::seed_equity_holding(pool, account, "ETF1", dec(held)).await;
     let instrument: Uuid = sqlx::query_scalar("select instrument_id from holding where id = $1")
         .bind(holding)
         .fetch_one(pool)
         .await
         .unwrap();
     for d in 1..=15 {
-        common::insert_price_on(
+        testkit::insert_price_on(
             pool,
             instrument,
             oct(d).and_hms_opt(0, 0, 0).unwrap().and_utc(),
@@ -52,7 +52,7 @@ async fn fixture(pool: &PgPool, held: &str) -> Fx {
 }
 
 async fn snap(pool: &PgPool, holding: Uuid, d: u32, qty: &str) {
-    common::stamp_on(pool, holding, oct(d), dec(qty), Decimal::ZERO).await;
+    testkit::stamp_on(pool, holding, oct(d), dec(qty), Decimal::ZERO).await;
 }
 
 async fn txn(pool: &PgPool, account: Uuid, id: &str, kind: &str, amount: &str, d: u32) {
@@ -60,7 +60,7 @@ async fn txn(pool: &PgPool, account: Uuid, id: &str, kind: &str, amount: &str, d
     upsert_transaction(
         &mut conn,
         account,
-        &common::txn_on("acct-1", id, kind, dec(amount), oct(d)),
+        &testkit::txn_on("acct-1", id, kind, dec(amount), oct(d)),
     )
     .await
     .unwrap();
@@ -180,7 +180,7 @@ async fn a_lot_of_the_same_side_in_the_window_covers_the_jump(pool: PgPool) {
 async fn a_new_holding_on_a_watched_account_rises_from_zero(pool: PgPool) {
     let fx = fixture(&pool, "23").await;
     // Another holding proves the account was synced on Oct 4.
-    let other = common::seed_equity_holding(&pool, fx.account, "ETF2", dec("1")).await;
+    let other = testkit::seed_equity_holding(&pool, fx.account, "ETF2", dec("1")).await;
     snap(&pool, other, 4, "1").await;
     snap(&pool, fx.holding, 8, "23").await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
@@ -253,7 +253,7 @@ async fn a_fully_explained_holding_gets_nothing(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn another_users_holding_is_none(pool: PgPool) {
     let fx = bought_23(&pool).await;
-    let (stranger, _) = common::seed_user_and_connection(&pool).await;
+    let (stranger, _) = testkit::seed_user_and_connection(&pool).await;
     assert!(
         suggest_lots(&pool, stranger, fx.holding)
             .await
@@ -268,14 +268,14 @@ async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
     let fx = bought_23(&pool).await;
     lot(&pool, fx.holding, "buy", oct(8), "22").await;
     // ETF2 rose by a similar value the same day, its own transaction missing.
-    let other = common::seed_equity_holding(&pool, fx.account, "ETF2", dec("33")).await;
+    let other = testkit::seed_equity_holding(&pool, fx.account, "ETF2", dec("33")).await;
     let instrument: Uuid = sqlx::query_scalar("select instrument_id from holding where id = $1")
         .bind(other)
         .fetch_one(&pool)
         .await
         .unwrap();
     for d in 1..=15 {
-        common::insert_price_on(
+        testkit::insert_price_on(
             &pool,
             instrument,
             oct(d).and_hms_opt(0, 0, 0).unwrap().and_utc(),

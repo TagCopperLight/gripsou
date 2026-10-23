@@ -1,10 +1,8 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::{checking_account, seed_connection, txn, txn_on};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::query::{TransactionFilters, transactions};
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::{self, checking_account, seed_connection, txn, txn_on};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -280,7 +278,7 @@ async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
     sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
          values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",

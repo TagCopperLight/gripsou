@@ -1161,13 +1161,7 @@ mod handler_tests {
 
     /// A user with one checking account; returns (user, account).
     async fn seed_user(pool: &PgPool) -> (Uuid, Uuid) {
-        let user_id: Uuid = sqlx::query_scalar(
-            "insert into users (email, name, password_hash) \
-             values (gen_random_uuid()::text || '@t.local', 'T', 'x') returning id",
-        )
-        .fetch_one(pool)
-        .await
-        .unwrap();
+        let user_id = gripsou_core::testkit::seed_user(pool).await;
         let account_id: Uuid = sqlx::query_scalar(
             "with c as (insert into connection (user_id, provider_key, display_name) \
                         values ($1, 'powens', 'C') returning id) \

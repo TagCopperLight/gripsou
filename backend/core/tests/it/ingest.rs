@@ -1,17 +1,14 @@
-use crate::common;
-
-use common::{cash_holding, checking_account, deposit_txn, equity_holding, seed_connection};
-use gripsou_core::dto::{Institution, SyncResult};
+use gripsou_core::dto::SyncResult;
 use gripsou_core::error::CoreError;
 use gripsou_core::ingest::ingest;
+use gripsou_core::testkit::{
+    self, cash_holding, checking_account, deposit_txn, equity_holding, seed_connection,
+};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
 fn sample_sync() -> SyncResult {
     SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
@@ -24,6 +21,7 @@ fn sample_sync() -> SyncResult {
             ),
         ],
         transactions: vec![deposit_txn("acct-1", "txn-1", Decimal::new(100, 0))],
+        ..Default::default()
     }
 }
 
@@ -68,15 +66,12 @@ async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> 
 async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1"), checking_account("acct-2")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
             cash_holding("acct-2", Decimal::new(200, 0)),
         ],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_id, &sync).await?;
 
@@ -95,9 +90,6 @@ async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Resu
 async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)), // cash -> value = qty = 100
@@ -116,7 +108,7 @@ async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
                 None,
             ), // unpriced -> 0
         ],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_id, &sync).await?;
 
@@ -141,9 +133,6 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 
     // First sync: a cash holding alongside an equity.
     let sync1 = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(1000, 0)),
@@ -155,16 +144,13 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
                 Some(Decimal::new(600, 0)),
             ),
         ],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_id, &sync1).await?;
 
     // Second sync: the cash holding is gone (e.g. the invest residual went to
     // zero). The equity remains.
     let sync2 = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
             "acct-1",
@@ -173,7 +159,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
             Decimal::new(450, 0),
             Some(Decimal::new(600, 0)),
         )],
-        transactions: vec![],
+        ..Default::default()
     };
     let summary = ingest(&pool, conn_id, &sync2).await?;
     assert_eq!(
@@ -218,12 +204,9 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
 async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("ghost", Decimal::new(100, 0))], // references missing account
-        transactions: vec![],
+        ..Default::default()
     };
     let err = ingest(&pool, conn_id, &sync).await.unwrap_err();
     assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
@@ -244,20 +227,14 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
     let conn_b = seed_connection(&pool).await;
 
     let sync_a = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("a-1")],
         holdings: vec![cash_holding("a-1", Decimal::new(100, 0))],
-        transactions: vec![],
+        ..Default::default()
     };
     let sync_b = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("b-1")],
         holdings: vec![cash_holding("b-1", Decimal::new(200, 0))],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_a, &sync_a).await?;
     ingest(&pool, conn_b, &sync_b).await?;
@@ -277,15 +254,13 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
 async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
         institution: gripsou_core::dto::Institution {
             key: "abc-uuid".into(),
             name: "BNP Paribas".into(),
         },
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_id, &sync).await?;
 
@@ -307,15 +282,13 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
 async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
         transactions: vec![
             deposit_txn("acct-1", "txn-1", Decimal::new(100, 0)),
             deposit_txn("ghost", "txn-2", Decimal::new(50, 0)), // unknown account
         ],
+        ..Default::default()
     };
     let summary = ingest(&pool, conn_id, &sync).await?;
 
@@ -350,12 +323,9 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
 async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("ghost", Decimal::new(100, 0))],
-        transactions: vec![],
+        ..Default::default()
     };
     let err = ingest(&pool, conn_id, &sync).await.unwrap_err();
     assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
@@ -373,18 +343,16 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
     let conn_id = seed_connection(&pool).await;
     let day = chrono::Utc::now().date_naive() - chrono::Duration::days(3);
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
-        transactions: vec![common::txn_on(
+        transactions: vec![testkit::txn_on(
             "acct-1",
             "t1",
             "deposit",
             Decimal::new(2500, 2),
             day,
         )],
+        ..Default::default()
     };
     let summary = gripsou_core::ingest::ingest(&pool, conn_id, &sync).await?;
     assert_eq!(summary.transactions_inserted, 1);

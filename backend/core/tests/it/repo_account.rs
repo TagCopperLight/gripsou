@@ -1,8 +1,6 @@
-use crate::common;
-
-use common::{checking_account, seed_connection};
 use gripsou_core::repo::account::update_account;
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::testkit::{checking_account, seed_connection};
 use sqlx::PgPool;
 use uuid::Uuid;
 

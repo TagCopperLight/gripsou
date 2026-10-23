@@ -1,8 +1,6 @@
-use crate::common;
-
+use gripsou_core::testkit::seed_user_and_connection;
 use std::collections::BTreeMap;
 
-use common::seed_user_and_connection;
 use gripsou_core::budget::ai_cost::usage_report;
 use gripsou_core::categorize::Usage;
 use gripsou_core::repo::budget::ai::{finish_run, record_usage, start_run, usage_by_model};

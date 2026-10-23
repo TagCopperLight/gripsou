@@ -1,7 +1,5 @@
-use crate::common;
-
-use common::seed_connection;
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::testkit::{self, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -14,10 +12,10 @@ fn dec(s: &str) -> Decimal {
 async fn lot_table_accepts_a_manual_buy(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
@@ -42,10 +40,10 @@ async fn lot_table_accepts_a_manual_buy(pool: PgPool) {
 async fn lot_rejects_a_negative_quantity(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let err = sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
@@ -64,10 +62,10 @@ async fn lot_rejects_a_negative_quantity(pool: PgPool) {
 async fn lot_rejects_an_unknown_source(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let err = sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
@@ -93,10 +91,10 @@ async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
         .await
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let id = insert_lot(
         &mut conn,
@@ -130,10 +128,10 @@ async fn delete_refuses_a_provider_lot(pool: PgPool) {
         .await
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let lot_id: Uuid = sqlx::query_scalar(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
@@ -161,10 +159,10 @@ async fn preview_computes_without_writing(pool: PgPool) {
         .await
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let figures = basis_preview(
         &pool,
@@ -199,18 +197,12 @@ async fn preview_computes_without_writing(pool: PgPool) {
 async fn preview_refuses_a_foreign_holding(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    let other_user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Other', 'x')")
-        .bind(other_user_id)
-        .bind(format!("u-{other_user_id}@test.local"))
-        .execute(&pool)
-        .await
-        .unwrap();
+    let other_user_id = testkit::seed_user(&pool).await;
 
     let figures = basis_preview(
         &pool,
@@ -247,18 +239,12 @@ async fn preview_refuses_a_foreign_holding(pool: PgPool) {
 async fn insert_lot_rejects_a_non_owning_user(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &common::checking_account("acct-1"))
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    let holding_id = common::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    let other_user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Other', 'x')")
-        .bind(other_user_id)
-        .bind(format!("u-{other_user_id}@test.local"))
-        .execute(&pool)
-        .await
-        .unwrap();
+    let other_user_id = testkit::seed_user(&pool).await;
 
     let result = insert_lot(
         &mut conn,

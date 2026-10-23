@@ -1,10 +1,8 @@
-use crate::common;
-
+use gripsou_core::testkit::{self, checking_account, seed_user_and_connection, txn};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use common::{checking_account, seed_user_and_connection, txn};
 use gripsou_core::budget::ai::{RunOutcome, run_for_user};
 use gripsou_core::categorize::{
     CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Guess, Usage,
@@ -543,12 +541,12 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
 /// never be reviewed. Same rule for the chunk and the "N left" count.
 #[sqlx::test(migrations = "../migrations")]
 async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, conn_id) = common::seed_user_and_connection(&pool).await;
+    let (user_id, conn_id) = testkit::seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let acct = gripsou_core::repo::account::upsert_account(
         &mut conn,
         conn_id,
-        &common::checking_account("acct-1"),
+        &testkit::checking_account("acct-1"),
     )
     .await?;
     for (ext, kind, amount, desc) in [
@@ -559,7 +557,7 @@ async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
         gripsou_core::repo::transaction::upsert_transaction(
             &mut conn,
             acct,
-            &common::txn("acct-1", ext, kind, amount.parse().unwrap(), Some(desc)),
+            &testkit::txn("acct-1", ext, kind, amount.parse().unwrap(), Some(desc)),
         )
         .await?;
     }

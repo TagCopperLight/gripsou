@@ -7,6 +7,8 @@ mod handlers;
 mod mfa;
 pub mod passkey;
 mod security_headers;
+#[cfg(test)]
+mod testkit;
 pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, Response};

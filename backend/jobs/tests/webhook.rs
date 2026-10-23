@@ -18,6 +18,7 @@
 //! status check right after handle_webhook returns).
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+use gripsou_core::testkit;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use sqlx::PgPool;
@@ -36,18 +37,6 @@ fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(format!("POST.{path}.{date}.{body}").as_bytes());
     STANDARD.encode(mac.finalize().into_bytes())
-}
-
-/// Insert a user, returning the user_id.
-async fn seed_user(pool: &PgPool) -> Uuid {
-    let user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Test', 'x')")
-        .bind(user_id)
-        .bind(format!("wh-{user_id}@test.local"))
-        .execute(pool)
-        .await
-        .unwrap();
-    user_id
 }
 
 /// Insert a connection in 'ok' status with provider_meta containing an
@@ -99,7 +88,7 @@ fn set_powens_env() {
 /// ENCRYPTION_KEY / credentials, but that races after our check.)
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = seed_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
     let conn_id = seed_connection(&pool, user_id, "99").await;
 
     let path = "/api/webhooks/powens";
@@ -151,7 +140,7 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Result<()> {
     let (_g, mut writer) = gripsou_core::logs::capture(100);
-    let user_id = seed_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
     let conn_id = seed_connection(&pool, user_id, "77").await;
 
     let path = "/api/webhooks/powens";

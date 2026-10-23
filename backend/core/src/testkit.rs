@@ -1,5 +1,5 @@
-#![allow(dead_code)]
-//! Shared test helpers. Seeding uses the runtime `query()` API (no offline
+//! Seeders and fixtures shared by the tests of every crate, behind the
+//! `test-util` feature. Seeding uses the runtime `query()` API (no offline
 //! cache needed); the library code under test uses the checked macros.
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -8,7 +8,45 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
+use crate::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
+
+/// Insert a user with a unique email, role `user` and a password hash that
+/// matches nothing. Every other column keeps its default.
+pub async fn seed_user(pool: &PgPool) -> Uuid {
+    let id = Uuid::new_v4();
+    seed_user_with_id(pool, id, &format!("u-{id}@test.local"), "user", "x").await
+}
+
+/// Same, with a chosen email.
+pub async fn seed_user_email(pool: &PgPool, email: &str) -> Uuid {
+    seed_user_as(pool, email, "user", "x").await
+}
+
+/// Insert a user with a chosen email, role and password hash.
+pub async fn seed_user_as(pool: &PgPool, email: &str, role: &str, password_hash: &str) -> Uuid {
+    seed_user_with_id(pool, Uuid::new_v4(), email, role, password_hash).await
+}
+
+async fn seed_user_with_id(
+    pool: &PgPool,
+    id: Uuid,
+    email: &str,
+    role: &str,
+    password_hash: &str,
+) -> Uuid {
+    sqlx::query(
+        "insert into users (id, email, name, password_hash, role) \
+         values ($1, $2, 'Test', $3, $4)",
+    )
+    .bind(id)
+    .bind(email)
+    .bind(password_hash)
+    .bind(role)
+    .execute(pool)
+    .await
+    .unwrap();
+    id
+}
 
 /// Insert a user + connection, returning the connection id.
 pub async fn seed_connection(pool: &PgPool) -> Uuid {
@@ -17,12 +55,12 @@ pub async fn seed_connection(pool: &PgPool) -> Uuid {
 }
 
 /// Same, but hands back the owning user so a test can add a second connection
-/// under it (the backfill horizon is user-wide).
+/// under it (the backfill horizon is user-wide). The user is in UTC, so a
+/// test's "today" does not depend on the hour it runs at.
 pub async fn seed_user_and_connection(pool: &PgPool) -> (Uuid, Uuid) {
-    let user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash, time_zone) values ($1, $2, 'Test', 'x', 'UTC')")
+    let user_id = seed_user(pool).await;
+    sqlx::query("update users set time_zone = 'UTC' where id = $1")
         .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
         .execute(pool)
         .await
         .unwrap();
@@ -191,7 +229,7 @@ pub async fn insert_price_on(
     unit_price: Decimal,
 ) {
     let mut conn = pool.acquire().await.unwrap();
-    gripsou_core::repo::price::insert_price(&mut conn, instrument_id, ts, unit_price, "EUR")
+    crate::repo::price::insert_price(&mut conn, instrument_id, ts, unit_price, "EUR")
         .await
         .unwrap();
 }
@@ -205,7 +243,7 @@ pub async fn stamp_on(
     value: Decimal,
 ) {
     let mut conn = pool.acquire().await.unwrap();
-    gripsou_core::repo::snapshot::stamp_snapshot(&mut conn, holding_id, day, qty, value)
+    crate::repo::snapshot::stamp_snapshot(&mut conn, holding_id, day, qty, value)
         .await
         .unwrap();
 }
@@ -251,11 +289,10 @@ pub async fn seed_equity_holding(
 ) -> Uuid {
     let mut conn = pool.acquire().await.unwrap();
     let holding = equity_holding("unused", symbol, quantity, Decimal::ZERO, None);
-    let instrument_id =
-        gripsou_core::repo::instrument::resolve_instrument(&mut conn, &holding.instrument)
-            .await
-            .unwrap();
-    gripsou_core::repo::holding::upsert_holding(&mut conn, account_id, instrument_id, &holding)
+    let instrument_id = crate::repo::instrument::resolve_instrument(&mut conn, &holding.instrument)
+        .await
+        .unwrap();
+    crate::repo::holding::upsert_holding(&mut conn, account_id, instrument_id, &holding)
         .await
         .unwrap()
 }
@@ -274,7 +311,7 @@ pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
 /// One rate for one currency on one day.
 pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
     let mut conn = pool.acquire().await.unwrap();
-    gripsou_core::repo::price::insert_price(
+    crate::repo::price::insert_price(
         &mut conn,
         instrument_id,
         d.and_hms_opt(0, 0, 0).unwrap().and_utc(),

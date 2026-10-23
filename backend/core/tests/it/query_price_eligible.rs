@@ -1,11 +1,9 @@
-use crate::common;
-
-use common::{cash_holding, checking_account, equity_holding, seed_connection};
-use gripsou_core::dto::{Institution, SyncResult};
+use gripsou_core::dto::SyncResult;
 use gripsou_core::ingest::ingest;
 use gripsou_core::price_sync::fetch_prices_for_connection;
 use gripsou_core::provider::PriceProvider;
 use gripsou_core::repo::query::price_eligible_instruments_for_connection;
+use gripsou_core::testkit::{cash_holding, checking_account, equity_holding, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
@@ -13,9 +11,6 @@ use sqlx::PgPool;
 async fn returns_only_nonzero_noncash(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
             cash_holding("acct-1", Decimal::new(100, 0)),
@@ -27,7 +22,7 @@ async fn returns_only_nonzero_noncash(pool: PgPool) {
                 Some(Decimal::new(600, 0)),
             ),
         ],
-        transactions: vec![],
+        ..Default::default()
     };
     ingest(&pool, conn_id, &sync).await.unwrap();
 
@@ -51,12 +46,9 @@ async fn foreign_cash_is_price_eligible_but_pivot_cash_is_not(pool: PgPool) -> a
         &pool,
         conn_id,
         &SyncResult {
-            provider_meta: Default::default(),
-            skipped: Default::default(),
-            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(50, 0)), cny],
-            transactions: vec![],
+            ..Default::default()
         },
     )
     .await?;
@@ -96,13 +88,10 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
         &pool,
         conn_id,
         &SyncResult {
-            provider_meta: Default::default(),
-            skipped: Default::default(),
-            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             // No USD cash holding at all -- only the foreign security.
             holdings: vec![usd_equity],
-            transactions: vec![],
+            ..Default::default()
         },
     )
     .await?;
@@ -140,12 +129,9 @@ async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_i
         &pool,
         conn_id,
         &SyncResult {
-            provider_meta: Default::default(),
-            skipped: Default::default(),
-            institution: Institution::default(),
             accounts: vec![checking_account("acct-1")],
             holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
-            transactions: vec![],
+            ..Default::default()
         },
     )
     .await?;

@@ -153,18 +153,7 @@ mod tests {
     use chrono::Duration;
     use sqlx::PgPool;
 
-    async fn seed_user(pool: &PgPool) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'a@t.local', 'Ann', 'h', 'admin')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
+    use crate::testkit::seed_user;
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_then_find_by_hash(pool: PgPool) {
@@ -236,15 +225,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_is_user_scoped(pool: PgPool) {
         let user_id = seed_user(&pool).await;
-        let other = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-                 values ($1, 'b@t.local', 'Bo', 'h', 'user')",
-        )
-        .bind(other)
-        .execute(&pool)
-        .await
-        .unwrap();
+        let other = seed_user(&pool).await;
 
         let exp = Utc::now() + Duration::days(1);
         let s = create(&pool, user_id, &[1u8], None, None, false, exp)

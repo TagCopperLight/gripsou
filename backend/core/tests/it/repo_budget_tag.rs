@@ -1,7 +1,5 @@
-use crate::common;
-
-use common::seed_user_and_connection;
 use gripsou_core::repo::budget::tag::{create_tag, delete_tag, list_tags, update_tag};
+use gripsou_core::testkit::seed_user_and_connection;
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../migrations")]

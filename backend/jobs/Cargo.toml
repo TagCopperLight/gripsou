@@ -13,6 +13,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+gripsou-core = { path = "../core", features = ["test-util"] }
 sqlx.workspace = true
 anyhow.workspace = true
 chrono.workspace = true

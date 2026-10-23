@@ -1707,6 +1707,7 @@ pub(crate) mod auth_tests {
     use super::*;
     use crate::auth;
     use crate::dto::{ChangePasswordReq, LoginReq};
+    use crate::testkit::seed_user_with_password;
     use crate::throttle::LoginThrottle;
     use axum::response::IntoResponse;
     use sqlx::PgPool;
@@ -1738,7 +1739,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn sixth_attempt_after_five_failures_is_refused_with_retry_after(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local", "hunter22").await;
         let throttle = Arc::new(LoginThrottle::default());
         for _ in 0..5 {
             let err = try_login(&pool, &throttle, "a@t.local", "wrong")
@@ -1758,7 +1759,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_successful_login_clears_earlier_failures(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local", "hunter22").await;
         let throttle = Arc::new(LoginThrottle::default());
         for _ in 0..4 {
             try_login(&pool, &throttle, "a@t.local", "wrong")
@@ -1794,7 +1795,7 @@ pub(crate) mod auth_tests {
     /// sent one by one: each attempt is counted before the password is checked.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local", "hunter22").await;
         let throttle = Arc::new(LoginThrottle::default());
         let mut set = tokio::task::JoinSet::new();
         for _ in 0..10 {
@@ -1930,7 +1931,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_without_second_factor_gives_a_session(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let throttle = Throttles::default();
         let out = login_outcome(&pool, &throttle, "a@t.local", "hunter22", false).await;
         assert!(matches!(out, dto::LoginOutcome::Session(_)));
@@ -1939,7 +1940,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_with_totp_asks_for_a_code_and_makes_no_session(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         match login_outcome(&pool, &throttle, "a@t.local", "hunter22", false).await {
@@ -1955,7 +1956,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn correct_totp_gives_a_session_that_keeps_remember(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, true).await;
@@ -1975,7 +1976,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_totp_code_works_once(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let code = now_code(&secret);
@@ -1992,7 +1993,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_wrong_code_keeps_the_challenge(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2015,7 +2016,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn exactly_one_code_kind_is_required(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2032,7 +2033,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_recovery_code_works_once(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2051,7 +2052,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn unusable_challenges_are_refused(pool: PgPool) {
         use gripsou_core::repo::login_challenge;
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let code = now_code(&secret);
@@ -2102,7 +2103,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn wrong_codes_are_throttled(pool: PgPool) {
         use gripsou_core::repo::login_challenge;
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         // Issued directly: `login` itself counts one attempt.
@@ -2137,7 +2138,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn wrong_codes_wait_on_the_second_factor_limiter(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2176,7 +2177,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn a_lost_challenge_does_not_burn_a_backup_code(pool: PgPool) {
         use gripsou_core::repo::login_challenge;
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2205,7 +2206,7 @@ pub(crate) mod auth_tests {
     /// A wrong backup code leaves the challenge usable.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_wrong_backup_code_keeps_the_challenge(pool: PgPool) {
-        let uid = seed_user(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let throttle = Throttles::default();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -2221,28 +2222,11 @@ pub(crate) mod auth_tests {
     /// Seed an admin user and return their id — mirrors what `seed_user` does for
     /// the existing tests (role "admin", email "a@t.local").
     async fn seed_admin_user(pool: &PgPool) -> Uuid {
-        seed_user(pool, "a@t.local", "hunter2").await
+        seed_admin(pool, "a@t.local", "hunter2").await
     }
 
-    async fn seed_user_role(pool: &PgPool, email: &str, password: &str, role: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        let hash = auth::hash_password(password).unwrap();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'Test', $3, $4)",
-        )
-        .bind(id)
-        .bind(email)
-        .bind(hash)
-        .bind(role)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
-
-    async fn seed_user(pool: &PgPool, email: &str, password: &str) -> Uuid {
-        seed_user_role(pool, email, password, "admin").await
+    async fn seed_admin(pool: &PgPool, email: &str, password: &str) -> Uuid {
+        seed_user_with_password(pool, email, password, "admin").await
     }
 
     async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
@@ -2271,7 +2255,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn investment_returns_lists_accounts_with_securities(pool: PgPool) {
-        let user_id = seed_user(&pool, "a@t.local", "hunter2").await;
+        let user_id = seed_admin(&pool, "a@t.local", "hunter2").await;
         let conn_id = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -2354,7 +2338,7 @@ pub(crate) mod auth_tests {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
 
         let password = "correct horse battery staple";
-        let admin = seed_user(&pool, "log@t.local", password).await;
+        let admin = seed_admin(&pool, "log@t.local", password).await;
         login_token(&pool, "log@t.local", password).await;
         let mut ua = axum::http::HeaderMap::new();
         ua.insert(
@@ -2409,7 +2393,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_succeeds_with_good_credentials(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local", "hunter2").await;
 
         let resp = login(
             State(pool.clone()),
@@ -2431,7 +2415,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_rejects_bad_password(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local", "hunter2").await;
 
         let err = login(
             State(pool.clone()),
@@ -2451,7 +2435,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_creates_findable_session(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local", "hunter2").await;
         let resp = login(
             State(pool.clone()),
             no_throttle(),
@@ -2475,7 +2459,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn me_returns_profile_and_logout_revokes(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local", "hunter2").await;
         let token = login_token(&pool, "a@t.local", "hunter2").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -2517,7 +2501,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn lists_marks_current_and_revokes(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local", "hunter2").await;
         let t1 = login_token(&pool, "a@t.local", "hunter2").await;
         let t2 = login_token(&pool, "a@t.local", "hunter2").await;
         let s1 = gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&t1))
@@ -2587,7 +2571,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_revokes_other_sessions(pool: PgPool) {
-        seed_user(&pool, "a@t.local", "old-pass").await;
+        seed_admin(&pool, "a@t.local", "old-pass").await;
         let current = login_token(&pool, "a@t.local", "old-pass").await;
         let other = login_token(&pool, "a@t.local", "old-pass").await;
         let cur =
@@ -2634,7 +2618,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_requires_matching_email(pool: PgPool) {
         // A non-admin user, so the last-admin guard is not in play here.
-        seed_user_role(&pool, "a@t.local", "hunter2", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "hunter2", "user").await;
         let token = login_token(&pool, "a@t.local", "hunter2").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -2697,7 +2681,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_refuses_last_admin(pool: PgPool) {
-        seed_user_role(&pool, "boss@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "boss@t.local", "pw", "admin").await;
         let token = login_token(&pool, "boss@t.local", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -2731,7 +2715,7 @@ pub(crate) mod auth_tests {
         );
 
         // With a second admin present, the first admin can delete itself.
-        seed_user_role(&pool, "boss2@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "boss2@t.local", "pw", "admin").await;
         delete_account(
             State(pool.clone()),
             auth::AuthUser {
@@ -2754,8 +2738,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn users_endpoint_requires_admin(pool: PgPool) {
-        seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
-        seed_user_role(&pool, "member@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "member@t.local", "pw", "user").await;
 
         let admin_tok = login_token(&pool, "admin@t.local", "pw").await;
         let admin_sess =
@@ -2794,8 +2778,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_profile_persists_and_rejects_duplicate_email(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "user").await;
-        seed_user_role(&pool, "taken@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "taken@t.local", "pw", "user").await;
         let token = login_token(&pool, "a@t.local", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -2869,7 +2853,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_persists_and_me_reflects_it(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
         let token = login_token(&pool, "a@t.local", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -2916,8 +2900,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
-        let owner = seed_user_role(&pool, "owner@t.local", "pw", "user").await;
-        let other = seed_user_role(&pool, "other@t.local", "pw", "user").await;
+        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", "user").await;
+        let other = seed_user_with_password(&pool, "other@t.local", "pw", "user").await;
         let id = gripsou_core::repo::connection::insert_pending(&pool, owner, "powens", "Bank")
             .await
             .unwrap();
@@ -2942,7 +2926,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn sync_connection_guards_and_orchestrator_errors(pool: PgPool) {
-        let user = seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
         // `powens` provider is seeded by migration 0002 (the FK requires it).
         let conn = Uuid::new_v4();
         sqlx::query(
@@ -2998,7 +2982,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn connections_returns_provider_tree(pool: PgPool) {
-        let user = seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
         sqlx::query(
             "insert into provider (key, display_name, kind, enabled) \
              values ('powens','Powens','account',true) on conflict (key) do nothing",
@@ -3047,7 +3031,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_requires_correct_current(pool: PgPool) {
-        let id = seed_user(&pool, "a@t.local", "old-pass").await;
+        let id = seed_admin(&pool, "a@t.local", "old-pass").await;
         // Need a real session_id for change_password
         let token = login_token(&pool, "a@t.local", "old-pass").await;
         let session =
@@ -3076,7 +3060,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
         // yahoo is kind='price' and must be excluded; powens is enabled via seed.
-        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
         let principal = auth::AuthUser {
             user_id: admin,
             session_id: Uuid::new_v4(),
@@ -3096,7 +3080,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_requires_admin(pool: PgPool) {
-        let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "user@t.local", "pw", "user").await;
         let err = providers(
             State(pool.clone()),
             auth::AuthUser {
@@ -3111,7 +3095,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
-        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
         let principal = || auth::AuthUser {
             user_id: admin,
             session_id: Uuid::new_v4(),
@@ -3158,7 +3142,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
-        let admin = seed_user_role(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
         // 'yahoo' is a price provider, not an account provider → treated as not found.
         for key in ["nope", "yahoo"] {
             let err = set_provider(
@@ -3178,7 +3162,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_requires_admin(pool: PgPool) {
-        let user = seed_user_role(&pool, "user@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "user@t.local", "pw", "user").await;
         let err = set_provider(
             State(pool.clone()),
             auth::AuthUser {
@@ -3196,7 +3180,7 @@ pub(crate) mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
         // Seed: powens is enabled via migration 0002; yahoo is price kind.
-        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let rows = enabled_providers(
             State(pool.clone()),
             auth::AuthUser {
@@ -3222,7 +3206,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn init_connection_rejects_unknown_provider(pool: PgPool) {
-        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = init_connection(
             State(pool.clone()),
             auth::AuthUser {
@@ -3240,7 +3224,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn init_connection_returns_redirect_url(pool: PgPool) {
-        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let resp = init_connection(
             State(pool.clone()),
             auth::AuthUser {
@@ -3266,8 +3250,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_connection_guards_ownership(pool: PgPool) {
-        let owner = seed_user_role(&pool, "owner@t.local", "pw", "user").await;
-        let other = seed_user_role(&pool, "other@t.local", "pw", "user").await;
+        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", "user").await;
+        let other = seed_user_with_password(&pool, "other@t.local", "pw", "user").await;
 
         let conn_id = Uuid::new_v4();
         sqlx::query(
@@ -3317,7 +3301,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn complete_connection_unknown_id_returns_error(pool: PgPool) {
-        let user = seed_user_role(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = complete_connection(
             State(pool.clone()),
             auth::AuthUser {
@@ -3350,7 +3334,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_invite_requires_admin(pool: PgPool) {
-        seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let who = principal_for(&pool, "m@t.local", "pw").await;
         let err = create_invite(State(pool.clone()), who).await.unwrap_err();
         assert_eq!(err.0, StatusCode::FORBIDDEN);
@@ -3358,7 +3342,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_invite_writes_invite_row(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
         let resp = create_invite(State(pool.clone()), who).await.expect("ok");
         assert_eq!(resp.0, StatusCode::CREATED);
@@ -3384,8 +3368,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_reset_link_stores_target_email(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         let resp = create_reset_link(State(pool.clone()), who, Path(target))
@@ -3411,8 +3395,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_rejects_mismatched_email(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         let err = delete_user(
@@ -3436,7 +3420,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_refuses_last_admin(pool: PgPool) {
-        let admin = seed_user_role(&pool, "boss@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "boss@t.local", "pw", "admin").await;
         let who = principal_for(&pool, "boss@t.local", "pw").await;
 
         let err = delete_user(
@@ -3454,8 +3438,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_removes_target(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_role(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         // Case-insensitive email match succeeds.
@@ -3480,8 +3464,8 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_requires_admin(pool: PgPool) {
-        seed_user_role(&pool, "m@t.local", "pw", "user").await;
-        let target = seed_user_role(&pool, "t@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
+        let target = seed_user_with_password(&pool, "t@t.local", "pw", "user").await;
         let who = principal_for(&pool, "m@t.local", "pw").await;
         let err = delete_user(
             State(pool.clone()),
@@ -3628,7 +3612,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_rejects_invalid_timezone_or_currency_without_writing(pool: PgPool) {
-        let user_id = seed_user_role(&pool, "tz@example.com", "pw", "user").await;
+        let user_id = seed_user_with_password(&pool, "tz@example.com", "pw", "user").await;
         let before = prefs_of(&pool, user_id).await;
         let zones = ["", "Europe/NotAPlace", "+02:00", "posix/Europe/Paris"].map(|zone| {
             let mut p = before.clone();
@@ -3683,7 +3667,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_rejects_bad_avatar(pool: PgPool) {
-        seed_user_role(&pool, "av@example.com", "pw", "user").await;
+        seed_user_with_password(&pool, "av@example.com", "pw", "user").await;
         let token = login_token(&pool, "av@example.com", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -3738,7 +3722,7 @@ pub(crate) mod auth_tests {
     /// core's `common::seed_connection`, but this crate can't import that
     /// test-only module across crates).
     async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
-        let user_id = seed_user_role(pool, email, "hunter2", "user").await;
+        let user_id = seed_user_with_password(pool, email, "hunter2", "user").await;
         let conn_id = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -4232,7 +4216,7 @@ pub(crate) mod auth_tests {
     /// A member must not read the CORS allow-list: it is server config, admin-only.
     #[sqlx::test(migrations = "../migrations")]
     async fn cors_origins_requires_admin(pool: PgPool) {
-        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let err = cors_origins(State(pool.clone()), auth(member))
             .await
             .unwrap_err();
@@ -4243,7 +4227,7 @@ pub(crate) mod auth_tests {
     /// live cache the CORS layer reads.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_cors_origins_requires_admin_and_changes_nothing(pool: PgPool) {
-        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let before = gripsou_core::repo::settings::cors_origins(&pool)
             .await
             .unwrap();
@@ -4271,7 +4255,7 @@ pub(crate) mod auth_tests {
     /// takes effect without a restart.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_cors_origins_persists_and_refreshes_cache(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let cache = cors_cache(vec![]);
         let wanted = vec![
             "https://one.example".to_string(),
@@ -4299,7 +4283,7 @@ pub(crate) mod auth_tests {
     /// A member must not read the budget AI settings: they are admin-only config.
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_settings_requires_admin(pool: PgPool) {
-        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let err = budget_ai_settings(State(pool.clone()), auth(member))
             .await
             .err()
@@ -4310,7 +4294,7 @@ pub(crate) mod auth_tests {
     /// A member must not list the provider's models: it spends the server's key.
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_requires_admin(pool: PgPool) {
-        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let key = gripsou_jobs::categorizer_keys()[0];
         let err = budget_ai_models(State(pool.clone()), auth(member), Path(key.to_string()))
             .await
@@ -4320,7 +4304,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let err = budget_ai_models(State(pool.clone()), auth(admin), Path("nope".into()))
             .await
             .expect_err("not found");
@@ -4331,7 +4315,7 @@ pub(crate) mod auth_tests {
     /// every user's transactions are sent.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_requires_admin_and_changes_nothing(pool: PgPool) {
-        let member = seed_user_role(&pool, "m@t.local", "pw", "user").await;
+        let member = seed_user_with_password(&pool, "m@t.local", "pw", "user").await;
         let key = gripsou_jobs::categorizer_keys()[0];
 
         let err = set_budget_ai_settings(
@@ -4354,7 +4338,7 @@ pub(crate) mod auth_tests {
     /// An admin's budget AI choice persists (trimmed) and reads back as written.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let key = gripsou_jobs::categorizer_keys()[0];
 
         let status = set_budget_ai_settings(
@@ -4381,7 +4365,7 @@ pub(crate) mod auth_tests {
     /// provider named "" that the scheduler would then try to look up.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let key = gripsou_jobs::categorizer_keys()[0];
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -4407,7 +4391,7 @@ pub(crate) mod auth_tests {
     /// choice in place, so a typo cannot silently disable categorisation.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_role(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
         let key = gripsou_jobs::categorizer_keys()[0];
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -4850,7 +4834,7 @@ pub(crate) mod auth_tests {
     /// "Sign out everywhere else" keeps the caller's own session alive.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_keeps_current(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
         let current = principal_for(&pool, "a@t.local", "pw").await;
         principal_for(&pool, "a@t.local", "pw").await;
         let session_id = current.session_id;
@@ -4865,7 +4849,7 @@ pub(crate) mod auth_tests {
     /// "Sign out everywhere else" revokes the caller's other sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
         let current = principal_for(&pool, "a@t.local", "pw").await;
         let other = principal_for(&pool, "a@t.local", "pw").await;
 
@@ -4878,8 +4862,8 @@ pub(crate) mod auth_tests {
     /// "Sign out everywhere else" never touches another user's sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
-        seed_user_role(&pool, "a@t.local", "pw", "user").await;
-        seed_user_role(&pool, "b@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "b@t.local", "pw", "user").await;
         let a = principal_for(&pool, "a@t.local", "pw").await;
         let b = principal_for(&pool, "b@t.local", "pw").await;
 
@@ -4909,7 +4893,7 @@ pub(crate) mod auth_tests {
     /// address can't collide with a test's own users.
     async fn mint_reset(pool: &PgPool, raw: &str, email: &str, expires_in: Duration) {
         let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
-        let admin = seed_user_role(pool, &issuer, "pw", "admin").await;
+        let admin = seed_user_with_password(pool, &issuer, "pw", "admin").await;
         gripsou_core::repo::invite_token::create(
             pool,
             "reset",
@@ -4943,7 +4927,7 @@ pub(crate) mod auth_tests {
     /// every old session and logs the user in.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
@@ -4968,7 +4952,7 @@ pub(crate) mod auth_tests {
     /// password chosen with it.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_token_is_single_use(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
         assert!(
             call_redeem_reset(&pool, "raw-reset", "first-pw")
@@ -4988,7 +4972,7 @@ pub(crate) mod auth_tests {
     /// An unknown reset token is a 404 and changes no password.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
         let err = call_redeem_reset(&pool, "never-minted", "new-password")
             .await
             .expect_err("unknown token must fail");
@@ -4999,7 +4983,7 @@ pub(crate) mod auth_tests {
     /// An expired reset link is a 404 and changes no password.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_expired_token_is_404(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(-1)).await;
 
         let err = call_redeem_reset(&pool, "raw-reset", "new-password")
@@ -5011,7 +4995,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn reset_refuses_a_short_password(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-password", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-password", "user").await;
         mint_reset(&pool, "raw-short", "t@t.local", Duration::hours(1)).await;
         let err = call_redeem_reset(&pool, "raw-short", "1234567")
             .await
@@ -5027,7 +5011,7 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_refuses_a_short_password(pool: PgPool) {
-        seed_user_role(&pool, "c@t.local", "old-password", "user").await;
+        seed_user_with_password(&pool, "c@t.local", "old-password", "user").await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;
         let err = change_password(
             State(pool.clone()),
@@ -5076,7 +5060,7 @@ pub(crate) mod auth_tests {
     /// can retry with a real one.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_rejects_empty_password(pool: PgPool) {
-        seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
         let err = call_redeem_reset(&pool, "raw-reset", "")
@@ -5099,18 +5083,8 @@ mod budget_ai_usage_tests {
     use std::collections::BTreeMap;
 
     async fn seed(pool: &PgPool, role: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'Test', 'x', $3)",
-        )
-        .bind(id)
-        .bind(format!("{id}@t.local"))
-        .bind(role)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
+        let email = format!("{}@t.local", Uuid::new_v4());
+        gripsou_core::testkit::seed_user_as(pool, &email, role, "x").await
     }
 
     fn who(user_id: Uuid) -> AuthUser {

@@ -1,10 +1,4 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::{
-    checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
-    txn, txn_on_day,
-};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{set_category, set_tags};
 use gripsou_core::repo::budget::category::list_categories;
@@ -14,6 +8,10 @@ use gripsou_core::repo::query::{
     transaction_counts, transactions,
 };
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::{
+    self, checking_account, checking_account_in, rate_on, seed_cash_instrument,
+    seed_user_and_connection, txn, txn_on_day,
+};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -278,7 +276,7 @@ async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow
         .fetch_one(&pool)
         .await?;
     let holding_id =
-        common::seed_equity_holding(&pool, account_id, "PUST", Decimal::new(2, 0)).await;
+        testkit::seed_equity_holding(&pool, account_id, "PUST", Decimal::new(2, 0)).await;
     sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
          values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",

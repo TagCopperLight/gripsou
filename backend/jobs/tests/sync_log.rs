@@ -78,9 +78,7 @@ async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
     unsafe { std::env::set_var("ENCRYPTION_KEY", KEY) };
     sqlx::query("insert into provider (key, display_name, kind, enabled) values ('fake','fake','account',true) on conflict (key) do nothing")
         .execute(pool).await.unwrap();
-    let user: Uuid = sqlx::query_scalar(
-        "insert into users (email, name, password_hash) values (gen_random_uuid()::text || '@t', 'T', 'x') returning id",
-    ).fetch_one(pool).await.unwrap();
+    let user = gripsou_core::testkit::seed_user(pool).await;
     let ct = gripsou_core::crypto::encrypt(KEY, br#"{"auth_token":"tok"}"#).unwrap();
     let conn: Uuid = sqlx::query_scalar(
         "insert into connection (user_id, provider_key, display_name, status, credentials, provider_meta) \

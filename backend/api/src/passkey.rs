@@ -574,7 +574,8 @@ pub(crate) mod tests {
     use super::*;
     use crate::auth::AuthUser;
     use crate::handlers::LoginError;
-    use crate::mfa::tests::{reauth_token, seed_session, seed_user, sessions, who};
+    use crate::mfa::tests::reauth_token;
+    use crate::testkit::{seed_session, seed_user, sessions, who};
     use crate::throttle::LoginThrottle;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
     use sqlx::PgPool;

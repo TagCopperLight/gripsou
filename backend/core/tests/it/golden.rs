@@ -12,10 +12,7 @@
 //!     UPDATE_GOLDEN=1 cargo test -p gripsou-core --test golden
 //! A failing golden file is a conversation about which answer is correct.
 
-use crate::common;
-
 use chrono::{Duration, NaiveDate, Utc};
-use common::{checking_account, seed_user_and_connection};
 use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::account::upsert_account;
@@ -23,6 +20,7 @@ use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::price::insert_price;
 use gripsou_core::repo::snapshot::stamp_snapshot;
+use gripsou_core::testkit::{checking_account, seed_user_and_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;

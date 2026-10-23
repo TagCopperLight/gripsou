@@ -298,11 +298,12 @@ pub(crate) mod tests {
     use crate::auth::{self, AuthUser};
     use crate::factors;
     use crate::handlers::LoginError;
+    use crate::testkit::{seed_session, seed_user, sessions, who};
     use crate::throttle::{LoginThrottle, SecondFactorThrottle};
     use axum::Json;
     use axum::extract::State;
     use axum::http::StatusCode;
-    use gripsou_core::repo::{login_challenge, mfa as repo, session};
+    use gripsou_core::repo::{login_challenge, mfa as repo};
     use sqlx::PgPool;
     use std::sync::Arc;
     use uuid::Uuid;
@@ -311,55 +312,6 @@ pub(crate) mod tests {
 
     fn key() -> crate::TotpKey {
         crate::TotpKey(Arc::from(KEY))
-    }
-
-    pub(crate) async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        let hash = auth::hash_password("hunter22").unwrap();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'Test', $3, 'user')",
-        )
-        .bind(id)
-        .bind(email)
-        .bind(hash)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
-
-    pub(crate) async fn seed_session(pool: &PgPool, user_id: Uuid) -> AuthUser {
-        let s = session::create(
-            pool,
-            user_id,
-            &auth::hash_token(&auth::generate_token()),
-            None,
-            None,
-            false,
-            chrono::Utc::now() + chrono::Duration::days(1),
-        )
-        .await
-        .unwrap();
-        AuthUser {
-            user_id,
-            session_id: s.id,
-        }
-    }
-
-    pub(crate) fn who(a: &AuthUser) -> AuthUser {
-        AuthUser {
-            user_id: a.user_id,
-            session_id: a.session_id,
-        }
-    }
-
-    pub(crate) async fn sessions(pool: &PgPool, user_id: Uuid) -> i64 {
-        sqlx::query_scalar("select count(*) from session where user_id = $1")
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap()
     }
 
     async fn setup(

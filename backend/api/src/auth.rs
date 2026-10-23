@@ -220,20 +220,8 @@ mod tests {
     use axum::http::{Request, header::AUTHORIZATION};
     use chrono::Duration;
     use sqlx::PgPool;
-    use uuid::Uuid;
 
-    async fn seed_user(pool: &PgPool) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'extractor@t.local', 'Test', 'h', 'user')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
+    use gripsou_core::testkit::seed_user;
 
     /// Build request parts from a request, optionally with a Bearer token header.
     fn make_parts(bearer: Option<&str>) -> axum::http::request::Parts {

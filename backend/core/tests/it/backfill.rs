@@ -1,13 +1,13 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::{cash_holding, checking_account, equity_holding, seed_connection, stamp_on, txn_on};
 use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::transaction::upsert_transaction;
+use gripsou_core::testkit::{
+    self, cash_holding, checking_account, equity_holding, seed_connection, stamp_on, txn_on,
+};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -578,8 +578,8 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
 /// into existence on a different day and steps net worth up as it goes.
 #[sqlx::test(migrations = "../migrations")]
 async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, shallow_conn) = common::seed_user_and_connection(&pool).await;
-    let deep_conn = common::seed_connection_for(&pool, user_id).await;
+    let (user_id, shallow_conn) = testkit::seed_user_and_connection(&pool).await;
+    let deep_conn = testkit::seed_connection_for(&pool, user_id).await;
 
     // Shallow connection: balance 100 on 2026-01-10, +30 deposit on 2026-01-05.
     let shallow_acct = checking_account("shallow-1");
@@ -692,7 +692,7 @@ async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::R
     upsert_transaction(
         &mut conn,
         account_id,
-        &common::txn_booked(
+        &testkit::txn_booked(
             "acct-1",
             "t1",
             "withdrawal",
@@ -749,7 +749,7 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
         upsert_transaction(
             &mut conn,
             account_id,
-            &common::txn_booked("acct-1", id, "withdrawal", dec(amount), spent, booked),
+            &testkit::txn_booked("acct-1", id, "withdrawal", dec(amount), spent, booked),
         )
         .await?;
     }
@@ -807,7 +807,7 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
         upsert_transaction(
             &mut conn,
             account_id,
-            &common::txn_booked("acct-1", id, "transfer", dec(amount), spent, booked),
+            &testkit::txn_booked("acct-1", id, "transfer", dec(amount), spent, booked),
         )
         .await?;
     }

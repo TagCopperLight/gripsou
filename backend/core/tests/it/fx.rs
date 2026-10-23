@@ -1,7 +1,5 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::seed_connection;
+use gripsou_core::testkit::seed_connection;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;

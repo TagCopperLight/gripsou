@@ -2,8 +2,6 @@
 //! per file, and every test runs in parallel. `logs_install` stays its own
 //! binary because it installs the process-wide subscriber.
 
-mod common;
-
 mod backfill;
 mod budget_ai_config;
 mod budget_ai_run;

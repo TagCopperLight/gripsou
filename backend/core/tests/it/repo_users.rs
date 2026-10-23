@@ -31,12 +31,7 @@ async fn lists_users_oldest_first(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn welcome_starts_pending_and_finishing_is_idempotent(pool: PgPool) -> anyhow::Result<()> {
-    let id: uuid::Uuid = sqlx::query_scalar(
-        "insert into users (email, name, password_hash, role) \
-         values ('new@t.local','New','x','user') returning id",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let id = gripsou_core::testkit::seed_user(&pool).await;
 
     let profile = gripsou_core::repo::user::profile_by_id(&pool, id)
         .await?

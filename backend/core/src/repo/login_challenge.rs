@@ -112,18 +112,7 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn seed_user(pool: &PgPool) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, 'a@t.local', 'Ann', 'h', 'admin')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
+    use crate::testkit::seed_user;
 
     async fn insert_expired(pool: &PgPool, hash: &[u8], kind: &str) {
         sqlx::query(

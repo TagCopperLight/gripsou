@@ -158,13 +158,7 @@ mod tests {
     use sqlx::PgPool;
 
     async fn seed_admin(pool: &PgPool) -> Uuid {
-        sqlx::query_scalar::<_, Uuid>(
-            "insert into users (email, name, password_hash, role)
-             values ('a@t.local', 'A', 'x', 'admin') returning id",
-        )
-        .fetch_one(pool)
-        .await
-        .unwrap()
+        crate::testkit::seed_user_as(pool, "a@t.local", "admin", "x").await
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -350,13 +344,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_clears_second_factors_of_that_user_only(pool: PgPool) {
         let admin = seed_admin(&pool).await; // a@t.local
-        let other: Uuid = sqlx::query_scalar(
-            "insert into users (email, name, password_hash, role) \
-             values ('b@t.local', 'B', 'h', 'user') returning id",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let other = crate::testkit::seed_user_email(&pool, "b@t.local").await;
         for (who, cred) in [(admin, 1_u8), (other, 2_u8)] {
             crate::repo::mfa::upsert_unconfirmed_totp(&pool, who, "s")
                 .await

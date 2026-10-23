@@ -1,8 +1,6 @@
-use crate::common;
-
 use chrono::NaiveDate;
-use common::{checking_account, seed_user_and_connection};
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::testkit::{self, checking_account, seed_user_and_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -64,7 +62,7 @@ async fn seed(pool: &PgPool, qty: &str) -> (Uuid, Uuid, Uuid) {
     )
     .await
     .unwrap();
-    let holding_id = common::seed_equity_holding(pool, account_id, "FR0000000001", dec(qty)).await;
+    let holding_id = testkit::seed_equity_holding(pool, account_id, "FR0000000001", dec(qty)).await;
     (user_id, account_id, holding_id)
 }
 

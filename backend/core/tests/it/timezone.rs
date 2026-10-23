@@ -1,11 +1,11 @@
-use crate::common;
+use gripsou_core::testkit;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../migrations")]
 async fn today_uses_each_users_zone_and_dst(pool: PgPool) -> anyhow::Result<()> {
-    let (user, _) = common::seed_user_and_connection(&pool).await;
+    let (user, _) = testkit::seed_user_and_connection(&pool).await;
     for (zone, instant, expected) in [
         (None, "2026-03-31T22:30:00Z", "2026-04-01"),
         (Some("Europe/Paris"), "2026-01-31T22:30:00Z", "2026-01-31"),
@@ -44,12 +44,12 @@ async fn today_uses_each_users_zone_and_dst(pool: PgPool) -> anyhow::Result<()> 
 #[sqlx::test(migrations = "../migrations")]
 async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::{
-        dto::{Institution, SyncResult},
+        dto::SyncResult,
         ingest::ingest,
         repo::{prefs, query},
     };
     use rust_decimal::Decimal;
-    let (user, connection) = common::seed_user_and_connection(&pool).await;
+    let (user, connection) = testkit::seed_user_and_connection(&pool).await;
     // At every UTC hour at least one of these zones has a different day.
     // Select it in SQL so this regression runs at any time of day.
     let zone: String = sqlx::query_scalar(
@@ -64,7 +64,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         .execute(&pool)
         .await?;
     let today = prefs::today(&pool, user).await?;
-    let mut security = common::equity_holding(
+    let mut security = testkit::equity_holding(
         "a",
         "US0378331005",
         Decimal::ONE,
@@ -76,12 +76,9 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         &pool,
         connection,
         &SyncResult {
-            provider_meta: Default::default(),
-            skipped: Default::default(),
-            institution: Institution::default(),
-            accounts: vec![common::checking_account("a")],
+            accounts: vec![testkit::checking_account("a")],
             holdings: vec![security],
-            transactions: vec![],
+            ..Default::default()
         },
     )
     .await?;

@@ -1,10 +1,8 @@
-use crate::common;
-
-use common::seed_connection;
 use gripsou_core::repo::connection::{
     BeginSync, SYNC_LOCK_STALE_MINS, begin_await, begin_sync, clear_stale_syncing, insert_pending,
     mark_synced_error, mark_synced_ok,
 };
+use gripsou_core::testkit::{self, seed_connection};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../migrations")]
@@ -68,12 +66,7 @@ async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn insert_pending_creates_row(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await?;
+    let user_id = testkit::seed_user(&pool).await;
 
     let id =
         gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
@@ -88,12 +81,7 @@ async fn insert_pending_creates_row(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await?;
+    let user_id = testkit::seed_user(&pool).await;
 
     let id =
         gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
@@ -132,12 +120,7 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
 
 #[sqlx::test(migrations = "../migrations")]
 async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await?;
+    let user_id = testkit::seed_user(&pool).await;
 
     let id =
         gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
@@ -166,7 +149,7 @@ async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()>
 
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
-    let conn = common::seed_connection(&pool).await;
+    let conn = testkit::seed_connection(&pool).await;
     let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
         .bind(conn)
         .fetch_one(&pool)
@@ -192,12 +175,7 @@ async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await?;
+    let user_id = testkit::seed_user(&pool).await;
 
     let id =
         gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "Acme").await?;
@@ -223,13 +201,7 @@ async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> 
 
 #[sqlx::test(migrations = "../migrations")]
 async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::seed_user(&pool).await;
     let fresh = insert_pending(&pool, user_id, "powens", "fresh")
         .await
         .unwrap();
@@ -253,13 +225,7 @@ async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::seed_user(&pool).await;
     let fresh = insert_pending(&pool, user_id, "powens", "fresh")
         .await
         .unwrap();
@@ -355,12 +321,7 @@ async fn begin_sync_takes_over_a_stale_claim(pool: PgPool) -> anyhow::Result<()>
 /// land in 'error' so the user sees the sync did not finish.
 #[sqlx::test(migrations = "../migrations")]
 async fn clear_stale_syncing_only_releases_old_claims(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = uuid::Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'T', 'x')")
-        .bind(user_id)
-        .bind(format!("u-{user_id}@test.local"))
-        .execute(&pool)
-        .await?;
+    let user_id = testkit::seed_user(&pool).await;
     let fresh = insert_pending(&pool, user_id, "powens", "fresh").await?;
     let stale = insert_pending(&pool, user_id, "powens", "stale").await?;
     let unstamped = insert_pending(&pool, user_id, "powens", "unstamped").await?;

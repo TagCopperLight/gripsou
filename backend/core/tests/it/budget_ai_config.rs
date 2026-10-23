@@ -1,9 +1,7 @@
-use crate::common;
-
-use common::seed_user_and_connection;
 use gripsou_core::repo::connection;
 use gripsou_core::repo::prefs::{budget_ai_enabled, review_threshold};
 use gripsou_core::repo::settings::{budget_ai, set_budget_ai};
+use gripsou_core::testkit::seed_user_and_connection;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 

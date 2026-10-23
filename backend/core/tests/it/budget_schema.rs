@@ -1,22 +1,11 @@
+use gripsou_core::testkit;
 use sqlx::PgPool;
-use uuid::Uuid;
-
-async fn insert_user(pool: &PgPool) -> Uuid {
-    let id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash) values ($1, $2, 'Test', 'x')")
-        .bind(id)
-        .bind(format!("u-{id}@test.local"))
-        .execute(pool)
-        .await
-        .unwrap();
-    id
-}
 
 /// Inserting a user must seed their category set — via the trigger, not via
 /// application code, so every creation path is covered including this one.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = insert_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
 
     let total: i64 = sqlx::query_scalar("select count(*) from budget_category where user_id = $1")
         .bind(user_id)
@@ -87,7 +76,7 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
 /// Exactly one system row, and it is the one the pairing pass writes to.
 #[sqlx::test(migrations = "../migrations")]
 async fn internal_transfer_is_the_only_system_category(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = insert_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
 
     let systems: Vec<(String, String)> = sqlx::query_as(
         "select system_key, kind from budget_category \
@@ -107,8 +96,8 @@ async fn internal_transfer_is_the_only_system_category(pool: PgPool) -> anyhow::
 /// Two users own two independent taxonomies; names collide across users.
 #[sqlx::test(migrations = "../migrations")]
 async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
-    let a = insert_user(&pool).await;
-    let b = insert_user(&pool).await;
+    let a = testkit::seed_user(&pool).await;
+    let b = testkit::seed_user(&pool).await;
 
     let shared: i64 = sqlx::query_scalar(
         "select count(*) from budget_category c1 join budget_category c2 \
@@ -127,7 +116,7 @@ async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
 /// the protection lives in the repository, not in a delete trigger.
 #[sqlx::test(migrations = "../migrations")]
 async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = insert_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
     sqlx::query("delete from users where id = $1")
         .bind(user_id)
         .execute(&pool)
@@ -171,7 +160,7 @@ async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Resul
 /// transactions.
 #[sqlx::test(migrations = "../migrations")]
 async fn neutral_ordering_puts_ignore_last(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = insert_user(&pool).await;
+    let user_id = testkit::seed_user(&pool).await;
     let neutral: Vec<(String, i32)> = sqlx::query_as(
         "select default_key, sort_order from budget_category \
          where user_id = $1 and kind = 'neutral' order by sort_order",
