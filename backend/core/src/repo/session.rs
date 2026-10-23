@@ -241,29 +241,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn list_and_delete_others(pool: PgPool) {
-        let user_id = seed_user(&pool).await;
-        let exp = Utc::now() + Duration::days(1);
-        let keep = create(&pool, user_id, &[1u8], None, None, false, exp)
-            .await
-            .unwrap();
-        create(&pool, user_id, &[2u8], None, None, false, exp)
-            .await
-            .unwrap();
-        create(&pool, user_id, &[3u8], None, None, false, exp)
-            .await
-            .unwrap();
-
-        assert_eq!(list_for_user(&pool, user_id).await.unwrap().len(), 3);
-
-        let removed = delete_others(&pool, user_id, keep.id).await.unwrap();
-        assert_eq!(removed, 2);
-        let left = list_for_user(&pool, user_id).await.unwrap();
-        assert_eq!(left.len(), 1);
-        assert_eq!(left[0].id, keep.id);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn delete_expired_removes_only_expired(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         create(

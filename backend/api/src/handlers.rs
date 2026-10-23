@@ -3183,6 +3183,16 @@ pub(crate) mod auth_tests {
         assert!(!resp.0.token.is_empty());
         assert_eq!(resp.0.user.email, "new@t.local");
         assert_eq!(resp.0.user.role, "user");
+        // Token consumed.
+        assert!(
+            gripsou_core::repo::invite_token::find_valid(
+                &pool,
+                &auth::hash_token_str("raw-invite")
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

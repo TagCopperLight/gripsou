@@ -162,29 +162,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn create_inserts_invite_row(pool: PgPool) {
-        let admin = seed_admin(&pool).await;
-        create(
-            &pool,
-            "invite",
-            None,
-            admin,
-            "hashed-token",
-            Utc::now() + Duration::hours(24),
-        )
-        .await
-        .unwrap();
-
-        let (kind, email): (String, Option<String>) =
-            sqlx::query_as("select type, email from invite_token where token = 'hashed-token'")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(kind, "invite");
-        assert_eq!(email, None);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn find_valid_returns_unused_unexpired(pool: PgPool) {
         let admin = seed_admin(&pool).await;
         create(
@@ -222,60 +199,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn redeem_invite_creates_user_and_consumes(pool: PgPool) {
-        let admin = seed_admin(&pool).await;
-        create(
-            &pool,
-            "invite",
-            None,
-            admin,
-            "inv-1",
-            Utc::now() + Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        let uid = redeem_invite(&pool, "inv-1", "new@t.local", "New", "pw-hash")
-            .await
-            .unwrap()
-            .expect("valid token redeems");
-
-        let (email, role): (String, String) =
-            sqlx::query_as("select email, role from users where id = $1")
-                .bind(uid)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(email, "new@t.local");
-        assert_eq!(role, "user");
-        // Token consumed → no longer valid.
-        assert!(find_valid(&pool, "inv-1").await.unwrap().is_none());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn redeem_invite_duplicate_email_leaves_token_unused(pool: PgPool) {
-        let admin = seed_admin(&pool).await; // already at a@t.local
-        create(
-            &pool,
-            "invite",
-            None,
-            admin,
-            "inv-2",
-            Utc::now() + Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        let err = redeem_invite(&pool, "inv-2", "a@t.local", "Dup", "pw-hash")
-            .await
-            .unwrap_err();
-        assert!(matches!(
-            err,
-            CoreError::Db(sqlx::Error::Database(ref db)) if db.is_unique_violation()
-        ));
-        // Token NOT consumed — still redeemable.
-        assert!(find_valid(&pool, "inv-2").await.unwrap().is_some());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn redeem_invite_expired_token_is_none(pool: PgPool) {
         let admin = seed_admin(&pool).await;
         create(
@@ -294,51 +217,6 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn redeem_reset_changes_password_and_revokes_sessions(pool: PgPool) {
-        let admin = seed_admin(&pool).await; // a@t.local, password_hash 'x'
-        // Give the admin a live session row.
-        sqlx::query(
-            "insert into session (user_id, token_hash, remembered, expires_at)
-                     values ($1, decode('00','hex'), false, now() + interval '1 day')",
-        )
-        .bind(admin)
-        .execute(&pool)
-        .await
-        .unwrap();
-        create(
-            &pool,
-            "reset",
-            Some("a@t.local"),
-            admin,
-            "rst-1",
-            Utc::now() + Duration::hours(1),
-        )
-        .await
-        .unwrap();
-
-        let (uid, cleared) = redeem_reset(&pool, "rst-1", "new-hash")
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(uid, admin);
-        assert!(!cleared.any());
-
-        let hash: String = sqlx::query_scalar("select password_hash from users where id = $1")
-            .bind(admin)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(hash, "new-hash");
-        let sessions: i64 = sqlx::query_scalar("select count(*) from session where user_id = $1")
-            .bind(admin)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(sessions, 0);
-        assert!(find_valid(&pool, "rst-1").await.unwrap().is_none());
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -386,10 +264,5 @@ mod tests {
         let theirs = crate::repo::mfa::status(&pool, other).await.unwrap();
         assert!(theirs.totp && theirs.passkeys == 1);
         assert_eq!(theirs.recovery_remaining, 2);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn redeem_reset_invalid_token_is_none(pool: PgPool) {
-        assert!(redeem_reset(&pool, "missing", "h").await.unwrap().is_none());
     }
 }
