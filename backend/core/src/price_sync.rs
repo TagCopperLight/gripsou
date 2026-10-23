@@ -28,8 +28,7 @@ use crate::repo::query::price_eligible_instruments_for_connection;
 /// the window only widens the response, not the round trips.
 ///
 /// 30 days rather than a handful so a gap survives a week of failed syncs, a
-/// holiday, or a laptop that was closed — and so this deploy repairs the holes
-/// already in the data without a one-off migration.
+/// holiday, or a laptop that was closed.
 const REFETCH_DAYS: i64 = 30;
 
 #[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -128,47 +127,11 @@ pub async fn fetch_prices_for_connection(
     .await
 }
 
-/// Re-request every eligible instrument's ENTIRE history, ignoring both the
-/// freshness guard and [`REFETCH_DAYS`].
-///
-/// The routine pass only heals the trailing window, so a gap older than that —
-/// anything an instance accumulated before the window existed — needs asking
-/// for the whole series once. Since `insert_prices` upserts, this repairs in
-/// place: nothing is deleted first, so a failed or half-finished run leaves the
-/// existing history exactly as it was rather than a hole where it used to be.
-///
-/// Expensive (one full-history response per instrument) and not idempotent in
-/// cost, so it is a deliberate manual operation — see
-/// `jobs/examples/pricefix.rs` — never the scheduler.
-pub async fn refresh_all_prices_for_connection(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(
-        pool,
-        connection_id,
-        providers,
-        true,
-        chrono::Utc::now().date_naive(),
-    )
-    .await
-}
-
 /// Runs the routine pass for an explicit business date. Production callers use UTC today.
 pub async fn fetch_prices_for_connection_at(
     pool: &sqlx::PgPool,
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
-    today: chrono::NaiveDate,
-) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(pool, connection_id, providers, false, today).await
-}
-async fn fetch_prices_for_connection_inner(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-    full: bool,
     today: chrono::NaiveDate,
 ) -> Result<PriceSyncSummary, CoreError> {
     let mut summary = PriceSyncSummary::default();
@@ -192,11 +155,9 @@ async fn fetch_prices_for_connection_inner(
             continue;
         };
 
-        // Freshness guard: already have today's point → nothing to do. A full
-        // refresh is asking for the history itself, not for today, so it is
-        // exactly the case the guard must not short-circuit.
+        // Freshness guard: already have today's point → nothing to do.
         let latest = latest_price_ts(&mut conn, row.id).await?;
-        if !full && latest.map(|ts| ts.date_naive()) == Some(today) {
+        if latest.map(|ts| ts.date_naive()) == Some(today) {
             summary.skipped_fresh += 1;
             continue;
         }
@@ -233,13 +194,10 @@ async fn fetch_prices_for_connection_inner(
             }
         };
 
-        // Re-fetch the trailing window (or full history when no prices yet, or
-        // when explicitly asked for one) and upsert. `latest` itself is
-        // deliberately not the start: see REFETCH_DAYS.
-        let since = match full {
-            true => None,
-            false => latest.map(|ts| ts - Duration::days(REFETCH_DAYS)),
-        };
+        // Re-fetch the trailing window (or full history when no prices yet)
+        // and upsert. `latest` itself is deliberately not the start: see
+        // REFETCH_DAYS.
+        let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
         match provider.fetch_prices(&symbol, since).await {
             Ok(points) => {
                 // Store points in whatever currency the listing is quoted in;
