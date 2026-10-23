@@ -73,6 +73,8 @@ test("stored token → /auth/me returns 401 → unauthenticated, global handler 
 
   // Global handler must not have been triggered (no spurious POST /auth/logout).
   expect(unauthorizedSpy).not.toHaveBeenCalled();
+  // The rejected token is cleared.
+  expect(client.getAuthToken()).toBeNull();
 });
 
 test("stored token → /auth/me network error → token preserved", async () => {

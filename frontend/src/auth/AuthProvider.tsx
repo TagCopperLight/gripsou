@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
+import { ApiError, getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
 import type { MfaRequired, SessionUser } from "../api/types";
 import {
   startAuthentication,
@@ -53,12 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const u = await getJson<SessionUser>("/auth/me", { skipGlobalUnauthorized: true });
         if (active && token === getAuthToken()) applyUser(u);
       } catch (err: unknown) {
-        // A 401 here is expected (stale/invalid stored token) and must NOT
-        // trigger the global unauthorized handler (which would fire a spurious
-        // POST /auth/logout and navigate before isBootstrapping resolves).
-        // Only clear the stored token if it's explicitly rejected as unauthorized.
-        // Network errors or 50x shouldn't log the user out.
-        if (token === getAuthToken() && err instanceof Error && err.message.includes("unauthorized")) {
+        // Only a rejected token is cleared: network errors or 50x shouldn't log the user out.
+        if (token === getAuthToken() && err instanceof ApiError && err.status === 401) {
           setAuthToken(null);
         }
       } finally {
