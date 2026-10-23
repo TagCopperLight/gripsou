@@ -233,9 +233,10 @@ pub async fn status(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Status, CoreEr
     Ok(row)
 }
 
-/// Two-factor is on when a confirmed TOTP or at least one passkey exists.
+/// Two-factor is on when a confirmed authenticator exists. Passkeys are a way
+/// to sign in, not a second step: they never turn it on.
 pub fn has_second_factor(s: &Status) -> bool {
-    s.totp || s.passkeys > 0
+    s.totp
 }
 
 pub struct Cleared {
@@ -512,7 +513,7 @@ mod tests {
         add_passkey(&pool, u, &[7]).await;
         let s = status(&pool, u).await.unwrap();
         assert_eq!(s.passkeys, 1);
-        assert!(has_second_factor(&s));
+        assert!(!has_second_factor(&s), "a passkey alone is not two-factor");
     }
 
     #[sqlx::test(migrations = "../migrations")]

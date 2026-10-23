@@ -13,6 +13,7 @@ pub mod login_challenge;
 pub mod lot;
 pub mod lot_suggest;
 pub mod mfa;
+pub mod passkey;
 pub mod prefs;
 pub mod price;
 pub mod provider;
