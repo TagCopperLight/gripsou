@@ -6,6 +6,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  RegistrationResponseJSON,
+} from "@simplewebauthn/browser";
 import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
@@ -23,6 +27,7 @@ import type {
   Provider,
   ProviderGroup,
   MfaStatus,
+  Passkey,
   Session,
   SessionUser,
   TotpSetup,
@@ -350,6 +355,46 @@ export function useRegenerateRecovery() {
         { reauth },
         KEEP_SESSION,
       ),
+    onSuccess: () => afterMfaChange(qc),
+  });
+}
+
+/** Starts adding a passkey: the browser's creation options for a fresh
+ *  password check (the token is checked, not spent, so a cancelled browser
+ *  window can be retried). */
+export function usePasskeyRegisterOptions() {
+  return useMutation({
+    mutationFn: (reauth: string) =>
+      postJson<{ challenge: string; options: PublicKeyCredentialCreationOptionsJSON }>(
+        "/auth/mfa/passkeys/register/options",
+        { reauth },
+        KEEP_SESSION,
+      ),
+  });
+}
+
+export function useRegisterPasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reauth: string; challenge: string; credential: RegistrationResponseJSON }) =>
+      postJson<Passkey>("/auth/mfa/passkeys/register", body, KEEP_SESSION),
+    onSuccess: () => afterMfaChange(qc),
+  });
+}
+
+export function useRenamePasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      patchJson<void>(`/auth/mfa/passkeys/${id}`, { name }),
+    onSuccess: () => afterMfaChange(qc),
+  });
+}
+
+export function useDeletePasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteJson<void>(`/auth/mfa/passkeys/${id}`),
     onSuccess: () => afterMfaChange(qc),
   });
 }

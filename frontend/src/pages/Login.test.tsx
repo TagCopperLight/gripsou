@@ -19,6 +19,7 @@ function wrapWithMock(
   login: AuthValue["login"],
   children: ReactNode,
   verifyLogin: AuthValue["verifyLogin"] = async () => {},
+  loginWithPasskey: AuthValue["loginWithPasskey"] = async () => {},
 ) {
   const value: AuthValue = {
     isAuthenticated: false,
@@ -26,6 +27,7 @@ function wrapWithMock(
     isBootstrapping: false,
     prefs: DEFAULT_PREFS,
     login,
+    loginWithPasskey,
     verifyLogin,
     adoptSession: () => {},
     logout: async () => {},

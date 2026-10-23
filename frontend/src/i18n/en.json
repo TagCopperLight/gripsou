@@ -205,7 +205,14 @@
     }
   },
   "auth": {
+    "signInWithPasskey": "Sign in with a passkey",
+    "usePassword": "Use your password instead",
     "mfa": {
+      "passkeyTitle": "Use your passkey",
+      "useCode": "Use your code instead",
+      "usePasskey": "Use a passkey",
+      "or": "or",
+      "passkeyRefused": "That passkey didn't work. Try again.",
       "codeTitle": "Enter your code",
       "backupTitle": "Enter a backup code",
       "codeLabel": "6-digit code",
@@ -867,5 +874,23 @@
     "turnOff": "Turn off",
     "turnOffTitle": "Turn off two-factor?",
     "turnOffBody": "You'll sign in with your password only."
+  },
+  "passkeys": {
+    "addTitle": "Add a passkey",
+    "waiting": "Waiting for your browser…",
+    "addedTitle": "Passkey added",
+    "notAdded": "No passkey was added",
+    "alreadyAdded": "This device already has a passkey for gripsou",
+    "tryAgain": "Try again",
+    "expired": "That took too long. Enter your password again.",
+    "title": "Passkeys",
+    "addPasskey": "Add passkey",
+    "added": "Added {{date}}",
+    "lastUsed": "Last used {{time}}",
+    "rename": "Rename",
+    "delete": "Delete",
+    "nameLabel": "Passkey name",
+    "deleteTitle": "Delete {{name}}?",
+    "failed": "Something went wrong. Try again."
   }
 }

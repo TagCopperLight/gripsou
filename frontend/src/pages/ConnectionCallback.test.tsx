@@ -21,6 +21,7 @@ function withClient(children: ReactNode, welcomeDone = true) {
     isBootstrapping: false,
     prefs: DEFAULT_PREFS,
     login: async () => null,
+    loginWithPasskey: async () => {},
     verifyLogin: async () => {},
     adoptSession: () => {},
     logout: async () => {},

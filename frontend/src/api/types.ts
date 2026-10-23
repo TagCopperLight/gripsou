@@ -364,8 +364,9 @@ export type InvestmentReturns = {
   accounts: ReturnAccount[];
 };
 
-export type MfaMethod = "totp" | "recovery";
+export type MfaMethod = "totp" | "recovery" | "passkey";
 export type MfaRequired = { mfaRequired: true; challenge: string; methods: MfaMethod[] };
 
-export type MfaStatus = { totp: boolean; recoveryRemaining: number };
+export type Passkey = { id: string; name: string; createdAt: number; lastUsedAt: number | null };
+export type MfaStatus = { totp: boolean; recoveryRemaining: number; passkeys: Passkey[] };
 export type TotpSetup = { secret: string; qrSvg: string };

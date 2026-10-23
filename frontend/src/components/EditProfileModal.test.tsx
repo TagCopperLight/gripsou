@@ -22,6 +22,7 @@ function renderModal(prefs: UserPrefs = DEFAULT_PREFS) {
     isBootstrapping: false,
     prefs,
     login: vi.fn(),
+    loginWithPasskey: vi.fn(),
     verifyLogin: vi.fn(),
     adoptSession: () => {},
     logout: vi.fn(),

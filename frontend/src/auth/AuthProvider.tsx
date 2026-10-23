@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
 import type { MfaRequired, SessionUser } from "../api/types";
-import { AuthContext, type AuthValue } from "./context";
+import {
+  startAuthentication,
+  type PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
+import { AuthContext, type AuthValue, type SecondFactor } from "./context";
 import i18n from "../i18n";
 import { DEFAULT_PREFS, setPrefs, type UserPrefs } from "../lib/prefs";
 import { afterCategorizeRequested, afterReviewThresholdChange } from "../api/invalidate";
@@ -85,18 +89,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyUser, resetSession],
   );
 
+  const loginWithPasskey = useCallback(
+    async (remember: boolean) => {
+      const { challenge, options } = await postJson<{
+        challenge: string;
+        options: PublicKeyCredentialRequestOptionsJSON;
+      }>("/auth/passkey/options", {}, { skipGlobalUnauthorized: true });
+      const credential = await startAuthentication({ optionsJSON: options });
+      const res = await postJson<SessionResponse>(
+        "/auth/passkey",
+        { challenge, credential, remember },
+        { skipGlobalUnauthorized: true },
+      );
+      resetSession();
+      setAuthToken(res.token, remember);
+      applyUser(res.user);
+    },
+    [applyUser, resetSession],
+  );
+
   const verifyLogin = useCallback(
     async (
       challenge: string,
-      code: { totp: string } | { recoveryCode: string },
+      code: SecondFactor,
       remember: boolean,
     ) => {
       // A 401 here means "challenge expired", not "logged out".
-      const res = await postJson<SessionResponse>(
-        "/auth/login/verify",
-        { challenge, ...code },
-        { skipGlobalUnauthorized: true },
-      );
+      const res =
+        "passkey" in code
+          ? await postJson<SessionResponse>(
+              "/auth/login/verify/passkey",
+              { challenge, credential: code.passkey },
+              { skipGlobalUnauthorized: true },
+            )
+          : await postJson<SessionResponse>(
+              "/auth/login/verify",
+              { challenge, ...code },
+              { skipGlobalUnauthorized: true },
+            );
       resetSession();
       setAuthToken(res.token, remember);
       applyUser(res.user);
@@ -186,13 +216,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       prefs: user?.prefs ?? DEFAULT_PREFS,
       login,
+      loginWithPasskey,
       verifyLogin,
       adoptSession,
       logout,
       updateUser,
       updatePrefs,
     }),
-    [user, isBootstrapping, login, verifyLogin, adoptSession, logout, updateUser, updatePrefs],
+    [user, isBootstrapping, login, loginWithPasskey, verifyLogin, adoptSession, logout, updateUser, updatePrefs],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

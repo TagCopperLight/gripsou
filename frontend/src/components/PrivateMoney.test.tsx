@@ -14,6 +14,7 @@ function renderWith(prefs: UserPrefs) {
     isBootstrapping: false,
     prefs,
     login: async () => null,
+    loginWithPasskey: async () => {},
     verifyLogin: async () => {},
     adoptSession: () => {},
     logout: async () => {},

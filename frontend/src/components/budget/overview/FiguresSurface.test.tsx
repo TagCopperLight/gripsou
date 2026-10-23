@@ -33,6 +33,7 @@ function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
     isBootstrapping: false,
     prefs,
     login: async () => null,
+    loginWithPasskey: async () => {},
     verifyLogin: async () => {},
     adoptSession: () => {},
     logout: async () => {},

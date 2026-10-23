@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, KeyRound, Settings, ShieldCheck, Smartphone } from "lucide-react";
+import { ChevronRight, Fingerprint, KeyRound, Plus, Settings, ShieldCheck, Smartphone } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
@@ -13,6 +13,8 @@ import { EditProfileModal } from "../../components/EditProfileModal";
 import { ChangePasswordModal } from "../../components/ChangePasswordModal";
 import { TotpSetupModal } from "../../components/TotpSetupModal";
 import { ManageTwoFactorModal } from "../../components/ManageTwoFactorModal";
+import { PasskeysModal } from "../../components/PasskeysModal";
+import { AddPasskeyModal } from "../../components/AddPasskeyModal";
 import {
   useMfaStatus,
   useSessions,
@@ -31,6 +33,13 @@ export function SettingsAccount() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
   const [managing, setManaging] = useState<"menu" | "turnOff" | null>(null);
+  const [passkeysOpen, setPasskeysOpen] = useState(false);
+  const hasPasskeys = (mfa.data?.passkeys.length ?? 0) > 0;
+  const [addingPasskey, setAddingPasskey] = useState(false);
+  const addPasskey = () => {
+    setPasskeysOpen(false);
+    setAddingPasskey(true);
+  };
   // The password window closes on success; the row says it worked.
   const [passwordChanged, setPasswordChanged] = useState(false);
 
@@ -113,6 +122,36 @@ export function SettingsAccount() {
                     aria-label={t("settings.account.twoFactor")}
                     offClassName="bg-surface-3"
                   />
+                </div>
+              )
+            }
+          />
+          <SecurityRow
+            icon={<Fingerprint className="size-4.5" strokeWidth={2} />}
+            iconTone={hasPasskeys ? "bg-green-soft text-green" : undefined}
+            title={t("passkeys.title")}
+            action={
+              mfa.data && (
+                <div className="flex items-center gap-3">
+                  {hasPasskeys && (
+                    <button
+                      type="button"
+                      onClick={() => setPasskeysOpen(true)}
+                      aria-label={t("settings.account.manage")}
+                      className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                    >
+                      <Settings className="size-4.5" strokeWidth={2} />
+                    </button>
+                  )}
+                  {/* As wide as the two-factor switch above, so the gears line up. */}
+                  <button
+                    type="button"
+                    onClick={addPasskey}
+                    aria-label={t("passkeys.addPasskey")}
+                    className="flex h-7.5 w-11 cursor-pointer items-center justify-center rounded-lg text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                  >
+                    <Plus className="size-5" strokeWidth={2} />
+                  </button>
                 </div>
               )
             }
@@ -241,6 +280,10 @@ export function SettingsAccount() {
 
       {settingUp && <TotpSetupModal onClose={() => setSettingUp(false)} />}
       {managing && <ManageTwoFactorModal start={managing} onClose={() => setManaging(null)} />}
+      {addingPasskey && <AddPasskeyModal onClose={() => setAddingPasskey(false)} />}
+      {passkeysOpen && (
+        <PasskeysModal onClose={() => setPasskeysOpen(false)} onAdd={addPasskey} />
+      )}
 
       {deleteOpen && (
         <DeleteAccountModal

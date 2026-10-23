@@ -1,16 +1,22 @@
 import { useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { Fingerprint, LoaderCircle } from "lucide-react";
+import {
+  startAuthentication,
+  WebAuthnAbortService,
+  type PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
 import { Button } from "../components/Button";
 import { CodeInput } from "../components/CodeInput";
 import { useAuth } from "../auth/context";
-import { ApiError } from "../api/client";
+import { ApiError, postJson } from "../api/client";
 import { throttleMinutes } from "../lib/mfa";
 
-type Step = "password" | "code" | "backup";
+type Step = "password" | "passwordless" | "passkey" | "code" | "backup";
 
 export function Login() {
   const { t } = useTranslation();
-  const { login, verifyLogin } = useAuth();
+  const { login, loginWithPasskey, verifyLogin } = useAuth();
 
   const [step, setStep] = useState<Step>("password");
   const [email, setEmail] = useState("");
@@ -18,6 +24,8 @@ export function Login() {
   const [remember, setRemember] = useState(false);
   // The second step's challenge, from a password the server accepted.
   const [challenge, setChallenge] = useState<string | null>(null);
+  // The account has a passkey: it is tried first, and the code page offers it.
+  const [hasPasskey, setHasPasskey] = useState(false);
   const [code, setCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +42,8 @@ export function Login() {
 
   const backToPassword = (message: string | null = null) => {
     attempt.current++;
+    WebAuthnAbortService.cancelCeremony();
+    setHasPasskey(false);
     setStep("password");
     setChallenge(null);
     setPassword("");
@@ -52,12 +62,64 @@ export function Login() {
       const mfa = await login(email, password, remember);
       if (mfa) {
         setChallenge(mfa.challenge);
-        setStep("code");
+        const passkey = mfa.methods.includes("passkey");
+        setHasPasskey(passkey);
+        if (passkey) void tryPasskey(mfa.challenge);
+        else setStep("code");
       }
     } catch (err) {
       setError(tooMany(err) ?? t("auth.invalidCredentials"));
     } finally {
       setPending(false);
+    }
+  };
+
+  /** Ask the browser for the passkey, then sign in with it. Cancelled or
+   *  refused (Safari may want a tap first), it lands on the code page, which
+   *  has a button to try again. */
+  const tryPasskey = async (forChallenge = challenge) => {
+    if (!forChallenge) return;
+    attempt.current++;
+    const sent = attempt.current;
+    setError(null);
+    setStep("passkey");
+    try {
+      const { options } = await postJson<{ options: PublicKeyCredentialRequestOptionsJSON }>(
+        "/auth/login/verify/passkey/options",
+        { challenge: forChallenge },
+        { skipGlobalUnauthorized: true },
+      );
+      const passkey = await startAuthentication({ optionsJSON: options });
+      if (sent !== attempt.current) return;
+      await verifyLogin(forChallenge, { passkey }, remember);
+    } catch (err) {
+      if (sent !== attempt.current) return;
+      if (err instanceof ApiError && err.status === 401) {
+        backToPassword(t("auth.mfa.expired"));
+        return;
+      }
+      setStep("code");
+      if (err instanceof ApiError) {
+        setError(tooMany(err) ?? (err.status === 400 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")));
+      }
+    }
+  };
+
+  /** Sign in with a passkey alone. Cancelled, it goes back to the form
+   *  without a message; refused, it says so there. */
+  const signInWithPasskey = async () => {
+    attempt.current++;
+    const sent = attempt.current;
+    setError(null);
+    setStep("passwordless");
+    try {
+      await loginWithPasskey(remember);
+    } catch (err) {
+      if (sent !== attempt.current) return;
+      setStep("password");
+      if (err instanceof ApiError) {
+        setError(tooMany(err) ?? (err.status === 400 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")));
+      }
     }
   };
 
@@ -87,6 +149,7 @@ export function Login() {
 
   const switchTo = (next: Step) => {
     attempt.current++;
+    WebAuthnAbortService.cancelCeremony();
     setError(null);
     setCode("");
     setBackupCode("");
@@ -137,7 +200,47 @@ export function Login() {
           }}
         />
         {errorLine}
+        {hasPasskey && (
+          <>
+            <div className="flex items-center gap-3 text-xs text-fg-faint">
+              <span className="h-px flex-1 bg-surface-3" />
+              {t("auth.mfa.or")}
+              <span className="h-px flex-1 bg-surface-3" />
+            </div>
+            <button
+              type="button"
+              onClick={() => void tryPasskey()}
+              className="flex h-10.25 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-2 text-sm font-medium text-fg transition-colors duration-140 hover:bg-surface-3"
+            >
+              <Fingerprint className="size-4.5" strokeWidth={2} />
+              {t("auth.mfa.usePasskey")}
+            </button>
+          </>
+        )}
         {switchLink(t("auth.mfa.useBackup"), "backup")}
+      </div>
+    );
+  } else if (step === "passkey") {
+    card = (
+      <div className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
+        <div className="pb-1 text-lg font-semibold text-fg">{t("auth.mfa.passkeyTitle")}</div>
+        {account}
+        <div className="flex flex-col items-center gap-4 py-6 text-center">
+          <LoaderCircle className="size-8 animate-spin text-green" />
+          <p className="text-lg font-semibold text-fg">{t("passkeys.waiting")}</p>
+        </div>
+        {switchLink(t("auth.mfa.useCode"), "code")}
+      </div>
+    );
+  } else if (step === "passwordless") {
+    card = (
+      <div className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
+        <div className="pb-1 text-lg font-semibold text-fg">{t("auth.signInWithPasskey")}</div>
+        <div className="flex flex-col items-center gap-4 py-6 text-center">
+          <LoaderCircle className="size-8 animate-spin text-green" />
+          <p className="text-lg font-semibold text-fg">{t("passkeys.waiting")}</p>
+        </div>
+        {switchLink(t("auth.usePassword"), "password")}
       </div>
     );
   } else if (step === "backup") {
@@ -204,6 +307,20 @@ export function Login() {
         <Button type="submit" disabled={pending} className="mt-1">
           {t("auth.signIn")}
         </Button>
+        <div className="flex items-center gap-3 text-xs text-fg-faint">
+          <span className="h-px flex-1 bg-surface-3" />
+          {t("auth.mfa.or")}
+          <span className="h-px flex-1 bg-surface-3" />
+        </div>
+        <button
+          type="button"
+          onClick={() => void signInWithPasskey()}
+          disabled={pending}
+          className="flex h-10.25 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-2 text-sm font-medium text-fg transition-colors duration-140 hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Fingerprint className="size-4.5" strokeWidth={2} />
+          {t("auth.signInWithPasskey")}
+        </button>
       </form>
     );
   }
