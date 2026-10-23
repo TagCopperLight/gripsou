@@ -41,21 +41,15 @@ Backend checks: `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`.
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-One command self-hosts the app: the backend binary serves both the built SPA and
-the JSON API, with Postgres alongside.
+One command self-hosts the app: the backend binary serves both the built SPA and the JSON API, with Postgres alongside.
 
 ## Locked out of two-factor
 
-If you lose both your authenticator app and your backup codes, run
-this on the server:
+If you lose both your authenticator app and your backup codes, run this on the server:
 
 ```sh
 docker compose -f docker/docker-compose.yml exec backend gripsou reset-2fa you@example.com
 ```
-
-It turns off two-factor authentication for that user and signs them out of
-every session; they can log in with their password and set it up again. (An
-admin can also send a reset link, which does the same.)
 
 ## Powens webhooks (optional)
 
