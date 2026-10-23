@@ -49,10 +49,13 @@ type HandleOptions = { skipGlobalUnauthorized?: boolean };
  *  instead of parsing the message. Thrown by every helper in this module. */
 export class ApiError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  /** Seconds from a `Retry-After` header (429 throttling), else null. */
+  readonly retryAfter: number | null;
+  constructor(message: string, status: number, retryAfter: number | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -61,7 +64,14 @@ function handle(res: Response, path: string, method: string, requestToken: strin
     if (!opts?.skipGlobalUnauthorized && requestToken === authToken) onUnauthorized?.();
     throw new ApiError(`${method} ${path} unauthorized`, 401);
   }
-  if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, res.status);
+  if (!res.ok) {
+    const retry = Number(res.headers.get("Retry-After"));
+    throw new ApiError(
+      `${method} ${path} failed: ${res.status}`,
+      res.status,
+      Number.isFinite(retry) && retry > 0 ? retry : null,
+    );
+  }
 }
 
 /** The body as JSON, or `undefined` when there is none: 204 No Content, and a

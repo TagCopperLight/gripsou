@@ -2,6 +2,8 @@ pub mod auth;
 mod budget;
 mod dto;
 mod handlers;
+mod security_headers;
+pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, Response};
 use axum::{
@@ -17,15 +19,24 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
+use crate::throttle::LoginThrottle;
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub cors_origins: Arc<RwLock<Vec<String>>>,
+    pub login_throttle: Arc<LoginThrottle>,
 }
 
 impl FromRef<AppState> for sqlx::PgPool {
     fn from_ref(state: &AppState) -> sqlx::PgPool {
         state.db.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<LoginThrottle> {
+    fn from_ref(state: &AppState) -> Arc<LoginThrottle> {
+        state.login_throttle.clone()
     }
 }
 
@@ -40,6 +51,7 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     let app_state = AppState {
         db: db.clone(),
         cors_origins: cors_origins.clone(),
+        login_throttle: Arc::new(LoginThrottle::default()),
     };
 
     let index_html = static_dir.join("index.html");
@@ -175,6 +187,8 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
             Method::OPTIONS,
         ])
         .allow_headers(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT])
+        // So a throttled login on another origin can say how long to wait.
+        .expose_headers(vec![axum::http::header::RETRY_AFTER])
         .allow_credentials(true);
 
     // Per-request span: every line a handler logs carries request_id, method,
@@ -232,6 +246,9 @@ pub fn router(db: sqlx::PgPool, static_dir: &std::path::Path, initial_cors: Vec<
     Router::new()
         .nest("/api", api.layer(cors_layer).layer(trace_layer))
         .merge(static_files)
+        .layer(axum::middleware::from_fn(
+            security_headers::security_headers,
+        ))
 }
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))

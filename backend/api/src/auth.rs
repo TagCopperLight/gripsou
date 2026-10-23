@@ -93,6 +93,40 @@ pub fn verify_password(plain: &str, hash: &str) -> bool {
     }
 }
 
+/// Hash checked when the email matches no account, so a login answers in the
+/// same time whether or not the email exists. Computed once, on first use.
+pub static DUMMY_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    hash_password("gripsou-dummy-password").expect("hashing a constant cannot fail")
+});
+
+/// `verify_password`, or the same amount of work against `DUMMY_HASH` when
+/// there is no account (`hash` is `None`), which never succeeds.
+pub fn verify_password_or_dummy(plain: &str, hash: Option<&str>) -> bool {
+    match hash {
+        Some(h) => verify_password(plain, h),
+        None => {
+            let _ = verify_password(plain, &DUMMY_HASH);
+            false
+        }
+    }
+}
+
+pub const PASSWORD_MIN_CHARS: usize = 8;
+pub const PASSWORD_MAX_CHARS: usize = 128;
+
+/// The one rule for a password being set (invite, reset, change): length
+/// only, counted in characters. Existing shorter passwords keep working.
+pub fn validate_new_password(pw: &str) -> Result<(), (StatusCode, String)> {
+    if (PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&pw.chars().count()) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "password must be 8 to 128 characters".to_string(),
+        ))
+    }
+}
+
 /// The authenticated principal, resolved from the opaque bearer token by DB
 /// lookup. Carries the session id so handlers can mark/skip the current session.
 #[derive(Debug)]
@@ -148,6 +182,39 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dummy_hash_is_a_real_argon2_hash() {
+        // A malformed dummy would fail fast and bring the timing gap back.
+        assert!(PasswordHash::new(&DUMMY_HASH).is_ok());
+    }
+
+    #[test]
+    fn verify_or_dummy_never_accepts_a_missing_user() {
+        assert!(!verify_password_or_dummy("gripsou-dummy-password", None));
+        assert!(!verify_password_or_dummy("", None));
+    }
+
+    #[test]
+    fn verify_or_dummy_checks_a_real_hash() {
+        let hash = hash_password("hunter22").unwrap();
+        assert!(verify_password_or_dummy("hunter22", Some(&hash)));
+        assert!(!verify_password_or_dummy("wrong", Some(&hash)));
+    }
+
+    #[test]
+    fn new_password_length_bounds() {
+        assert!(validate_new_password(&"a".repeat(7)).is_err());
+        assert!(validate_new_password(&"a".repeat(8)).is_ok());
+        assert!(validate_new_password(&"a".repeat(128)).is_ok());
+        assert!(validate_new_password(&"a".repeat(129)).is_err());
+        assert!(validate_new_password("").is_err());
+        // Counted in characters, not bytes: 8 accented letters are 16 bytes.
+        assert!(validate_new_password("éééééééé").is_ok());
+        let err = validate_new_password("short").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1, "password must be 8 to 128 characters");
+    }
+
     use super::*;
     use axum::http::{Request, header::AUTHORIZATION};
     use chrono::Duration;

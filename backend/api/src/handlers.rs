@@ -875,33 +875,79 @@ pub async fn users(
     ))
 }
 
+/// Login's error: the usual status + message, plus `Retry-After` seconds when
+/// throttled. Other handlers keep `(StatusCode, String)`; `?` converts it.
+#[derive(Debug)]
+pub struct LoginError(pub StatusCode, pub String, pub Option<u64>);
+
+impl From<(StatusCode, String)> for LoginError {
+    fn from((status, message): (StatusCode, String)) -> Self {
+        LoginError(status, message, None)
+    }
+}
+
+impl axum::response::IntoResponse for LoginError {
+    fn into_response(self) -> axum::response::Response {
+        let mut res = (self.0, self.1).into_response();
+        if let Some(secs) = self.2 {
+            res.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from(secs),
+            );
+        }
+        res
+    }
+}
+
+const MAX_EMAIL_LEN: usize = 254;
+
 pub async fn login(
     State(pool): State<PgPool>,
+    State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginReq>,
-) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
+) -> Result<Json<dto::LoginResponse>, LoginError> {
     let unauthorized = || {
-        (
+        LoginError(
             StatusCode::UNAUTHORIZED,
             "invalid email or password".to_string(),
+            None,
         )
     };
     let user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
+    // No real address is longer (RFC 5321). Refused before the email can
+    // become a throttle key or a log field.
+    if body.email.len() > MAX_EMAIL_LEN {
+        return Err(unauthorized());
+    }
     let ip = client_ip(&headers, peer);
-    let Some(creds) = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
+    let now = std::time::Instant::now();
+    // Counts the attempt as a failure until the password proves right.
+    if let Err(blocked) = throttle.try_attempt(&body.email, &ip, now) {
+        if blocked.first_refusal {
+            tracing::warn!(email = %body.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+        }
+        return Err(LoginError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many attempts".to_string(),
+            Some(blocked.retry_after_secs()),
+        ));
+    }
+    let creds = gripsou_core::repo::user::credentials_by_email(&pool, &body.email)
         .await
-        .map_err(internal)?
-    else {
+        .map_err(internal)?;
+    let ok = auth::verify_password_or_dummy(
+        &body.password,
+        creds.as_ref().map(|c| c.password_hash.as_str()),
+    );
+    let Some(creds) = creds.filter(|_| ok) else {
         tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
         return Err(unauthorized());
     };
-    if !auth::verify_password(&body.password, &creds.password_hash) {
-        tracing::warn!(email = %body.email, ip = %ip, user_agent = user_agent.unwrap_or(""), "login failed");
-        return Err(unauthorized());
-    }
+    throttle.record_success(&body.email, &ip);
 
     let token = auth::generate_token();
     let hash = auth::hash_token(&token);
@@ -1123,6 +1169,7 @@ pub async fn change_password(
             "current password is incorrect".to_string(),
         ));
     }
+    auth::validate_new_password(&body.new_password)?;
     let new_hash = auth::hash_password(&body.new_password).map_err(internal)?;
     gripsou_core::repo::user::update_password(&pool, user_id, &new_hash)
         .await
@@ -1452,12 +1499,13 @@ pub async fn redeem_invite(
 ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
     let email = body.email.trim();
     let name = body.name.trim();
-    if email.is_empty() || name.is_empty() || body.password.is_empty() {
+    if email.is_empty() || name.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "email, name and password are required".to_string(),
+            "email and name are required".to_string(),
         ));
     }
+    auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
     let user_id =
@@ -1480,9 +1528,7 @@ pub async fn redeem_reset(
     Path(token): Path<String>,
     Json(body): Json<dto::RedeemResetReq>,
 ) -> Result<Json<dto::LoginResponse>, (StatusCode, String)> {
-    if body.password.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "password is required".to_string()));
-    }
+    auth::validate_new_password(&body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = auth::hash_password(&body.password).map_err(internal)?;
     let user_id = gripsou_core::repo::invite_token::redeem_reset(&pool, &hash, &pw_hash)
@@ -1515,7 +1561,125 @@ mod auth_tests {
     use super::*;
     use crate::auth;
     use crate::dto::{ChangePasswordReq, LoginReq};
+    use crate::throttle::LoginThrottle;
+    use axum::response::IntoResponse;
     use sqlx::PgPool;
+    use std::sync::Arc;
+
+    fn no_throttle() -> State<Arc<LoginThrottle>> {
+        State(Arc::new(LoginThrottle::default()))
+    }
+
+    async fn try_login(
+        pool: &PgPool,
+        throttle: &Arc<LoginThrottle>,
+        email: &str,
+        pw: &str,
+    ) -> Result<Json<dto::LoginResponse>, LoginError> {
+        login(
+            State(pool.clone()),
+            State(throttle.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Json(LoginReq {
+                email: email.into(),
+                password: pw.into(),
+                remember: false,
+            }),
+        )
+        .await
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn sixth_attempt_after_five_failures_is_refused_with_retry_after(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..5 {
+            let err = try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        }
+        // Even the right password waits: the check happens before any verify.
+        let err = try_login(&pool, &throttle, "a@t.local", "hunter22")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(matches!(err.2, Some(s) if (1..=60).contains(&s)));
+        let resp = err.into_response();
+        assert!(resp.headers().contains_key(axum::http::header::RETRY_AFTER));
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_successful_login_clears_earlier_failures(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..4 {
+            try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+        }
+        let _ = try_login(&pool, &throttle, "a@t.local", "hunter22")
+            .await
+            .expect("login ok");
+        for _ in 0..4 {
+            let err = try_login(&pool, &throttle, "a@t.local", "wrong")
+                .await
+                .unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn unknown_emails_are_throttled_like_real_ones(pool: PgPool) {
+        let throttle = Arc::new(LoginThrottle::default());
+        for _ in 0..5 {
+            try_login(&pool, &throttle, "nobody@t.local", "x")
+                .await
+                .unwrap_err();
+        }
+        let err = try_login(&pool, &throttle, "nobody@t.local", "x")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    /// A burst sent all at once gets no more guesses than the same requests
+    /// sent one by one: each attempt is counted before the password is checked.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
+        seed_user(&pool, "a@t.local", "hunter22").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let mut set = tokio::task::JoinSet::new();
+        for _ in 0..10 {
+            let (pool, throttle) = (pool.clone(), throttle.clone());
+            set.spawn(async move {
+                try_login(&pool, &throttle, "a@t.local", "wrong")
+                    .await
+                    .unwrap_err()
+                    .0
+            });
+        }
+        let statuses = set.join_all().await;
+        let count = |s| statuses.iter().filter(|&&x| x == s).count();
+        assert_eq!(count(StatusCode::UNAUTHORIZED), 5, "{statuses:?}");
+        assert_eq!(count(StatusCode::TOO_MANY_REQUESTS), 5, "{statuses:?}");
+    }
+
+    /// An oversized email is refused like a wrong one, before it can become a
+    /// throttle key (or a log field).
+    #[sqlx::test(migrations = "../migrations")]
+    async fn an_oversized_email_is_refused_without_counting(pool: PgPool) {
+        let throttle = Arc::new(LoginThrottle::default());
+        let email = format!("{}@t.local", "a".repeat(292));
+        assert_eq!(email.len(), 300);
+        for _ in 0..6 {
+            let err = try_login(&pool, &throttle, &email, "x").await.unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+            assert_eq!(err.1, "invalid email or password");
+        }
+        assert_eq!(throttle.tracked_keys(), (0, 0));
+    }
 
     /// Seed an admin user and return their id — mirrors what `seed_user` does for
     /// the existing tests (role "admin", email "a@t.local").
@@ -1547,6 +1711,7 @@ mod auth_tests {
     async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
         login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1655,6 +1820,7 @@ mod auth_tests {
         );
         let failed = login(
             State(pool.clone()),
+            no_throttle(),
             ua,
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1704,6 +1870,7 @@ mod auth_tests {
 
         let resp = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1724,6 +1891,7 @@ mod auth_tests {
 
         let err = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -1742,6 +1910,7 @@ mod auth_tests {
         seed_user(&pool, "a@t.local", "hunter2").await;
         let resp = login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -2810,7 +2979,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "new@t.local".into(),
                 name: "New".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -2841,7 +3010,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "new@t.local".into(),
                 name: "New".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -2890,7 +3059,7 @@ mod auth_tests {
             Json(dto::RedeemInviteReq {
                 email: "a@t.local".into(),
                 name: "Dup".into(),
-                password: "hunter2".into(),
+                password: "hunter2-long".into(),
             }),
         )
         .await
@@ -4168,6 +4337,7 @@ mod auth_tests {
     async fn can_login(pool: &PgPool, email: &str, pw: &str) -> bool {
         login(
             State(pool.clone()),
+            no_throttle(),
             axum::http::HeaderMap::new(),
             axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             Json(LoginReq {
@@ -4222,7 +4392,7 @@ mod auth_tests {
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
-        let resp = call_redeem_reset(&pool, "raw-reset", "new-pw")
+        let resp = call_redeem_reset(&pool, "raw-reset", "new-password")
             .await
             .expect("redeem ok")
             .0;
@@ -4234,7 +4404,7 @@ mod auth_tests {
                 .is_some(),
             "the response logs the user in"
         );
-        assert!(can_login(&pool, "t@t.local", "new-pw").await);
+        assert!(can_login(&pool, "t@t.local", "new-password").await);
         assert!(!can_login(&pool, "t@t.local", "old-pw").await);
         assert!(!session_alive(&pool, old_session.session_id).await);
     }
@@ -4264,7 +4434,7 @@ mod auth_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
         seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
-        let err = call_redeem_reset(&pool, "never-minted", "new-pw")
+        let err = call_redeem_reset(&pool, "never-minted", "new-password")
             .await
             .expect_err("unknown token must fail");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
@@ -4277,11 +4447,74 @@ mod auth_tests {
         seed_user_role(&pool, "t@t.local", "old-pw", "user").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(-1)).await;
 
-        let err = call_redeem_reset(&pool, "raw-reset", "new-pw")
+        let err = call_redeem_reset(&pool, "raw-reset", "new-password")
             .await
             .expect_err("expired token must fail");
         assert_eq!(err.0, StatusCode::NOT_FOUND);
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn reset_refuses_a_short_password(pool: PgPool) {
+        seed_user_role(&pool, "t@t.local", "old-password", "user").await;
+        mint_reset(&pool, "raw-short", "t@t.local", Duration::hours(1)).await;
+        let err = call_redeem_reset(&pool, "raw-short", "1234567")
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        // The link was not spent: a valid password still works with it.
+        assert!(
+            call_redeem_reset(&pool, "raw-short", "12345678")
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn change_password_refuses_a_short_password(pool: PgPool) {
+        seed_user_role(&pool, "c@t.local", "old-password", "user").await;
+        let who = principal_for(&pool, "c@t.local", "old-password").await;
+        let err = change_password(
+            State(pool.clone()),
+            who,
+            Json(dto::ChangePasswordReq {
+                current_password: "old-password".into(),
+                new_password: "short".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert!(can_login(&pool, "c@t.local", "old-password").await);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn invite_refuses_a_short_password(pool: PgPool) {
+        let admin = seed_admin_user(&pool).await;
+        gripsou_core::repo::invite_token::create(
+            &pool,
+            "invite",
+            None,
+            admin,
+            &auth::hash_token_str("raw-invite"),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+        let err = redeem_invite(
+            State(pool.clone()),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            Path("raw-invite".to_string()),
+            Json(dto::RedeemInviteReq {
+                email: "new@t.local".into(),
+                name: "New".into(),
+                password: "1234567".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
     }
 
     /// An empty new password is a 400 and does not burn the link, so the user

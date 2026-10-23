@@ -19,6 +19,7 @@ import { useAuth } from "../../auth/context";
 import type { Session } from "../../api/types";
 import { formatDate, formatRelative } from "../../lib/date";
 import { fileToAvatarDataUrl } from "../../lib/avatar";
+import { passwordLengthOk } from "../../lib/password";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -48,7 +49,14 @@ export function SettingsAccount() {
   const emailTaken = updateProfile.error?.message.includes(" 409") ?? false;
 
   const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [newPassword, setNewPasswordValue] = useState("");
+  // Set when "Update password" is clicked with a new password breaking the
+  // length rule; editing the new password clears it.
+  const [lengthError, setLengthError] = useState(false);
+  const setNewPassword = (value: string) => {
+    setNewPasswordValue(value);
+    setLengthError(false);
+  };
   const [confirmPassword, setConfirmPassword] = useState("");
   const changePassword = useChangePassword();
 
@@ -77,6 +85,10 @@ export function SettingsAccount() {
 
   const updatePassword = () => {
     if (!canUpdatePassword) return;
+    if (!passwordLengthOk(newPassword)) {
+      setLengthError(true);
+      return;
+    }
     changePassword.mutate(
       { currentPassword, newPassword },
       {
@@ -190,6 +202,7 @@ export function SettingsAccount() {
               ariaLabel={t("settings.account.confirmNewPassword")}
             />
           </Field>
+          {lengthError && <p className="text-sm text-red">{t("auth.passwordLength")}</p>}
           {passwordsMismatch && (
             <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>
           )}
