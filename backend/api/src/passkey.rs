@@ -3,19 +3,25 @@
 //! code on the second step).
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use gripsou_core::repo::{login_challenge, passkey as repo, session};
 use sqlx::PgPool;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use uuid::Uuid;
-use webauthn_rs::prelude::{CredentialID, PasskeyRegistration, Url, Webauthn, WebauthnBuilder};
+use webauthn_rs::prelude::{
+    CredentialID, DiscoverableAuthentication, DiscoverableKey, Passkey, PasskeyAuthentication,
+    PasskeyRegistration, Url, Webauthn, WebauthnBuilder,
+};
 use webauthn_rs_proto::ResidentKeyRequirement;
 
 use crate::auth::{self, AuthUser};
 use crate::dto;
-use crate::handlers::internal;
+use crate::handlers::{LoginError, client_ip, internal, issue_session};
 use crate::mfa::{ApiError, check_reauth, require_reauth};
+use crate::throttle::{Blocked, LoginThrottle, SecondFactorThrottle};
 
 /// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
 /// to start without a usable address. Every saved passkey is bound to its
@@ -63,6 +69,9 @@ impl Passkeys {
 }
 
 const REGISTER_KIND: &str = "passkey_register";
+const LOGIN_KIND: &str = "passkey_login";
+/// The second login step's challenge, which a passkey ceremony rides on.
+const MFA_KIND: &str = "mfa";
 const MAX_NAME_CHARS: usize = 64;
 
 fn not_accepted() -> ApiError {
@@ -212,6 +221,230 @@ pub async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
+fn too_many(blocked: &Blocked) -> LoginError {
+    LoginError(
+        StatusCode::TOO_MANY_REQUESTS,
+        "too many attempts".to_string(),
+        Some(blocked.retry_after_secs()),
+    )
+}
+
+/// A throttled second login step: the account is known.
+fn throttled(blocked: Blocked, email: &str, ip: &str) -> LoginError {
+    if blocked.first_refusal {
+        tracing::warn!(email = %email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+    }
+    too_many(&blocked)
+}
+
+/// A throttled passwordless sign-in: no account is known, only the IP.
+fn throttled_ip(blocked: Blocked, ip: &str) -> LoginError {
+    if blocked.first_refusal {
+        tracing::warn!(ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+    }
+    too_many(&blocked)
+}
+
+fn user_agent(headers: &HeaderMap) -> &str {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+}
+
+/// Start a passwordless sign-in: the browser offers the passkeys it has for
+/// this site, no email asked.
+pub async fn sign_in_options(
+    State(pool): State<PgPool>,
+    State(pk): State<Passkeys>,
+) -> Result<Json<dto::PasskeyOptions>, ApiError> {
+    let (mut rcr, state) = pk.0.start_discoverable_authentication().map_err(internal)?;
+    // webauthn-rs asks for the autofill style; this runs from a button.
+    rcr.mediation = None;
+    let token = auth::generate_token();
+    login_challenge::create(
+        &pool,
+        &auth::hash_token(&token),
+        None,
+        LOGIN_KIND,
+        serde_json::json!({ "auth": state }),
+    )
+    .await
+    .map_err(internal)?;
+    Ok(Json(dto::PasskeyOptions {
+        challenge: token,
+        options: serde_json::to_value(&rcr.public_key).map_err(internal)?,
+    }))
+}
+
+/// Finish a passwordless sign-in. The passkey's own unlock (PIN or biometric,
+/// required) is the second factor, so this is a full sign-in even with
+/// two-factor on. Any attempt spends the challenge; failures count per IP.
+pub async fn sign_in(
+    State(pool): State<PgPool>,
+    State(pk): State<Passkeys>,
+    State(throttle): State<Arc<LoginThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(body): Json<dto::PasskeySignInReq>,
+) -> Result<Json<dto::LoginResponse>, LoginError> {
+    let ip = client_ip(&headers, peer);
+    // Counts the attempt as a failure until the passkey proves right.
+    throttle
+        .try_ip(&ip, Instant::now())
+        .map_err(|b| throttled_ip(b, &ip))?;
+    let challenge = login_challenge::consume(&pool, &auth::hash_token(&body.challenge), LOGIN_KIND)
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    let refuse = |reason: &str| {
+        tracing::warn!(ip = %ip, user_agent = user_agent(&headers), reason, "passkey login failed");
+        LoginError::from(not_accepted())
+    };
+    let state: DiscoverableAuthentication =
+        serde_json::from_value(challenge.state["auth"].clone()).map_err(internal)?;
+    let (user_id, cred_id) =
+        pk.0.identify_discoverable_authentication(&body.credential)
+            .map_err(|_| refuse("no_user"))?;
+    // Only the claimed user's own passkey: a handle naming someone else finds nothing.
+    let Some(row) = repo::find(&pool, user_id, cred_id)
+        .await
+        .map_err(internal)?
+    else {
+        return Err(refuse("unknown_passkey"));
+    };
+    let mut passkey: Passkey = serde_json::from_value(row.passkey).map_err(internal)?;
+    let result =
+        pk.0.finish_discoverable_authentication(
+            &body.credential,
+            state,
+            &[DiscoverableKey::from(&passkey)],
+        )
+        .map_err(|_| refuse("invalid"))?;
+    passkey.update_credential(&result);
+    repo::record_use(
+        &pool,
+        row.id,
+        &serde_json::to_value(&passkey).map_err(internal)?,
+    )
+    .await
+    .map_err(internal)?;
+    throttle.refund_ip(&ip);
+    let resp = issue_session(&pool, &headers, peer, user_id, body.remember).await?;
+    tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent(&headers), method = "passkey", "login succeeded");
+    Ok(Json(resp))
+}
+
+/// Second login step: start a passkey ceremony for the challenge's user. Its
+/// state goes on the `mfa` challenge, which stays valid; a newer ceremony
+/// replaces an older one.
+pub async fn verify_options(
+    State(pool): State<PgPool>,
+    State(pk): State<Passkeys>,
+    Json(body): Json<dto::ChallengeReq>,
+) -> Result<Json<dto::PasskeyRequestOptions>, ApiError> {
+    let hash = auth::hash_token(&body.challenge);
+    let user_id = login_challenge::find_valid(&pool, &hash, MFA_KIND)
+        .await
+        .map_err(internal)?
+        .and_then(|c| c.user_id)
+        .ok_or_else(expired)?;
+    let passkeys: Vec<Passkey> = repo::stored(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|s| serde_json::from_value(s.passkey))
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+    if passkeys.is_empty() {
+        return Err((StatusCode::CONFLICT, "no passkeys".to_string()));
+    }
+    let (rcr, state) =
+        pk.0.start_passkey_authentication(&passkeys)
+            .map_err(internal)?;
+    let patch = serde_json::json!({ "passkey": state });
+    if !login_challenge::merge_state(&pool, &hash, MFA_KIND, patch)
+        .await
+        .map_err(internal)?
+    {
+        return Err(expired());
+    }
+    Ok(Json(dto::PasskeyRequestOptions {
+        options: serde_json::to_value(&rcr.public_key).map_err(internal)?,
+    }))
+}
+
+/// Second login step with a passkey. Counted like a code: per account on the
+/// second-factor throttle and per IP. A failure leaves the challenge usable.
+pub async fn verify(
+    State(pool): State<PgPool>,
+    State(pk): State<Passkeys>,
+    State(throttle): State<Arc<LoginThrottle>>,
+    State(sf_throttle): State<Arc<SecondFactorThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(body): Json<dto::LoginVerifyPasskeyReq>,
+) -> Result<Json<dto::LoginResponse>, LoginError> {
+    let ip = client_ip(&headers, peer);
+    let hash = auth::hash_token(&body.challenge);
+    let challenge = login_challenge::find_valid(&pool, &hash, MFA_KIND)
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    let user_id = challenge.user_id.ok_or_else(expired)?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    sf_throttle
+        .try_login(&throttle, &profile.email, &ip, Instant::now())
+        .map_err(|b| throttled(b, &profile.email, &ip))?;
+    let refuse = || {
+        tracing::warn!(email = %profile.email, ip = %ip, user_agent = user_agent(&headers), step = "second_factor", method = "passkey", "login failed");
+        LoginError::from(not_accepted())
+    };
+    // No ceremony started on this challenge.
+    let Some(state) = challenge.state.get("passkey").cloned() else {
+        return Err(refuse());
+    };
+    let state: PasskeyAuthentication = serde_json::from_value(state).map_err(internal)?;
+    let Some(row) = repo::find(&pool, user_id, body.credential.get_credential_id())
+        .await
+        .map_err(internal)?
+    else {
+        return Err(refuse());
+    };
+    let mut passkey: Passkey = serde_json::from_value(row.passkey).map_err(internal)?;
+    let result =
+        pk.0.finish_passkey_authentication(&body.credential, &state)
+            .map_err(|_| refuse())?;
+    passkey.update_credential(&result);
+    // A parallel request that already spent the challenge wins; this one
+    // rolls back without recording the use.
+    let mut tx = pool.begin().await.map_err(internal)?;
+    let challenge = login_challenge::consume(&mut *tx, &hash, MFA_KIND)
+        .await
+        .map_err(internal)?
+        .ok_or_else(expired)?;
+    repo::record_use(
+        &mut *tx,
+        row.id,
+        &serde_json::to_value(&passkey).map_err(internal)?,
+    )
+    .await
+    .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    sf_throttle.record_login_success(&throttle, &profile.email, &ip);
+    let remember = challenge
+        .state
+        .get("remember")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let resp = issue_session(&pool, &headers, peer, user_id, remember).await?;
+    tracing::info!(user_id = %user_id, ip = %ip, user_agent = user_agent(&headers), method = "passkey", "login succeeded");
+    Ok(Json(resp))
+}
+
 #[cfg(test)]
 mod config_tests {
     use super::Passkeys;
@@ -296,8 +529,6 @@ pub(crate) mod soft {
         /// by itself or send a user handle, which a real passkey does on a
         /// passwordless sign-in: `allow` names the credential and
         /// `user_handle` fills it in (it isn't covered by the signature).
-        // Used by the sign-in tests (next task).
-        #[allow(dead_code)]
         pub(crate) fn sign(
             &mut self,
             options: &serde_json::Value,
@@ -336,9 +567,12 @@ pub(crate) mod tests {
     use super::soft::{Soft, passkeys};
     use super::*;
     use crate::auth::AuthUser;
+    use crate::handlers::LoginError;
     use crate::mfa::tests::{reauth_token, seed_session, seed_user, sessions, who};
+    use crate::throttle::LoginThrottle;
     use axum::http::{HeaderMap, HeaderValue, StatusCode};
     use sqlx::PgPool;
+    use std::sync::Arc;
 
     fn firefox() -> HeaderMap {
         let mut h = HeaderMap::new();
@@ -593,5 +827,281 @@ pub(crate) mod tests {
         // The transaction rolled back: the token and the ceremony are intact.
         check_reauth(&pool, u, &reauth).await.expect("token kept");
         assert_eq!(repo::list(&pool, u).await.unwrap().len(), 0);
+    }
+
+    fn peer() -> axum::extract::ConnectInfo<std::net::SocketAddr> {
+        axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap())
+    }
+
+    async fn passwordless(
+        pool: &PgPool,
+        t: &Arc<LoginThrottle>,
+        soft: &mut Soft,
+        cred: &[u8],
+        user: Uuid,
+    ) -> Result<dto::LoginResponse, LoginError> {
+        let o = sign_in_options(State(pool.clone()), State(passkeys()))
+            .await
+            .map_err(LoginError::from)?
+            .0;
+        let credential = soft.sign(&o.options, Some(cred), Some(user));
+        sign_in(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.clone()),
+            firefox(),
+            peer(),
+            Json(dto::PasskeySignInReq {
+                challenge: o.challenge,
+                credential,
+                remember: true,
+            }),
+        )
+        .await
+        .map(|j| j.0)
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn passwordless_sign_in_makes_a_session_and_records_the_use(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
+        let t = Arc::new(LoginThrottle::default());
+        let resp = passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .expect("signed in");
+        assert_eq!(resp.user.email, "a@t.local");
+        assert_eq!(sessions(&pool, u).await, 2);
+        let st = crate::mfa::status(State(pool.clone()), who(&a))
+            .await
+            .unwrap()
+            .0;
+        assert!(st.passkeys[0].last_used_at.is_some());
+        // Works again: the stored sign counter was updated, not left behind.
+        passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .expect("second sign-in");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn passwordless_refuses_a_deleted_passkey_a_wrong_user_and_a_reused_challenge(
+        pool: PgPool,
+    ) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let v = seed_user(&pool, "b@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        let (info, cred) = add_passkey(&pool, &a, &mut soft).await;
+        let t = Arc::new(LoginThrottle::default());
+        // Claims to be another user: that user has no such passkey.
+        let e = passwordless(&pool, &t, &mut soft, &cred, v)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(
+            (e.0, e.1.as_str()),
+            (StatusCode::BAD_REQUEST, "passkey not accepted")
+        );
+        // A challenge is spent by any attempt.
+        let o = sign_in_options(State(pool.clone()), State(passkeys()))
+            .await
+            .unwrap()
+            .0;
+        let c1 = soft.sign(&o.options, Some(&cred), Some(u));
+        let c2 = soft.sign(&o.options, Some(&cred), Some(u));
+        let req = |credential| {
+            Json(dto::PasskeySignInReq {
+                challenge: o.challenge.clone(),
+                credential,
+                remember: false,
+            })
+        };
+        let first = sign_in(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.clone()),
+            firefox(),
+            peer(),
+            req(c1),
+        )
+        .await
+        .expect("first answer signs in")
+        .0;
+        assert_eq!(first.user.email, "a@t.local");
+        let e = sign_in(
+            State(pool.clone()),
+            State(passkeys()),
+            State(t.clone()),
+            firefox(),
+            peer(),
+            req(c2),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(
+            (e.0, e.1.as_str()),
+            (StatusCode::UNAUTHORIZED, "challenge expired")
+        );
+        remove(State(pool.clone()), who(&a), Path(info.id))
+            .await
+            .unwrap();
+        let e = passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(e.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn passwordless_failures_are_throttled_per_ip(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let v = seed_user(&pool, "b@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
+        let t = Arc::new(LoginThrottle::default());
+        // The IP policy's free failures (30): each is let through and refused.
+        for _ in 0..crate::throttle::IP.free_failures {
+            let e = passwordless(&pool, &t, &mut soft, &cred, v)
+                .await
+                .err()
+                .unwrap();
+            assert_eq!(e.0, StatusCode::BAD_REQUEST);
+        }
+        let e = passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(e.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(e.2.is_some());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_passwordless_success_gives_back_its_ip_attempt(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let v = seed_user(&pool, "b@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
+        let t = Arc::new(LoginThrottle::default());
+        for _ in 0..crate::throttle::IP.free_failures - 1 {
+            let _ = passwordless(&pool, &t, &mut soft, &cred, v).await;
+        }
+        passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .expect("signed in");
+        // Without the refund the IP would now be waiting.
+        passwordless(&pool, &t, &mut soft, &cred, u)
+            .await
+            .expect("not throttled");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn methods_offer_a_passkey_only_with_two_factor_on(pool: PgPool) {
+        use crate::handlers::auth_tests::{Throttles, enable_totp, login_outcome};
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        add_passkey(&pool, &a, &mut Soft::new()).await;
+        let t = Throttles::default();
+        assert!(
+            matches!(
+                login_outcome(&pool, &t, "a@t.local", "hunter22", false).await,
+                dto::LoginOutcome::Session(_)
+            ),
+            "passkey without two-factor: the password is enough"
+        );
+        enable_totp(&pool, u).await;
+        match login_outcome(&pool, &t, "a@t.local", "hunter22", false).await {
+            dto::LoginOutcome::Mfa(m) => {
+                assert_eq!(m.methods, vec!["totp", "recovery", "passkey"])
+            }
+            other => panic!("expected mfa, got {other:?}"),
+        }
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn code_step_passkey_gives_a_session_with_the_remember_choice(pool: PgPool) {
+        use crate::handlers::auth_tests::{Throttles, enable_totp, login_outcome};
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let mut soft = Soft::new();
+        add_passkey(&pool, &a, &mut soft).await;
+        enable_totp(&pool, u).await;
+        let t = Throttles::default();
+        let dto::LoginOutcome::Mfa(m) =
+            login_outcome(&pool, &t, "a@t.local", "hunter22", true).await
+        else {
+            panic!("expected mfa")
+        };
+        let start = || {
+            verify_options(
+                State(pool.clone()),
+                State(passkeys()),
+                Json(dto::ChallengeReq {
+                    challenge: m.challenge.clone(),
+                }),
+            )
+        };
+        let o = start().await.unwrap().0;
+        // A newer ceremony replaces the older one.
+        let other = start().await.unwrap().0;
+        let call = |credential| {
+            verify(
+                State(pool.clone()),
+                State(passkeys()),
+                State(t.pw.clone()),
+                State(t.sf.clone()),
+                firefox(),
+                peer(),
+                Json(dto::LoginVerifyPasskeyReq {
+                    challenge: m.challenge.clone(),
+                    credential,
+                }),
+            )
+        };
+        let stale = soft.sign(&o.options, None, None);
+        let e = call(stale).await.err().unwrap();
+        assert_eq!(
+            (e.0, e.1.as_str()),
+            (StatusCode::BAD_REQUEST, "passkey not accepted"),
+            "only the latest ceremony counts"
+        );
+        // The refusal left the mfa challenge usable.
+        let good = soft.sign(&other.options, None, None);
+        let resp = call(good).await.expect("signed in").0;
+        assert_eq!(resp.user.email, "a@t.local");
+        let remembered: bool = sqlx::query_scalar(
+            "select remembered from session where user_id = $1 order by created_at desc limit 1",
+        )
+        .bind(u)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(remembered);
+        let st = crate::mfa::status(State(pool.clone()), who(&a))
+            .await
+            .unwrap()
+            .0;
+        assert!(st.passkeys[0].last_used_at.is_some());
+        // The challenge is spent now.
+        let again = start().await.err().unwrap();
+        assert_eq!(again.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn code_step_options_need_a_live_mfa_challenge(pool: PgPool) {
+        let e = verify_options(
+            State(pool.clone()),
+            State(passkeys()),
+            Json(dto::ChallengeReq {
+                challenge: "nope".into(),
+            }),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(e.0, StatusCode::UNAUTHORIZED);
     }
 }

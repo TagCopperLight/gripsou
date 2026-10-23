@@ -13,7 +13,10 @@ fn test_passkeys() -> gripsou_api::Passkeys {
 
 #[tokio::test]
 async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
+    // Short wait: a route reaching the database fails fast instead of
+    // retrying the connection for the default 30 s.
     let db = sqlx::postgres::PgPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(1))
         .connect_lazy("postgres://unused:unused@localhost/unused")
         .unwrap();
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
@@ -69,6 +72,20 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
         .await
         .unwrap();
     assert_eq!(r.headers()["access-control-expose-headers"], "retry-after");
+    // Passwordless sign-in starts without a session (the unused pool makes
+    // it fail later, but never as unauthorised).
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/passkey/options")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(r.status(), StatusCode::UNAUTHORIZED);
     let r = app
         .oneshot(
             Request::builder()

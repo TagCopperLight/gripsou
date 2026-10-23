@@ -967,6 +967,9 @@ pub async fn login(
         if status.totp {
             methods.extend(["totp", "recovery"]);
         }
+        if status.passkeys > 0 {
+            methods.push("passkey");
+        }
         tracing::info!(user_id = %creds.id, ip = %ip, "mfa challenge issued");
         return Ok(Json(dto::LoginOutcome::Mfa(dto::MfaRequired {
             mfa_required: true,
@@ -1560,9 +1563,10 @@ pub async fn webhook(
 }
 
 /// Issue a session for `user_id` (30 days when remembered, else 1 day) and
-/// build the login-shaped response. Shared by login, its second step and the
-/// invite/reset redeem handlers. Logs nothing: each caller words its own line.
-async fn issue_session(
+/// build the login-shaped response. Shared by login, its second step, the
+/// passkey sign-ins and the invite/reset redeem handlers. Logs nothing: each
+/// caller words its own line.
+pub(crate) async fn issue_session(
     pool: &PgPool,
     headers: &HeaderMap,
     peer: SocketAddr,
@@ -1693,7 +1697,7 @@ pub async fn delete_connection(
 }
 
 #[cfg(test)]
-mod auth_tests {
+pub(crate) mod auth_tests {
     use super::*;
     use crate::auth;
     use crate::dto::{ChangePasswordReq, LoginReq};
@@ -1823,7 +1827,7 @@ mod auth_tests {
 
     /// Enrol TOTP for `user_id` with a secret encrypted under the test key and
     /// ten recovery codes; returns the secret and the plain recovery codes.
-    async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
+    pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
         use gripsou_core::repo::mfa;
         let secret = crate::factors::new_totp_secret();
         let enc = gripsou_core::crypto::encrypt(&"a".repeat(64), &secret).unwrap();
@@ -1852,12 +1856,12 @@ mod auth_tests {
 
     /// The two limiters a login goes through, shared across a test's calls.
     #[derive(Default)]
-    struct Throttles {
-        pw: Arc<LoginThrottle>,
-        sf: Arc<crate::throttle::SecondFactorThrottle>,
+    pub(crate) struct Throttles {
+        pub(crate) pw: Arc<LoginThrottle>,
+        pub(crate) sf: Arc<crate::throttle::SecondFactorThrottle>,
     }
 
-    async fn login_outcome(
+    pub(crate) async fn login_outcome(
         pool: &PgPool,
         throttle: &Throttles,
         email: &str,

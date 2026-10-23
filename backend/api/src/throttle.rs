@@ -260,6 +260,16 @@ impl LoginThrottle {
         self.ips.refund(ip);
     }
 
+    /// A sign-in with no account to count against yet (passwordless passkey):
+    /// only the IP limit applies. A success gives it back ([`Self::refund_ip`]).
+    pub fn try_ip(&self, ip: &str, now: Instant) -> Result<(), Blocked> {
+        try_all(&[(&self.ips, ip)], now)
+    }
+
+    pub fn refund_ip(&self, ip: &str) {
+        self.ips.refund(ip);
+    }
+
     /// How many accounts and IPs have an entry.
     #[cfg(test)]
     pub(crate) fn tracked_keys(&self) -> (usize, usize) {
@@ -501,6 +511,28 @@ mod tests {
         }
         succeed(&t, "me@t.local", "6.6.6.6", now);
         assert_eq!(peek(&t, "fresh@t.local", "6.6.6.6", now), Ok(()));
+    }
+
+    #[test]
+    fn ip_only_attempts_count_on_the_ip_and_a_refund_gives_one_back() {
+        let t = LoginThrottle::default();
+        let now = Instant::now();
+        for _ in 0..30 {
+            t.try_ip("1.2.3.4", now).unwrap();
+        }
+        assert!(t.try_ip("1.2.3.4", now).is_err());
+        assert!(
+            t.try_attempt("a@t.local", "1.2.3.4", now).is_err(),
+            "same IP limit as passwords"
+        );
+        let t = LoginThrottle::default();
+        for _ in 0..29 {
+            t.try_ip("1.2.3.4", now).unwrap();
+        }
+        t.refund_ip("1.2.3.4");
+        t.try_ip("1.2.3.4", now).unwrap();
+        t.try_ip("1.2.3.4", now)
+            .expect("the refund made room for one more");
     }
 
     #[test]

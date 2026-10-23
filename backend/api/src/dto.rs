@@ -1327,6 +1327,36 @@ pub struct RenamePasskeyReq {
     pub name: String,
 }
 
+/// Finish a passwordless sign-in.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeySignInReq {
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::PublicKeyCredential,
+    #[serde(default)]
+    pub remember: bool,
+}
+
+/// The second login step's challenge, to start a passkey ceremony on it.
+#[derive(Deserialize)]
+pub struct ChallengeReq {
+    pub challenge: String,
+}
+
+/// A passkey ceremony on the second login step: it rides on the step's own
+/// challenge, so only the `publicKey` options are sent.
+#[derive(Debug, Serialize)]
+pub struct PasskeyRequestOptions {
+    pub options: serde_json::Value,
+}
+
+/// Second login step with a passkey.
+#[derive(Deserialize)]
+pub struct LoginVerifyPasskeyReq {
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::PublicKeyCredential,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TotpSetup {
