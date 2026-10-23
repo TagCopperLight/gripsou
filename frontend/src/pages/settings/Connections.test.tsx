@@ -25,7 +25,7 @@ const GROUPS: ProviderGroup[] = [
         lastError: null,
         accounts: [
           { id: "a1", name: "Compte courant", color: "#3b82f6", typeLabel: "Checking", value: "1234.50", lastSyncAt: 1_700_000_000_000 },
-          { id: "a2", name: "Livret A", color: null, typeLabel: "Savings", value: "8000.00", lastSyncAt: 1_700_000_000_000 },
+          { id: "a2", name: "Livret A", color: "#4dd0b1", typeLabel: "Savings", value: "8000.00", lastSyncAt: 1_700_000_000_000 },
         ],
         logo: null,
       },

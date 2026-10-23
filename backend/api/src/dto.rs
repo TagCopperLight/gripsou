@@ -183,7 +183,7 @@ impl Holding {
             logo: r.logo_url,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
-            account_color: r.account_color.unwrap_or_else(|| "#888888".to_string()),
+            account_color: r.account_color,
             account_type: r.type_key,
             account_type_label: r.type_label,
             qty: r.quantity.to_string(),
@@ -338,7 +338,7 @@ pub struct Transaction {
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
-    pub account_color: Option<String>,
+    pub account_color: String,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale. The
     /// frontend picks its rendering (and i18n) off this discriminator.
     pub source: String,
@@ -455,7 +455,7 @@ impl Account {
             id: r.account_id.to_string(),
             connection_id: r.connection_id.to_string(),
             name: r.name,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            color: r.color,
             type_key: r.type_key,
             type_label: r.type_label,
             value: r.value.to_string(),
@@ -511,7 +511,7 @@ impl AccountSeriesResponse {
                 accounts.push(SeriesAccount {
                     id: id.clone(),
                     name: r.name,
-                    color: r.color.unwrap_or_else(|| "#888888".to_string()),
+                    color: r.color,
                 });
             }
             latest_value.insert(id.clone(), r.value);
@@ -563,7 +563,7 @@ pub struct SyncAccount {
     pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub type_label: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
@@ -692,7 +692,7 @@ impl UpdatedAccount {
         UpdatedAccount {
             id: r.id.to_string(),
             name: r.name,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            color: r.color,
             type_key: r.type_key,
             type_label: r.type_label,
         }
@@ -1020,7 +1020,7 @@ mod tests {
         AccountSeriesRow {
             account_id: id,
             name: format!("acct-{day}"),
-            color: None,
+            color: "#888888".into(),
             as_of: NaiveDate::from_ymd_opt(2026, 1, day).unwrap(),
             value: Decimal::from(value),
         }

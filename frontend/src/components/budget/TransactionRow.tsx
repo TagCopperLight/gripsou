@@ -9,7 +9,7 @@ import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
 import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
-import { FALLBACK_COLOR, categoryOfTransaction } from "../../lib/budget";
+import { categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
 import type { Transaction } from "../../api/types";
 
@@ -169,7 +169,7 @@ export const TransactionRow = memo(function TransactionRow({
         <span className={`flex min-w-0 items-center gap-2 ${dim}`}>
           <span
             className="inline-block size-3 rounded"
-            style={{ backgroundColor: tx.accountColor ?? FALLBACK_COLOR }}
+            style={{ backgroundColor: tx.accountColor }}
           />
           <span className="truncate text-fg-dim">{tx.accountName}</span>
         </span>

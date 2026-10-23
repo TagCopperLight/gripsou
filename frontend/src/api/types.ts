@@ -189,7 +189,7 @@ export type SyncAccount = {
   health?: SyncHealth | null;
   id: string;
   name: string;
-  color: string | null;
+  color: string;
   typeLabel: string;
   value: string;
   lastSyncAt: number | null;
@@ -259,7 +259,7 @@ export type Transaction = {
   currency: string;
   accountId: string;
   accountName: string;
-  accountColor: string | null;
+  accountColor: string;
   /** "cash" for a ledger row, "lot" for a purchase or sale. Lot rows carry the
    *  four instrument fields below and no description. */
   source: "cash" | "lot";

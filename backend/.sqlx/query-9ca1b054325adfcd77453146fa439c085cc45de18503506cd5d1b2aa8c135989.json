@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     welcomed_at is not null as \"welcome_done!\",\n                     prefs as \"prefs!: sqlx::types::Json<DisplayPrefs>\",\n                  currency, time_zone, budget_ai_enabled, budget_ai_threshold",
+  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     welcomed_at is not null as \"welcome_done!\",\n                     prefs as \"prefs!: sqlx::types::Json<DisplayPrefs>\",\n                     currency, time_zone, budget_ai_enabled, budget_ai_threshold",
   "describe": {
     "columns": [
       {
@@ -129,5 +129,5 @@
       false
     ]
   },
-  "hash": "fd0a182bbb7b05e200f42ac619621fddafb15c2fc38ee13c3bff3869c60e736a"
+  "hash": "9ca1b054325adfcd77453146fa439c085cc45de18503506cd5d1b2aa8c135989"
 }

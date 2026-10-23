@@ -118,20 +118,16 @@ async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(updated.name, "My Savings");
     assert_eq!(updated.type_key, "savings");
     assert_eq!(updated.type_label, "Savings");
-    assert_eq!(updated.color.as_deref(), Some("#4dd0b1"));
+    assert_eq!(updated.color, "#4dd0b1");
 
-    let row: (String, String, Option<String>) =
+    let row: (String, String, String) =
         sqlx::query_as("select name, type_key, color from account where id = $1")
             .bind(acct_id)
             .fetch_one(&pool)
             .await?;
     assert_eq!(
         row,
-        (
-            "My Savings".into(),
-            "savings".into(),
-            Some("#4dd0b1".into())
-        )
+        ("My Savings".into(), "savings".into(), "#4dd0b1".into())
     );
     Ok(())
 }

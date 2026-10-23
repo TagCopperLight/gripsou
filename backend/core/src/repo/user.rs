@@ -6,48 +6,25 @@ use uuid::Uuid;
 use crate::error::CoreError;
 use crate::repo::prefs::{DisplayPrefs, UserPrefs};
 
-/// Row needed to authenticate a login: the hash to verify plus the profile the
-/// client needs to render the session.
+/// What a password login checks: the hash, and whose it is.
+#[derive(Debug)]
 pub struct UserCredentials {
     pub id: Uuid,
     pub password_hash: String,
-    pub name: String,
-    pub email: String,
-    pub role: String,
-    pub prefs: UserPrefs,
-    /// False until the user finished or skipped the post-invite welcome screen.
-    pub welcome_done: bool,
 }
 
 pub async fn credentials_by_email(
     pool: &sqlx::PgPool,
     email: &str,
 ) -> Result<Option<UserCredentials>, CoreError> {
-    let row = sqlx::query!(
-        r#"select id, password_hash, name, email, role,
-                  welcomed_at is not null as "welcome_done!",
-                  prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
-                  currency, time_zone, budget_ai_enabled, budget_ai_threshold
-           from users where email = $1"#,
+    let row = sqlx::query_as!(
+        UserCredentials,
+        r#"select id, password_hash from users where email = $1"#,
         email,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|r| UserCredentials {
-        id: r.id,
-        password_hash: r.password_hash,
-        name: r.name,
-        email: r.email,
-        role: r.role,
-        prefs: UserPrefs {
-            display: r.prefs.0,
-            currency: r.currency,
-            time_zone: r.time_zone,
-            budget_ai_enabled: r.budget_ai_enabled,
-            budget_ai_threshold: r.budget_ai_threshold as u8,
-        },
-        welcome_done: r.welcome_done,
-    }))
+    Ok(row)
 }
 
 pub async fn password_hash(
@@ -72,11 +49,45 @@ pub struct UserProfile {
     pub welcome_done: bool,
 }
 
+/// A profile as the queries read it, prefs still in their columns.
+struct ProfileRow {
+    id: Uuid,
+    name: String,
+    email: String,
+    role: String,
+    welcome_done: bool,
+    prefs: sqlx::types::Json<DisplayPrefs>,
+    currency: String,
+    time_zone: String,
+    budget_ai_enabled: bool,
+    budget_ai_threshold: i16,
+}
+
+impl From<ProfileRow> for UserProfile {
+    fn from(r: ProfileRow) -> Self {
+        UserProfile {
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            role: r.role,
+            prefs: UserPrefs {
+                display: r.prefs.0,
+                currency: r.currency,
+                time_zone: r.time_zone,
+                budget_ai_enabled: r.budget_ai_enabled,
+                budget_ai_threshold: r.budget_ai_threshold as u8,
+            },
+            welcome_done: r.welcome_done,
+        }
+    }
+}
+
 pub async fn profile_by_id(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query!(
+    let row = sqlx::query_as!(
+        ProfileRow,
         r#"select id, name, email, role,
                   welcomed_at is not null as "welcome_done!",
                   prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
@@ -86,20 +97,7 @@ pub async fn profile_by_id(
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|r| UserProfile {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        role: r.role,
-        prefs: UserPrefs {
-            display: r.prefs.0,
-            currency: r.currency,
-            time_zone: r.time_zone,
-            budget_ai_enabled: r.budget_ai_enabled,
-            budget_ai_threshold: r.budget_ai_threshold as u8,
-        },
-        welcome_done: r.welcome_done,
-    }))
+    Ok(row.map(UserProfile::from))
 }
 
 /// Number of users with the `admin` role. Used to refuse deleting the last
@@ -130,32 +128,20 @@ pub async fn update_profile(
     name: &str,
     email: &str,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query!(
+    let row = sqlx::query_as!(
+        ProfileRow,
         r#"update users set name = $2, email = $3 where id = $1
            returning id, name, email, role,
                      welcomed_at is not null as "welcome_done!",
                      prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
-                  currency, time_zone, budget_ai_enabled, budget_ai_threshold"#,
+                     currency, time_zone, budget_ai_enabled, budget_ai_threshold"#,
         user_id,
         name,
         email,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|r| UserProfile {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        role: r.role,
-        prefs: UserPrefs {
-            display: r.prefs.0,
-            currency: r.currency,
-            time_zone: r.time_zone,
-            budget_ai_enabled: r.budget_ai_enabled,
-            budget_ai_threshold: r.budget_ai_threshold as u8,
-        },
-        welcome_done: r.welcome_done,
-    }))
+    Ok(row.map(UserProfile::from))
 }
 
 /// Mark the welcome screen done. Keeps the first date when called again.
@@ -198,7 +184,6 @@ mod tests {
         let creds = credentials_by_email(&pool, "a@t.local").await?.unwrap();
         assert_eq!(creds.id, id);
         assert_eq!(creds.password_hash, "hash-1");
-        assert_eq!(creds.role, "admin");
 
         assert!(
             credentials_by_email(&pool, "missing@t.local")
@@ -221,9 +206,7 @@ mod tests {
         assert_eq!(profile.prefs.currency, "EUR");
         assert_eq!(profile.prefs.time_zone, "Europe/Paris");
         assert_eq!(profile.prefs.budget_ai_threshold, 70);
-
-        let creds = credentials_by_email(&pool, "p@t.local").await?.unwrap();
-        assert_eq!(creds.prefs.display.number_decimal_sep, ",");
+        assert_eq!(profile.prefs.display.number_decimal_sep, ",");
         Ok(())
     }
 

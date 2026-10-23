@@ -49,12 +49,11 @@ pub async fn upsert_account(
     Ok(id)
 }
 
-/// User-editable fields returned after an edit-account save. `color` is
-/// nullable in the schema, so it stays `Option`.
+/// User-editable fields returned after an edit-account save.
 pub struct UpdatedAccount {
     pub id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub type_key: String,
     pub type_label: String,
 }

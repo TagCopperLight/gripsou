@@ -20,7 +20,7 @@ const conn: SyncConnection & { providerName: string } = {
   lastError: null,
   logo: null,
   accounts: [
-    { id: "a1", name: "LIVRET A", typeLabel: "Savings", value: "6.87", color: null, lastSyncAt: null },
+    { id: "a1", name: "LIVRET A", typeLabel: "Savings", value: "6.87", color: "#4dd0b1", lastSyncAt: null },
   ],
 };
 

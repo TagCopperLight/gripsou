@@ -1165,8 +1165,8 @@ mod handler_tests {
         let account_id: Uuid = sqlx::query_scalar(
             "with c as (insert into connection (user_id, provider_key, display_name) \
                         values ($1, 'powens', 'C') returning id) \
-             insert into account (connection_id, name, currency, type_key) \
-             select id, 'Current', 'EUR', 'checking' from c returning id",
+             insert into account (connection_id, name, currency, type_key, color) \
+             select id, 'Current', 'EUR', 'checking', '#4dd0b1' from c returning id",
         )
         .bind(user_id)
         .fetch_one(pool)

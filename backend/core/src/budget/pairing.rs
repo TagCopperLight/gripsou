@@ -234,12 +234,10 @@ pub async fn pair_internal_transfers(
     Ok(ids.len() / 2)
 }
 
-/// One round: every mutual-nearest-neighbour pair among `candidates`. See
-/// [`pair_internal_transfers`] for why this needs to repeat.
-fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
-    // Group by (currency, |amount|): only rows inside one group can ever pair,
-    // which keeps the comparison quadratic in the size of a group rather than
-    // of the ledger.
+/// Candidates grouped by (currency, |amount|): only rows inside one group can
+/// ever pair, which keeps the comparison quadratic in the size of a group
+/// rather than of the ledger.
+fn groups(candidates: &[Candidate]) -> impl Iterator<Item = Vec<&Candidate>> {
     let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
     for c in candidates {
         groups
@@ -247,10 +245,15 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
             .or_default()
             .push(c);
     }
+    groups.into_values()
+}
 
+/// One round: every mutual-nearest-neighbour pair among `candidates`. See
+/// [`pair_internal_transfers`] for why this needs to repeat.
+fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     let window = chrono::Duration::days(WINDOW_DAYS);
     let mut pairs: Vec<(Uuid, Uuid)> = vec![];
-    for (_key, group) in groups {
+    for group in groups(candidates) {
         let outs: Vec<&&Candidate> = group.iter().filter(|c| c.amount < Decimal::ZERO).collect();
         let ins: Vec<&&Candidate> = group.iter().filter(|c| c.amount > Decimal::ZERO).collect();
 
@@ -365,16 +368,8 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
 /// ways to do it and pair nothing. Stricter than [`interchangeable`], which
 /// ignores the date: a node's reach is measured from its single timestamp.
 fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
-    let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
-    for c in candidates {
-        groups
-            .entry((c.currency.as_str(), c.amount.abs()))
-            .or_default()
-            .push(c);
-    }
-
     let mut pairs = vec![];
-    for group in groups.into_values() {
+    for group in groups(candidates) {
         // Nodes: identical rows, each list sorted by id so both runs
         // of a converged pass pick the same rows.
         let mut outs: Vec<Vec<&Candidate>> = vec![];

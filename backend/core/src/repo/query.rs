@@ -85,7 +85,7 @@ pub async fn net_worth_series_with_target(
 struct AccountDayRow {
     account_id: Uuid,
     name: String,
-    color: Option<String>,
+    color: String,
     as_of: NaiveDate,
     value: Decimal,
     invested: Decimal,
@@ -240,7 +240,7 @@ pub struct HoldingRow {
     pub account_currency: String,
     pub account_id: Uuid,
     pub account_name: String,
-    pub account_color: Option<String>,
+    pub account_color: String,
     /// Stable account-type key (`checking`, `pea`, …); the frontend translates
     /// it, falling back to `type_label`.
     pub type_key: String,
@@ -294,7 +294,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         instrument_id: Uuid,
         account_id: Uuid,
         account_name: String,
-        account_color: Option<String>,
+        account_color: String,
         type_key: String,
         type_label: String,
         quantity: Decimal,
@@ -539,7 +539,7 @@ pub struct AccountRow {
     pub account_id: Uuid,
     pub connection_id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub type_key: String,
     pub type_label: String,
     pub value: Decimal,
@@ -640,7 +640,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
 pub struct AccountSeriesRow {
     pub account_id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub as_of: NaiveDate,
     pub value: Decimal,
 }
@@ -756,7 +756,7 @@ pub struct TransactionListRow {
     pub fee: Option<Decimal>,
     pub account_id: Uuid,
     pub account_name: String,
-    pub account_color: Option<String>,
+    pub account_color: String,
     /// Also the currency of a lot row's `amount`: lot prices are recorded in
     /// the account's currency, as `lot_basis` and the holdings table assume.
     pub account_currency: String,
@@ -925,7 +925,7 @@ pub async fn transactions(
                source as "source!", ticker, instrument_kind, instrument_isin,
                instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
-               account_color, account_currency as "account_currency!",
+               account_color as "account_color!", account_currency as "account_currency!",
                filtered.category_id, category_name, category_default_key, category_color,
                category_icon, category_kind, category_source, category_confidence,
                needs_review as "needs_review!", checked as "checked!",

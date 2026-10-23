@@ -31,23 +31,10 @@ pub fn map_type_key(name: &str) -> Option<&'static str> {
     })
 }
 
+/// Whether Powens holds this account's value in investments (its `balance`
+/// lags, the `XX-liquidity` line is the cash) rather than as a plain balance.
 pub fn is_invest_type(name: &str) -> bool {
-    !matches!(
-        name,
-        "checking"
-            | "deposit"
-            | "joint"
-            | "card"
-            | "loan"
-            | "savings"
-            | "livret_a"
-            | "livret_b"
-            | "ldds"
-            | "cel"
-            | "csl"
-            | "cat"
-            | "pel"
-    )
+    !matches!(map_type_key(name), Some("checking" | "savings") | None)
 }
 
 /// Powens reports an investment account's un-invested cash sleeve as an

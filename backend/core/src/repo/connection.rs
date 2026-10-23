@@ -55,7 +55,7 @@ pub struct ConnectionAccountRow {
     pub connection_id: Uuid,
     pub account_id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub type_label: String,
     pub value: Decimal,
     pub last_sync_at: Option<DateTime<Utc>>,
@@ -139,10 +139,20 @@ pub async fn begin_sync(
     .fetch_optional(pool)
     .await?;
 
+    claim_outcome(pool, user_id, id, claimed).await
+}
+
+/// A claim's outcome. No claimed row means either "already busy" or "not
+/// owned"; only then is it worth a second query to tell them apart.
+async fn claim_outcome(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+    claimed: Option<ConnectionState>,
+) -> Result<BeginSync, CoreError> {
     if let Some(state) = claimed {
         return Ok(BeginSync::Started(state));
     }
-    // None means either "already syncing" or "not owned" — distinguish.
     let exists = sqlx::query_scalar!(
         r#"select exists(select 1 from connection where id = $1 and user_id = $2) as "exists!""#,
         id,
@@ -393,21 +403,7 @@ pub async fn begin_await(
     )
     .fetch_optional(pool)
     .await?;
-    if let Some(state) = claimed {
-        return Ok(BeginSync::Started(state));
-    }
-    let exists = sqlx::query_scalar!(
-        r#"select exists(select 1 from connection where id=$1 and user_id=$2) as "e!""#,
-        id,
-        user_id,
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(if exists {
-        BeginSync::AlreadySyncing
-    } else {
-        BeginSync::NotFound
-    })
+    claim_outcome(pool, user_id, id, claimed).await
 }
 
 /// Find a connection by provider + native connection id stored in provider_meta.

@@ -125,7 +125,7 @@ pub async fn investment_returns(
             Some(dto::ReturnAccount {
                 id: a.account_id.to_string(),
                 name: acc.name.clone(),
-                color: acc.color.clone().unwrap_or_else(|| "#888888".to_string()),
+                color: acc.color.clone(),
                 source: acc.source_name.clone().unwrap_or_default(),
                 missing: a
                     .figures
@@ -2208,8 +2208,8 @@ pub(crate) mod auth_tests {
         .await
         .unwrap();
         let account_id: Uuid = sqlx::query_scalar(
-            "insert into account (connection_id, external_id, name, type_key, currency) \
-             values ($1, 'a1', 'PEA', 'pea', 'EUR') returning id",
+            "insert into account (connection_id, external_id, name, type_key, currency, color) \
+             values ($1, 'a1', 'PEA', 'pea', 'EUR', '#4dd0b1') returning id",
         )
         .bind(conn_id)
         .fetch_one(&pool)
@@ -2924,8 +2924,8 @@ pub(crate) mod auth_tests {
         .await
         .unwrap();
         sqlx::query(
-            "insert into account (connection_id, name, currency, type_key) \
-             values ($1,'Checking','EUR','checking')",
+            "insert into account (connection_id, name, currency, type_key, color) \
+             values ($1,'Checking','EUR','checking','#4dd0b1')",
         )
         .bind(conn)
         .execute(&pool)

@@ -386,35 +386,8 @@ pub async fn count_same_description(
     txn_id: Uuid,
     scope: SameDescription,
 ) -> Result<i64, CoreError> {
-    let n = sqlx::query_scalar!(
-        r#"
-        select count(*) as "n!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $2
-          and t.id <> $1
-          and t.description_norm <> ''
-          and t.description_norm = (
-              select t2.description_norm
-              from transaction t2
-              join account a2    on a2.id = t2.account_id
-              join connection k2 on k2.id = a2.connection_id
-              where t2.id = $1 and k2.user_id = $2
-                and t2.description_norm <> ''
-          )
-          and ($3::numeric is null
-               or (t.id <> $1
-                   and t.id in (select r.id from budget_transaction_rows($2, $3) r
-                                where r.needs_review)))
-        "#,
-        txn_id,
-        user_id,
-        scope.threshold(),
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(n)
+    let ids = same_description_ids(pool, user_id, txn_id, scope).await?;
+    Ok(ids.iter().filter(|&&id| id != txn_id).count() as i64)
 }
 
 /// The anchor row and every transaction of this user sharing its normalised
@@ -430,6 +403,18 @@ async fn same_description_rows(
     txn_id: Uuid,
     scope: SameDescription,
 ) -> Result<Vec<(Uuid, bool)>, CoreError> {
+    let ids = same_description_ids(&mut *conn, user_id, txn_id, scope).await?;
+    lock_owned(conn, user_id, &ids).await
+}
+
+/// The ids behind both functions above: the anchor (outside the review
+/// scope) and every row sharing its normalised description.
+async fn same_description_ids<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    user_id: Uuid,
+    txn_id: Uuid,
+    scope: SameDescription,
+) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"
         select t.id as "id!"
@@ -455,9 +440,9 @@ async fn same_description_rows(
         user_id,
         scope.threshold(),
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(executor)
     .await?;
-    lock_owned(conn, user_id, &ids).await
+    Ok(ids)
 }
 
 /// "Apply to the same description", as one database transaction: the rows
