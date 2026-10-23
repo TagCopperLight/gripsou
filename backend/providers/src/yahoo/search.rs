@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn none_when_no_security_candidate() {
-        let cands = vec![c("BTC", "CRYPTOCURRENCY"), c("IDX", "INDEX")];
+        let cands = vec![c("EURUSD=X", "CURRENCY"), c("IDX", "INDEX")];
         assert_eq!(select_symbol(&cands), None);
     }
 

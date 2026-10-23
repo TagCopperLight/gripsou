@@ -17,7 +17,7 @@ pub struct CanonicalAccount {
 /// Reference to an instrument; the core resolves/creates the global row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentRef {
-    /// `cash` | `equity` | `etf` | `crypto` | …
+    /// `cash` | `equity` | `etf`
     pub kind: String,
     pub symbol: Option<String>,
     pub isin: Option<String>,

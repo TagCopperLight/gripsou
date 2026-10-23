@@ -4,13 +4,12 @@
 import type { TFunction } from "i18next";
 import type { UserPrefs } from "../lib/prefs";
 
-export type HoldingKind = "cash" | "etf" | "equity" | "crypto";
+export type HoldingKind = "cash" | "etf" | "equity";
 
 export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
   cash: "holdingKind.cash",
   etf: "holdingKind.etf",
   equity: "holdingKind.equity",
-  crypto: "holdingKind.crypto",
 };
 
 // Account types are data-driven: the backend sends a stable `key` plus an

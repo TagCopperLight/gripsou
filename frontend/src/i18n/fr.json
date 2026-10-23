@@ -36,8 +36,7 @@
   "holdingKind": {
     "cash": "Liquidités",
     "etf": "ETF",
-    "equity": "Action",
-    "crypto": "Cryptomonnaie"
+    "equity": "Action"
   },
   "accountTypes": {
     "checking": "Compte courant",
@@ -46,7 +45,6 @@
     "brokerage": "Compte-titres",
     "life_insurance": "Assurance-vie",
     "retirement": "Épargne retraite",
-    "crypto": "Cryptomonnaies",
     "multiple": "Plusieurs types"
   },
   "time": {

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select distinct\n               i.id       as \"id!\",\n               i.kind     as \"kind!\",\n               i.symbol,\n               i.isin,\n               i.name     as \"name!\",\n               i.currency as \"currency!\",\n               i.meta     as \"meta!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join instrument i on i.id = h.instrument_id\n        where a.connection_id = $1\n          and i.kind <> 'cash'\n          and i.kind <> 'crypto'\n          and h.quantity <> 0\n          and (i.symbol is not null or i.isin is not null)\n          and coalesce(i.meta->>'composition_status', '') <> 'none'\n          and (\n            i.meta->'composition'->>'as_of' is null\n            or (i.meta->'composition'->>'as_of')::date < (now() - interval '30 days')::date\n          )\n        order by i.name\n        ",
+  "query": "\n        select distinct\n               i.id       as \"id!\",\n               i.kind     as \"kind!\",\n               i.symbol,\n               i.isin,\n               i.name     as \"name!\",\n               i.currency as \"currency!\",\n               i.meta     as \"meta!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join instrument i on i.id = h.instrument_id\n        where a.connection_id = $1\n          and i.kind <> 'cash'\n          and h.quantity <> 0\n          and (i.symbol is not null or i.isin is not null)\n          and coalesce(i.meta->>'composition_status', '') <> 'none'\n          and (\n            i.meta->'composition'->>'as_of' is null\n            or (i.meta->'composition'->>'as_of')::date < (now() - interval '30 days')::date\n          )\n        order by i.name\n        ",
   "describe": {
     "columns": [
       {
@@ -96,5 +96,5 @@
       false
     ]
   },
-  "hash": "758bb63e201f8fbcec63e5423c97c4545ed6386629a45d03ade4abaddb72a666"
+  "hash": "a2d00a756b934167770a26993194b98c04cb730fb45412e88e950027c1c408eb"
 }

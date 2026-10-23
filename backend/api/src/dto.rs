@@ -1043,7 +1043,6 @@ mod tests {
         assert_eq!(display_kind("equity", false), "equity");
         // A scrape never lands on these, but be explicit: nothing else moves.
         assert_eq!(display_kind("cash", true), "cash");
-        assert_eq!(display_kind("crypto", true), "crypto");
         assert_eq!(display_kind("etf", false), "etf");
     }
 

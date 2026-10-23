@@ -74,12 +74,10 @@ pub fn institution_logo_url(institution_key: Option<&str>) -> Option<String> {
     )))
 }
 
-/// Logo URL for an instrument: by symbol for crypto, by ISIN (else ticker)
-/// otherwise. `None` for cash or when there is nothing to look it up by.
+/// Logo URL for an instrument: by ISIN, else ticker. `None` for cash or when there is nothing to look it up by.
 pub fn instrument_logo_url(kind: &str, isin: Option<&str>, symbol: Option<&str>) -> Option<String> {
     let path = match kind {
         "cash" => return None,
-        "crypto" => format!("crypto/{}", symbol?),
         _ => match (isin, symbol) {
             (Some(isin), _) => format!("isin/{isin}"),
             (None, Some(symbol)) => format!("ticker/{symbol}"),
@@ -114,11 +112,6 @@ mod tests {
         let url = instrument_logo_url("equity", None, Some("AAPL")).unwrap();
         assert!(
             url.starts_with("https://cdn.brandfetch.io/ticker/AAPL/"),
-            "got {url}"
-        );
-        let url = instrument_logo_url("crypto", Some("x"), Some("BTC")).unwrap();
-        assert!(
-            url.starts_with("https://cdn.brandfetch.io/crypto/BTC/"),
             "got {url}"
         );
         assert_eq!(instrument_logo_url("cash", None, Some("EUR")), None);

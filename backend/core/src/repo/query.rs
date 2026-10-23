@@ -1270,7 +1270,6 @@ pub async fn composition_eligible_instruments_for_connection(
         join instrument i on i.id = h.instrument_id
         where a.connection_id = $1
           and i.kind <> 'cash'
-          and i.kind <> 'crypto'
           and h.quantity <> 0
           and (i.symbol is not null or i.isin is not null)
           and coalesce(i.meta->>'composition_status', '') <> 'none'

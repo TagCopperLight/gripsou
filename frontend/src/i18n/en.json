@@ -36,8 +36,7 @@
   "holdingKind": {
     "cash": "Cash",
     "etf": "ETF",
-    "equity": "Stock",
-    "crypto": "Crypto"
+    "equity": "Stock"
   },
   "accountTypes": {
     "checking": "Checking",
@@ -46,7 +45,6 @@
     "brokerage": "Brokerage",
     "life_insurance": "Life insurance",
     "retirement": "Retirement",
-    "crypto": "Crypto",
     "multiple": "Multiple"
   },
   "time": {
