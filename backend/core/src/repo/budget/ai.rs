@@ -107,7 +107,6 @@ pub async fn active_categories(
         .collect())
 }
 
-#[derive(serde::Serialize)]
 pub struct WorkRow {
     pub id: Uuid,
     pub description: Option<String>,

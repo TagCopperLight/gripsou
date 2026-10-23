@@ -9,7 +9,6 @@ use uuid::Uuid;
 use crate::error::CoreError;
 use crate::returns::{CashFlow, Position};
 
-#[derive(serde::Serialize)]
 pub struct ReturnInputs {
     /// The user's today (`user_today`), the day the current value is taken.
     pub today: NaiveDate,

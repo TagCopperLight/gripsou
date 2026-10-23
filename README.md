@@ -76,20 +76,6 @@ For real-time sync of Powens connections (instead of polling):
 
 When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.
 
-## Benchmarks
-
-The release benchmark runner covers backend operations, authenticated HTTP
-requests, browser actions and concurrent load scenarios.
-
-```sh
-scripts/bench list
-scripts/bench run --profile typical --only portfolio.backfill,portfolio.net-worth,portfolio.account-series,portfolio.distribution,portfolio.holdings --save /tmp/baseline.json
-# Repeat after an optimization with --save /tmp/candidate.json, then compare:
-scripts/bench compare /tmp/baseline.json /tmp/candidate.json
-```
-
-See the [benchmark guide](docs/benchmarks.md) for setup and additional workloads.
-
 ## Changelog
 
 See [Releases](https://github.com/TagCopperLight/gripsou/releases).

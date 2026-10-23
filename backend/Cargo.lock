@@ -1133,31 +1133,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gripsou-bench"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "chrono",
- "dotenvy",
- "futures-util",
- "gripsou-api",
- "gripsou-core",
- "reqwest 0.12.28",
- "rust_decimal",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "gripsou-core"
 version = "0.1.0"
 dependencies = [

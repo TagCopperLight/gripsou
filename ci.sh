@@ -55,12 +55,6 @@ step "lint"    bash -c 'cd frontend && bun run lint'
 step "ftest"   bash -c 'cd frontend && bun run test'
 step "build"   bash -c 'cd frontend && bun run build'
 
-# bench-ui job
-step "ui-install" bash -c 'cd tools/bench-ui && bun install --frozen-lockfile'
-step "ui-lint"    bash -c 'cd tools/bench-ui && bun run lint'
-step "ui-test"    bash -c 'cd tools/bench-ui && bun run test'
-step "ui-build"   bash -c 'cd tools/bench-ui && bun run build'
-
 echo
 [ $fail -eq 0 ] && echo "CI WOULD PASS" || echo "CI WOULD FAIL"
 exit $fail

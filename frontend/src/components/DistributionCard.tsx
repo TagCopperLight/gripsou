@@ -1,4 +1,3 @@
-import { chartReadinessEvents, chartReady } from "./chartReadiness";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "./EChart";
@@ -74,9 +73,9 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
         ) : (
         <div className="mt-2 flex flex-col items-center gap-4 md:flex-row md:gap-8">
           <div className="relative size-55 shrink-0">
-            <ReactECharts onChartReady={chartReady}
+            <ReactECharts
               option={option}
-              onEvents={{ ...onEvents, ...chartReadinessEvents, chartReady }}
+              onEvents={onEvents}
               style={{ height: "100%", width: "100%" }}
             />
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
