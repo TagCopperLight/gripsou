@@ -117,7 +117,6 @@ async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
         .expect("account belongs to user");
     assert_eq!(updated.name, "My Savings");
     assert_eq!(updated.type_key, "savings");
-    assert_eq!(updated.type_label, "Savings");
     assert_eq!(updated.color, "#4dd0b1");
 
     let row: (String, String, String) =

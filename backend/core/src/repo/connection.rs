@@ -53,7 +53,7 @@ pub struct ConnectionAccountRow {
     pub account_id: Uuid,
     pub name: String,
     pub color: String,
-    pub type_label: String,
+    pub type_key: String,
     pub value: Decimal,
     pub last_sync_at: Option<DateTime<Utc>>,
 }
@@ -77,16 +77,15 @@ pub async fn list_connection_accounts(
                a.id                    as "account_id!",
                a.name                  as "name!",
                a.color                 as "color",
-               t.label                 as "type_label!",
+               a.type_key              as "type_key!",
                coalesce(sum(l.value), 0) as "value!",
                c.last_sync_at,
                a.provider_meta as "provider_meta!"
         from account a
         join connection c   on c.id = a.connection_id
-        join account_type t on t.key = a.type_key
         left join latest l  on l.account_id = a.id
         where c.user_id = $1 and a.connection_id is not null
-        group by a.connection_id, a.id, a.name, a.color, t.label, c.last_sync_at
+        group by a.connection_id, a.id, a.name, a.color, a.type_key, c.last_sync_at
         order by a.name
         "#,
         user_id,

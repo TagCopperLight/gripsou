@@ -89,7 +89,6 @@ const holding = {
   accountName: "PEA",
   accountColor: "#34d399",
   accountType: "pea",
-  accountTypeLabel: "PEA",
   qty: "20",
   price: "40",
   accountCurrency: "EUR",

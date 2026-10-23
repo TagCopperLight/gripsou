@@ -135,13 +135,8 @@ pub async fn transactions(
     ))
 }
 
-pub async fn account_types(
-    State(pool): State<PgPool>,
-) -> Result<Json<Vec<dto::AccountType>>, ApiError> {
-    let rows = gripsou_core::repo::query::account_types(&pool).await?;
-    Ok(Json(
-        rows.into_iter().map(dto::AccountType::from_row).collect(),
-    ))
+pub async fn account_types(State(pool): State<PgPool>) -> Result<Json<Vec<String>>, ApiError> {
+    Ok(Json(gripsou_core::repo::query::account_types(&pool).await?))
 }
 
 pub async fn update_account(
@@ -226,7 +221,7 @@ mod tests {
         assert_eq!(name, "PEA");
     }
 
-    /// The owner's update persists and echoes the type's label.
+    /// The owner's update persists and echoes the new type.
     #[sqlx::test(migrations = "../migrations")]
     async fn update_account_persists_for_owner(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -245,7 +240,7 @@ mod tests {
         .expect("owner may update")
         .0;
         assert_eq!(updated.name, "Renamed");
-        assert_eq!(updated.type_label, "PEA");
+        assert_eq!(updated.type_key, "pea");
 
         let (name, color): (String, Option<String>) =
             sqlx::query_as("select name, color from account where id = $1")
@@ -338,16 +333,5 @@ mod tests {
         .expect("list ok")
         .0;
         assert!(list.is_empty());
-    }
-
-    /// The account-type picker is served from the reference table, with labels.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn account_types_lists_reference_types(pool: PgPool) {
-        let list = account_types(State(pool.clone())).await.expect("ok").0;
-        let pea = list
-            .iter()
-            .find(|t| t.key == "pea")
-            .expect("pea is a seeded type");
-        assert_eq!(pea.label, "PEA");
     }
 }

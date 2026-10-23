@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select key from account_type order by key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_type",
+            "name": "key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dbcd6f6f670da90f8257045832832acca53711a2979653d17728928325efd4cd"
+}

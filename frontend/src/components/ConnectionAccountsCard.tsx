@@ -58,7 +58,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
                   <span className="hidden text-fg-faint text-xs whitespace-nowrap sm:inline">
-                    {accountTypeLabel(t, a.typeKey, a.typeLabel)}
+                    {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>
                 <span className="flex items-center gap-3">

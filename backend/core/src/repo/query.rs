@@ -241,11 +241,8 @@ pub struct HoldingRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: String,
-    /// Stable account-type key (`checking`, `pea`, …); the frontend translates
-    /// it, falling back to `type_label`.
+    /// Stable account-type key (`checking`, `pea`, …); the frontend translates it.
     pub type_key: String,
-    /// English account-type label from the reference table — the i18n fallback.
-    pub type_label: String,
     pub quantity: Decimal,
     /// Latest unit price, in `price_currency` (NOT `currency`).
     pub price: Option<Decimal>,
@@ -296,7 +293,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         account_name: String,
         account_color: String,
         type_key: String,
-        type_label: String,
         quantity: Decimal,
         price: Option<Decimal>,
         composition: Option<serde_json::Value>,
@@ -349,7 +345,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                a.name          as "account_name!",
                a.color         as "account_color",
                a.type_key      as "type_key!",
-               t.label         as "type_label!",
                h.quantity      as "quantity!",
                px.unit_price   as "price?",
                coalesce(
@@ -391,7 +386,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
         join instrument i   on i.id = h.instrument_id
-        join account_type t on t.key = a.type_key
         left join lateral (
             select p.unit_price, p.currency
             from price p
@@ -475,7 +469,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             account_name: b.account_name,
             account_color: b.account_color,
             type_key: b.type_key,
-            type_label: b.type_label,
             quantity: b.quantity,
             price: b.price,
             spark,
@@ -541,7 +534,6 @@ pub struct AccountRow {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub type_label: String,
     pub value: Decimal,
     pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
@@ -550,8 +542,8 @@ pub struct AccountRow {
     pub provider_key: String,
 }
 
-/// One row per account: latest snapshot value per holding, summed, with the
-/// account-type label, its connection, and the connection's last sync time.
+/// One row per account: latest snapshot value per holding, summed, with its
+/// connection and the connection's last sync time.
 pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountRow,
@@ -615,7 +607,6 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.name  as "name!",
                a.color,
                a.type_key as "type_key!",
-               t.label as "type_label!",
                sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
@@ -625,9 +616,8 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
-        join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
-        group by a.id, c.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
+        group by a.id, c.id, a.name, a.color, a.type_key, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
         order by sum(l.value) desc
         "#,
         user_id,
@@ -674,28 +664,13 @@ pub async fn account_series(
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
-pub struct AccountTypeRow {
-    pub key: String,
-    pub label: String,
-}
-
-/// All account types from the reference table, ordered by label. New types are
-/// data inserts here — no code change needed to surface them in the
-/// edit-account dropdown.
-pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        AccountTypeRow,
-        r#"
-        select t.key   as "key!",
-               t.label as "label!"
-        from account_type t
-        order by t.label
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
+/// Every account-type key. New types are data inserts here — no code change
+/// needed to offer them in the edit-account dropdown.
+pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
+    let keys = sqlx::query_scalar!("select key from account_type order by key")
+        .fetch_all(pool)
+        .await?;
+    Ok(keys)
 }
 
 #[derive(serde::Serialize)]

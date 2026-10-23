@@ -17,7 +17,7 @@ const connectionsData: { data: ProviderGroup[]; isLoading: boolean } = {
           lastSyncAt: null,
           lastError: null,
           accounts: [
-            { id: "a1", name: "Checking", typeLabel: "Current account", value: "10", lastSyncAt: null, color: "#4dd0b1" },
+            { id: "a1", name: "Checking", typeKey: "savings", value: "10", lastSyncAt: null, color: "#4dd0b1" },
           ],
           logo: null,
         },
@@ -54,7 +54,7 @@ describe("SyncModal", () => {
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("My bank"));
     expect(screen.getByText("Checking")).toBeInTheDocument();
-    expect(screen.getByText("Current account")).toBeInTheDocument();
+    expect(screen.getByText("Savings")).toBeInTheDocument();
   });
 
   it("syncs one connection and syncs all", () => {

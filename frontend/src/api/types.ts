@@ -12,12 +12,10 @@ export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
   equity: "holdingKind.equity",
 };
 
-// Account types are data-driven: the backend sends a stable `key` plus an
-// English `label`. We translate `accountTypes.<key>` and fall back to the
-// backend label when a key has no locale entry yet (e.g. a type added to the DB
-// but not the locale files).
-export function accountTypeLabel(t: TFunction, key: string, fallback: string): string {
-  return t(`accountTypes.${key}`, { defaultValue: fallback });
+// Account types are data-driven: the backend sends a stable key. A type added
+// to the database but not yet to the locale files shows its key.
+export function accountTypeLabel(t: TFunction, key: string): string {
+  return t(`accountTypes.${key}`, { defaultValue: key });
 }
 
 export type NetWorthPoint = { t: number; netWorth: string; invested: string };
@@ -50,7 +48,6 @@ export type Holding = {
   accountName: string;
   accountColor: string;
   accountType: string;
-  accountTypeLabel: string;
   qty: string;
   /** Unit price, denominated in `priceCurrency` — NOT in `currency`. */
   price: string;
@@ -125,17 +122,11 @@ export type Account = {
   name: string;
   color: string;
   typeKey: string;
-  typeLabel: string;
   value: string;
   lastSyncAt: number | null;
   sourceName: string | null;
   sourceLogo: string | null;
   fxMissing: boolean;
-};
-
-export type AccountType = {
-  key: string;
-  label: string;
 };
 
 export type AccountSeries = {
@@ -190,7 +181,7 @@ export type SyncAccount = {
   id: string;
   name: string;
   color: string;
-  typeLabel: string;
+  typeKey: string;
   value: string;
   lastSyncAt: number | null;
 };

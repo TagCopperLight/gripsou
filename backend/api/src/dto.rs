@@ -92,8 +92,6 @@ pub struct Holding {
     pub account_color: String,
     /// Stable account-type key; the frontend translates it via i18n.
     pub account_type: String,
-    /// English account-type label — i18n fallback when the key has no locale entry.
-    pub account_type_label: String,
     pub qty: String,
     /// Unit price, denominated in `price_currency` — NOT in `currency`.
     pub price: String,
@@ -185,7 +183,6 @@ impl Holding {
             account_name: r.account_name,
             account_color: r.account_color,
             account_type: r.type_key,
-            account_type_label: r.type_label,
             qty: r.quantity.to_string(),
             price: price.to_string(),
             currency: r.currency,
@@ -438,7 +435,6 @@ pub struct Account {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub type_label: String,
     pub value: String,
     pub fx_missing: bool,
     pub last_sync_at: Option<i64>,
@@ -455,7 +451,6 @@ impl Account {
             name: r.name,
             color: r.color,
             type_key: r.type_key,
-            type_label: r.type_label,
             value: r.value.to_string(),
             fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
@@ -541,28 +536,12 @@ impl AccountSeriesResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AccountType {
-    pub key: String,
-    pub label: String,
-}
-
-impl AccountType {
-    pub fn from_row(r: gripsou_core::repo::query::AccountTypeRow) -> Self {
-        AccountType {
-            key: r.key,
-            label: r.label,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SyncAccount {
     pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub name: String,
     pub color: String,
-    pub type_label: String,
+    pub type_key: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
 }
@@ -612,7 +591,7 @@ impl ProviderGroup {
                     id: a.account_id.to_string(),
                     name: a.name,
                     color: a.color,
-                    type_label: a.type_label,
+                    type_key: a.type_key,
                     value: a.value.to_string(),
                     last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
                 });
@@ -683,7 +662,6 @@ pub struct UpdatedAccount {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub type_label: String,
 }
 
 impl UpdatedAccount {
@@ -693,7 +671,6 @@ impl UpdatedAccount {
             name: r.name,
             color: r.color,
             type_key: r.type_key,
-            type_label: r.type_label,
         }
     }
 }

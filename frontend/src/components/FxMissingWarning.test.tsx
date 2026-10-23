@@ -72,7 +72,6 @@ const slice = (fxMissing: boolean): Account[] => [
     connectionId: "c1",
     name: "Brokerage account",
     typeKey: "pea",
-    typeLabel: "PEA",
     color: "#6ea8fe",
     value: "1000",
     lastSyncAt: null,

@@ -9,7 +9,6 @@ function account(id: string, connectionId: string, value: string): Account {
     name: id,
     color: "#5b9bf0",
     typeKey: "checking",
-    typeLabel: "Checking",
     value,
     lastSyncAt: null,
     sourceName: `Bank ${connectionId}`,

@@ -24,10 +24,9 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
   const { data: types } = useAccountTypes();
   const update = useUpdateAccount();
 
-  const typeOptions = (types ?? []).map((ty) => ({
-    value: ty.key,
-    label: accountTypeLabel(t, ty.key, ty.label),
-  }));
+  const typeOptions = (types ?? [])
+    .map((key) => ({ value: key, label: accountTypeLabel(t, key) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const trimmed = name.trim();
   const dirty =

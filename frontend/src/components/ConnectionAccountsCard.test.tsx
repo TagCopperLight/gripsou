@@ -12,7 +12,6 @@ const ACCOUNT: Account = {
   name: "Compte Courant",
   color: "#6ea8fe",
   typeKey: "checking",
-  typeLabel: "Checking",
   value: "300",
   lastSyncAt: null,
   sourceName: "Online Bank",
@@ -20,7 +19,7 @@ const ACCOUNT: Account = {
   fxMissing: false,
 };
 
-const SAVINGS: Account = { ...ACCOUNT, id: "a2", name: "Livret A", typeKey: "savings", typeLabel: "Savings", value: "100" };
+const SAVINGS: Account = { ...ACCOUNT, id: "a2", name: "Livret A", typeKey: "savings", value: "100" };
 
 function group(overrides: Partial<ConnectionGroup> = {}): ConnectionGroup {
   return {

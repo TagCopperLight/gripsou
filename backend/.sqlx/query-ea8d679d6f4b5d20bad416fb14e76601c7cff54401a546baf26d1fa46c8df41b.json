@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        update account a\n           set name = $3, type_key = $4, color = $5\n          from connection c, account_type t\n         where a.id = $1 and a.connection_id = c.id and c.user_id = $2\n           and t.key = $4\n        returning a.id      as \"id!\",\n                  a.name    as \"name!\",\n                  a.color,\n                  a.type_key as \"type_key!\",\n                  t.label    as \"type_label!\"\n        ",
+  "query": "\n        update account a\n           set name = $3, type_key = $4, color = $5\n          from connection c, account_type t\n         where a.id = $1 and a.connection_id = c.id and c.user_id = $2\n           and t.key = $4\n        returning a.id      as \"id!\",\n                  a.name    as \"name!\",\n                  a.color,\n                  a.type_key as \"type_key!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -46,17 +46,6 @@
             "name": "type_key"
           }
         }
-      },
-      {
-        "ordinal": 4,
-        "name": "type_label!",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "account_type",
-            "name": "label"
-          }
-        }
       }
     ],
     "parameters": {
@@ -72,9 +61,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "0880213680411a40d9c29e95fef877c9341429baf73c308f13077f294844e2c8"
+  "hash": "ea8d679d6f4b5d20bad416fb14e76601c7cff54401a546baf26d1fa46c8df41b"
 }

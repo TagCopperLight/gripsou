@@ -211,10 +211,7 @@ async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Resul
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
-    // The account is `checking`; before the category table was dropped this
-    // read "cash"/"Cash" via checking -> cash.
     assert_eq!(rows[0].type_key, "checking");
-    assert_eq!(rows[0].type_label, "Checking");
     assert_eq!(
         rows[0].value,
         Decimal::new(120, 0),
@@ -415,7 +412,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
     assert_eq!(rows[0].connection_id, conn_id);
-    assert_eq!(rows[0].type_label, "Checking");
+    assert_eq!(rows[0].type_key, "checking");
     assert_eq!(rows[0].value, Decimal::new(150, 0));
     assert!(
         rows[0].last_sync_at.is_none(),
@@ -565,8 +562,8 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
 
 #[sqlx::test(migrations = "../migrations")]
 async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<()> {
-    let types = query::account_types(&pool).await?;
-    let keys: Vec<&str> = types.iter().map(|t| t.key.as_str()).collect();
+    let keys = query::account_types(&pool).await?;
+    let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
     assert!(keys.contains(&"checking"));
     assert!(keys.contains(&"brokerage"));
     assert!(keys.contains(&"life_insurance"));

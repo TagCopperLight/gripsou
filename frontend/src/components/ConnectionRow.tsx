@@ -8,7 +8,7 @@ import { useManageConnection, useSyncConnection } from "../api/hooks";
 import { connectionIssues, healthIssue } from "../lib/connectionHealth";
 import { formatDate, formatRelative } from "../lib/date";
 import { formatMoney } from "../lib/money";
-import type { SyncConnection } from "../api/types";
+import { accountTypeLabel, type SyncConnection } from "../api/types";
 
 // Shared collapsible connection row used by the settings page and the sync
 // modal. `onDelete` is optional — the delete icon renders only when provided
@@ -183,7 +183,7 @@ export function ConnectionRow({
                     />
                     <span className="text-sm text-fg-dim truncate">{a.name}</span>
                     <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
-                      {a.typeLabel}
+                      {accountTypeLabel(t, a.typeKey)}
                     </span>
                     {a.health?.lastUpdatedOn && (
                       <span title={t("settings.connections.health.bankUpdated")} className={`text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>

@@ -10,7 +10,6 @@ const ACCOUNT: Account = {
   color: "#5b9bf0",
   connectionId: "c1",
   typeKey: "checking",
-  typeLabel: "Checking",
   value: "12480.30",
   lastSyncAt: null,
   sourceName: null,
@@ -34,10 +33,7 @@ describe("EditAccountModal", () => {
       vi.fn(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.endsWith("/api/account-types")) {
           return new Response(
-            JSON.stringify([
-              { key: "checking", label: "Checking" },
-              { key: "savings", label: "Savings" },
-            ]),
+            JSON.stringify(["checking", "savings"]),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );
         }

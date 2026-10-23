@@ -23,7 +23,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       share: Number(a.value) / total,
       color: a.color,
       value: a.value,
-      tag: accountTypeLabel(t, a.typeKey, a.typeLabel),
+      tag: accountTypeLabel(t, a.typeKey),
       warning: a.fxMissing ? t("dashboard.fxMissing") : undefined,
     }));
 

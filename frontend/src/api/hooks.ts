@@ -14,7 +14,6 @@ import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
-  AccountType,
   BasisPreview,
   EnabledProvider,
   Holding,
@@ -199,7 +198,7 @@ export function useTransactionCounts(q: TransactionFilterQuery) {
 export function useAccountTypes() {
   return useQuery({
     queryKey: keys.accountTypes(),
-    queryFn: ({ signal }) => getJson<AccountType[]>(`/account-types`, { signal }),
+    queryFn: ({ signal }) => getJson<string[]>(`/account-types`, { signal }),
   });
 }
 

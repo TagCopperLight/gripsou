@@ -26,7 +26,7 @@ export function HoldingModalHeader({
           <div className="flex items-center gap-2 text-sm leading-none">
             <span className="font-mono text-fg-faint">{holding.ticker} · </span>
             <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-              {accountTypeLabel(t, holding.accountType, holding.accountTypeLabel)}
+              {accountTypeLabel(t, holding.accountType)}
             </span>
             <span className="font-mono text-fg-faint"> · </span>
             <span className="flex items-center gap-1.5 text-fg-dim">

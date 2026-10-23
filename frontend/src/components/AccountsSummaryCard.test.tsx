@@ -10,7 +10,6 @@ function account(id: string, name: string, value: string): Account {
     name,
     color: "#5b9bf0",
     typeKey: "checking",
-    typeLabel: "Checking",
     value,
     lastSyncAt: null,
     sourceName: null,
