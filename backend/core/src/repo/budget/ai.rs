@@ -1,5 +1,4 @@
-//! Persistence for the AI run: the per-user lock, the work
-//! set, the evidence, the guarded writes and the run log.
+//! Persistence for the AI run: the work set, the evidence, the guarded writes and the run log.
 
 use std::collections::HashMap;
 
@@ -15,46 +14,9 @@ use crate::error::CoreError;
 const SAME_DESCRIPTION: i64 = 20;
 const NEIGHBOURS: i64 = 5;
 
-/// A lock whose run has not beaten for this long belongs to a dead task (a
-/// run beats once per batch, and a batch is bounded by the adapters' HTTP
-/// timeouts) and may be taken over.
-pub const LOCK_STALE_MINS: i32 = 30;
-
-/// Claims the user, or takes over a lock whose heartbeat is stale.
-pub async fn try_lock(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
-    let n = sqlx::query!(
-        r#"
-        insert into budget_ai_lock (user_id) values ($1)
-        on conflict (user_id) do update set heartbeat_at = now()
-         where budget_ai_lock.heartbeat_at < now() - make_interval(mins => $2)
-        "#,
-        user_id,
-        LOCK_STALE_MINS,
-    )
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(n == 1)
-}
-
-pub async fn unlock(pool: &sqlx::PgPool, user_id: Uuid) -> Result<(), CoreError> {
-    sqlx::query!("delete from budget_ai_lock where user_id = $1", user_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-pub async fn is_locked(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
-    Ok(sqlx::query_scalar!(
-        r#"select exists(select 1 from budget_ai_lock where user_id = $1) as "e!""#,
-        user_id
-    )
-    .fetch_one(pool)
-    .await?)
-}
-
-/// Closes runs still marked `running` as `error`: for one user once their
-/// lock is held, or for everyone at boot. Either way no live task owns them.
+/// Closes runs still marked `running` as `error`: for one user when their
+/// run starts or crashes, or for everyone at boot. Either way no live task
+/// owns them.
 pub async fn close_abandoned_runs(
     pool: &sqlx::PgPool,
     user_id: Option<Uuid>,
@@ -71,14 +33,6 @@ pub async fn close_abandoned_runs(
     .execute(pool)
     .await?
     .rows_affected())
-}
-
-/// Boot sweep: every lock predates this process (single-instance app).
-pub async fn clear_all_locks(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
-    Ok(sqlx::query!("delete from budget_ai_lock")
-        .execute(pool)
-        .await?
-        .rows_affected())
 }
 
 pub async fn active_categories(
@@ -338,15 +292,12 @@ pub async fn start_run(pool: &sqlx::PgPool, user_id: Uuid, model: &str) -> Resul
     .await?)
 }
 
-/// Adds one call's tokens to the run, and beats the user's lock so a live
-/// run is never taken for a dead one.
+/// Adds one call's tokens to the run.
 pub async fn record_usage(
     pool: &sqlx::PgPool,
     run_id: Uuid,
-    user_id: Uuid,
     usage: Usage,
 ) -> Result<(), CoreError> {
-    let mut tx = pool.begin().await?;
     sqlx::query!(
         r#"
         update budget_ai_run
@@ -360,15 +311,8 @@ pub async fn record_usage(
         usage.tokens_out,
         usage.complete,
     )
-    .execute(&mut *tx)
+    .execute(pool)
     .await?;
-    sqlx::query!(
-        "update budget_ai_lock set heartbeat_at = now() where user_id = $1",
-        user_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -396,7 +340,7 @@ pub struct LastRun {
     pub started_at: DateTime<Utc>,
 }
 
-/// The latest finished run. A live one is reported by the lock instead.
+/// The latest finished run.
 pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastRun>, CoreError> {
     Ok(sqlx::query_as!(
         LastRun,

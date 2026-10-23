@@ -149,11 +149,6 @@ pub async fn run_scheduler(db: Db) {
     // single-instance, so there is no sibling whose live claim this could steal.
     sweep("boot_sync_locks", connection::clear_stale_syncing(&db, 0)).await;
     sweep(
-        "boot_ai_locks",
-        gripsou_core::repo::budget::ai::clear_all_locks(&db),
-    )
-    .await;
-    sweep(
         "boot_ai_runs",
         gripsou_core::repo::budget::ai::close_abandoned_runs(&db, None),
     )
@@ -477,7 +472,6 @@ pub async fn categorize_user(db: Db, user_id: Uuid) {
             batches = batches as i64,
             "ai run finished"
         ),
-        Ok(RunOutcome::Busy) => tracing::debug!("ai run skipped: another is running"),
         Ok(RunOutcome::Nothing) => tracing::debug!("ai run skipped: nothing to categorise"),
         Err(e) => tracing::error!(error = %gripsou_core::logs::error_chain(&e), "ai run failed"),
     }
@@ -489,6 +483,11 @@ static AI_RUNS: LazyLock<Mutex<HashMap<Uuid, bool>>> = LazyLock::new(Default::de
 
 fn ai_runs() -> std::sync::MutexGuard<'static, HashMap<Uuid, bool>> {
     AI_RUNS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Whether the user has an AI run going (or booked to follow the current one).
+pub fn ai_running(user_id: Uuid) -> bool {
+    ai_runs().contains_key(&user_id)
 }
 
 /// Claims the user's run slot. False when a run is going: it is then asked to
@@ -545,8 +544,8 @@ pub fn request_categorize(db: Db, user_id: Uuid) {
 }
 
 /// Runs `run` in its own task so a panic is caught: the user's run row is
-/// then closed as failed and the AI lock released, instead of holding the
-/// user until a restart. Only for the task that owns the user's run.
+/// then closed as failed and the slot goes on to the next run, instead of
+/// holding the user until a restart. Only for the task that owns the user's run.
 async fn guarded<F>(db: &Db, user_id: Uuid, run: F)
 where
     F: std::future::Future<Output = ()> + Send + 'static,
@@ -556,11 +555,11 @@ where
     };
     // The panic payload is in JoinError's Display.
     tracing::error!(user_id = %user_id, error = %e, "ai run crashed");
-    if let Err(e) = gripsou_core::budget::ai::abandon(db, user_id).await {
+    if let Err(e) = gripsou_core::repo::budget::ai::close_abandoned_runs(db, Some(user_id)).await {
         tracing::error!(
             user_id = %user_id,
             error = %gripsou_core::logs::error_chain(&e),
-            "ai lock not released"
+            "ai run not closed"
         );
     }
 }
@@ -1337,16 +1336,11 @@ mod categorize_run_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn a_panicking_run_releases_the_lock_and_closes_its_row(pool: PgPool) {
+    async fn a_panicking_run_closes_its_row(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);
         let user = gripsou_core::testkit::seed_user(&pool).await;
         let p = pool.clone();
         guarded(&pool, user, async move {
-            assert!(
-                gripsou_core::repo::budget::ai::try_lock(&p, user)
-                    .await
-                    .unwrap()
-            );
             gripsou_core::repo::budget::ai::start_run(&p, user, "mock:m")
                 .await
                 .unwrap();
@@ -1354,11 +1348,6 @@ mod categorize_run_tests {
         })
         .await;
 
-        assert!(
-            !gripsou_core::repo::budget::ai::is_locked(&pool, user)
-                .await
-                .unwrap()
-        );
         let run = gripsou_core::repo::budget::ai::last_run(&pool, user)
             .await
             .unwrap()

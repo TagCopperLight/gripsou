@@ -1015,7 +1015,7 @@ pub async fn categorize_status(
     let last = ai_repo::last_run(&pool, user_id).await.map_err(internal)?;
     Ok(Json(crate::dto::AiStatusDto {
         configured,
-        running: ai_repo::is_locked(&pool, user_id).await.map_err(internal)?,
+        running: gripsou_jobs::ai_running(user_id),
         remaining: ai_repo::remaining(&pool, user_id).await.map_err(internal)?,
         review_count: review::review_count(&pool, user_id, threshold)
             .await

@@ -355,28 +355,6 @@ async fn nothing_to_do_writes_no_run_row(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn a_held_lock_makes_the_call_a_no_op(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
-    sqlx::query("insert into budget_ai_lock (user_id) values ($1)")
-        .bind(user_id)
-        .execute(&pool)
-        .await?;
-    let mock = Mock::new(50, vec![abstain_all()]);
-    assert!(matches!(
-        run_for_user(&pool, user_id, &mock).await?,
-        RunOutcome::Busy
-    ));
-    assert!(mock.requests().is_empty());
-
-    assert_eq!(
-        gripsou_core::repo::budget::ai::clear_all_locks(&pool).await?,
-        1
-    );
-    assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
-    Ok(())
-}
-
 /// Answers only the first item of each request.
 fn first_item_only() -> Script {
     Box::new(|req| {
@@ -475,7 +453,6 @@ async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
     let run = last_run(&pool, user_id).await?.unwrap();
     assert_eq!(run.outcome, "error");
     assert!(run.error.unwrap().contains("no_ai"));
-    assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
     Ok(())
 }
 
@@ -496,24 +473,6 @@ async fn a_run_left_running_is_closed_by_the_next_one(pool: PgPool) -> anyhow::R
         .await?;
     assert_eq!(outcome, "error");
     assert_eq!(last_run(&pool, user_id).await?.unwrap().outcome, "ok");
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn a_stale_lock_is_taken_over(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
-    sqlx::query(
-        "insert into budget_ai_lock (user_id, heartbeat_at) values ($1, now() - interval '2 hours')",
-    )
-    .bind(user_id)
-    .execute(&pool)
-    .await?;
-    let mock = Mock::new(50, vec![abstain_all()]);
-    assert!(matches!(
-        run_for_user(&pool, user_id, &mock).await?,
-        RunOutcome::Finished { .. }
-    ));
-    assert!(!gripsou_core::repo::budget::ai::is_locked(&pool, user_id).await?);
     Ok(())
 }
 

@@ -33,7 +33,7 @@ async fn insert_run(pool: &PgPool, user_id: Uuid, r: &Run) -> anyhow::Result<()>
         tokens_out: r.tokens_out.unwrap_or(0),
         complete: r.tokens_in.is_some() && r.tokens_out.is_some(),
     };
-    record_usage(pool, id, user_id, usage).await?;
+    record_usage(pool, id, usage).await?;
     finish_run(pool, id, "ok", None).await?;
     Ok(())
 }
@@ -176,9 +176,9 @@ async fn a_run_with_one_unreported_call_counts_as_without_usage(
 ) -> anyhow::Result<()> {
     let (user, _) = seed_user_and_connection(&pool).await;
     let id = start_run(&pool, user, "jev:jev-latest").await?;
-    record_usage(&pool, id, user, Usage::known(300, 30)).await?;
-    record_usage(&pool, id, user, Usage::default()).await?;
-    record_usage(&pool, id, user, Usage::known(200, 20)).await?;
+    record_usage(&pool, id, Usage::known(300, 30)).await?;
+    record_usage(&pool, id, Usage::default()).await?;
+    record_usage(&pool, id, Usage::known(200, 20)).await?;
     finish_run(&pool, id, "ok", None).await?;
 
     let rows = usage_by_model(&pool).await?;
