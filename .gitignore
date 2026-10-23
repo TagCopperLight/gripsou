@@ -6,3 +6,6 @@ target/
 dist/
 .env
 .claude/worktrees/
+
+# Local copy of the Powens docs (not ours to republish)
+docs/powens/
