@@ -358,14 +358,8 @@ fn strips_the_trailing_card_mask_from_the_description() {
 #[test]
 fn prefers_rdate_and_falls_back_to_date() {
     let txns = mapped_txns();
-    assert_eq!(
-        by_id(&txns, "1001").ts.date_naive().to_string(),
-        "2026-03-14"
-    );
-    assert_eq!(
-        by_id(&txns, "1002").ts.date_naive().to_string(),
-        "2026-03-10"
-    );
+    assert_eq!(by_id(&txns, "1001").spent_on.to_string(), "2026-03-14");
+    assert_eq!(by_id(&txns, "1002").spent_on.to_string(), "2026-03-10");
 }
 
 #[test]
@@ -401,9 +395,6 @@ fn carries_amount_and_account_link_verbatim() {
     let t = by_id(&mapped_txns(), "1004");
     assert_eq!(t.amount, dec("-312.34"));
     assert_eq!(t.account_external_id, "502");
-    // Powens links no instrument to a market_order row: no ISIN, no
-    // id_security, empty `informations`. The user records lots by hand instead.
-    assert!(t.quantity.is_none() && t.unit_price.is_none());
 }
 
 #[test]
@@ -486,7 +477,7 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
 fn carries_both_the_spend_date_and_the_booking_date() {
     let txns = mapped_txns();
     let t = by_id(&txns, "1019");
-    assert_eq!(t.ts.date_naive().to_string(), "2026-08-14", "ts is rdate");
+    assert_eq!(t.spent_on.to_string(), "2026-08-14", "spent_on is rdate");
     assert_eq!(
         t.booked_on.map(|d| d.to_string()).as_deref(),
         Some("2026-08-17"),
@@ -497,7 +488,7 @@ fn carries_both_the_spend_date_and_the_booking_date() {
 #[test]
 fn falls_back_to_the_booking_date_when_rdate_is_absent() {
     let t = by_id(&mapped_txns(), "1020");
-    assert_eq!(t.ts.date_naive().to_string(), "2026-08-19");
+    assert_eq!(t.spent_on.to_string(), "2026-08-19");
     assert_eq!(
         t.booked_on.map(|d| d.to_string()).as_deref(),
         Some("2026-08-19")

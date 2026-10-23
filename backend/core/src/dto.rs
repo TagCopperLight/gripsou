@@ -48,12 +48,10 @@ pub struct CanonicalTransaction {
     /// `deposit` | `withdrawal` | `buy` | `sell` | `dividend` | `fee` |
     /// `interest` | `transfer`
     pub kind: String,
-    pub ts: DateTime<Utc>,
-    pub quantity: Option<Decimal>,
-    pub unit_price: Option<Decimal>,
+    /// The day the user spent (Powens' `rdate`).
+    pub spent_on: NaiveDate,
     /// Cash impact on the account.
     pub amount: Decimal,
-    pub fee: Option<Decimal>,
     /// Human-readable label, provider-cleaned (card masks stripped). A column,
     /// not `provider_meta`: the list renders it and search matches it.
     pub description: Option<String>,
@@ -61,9 +59,9 @@ pub struct CanonicalTransaction {
     /// nothing the app reads lives here.
     pub provider_meta: serde_json::Value,
     /// The day the provider's balance actually moved, when it reports one
-    /// separately from `ts`. `ts` is the day the user spent (Powens' `rdate`);
-    /// these disagree on 70% of real rows by up to five days. The backfill walks
-    /// on this, because it anchors on the balance; the UI shows `ts`.
+    /// separately from `spent_on`. They disagree on 70% of real rows by up to
+    /// five days. The backfill walks on this, because it anchors on the
+    /// balance; the UI shows `spent_on`.
     pub booked_on: Option<NaiveDate>,
 }
 

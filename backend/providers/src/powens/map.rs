@@ -352,7 +352,7 @@ pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
         return None;
     }
     let value = t.value?;
-    // `ts` is the spend date, `booked_on` the day the balance moved. Both fall
+    // `spent_on` is the spend date, `booked_on` the day the balance moved. Both fall
     // back to the other when the provider reports only one.
     let spent_on = t.rdate.or(t.date)?;
     let booked_on = t.date.or(t.rdate);
@@ -360,11 +360,8 @@ pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
         account_external_id: t.id_account.to_string(),
         external_id: t.id.to_string(),
         kind: map_txn_type(t.r#type.as_deref(), value).to_string(),
-        ts: spent_on.and_hms_opt(0, 0, 0)?.and_utc(),
-        quantity: None,
-        unit_price: None,
+        spent_on,
         amount: value,
-        fee: None,
         description: t.wording.as_deref().map(|w| strip_card_mask(w).to_string()),
         provider_meta: serde_json::Value::Object(t.raw.clone()),
         booked_on,

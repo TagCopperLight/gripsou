@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, NaiveDate, Utc};
 use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::dto::CanonicalAccount;
 use gripsou_core::repo::account::upsert_account;
@@ -31,9 +31,9 @@ async fn tx_at(
     account_ext: &str,
     ext: &str,
     amount: Decimal,
-    ts: DateTime<Utc>,
+    day: NaiveDate,
 ) -> anyhow::Result<Uuid> {
-    tx_at_kind(pool, account_id, account_ext, ext, "transfer", amount, ts).await
+    tx_at_kind(pool, account_id, account_ext, ext, "transfer", amount, day).await
 }
 
 /// Same as [`tx_at`], but with an explicit transaction `type` rather than the
@@ -46,11 +46,11 @@ async fn tx_at_kind(
     ext: &str,
     kind: &str,
     amount: Decimal,
-    ts: DateTime<Utc>,
+    day: NaiveDate,
 ) -> anyhow::Result<Uuid> {
     let mut conn = pool.acquire().await?;
     let mut t = txn(account_ext, ext, kind, amount, Some("VIREMENT"));
-    t.ts = ts;
+    t.spent_on = day;
     upsert_transaction(&mut conn, account_id, &t).await?;
     let id: Uuid = sqlx::query_scalar("select id from transaction where external_id = $1")
         .bind(ext)
@@ -70,17 +70,9 @@ async fn two_accounts(pool: &PgPool, currency_b: &str) -> anyhow::Result<(Uuid, 
 #[sqlx::test(migrations = "../migrations")]
 async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    let inn = tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(4),
-    )
-    .await?;
+    let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
@@ -113,7 +105,7 @@ async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     tx_at(
         &pool,
@@ -121,7 +113,7 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
         "acct-b",
         "i1",
         Decimal::new(50000, 2),
-        now + Duration::hours(2),
+        now + Duration::days(2),
     )
     .await?;
     tx_at(
@@ -130,7 +122,7 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
         "acct-b",
         "i2",
         Decimal::new(50000, 2),
-        now - Duration::hours(2),
+        now - Duration::days(2),
     )
     .await?;
 
@@ -150,8 +142,8 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
-    let later = now + Duration::hours(1);
+    let now = Utc::now().date_naive();
+    let later = now;
     let o1 = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-500, 2), now).await?;
     let o2 = tx_at(&pool, a, "acct-a", "o2", Decimal::new(-500, 2), now).await?;
     let i1 = tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
@@ -187,7 +179,7 @@ async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()
 #[sqlx::test(migrations = "../migrations")]
 async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(
         &pool,
         a,
@@ -212,8 +204,8 @@ async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyh
 #[sqlx::test(migrations = "../migrations")]
 async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
-    let later = now + Duration::hours(1);
+    let now = Utc::now().date_naive();
+    let later = now;
     tx_at_kind(
         &pool,
         a,
@@ -248,7 +240,7 @@ async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<(
 #[sqlx::test(migrations = "../migrations")]
 async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(
         &pool,
         a,
@@ -280,8 +272,8 @@ async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> an
         let mut conn = pool.acquire().await?;
         upsert_account(&mut conn, conn_id, &account("acct-c", "EUR")).await?
     };
-    let now = Utc::now();
-    let later = now + Duration::hours(1);
+    let now = Utc::now().date_naive();
+    let later = now;
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-500, 2), now).await?;
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
     tx_at(&pool, c, "acct-c", "i2", Decimal::new(500, 2), later).await?;
@@ -294,7 +286,7 @@ async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> an
 #[sqlx::test(migrations = "../migrations")]
 async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     tx_at(
         &pool,
@@ -302,7 +294,7 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
         "acct-b",
         "i1",
         Decimal::new(50000, 2),
-        now + Duration::days(5) + Duration::hours(1),
+        now + Duration::days(6),
     )
     .await?;
 
@@ -315,7 +307,7 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
 #[sqlx::test(migrations = "../migrations")]
 async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     tx_at(
         &pool,
@@ -337,17 +329,9 @@ async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> 
 #[sqlx::test(migrations = "../migrations")]
 async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "USD").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
@@ -357,17 +341,9 @@ async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, _b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    tx_at(
-        &pool,
-        a,
-        "acct-a",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    tx_at(&pool, a, "acct-a", "i1", Decimal::new(50000, 2), now).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
@@ -383,7 +359,7 @@ async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result
 #[sqlx::test(migrations = "../migrations")]
 async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let buy = tx_at_kind(
         &pool,
         a,
@@ -394,15 +370,7 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
         now,
     )
     .await?;
-    tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
@@ -422,17 +390,9 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
 #[sqlx::test(migrations = "../migrations")]
 async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    let inn = tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
     let groceries = list_categories(&pool, user_id)
         .await?
         .into_iter()
@@ -482,17 +442,9 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
     let groceries = by_key(&pool, user_id, "groceries").await?;
     file_as(&pool, out, groceries, "user").await?;
 
@@ -536,17 +488,9 @@ async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    let inn = tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
     let savings = by_key(&pool, user_id, "savings").await?;
     file_as(&pool, out, savings, "user").await?;
 
@@ -571,7 +515,7 @@ async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
 #[sqlx::test(migrations = "../migrations")]
 async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-4000, 2), now).await?;
     let inn = tx_at_kind(
         &pool,
@@ -598,7 +542,7 @@ async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Res
 #[sqlx::test(migrations = "../migrations")]
 async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let buy = tx_at_kind(&pool, a, "acct-a", "b1", "buy", Decimal::new(-2100, 2), now).await?;
     let sell = tx_at_kind(&pool, b, "acct-b", "s1", "sell", Decimal::new(2100, 2), now).await?;
     let investments = by_key(&pool, user_id, "investments").await?;
@@ -616,17 +560,9 @@ async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Resul
 #[sqlx::test(migrations = "../migrations")]
 async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-25000, 2), now).await?;
-    let inn = tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(25000, 2),
-        now + Duration::hours(1),
-    )
-    .await?;
+    let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(25000, 2), now).await?;
     let gifts = list_categories(&pool, user_id)
         .await?
         .into_iter()
@@ -660,8 +596,8 @@ async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> 
 #[sqlx::test(migrations = "../migrations")]
 async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
-    let (b, ts): (Uuid, DateTime<Utc>) =
-        sqlx::query_as("select account_id, ts from transaction where id = $1")
+    let (b, day): (Uuid, NaiveDate) =
+        sqlx::query_as("select account_id, spent_on from transaction where id = $1")
             .bind(inn)
             .fetch_one(&pool)
             .await?;
@@ -679,15 +615,7 @@ async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::
     );
     assert_eq!(survivor.3, None);
 
-    let fresh = tx_at(
-        &pool,
-        b,
-        "acct-b",
-        "i2",
-        Decimal::new(50000, 2),
-        ts + Duration::hours(1),
-    )
-    .await?;
+    let fresh = tx_at(&pool, b, "acct-b", "i2", Decimal::new(50000, 2), day).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
@@ -704,20 +632,12 @@ async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
     let groceries = a_category(&pool, user_id).await?;
     set_category(&pool, user_id, out, Some(groceries)).await;
 
-    let (a, ts): (Uuid, DateTime<Utc>) =
-        sqlx::query_as("select account_id, ts from transaction where id = $1")
+    let (a, day): (Uuid, NaiveDate) =
+        sqlx::query_as("select account_id, spent_on from transaction where id = $1")
             .bind(out)
             .fetch_one(&pool)
             .await?;
-    let fresh = tx_at(
-        &pool,
-        a,
-        "acct-a",
-        "o2",
-        Decimal::new(-50000, 2),
-        ts + Duration::hours(1),
-    )
-    .await?;
+    let fresh = tx_at(&pool, a, "acct-a", "o2", Decimal::new(-50000, 2), day).await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
@@ -747,7 +667,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
     let c = upsert_account(&mut conn, conn_id, &account("acct-c", "EUR")).await?;
     let d = upsert_account(&mut conn, conn_id, &account("acct-d", "EUR")).await?;
 
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let x = tx_at(&pool, a, "acct-a", "x", Decimal::new(-50000, 2), now).await?;
     let y = tx_at(
         &pool,
@@ -755,7 +675,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
         "acct-b",
         "y",
         Decimal::new(50000, 2),
-        now + Duration::hours(3),
+        now + Duration::days(3),
     )
     .await?;
     let w = tx_at(
@@ -764,7 +684,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
         "acct-c",
         "w",
         Decimal::new(-50000, 2),
-        now + Duration::hours(2),
+        now + Duration::days(2),
     )
     .await?;
     // Z: farther from X than Y is, so round 1's nearest for X is still Y, not
@@ -775,7 +695,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
         "acct-d",
         "z",
         Decimal::new(50000, 2),
-        now + Duration::hours(10),
+        now + Duration::days(5),
     )
     .await?;
 
@@ -820,8 +740,8 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
     let b = upsert_account(&mut conn, conn_id, &account("acct-b", "EUR")).await?;
     let c = upsert_account(&mut conn, conn_id, &account("acct-c", "EUR")).await?;
 
-    let now = Utc::now();
-    // X: outflow on account a, 3h from the only inflow Y — X's nearest (its
+    let now = Utc::now().date_naive();
+    // X: outflow on account a, 3 days from the only inflow Y — X's nearest (its
     // only candidate) is Y.
     let x = tx_at(&pool, a, "acct-a", "x", Decimal::new(-50000, 2), now).await?;
     // Y: the one inflow, on account b.
@@ -831,10 +751,10 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
         "acct-b",
         "y",
         Decimal::new(50000, 2),
-        now + Duration::hours(3),
+        now + Duration::days(3),
     )
     .await?;
-    // W: outflow on account c, only 1h from Y — closer than X is, so Y's own
+    // W: outflow on account c, only 1 day from Y — closer than X is, so Y's own
     // nearest is W, not X.
     let w = tx_at(
         &pool,
@@ -842,7 +762,7 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
         "acct-c",
         "w",
         Decimal::new(-50000, 2),
-        now + Duration::hours(2),
+        now + Duration::days(2),
     )
     .await?;
 
@@ -867,12 +787,12 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
 
 /// Among several candidates within the window, the nearest in time wins, not
 /// an arbitrary or farthest one. Flipping the `gap < best_gap` comparison to
-/// prefer the farther candidate would pick the +5h inflow instead and this
+/// prefer the farther candidate would pick the +5 days inflow instead and this
 /// test would fail.
 #[sqlx::test(migrations = "../migrations")]
 async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     let near = tx_at(
         &pool,
@@ -880,7 +800,7 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
         "acct-b",
         "near",
         Decimal::new(50000, 2),
-        now + Duration::hours(1),
+        now + Duration::days(1),
     )
     .await?;
     let far = tx_at(
@@ -889,7 +809,7 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
         "acct-b",
         "far",
         Decimal::new(50000, 2),
-        now + Duration::hours(5),
+        now + Duration::days(5),
     )
     .await?;
 
@@ -913,20 +833,20 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
 
 /// A savings account whose transfers to the current account pass through a
 /// deposit account (savings → deposit → current account), as seen on
-/// real data. Seeds one such chain of `amount` at `ts`, returning its rows as
+/// real data. Seeds one such chain of `amount` at `day`, returning its rows as
 /// (livret out, depot in, depot out, courant in).
 async fn chain_at(
     pool: &PgPool,
     [livret, depot, courant]: [Uuid; 3],
     tag: &str,
     amount: Decimal,
-    ts: DateTime<Utc>,
+    day: NaiveDate,
 ) -> anyhow::Result<[Uuid; 4]> {
     Ok([
-        tx_at(pool, livret, "livret", &format!("{tag}-lo"), -amount, ts).await?,
-        tx_at(pool, depot, "depot", &format!("{tag}-di"), amount, ts).await?,
-        tx_at(pool, depot, "depot", &format!("{tag}-do"), -amount, ts).await?,
-        tx_at(pool, courant, "courant", &format!("{tag}-ci"), amount, ts).await?,
+        tx_at(pool, livret, "livret", &format!("{tag}-lo"), -amount, day).await?,
+        tx_at(pool, depot, "depot", &format!("{tag}-di"), amount, day).await?,
+        tx_at(pool, depot, "depot", &format!("{tag}-do"), -amount, day).await?,
+        tx_at(pool, courant, "courant", &format!("{tag}-ci"), amount, day).await?,
     ])
 }
 
@@ -956,8 +876,14 @@ async fn partner(pool: &PgPool, id: Uuid) -> anyhow::Result<Option<Uuid>> {
 #[sqlx::test(migrations = "../migrations")]
 async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
-    let [lo, di, dout, ci] =
-        chain_at(&pool, accts, "c", Decimal::new(10000, 2), Utc::now()).await?;
+    let [lo, di, dout, ci] = chain_at(
+        &pool,
+        accts,
+        "c",
+        Decimal::new(10000, 2),
+        Utc::now().date_naive(),
+    )
+    .await?;
 
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
@@ -973,7 +899,7 @@ async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<
 #[sqlx::test(migrations = "../migrations")]
 async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     chain_at(&pool, accts, "c", Decimal::new(10000, 2), now).await?;
     let mut conn = pool.acquire().await?;
     let (_, conn_id): (Uuid, Uuid) =
@@ -993,7 +919,7 @@ async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<
 #[sqlx::test(migrations = "../migrations")]
 async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     chain_at(&pool, accts, "c1", Decimal::new(10000, 2), now).await?;
     chain_at(&pool, accts, "c2", Decimal::new(10000, 2), now).await?;
 
@@ -1008,7 +934,7 @@ async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<
 #[sqlx::test(migrations = "../migrations")]
 async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let [lo1, di1, do1, ci1] = chain_at(&pool, accts, "c1", Decimal::new(10000, 2), now).await?;
     let [lo2, di2, do2, ci2] = chain_at(
         &pool,
@@ -1041,17 +967,9 @@ async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow
 /// Seeds a paired transfer and returns `(user_id, outgoing, incoming)`.
 async fn seeded_pair(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid)> {
     let (user_id, a, b) = two_accounts(pool, "EUR").await?;
-    let now = Utc::now();
+    let now = Utc::now().date_naive();
     let out = tx_at(pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
-    let inn = tx_at(
-        pool,
-        b,
-        "acct-b",
-        "i1",
-        Decimal::new(50000, 2),
-        now + Duration::hours(4),
-    )
-    .await?;
+    let inn = tx_at(pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
     let mut conn = pool.acquire().await?;
     assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
     Ok((user_id, out, inn))
@@ -1083,12 +1001,12 @@ async fn row(pool: &PgPool, id: Uuid) -> anyhow::Result<PairedRow> {
 /// half as the incoming half is, on the other side: the outgoing half now
 /// ties, and the pair no longer holds.
 async fn tie_the_pair(pool: &PgPool, out: Uuid, inn: Uuid) -> anyhow::Result<()> {
-    let (out_ts,): (DateTime<Utc>,) = sqlx::query_as("select ts from transaction where id = $1")
+    let (out_ts,): (NaiveDate,) = sqlx::query_as("select spent_on from transaction where id = $1")
         .bind(out)
         .fetch_one(pool)
         .await?;
-    let (b, in_ts): (Uuid, DateTime<Utc>) =
-        sqlx::query_as("select account_id, ts from transaction where id = $1")
+    let (b, in_ts): (Uuid, NaiveDate) =
+        sqlx::query_as("select account_id, spent_on from transaction where id = $1")
             .bind(inn)
             .fetch_one(pool)
             .await?;

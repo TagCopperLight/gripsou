@@ -54,31 +54,3 @@ async fn inserts_once_then_updates_in_place(pool: PgPool) -> anyhow::Result<()> 
     assert_eq!(description.as_deref(), Some("SALAIRE MARS"));
     Ok(())
 }
-
-/// The canonical DTO still carries instrument/quantity/unit_price for a future
-/// provider that reports orders, but `transaction` is the cash ledger now and
-/// must not try to store them.
-#[sqlx::test(migrations = "../migrations")]
-async fn upsert_ignores_instrument_level_fields(pool: PgPool) -> anyhow::Result<()> {
-    let conn_id = seed_connection(&pool).await;
-    let mut conn = pool.acquire().await?;
-    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
-    let mut t = txn(
-        "acct-1",
-        "t1",
-        "buy",
-        Decimal::new(-21053, 2),
-        Some("ACHAT COMPTANT"),
-    );
-    t.quantity = Some(Decimal::new(2, 0));
-    t.unit_price = Some(Decimal::new(10474, 2));
-
-    upsert_transaction(&mut conn, account_id, &t).await?;
-
-    let amount: Decimal =
-        sqlx::query_scalar("select amount from transaction where external_id = 't1'")
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(amount, Decimal::new(-21053, 2));
-    Ok(())
-}

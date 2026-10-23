@@ -249,11 +249,7 @@ impl Lot {
     pub fn from_row(r: gripsou_core::repo::lot::LotRow) -> Self {
         Lot {
             id: r.id.to_string(),
-            t: r.acquired_on
-                .and_hms_opt(0, 0, 0)
-                .expect("midnight is a valid time")
-                .and_utc()
-                .timestamp_millis(),
+            t: day_to_millis(r.acquired_on),
             side: r.side,
             qty: r.quantity.to_string(),
             price: r.unit_price.to_string(),
@@ -325,7 +321,8 @@ impl PricePoint {
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: String,
-    /// Epoch milliseconds, like every other timestamp in this API.
+    /// Epoch milliseconds at UTC midnight of the day, like every other date
+    /// in this API.
     pub t: i64,
     #[serde(rename = "type")]
     pub kind: String,
@@ -388,7 +385,7 @@ impl Transaction {
     ) -> Self {
         Transaction {
             id: r.id.to_string(),
-            t: r.ts.timestamp_millis(),
+            t: day_to_millis(r.day),
             kind: r.kind,
             description: r.description,
             amount: r.amount.to_string(),

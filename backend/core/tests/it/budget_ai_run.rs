@@ -131,7 +131,7 @@ async fn ledger(pool: &PgPool, rows: &[(&str, i64)]) -> anyhow::Result<(Uuid, Ve
             Decimal::new(*cents, 2),
             Some(desc),
         );
-        t.ts = Utc::now() - Duration::days(i as i64);
+        t.spent_on = Utc::now().date_naive() - Duration::days(i as i64);
         upsert_transaction(&mut conn, acct, &t).await?;
         ids.push(
             sqlx::query_scalar("select id from transaction where external_id = $1")

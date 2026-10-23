@@ -87,9 +87,9 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         where c.user_id = $1 and i.kind <> 'cash'
         union all
         select null::uuid, t.account_id,
-               coalesce(t.booked_on, (t.ts at time zone 'utc')::date),
-               t.amount * fx_asof(a.currency, coalesce(t.booked_on, (t.ts at time zone 'utc')::date))
-                 / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, (t.ts at time zone 'utc')::date)), 0)
+               coalesce(t.booked_on, t.spent_on),
+               t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.spent_on))
+                 / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, t.spent_on)), 0)
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id

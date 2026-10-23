@@ -211,11 +211,11 @@ async fn seed_lot(
 /// A cash row entered by hand: no `external_id`.
 async fn manual_txn(pool: &PgPool, account_id: Uuid, kind: &str, amount: &str, day: NaiveDate) {
     sqlx::query(
-        "insert into transaction (account_id, ts, booked_on, type, amount, description) \
+        "insert into transaction (account_id, spent_on, booked_on, type, amount, description) \
          values ($1, $2, $2, $3, $4, 'manual')",
     )
     .bind(account_id)
-    .bind(day.and_hms_opt(0, 0, 0).unwrap().and_utc())
+    .bind(day)
     .bind(kind)
     .bind(dec(amount))
     .execute(pool)
@@ -679,7 +679,7 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
 /// The walk must follow the day the balance moved, not the day the card was
 /// tapped. Here a −30 card purchase is spent on the 5th but booked on the 8th,
 /// with a snapshot of 100 on the 10th. The balance only dropped on the 8th, so
-/// days 8 and 9 read 100 and days 5-7 read 130 — keying on `ts` instead would
+/// days 8 and 9 read 100 and days 5-7 read 130 — keying on `spent_on` instead would
 /// subtract it three days early and report 130 on the 8th and 9th.
 #[sqlx::test(migrations = "../migrations")]
 async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::Result<()> {

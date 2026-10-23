@@ -60,7 +60,7 @@ pub async fn day_category_totals(
         -- a lot is the record of an investment, and buying a security is not
         -- spending. The threshold only feeds `needs_review`, unused here.
         with base as (
-            select (r.ts at time zone 'utc')::date as day,
+            select r.day,
                    r.amount,
                    r.account_currency,
                    -- An orphaned `pair` row lost its partner: the user
@@ -83,10 +83,7 @@ pub async fn day_category_totals(
                         else 0 end as uncategorised_sign
             from budget_transaction_rows($1, 0) r
             where r.source = 'cash'
-              -- On `ts` itself, not on a cast of it, so the (account, ts)
-              -- index bounds the scan.
-              and r.ts >= ($2::date::timestamp at time zone 'UTC')
-              and r.ts < (($3::date + 1)::timestamp at time zone 'UTC')
+              and r.day between $2 and $3
               -- A paired transfer nets to zero by construction, so both halves
               -- are dropped rather than left to cancel: a pair straddling a
               -- month end would leave -x in one month and +x in the next, and

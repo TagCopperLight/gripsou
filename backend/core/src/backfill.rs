@@ -44,11 +44,11 @@ pub async fn backfill_connection(
                    i.currency = a.currency as is_account_currency,
                    -- Some connectors send a statement period as `booked_on`
                    -- (the 1st or the 16th). A row booked before it was spent
-                   -- gives them away; such an account is keyed on `ts`.
+                   -- gives them away; such an account is keyed on `spent_on`.
                    not exists (
                        select 1 from transaction t
                        where t.account_id = a.id
-                         and t.booked_on < (t.ts at time zone 'utc')::date
+                         and t.booked_on < t.spent_on
                    ) as trust_booked_on
             from holding h
             join account a    on a.id = h.account_id
@@ -63,7 +63,7 @@ pub async fn backfill_connection(
         ),
         horizon as (
             select least(
-                coalesce((select min(t.ts at time zone 'utc')::date from transaction t
+                coalesce((select min(t.spent_on) from transaction t
                           join account a    on a.id = t.account_id
                           join connection c on c.id = a.connection_id
                           where c.user_id = (select user_id from owner)),
@@ -88,7 +88,7 @@ pub async fn backfill_connection(
             select s.holding_id, s.account_id, ps.day as provider_start
             from scope s
             cross join lateral (
-                select min(txn_day(s.trust_booked_on, t.booked_on, t.ts)) as day
+                select min(txn_day(s.trust_booked_on, t.booked_on, t.spent_on)) as day
                 from transaction t
                 where t.account_id = s.account_id and t.external_id is not null
             ) ps
@@ -98,7 +98,7 @@ pub async fn backfill_connection(
                   select 1 from transaction t
                   where t.account_id = s.account_id
                     and t.external_id is null
-                    and txn_day(s.trust_booked_on, t.booked_on, t.ts) < ps.day
+                    and txn_day(s.trust_booked_on, t.booked_on, t.spent_on) < ps.day
               )
         ),
         -- Signed movement per (holding, day). `materialized` matters: inlined,
@@ -109,13 +109,13 @@ pub async fn backfill_connection(
             -- since the walk anchors on balances. `transaction` has no
             -- currency: `amount` is in the account's currency, so a cash line
             -- in another currency is held flat.
-            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts) as day,
+            select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.spent_on) as day,
                    sum(t.amount) as delta
             from scope s
             join transaction t on t.account_id = s.account_id
             where s.is_cash
               and s.is_account_currency
-            group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.ts)
+            group by s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.spent_on)
 
             union all
 

@@ -83,7 +83,7 @@ pub async fn work_chunk(
         WorkRow,
         r#"
         select t.id, t.description, t.amount, a.currency, a.type_key as account_type,
-               (t.ts at time zone 'utc')::date as "day!"
+               t.spent_on as "day!"
         from transaction t
         join account a    on a.id = t.account_id
         join connection k on k.id = a.connection_id
@@ -94,7 +94,7 @@ pub async fn work_chunk(
           and t.amount <> 0
           and not budget_investment_leg(t.type)
           and t.id <> all($2)
-        order by t.ts desc, t.id
+        order by t.spent_on desc, t.id
         limit $3
         "#,
         user_id,
@@ -151,7 +151,7 @@ pub async fn examples_for(
         from items i
         cross join lateral (
             (select c.description, c.amount, a.currency, a.type_key,
-                    (c.ts at time zone 'utc')::date as day, c.budget_category_id as category_id
+                    c.spent_on as day, c.budget_category_id as category_id
                from transaction c
                join account a    on a.id = c.account_id
                join connection k on k.id = a.connection_id
@@ -160,11 +160,11 @@ pub async fn examples_for(
                 and k.user_id = $1
                 and c.budget_category_id is not null
                 and (c.category_source = 'user' or c.category_reviewed_at is not null)
-              order by c.ts desc, c.id
+              order by c.spent_on desc, c.id
               limit $3)
             union all
             (select c.description, c.amount, a.currency, a.type_key,
-                    (c.ts at time zone 'utc')::date as day, c.budget_category_id as category_id
+                    c.spent_on as day, c.budget_category_id as category_id
                from transaction c
                join account a    on a.id = c.account_id
                join connection k on k.id = a.connection_id
@@ -174,7 +174,7 @@ pub async fn examples_for(
                 and k.user_id = $1
                 and c.budget_category_id is not null
                 and (c.category_source = 'user' or c.category_reviewed_at is not null)
-              order by similarity(c.description_norm, i.norm) desc, c.ts desc, c.id
+              order by similarity(c.description_norm, i.norm) desc, c.spent_on desc, c.id
               limit $4)
         ) e
         "#,
@@ -208,7 +208,7 @@ pub async fn recent_corrections(
     let rows = sqlx::query!(
         r#"
         select t.description, t.amount, a.currency, a.type_key,
-               (t.ts at time zone 'utc')::date as "day!",
+               t.spent_on as "day!",
                t.budget_category_id as "category_id!"
         from transaction t
         join account a    on a.id = t.account_id

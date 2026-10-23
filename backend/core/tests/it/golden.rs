@@ -209,11 +209,11 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
 
         sqlx::query(
             "insert into transaction \
-             (account_id, ts, booked_on, type, amount, external_id) \
+             (account_id, spent_on, booked_on, type, amount, external_id) \
              values ($1, $2, $3, 'buy', $4, $5)",
         )
         .bind(account_id)
-        .bind(day(100).and_hms_opt(12, 0, 0).unwrap().and_utc())
+        .bind(day(100))
         .bind(day(100))
         .bind(dec("-400"))
         .bind(format!("g-buy-{n}"))
@@ -238,11 +238,11 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     let (sold_holding, _sold_instrument, sold_account) = security_holdings[1];
     sqlx::query(
         "insert into transaction \
-         (account_id, ts, booked_on, type, amount, external_id) \
+         (account_id, spent_on, booked_on, type, amount, external_id) \
          values ($1, $2, $3, 'sell', $4, 'g-sell')",
     )
     .bind(sold_account)
-    .bind(day(20).and_hms_opt(12, 0, 0).unwrap().and_utc())
+    .bind(day(20))
     .bind(day(20))
     .bind(dec("600"))
     .execute(&mut *conn)
@@ -272,11 +272,11 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .enumerate()
     {
         sqlx::query(
-            "insert into transaction (account_id, ts, booked_on, type, amount, external_id) \
+            "insert into transaction (account_id, spent_on, booked_on, type, amount, external_id) \
              values ($1, $2, $3, $4, $5, $6)",
         )
         .bind(checking)
-        .bind(day(*back).and_hms_opt(12, 0, 0).unwrap().and_utc())
+        .bind(day(*back))
         .bind(day(*back))
         .bind(kind)
         .bind(dec(amount))

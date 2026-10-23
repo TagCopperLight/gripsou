@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select id as \"id!\"\n        from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n        where source = 'cash'\n        order by ts desc, id\n        ",
+  "query": "\n        select id as \"id!\"\n        from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n        where source = 'cash'\n        order by day desc, id\n        ",
   "describe": {
     "columns": [
       {
@@ -30,5 +30,5 @@
       null
     ]
   },
-  "hash": "0c5345f9fd7757ee93f95ea2b557e2aa2cfefb9dbf709cb0a3c65e8d7138dd9d"
+  "hash": "4ba46a8a5aeca4a787d869eb1a4a8675f30c8e48119928a0030d9e53d49fc647"
 }

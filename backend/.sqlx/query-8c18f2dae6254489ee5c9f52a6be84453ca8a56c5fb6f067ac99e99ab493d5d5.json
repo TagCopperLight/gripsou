@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select t.description, t.amount, a.currency, a.type_key,\n               (t.ts at time zone 'utc')::date as \"day!\",\n               t.budget_category_id as \"category_id!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.budget_category_id is not null\n          and t.category_reviewed_at is not null\n        order by t.category_reviewed_at desc\n        limit $2\n        ",
+  "query": "\n        select t.description, t.amount, a.currency, a.type_key,\n               t.spent_on as \"day!\",\n               t.budget_category_id as \"category_id!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where k.user_id = $1\n          and t.budget_category_id is not null\n          and t.category_reviewed_at is not null\n        order by t.category_reviewed_at desc\n        limit $2\n        ",
   "describe": {
     "columns": [
       {
@@ -51,7 +51,12 @@
         "ordinal": 4,
         "name": "day!",
         "type_info": "Date",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "transaction",
+            "name": "spent_on"
+          }
+        }
       },
       {
         "ordinal": 5,
@@ -76,9 +81,9 @@
       false,
       false,
       false,
-      null,
+      false,
       true
     ]
   },
-  "hash": "63ff77ccaeb92c83ab1465dd265ab228c4180a211ec9a209afde9bf8e35e7a3a"
+  "hash": "8c18f2dae6254489ee5c9f52a6be84453ca8a56c5fb6f067ac99e99ab493d5d5"
 }

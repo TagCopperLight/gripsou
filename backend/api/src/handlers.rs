@@ -4012,8 +4012,8 @@ pub(crate) mod auth_tests {
         .await
         .unwrap();
         sqlx::query(
-            "insert into transaction (account_id, ts, type, amount, description) \
-             values ($1, now(), 'deposit', 10, $2)",
+            "insert into transaction (account_id, spent_on, type, amount, description) \
+             values ($1, current_date, 'deposit', 10, $2)",
         )
         .bind(account)
         .bind(label)

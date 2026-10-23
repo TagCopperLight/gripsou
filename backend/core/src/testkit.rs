@@ -149,11 +149,8 @@ pub fn deposit_txn(
         account_external_id: account_external_id.to_string(),
         external_id: external_id.to_string(),
         kind: "deposit".to_string(),
-        ts: Utc::now(),
-        quantity: None,
-        unit_price: None,
+        spent_on: Utc::now().date_naive(),
         amount,
-        fee: None,
         description: None,
         provider_meta: serde_json::json!({}),
         booked_on: None,
@@ -172,18 +169,15 @@ pub fn txn(
         account_external_id: account_external_id.to_string(),
         external_id: external_id.to_string(),
         kind: kind.to_string(),
-        ts: Utc::now(),
-        quantity: None,
-        unit_price: None,
+        spent_on: Utc::now().date_naive(),
         amount,
-        fee: None,
         description: description.map(str::to_string),
         provider_meta: serde_json::json!({}),
         booked_on: None,
     }
 }
 
-/// Same, on a specific day (the backfill walks by date, not by instant).
+/// Same, on a specific day.
 pub fn txn_on(
     account_external_id: &str,
     external_id: &str,
@@ -192,7 +186,7 @@ pub fn txn_on(
     day: NaiveDate,
 ) -> CanonicalTransaction {
     CanonicalTransaction {
-        ts: day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        spent_on: day,
         ..txn(account_external_id, external_id, kind, amount, None)
     }
 }
@@ -218,7 +212,7 @@ pub fn txn_on_day(
     description: &str,
 ) -> CanonicalTransaction {
     CanonicalTransaction {
-        ts: day.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        spent_on: day,
         ..txn(
             account_external_id,
             external_id,
@@ -280,7 +274,7 @@ pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
 
 /// A transaction whose spend date and booking date differ — the real shape of
 /// 70% of Powens rows, and the case the backward walk gets wrong when it keys
-/// on `ts`.
+/// on `spent_on`.
 pub fn txn_booked(
     account_external_id: &str,
     external_id: &str,
@@ -290,7 +284,7 @@ pub fn txn_booked(
     booked_on: NaiveDate,
 ) -> CanonicalTransaction {
     CanonicalTransaction {
-        ts: spent_on.and_hms_opt(12, 0, 0).unwrap().and_utc(),
+        spent_on,
         booked_on: Some(booked_on),
         ..txn(account_external_id, external_id, kind, amount, None)
     }

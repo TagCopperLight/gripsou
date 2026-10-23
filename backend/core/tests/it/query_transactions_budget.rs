@@ -738,21 +738,20 @@ async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// Days are UTC days at both edges: the last second of the `to` day is in,
-/// the first second of the next day is out.
+/// Both edge days are in.
 #[sqlx::test(migrations = "../migrations")]
-async fn a_date_range_keeps_whole_utc_days(pool: PgPool) -> anyhow::Result<()> {
+async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
-    for (ext, ts) in [
-        ("before", "2026-02-28T23:59:59Z"),
-        ("first", "2026-03-01T00:00:00Z"),
-        ("last", "2026-03-31T23:59:59Z"),
-        ("after", "2026-04-01T00:00:00Z"),
+    for (ext, spent_on) in [
+        ("before", day(2026, 2, 28)),
+        ("first", day(2026, 3, 1)),
+        ("last", day(2026, 3, 31)),
+        ("after", day(2026, 4, 1)),
     ] {
         let mut t = txn("acct-1", ext, "withdrawal", eur(-1), Some(ext));
-        t.ts = ts.parse()?;
+        t.spent_on = spent_on;
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
     drop(conn);

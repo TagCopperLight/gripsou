@@ -1089,8 +1089,8 @@ mod handler_tests {
 
     async fn seed_txn(pool: &PgPool, account_id: Uuid, description: &str) -> Uuid {
         sqlx::query_scalar(
-            "insert into transaction (account_id, ts, type, amount, description) \
-             values ($1, now(), 'withdrawal', -12, $2) returning id",
+            "insert into transaction (account_id, spent_on, type, amount, description) \
+             values ($1, current_date, 'withdrawal', -12, $2) returning id",
         )
         .bind(account_id)
         .bind(description)
@@ -1359,7 +1359,7 @@ mod handler_tests {
 
     // ── Helpers for the tests below ─────────────────────────────────────────
 
-    /// A cash row at a fixed UTC date, so period tests do not depend on today.
+    /// A cash row on a fixed date, so period tests do not depend on today.
     async fn seed_dated(
         pool: &PgPool,
         account_id: Uuid,
@@ -1369,8 +1369,8 @@ mod handler_tests {
     ) -> Uuid {
         let kind = if amount < 0 { "withdrawal" } else { "deposit" };
         sqlx::query_scalar(
-            "insert into transaction (account_id, ts, type, amount, description) \
-             values ($1, ($2::date)::timestamp at time zone 'utc', $3, $4, $5) returning id",
+            "insert into transaction (account_id, spent_on, type, amount, description) \
+             values ($1, $2::date, $3, $4, $5) returning id",
         )
         .bind(account_id)
         .bind(day)

@@ -39,7 +39,7 @@ async fn add_lot(
 
 async fn add_dividend(pool: &PgPool, account_id: Uuid, on: &str, amount: &str) {
     sqlx::query(
-        "insert into transaction (account_id, ts, booked_on, type, amount, external_id) \
+        "insert into transaction (account_id, spent_on, booked_on, type, amount, external_id) \
          values ($1, $2, $2, 'dividend', $3, $4)",
     )
     .bind(account_id)

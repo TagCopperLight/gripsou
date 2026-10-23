@@ -162,16 +162,15 @@ async fn account_jumps(
                c.id as "txn_id?", c.day as "txn_day?", c.amount as "amount?"
         from open_jumps oj
         left join lateral (
-            select t.id, d.day, t.amount
+            select t.id, t.spent_on as day, t.amount
             from transaction t
-            cross join lateral (select (t.ts at time zone 'utc')::date as day) d
             cross join lateral (
-                select abs(oj.dq) * unit_value_asof(oj.instrument_id, d.day)
-                       / nullif(fx_asof($2, d.day), 0) as expected
+                select abs(oj.dq) * unit_value_asof(oj.instrument_id, t.spent_on)
+                       / nullif(fx_asof($2, t.spent_on), 0) as expected
             ) e
             where t.account_id = $1
               and t.type in ('buy', 'sell')
-              and d.day between oj.win_from and oj.win_to
+              and t.spent_on between oj.win_from and oj.win_to
               and abs(t.amount) between 0.95 * e.expected and 1.05 * e.expected
         ) c on true
         order by oj.holding_id, oj.day, c.day, c.id

@@ -51,7 +51,7 @@ async fn lists_newest_first_with_the_account_joined(pool: PgPool) -> anyhow::Res
     let (user_id, account_id) = seed(&pool).await;
     let rows = transactions(&pool, user_id, &all()).await?;
     assert_eq!(rows.len(), 3);
-    assert!(rows[0].ts >= rows[1].ts, "newest first");
+    assert!(rows[0].day >= rows[1].day, "newest first");
     assert_eq!(rows[0].account_id, account_id);
     assert_eq!(rows[0].account_name, "Current account");
     assert_eq!(rows[0].account_currency, "EUR");

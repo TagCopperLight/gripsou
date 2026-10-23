@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into transaction\n            (account_id, spent_on, type, amount,\n             description, external_id, provider_meta, booked_on)\n        values ($1, $2, $3, $4, $5, $6, $7, $8)\n        on conflict (account_id, external_id) where external_id is not null\n        do update set\n            spent_on      = excluded.spent_on,\n            type          = excluded.type,\n            amount        = excluded.amount,\n            description   = excluded.description,\n            booked_on     = excluded.booked_on,\n            provider_meta = excluded.provider_meta\n        returning (xmax = 0) as \"inserted!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inserted!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Text",
+        "Numeric",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Date"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eaf7ac7cd342e9a252cfd4c7985f844900e7496b2cea6f2167ea6cc7939d68de"
+}

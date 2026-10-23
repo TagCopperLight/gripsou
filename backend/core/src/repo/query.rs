@@ -726,7 +726,7 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
 #[derive(serde::Serialize)]
 pub struct TransactionListRow {
     pub id: Uuid,
-    pub ts: DateTime<Utc>,
+    pub day: NaiveDate,
     pub kind: String,
     pub description: Option<String>,
     /// In `account_currency` — the amount domain, as the provider sent it. Not
@@ -898,10 +898,10 @@ pub async fn transactions(
         with filtered as (
             select *
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            order by ts desc, id
+            order by day desc, id
             limit $13 offset $14
         ),
-        days as (select distinct (ts at time zone 'utc')::date as day from filtered),
+        days as (select distinct day from filtered),
         grid as materialized (
             select as_of, currency, unit_value
             from valuation_grid($1, array(select day from days)::date[])
@@ -910,7 +910,7 @@ pub async fn transactions(
         reporting as (
             select (select currency from users where id = $1) as code
         )
-        select id as "id!", ts as "ts!", kind as "kind!", description, amount as "amount!",
+        select id as "id!", day as "day!", kind as "kind!", description, amount as "amount!",
                -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
                -- `nullif`: when the reporting currency has no rate on this
                -- day the whole expression must still degrade to the pivot
@@ -932,11 +932,11 @@ pub async fn transactions(
                is_transfer as "is_transfer!",
                is_orphan_transfer as "is_orphan_transfer!"
         from filtered
-        left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date
+        left join grid afx on afx.as_of = filtered.day
                           and afx.currency = filtered.account_currency
-        left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date
+        left join grid rfx on rfx.as_of = filtered.day
                           and rfx.currency = (select code from reporting)
-        order by ts desc, id
+        order by day desc, id
         "#,
         user_id,
         f.review_threshold,
@@ -1046,7 +1046,7 @@ pub async fn transaction_counts(
     let row = sqlx::query!(
         r#"
         with matching as (
-            select amount, account_currency, (ts at time zone 'utc')::date as day
+            select amount, account_currency, day
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ),
         reporting as (
@@ -1129,7 +1129,7 @@ pub async fn matching_transaction_ids(
         select id as "id!"
         from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         where source = 'cash'
-        order by ts desc, id
+        order by day desc, id
         "#,
         user_id,
         f.review_threshold,
