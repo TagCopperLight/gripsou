@@ -8,7 +8,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
 import { transactionFilterFields } from "./filter";
 import {
@@ -87,11 +87,9 @@ export function useReorderBudgetCategories() {
   return useMutation({
     mutationFn: (ids: string[]) => putJson<void>("/budget/categories/order", { ids }),
     onMutate: async (ids: string[]) => {
-      const token = getAuthToken();
       // An in-flight list refetch would otherwise land on top of the optimistic
       // order and bounce the row back.
       await qc.cancelQueries({ queryKey: keys.budgetCategories() });
-      if (token !== getAuthToken()) throw new Error("session changed");
       const previous = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
       if (previous) {
         const byId = new Map(previous.map((c) => [c.id, c]));
@@ -100,14 +98,12 @@ export function useReorderBudgetCategories() {
         // sign the cache moved under us, so leave it to the refetch.
         if (next.length === previous.length) qc.setQueryData(keys.budgetCategories(), next);
       }
-      return { previous, token };
+      return { previous };
     },
     onError: (_err, _ids, ctx) => {
-      if (ctx?.token === getAuthToken() && ctx.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
+      if (ctx?.previous) qc.setQueryData(keys.budgetCategories(), ctx.previous);
     },
-    onSettled: (_data, _error, _ids, ctx) => {
-      if (ctx?.token === getAuthToken()) return afterBudgetCategoryReorder(qc);
-    },
+    onSettled: () => afterBudgetCategoryReorder(qc),
   });
 }
 
@@ -202,12 +198,10 @@ export function usePatchTransaction() {
     mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
       patchJson<PatchResult>(`/transactions/${id}`, body),
     onMutate: async ({ id, optimistic }) => {
-      const token = getAuthToken();
-      if (!optimistic) return { previous: [] as [readonly unknown[], unknown][], token };
+      if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
       // Every cached filter combination may hold this row, so patch the whole
       // family rather than guessing which key the caller is reading.
       await qc.cancelQueries({ queryKey: keys.transactions() });
-      if (token !== getAuthToken()) throw new Error("session changed");
       const previous = qc.getQueriesData({ queryKey: keys.transactions() });
       qc.setQueriesData<InfiniteData<Transaction[]>>({ queryKey: keys.transactions() }, (data) =>
         data
@@ -219,22 +213,19 @@ export function usePatchTransaction() {
             }
           : data,
       );
-      return { previous, token };
+      return { previous };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.token !== getAuthToken()) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
     // Refused pending confirmation: nothing was written, so the row goes back
     // to what it was while the caller asks.
     onSuccess: (res, _vars, ctx) => {
-      if (ctx?.token !== getAuthToken() || !res?.pendingPairBreaks) return;
+      if (!res?.pendingPairBreaks) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
-    onSettled: (_res, _err, { body }, ctx) => {
-      if (ctx?.token !== getAuthToken()) return;
-      return onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc);
-    },
+    onSettled: (_res, _err, { body }) =>
+      onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
   });
 }
 

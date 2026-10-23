@@ -7,7 +7,7 @@ import {
   useAccounts, useAccountSeries, useConnections, useDistribution, useHoldings,
   useInvestmentReturns, useNetWorth, useSyncConnection, useTransactions,
 } from "./hooks";
-import { useAiStatus, usePatchTransaction, type AiStatus } from "./budget";
+import { useAiStatus, type AiStatus } from "./budget";
 import { setAuthToken } from "./client";
 import {
   afterAccountEdit, afterAiRunFinished, afterBudgetCategoryChange,
@@ -201,34 +201,6 @@ describe("AI completion", () => {
 });
 
 describe("mutation dependencies", () => {
-  it.each(["error", "refused"] as const)("does not restore another session's transaction snapshot after a delayed %s", async (outcome) => {
-    const { qc, wrapper } = setup();
-    setAuthToken("old-session");
-    const key = keys.transactions({});
-    qc.setQueryData(key, { pages: [[{ id: "old-row", checked: false }]], pageParams: [0] });
-    let release!: (response: Response) => void;
-    let reject!: (error: Error) => void;
-    let started = false;
-    vi.stubGlobal("fetch", vi.fn(() => {
-      started = true;
-      return new Promise<Response>((yes, no) => { release = yes; reject = no; });
-    }));
-    const { result, unmount } = renderHook(() => usePatchTransaction(), { wrapper });
-    try {
-      let pending!: Promise<unknown>;
-      act(() => { pending = result.current.mutateAsync({ id: "old-row", body: { checked: true }, optimistic: { checked: true } }).catch(() => {}); });
-      await waitFor(() => expect(started).toBe(true));
-      qc.clear();
-      setAuthToken("new-session");
-      qc.setQueryData(key, { pages: [[{ id: "new-row", checked: false }]], pageParams: [0] });
-      await act(async () => {
-        if (outcome === "error") reject(new Error("request failed"));
-        else release(Response.json({ pendingPairBreaks: 1 }));
-        await pending;
-      });
-      expect(qc.getQueryData(key)).toEqual({ pages: [[{ id: "new-row", checked: false }]], pageParams: [0] });
-    } finally { unmount(); qc.clear(); }
-  });
   it("aborts the HTTP request when a superseded query is cancelled", async () => {
     const { qc, wrapper } = setup();
     let signal: AbortSignal | null | undefined;

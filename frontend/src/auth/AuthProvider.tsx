@@ -51,10 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // trigger the global unauthorized handler (which would fire a spurious
         // POST /auth/logout and navigate before isBootstrapping resolves).
         const u = await getJson<SessionUser>("/auth/me", { skipGlobalUnauthorized: true });
-        if (active && token === getAuthToken()) applyUser(u);
+        if (active) applyUser(u);
       } catch (err: unknown) {
         // Only a rejected token is cleared: network errors or 50x shouldn't log the user out.
-        if (token === getAuthToken() && err instanceof ApiError && err.status === 401) {
+        if (err instanceof ApiError && err.status === 401) {
           setAuthToken(null);
         }
       } finally {

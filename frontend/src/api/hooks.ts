@@ -10,7 +10,7 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
-import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
@@ -424,12 +424,7 @@ export function useSyncConnection() {
 
 export function useManageConnection() {
   return useMutation({
-    mutationFn: async (id: string) => {
-      const token = getAuthToken();
-      const result = await postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {});
-      if (token !== getAuthToken()) throw new Error("session changed");
-      return result;
-    },
+    mutationFn: (id: string) => postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {}),
   });
 }
 
@@ -455,21 +450,17 @@ export function useSetProviderEnabled() {
       patchJson<Provider>(`/providers/${key}`, { enabled }),
     // Optimistically flip the toggle; roll back on error.
     onMutate: async ({ key, enabled }) => {
-      const token = getAuthToken();
       await qc.cancelQueries({ queryKey: keys.providers() });
-      if (token !== getAuthToken()) throw new Error("session changed");
       const prev = qc.getQueryData<Provider[]>(keys.providers());
       qc.setQueryData<Provider[]>(keys.providers(), (old) =>
         old?.map((p) => (p.key === key ? { ...p, enabled } : p)),
       );
-      return { prev, token };
+      return { prev };
     },
     onError: (_e, _vars, ctx) => {
-      if (ctx?.token === getAuthToken() && ctx.prev) qc.setQueryData(keys.providers(), ctx.prev);
+      if (ctx?.prev) qc.setQueryData(keys.providers(), ctx.prev);
     },
-    onSettled: (_data, _error, _vars, ctx) => {
-      if (ctx?.token === getAuthToken()) return afterProviderChange(qc);
-    },
+    onSettled: () => afterProviderChange(qc),
   });
 }
 
