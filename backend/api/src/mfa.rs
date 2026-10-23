@@ -15,7 +15,7 @@ use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::handlers::{LoginError, client_ip, internal};
 use crate::throttle::{LoginThrottle, SecondFactorThrottle};
-use crate::{TotpKey, factors};
+use crate::{EncryptionKey, factors};
 
 const REAUTH_KIND: &str = "reauth";
 
@@ -155,11 +155,10 @@ pub async fn status(
 /// (already set up) comes first, so it doesn't spend the token.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
-    State(key): State<TotpKey>,
+    State(key): State<EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
-    let key = &*key.0;
     let already = || {
         (
             StatusCode::CONFLICT,
@@ -175,7 +174,7 @@ pub async fn totp_setup(
         .map_err(internal)?
         .ok_or_else(unauthorized)?;
     let secret = factors::new_totp_secret();
-    let enc = gripsou_core::crypto::encrypt(key, &secret).map_err(internal)?;
+    let enc = key.encrypt(&secret).map_err(internal)?;
     // Still refuses to replace a confirmed row, should one appear meanwhile.
     if !mfa::upsert_unconfirmed_totp(&pool, user_id, &enc)
         .await
@@ -199,7 +198,7 @@ pub async fn totp_setup(
 /// abandoned, and so to the backup codes.
 pub async fn totp_confirm(
     State(pool): State<PgPool>,
-    State(key): State<TotpKey>,
+    State(key): State<EncryptionKey>,
     State(sf_throttle): State<Arc<SecondFactorThrottle>>,
     AuthUser {
         user_id,
@@ -207,7 +206,6 @@ pub async fn totp_confirm(
     }: AuthUser,
     Json(body): Json<dto::TotpConfirmReq>,
 ) -> Result<Json<dto::RecoveryCodes>, LoginError> {
-    let key = &*key.0;
     let no_setup = || (StatusCode::CONFLICT, "no setup in progress".to_string());
     let row = mfa::totp(&pool, user_id)
         .await
@@ -228,7 +226,7 @@ pub async fn totp_confirm(
             Some(blocked.retry_after_secs()),
         ));
     }
-    let secret = gripsou_core::crypto::decrypt(key, &row.secret_enc).map_err(internal)?;
+    let secret = key.decrypt(&row.secret_enc).map_err(internal)?;
     let now = Utc::now().timestamp().max(0) as u64;
     let Some(step) = factors::match_totp(&secret, &body.code, now) else {
         tracing::warn!(user_id = %user_id, "totp confirm failed");
@@ -319,15 +317,10 @@ pub(crate) mod tests {
     use axum::extract::State;
     use axum::http::StatusCode;
     use gripsou_core::repo::{login_challenge, mfa as repo};
+    use gripsou_core::testkit::encryption_key as key;
     use sqlx::PgPool;
     use std::sync::Arc;
     use uuid::Uuid;
-
-    const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-    fn key() -> crate::TotpKey {
-        crate::TotpKey(Arc::from(KEY))
-    }
 
     async fn setup(
         pool: &PgPool,
@@ -355,7 +348,7 @@ pub(crate) mod tests {
 
     async fn stored_secret(pool: &PgPool, user_id: Uuid) -> Vec<u8> {
         let row = repo::totp(pool, user_id).await.unwrap().unwrap();
-        gripsou_core::crypto::decrypt(KEY, &row.secret_enc).unwrap()
+        key().decrypt(&row.secret_enc).unwrap()
     }
 
     fn code_now(secret: &[u8]) -> String {

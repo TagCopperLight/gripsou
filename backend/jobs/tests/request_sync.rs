@@ -18,10 +18,10 @@ use gripsou_core::testkit;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Encrypt `creds` using the given hex key and return the blob stored in the DB.
-fn make_encrypted_creds(key_hex: &str, creds: serde_json::Value) -> serde_json::Value {
+/// Encrypt `creds` with the test key and return the blob stored in the DB.
+fn make_encrypted_creds(creds: serde_json::Value) -> serde_json::Value {
     let plaintext = serde_json::to_vec(&creds).unwrap();
-    let ct = gripsou_core::crypto::encrypt(key_hex, &plaintext).unwrap();
+    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
     serde_json::json!({ "v": 1, "ct": ct })
 }
 
@@ -72,20 +72,17 @@ async fn seed_provider(pool: &PgPool, key: &str) {
 /// POWENS_* env vars happen to be set by other tests running concurrently.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<()> {
-    let enc_key = "a".repeat(64);
-    // ENCRYPTION_KEY must be present (sync_connection reads it in the spawned task).
-    unsafe { std::env::set_var("ENCRYPTION_KEY", &enc_key) };
-
     // Insert a provider that has no adapter — no POWENS_* vars needed.
     seed_provider(&pool, "no-adapter").await;
 
     let user_id = testkit::seed_user(&pool).await;
-    let credentials = make_encrypted_creds(&enc_key, serde_json::json!({ "auth_token": "tok" }));
+    let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     let meta = serde_json::json!({ "external_connection_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "no-adapter", credentials, meta).await;
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
+        &testkit::encryption_key(),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -115,12 +112,9 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
 /// resolves; see module doc for the documented race window.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Result<()> {
-    let enc_key = "b".repeat(64);
-
     // Set all vars required by PowensProvider::from_env() + the webhook secret.
     // Use a fake domain that cannot be reached so the spawn fails cleanly.
     unsafe {
-        std::env::set_var("ENCRYPTION_KEY", &enc_key);
         std::env::set_var("POWENS_CLIENT_ID", "test-client");
         std::env::set_var("POWENS_CLIENT_SECRET", "test-secret");
         std::env::set_var("POWENS_DOMAIN", "127.0.0.1:0"); // unreachable
@@ -129,12 +123,13 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     }
 
     let user_id = testkit::seed_user(&pool).await;
-    let credentials = make_encrypted_creds(&enc_key, serde_json::json!({ "auth_token": "tok" }));
+    let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     let meta = serde_json::json!({ "external_connection_id": "99" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
+        &testkit::encryption_key(),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -175,11 +170,8 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
 /// `complete_connect_without_connection_id`).
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> anyhow::Result<()> {
-    let enc_key = "c".repeat(64);
-
     // Same POWENS_* env as the webhook test so the adapter is webhook-enabled.
     unsafe {
-        std::env::set_var("ENCRYPTION_KEY", &enc_key);
         std::env::set_var("POWENS_CLIENT_ID", "test-client");
         std::env::set_var("POWENS_CLIENT_SECRET", "test-secret");
         std::env::set_var("POWENS_DOMAIN", "127.0.0.1:0"); // unreachable
@@ -188,13 +180,14 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     }
 
     let user_id = testkit::seed_user(&pool).await;
-    let credentials = make_encrypted_creds(&enc_key, serde_json::json!({ "auth_token": "tok" }));
+    let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
     // provider_meta has NO external_connection_id — mimics the incomplete OAuth callback.
     let meta = serde_json::json!({ "powens_user_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
+        &testkit::encryption_key(),
         user_id,
         conn_id,
         gripsou_jobs::Trigger::Manual,
@@ -225,6 +218,7 @@ async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow:
 
     let result = gripsou_jobs::request_sync(
         pool.clone(),
+        &testkit::encryption_key(),
         user_id,
         Uuid::new_v4(),
         gripsou_jobs::Trigger::Manual,

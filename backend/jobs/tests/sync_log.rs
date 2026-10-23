@@ -15,8 +15,6 @@ use sqlx::PgPool;
 use tracing::Instrument;
 use uuid::Uuid;
 
-const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
 #[derive(Clone, Copy)]
 enum Mode {
     Ok,
@@ -71,6 +69,7 @@ fn deps(mode: Mode) -> SyncDeps {
     let mut accounts: HashMap<String, Box<dyn AccountProvider>> = HashMap::new();
     accounts.insert("fake".into(), Box::new(FakeBank { mode }));
     SyncDeps {
+        key: gripsou_core::testkit::encryption_key(),
         accounts,
         prices: Vec::new(),
         composition: Box::new(NoComposition),
@@ -79,11 +78,12 @@ fn deps(mode: Mode) -> SyncDeps {
 }
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
-    unsafe { std::env::set_var("ENCRYPTION_KEY", KEY) };
     sqlx::query("insert into provider (key, display_name, kind, enabled) values ('fake','fake','account',true) on conflict (key) do nothing")
         .execute(pool).await.unwrap();
     let user = gripsou_core::testkit::seed_user(pool).await;
-    let ct = gripsou_core::crypto::encrypt(KEY, br#"{"auth_token":"tok"}"#).unwrap();
+    let ct = gripsou_core::testkit::encryption_key()
+        .encrypt(br#"{"auth_token":"tok"}"#)
+        .unwrap();
     let conn: Uuid = sqlx::query_scalar(
         "insert into connection (user_id, provider_key, display_name, status, credentials, provider_meta) \
          values ($1, 'fake', 'Test bank', 'ok', $2, '{}') returning id",
@@ -255,9 +255,15 @@ async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
         .unwrap();
 
     // Already syncing: the second request is refused and says why.
-    let r = gripsou_jobs::request_sync(pool.clone(), user, conn, Trigger::Manual)
-        .await
-        .unwrap();
+    let r = gripsou_jobs::request_sync(
+        pool.clone(),
+        &gripsou_core::testkit::encryption_key(),
+        user,
+        conn,
+        Trigger::Manual,
+    )
+    .await
+    .unwrap();
     assert!(matches!(
         r,
         gripsou_core::repo::connection::BeginSync::AlreadySyncing

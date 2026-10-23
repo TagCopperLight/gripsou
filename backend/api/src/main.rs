@@ -18,11 +18,11 @@ async fn main() -> anyhow::Result<()> {
         None
     } else {
         let raw = env::var("ENCRYPTION_KEY").ok();
-        let totp_key = gripsou_api::TotpKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?;
+        let key = gripsou_api::EncryptionKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?;
         let public_url = env::var("PUBLIC_URL").ok();
         let passkeys =
             gripsou_api::Passkeys::parse(public_url.as_deref()).map_err(anyhow::Error::msg)?;
-        Some((totp_key, passkeys))
+        Some((key, passkeys))
     };
 
     let database_url =
@@ -34,13 +34,13 @@ async fn main() -> anyhow::Result<()> {
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
 
-    let Some((totp_key, passkeys)) = keys else {
+    let Some((key, passkeys)) = keys else {
         let code = gripsou_api::cli::reset_two_factor(&db, env::args().nth(2)).await;
         log_handle.shutdown().await;
         std::process::exit(code);
     };
 
-    tokio::spawn(gripsou_jobs::run_scheduler(db.clone()));
+    tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), key.clone()));
 
     let initial_cors = gripsou_core::repo::settings::cors_origins(&db)
         .await
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         db.clone(),
         std::path::Path::new(&static_dir),
         initial_cors,
-        totp_key,
+        key,
         passkeys,
     );
     // Hash the dummy password now so the first login isn't slower.

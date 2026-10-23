@@ -25,6 +25,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
+pub use gripsou_core::crypto::EncryptionKey;
 pub use passkey::Passkeys;
 
 use crate::throttle::{LoginThrottle, SecondFactorThrottle};
@@ -35,36 +36,13 @@ pub struct AppState {
     pub cors_origins: Arc<RwLock<Vec<String>>>,
     pub login_throttle: Arc<LoginThrottle>,
     pub second_factor_throttle: Arc<SecondFactorThrottle>,
-    pub totp_key: TotpKey,
+    pub encryption_key: EncryptionKey,
     pub passkeys: Passkeys,
 }
 
-/// `ENCRYPTION_KEY` as the second-factor handlers see it. Always present and
-/// valid: the server refuses to start without one (see [`TotpKey::parse`]), so
-/// two-factor authentication is always available.
-#[derive(Clone)]
-pub struct TotpKey(pub Arc<str>);
-
-impl TotpKey {
-    /// Check the raw `ENCRYPTION_KEY` value once, at startup. The error says
-    /// what is wrong without ever repeating the value.
-    pub fn parse(raw: Option<&str>) -> Result<TotpKey, String> {
-        match raw {
-            None | Some("") => Err(
-                "ENCRYPTION_KEY must be set (generate one with `openssl rand -hex 32`)".into(),
-            ),
-            Some(k) if gripsou_core::crypto::parse_key(k).is_err() => Err(
-                "ENCRYPTION_KEY is not a valid key: expected 64 hex characters (`openssl rand -hex 32`)"
-                    .into(),
-            ),
-            Some(k) => Ok(TotpKey(Arc::from(k))),
-        }
-    }
-}
-
-impl FromRef<AppState> for TotpKey {
-    fn from_ref(state: &AppState) -> TotpKey {
-        state.totp_key.clone()
+impl FromRef<AppState> for EncryptionKey {
+    fn from_ref(state: &AppState) -> EncryptionKey {
+        state.encryption_key.clone()
     }
 }
 
@@ -102,7 +80,7 @@ pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
     initial_cors: Vec<String>,
-    totp_key: TotpKey,
+    encryption_key: EncryptionKey,
     passkeys: Passkeys,
 ) -> Router {
     let cors_origins = Arc::new(RwLock::new(initial_cors));
@@ -111,7 +89,7 @@ pub fn router(
         cors_origins: cors_origins.clone(),
         login_throttle: Arc::new(LoginThrottle::default()),
         second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
-        totp_key,
+        encryption_key,
         passkeys,
     };
 
@@ -337,23 +315,7 @@ pub fn router(
             security_headers::security_headers,
         ))
 }
+
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TotpKey;
-
-    const GOOD: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
-
-    #[test]
-    fn a_malformed_key_is_refused_without_its_value() {
-        let zz = "zz".repeat(32);
-        for raw in ["short", "not-a-hex-key-value", &zz, &format!("{GOOD}00")] {
-            let err = TotpKey::parse(Some(raw)).err().unwrap();
-            assert!(err.contains("not a valid key"), "{err}");
-            assert!(!err.contains(raw));
-        }
-    }
 }

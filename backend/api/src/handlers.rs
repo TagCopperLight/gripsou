@@ -554,13 +554,20 @@ pub async fn connections(
 
 pub async fn sync_connection(
     State(pool): State<PgPool>,
+    State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<dto::ConnectionState>), (StatusCode, String)> {
     use gripsou_core::repo::connection::BeginSync;
-    match gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
-        .await
-        .map_err(internal)?
+    match gripsou_jobs::request_sync(
+        pool.clone(),
+        &key,
+        user_id,
+        id,
+        gripsou_jobs::Trigger::Manual,
+    )
+    .await
+    .map_err(internal)?
     {
         BeginSync::Started(state) => {
             tracing::info!(connection_id = %id, "sync requested");
@@ -579,6 +586,7 @@ pub async fn sync_connection(
 
 pub async fn sync_all(
     State(pool): State<PgPool>,
+    State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
     use gripsou_core::repo::connection::BeginSync;
@@ -587,10 +595,15 @@ pub async fn sync_all(
         .map_err(internal)?;
     let mut started = 0u32;
     for id in ids {
-        if let BeginSync::Started(_) =
-            gripsou_jobs::request_sync(pool.clone(), user_id, id, gripsou_jobs::Trigger::Manual)
-                .await
-                .map_err(internal)?
+        if let BeginSync::Started(_) = gripsou_jobs::request_sync(
+            pool.clone(),
+            &key,
+            user_id,
+            id,
+            gripsou_jobs::Trigger::Manual,
+        )
+        .await
+        .map_err(internal)?
         {
             started += 1;
         }
@@ -977,7 +990,7 @@ pub async fn login_verify(
     State(pool): State<PgPool>,
     State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
     State(sf_throttle): State<std::sync::Arc<crate::throttle::SecondFactorThrottle>>,
-    State(key): State<crate::TotpKey>,
+    State(key): State<crate::EncryptionKey>,
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(body): Json<dto::LoginVerifyReq>,
@@ -1020,15 +1033,13 @@ pub async fn login_verify(
     // The TOTP step is worked out before the transaction (no DB write).
     let totp_step = match (&body.totp, &body.recovery_code) {
         (Some(code), None) => {
-            let key = &*key.0;
             let row = mfa::totp(&pool, user_id)
                 .await
                 .map_err(internal)?
                 .filter(|r| r.confirmed);
             match row {
                 Some(row) => {
-                    let secret =
-                        gripsou_core::crypto::decrypt(key, &row.secret_enc).map_err(internal)?;
+                    let secret = key.decrypt(&row.secret_enc).map_err(internal)?;
                     let now = Utc::now().timestamp().max(0) as u64;
                     crate::factors::match_totp(&secret, code, now)
                 }
@@ -1419,6 +1430,7 @@ pub async fn enabled_providers(
 
 pub async fn manage_connection(
     State(pool): State<PgPool>,
+    State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>), (StatusCode, String)> {
@@ -1432,14 +1444,16 @@ pub async fn manage_connection(
             "connection management unavailable".into(),
         ));
     }
-    let init = gripsou_jobs::manage_connection(&conn).await.map_err(|_| {
-        // The temporary access URL and provider response must never enter logs.
-        tracing::warn!(connection_id = %id, "connection management failed");
-        (
-            StatusCode::BAD_GATEWAY,
-            "Unable to open connection management. Please try again.".into(),
-        )
-    })?;
+    let init = gripsou_jobs::manage_connection(&key, &conn)
+        .await
+        .map_err(|_| {
+            // The temporary access URL and provider response must never enter logs.
+            tracing::warn!(connection_id = %id, "connection management failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                "Unable to open connection management. Please try again.".into(),
+            )
+        })?;
     let mut headers = HeaderMap::new();
     headers.insert(
         axum::http::header::CACHE_CONTROL,
@@ -1489,6 +1503,7 @@ pub async fn init_connection(
 
 pub async fn complete_connection(
     State(pool): State<PgPool>,
+    State(key): State<crate::EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::CompleteConnectionReq>,
 ) -> Result<StatusCode, (StatusCode, String)> {
@@ -1497,7 +1512,8 @@ pub async fn complete_connection(
         .parse::<Uuid>()
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid connection_id".to_string()))?;
 
-    match gripsou_jobs::complete_connection(pool, user_id, connection_id, &body.params).await {
+    match gripsou_jobs::complete_connection(pool, &key, user_id, connection_id, &body.params).await
+    {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
             tracing::warn!(connection_id = %connection_id, step = "complete", error = %gripsou_core::logs::error_chain(&e), "connect failed");
@@ -1513,6 +1529,7 @@ pub async fn complete_connection(
 
 pub async fn webhook(
     State(pool): State<PgPool>,
+    State(key): State<crate::EncryptionKey>,
     Path(provider): Path<String>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
     headers: HeaderMap,
@@ -1527,7 +1544,8 @@ pub async fn webhook(
                 .map(|s| (k.as_str().to_lowercase(), s.to_string()))
         })
         .collect();
-    match gripsou_jobs::handle_webhook(pool, &provider, uri.path(), hmap, body.to_vec()).await {
+    match gripsou_jobs::handle_webhook(pool, &key, &provider, uri.path(), hmap, body.to_vec()).await
+    {
         WebhookOutcome::Accepted => StatusCode::OK,
         WebhookOutcome::Unauthorized => StatusCode::UNAUTHORIZED,
         WebhookOutcome::NotFound => StatusCode::NOT_FOUND,
@@ -1676,6 +1694,7 @@ pub(crate) mod auth_tests {
     use crate::testkit::seed_user_with_password;
     use crate::throttle::LoginThrottle;
     use axum::response::IntoResponse;
+    use gripsou_core::testkit::encryption_key as test_key;
     use serde_json::json;
     use sqlx::PgPool;
     use std::sync::Arc;
@@ -1806,16 +1825,12 @@ pub(crate) mod auth_tests {
         assert_eq!(throttle.tracked_keys(), (0, 0));
     }
 
-    fn test_key() -> crate::TotpKey {
-        crate::TotpKey(Arc::from("a".repeat(64)))
-    }
-
     /// Enrol TOTP for `user_id` with a secret encrypted under the test key and
     /// ten recovery codes; returns the secret and the plain recovery codes.
     pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
         use gripsou_core::repo::mfa;
         let secret = crate::factors::new_totp_secret();
-        let enc = gripsou_core::crypto::encrypt(&"a".repeat(64), &secret).unwrap();
+        let enc = test_key().encrypt(&secret).unwrap();
         assert!(
             mfa::upsert_unconfirmed_totp(pool, user_id, &enc)
                 .await
@@ -2855,9 +2870,14 @@ pub(crate) mod auth_tests {
             session_id: Uuid::new_v4(),
         };
         for target in [id, Uuid::new_v4()] {
-            let error = manage_connection(State(pool.clone()), principal(), Path(target))
-                .await
-                .unwrap_err();
+            let error = manage_connection(
+                State(pool.clone()),
+                State(gripsou_core::testkit::encryption_key()),
+                principal(),
+                Path(target),
+            )
+            .await
+            .unwrap_err();
             assert_eq!(error.0, StatusCode::NOT_FOUND);
         }
         let stored = gripsou_core::repo::connection::connection_for_sync(&pool, owner, id)
@@ -2890,9 +2910,14 @@ pub(crate) mod auth_tests {
         };
 
         // Unknown connection → 404.
-        let nf = sync_connection(State(pool.clone()), principal(), Path(Uuid::new_v4()))
-            .await
-            .unwrap_err();
+        let nf = sync_connection(
+            State(pool.clone()),
+            State(gripsou_core::testkit::encryption_key()),
+            principal(),
+            Path(Uuid::new_v4()),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(nf.0, StatusCode::NOT_FOUND);
 
         // Force a 'syncing' claim, then a trigger → 409.
@@ -2901,9 +2926,14 @@ pub(crate) mod auth_tests {
             .execute(&pool)
             .await
             .unwrap();
-        let busy = sync_connection(State(pool.clone()), principal(), Path(conn))
-            .await
-            .unwrap_err();
+        let busy = sync_connection(
+            State(pool.clone()),
+            State(gripsou_core::testkit::encryption_key()),
+            principal(),
+            Path(conn),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(busy.0, StatusCode::CONFLICT);
 
         // Reset, then run the orchestrator directly (deterministic — no spawn):
@@ -2913,7 +2943,8 @@ pub(crate) mod auth_tests {
             .execute(&pool)
             .await
             .unwrap();
-        gripsou_jobs::sync_connection(pool.clone(), conn).await;
+        gripsou_jobs::sync_connection(pool.clone(), gripsou_core::testkit::encryption_key(), conn)
+            .await;
         let (status, err): (String, Option<String>) =
             sqlx::query_as("select status, last_error from connection where id=$1")
                 .bind(conn)
@@ -3251,6 +3282,7 @@ pub(crate) mod auth_tests {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
         let err = complete_connection(
             State(pool.clone()),
+            State(gripsou_core::testkit::encryption_key()),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),
@@ -3285,6 +3317,7 @@ pub(crate) mod auth_tests {
         for id in [pending, active] {
             complete_connection(
                 State(pool.clone()),
+                State(gripsou_core::testkit::encryption_key()),
                 auth::AuthUser {
                     user_id: user,
                     session_id: Uuid::new_v4(),

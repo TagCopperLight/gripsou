@@ -8,9 +8,15 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::crypto::EncryptionKey;
 use crate::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
 use crate::error::CoreError;
 use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transaction};
+
+/// The key every test encrypts with: `"a"` 64 times.
+pub fn encryption_key() -> EncryptionKey {
+    EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()
+}
 
 /// Insert a user with a unique email, role `user` and a password hash that
 /// matches nothing. Every other column keeps its default.

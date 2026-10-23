@@ -4,9 +4,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-fn test_key() -> gripsou_api::TotpKey {
-    gripsou_api::TotpKey::parse(Some(&"a".repeat(64))).unwrap()
-}
+use gripsou_core::testkit::encryption_key as test_key;
 fn test_passkeys() -> gripsou_api::Passkeys {
     gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap()
 }

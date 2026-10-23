@@ -44,10 +44,8 @@ fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
 async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uuid {
     let conn_id = Uuid::new_v4();
     let meta = serde_json::json!({ "external_connection_id": ext_conn_id });
-    // Use a dummy encryption key for test credentials (won't be decrypted in webhook path).
-    let enc_key = "0".repeat(64);
     let plaintext = serde_json::to_vec(&serde_json::json!({ "auth_token": "test" })).unwrap();
-    let ct = gripsou_core::crypto::encrypt(&enc_key, &plaintext).unwrap();
+    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
     let credentials = serde_json::json!({ "v": 1, "ct": ct });
     sqlx::query(
         "insert into connection \
@@ -84,8 +82,8 @@ fn set_powens_env() {
 /// The 'syncing' assertion is safe: `handle_webhook` awaits `begin_sync`
 /// synchronously before spawning `sync_connection`. The spawn is not polled
 /// until after this function returns, so the status is guaranteed 'syncing' at
-/// the assertion point. (The spawn will later flip it to 'error' due to missing
-/// ENCRYPTION_KEY / credentials, but that races after our check.)
+/// the assertion point. (The spawn will later flip it to 'error', since the
+/// fake Powens domain is unreachable, but that races after our check.)
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -105,6 +103,7 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),
+            &testkit::encryption_key(),
             "powens",
             path,
             headers,
@@ -162,6 +161,7 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),
+            &testkit::encryption_key(),
             "powens",
             path,
             headers,
@@ -222,6 +222,7 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
         set_powens_env();
         gripsou_jobs::handle_webhook(
             pool.clone(),
+            &testkit::encryption_key(),
             "powens",
             path,
             headers,
