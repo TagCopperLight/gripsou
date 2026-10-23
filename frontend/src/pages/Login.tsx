@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { CodeInput } from "../components/CodeInput";
@@ -22,6 +22,10 @@ export function Login() {
   const [backupCode, setBackupCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Bumped whenever the user leaves the step a code was sent from (Change, or
+  // switching between app and backup code), so a late answer to that code
+  // doesn't put its error on the screen they moved to.
+  const attempt = useRef(0);
 
   const tooMany = (err: unknown) => {
     const minutes = throttleMinutes(err);
@@ -29,6 +33,7 @@ export function Login() {
   };
 
   const backToPassword = (message: string | null = null) => {
+    attempt.current++;
     setStep("password");
     setChallenge(null);
     setPassword("");
@@ -60,9 +65,11 @@ export function Login() {
     if (!challenge || pending) return;
     setError(null);
     setPending(true);
+    const sent = attempt.current;
     try {
       await verifyLogin(challenge, secret, remember);
     } catch (err) {
+      if (sent !== attempt.current) return;
       // 401: the challenge expired (5 minutes) or was used up; start over.
       if (err instanceof ApiError && err.status === 401) {
         backToPassword(t("auth.mfa.expired"));
@@ -79,6 +86,7 @@ export function Login() {
   };
 
   const switchTo = (next: Step) => {
+    attempt.current++;
     setError(null);
     setCode("");
     setBackupCode("");

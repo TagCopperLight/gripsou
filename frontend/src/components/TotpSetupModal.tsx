@@ -88,7 +88,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
 
   const index = STEPS.indexOf(step);
   const progress = (
-    <span className="flex gap-1.5" aria-label={t("twoFactor.stepOf", { step: index + 1, total: STEPS.length })}>
+    <span role="img" className="flex gap-1.5" aria-label={t("twoFactor.stepOf", { step: index + 1, total: STEPS.length })}>
       {STEPS.map((s, i) => (
         <span key={s} className={`h-1.5 w-5 rounded-full ${i <= index ? "bg-green" : "bg-surface-3"}`} />
       ))}
@@ -106,7 +106,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
         <label className="flex flex-col gap-2">
           <span className="text-sm text-fg-faint">{t("settings.account.currentPassword")}</span>
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+          <input type="password" autoComplete="current-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
         </label>
         {errorLine}
         <button type="submit" hidden />
@@ -178,6 +178,8 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog
+      // One dialog per step, so focus lands on each step's first control.
+      key={step}
       title={step === "codes" ? t("twoFactor.codesTitle") : t("twoFactor.setupTitle")}
       onClose={onClose}
       busy={busy}

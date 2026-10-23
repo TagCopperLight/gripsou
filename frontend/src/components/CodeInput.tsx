@@ -37,9 +37,19 @@ export function CodeInput({ value, onChange, ariaLabel, autoFocus }: CodeInputPr
         autoComplete="one-time-code"
         autoFocus={autoFocus}
         data-autofocus={autoFocus ? "" : undefined}
-        maxLength={6}
+        // No maxLength: the browser would cut a pasted "123 456" to "123 45"
+        // before sixDigits could drop the space. sixDigits caps it at six.
         value={value}
         onChange={(e) => onChange(sixDigits(e.target.value))}
+        // A pasted whole code replaces what was there: the caret is pinned to
+        // the end, so it would otherwise be appended and cut off.
+        onPaste={(e) => {
+          const pasted = sixDigits(e.clipboardData.getData("text"));
+          if (pasted.length === 6) {
+            e.preventDefault();
+            onChange(pasted);
+          }
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         // Keep the caret at the end: digits are always added or removed there.

@@ -319,6 +319,7 @@
       "removeImage": "Supprimer",
       "editProfile": "Modifier le profil",
       "changePicture": "Changer la photo",
+      "pictureError": "Impossible d'utiliser cette image.",
       "security": "Sécurité",
       "changePassword": "Modifier",
       "changePasswordTitle": "Changer le mot de passe",
@@ -876,6 +877,6 @@
     "newCodesTitle": "Nouveaux codes de secours",
     "turnOff": "Désactiver",
     "turnOffTitle": "Désactiver la double authentification ?",
-    "turnOffBody": "Vous vous connecterez avec votre mot de passe seulement."
+    "turnOffBody": "Vous vous connecterez uniquement avec votre mot de passe."
   }
 }

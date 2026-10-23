@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
+import { ApiError } from "../api/client";
 import { useChangePassword } from "../api/hooks";
 import { passwordLengthOk } from "../lib/password";
 
@@ -20,6 +21,9 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   };
   const change = useChangePassword();
 
+  // The server answers 400 for a wrong current password (the length rule is
+  // checked here first); anything else is not the user's typing.
+  const wrongCurrent = change.error instanceof ApiError && change.error.status === 400;
   const mismatch = confirm !== "" && next !== confirm;
   const canUpdate = current !== "" && next !== "" && next === confirm && !change.isPending;
 
@@ -74,7 +78,13 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
         {input(t("settings.account.confirmNewPassword"), confirm, setConfirm, "new-password")}
         {lengthError && <p className="text-sm text-red">{t("auth.passwordLength")}</p>}
         {mismatch && <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>}
-        {change.isError && <p className="text-sm text-red">{t("settings.account.currentPasswordIncorrect")}</p>}
+        {change.isError && (
+          <p className="text-sm text-red">
+            {wrongCurrent
+              ? t("settings.account.currentPasswordIncorrect")
+              : t("settings.account.passwordUpdateFailed")}
+          </p>
+        )}
         <button type="submit" hidden />
       </form>
     </Dialog>

@@ -142,4 +142,13 @@ describe("Dialog", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the aside in the header, before the close button", () => {
+    open({ aside: <span>Step 2 of 4</span> });
+    const aside = screen.getByText("Step 2 of 4");
+    const close = screen.getByRole("button", { name: /close/i });
+    expect(aside.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // It stays out of the body and the dialog's name.
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit category");
+  });
 });

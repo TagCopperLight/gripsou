@@ -20,13 +20,19 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const updateProfile = useUpdateProfile();
+  const [pictureError, setPictureError] = useState(false);
 
   const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
     if (!file) return;
-    const avatar = await fileToAvatarDataUrl(file);
-    void updatePrefs({ ...prefs, avatar });
+    setPictureError(false);
+    try {
+      const avatar = await fileToAvatarDataUrl(file);
+      void updatePrefs({ ...prefs, avatar });
+    } catch {
+      setPictureError(true);
+    }
   };
 
   const dirty = name !== (user?.name ?? "") || email !== (user?.email ?? "");
@@ -126,6 +132,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             </label>
           </div>
         </div>
+        {pictureError && <p className="text-sm text-red">{t("settings.account.pictureError")}</p>}
         {updateProfile.isError && (
           <p className="text-sm text-red">
             {emailTaken ? t("settings.account.emailInUse") : t("settings.account.profileUpdateFailed")}
