@@ -895,7 +895,7 @@
     "title": "Clés d'accès",
     "addPasskey": "Ajouter une clé d'accès",
     "added": "Ajoutée le {{date}}",
-    "lastUsed": "Dernière utilisation {{time}}",
+    "lastUsed": "Dernière utilisation : {{time}}",
     "rename": "Renommer",
     "delete": "Supprimer",
     "nameLabel": "Nom de la clé d'accès",

@@ -2,11 +2,12 @@ import { createContext, useContext } from "react";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/browser";
 import type { MfaRequired, SessionUser } from "../api/types";
 
+import type { UserPrefs } from "../lib/prefs";
+
 export type SecondFactor =
   | { totp: string }
   | { recoveryCode: string }
   | { passkey: AuthenticationResponseJSON };
-import type { UserPrefs } from "../lib/prefs";
 
 export type AuthValue = {
   isAuthenticated: boolean;
