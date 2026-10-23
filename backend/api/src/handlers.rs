@@ -223,15 +223,7 @@ fn parse_lot_adds(
         if fee < Decimal::ZERO {
             return Err(bad("fee must not be negative"));
         }
-        // `Decimal` decodes at most ~29 significant digits (96-bit mantissa) and
-        // a scale of at most 28. `lot.quantity/unit_price` are unconstrained
-        // `numeric`, so nothing stops a value that writes fine but can never be
-        // read back as a `Decimal` — every later read of this holding's lots
-        // would 500 forever. Bounds below are generous for any real
-        // security/crypto lot (8 decimal places covers satoshi-level precision;
-        // 10^12 units or currency-per-unit is far beyond any real holding)
-        // while still being tight enough, combined, that the multiplied gross
-        // value cannot approach the ~29-digit ceiling.
+        // A lot that doesn't fit a `Decimal` would make every read of its holding fail.
         const MAX_SCALE: u32 = 8;
         let max_magnitude = Decimal::from(1_000_000_000_000i64); // 10^12
         if quantity.scale() > MAX_SCALE || unit_price.scale() > MAX_SCALE || fee.scale() > MAX_SCALE
