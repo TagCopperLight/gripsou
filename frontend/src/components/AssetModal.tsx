@@ -26,23 +26,18 @@ import { positionSeries } from "../lib/assetSeries";
 // - Price domain (`holding.priceCurrency` — the currency stamped on the `price`
 //   ROW we read, which is NOT necessarily `holding.currency`; Powens may label
 //   an instrument EUR while Yahoo resolves a London listing quoted GBP): the
-//   left chart panel's header figure and gain, and the chart itself.
+//   asset-mode chart, its header figure and gain.
 // - Amount domain (`holding.accountCurrency`): everything the provider
 //   denominated in the account — mean price per share (`holding.meanPrice`,
 //   the same fee-inclusive figure `lot_basis` computes for RecordLotsModal,
-//   NOT a market price) and the purchase-history table's price/amount
-//   columns (`Lot.price`/`Lot.fee`, and the derived cash amount, are all
-//   amount-domain).
+//   NOT a market price), the purchase-history table's price/amount columns
+//   (`Lot.price`/`Lot.fee`, and the derived cash amount), and the
+//   purchases-mode chart, whose value line uses prices the server converted
+//   into the account's currency (`PricePoint.accountPrice`).
 //
 // `holding.currency` is the instrument's QUOTE currency. It labels the asset's
 // identity, not any amount here, so it formats nothing on this screen.
 //
-// Caveat, deliberately left as-is: in purchases mode the chart overlays a
-// position-value series (price domain) on an invested series (amount domain).
-// Those coincide for the common case where the account and the listing share a
-// currency, and the chart is labelled with the price domain because the value
-// series is the one that moves. Splitting them needs a per-transaction FX rate
-// the provider does not give us.
 // Never mix the domains without labeling — an unlabelled figure sitting next to
 // one in another currency is the bug this split exists to prevent.
 
@@ -134,6 +129,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         ? 0
         : Number(holding.investedNative) / qtyNum;
   const up = Number(holding.gl) >= 0;
+  const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
 
   // Chart series + header figures depend on the mode and range.
   const { series, headerValue, gainAbs, gainPct, chartLabel } = useMemo(() => {
@@ -173,8 +169,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
       ] satisfies ChartSeries[],
       // The chart's own last point, not `holding.value`: this series is
-      // price-domain (unit prices x quantity), so the header must read in the
-      // same currency as the axis beneath it — not the reporting currency.
+      // amount-domain, so the header must read in the same currency as the
+      // axis beneath it — not the reporting currency.
       headerValue: last,
       gainAbs: last - first,
       gainPct: first ? (last - first) / first : 0,
@@ -223,13 +219,12 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             <div className="flex items-start justify-between">
               <div className="flex flex-col gap-1">
                 <span className="text-fg-faint text-sm">{chartLabel}</span>
-                {/* Both headerValue and gainAbs follow the chart, which is
-                    price-domain in both modes: unit prices in asset mode, and
-                    unit prices x quantity in purchases mode. Never reporting
-                    currency — see the file header. */}
+                {/* Both headerValue and gainAbs follow the chart: price
+                    domain in asset mode, amount domain in purchases mode.
+                    Never reporting currency — see the file header. */}
                 <Money
                   value={headerValue}
-                  currency={holding.priceCurrency}
+                  currency={chartCurrency}
                   className="text-fg text-2xl font-semibold tracking-tight"
                 />
                 <div
@@ -244,7 +239,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                   )}
                   <Money
                     value={gainAbs}
-                    currency={holding.priceCurrency}
+                    currency={chartCurrency}
                     signed
                   />
                   <span className="font-mono ml-2">
@@ -280,7 +275,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 percentLabel={t("common.return")}
                 height={340}
                 className="mt-4"
-                currency={holding.priceCurrency}
+                currency={chartCurrency}
               />
             ) : (
               <CardState

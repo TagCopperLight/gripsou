@@ -13,9 +13,8 @@ import type { BasisPreview, Holding } from "../api/types";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
 // quantities, unit prices, and everything the preview endpoint derives from
-// them. The one exception is `holding.price`, which is PRICE domain — the same
-// approximation `AssetModal` documents for its purchases chart, exact whenever
-// the account and the listing share a currency. Never label anything here with
+// them (the server converts today's price into the account's currency for the
+// unrealised figure). Never label anything here with
 // `holding.currency` (the instrument's quote currency): it names the asset's
 // identity, not any amount on this screen.
 //

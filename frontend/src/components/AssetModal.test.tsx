@@ -98,6 +98,29 @@ describe("AssetModal currency domains", () => {
   });
 });
 
+describe("AssetModal purchases chart", () => {
+  // A GBP quote in a USD account: the purchases chart values the position at
+  // the account-currency price, so it reads in USD like the invested line.
+  it("reads in the account's currency", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      new Response(JSON.stringify(
+        url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120" }] : [],
+      ), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+    const user = userEvent.setup();
+    render(withClient(
+      <AssetModal
+        holding={{ ...BASE, priceCurrency: "GBP", accountCurrency: "USD" }}
+        netWorth={5000}
+        onClose={() => {}}
+      />,
+    ));
+    await user.click(screen.getByRole("radio", { name: /purchases/i }));
+    // 10 shares x 120 USD.
+    expect(await screen.findByText(/^1.200,00.\$$/)).toBeInTheDocument();
+  });
+});
+
 describe("incomplete-history strip", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async () =>

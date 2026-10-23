@@ -444,7 +444,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 #[derive(serde::Serialize)]
 pub struct PricePointRow {
     pub ts: DateTime<Utc>,
+    /// In the price row's own currency (the listing's quote).
     pub unit_price: Decimal,
+    /// The same price in the holding's account currency, at that day's rates:
+    /// the domain lots are recorded in, so it can sit next to them. Null when
+    /// either rate is unknown.
+    pub account_price: Option<Decimal>,
 }
 
 pub async fn holding_prices(
@@ -457,7 +462,10 @@ pub async fn holding_prices(
     let rows = sqlx::query_as!(
         PricePointRow,
         r#"
-        select p.ts as "ts!", p.unit_price as "unit_price!"
+        select p.ts as "ts!", p.unit_price as "unit_price!",
+               p.unit_price * fx_asof(p.currency, (p.ts at time zone 'utc')::date)
+                   / nullif(fx_asof(a.currency, (p.ts at time zone 'utc')::date), 0)
+                   as "account_price?"
         from price p
         join holding h    on h.instrument_id = p.instrument_id
         join account a    on a.id = h.account_id
@@ -828,15 +836,8 @@ pub struct TransactionListRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: Option<String>,
-    /// Also the currency `amount_reporting` converts FROM for a lot row —
-    /// an inherited assumption, not one this phase introduced. A lot's
-    /// `amount` is `quantity * unit_price ± fee` in the INSTRUMENT'S LISTING
-    /// currency, which can differ from the holding account's currency (a EUR
-    /// account holding a USD-listed line). The pairing predates this phase;
-    /// this phase is only the first to actually run a conversion over it, so
-    /// `amount_reporting` on such a row is converted at the wrong FX rate.
-    /// Left as-is — fixing it means threading the listing currency through,
-    /// which is a bigger change than this fix pass.
+    /// Also the currency of a lot row's `amount`: lot prices are recorded in
+    /// the account's currency, as `lot_basis` and the holdings table assume.
     pub account_currency: String,
 
     // ── Budget ──────────────────────────────────────────────────────────────

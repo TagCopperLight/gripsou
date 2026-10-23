@@ -91,7 +91,14 @@ export type Holding = {
   unexplainedCost: string;
 };
 
-export type PricePoint = { t: number; price: string };
+export type PricePoint = {
+  t: number;
+  /** In the price row's currency (`Holding.priceCurrency`). */
+  price: string;
+  /** The same price in the account's currency at that day's rates; null when
+   *  a rate is missing. */
+  accountPrice: string | null;
+};
 
 export type Lot = {
   id: string;

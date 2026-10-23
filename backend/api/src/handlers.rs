@@ -394,24 +394,27 @@ pub async fn lot_suggestions(
 /// full `holdings()` listing query, so this is a new, narrow lookup rather
 /// than a reuse. Zero when no price row exists yet, mirroring `Holding`'s own
 /// fallback for the same case.
+/// Today's price of one share in the holding's account currency — the domain
+/// lots and their basis are in. Zero when the price or a rate is unknown.
 async fn current_price(
     pool: &PgPool,
+    user_id: Uuid,
     holding_id: Uuid,
 ) -> Result<Decimal, gripsou_core::error::CoreError> {
     let price = sqlx::query_scalar!(
         r#"
-        select p.unit_price as "unit_price!"
-        from price p
-        join holding h on h.instrument_id = p.instrument_id
+        select unit_value_asof(h.instrument_id, user_today($2))
+               / nullif(fx_asof(a.currency, user_today($2)), 0)
+        from holding h
+        join account a on a.id = h.account_id
         where h.id = $1
-        order by p.ts desc
-        limit 1
         "#,
         holding_id,
+        user_id,
     )
     .fetch_optional(pool)
     .await?;
-    Ok(price.unwrap_or(Decimal::ZERO))
+    Ok(price.flatten().unwrap_or(Decimal::ZERO))
 }
 
 /// What the figures would be for a set of unsaved rows.
@@ -435,14 +438,9 @@ pub async fn preview_lots(
         .await
         .map_err(internal)?
         .ok_or((StatusCode::NOT_FOUND, "unknown holding".to_string()))?;
-    let price = current_price(&pool, holding_id).await.map_err(internal)?;
-    // `price` comes straight from the `price` row and is in the PRICE domain (a
-    // London listing can be GBP while the account is EUR); `f.basis` is in the
-    // ACCOUNT-CURRENCY / amount domain. Mixing them here is a pre-existing,
-    // accepted approximation, not a fix target: the two coincide whenever the
-    // account and the listing share a currency, which is the common case, and
-    // diverge only for cross-currency holdings, where this preview is already
-    // approximate.
+    let price = current_price(&pool, user_id, holding_id)
+        .await
+        .map_err(internal)?;
     let unrealised = f.explained_qty * price - f.basis;
     Ok(Json(dto::BasisPreview {
         mean_price: f.mean_price.to_string(),
@@ -4726,6 +4724,53 @@ pub(crate) mod auth_tests {
             .await
             .unwrap();
         assert_eq!(lots, 0, "a preview must not persist its rows");
+    }
+
+    /// A USD listing in a EUR account: the preview values the shares in euros
+    /// before comparing them with what was paid, or the exchange rate reads as
+    /// gain.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_values_a_foreign_listing_in_the_account_currency(pool: PgPool) {
+        use gripsou_core::testkit::{rate_on, seed_cash_instrument};
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let instrument: Uuid =
+            sqlx::query_scalar("select instrument_id from holding where id = $1")
+                .bind(holding_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let today = gripsou_core::repo::prefs::today(&pool, user_id)
+            .await
+            .unwrap();
+        let usd = seed_cash_instrument(&pool, "USD").await;
+        rate_on(&pool, usd, today, Decimal::new(5, 1)).await;
+        let mut conn = pool.acquire().await.unwrap();
+        gripsou_core::testkit::insert_price(
+            &mut conn,
+            instrument,
+            today.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            Decimal::new(30, 0),
+            "USD",
+        )
+        .await
+        .unwrap();
+        drop(conn);
+
+        let preview = preview_lots(
+            State(pool.clone()),
+            auth(user_id),
+            Path(holding_id),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "10", "10")],
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        // 10 shares x 30 USD x 0.5 EUR per USD = 150 EUR, whatever the basis.
+        let invested: Decimal = preview.invested.parse().unwrap();
+        let unrealised: Decimal = preview.unrealised.parse().unwrap();
+        assert_eq!(invested + unrealised, Decimal::new(150, 0));
     }
 
     /// The accounts list shows only the caller's accounts.

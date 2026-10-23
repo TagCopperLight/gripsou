@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { positionSeries, windowReturn } from "./assetSeries";
 import type { Lot, PricePoint } from "../api/types";
 
+// A same-currency listing: the account price equals the quoted one.
+const px = (t: number, price: string): PricePoint => ({ t, price, accountPrice: price });
+
 const prices: PricePoint[] = [
-  { t: 100, price: "10" },
-  { t: 300, price: "12" },
+  px(100, "10"),
+  px(300, "12"),
 ];
 
 const buy = (t: number, qty: string, price: string): Lot => ({
@@ -22,8 +25,8 @@ describe("positionSeries", () => {
   it("a sale removes cost, not proceeds", () => {
     const pts = positionSeries(
       [
-        { t: 100, price: "150" },
-        { t: 300, price: "150" },
+        px(100, "150"),
+        px(300, "150"),
       ],
       [buy(50, "10", "100"), sell(200, "5", "200")],
       100,
@@ -36,7 +39,7 @@ describe("positionSeries", () => {
   });
 
   it("carries the unexplained basis on every point", () => {
-    const pts = positionSeries([{ t: 100, price: "150" }], [buy(50, "4", "100")], 100, 800, 10, 1200);
+    const pts = positionSeries([px(100, "150")], [buy(50, "4", "100")], 100, 800, 10, 1200);
     expect(pts[0].invested).toBe(1200);
   });
 
@@ -64,6 +67,35 @@ describe("positionSeries", () => {
     const pts = positionSeries(prices, [], 10, 0, 7, 70);
     expect(pts[0].value).toBe(7 * 10);
     expect(pts[0].invested).toBe(70);
+  });
+});
+
+describe("positionSeries on a foreign listing", () => {
+  // 10 shares quoted 115 USD, account in EUR, 1 USD = 0.87 EUR: the value line
+  // must be in euros like the invested line, or the exchange rate reads as gain.
+  it("values the position at the account-currency price", () => {
+    const pts = positionSeries(
+      [{ t: 100, price: "115", accountPrice: "100.05" }],
+      [buy(50, "10", "100")],
+      100,
+      0,
+      10,
+      1000,
+    );
+    expect(pts[0].value).toBeCloseTo(1000.5);
+    expect(pts[0].invested).toBe(1000);
+  });
+
+  it("drops a day whose rate is missing instead of charting zero", () => {
+    const pts = positionSeries(
+      [{ t: 100, price: "115", accountPrice: null }, { t: 300, price: "115", accountPrice: "100" }],
+      [],
+      0,
+      0,
+      10,
+      1000,
+    );
+    expect(pts.map((p) => p.t)).toEqual([300]);
   });
 });
 
