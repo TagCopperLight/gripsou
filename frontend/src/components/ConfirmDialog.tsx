@@ -14,6 +14,11 @@ type ConfirmDialogProps = {
    *  that is allowed but easy to regret (amber icon, plain button). */
   tone?: "danger" | "warning";
   busy?: boolean;
+  /** A field to fill before confirming (a password, the email typed back),
+   *  shown under the body. */
+  children?: ReactNode;
+  /** Keeps the action off until `children` is filled in. */
+  confirmDisabled?: boolean;
   /** Shown under the body when the confirmed action failed. */
   error?: string | null;
   onConfirm: () => void;
@@ -24,10 +29,10 @@ type ConfirmDialogProps = {
 
 /** "Are you sure?" as one component: a sentence, Cancel, and one action.
  *  Cancel takes focus on open, so a stray Enter backs out instead of
- *  confirming. */
+ *  confirming; with a field to fill (`children`), the field takes it. */
 export function ConfirmDialog({
-  title, body, confirmLabel, tone = "danger", busy = false, error = null,
-  onConfirm, onClose, confirmTestId, ...rest
+  title, body, confirmLabel, tone = "danger", busy = false, children, confirmDisabled = false,
+  error = null, onConfirm, onClose, confirmTestId, ...rest
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 
@@ -46,9 +51,9 @@ export function ConfirmDialog({
             variant={tone === "danger" ? "danger" : "primary"}
             data-testid={confirmTestId}
             onClick={() => {
-              if (!busy) onConfirm();
+              if (!busy && !confirmDisabled) onConfirm();
             }}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
           >
             {confirmLabel}
           </Button>
@@ -59,6 +64,7 @@ export function ConfirmDialog({
         <p data-testid={rest["data-testid"]} className="text-sm text-fg-dim">
           {body}
         </p>
+        {children}
         {error && (
           <p role="alert" className="text-red text-sm">
             {error}

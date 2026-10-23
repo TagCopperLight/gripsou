@@ -6,6 +6,7 @@ import { Trash2, X } from "lucide-react";
 import { Button } from "./Button";
 import { CardState } from "./CardState";
 import { HoldingModalHeader } from "./HoldingModalHeader";
+import { Modal } from "./Modal";
 import { Money } from "./Money";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
 import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
@@ -159,20 +160,6 @@ export function RecordLotsModal({
     ]);
   }
 
-  // Close on Escape; lock background scroll while open.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
-
   const list = rows ?? [];
   const set = (i: number, patch: Partial<Row>) => {
     setDirty(true);
@@ -278,238 +265,235 @@ export function RecordLotsModal({
   const currency = holding.accountCurrency;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("dashboard.holdings.gap.title")}
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-208 max-w-[90vw] max-h-[85vh] bg-surface rounded-3xl flex flex-col"
-      >
-        <HoldingModalHeader holding={holding}>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.close")}
-            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
-          >
-            <X className="size-5" />
-          </button>
-        </HoldingModalHeader>
+    <Modal
+      label={t("dashboard.holdings.gap.title")}
+      onClose={onClose}
+      busy={saveLots.isPending}
+      className="relative w-208 max-w-[90vw] max-h-[85vh] bg-surface rounded-3xl flex flex-col"
+    >
+      <HoldingModalHeader holding={holding}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saveLots.isPending}
+          aria-label={t("common.close")}
+          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <X className="size-5" />
+        </button>
+      </HoldingModalHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
-          {/* Accounted bar */}
-          <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
-            <span className="text-fg-dim text-sm">
-              <Trans
-                i18nKey="dashboard.holdings.gap.accounted"
-                values={{
-                  recorded: formatQuantity(String(recorded)),
-                  total: formatQuantity(holding.qty),
-                }}
-                components={{ num: <span className="font-mono" /> }}
-              />
-            </span>
-            <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
-              <div
-                data-testid="accounted-bar"
-                className={`h-full rounded-full transition-all duration-140 ${barColor}`}
-                style={{ width: `${barWidth * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Table — no surface, deliberately: it is the working area, not a card. */}
-          {rows === null ? (
-            <CardState
-              variant={isError ? "error" : "loading"}
-              onRetry={() => refetch()}
-              className="h-32"
+      <div data-modal-body className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
+        {/* Accounted bar */}
+        <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
+          <span className="text-fg-dim text-sm">
+            <Trans
+              i18nKey="dashboard.holdings.gap.accounted"
+              values={{
+                recorded: formatQuantity(String(recorded)),
+                total: formatQuantity(holding.qty),
+              }}
+              components={{ num: <span className="font-mono" /> }}
             />
-          ) : list.length === 0 ? (
-            <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
-          ) : (
-            <table className="w-full border-separate border-spacing-0">
-              <thead>
-                <tr className="text-[11px] font-mono text-fg-faint">
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.fee")}</th>
-                  <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
-                  <th className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((r, i) => {
-                  const p = toLotEntry(r);
-                  const badQty =
-                    r.quantity !== "" &&
-                    validateRow(normaliseDecimal(r.quantity, i18n.language), "1") !== null;
-                  const badPrice =
-                    r.unitPrice !== "" &&
-                    validateRow("1", normaliseDecimal(r.unitPrice, i18n.language)) !== null;
-                  const ring = "ring-1 ring-red";
-                  const input =
-                    "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
-                  return (
-                    <tr key={r.id ?? `new-${i}`} data-testid="lot-row" className="text-sm">
-                      <td className="py-1.5 pr-2 border-t border-surface-2">
-                        <span className={r.type === "sell" ? "text-fg-dim" : "text-fg"}>
-                          {t(`dashboard.holdings.gap.${r.type}`)}
-                        </span>
-                      </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2">
-                        <input
-                          type="date"
-                          data-testid="lot-date"
-                          value={r.date}
-                          onChange={(e) => set(i, { date: e.target.value })}
-                          className={`${input} ${r.date === "" ? ring : ""}`}
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2">
-                        <input
-                          inputMode="decimal"
-                          data-testid="lot-quantity"
-                          value={r.quantity}
-                          onChange={(e) => set(i, { quantity: e.target.value })}
-                          className={`${input} text-right ${badQty ? ring : ""}`}
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2">
-                        <input
-                          inputMode="decimal"
-                          data-testid="lot-unitPrice"
-                          value={r.unitPrice}
-                          onChange={(e) => set(i, { unitPrice: e.target.value })}
-                          className={`${input} text-right ${badPrice ? ring : ""}`}
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2">
-                        <input
-                          inputMode="decimal"
-                          data-testid="lot-fee"
-                          value={r.fee}
-                          onChange={(e) => set(i, { fee: e.target.value })}
-                          className={`${input} text-right`}
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
-                        {p === null
-                          ? "—"
-                          : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), {
-                              currency,
-                            })}
-                      </td>
-                      <td className="py-1.5 border-t border-surface-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => remove(i)}
-                          aria-label={t("dashboard.holdings.gap.delete")}
-                          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-red transition-colors duration-140 cursor-pointer"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-
-          {list.some((r) => r.suggested) && (
-            <p className="text-fg-faint text-sm">
-              {t("dashboard.holdings.gap.prefilled", { count: list.filter((r) => r.suggested).length })}
-            </p>
-          )}
-
-          <div className="flex items-center gap-2">
-            {/* Bordered, not bare text: these sit under a table of inputs, where
-                an unboxed label reads as a column heading rather than a control. */}
-            <Button
-              variant="ghost"
-              className={ADD_ROW_BUTTON}
-              onClick={() => {
-                setDirty(true);
-                setRows((rs) => [
-                  ...(rs ?? []),
-                  { type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" },
-                ]);
-              }}
-            >
-              {t("dashboard.holdings.gap.addBuy")}
-            </Button>
-            <Button
-              variant="ghost"
-              className={ADD_ROW_BUTTON}
-              onClick={() => {
-                setDirty(true);
-                setRows((rs) => [
-                  ...(rs ?? []),
-                  { type: "sell", date: today(), quantity: "", unitPrice: "", fee: "" },
-                ]);
-              }}
-            >
-              {t("dashboard.holdings.gap.addSell")}
-            </Button>
+          </span>
+          <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
+            <div
+              data-testid="accounted-bar"
+              className={`h-full rounded-full transition-all duration-140 ${barColor}`}
+              style={{ width: `${barWidth * 100}%` }}
+            />
           </div>
-
-          {/* Resulting figures */}
-          <div className="bg-surface-2 rounded-2xl p-5">
-            <span className="text-fg text-sm font-semibold">
-              {t("dashboard.holdings.gap.figures")}
-              {(short || over) && (
-                <span className="text-fg-faint font-normal">
-                  {" · "}
-                  {t("dashboard.holdings.gap.figuresProvisional")}
-                </span>
-              )}
-            </span>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
-              <Figure
-                testId="figure-invested"
-                label={t("dashboard.holdings.gap.capitalInvested")}
-                value={formatMoney(figures.invested, { currency })}
-              />
-              <Figure
-                testId="figure-meanPrice"
-                label={t("dashboard.holdings.gap.meanPricePerShare")}
-                value={formatMoney(figures.meanPrice, { currency })}
-              />
-              <SignedFigure
-                testId="figure-realised"
-                label={t("dashboard.holdings.gap.realisedPnl")}
-                value={Number(figures.realised)}
-                currency={currency}
-              />
-              <SignedFigure
-                testId="figure-unrealised"
-                label={t("dashboard.holdings.gap.unrealisedPnl")}
-                value={Number(figures.unrealised)}
-                currency={currency}
-              />
-            </div>
-          </div>
-
-          {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
-          <Button variant="ghost" onClick={onClose}>
-            {t("dashboard.holdings.gap.cancel")}
+        {/* Table — no surface, deliberately: it is the working area, not a card. */}
+        {rows === null ? (
+          <CardState
+            variant={isError ? "error" : "loading"}
+            onRetry={() => refetch()}
+            className="h-32"
+          />
+        ) : list.length === 0 ? (
+          <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
+        ) : (
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr className="text-[11px] font-mono text-fg-faint">
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.fee")}</th>
+                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
+                <th className="pb-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r, i) => {
+                const p = toLotEntry(r);
+                const badQty =
+                  r.quantity !== "" &&
+                  validateRow(normaliseDecimal(r.quantity, i18n.language), "1") !== null;
+                const badPrice =
+                  r.unitPrice !== "" &&
+                  validateRow("1", normaliseDecimal(r.unitPrice, i18n.language)) !== null;
+                const ring = "ring-1 ring-red";
+                const input =
+                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
+                return (
+                  <tr key={r.id ?? `new-${i}`} data-testid="lot-row" className="text-sm">
+                    <td className="py-1.5 pr-2 border-t border-surface-2">
+                      <span className={r.type === "sell" ? "text-fg-dim" : "text-fg"}>
+                        {t(`dashboard.holdings.gap.${r.type}`)}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-2 border-t border-surface-2">
+                      <input
+                        type="date"
+                        data-testid="lot-date"
+                        value={r.date}
+                        onChange={(e) => set(i, { date: e.target.value })}
+                        className={`${input} ${r.date === "" ? ring : ""}`}
+                      />
+                    </td>
+                    <td className="py-1.5 pr-2 border-t border-surface-2">
+                      <input
+                        inputMode="decimal"
+                        data-testid="lot-quantity"
+                        value={r.quantity}
+                        onChange={(e) => set(i, { quantity: e.target.value })}
+                        className={`${input} text-right ${badQty ? ring : ""}`}
+                      />
+                    </td>
+                    <td className="py-1.5 pr-2 border-t border-surface-2">
+                      <input
+                        inputMode="decimal"
+                        data-testid="lot-unitPrice"
+                        value={r.unitPrice}
+                        onChange={(e) => set(i, { unitPrice: e.target.value })}
+                        className={`${input} text-right ${badPrice ? ring : ""}`}
+                      />
+                    </td>
+                    <td className="py-1.5 pr-2 border-t border-surface-2">
+                      <input
+                        inputMode="decimal"
+                        data-testid="lot-fee"
+                        value={r.fee}
+                        onChange={(e) => set(i, { fee: e.target.value })}
+                        className={`${input} text-right`}
+                      />
+                    </td>
+                    <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
+                      {p === null
+                        ? "—"
+                        : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), {
+                            currency,
+                          })}
+                    </td>
+                    <td className="py-1.5 border-t border-surface-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => remove(i)}
+                        aria-label={t("dashboard.holdings.gap.delete")}
+                        className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-red transition-colors duration-140 cursor-pointer"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {list.some((r) => r.suggested) && (
+          <p className="text-fg-faint text-sm">
+            {t("dashboard.holdings.gap.prefilled", { count: list.filter((r) => r.suggested).length })}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2">
+          {/* Bordered, not bare text: these sit under a table of inputs, where
+              an unboxed label reads as a column heading rather than a control. */}
+          <Button
+            variant="ghost"
+            className={ADD_ROW_BUTTON}
+            onClick={() => {
+              setDirty(true);
+              setRows((rs) => [
+                ...(rs ?? []),
+                { type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" },
+              ]);
+            }}
+          >
+            {t("dashboard.holdings.gap.addBuy")}
           </Button>
-          <Button variant="primary" onClick={save} disabled={!canSave}>
-            {pending === 0
-              ? t("dashboard.holdings.gap.saveNone")
-              : t("dashboard.holdings.gap.save", { count: pending })}
+          <Button
+            variant="ghost"
+            className={ADD_ROW_BUTTON}
+            onClick={() => {
+              setDirty(true);
+              setRows((rs) => [
+                ...(rs ?? []),
+                { type: "sell", date: today(), quantity: "", unitPrice: "", fee: "" },
+              ]);
+            }}
+          >
+            {t("dashboard.holdings.gap.addSell")}
           </Button>
         </div>
+
+        {/* Resulting figures */}
+        <div className="bg-surface-2 rounded-2xl p-5">
+          <span className="text-fg text-sm font-semibold">
+            {t("dashboard.holdings.gap.figures")}
+            {(short || over) && (
+              <span className="text-fg-faint font-normal">
+                {" · "}
+                {t("dashboard.holdings.gap.figuresProvisional")}
+              </span>
+            )}
+          </span>
+          <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
+            <Figure
+              testId="figure-invested"
+              label={t("dashboard.holdings.gap.capitalInvested")}
+              value={formatMoney(figures.invested, { currency })}
+            />
+            <Figure
+              testId="figure-meanPrice"
+              label={t("dashboard.holdings.gap.meanPricePerShare")}
+              value={formatMoney(figures.meanPrice, { currency })}
+            />
+            <SignedFigure
+              testId="figure-realised"
+              label={t("dashboard.holdings.gap.realisedPnl")}
+              value={Number(figures.realised)}
+              currency={currency}
+            />
+            <SignedFigure
+              testId="figure-unrealised"
+              label={t("dashboard.holdings.gap.unrealisedPnl")}
+              value={Number(figures.unrealised)}
+              currency={currency}
+            />
+          </div>
+        </div>
+
+        {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
       </div>
-    </div>
+
+      <div data-modal-footer className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
+        <Button variant="ghost" onClick={onClose} disabled={saveLots.isPending}>
+          {t("dashboard.holdings.gap.cancel")}
+        </Button>
+        <Button variant="primary" onClick={save} disabled={!canSave}>
+          {pending === 0
+            ? t("dashboard.holdings.gap.saveNone")
+            : t("dashboard.holdings.gap.save", { count: pending })}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
