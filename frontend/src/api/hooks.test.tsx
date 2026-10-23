@@ -47,7 +47,7 @@ describe("useHoldings", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].ticker).toBe("AAPL");
     // getJson now attaches an (empty, unauthenticated) headers object.
-    expect(fetch).toHaveBeenCalledWith("/api/holdings", { headers: {}, signal: expect.any(AbortSignal) });
+    expect(fetch).toHaveBeenCalledWith("/api/holdings", { method: "GET", headers: {}, signal: expect.any(AbortSignal) });
   });
 });
 
@@ -222,7 +222,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/transactions?search=leclerc&limit=${TRANSACTIONS_PAGE_SIZE}&offset=0`,
-      { headers: {}, signal: expect.any(AbortSignal) },
+      { method: "GET", headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(true);
   });
@@ -253,7 +253,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/transactions?limit=${TRANSACTIONS_PAGE_SIZE}&offset=${TRANSACTIONS_PAGE_SIZE}`,
-      { headers: {}, signal: expect.any(AbortSignal) },
+      { method: "GET", headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(false);
   });

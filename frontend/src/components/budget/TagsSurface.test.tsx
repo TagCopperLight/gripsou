@@ -102,7 +102,7 @@ describe("TagsSurface", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByDisplayValue("Vacation")).toBeNull();
     expect(screen.getAllByTestId("tag-chip")[0]).toHaveTextContent("Holiday");
-    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method)).toHaveLength(0);
+    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method !== "GET")).toHaveLength(0);
   });
 
   it("sends the full body on a rename, keeping the current colour", async () => {
@@ -156,7 +156,7 @@ describe("TagsSurface", () => {
   it("changes a colour without renaming, and clears it with null", async () => {
     renderSurface();
     await screen.findByText("Holiday");
-    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method)).toHaveLength(0);
+    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method !== "GET")).toHaveLength(0);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Colour #4dd0b1" })[0]);
     await waitFor(() =>

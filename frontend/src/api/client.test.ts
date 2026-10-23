@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
-import { ApiError, getAuthToken, getJson, postJson, setAuthToken, setUnauthorizedHandler } from "./client";
+import { ApiError, deleteJson, getAuthToken, getJson, postJson, putJson, setAuthToken, setUnauthorizedHandler } from "./client";
 
 beforeEach(() => {
   localStorage.clear();
@@ -77,4 +77,10 @@ describe("ApiError.retryAfter", () => {
     const err = (await postJson("/x", {}).catch((e: unknown) => e)) as ApiError;
     expect(err.retryAfter).toBeNull();
   });
+});
+
+test("an empty success body reads as undefined for every verb", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
+  expect(await putJson("/x", {})).toBeUndefined();
+  expect(await deleteJson("/x")).toBeUndefined();
 });
