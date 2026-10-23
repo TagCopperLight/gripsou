@@ -533,4 +533,65 @@ pub(crate) mod tests {
             StatusCode::NO_CONTENT
         );
     }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn options_require_what_passwordless_needs_and_exclude_existing(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let reauth = reauth_token(&pool, &a, "hunter22").await;
+        let o = options(&pool, &a, &reauth).await.unwrap();
+        let sel = &o.options["authenticatorSelection"];
+        assert_eq!(sel["residentKey"], "required");
+        assert_eq!(sel["requireResidentKey"], true);
+        assert_eq!(sel["userVerification"], "required");
+
+        let (_, cred) = add_passkey(&pool, &a, &mut Soft::new()).await;
+        let reauth = reauth_token(&pool, &a, "hunter22").await;
+        let o2 = options(&pool, &a, &reauth).await.unwrap();
+        let excluded: Vec<webauthn_rs::prelude::CredentialID> = serde_json::from_value(
+            o2.options["excludeCredentials"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| c["id"].clone())
+                .collect(),
+        )
+        .unwrap();
+        assert_eq!(excluded.len(), 1);
+        assert_eq!(excluded[0].as_ref(), cred.as_slice());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_credential_already_saved_is_a_conflict_and_keeps_the_token(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let v = seed_user(&pool, "b@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let reauth = reauth_token(&pool, &a, "hunter22").await;
+        let o = options(&pool, &a, &reauth).await.unwrap();
+        let mut soft = Soft::new();
+        let credential = soft.register(&o.options);
+        let cred_id: &[u8] = credential.raw_id.as_ref();
+        repo::insert(&pool, v, cred_id, &serde_json::json!({}), "theirs")
+            .await
+            .unwrap()
+            .unwrap();
+        let err = register(
+            State(pool.clone()),
+            State(passkeys()),
+            firefox(),
+            who(&a),
+            Json(dto::PasskeyRegisterReq {
+                reauth: reauth.clone(),
+                challenge: o.challenge.clone(),
+                credential,
+            }),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+        // The transaction rolled back: the token and the ceremony are intact.
+        check_reauth(&pool, u, &reauth).await.expect("token kept");
+        assert_eq!(repo::list(&pool, u).await.unwrap().len(), 0);
+    }
 }

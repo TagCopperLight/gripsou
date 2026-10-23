@@ -1290,8 +1290,8 @@ pub struct MfaStatus {
 pub struct PasskeyInfo {
     pub id: uuid::Uuid,
     pub name: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
 }
 
 impl From<gripsou_core::repo::passkey::PasskeyRow> for PasskeyInfo {
@@ -1299,8 +1299,8 @@ impl From<gripsou_core::repo::passkey::PasskeyRow> for PasskeyInfo {
         PasskeyInfo {
             id: r.id,
             name: r.name,
-            created_at: r.created_at,
-            last_used_at: r.last_used_at,
+            created_at: r.created_at.timestamp_millis(),
+            last_used_at: r.last_used_at.map(|t| t.timestamp_millis()),
         }
     }
 }
