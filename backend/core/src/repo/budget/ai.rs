@@ -88,6 +88,7 @@ pub async fn work_chunk(
         join account a    on a.id = t.account_id
         join connection k on k.id = a.connection_id
         where k.user_id = $1
+          -- What the AI still has to look at: keep in step with `remaining`.
           and t.category_source is null
           and t.budget_category_id is null
           and t.amount <> 0
@@ -113,6 +114,7 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
         join account a    on a.id = t.account_id
         join connection k on k.id = a.connection_id
         where k.user_id = $1
+          -- What the AI still has to look at: keep in step with `work_chunk`.
           and t.category_source is null
           and t.budget_category_id is null
           and t.amount <> 0
