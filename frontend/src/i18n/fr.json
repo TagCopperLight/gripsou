@@ -25,12 +25,8 @@
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
-    "syncing": "Synchronisation…",
-    "awaiting": "En attente de la banque…",
     "sync": "Synchroniser",
-    "lastSync": "Synchronisé {{when}}",
     "neverSynced": "Jamais synchronisé",
-    "error": "Échec de la synchronisation",
     "empty": "Aucune connexion pour le moment."
   },
   "holdingKind": {
@@ -243,7 +239,6 @@
     "emailExists": "Un compte avec cet e-mail existe déjà",
     "createAccountButton": "Créer le compte",
     "resetPassword": "Réinitialiser votre mot de passe",
-    "resetForEmail": "Définissez un nouveau mot de passe pour {{email}}.",
     "newPassword": "Nouveau mot de passe",
     "updatePasswordButton": "Mettre à jour le mot de passe",
     "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
@@ -302,7 +297,6 @@
       "sessionIp": "Adresse IP",
       "sessionLastActive": "Dernière activité",
       "sessionSignedIn": "Connecté le",
-      "sessionDetails": "Détails de la session",
       "signedInOn": "Connecté le {{date}}",
       "lastActive": "Dernière activité {{time}}",
       "revokeSession": "Déconnecter",
@@ -316,7 +310,6 @@
       "deleteAccountConfirm": "Supprimer mon compte",
       "deleteAccountPending": "Suppression…",
       "deleteAccountError": "Impossible de supprimer votre compte",
-      "avatar": "Photo de profil",
       "removeImage": "Supprimer",
       "editProfile": "Modifier le profil",
       "changePicture": "Changer la photo",
@@ -332,7 +325,6 @@
       "usersCount_one": "{{count}} membre",
       "usersCount_other": "{{count}} membres",
       "inviteUser": "Inviter un utilisateur",
-      "addUser": "Ajouter un utilisateur",
       "columns": {
         "member": "MEMBRE",
         "role": "RÔLE",
@@ -362,7 +354,6 @@
         "error": "Impossible de supprimer l'utilisateur. Veuillez réessayer."
       },
       "copyLink": "Copier le lien",
-      "copied": "Copié",
       "linkError": "Impossible de générer le lien. Veuillez réessayer.",
       "done": "Terminé"
     },
@@ -412,7 +403,6 @@
       "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
       "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
       "status": {
-        "ok": "Synchronisée",
         "syncing": "Synchronisation…",
         "awaiting": "En attente de la banque…",
         "error": "Échec de la synchronisation",
