@@ -278,11 +278,9 @@
     },
     "account": {
       "title": "Compte",
-      "profile": "Profil",
       "name": "Nom",
       "email": "E-mail",
       "saveChanges": "Enregistrer",
-      "profileUpdated": "Profil mis à jour",
       "emailInUse": "Cet e-mail est déjà utilisé",
       "profileUpdateFailed": "Impossible d'enregistrer les modifications",
       "password": "Mot de passe",

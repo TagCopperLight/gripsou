@@ -278,11 +278,9 @@
     },
     "account": {
       "title": "Account",
-      "profile": "Profile",
       "name": "Name",
       "email": "Email",
       "saveChanges": "Save changes",
-      "profileUpdated": "Profile updated",
       "emailInUse": "That email is already in use",
       "profileUpdateFailed": "Couldn't save changes",
       "password": "Password",

@@ -50,7 +50,7 @@ export function ManageTwoFactorModal({
       setError(
         minutes !== null
           ? t("auth.tooManyAttempts", { count: minutes })
-          : err instanceof ApiError && err.status === 401
+          : err instanceof ApiError && err.status === 400
             ? t("twoFactor.wrongPassword")
             : t("twoFactor.failed"),
       );

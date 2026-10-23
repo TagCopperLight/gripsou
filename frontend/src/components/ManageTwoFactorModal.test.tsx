@@ -104,7 +104,7 @@ describe("ManageTwoFactorModal", () => {
   });
 
   it("says when the password is wrong and stays open", async () => {
-    const fetchMock = stubApi({ ...OK, "POST /auth/reauth": { status: 401 } });
+    const fetchMock = stubApi({ ...OK, "POST /auth/reauth": { status: 400 } });
     const { onClose, user } = renderModal("turnOff");
     await user.type(screen.getByLabelText("Current password"), "nope");
     await user.click(screen.getByRole("button", { name: "Turn off" }));

@@ -47,7 +47,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     try {
       token = (await reauth.mutateAsync(password)).reauth;
     } catch (err) {
-      fail(err, err instanceof ApiError && err.status === 401 ? t("twoFactor.wrongPassword") : t("twoFactor.failed"));
+      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongPassword") : t("twoFactor.failed"));
       return;
     }
     try {

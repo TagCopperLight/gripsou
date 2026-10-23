@@ -304,8 +304,9 @@ export function useMfaStatus() {
   });
 }
 
-// The reauth routes answer 401 for a bad or used token, which is not a lost
-// login: skip the global handler that would sign the user out.
+// The routes that take a reauth token answer 401 for a bad or used token,
+// which is not a lost login: skip the global handler that would sign the user
+// out. /auth/reauth itself answers 400 for a wrong password.
 const KEEP_SESSION = { skipGlobalUnauthorized: true } as const;
 
 export function useReauth() {

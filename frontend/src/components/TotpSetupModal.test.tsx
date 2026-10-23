@@ -97,7 +97,7 @@ describe("TotpSetupModal", () => {
   });
 
   it("says when the password is wrong", async () => {
-    const fetchMock = stubApi({ ...OK, "/auth/reauth": { status: 401 } });
+    const fetchMock = stubApi({ ...OK, "/auth/reauth": { status: 400 } });
     const { user } = renderModal();
     await user.type(screen.getByLabelText("Current password"), "nope");
     await user.click(screen.getByRole("button", { name: "Continue" }));
