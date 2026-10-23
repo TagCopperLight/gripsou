@@ -65,8 +65,8 @@ jobs:
       #   worth keeping here);
       # - migrate template1, which every new database is copied from, so each
       #   test's migrator finds everything already applied.
-      # ./ci.sh skips this on purpose: it only changes the speed, and a migrated
-      # template1 on a dev server goes stale when you edit an unmerged migration.
+      # ./ci.sh does the same on a container of its own; never on a dev server,
+      # where a migrated template1 goes stale when you edit an unmerged migration.
       - name: Prepare test database
         run: |
           for setting in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
