@@ -845,7 +845,6 @@ pub struct MfaRequired {
     /// Always true; lets the client tell this shape from a session.
     pub mfa_required: bool,
     pub challenge: String,
-    pub methods: Vec<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -1340,26 +1339,6 @@ pub struct PasskeySignInReq {
     pub credential: webauthn_rs::prelude::PublicKeyCredential,
     #[serde(default)]
     pub remember: bool,
-}
-
-/// The second login step's challenge, to start a passkey ceremony on it.
-#[derive(Deserialize)]
-pub struct ChallengeReq {
-    pub challenge: String,
-}
-
-/// A passkey ceremony on the second login step: it rides on the step's own
-/// challenge, so only the `publicKey` options are sent.
-#[derive(Debug, Serialize)]
-pub struct PasskeyRequestOptions {
-    pub options: serde_json::Value,
-}
-
-/// Second login step with a passkey.
-#[derive(Deserialize)]
-pub struct LoginVerifyPasskeyReq {
-    pub challenge: String,
-    pub credential: webauthn_rs::prelude::PublicKeyCredential,
 }
 
 #[derive(Debug, Serialize)]

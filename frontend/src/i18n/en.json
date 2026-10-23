@@ -206,9 +206,7 @@
     "signInWithPasskey": "Sign in with a passkey",
     "usePassword": "Use your password instead",
     "mfa": {
-      "passkeyTitle": "Use your passkey",
       "useCode": "Use your code instead",
-      "usePasskey": "Use a passkey",
       "or": "or",
       "passkeyRefused": "That passkey didn't work. Try again.",
       "codeTitle": "Enter your code",

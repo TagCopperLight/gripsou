@@ -933,18 +933,10 @@ pub async fn login(
         )
         .await
         .map_err(internal)?;
-        let mut methods = Vec::new();
-        if status.totp {
-            methods.extend(["totp", "recovery"]);
-        }
-        if status.passkeys > 0 {
-            methods.push("passkey");
-        }
         tracing::info!(user_id = %creds.id, ip = %ip, "mfa challenge issued");
         return Ok(Json(dto::LoginOutcome::Mfa(dto::MfaRequired {
             mfa_required: true,
             challenge: token,
-            methods,
         })));
     }
     throttle.record_success(&body.email, &ip);
@@ -1910,7 +1902,6 @@ pub(crate) mod auth_tests {
         match login_outcome(&pool, &throttle, "a@t.local", "hunter22", false).await {
             dto::LoginOutcome::Mfa(m) => {
                 assert!(m.mfa_required);
-                assert_eq!(m.methods, vec!["totp", "recovery"]);
                 assert!(!m.challenge.is_empty());
             }
             other => panic!("expected mfa, got {other:?}"),

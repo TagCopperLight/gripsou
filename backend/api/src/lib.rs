@@ -88,11 +88,6 @@ pub fn router(
         .route("/health", get(health))
         .route("/auth/login", post(handlers::login))
         .route("/auth/login/verify", post(handlers::login_verify))
-        .route(
-            "/auth/login/verify/passkey/options",
-            post(passkey::verify_options),
-        )
-        .route("/auth/login/verify/passkey", post(passkey::verify))
         .route("/auth/passkey/options", post(passkey::sign_in_options))
         .route("/auth/passkey", post(passkey::sign_in))
         .route("/auth/reauth", post(mfa::reauth))

@@ -156,20 +156,7 @@ describe("passkeys", () => {
     expect(screen.getByText("out")).toBeInTheDocument();
   });
 
-  it("verifyLogin with a passkey posts the credential to the passkey endpoint", async () => {
-    const post = vi.spyOn(client, "postJson").mockResolvedValue({ token: "tok", user: sessionUser } as never);
-    const auth = await mountAuth();
-    await act(async () => auth().verifyLogin("ch1", { passkey: credential as never }, false));
-    expect(post).toHaveBeenCalledWith(
-      "/auth/login/verify/passkey",
-      { challenge: "ch1", credential },
-      expect.anything(),
-    );
-    expect(await screen.findByText("in Ann")).toBeInTheDocument();
-    expect(Object.values(sessionStorage)).toContain("tok");
-  });
-
-  it("verifyLogin with a code still posts to the code endpoint", async () => {
+  it("verifyLogin posts the code to the verify endpoint", async () => {
     const post = vi.spyOn(client, "postJson").mockResolvedValue({ token: "tok", user: sessionUser } as never);
     const auth = await mountAuth();
     await act(async () => auth().verifyLogin("ch1", { totp: "123456" }, true));

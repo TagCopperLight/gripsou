@@ -109,18 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       remember: boolean,
     ) => {
       // A 401 here means "challenge expired", not "logged out".
-      const res =
-        "passkey" in code
-          ? await postJson<SessionResponse>(
-              "/auth/login/verify/passkey",
-              { challenge, credential: code.passkey },
-              { skipGlobalUnauthorized: true },
-            )
-          : await postJson<SessionResponse>(
-              "/auth/login/verify",
-              { challenge, ...code },
-              { skipGlobalUnauthorized: true },
-            );
+      const res = await postJson<SessionResponse>(
+        "/auth/login/verify",
+        { challenge, ...code },
+        { skipGlobalUnauthorized: true },
+      );
       resetSession();
       setAuthToken(res.token, remember);
       applyUser(res.user);
