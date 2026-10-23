@@ -31,3 +31,10 @@ base64 = "0.22.1"
 rand = "0.8.8"
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 urlencoding = "2.1.3"
+
+# Password hashing is far too slow unoptimized: the api tests hash on almost every login.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
