@@ -45,22 +45,9 @@ pub struct PriceSyncSummary {
 }
 
 // An FX rate can only be stored against a cash instrument, and cash instruments
-// otherwise only appear when a user actually holds cash in that currency. Every
-// currency this connection *converts through* therefore needs one backfilled,
-// or fx_asof() stays NULL for it forever and whatever it governs reads zero:
-//
-// * instrument.currency — a USD equity in a EUR account never holds USD cash.
-// * price.currency (the price domain) — Powens labels an instrument EUR, Yahoo
-//   resolves a London listing quoted GBP; unit_value_asof reads the price row's
-//   currency, so without GBP the position is unvaluable.
-// * account.currency (the amount domain) — cost_basis and snapshot.value
-//   convert from it.
-//
-// The `^[A-Z]{3}$` guard keeps a provider's stray `"usd"` (or worse) from
-// becoming a second, globally-shared cash instrument that the
-// `kind='cash'`-unique index on `currency` would not catch, and from being
-// pasted into a live Yahoo URL. instrument rows are global/shared across users
-// by design, so this is a plain insert, not a per-connection concept.
+// otherwise only appear when a user actually holds cash in that currency. So
+// every currency this connection converts through gets one (instrument rows are
+// global, shared across users).
 async fn ensure_cash_instruments_for_held_currencies(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
@@ -68,42 +55,8 @@ async fn ensure_cash_instruments_for_held_currencies(
     sqlx::query!(
         r#"
         insert into instrument (kind, symbol, isin, name, currency)
-        select distinct 'cash', null, null, needed.cur, needed.cur
-        from (
-            select i.currency as cur
-            from holding h
-            join account a    on a.id = h.account_id
-            join instrument i on i.id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select p.currency
-            from holding h
-            join account a on a.id = h.account_id
-            join price p   on p.instrument_id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select a.currency
-            from account a
-            where a.connection_id = $1
-
-            union
-
-            -- The owner's reporting preference. It is not held, quoted or
-            -- denominated in anything — it is only ever the divisor — so none
-            -- of the arms above reach it, and without this the rate is never
-            -- fetched: reporting_fx_asof falls back to 1 and every figure stays
-            -- in the pivot while wearing the chosen currency's symbol.
-            select u.currency
-            from connection c
-            join users u on u.id = c.user_id
-            where c.id = $1
-        ) needed
-        where needed.cur <> (select base_currency from app_settings where id = 1)
-          and needed.cur ~ '^[A-Z]{3}$'
+        select 'cash', null, null, cur, cur
+        from connection_fx_currencies($1) cur
         on conflict (currency) where kind = 'cash' do nothing
         "#,
         connection_id,

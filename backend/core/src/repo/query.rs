@@ -1200,19 +1200,8 @@ pub async fn composition_eligible_instruments_for_connection(
 
 /// Distinct non-cash instruments held (nonzero quantity) under a connection,
 /// plus the cash instrument (the FX rate) for every currency this connection
-/// needs a rate for, excluding the pivot. Three sources, one per currency
-/// domain, because a rate missing in any of them zeroes a figure:
-///
-/// * `instrument.currency` — a foreign security held in a base-currency account
-///   (a USD equity in a EUR account) never holds USD *cash* itself, so reaching
-///   rates only through `i.kind = 'cash'` rows would leave USD unfetchable.
-/// * `price.currency` — the price domain. Powens may label an instrument EUR
-///   while Yahoo resolves a London listing quoted GBP; `unit_value_asof` reads
-///   the price row's currency, so without GBP here the holding stays NULL —
-///   valued at zero — forever.
-/// * `account.currency` — the amount domain. `holding.cost_basis` and
-///   `holding_snapshot.value` convert from it, so a CHF account inside a EUR
-///   install needs CHF even if every instrument in it is quoted in EUR.
+/// needs a rate for, excluding the pivot (`connection_fx_currencies`, which
+/// says why each one is needed).
 ///
 /// Drives the per-connection price-fetch pass.
 pub async fn price_eligible_instruments_for_connection(
@@ -1240,54 +1229,16 @@ pub async fn price_eligible_instruments_for_connection(
         union
 
         -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
-        -- pivot is 1 by definition and has no Yahoo pair. This reaches the cash
-        -- instrument backing every currency this connection converts through,
-        -- not just an actually-held foreign cash position (see the doc comment).
-        select distinct
-               fx.id       as "id!",
+        -- pivot is 1 by definition and has no Yahoo pair.
+        select fx.id       as "id!",
                fx.kind     as "kind!",
                fx.symbol,
                fx.isin,
                fx.name     as "name!",
                fx.currency as "currency!",
                fx.meta     as "meta!"
-        from (
-            select i.currency as cur
-            from holding h
-            join account a    on a.id = h.account_id
-            join instrument i on i.id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select p.currency
-            from holding h
-            join account a on a.id = h.account_id
-            join price p   on p.instrument_id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select a.currency
-            from account a
-            where a.connection_id = $1
-
-            union
-
-            -- The owner's reporting preference, which is a divisor and nothing
-            -- else — no holding, price or account carries it, so it would never
-            -- otherwise become rate-eligible and reporting_fx_asof would fall
-            -- back to the pivot forever. Its cash instrument is created by
-            -- ensure_cash_instruments_for_held_currencies, which unions the
-            -- same arm.
-            select u.currency
-            from connection c
-            join users u on u.id = c.user_id
-            where c.id = $1
-        ) needed
-        join instrument fx on fx.kind = 'cash' and fx.currency = needed.cur
-        where needed.cur <> (select base_currency from app_settings where id = 1)
-          and needed.cur ~ '^[A-Z]{3}$'
+        from connection_fx_currencies($1) cur
+        join instrument fx on fx.kind = 'cash' and fx.currency = cur
 
         order by 5
         "#,
