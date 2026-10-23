@@ -3,23 +3,22 @@ import { useTranslation } from "react-i18next";
 import { X, TriangleAlert } from "lucide-react";
 
 import { Button } from "./Button";
+import { ApiError } from "../api/client";
 import { useDeleteAccount } from "../api/hooks";
+import { throttleMinutes } from "../lib/mfa";
 
 type DeleteAccountModalProps = {
-  /** The signed-in user's email; the typed value must match it to confirm. */
-  email: string;
   onClose: () => void;
   /** Called once the account has been deleted server-side. */
   onDeleted: () => void;
 };
 
 export function DeleteAccountModal({
-  email,
   onClose,
   onDeleted,
 }: DeleteAccountModalProps) {
   const { t } = useTranslation();
-  const [typed, setTyped] = useState("");
+  const [password, setPassword] = useState("");
   const remove = useDeleteAccount();
 
   // Close on Escape; lock background scroll while open.
@@ -36,13 +35,20 @@ export function DeleteAccountModal({
     };
   }, [onClose]);
 
-  const matches = typed.trim().toLowerCase() === email.trim().toLowerCase();
-  const canDelete = matches && !remove.isPending;
+  const canDelete = password !== "" && !remove.isPending;
 
   const confirm = () => {
     if (!canDelete) return;
-    remove.mutate(email, { onSuccess: onDeleted });
+    remove.mutate(password, { onSuccess: onDeleted });
   };
+
+  const minutes = throttleMinutes(remove.error);
+  const error =
+    minutes !== null
+      ? t("auth.tooManyAttempts", { count: minutes })
+      : remove.error instanceof ApiError && remove.error.status === 400
+        ? t("twoFactor.wrongPassword")
+        : t("settings.account.deleteAccountError");
 
   return (
     <div
@@ -77,24 +83,28 @@ export function DeleteAccountModal({
         <div className="px-6 py-4 flex flex-col gap-5">
           <p className="text-sm text-fg-dim">{t("settings.account.deleteAccountBody")}</p>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-sm text-fg-faint">
-              {t("settings.account.deleteAccountConfirmLabel", { email })}
-            </span>
-            <input
-              type="email"
-              aria-label={t("settings.account.deleteAccountConfirmLabel", { email })}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              placeholder={email}
-              autoComplete="off"
-              className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-red"
-            />
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              confirm();
+            }}
+          >
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-fg-faint">
+                {t("settings.account.deleteAccountConfirmLabel")}
+              </span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-red"
+              />
+            </label>
+            <button type="submit" hidden />
+          </form>
 
-          {remove.isError && (
-            <p className="text-red text-sm">{t("settings.account.deleteAccountError")}</p>
-          )}
+          {remove.isError && <p className="text-red text-sm">{error}</p>}
         </div>
 
         {/* Footer */}

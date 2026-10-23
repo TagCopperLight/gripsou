@@ -6,8 +6,9 @@ import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Avatar } from "../../components/Avatar";
 import { CardState } from "../../components/CardState";
-import { useUsers, useCreateInvite, useCreateResetLink } from "../../api/hooks";
+import { useUsers, useCreateInvite } from "../../api/hooks";
 import { LinkModal } from "../../components/LinkModal";
+import { ResetLinkModal } from "../../components/ResetLinkModal";
 import { DeleteUserModal } from "../../components/DeleteUserModal";
 import { UserDetailModal } from "../../components/UserDetailModal";
 import { formatDate } from "../../lib/date";
@@ -23,7 +24,6 @@ export function SettingsUsers() {
   const users = data ?? [];
 
   const invite = useCreateInvite();
-  const resetLink = useCreateResetLink();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
@@ -32,10 +32,6 @@ export function SettingsUsers() {
   const openInvite = () => {
     setInviteOpen(true);
     invite.mutate();
-  };
-  const openReset = (u: User) => {
-    setResetTarget(u);
-    resetLink.mutate(u.id);
   };
   const linkFor = (path: string, token?: string) =>
     token ? `${window.location.origin}${path}/${token}` : null;
@@ -168,7 +164,7 @@ export function SettingsUsers() {
                           {!u.isSelf && (
                             <button
                               type="button"
-                              onClick={() => openReset(u)}
+                              onClick={() => setResetTarget(u)}
                               aria-label={t("settings.users.resetPassword")}
                               className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
                             >
@@ -207,7 +203,7 @@ export function SettingsUsers() {
               : () => {
                   const u = detail;
                   setDetail(null);
-                  openReset(u);
+                  setResetTarget(u);
                 }
           }
           onDelete={
@@ -236,17 +232,7 @@ export function SettingsUsers() {
         />
       )}
       {resetTarget && (
-        <LinkModal
-          title={t("settings.users.reset.title")}
-          subtitle={t("settings.users.reset.heading")}
-          body={t("settings.users.reset.body", { name: resetTarget.name })}
-          link={linkFor("/reset", resetLink.data?.token)}
-          error={resetLink.isError}
-          onClose={() => {
-            setResetTarget(null);
-            resetLink.reset();
-          }}
-        />
+        <ResetLinkModal user={resetTarget} onClose={() => setResetTarget(null)} />
       )}
       {deleteTarget && (
         <DeleteUserModal

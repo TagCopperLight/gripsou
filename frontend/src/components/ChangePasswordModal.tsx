@@ -5,6 +5,7 @@ import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { ApiError } from "../api/client";
 import { useChangePassword } from "../api/hooks";
+import { throttleMinutes } from "../lib/mfa";
 import { passwordLengthOk } from "../lib/password";
 
 export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
@@ -24,6 +25,7 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   // The server answers 400 for a wrong current password (the length rule is
   // checked here first); anything else is not the user's typing.
   const wrongCurrent = change.error instanceof ApiError && change.error.status === 400;
+  const minutes = throttleMinutes(change.error);
   const mismatch = confirm !== "" && next !== confirm;
   const canUpdate = current !== "" && next !== "" && next === confirm && !change.isPending;
 
@@ -80,9 +82,11 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
         {mismatch && <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>}
         {change.isError && (
           <p className="text-sm text-red">
-            {wrongCurrent
-              ? t("settings.account.currentPasswordIncorrect")
-              : t("settings.account.passwordUpdateFailed")}
+            {minutes !== null
+              ? t("auth.tooManyAttempts", { count: minutes })
+              : wrongCurrent
+                ? t("settings.account.currentPasswordIncorrect")
+                : t("settings.account.passwordUpdateFailed")}
           </p>
         )}
         <button type="submit" hidden />

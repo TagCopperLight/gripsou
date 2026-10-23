@@ -64,21 +64,22 @@ fn reauth_required() -> ApiError {
     )
 }
 
-/// Trade the password for a short-lived token that authorises one sensitive
-/// two-factor change. Throttled like login.
-pub async fn reauth(
-    State(pool): State<PgPool>,
-    State(throttle): State<Arc<LoginThrottle>>,
-    headers: HeaderMap,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    AuthUser { user_id, .. }: AuthUser,
-    Json(body): Json<dto::ReauthReq>,
-) -> Result<Json<dto::ReauthResponse>, LoginError> {
-    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+/// Check the signed-in user's password on the login throttle, keyed on their
+/// email like a login, so a stolen session guesses no faster than the login
+/// form allows.
+pub(crate) async fn check_password(
+    pool: &PgPool,
+    throttle: &LoginThrottle,
+    headers: &HeaderMap,
+    peer: SocketAddr,
+    user_id: Uuid,
+    password: &str,
+) -> Result<(), LoginError> {
+    let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
         .await
         .map_err(internal)?
         .ok_or_else(unauthorized)?;
-    let ip = client_ip(&headers, peer);
+    let ip = client_ip(headers, peer);
     if let Err(blocked) = throttle.try_attempt(&profile.email, &ip, std::time::Instant::now()) {
         if blocked.first_refusal {
             tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
@@ -89,12 +90,12 @@ pub async fn reauth(
             Some(blocked.retry_after_secs()),
         ));
     }
-    let hash = gripsou_core::repo::user::password_hash(&pool, user_id)
+    let hash = gripsou_core::repo::user::password_hash(pool, user_id)
         .await
         .map_err(internal)?
         .ok_or_else(unauthorized)?;
-    if !auth::verify_password(&body.password, &hash) {
-        tracing::warn!(user_id = %user_id, ip = %ip, "reauth failed");
+    if !auth::verify_password(password, &hash) {
+        tracing::warn!(user_id = %user_id, ip = %ip, "password check failed");
         return Err(LoginError(
             StatusCode::BAD_REQUEST,
             "password is incorrect".to_string(),
@@ -102,6 +103,20 @@ pub async fn reauth(
         ));
     }
     throttle.record_success(&profile.email, &ip);
+    Ok(())
+}
+
+/// Trade the password for a short-lived token that authorises one sensitive
+/// change (a second factor, a reset link).
+pub async fn reauth(
+    State(pool): State<PgPool>,
+    State(throttle): State<Arc<LoginThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    AuthUser { user_id, .. }: AuthUser,
+    Json(body): Json<dto::ReauthReq>,
+) -> Result<Json<dto::ReauthResponse>, LoginError> {
+    check_password(&pool, &throttle, &headers, peer, user_id, &body.password).await?;
     let token = auth::generate_token();
     // `create` expires the challenge in 5 minutes.
     login_challenge::create(

@@ -873,9 +873,7 @@ pub struct ChangePasswordReq {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAccountReq {
-    /// The user re-types their own email to confirm; verified server-side as a
-    /// guard against a mis-targeted request.
-    pub email: String,
+    pub password: String,
 }
 
 #[derive(serde::Deserialize)]

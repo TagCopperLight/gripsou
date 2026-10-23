@@ -316,7 +316,7 @@
       "deleteAccountDescription": "Permanently delete your account and all of its data. This action cannot be undone.",
       "deleteAccountTitle": "Delete your account?",
       "deleteAccountBody": "This permanently deletes your account, your connections, and all synced data. This action cannot be undone.",
-      "deleteAccountConfirmLabel": "Type {{email}} to confirm",
+      "deleteAccountConfirmLabel": "Enter your password to confirm",
       "deleteAccountConfirm": "Delete my account",
       "deleteAccountPending": "Deleting…",
       "deleteAccountError": "Couldn't delete your account",
@@ -354,7 +354,9 @@
       "reset": {
         "title": "Reset password",
         "heading": "Share this one-time link",
-        "body": "{{name}} must open this link to choose a new password. It expires in 24 hours and can be used once."
+        "body": "{{name}} must open this link to choose a new password. It expires in 24 hours and can be used once.",
+        "create": "Create link",
+        "confirm": "Enter your password to create a reset link for {{name}}. Using it also turns off their two-factor authentication and removes their passkeys."
       },
       "removeUser": {
         "title": "Remove {{name}}",

@@ -1282,23 +1282,25 @@ pub async fn revoke_other_sessions(
 
 pub async fn change_password(
     State(pool): State<PgPool>,
+    State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     AuthUser {
         user_id,
         session_id,
     }: AuthUser,
     Json(body): Json<dto::ChangePasswordReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let hash = gripsou_core::repo::user::password_hash(&pool, user_id)
-        .await
-        .map_err(internal)?
-        .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
-    if !auth::verify_password(&body.current_password, &hash) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "current password is incorrect".to_string(),
-        ));
-    }
+) -> Result<StatusCode, LoginError> {
     auth::validate_new_password(&body.new_password)?;
+    crate::mfa::check_password(
+        &pool,
+        &throttle,
+        &headers,
+        peer,
+        user_id,
+        &body.current_password,
+    )
+    .await?;
     let new_hash = auth::hash_password(&body.new_password).map_err(internal)?;
     gripsou_core::repo::user::update_password(&pool, user_id, &new_hash)
         .await
@@ -1312,20 +1314,17 @@ pub async fn change_password(
 
 pub async fn delete_account(
     State(pool): State<PgPool>,
+    State(throttle): State<std::sync::Arc<crate::throttle::LoginThrottle>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::DeleteAccountReq>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, LoginError> {
+    crate::mfa::check_password(&pool, &throttle, &headers, peer, user_id, &body.password).await?;
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::UNAUTHORIZED, "unauthorized".to_string()))?;
-    // Confirm the typed email matches the account being deleted (case-insensitive).
-    if body.email.trim().to_lowercase() != profile.email.to_lowercase() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "email does not match account".to_string(),
-        ));
-    }
     // Refuse to delete the last admin: doing so would lock everyone out of the
     // admin-only settings (user management, server config) for good.
     if profile.role == "admin"
@@ -1334,9 +1333,10 @@ pub async fn delete_account(
             .map_err(internal)?
             <= 1
     {
-        return Err((
+        return Err(LoginError(
             StatusCode::CONFLICT,
             "cannot delete the last admin".to_string(),
+            None,
         ));
     }
     gripsou_core::repo::user::delete_user(&pool, user_id)
@@ -1364,16 +1364,27 @@ pub async fn create_invite(
     ))
 }
 
+/// Redeeming a reset link clears the target's second factors, so creating one
+/// needs a fresh reauth token, and never for oneself (Settings changes one's
+/// own password): a stolen admin session must not get past two-factor.
 pub async fn create_reset_link(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
+    Json(body): Json<dto::ReauthTokenReq>,
 ) -> Result<(StatusCode, Json<dto::InviteLinkResp>), (StatusCode, String)> {
     require_admin(&pool, user_id).await?;
+    if id == user_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "cannot create a reset link for yourself".to_string(),
+        ));
+    }
     let target = gripsou_core::repo::user::profile_by_id(&pool, id)
         .await
         .map_err(internal)?
         .ok_or((StatusCode::NOT_FOUND, "user not found".to_string()))?;
+    crate::mfa::require_reauth(&pool, user_id, &body.reauth).await?;
     let raw = auth::generate_token();
     let stored = auth::hash_token_str(&raw);
     let expires_at = Utc::now() + Duration::hours(24);
@@ -2587,6 +2598,9 @@ pub(crate) mod auth_tests {
 
         change_password(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: cur.user_id,
                 session_id: cur.id,
@@ -2621,7 +2635,7 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn delete_account_requires_matching_email(pool: PgPool) {
+    async fn delete_account_requires_the_password(pool: PgPool) {
         // A non-admin user, so the last-admin guard is not in play here.
         seed_user_with_password(&pool, "a@t.local", "hunter2", "user").await;
         let token = login_token(&pool, "a@t.local", "hunter2").await;
@@ -2635,15 +2649,18 @@ pub(crate) mod auth_tests {
             session_id: session.id,
         };
 
-        // Wrong email is rejected and the user/session survive.
+        // A wrong password is rejected and the user/session survive.
         let bad = delete_account(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                email: "wrong@t.local".into(),
+                password: "wrong".into(),
             }),
         )
         .await
@@ -2656,16 +2673,18 @@ pub(crate) mod auth_tests {
                 .is_some()
         );
 
-        // Correct email (case-insensitive) deletes the user; the session is gone
-        // via FK cascade.
+        // The right password deletes the user; the session is gone via FK cascade.
         delete_account(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                email: "A@T.local".into(),
+                password: "hunter2".into(),
             }),
         )
         .await
@@ -2698,15 +2717,18 @@ pub(crate) mod auth_tests {
             session_id: session.id,
         };
 
-        // Sole admin: deletion is refused even with the correct email.
+        // Sole admin: deletion is refused even with the right password.
         let err = delete_account(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                email: "boss@t.local".into(),
+                password: "pw".into(),
             }),
         )
         .await
@@ -2723,12 +2745,15 @@ pub(crate) mod auth_tests {
         seed_user_with_password(&pool, "boss2@t.local", "pw", "admin").await;
         delete_account(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                email: "boss@t.local".into(),
+                password: "pw".into(),
             }),
         )
         .await
@@ -3048,6 +3073,9 @@ pub(crate) mod auth_tests {
 
         let bad = change_password(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             auth::AuthUser {
                 user_id: id,
                 session_id: session.id,
@@ -3377,9 +3405,15 @@ pub(crate) mod auth_tests {
         let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
-        let resp = create_reset_link(State(pool.clone()), who, Path(target))
-            .await
-            .expect("ok");
+        let reauth = crate::mfa::tests::reauth_token(&pool, &who, "pw").await;
+        let resp = create_reset_link(
+            State(pool.clone()),
+            who,
+            Path(target),
+            Json(dto::ReauthTokenReq { reauth }),
+        )
+        .await
+        .expect("ok");
         assert_eq!(resp.0, StatusCode::CREATED);
 
         let (kind, email): (String, Option<String>) =
@@ -3396,6 +3430,71 @@ pub(crate) mod auth_tests {
                 .await
                 .unwrap();
         assert_ne!(stored_token, resp.1.0.token, "raw token must not be stored");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn create_reset_link_needs_a_reauth_and_another_user(pool: PgPool) {
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let create = |id, reauth: &str| {
+            create_reset_link(
+                State(pool.clone()),
+                auth::AuthUser {
+                    user_id: who.user_id,
+                    session_id: who.session_id,
+                },
+                Path(id),
+                Json(dto::ReauthTokenReq {
+                    reauth: reauth.into(),
+                }),
+            )
+        };
+
+        let err = create(target, "forged").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        let reauth = crate::mfa::tests::reauth_token(&pool, &who, "pw").await;
+        let err = create(admin, &reauth).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        // Refusing oneself did not spend the token.
+        let (status, _) = create(target, &reauth).await.expect("ok");
+        assert_eq!(status, StatusCode::CREATED);
+        // Single use.
+        let err = create(target, &reauth).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn change_password_is_throttled_like_login(pool: PgPool) {
+        seed_user_with_password(&pool, "c@t.local", "old-password", "user").await;
+        let who = principal_for(&pool, "c@t.local", "old-password").await;
+        let throttle = Arc::new(LoginThrottle::default());
+        let attempt = |current: &str| {
+            change_password(
+                State(pool.clone()),
+                State(throttle.clone()),
+                axum::http::HeaderMap::new(),
+                axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+                auth::AuthUser {
+                    user_id: who.user_id,
+                    session_id: who.session_id,
+                },
+                Json(dto::ChangePasswordReq {
+                    current_password: current.into(),
+                    new_password: "new-password".into(),
+                }),
+            )
+        };
+        for _ in 0..5 {
+            assert_eq!(
+                attempt("wrong").await.unwrap_err().0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        let err = attempt("old-password").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(err.2.is_some());
+        assert!(can_login(&pool, "c@t.local", "old-password").await);
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -5067,6 +5166,9 @@ pub(crate) mod auth_tests {
         let who = principal_for(&pool, "c@t.local", "old-password").await;
         let err = change_password(
             State(pool.clone()),
+            no_throttle(),
+            axum::http::HeaderMap::new(),
+            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
             who,
             Json(dto::ChangePasswordReq {
                 current_password: "old-password".into(),

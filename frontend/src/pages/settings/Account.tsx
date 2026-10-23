@@ -287,7 +287,6 @@ export function SettingsAccount() {
 
       {deleteOpen && (
         <DeleteAccountModal
-          email={user?.email ?? ""}
           onClose={() => setDeleteOpen(false)}
           onDeleted={onDeleted}
         />

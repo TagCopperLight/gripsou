@@ -316,7 +316,7 @@
       "deleteAccountDescription": "Supprimer définitivement votre compte et toutes ses données. Cette action est irréversible.",
       "deleteAccountTitle": "Supprimer votre compte ?",
       "deleteAccountBody": "Votre compte, vos connexions et toutes les données synchronisées seront définitivement supprimés. Cette action est irréversible.",
-      "deleteAccountConfirmLabel": "Saisissez {{email}} pour confirmer",
+      "deleteAccountConfirmLabel": "Saisissez votre mot de passe pour confirmer",
       "deleteAccountConfirm": "Supprimer mon compte",
       "deleteAccountPending": "Suppression…",
       "deleteAccountError": "Impossible de supprimer votre compte",
@@ -354,7 +354,9 @@
       "reset": {
         "title": "Réinitialiser le mot de passe",
         "heading": "Envoyez ce lien à usage unique",
-        "body": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut servir qu'une fois."
+        "body": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut servir qu'une fois.",
+        "create": "Créer le lien",
+        "confirm": "Saisissez votre mot de passe pour créer un lien de réinitialisation pour {{name}}. S'en servir désactive aussi sa double authentification et supprime ses clés d'accès."
       },
       "removeUser": {
         "title": "Supprimer {{name}}",

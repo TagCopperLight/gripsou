@@ -316,7 +316,7 @@ describe("SettingsAccount delete account", () => {
     navigateSpy.mockReset();
   });
 
-  it("requires the typed email to match before deleting", async () => {
+  it("asks for the password before deleting", async () => {
     stubFetch(false);
     render(withClient(<SettingsAccount />));
     await twoFactorSwitch();
@@ -324,12 +324,9 @@ describe("SettingsAccount delete account", () => {
 
     const confirm = screen.getByRole("button", { name: "Delete my account" });
     expect(confirm).toBeDisabled();
-
-    const input = screen.getByLabelText(/type .* to confirm/i);
-    fireEvent.change(input, { target: { value: "wrong@gripsou.local" } });
-    expect(confirm).toBeDisabled();
-
-    fireEvent.change(input, { target: { value: "jules@gripsou.local" } });
+    fireEvent.change(screen.getByLabelText(/enter your password to confirm/i), {
+      target: { value: "hunter22" },
+    });
     expect(confirm).toBeEnabled();
   });
 
@@ -338,8 +335,8 @@ describe("SettingsAccount delete account", () => {
     render(withClient(<SettingsAccount />));
     await twoFactorSwitch();
     fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
-    fireEvent.change(screen.getByLabelText(/type .* to confirm/i), {
-      target: { value: "jules@gripsou.local" },
+    fireEvent.change(screen.getByLabelText(/enter your password to confirm/i), {
+      target: { value: "hunter22" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
 
@@ -348,7 +345,7 @@ describe("SettingsAccount delete account", () => {
     await waitFor(() => expect(logoutSpy).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/account",
-      expect.objectContaining({ method: "DELETE" }),
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ password: "hunter22" }) }),
     );
     expect(navigateSpy).toHaveBeenCalledWith({ to: "/login" });
   });

@@ -273,9 +273,9 @@ export function useChangePassword() {
 
 export function useDeleteAccount() {
   return useMutation({
-    // The email is re-typed by the user and verified server-side before the
-    // account (and all its data) is permanently deleted.
-    mutationFn: (email: string) => deleteJson<void>("/auth/account", { email }),
+    // The password is checked server-side (throttled like login) before the
+    // account and all its data are permanently deleted.
+    mutationFn: (password: string) => deleteJson<void>("/auth/account", { password }),
   });
 }
 
@@ -538,7 +538,8 @@ export function useCreateInvite() {
 
 export function useCreateResetLink() {
   return useMutation({
-    mutationFn: (id: string) => postJson<{ token: string }>(`/users/${id}/reset-link`, {}),
+    mutationFn: ({ id, reauth }: { id: string; reauth: string }) =>
+      postJson<{ token: string }>(`/users/${id}/reset-link`, { reauth }, KEEP_SESSION),
   });
 }
 
