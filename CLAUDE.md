@@ -123,7 +123,7 @@ Every info-and-above line from gripsou's crates is printed *and* saved to the `l
 - **Message** is a fixed lowercase phrase (`sync finished`, `price fetch failed`); every variable is a field. Shared names: `connection_id`, `user_id`, `provider`, `instrument_id`, `step`, `trigger`, `outcome`, `duration_ms`, `error`, `reason`, `count`.
 - **Levels:** error = someone must look / work was lost; warn = degraded but recovered; info = something happened; debug = routine, not saved.
 - **Errors** go in `error = %gripsou_core::logs::error_chain(&e)`, logged once where handled.
-- **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names.
+- **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names. Log `user_id` once the user is known; an email only at the password step, where the account may not exist.
 - **Spans** carry the operation: `sync` (`sync_id`, `connection_id`, `user_id`, `provider`, `trigger`), `ai_run` (`user_id`, `run_id`, `model`), `sweep` (`name`), `request` (`request_id`, `route`, `user_id`). Spawned work must be `.instrument(...)`-ed or it loses them.
 - **The subscriber is installed by `gripsou_core::logs::install`, never `.init()`**: `.init()` adds the `log`-crate bridge, whose checks (sqlx makes one per query) made the per-output filters drop the next line, in the terminal too. `core/tests/logs_install.rs` pins it.
 - **The terminal shows UUIDs cut to 8 characters** (`core/src/logs/terminal.rs`); the saved log keeps them whole, so match a copied one with `like '1fe32d5a%'`.

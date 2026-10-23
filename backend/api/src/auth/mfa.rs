@@ -64,7 +64,7 @@ pub(crate) async fn check_password(
     let ip = client_ip(headers, peer);
     if let Err(blocked) = throttle.try_attempt(&profile.email, &ip, std::time::Instant::now()) {
         if blocked.first_refusal {
-            tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+            tracing::warn!(user_id = %user_id, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
         }
         return Err(blocked.into());
     }
@@ -177,7 +177,7 @@ pub async fn totp_confirm(
         .ok_or(ApiError::Unauthorized)?;
     if let Err(blocked) = sf_throttle.try_attempt(&profile.email, std::time::Instant::now()) {
         if blocked.first_refusal {
-            tracing::warn!(email = %profile.email, user_id = %user_id, reason = blocked.reason.as_str(), "login throttled");
+            tracing::warn!(user_id = %user_id, reason = blocked.reason.as_str(), "login throttled");
         }
         return Err(blocked.into());
     }

@@ -121,7 +121,7 @@ pub async fn login_verify(
         sf_throttle.try_login(&throttle, &profile.email, &ip, std::time::Instant::now())
     {
         if blocked.first_refusal {
-            tracing::warn!(email = %profile.email, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
+            tracing::warn!(user_id = %user_id, ip = %ip, reason = blocked.reason.as_str(), "login throttled");
         }
         return Err(blocked.into());
     }
@@ -162,7 +162,7 @@ pub async fn login_verify(
     };
     let Some((method, remaining)) = method else {
         drop(tx);
-        tracing::warn!(email = %profile.email, ip = %ip, user_agent, step = "second_factor", "login failed");
+        tracing::warn!(user_id = %user_id, ip = %ip, user_agent, step = "second_factor", "login failed");
         return Err(ApiError::bad_request("invalid code"));
     };
     tx.commit().await?;
@@ -484,6 +484,32 @@ mod tests {
         let _ = verify(&pool, &throttle, &ch, Some(now_code(&secret)), None)
             .await
             .expect("right code on the same challenge");
+    }
+
+    /// Once the password is past, a failure names the user, not the email.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_failed_second_step_is_saved_with_the_user_id(pool: PgPool) {
+        let (_g, mut writer) = gripsou_core::logs::capture(1000);
+        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let (secret, _) = enable_totp(&pool, uid).await;
+        let throttle = Throttles::default();
+        let ch = mfa_challenge(&pool, &throttle, false).await;
+        let wrong = if now_code(&secret) == "000000" {
+            "000001"
+        } else {
+            "000000"
+        };
+        let _ = verify(&pool, &throttle, &ch, Some(wrong.into()), None).await;
+        writer.flush(&pool).await;
+
+        let fields: serde_json::Value = sqlx::query_scalar(
+            "select fields from log where message = 'login failed' and fields->>'step' = 'second_factor'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(fields["user_id"], uid.to_string());
+        assert!(fields.get("email").is_none());
     }
 
     #[sqlx::test(migrations = "../migrations")]
