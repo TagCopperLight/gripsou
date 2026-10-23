@@ -172,7 +172,7 @@ async fn other_users_data_is_not_loaded(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn a_missing_reporting_rate_leaves_the_amount_unknown(pool: PgPool) {
     let (user_id, _account_id, holding_id) = seed(&pool, "1").await;
-    sqlx::query("update users set prefs = prefs || '{\"currency\":\"USD\"}' where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await

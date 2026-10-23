@@ -4,7 +4,7 @@
 use uuid::Uuid;
 
 use crate::error::CoreError;
-use crate::repo::prefs::UserPrefs;
+use crate::repo::prefs::{DisplayPrefs, UserPrefs};
 
 /// Row needed to authenticate a login: the hash to verify plus the profile the
 /// client needs to render the session.
@@ -26,7 +26,8 @@ pub async fn credentials_by_email(
     let row = sqlx::query!(
         r#"select id, password_hash, name, email, role,
                   welcomed_at is not null as "welcome_done!",
-                  prefs as "prefs!: sqlx::types::Json<UserPrefs>"
+                  prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
+                  currency, time_zone, budget_ai_enabled, budget_ai_threshold
            from users where email = $1"#,
         email,
     )
@@ -38,7 +39,13 @@ pub async fn credentials_by_email(
         name: r.name,
         email: r.email,
         role: r.role,
-        prefs: r.prefs.0,
+        prefs: UserPrefs {
+            display: r.prefs.0,
+            currency: r.currency,
+            time_zone: r.time_zone,
+            budget_ai_enabled: r.budget_ai_enabled,
+            budget_ai_threshold: r.budget_ai_threshold as u8,
+        },
         welcome_done: r.welcome_done,
     }))
 }
@@ -72,7 +79,8 @@ pub async fn profile_by_id(
     let row = sqlx::query!(
         r#"select id, name, email, role,
                   welcomed_at is not null as "welcome_done!",
-                  prefs as "prefs!: sqlx::types::Json<UserPrefs>"
+                  prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
+                  currency, time_zone, budget_ai_enabled, budget_ai_threshold
            from users where id = $1"#,
         user_id,
     )
@@ -83,7 +91,13 @@ pub async fn profile_by_id(
         name: r.name,
         email: r.email,
         role: r.role,
-        prefs: r.prefs.0,
+        prefs: UserPrefs {
+            display: r.prefs.0,
+            currency: r.currency,
+            time_zone: r.time_zone,
+            budget_ai_enabled: r.budget_ai_enabled,
+            budget_ai_threshold: r.budget_ai_threshold as u8,
+        },
         welcome_done: r.welcome_done,
     }))
 }
@@ -120,7 +134,8 @@ pub async fn update_profile(
         r#"update users set name = $2, email = $3 where id = $1
            returning id, name, email, role,
                      welcomed_at is not null as "welcome_done!",
-                     prefs as "prefs!: sqlx::types::Json<UserPrefs>""#,
+                     prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
+                  currency, time_zone, budget_ai_enabled, budget_ai_threshold"#,
         user_id,
         name,
         email,
@@ -132,7 +147,13 @@ pub async fn update_profile(
         name: r.name,
         email: r.email,
         role: r.role,
-        prefs: r.prefs.0,
+        prefs: UserPrefs {
+            display: r.prefs.0,
+            currency: r.currency,
+            time_zone: r.time_zone,
+            budget_ai_enabled: r.budget_ai_enabled,
+            budget_ai_threshold: r.budget_ai_threshold as u8,
+        },
         welcome_done: r.welcome_done,
     }))
 }
@@ -201,7 +222,6 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn profile_returns_default_prefs_for_empty_jsonb(pool: PgPool) -> anyhow::Result<()> {
         let id = Uuid::new_v4();
-        // No prefs column set -> DB default '{}'.
         sqlx::query(
             "insert into users (id, email, name, password_hash, role) \
              values ($1, 'p@t.local', 'Pia', 'hash', 'user')",
@@ -211,11 +231,13 @@ mod tests {
         .await?;
 
         let profile = profile_by_id(&pool, id).await?.unwrap();
-        assert_eq!(profile.prefs.ui_language, "en");
+        assert_eq!(profile.prefs.display.ui_language, "en");
         assert_eq!(profile.prefs.currency, "EUR");
+        assert_eq!(profile.prefs.time_zone, "Europe/Paris");
+        assert_eq!(profile.prefs.budget_ai_threshold, 70);
 
         let creds = credentials_by_email(&pool, "p@t.local").await?.unwrap();
-        assert_eq!(creds.prefs.number_decimal_sep, ",");
+        assert_eq!(creds.prefs.display.number_decimal_sep, ",");
         Ok(())
     }
 

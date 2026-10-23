@@ -40,7 +40,7 @@ pub async fn seed(pool: &PgPool, c: &FixtureConfig) -> Result<Fixture> {
     pool.execute(AssertSqlSafe("create function bench_id(k integer,u integer,i bigint) returns uuid language sql immutable as $$select (lpad(to_hex(k),8,'0')||lpad(to_hex(u),8,'0')||lpad(to_hex(i),16,'0'))::uuid$$".to_string())).await?;
     sqlx::query("insert into provider(key,display_name,kind,enabled) values ('bench','Benchmark','account',false)").execute(pool).await?;
     sqlx::query("update app_settings set enabled_providers='{}',base_currency='EUR',budget_ai_provider=null").execute(pool).await?;
-    sqlx::query("insert into users(id,email,name,password_hash,prefs,welcomed_at) select bench_id(1,u,0),'bench-'||u||'@example.invalid','Benchmark '||u,'unusable',jsonb_build_object('currency',$2::text,'timeZone','Europe/Paris'),now() from generate_series(0,$1::int-1) u")
+    sqlx::query("insert into users(id,email,name,password_hash,currency,time_zone,welcomed_at) select bench_id(1,u,0),'bench-'||u||'@example.invalid','Benchmark '||u,'unusable',$2::text,'Europe/Paris',now() from generate_series(0,$1::int-1) u")
         .bind(c.users as i32).bind(&c.reporting_currency).execute(pool).await?;
     // Seed triggers use random category IDs; replace before any references exist.
     sqlx::query("delete from budget_category")

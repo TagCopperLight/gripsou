@@ -98,7 +98,7 @@ async fn ensure_cash_instruments_for_held_currencies(
             -- of the arms above reach it, and without this the rate is never
             -- fetched: reporting_fx_asof falls back to 1 and every figure stays
             -- in the pivot while wearing the chosen currency's symbol.
-            select u.prefs->>'currency'
+            select u.currency
             from connection c
             join users u on u.id = c.user_id
             where c.id = $1

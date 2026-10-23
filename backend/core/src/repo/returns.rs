@@ -79,7 +79,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
                (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                      else l.quantity * l.unit_price - l.fee end)
                  * fx_asof(a.currency, l.acquired_on)
-                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), l.acquired_on), 0) as "amount?"
+                 / nullif(fx_asof((select currency from users where id = $1), l.acquired_on), 0) as "amount?"
         from lot l
         join holding h    on h.id = l.holding_id
         join account a    on a.id = h.account_id
@@ -90,7 +90,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         select null::uuid, t.account_id,
                coalesce(t.booked_on, t.ts::date),
                t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.ts::date))
-                 / nullif(fx_asof((select coalesce(u.prefs->>'currency', 'EUR') from users u where u.id = $1), coalesce(t.booked_on, t.ts::date)), 0)
+                 / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, t.ts::date)), 0)
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id

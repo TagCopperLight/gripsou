@@ -21,12 +21,13 @@ async fn today_uses_each_users_zone_and_dst(pool: PgPool) -> anyhow::Result<()> 
             "2027-01-01",
         ),
     ] {
-        sqlx::query("update users set prefs = $2 where id = $1")
+        let set = match zone {
+            Some(_) => "update users set time_zone = $2 where id = $1",
+            None => "update users set time_zone = default where id = $1 and $2::text is null",
+        };
+        sqlx::query(set)
             .bind(user)
-            .bind(zone.map_or(
-                serde_json::json!({}),
-                |z| serde_json::json!({"timeZone": z}),
-            ))
+            .bind(zone)
             .execute(&pool)
             .await?;
         let now: DateTime<Utc> = instant.parse()?;
@@ -57,7 +58,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
     )
     .fetch_one(&pool)
     .await?;
-    sqlx::query("update users set prefs = jsonb_build_object('timeZone', $2::text) where id = $1")
+    sqlx::query("update users set time_zone = $2 where id = $1")
         .bind(user)
         .bind(zone)
         .execute(&pool)

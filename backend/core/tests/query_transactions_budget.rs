@@ -788,7 +788,7 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
     rate_on(&pool, usd, day(2026, 3, 2), Decimal::ZERO).await;
     rate_on(&pool, usd, day(2026, 3, 3), Decimal::new(3, 1)).await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
-    sqlx::query("update users set prefs = prefs || '{\"currency\":\"USD\"}' where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;

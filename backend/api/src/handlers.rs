@@ -1145,7 +1145,13 @@ pub async fn update_prefs(
             "timeZone must be a recognized IANA timezone".to_string(),
         ));
     }
-    if let Some(avatar) = &prefs.avatar {
+    if !gripsou_core::repo::prefs::valid_currency(&prefs.currency) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "currency must be an ISO 4217 code".to_string(),
+        ));
+    }
+    if let Some(avatar) = &prefs.display.avatar {
         if !avatar.starts_with("data:image/") {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -2863,7 +2869,6 @@ pub(crate) mod auth_tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_persists_and_me_reflects_it(pool: PgPool) {
-        use gripsou_core::repo::prefs::UserPrefs;
         seed_user_role(&pool, "a@t.local", "pw", "user").await;
         let token = login_token(&pool, "a@t.local", "pw").await;
         let session =
@@ -2876,13 +2881,11 @@ pub(crate) mod auth_tests {
             session_id: session.id,
         };
 
-        let next = UserPrefs {
-            ui_language: "fr".into(),
-            currency: "USD".into(),
-            currency_position: "before".into(),
-            time_zone: "America/Los_Angeles".into(),
-            ..Default::default()
-        };
+        let mut next = prefs_of(&pool, principal.user_id).await;
+        next.display.ui_language = "fr".into();
+        next.display.currency_position = "before".into();
+        next.currency = "USD".into();
+        next.time_zone = "America/Los_Angeles".into();
 
         let updated = update_prefs(
             State(pool.clone()),
@@ -2894,7 +2897,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .expect("update prefs ok");
-        assert_eq!(updated.0.prefs.ui_language, "fr");
+        assert_eq!(updated.0.prefs.display.ui_language, "fr");
         assert_eq!(updated.0.prefs.currency, "USD");
 
         // Persisted: a fresh /auth/me sees the new prefs.
@@ -2907,7 +2910,7 @@ pub(crate) mod auth_tests {
         )
         .await
         .unwrap();
-        assert_eq!(me_resp.0.prefs.currency_position, "before");
+        assert_eq!(me_resp.0.prefs.display.currency_position, "before");
         assert_eq!(me_resp.0.prefs.time_zone, "America/Los_Angeles");
     }
 
@@ -3624,32 +3627,48 @@ pub(crate) mod auth_tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn update_prefs_rejects_invalid_timezone_without_writing(pool: PgPool) {
+    async fn update_prefs_rejects_invalid_timezone_or_currency_without_writing(pool: PgPool) {
         let user_id = seed_user_role(&pool, "tz@example.com", "pw", "user").await;
-        for zone in ["", "Europe/NotAPlace", "+02:00", "posix/Europe/Paris"] {
+        let before = prefs_of(&pool, user_id).await;
+        let zones = ["", "Europe/NotAPlace", "+02:00", "posix/Europe/Paris"].map(|zone| {
+            let mut p = before.clone();
+            p.time_zone = zone.to_string();
+            p
+        });
+        let currencies = ["usd", "EURO", ""].map(|code| {
+            let mut p = before.clone();
+            p.currency = code.to_string();
+            p
+        });
+        for prefs in zones.into_iter().chain(currencies) {
+            let label = format!("{} {}", prefs.time_zone, prefs.currency);
             let result = update_prefs(
                 State(pool.clone()),
                 auth::AuthUser {
                     user_id,
                     session_id: Uuid::new_v4(),
                 },
-                Json(gripsou_core::repo::prefs::UserPrefs {
-                    time_zone: zone.to_string(),
-                    ..Default::default()
-                }),
+                Json(prefs),
             )
             .await;
             assert!(
                 matches!(result, Err((StatusCode::BAD_REQUEST, _))),
-                "{zone}"
+                "{label}"
             );
         }
-        let stored: serde_json::Value = sqlx::query_scalar("select prefs from users where id = $1")
-            .bind(user_id)
-            .fetch_one(&pool)
+        let after = prefs_of(&pool, user_id).await;
+        assert_eq!(
+            (after.time_zone, after.currency),
+            (before.time_zone, before.currency)
+        );
+    }
+
+    async fn prefs_of(pool: &PgPool, user_id: Uuid) -> gripsou_core::repo::prefs::UserPrefs {
+        gripsou_core::repo::user::profile_by_id(pool, user_id)
             .await
-            .unwrap();
-        assert_eq!(stored, serde_json::json!({}));
+            .unwrap()
+            .unwrap()
+            .prefs
     }
 
     #[test]
@@ -3675,10 +3694,8 @@ pub(crate) mod auth_tests {
         let session_id = session.id;
 
         // Non-image data URL rejected.
-        let mut prefs = gripsou_core::repo::prefs::UserPrefs {
-            avatar: Some("data:text/html,<script>".to_string()),
-            ..Default::default()
-        };
+        let mut prefs = prefs_of(&pool, user_id).await;
+        prefs.display.avatar = Some("data:text/html,<script>".to_string());
         let bad = update_prefs(
             State(pool.clone()),
             auth::AuthUser {
@@ -3691,7 +3708,7 @@ pub(crate) mod auth_tests {
         assert!(matches!(bad, Err((StatusCode::BAD_REQUEST, _))));
 
         // Oversized avatar rejected.
-        prefs.avatar = Some(format!("data:image/webp;base64,{}", "A".repeat(200 * 1024)));
+        prefs.display.avatar = Some(format!("data:image/webp;base64,{}", "A".repeat(200 * 1024)));
         let big = update_prefs(
             State(pool.clone()),
             auth::AuthUser {
@@ -3704,7 +3721,7 @@ pub(crate) mod auth_tests {
         assert!(matches!(big, Err((StatusCode::BAD_REQUEST, _))));
 
         // Valid small avatar accepted.
-        prefs.avatar = Some("data:image/webp;base64,UklGRg==".to_string());
+        prefs.display.avatar = Some("data:image/webp;base64,UklGRg==".to_string());
         let ok = update_prefs(
             State(pool.clone()),
             auth::AuthUser {

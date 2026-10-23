@@ -1162,12 +1162,11 @@ mod open_gate_tests {
 
     const AVAILABLE: &[&str] = &["gemini"];
 
-    /// Insert a user whose prefs carry `budgetAiEnabled = opted_in`.
+    /// Insert a user with `budget_ai_enabled = opted_in`.
     async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
         sqlx::query_scalar(
-            "insert into users (email, name, password_hash, prefs) \
-             values (gen_random_uuid()::text || '@t.local', 'Test', 'x', \
-                     jsonb_build_object('budgetAiEnabled', $1::boolean)) \
+            "insert into users (email, name, password_hash, budget_ai_enabled) \
+             values (gen_random_uuid()::text || '@t.local', 'Test', 'x', $1) \
              returning id",
         )
         .bind(opted_in)

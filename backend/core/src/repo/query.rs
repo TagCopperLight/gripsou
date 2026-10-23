@@ -76,7 +76,7 @@ pub async fn net_worth_series_with_target(
         --               instrument);
         --   amount    — `account.currency`, which is what the provider denominates
         --               snapshot.value in, hence the afx join on that branch;
-        --   reporting — `users.prefs.currency`, applied once by the final divide.
+        --   reporting — `users.currency`, applied once by the final divide.
         -- `instrument.currency` is the quote currency of the security and is none
         -- of the three: a USD-quoted stock inside a EUR account has a EUR cost
         -- basis.
@@ -102,7 +102,7 @@ pub async fn net_worth_series_with_target(
         fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
         rep  as materialized (
             select as_of, unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         ),
         -- The invested line, from the one definition (0022). `materialized` for
         -- the same reason the grid is: inlined, this would be re-executed per
@@ -533,7 +533,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
         rep as materialized (
             select unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         ),
         latest as (
             select distinct on (hs.holding_id)
@@ -639,7 +639,7 @@ pub async fn account_series_with_target(
         fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
         rep  as materialized (
             select as_of, unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         )
         select a.id   as "account_id!",
                a.name as "name!",
@@ -772,7 +772,7 @@ pub async fn distribution(
         fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
         rep as materialized (
             select unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         ),
         latest as (
             select distinct on (hs.holding_id)
@@ -1006,7 +1006,7 @@ pub async fn transactions(
             where kind = 'cash'
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         )
         select id as "id!", ts as "ts!", kind as "kind!", description, amount as "amount!",
                -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
@@ -1147,7 +1147,7 @@ pub async fn transaction_counts(
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         ),
         -- One FX row per needed day and account currency, with both legs.
         -- Keeping reporting FX on the same row avoids a separate join whose
@@ -1378,7 +1378,7 @@ pub async fn price_eligible_instruments_for_connection(
             -- back to the pivot forever. Its cash instrument is created by
             -- ensure_cash_instruments_for_held_currencies, which unions the
             -- same arm.
-            select u.prefs->>'currency'
+            select u.currency
             from connection c
             join users u on u.id = c.user_id
             where c.id = $1

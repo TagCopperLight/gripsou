@@ -727,7 +727,7 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
     .fetch_one(&pool)
     .await?;
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
-    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;
@@ -2253,7 +2253,7 @@ async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow
     // Switch to a currency no rate exists for. The figure stays 100 — it is
     // euros — and that is exactly what makes the flag necessary: without it the
     // UI renders "$100" for 100 EUR.
-    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;

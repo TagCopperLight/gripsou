@@ -183,7 +183,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
         .fetch_one(&pool)
         .await?;
 
-    // No prefs.currency yet → defaults to EUR → divisor 1.
+    // The default currency is the pivot: divisor 1.
     let d: Option<Decimal> = sqlx::query_scalar("select reporting_fx_asof($1, $2)")
         .bind(user_id)
         .bind(day(2026, 8, 14))
@@ -202,7 +202,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
         "EUR",
     )
     .await?;
-    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;
@@ -214,7 +214,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
     assert_eq!(d, Some("0.90".parse()?));
 
     // Reporting in a currency with no rate → 1, i.e. report in the pivot.
-    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"CNY\"') where id = $1")
+    sqlx::query("update users set currency = 'CNY' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;
@@ -266,7 +266,7 @@ async fn reporting_fx_degraded_is_false_when_the_conversion_really_happened(
         "EUR",
     )
     .await?;
-    sqlx::query("update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"') where id = $1")
+    sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;

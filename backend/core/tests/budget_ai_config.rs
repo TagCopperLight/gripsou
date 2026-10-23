@@ -33,13 +33,13 @@ async fn the_schema_does_not_list_providers(pool: PgPool) -> anyhow::Result<()> 
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn threshold_and_opt_in_come_from_prefs(pool: PgPool) -> anyhow::Result<()> {
+async fn threshold_and_opt_in_come_from_the_users_row(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed_user_and_connection(&pool).await;
     assert_eq!(review_threshold(&pool, user_id).await?, Decimal::new(70, 2));
     assert!(!budget_ai_enabled(&pool, user_id).await?);
 
     sqlx::query(
-        "update users set prefs = '{\"budgetAiEnabled\":true,\"budgetAiThreshold\":65}' where id = $1",
+        "update users set budget_ai_enabled = true, budget_ai_threshold = 65 where id = $1",
     )
     .bind(user_id)
     .execute(&pool)

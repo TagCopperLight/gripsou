@@ -151,7 +151,7 @@ async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_i
     .await?;
     // An all-EUR install whose owner reads in dollars.
     sqlx::query(
-        "update users set prefs = jsonb_set(prefs, '{currency}', '\"USD\"')
+        "update users set currency = 'USD'
          where id = (select user_id from connection where id = $1)",
     )
     .bind(conn_id)

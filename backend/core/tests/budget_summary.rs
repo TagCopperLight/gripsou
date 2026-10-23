@@ -34,17 +34,14 @@ async fn cat(pool: &PgPool, user_id: Uuid, key: &str) -> Uuid {
         .id
 }
 
-/// Set the user's reporting currency, the same `prefs->>'currency'` the query
-/// reads.
+/// Set the user's reporting currency.
 async fn set_reporting_currency(pool: &PgPool, user_id: Uuid, currency: &str) {
-    sqlx::query(
-        "update users set prefs = jsonb_set(coalesce(prefs, '{}'::jsonb), '{currency}', to_jsonb($2::text)) where id = $1",
-    )
-    .bind(user_id)
-    .bind(currency)
-    .execute(pool)
-    .await
-    .unwrap();
+    sqlx::query("update users set currency = $2 where id = $1")
+        .bind(user_id)
+        .bind(currency)
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 #[sqlx::test(migrations = "../migrations")]

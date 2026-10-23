@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, name, email, role,\n                  welcomed_at is not null as \"welcome_done!\",\n                  prefs as \"prefs!: sqlx::types::Json<UserPrefs>\"\n           from users where id = $1",
+  "query": "select id, name, email, role,\n                  welcomed_at is not null as \"welcome_done!\",\n                  prefs as \"prefs!: sqlx::types::Json<DisplayPrefs>\",\n                  currency, time_zone, budget_ai_enabled, budget_ai_threshold\n           from users where id = $1",
   "describe": {
     "columns": [
       {
@@ -55,12 +55,56 @@
       },
       {
         "ordinal": 5,
-        "name": "prefs!: sqlx::types::Json<UserPrefs>",
+        "name": "prefs!: sqlx::types::Json<DisplayPrefs>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
             "table": "users",
             "name": "prefs"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "currency",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "budget_ai_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "budget_ai_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_threshold"
           }
         }
       }
@@ -76,8 +120,12 @@
       false,
       false,
       null,
+      false,
+      false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "e6a8e99e9708ecb3bbf0305a28d41ef5fbff37e2b9706a0c9252ac4184254304"
+  "hash": "62d6e7d6923720d22c81b42f5983f80fbd1ad89e2d9d98ba622d658e49124221"
 }

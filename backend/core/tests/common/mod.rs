@@ -20,7 +20,7 @@ pub async fn seed_connection(pool: &PgPool) -> Uuid {
 /// under it (the backfill horizon is user-wide).
 pub async fn seed_user_and_connection(pool: &PgPool) -> (Uuid, Uuid) {
     let user_id = Uuid::new_v4();
-    sqlx::query("insert into users (id, email, name, password_hash, prefs) values ($1, $2, 'Test', 'x', '{\"timeZone\":\"UTC\"}')")
+    sqlx::query("insert into users (id, email, name, password_hash, time_zone) values ($1, $2, 'Test', 'x', 'UTC')")
         .bind(user_id)
         .bind(format!("u-{user_id}@test.local"))
         .execute(pool)

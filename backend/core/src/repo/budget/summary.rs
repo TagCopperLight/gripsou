@@ -124,7 +124,7 @@ pub async fn day_category_totals(
             where kind = 'cash'
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         )
         select b.day as "day!",
                b.category_id as "category_id?",
