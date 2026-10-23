@@ -7,15 +7,28 @@ use tower::ServiceExt;
 fn test_key() -> gripsou_api::TotpKey {
     gripsou_api::TotpKey::parse(Some(&"a".repeat(64))).unwrap()
 }
+fn test_passkeys() -> gripsou_api::Passkeys {
+    gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap()
+}
+
 #[tokio::test]
 async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
+    // Short wait: a route reaching the database fails fast instead of
+    // retrying the connection for the default 30 s.
     let db = sqlx::postgres::PgPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(1))
         .connect_lazy("postgres://unused:unused@localhost/unused")
         .unwrap();
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, vec!["http://example.test".into()], test_key());
+    let app = gripsou_api::router(
+        db,
+        &dir,
+        vec!["http://example.test".into()],
+        test_key(),
+        test_passkeys(),
+    );
     for (path, status) in [
         ("/api/health", StatusCode::OK),
         ("/api/holdings", StatusCode::UNAUTHORIZED),
@@ -59,6 +72,20 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
         .await
         .unwrap();
     assert_eq!(r.headers()["access-control-expose-headers"], "retry-after");
+    // Passwordless sign-in starts without a session (the unused pool makes
+    // it fail later, but never as unauthorised).
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/passkey/options")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(r.status(), StatusCode::UNAUTHORIZED);
     let r = app
         .oneshot(
             Request::builder()
@@ -90,7 +117,7 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
         "console.log(1);".repeat(100),
     )
     .unwrap();
-    let app = gripsou_api::router(db, &dir, vec![], test_key());
+    let app = gripsou_api::router(db, &dir, vec![], test_key(), test_passkeys());
     let get = |path: &str| {
         Request::builder()
             .uri(path)
@@ -134,7 +161,7 @@ async fn every_response_carries_the_security_headers() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, vec![], test_key());
+    let app = gripsou_api::router(db, &dir, vec![], test_key(), test_passkeys());
 
     for path in ["/api/health", "/api/holdings", "/", "/some/spa/route"] {
         let r = app
@@ -178,7 +205,13 @@ async fn totp_setup_without_a_token_is_unauthorized() {
     let db = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy("postgres://unused:unused@localhost/unused")
         .unwrap();
-    let app = gripsou_api::router(db, std::path::Path::new("/nonexistent"), vec![], test_key());
+    let app = gripsou_api::router(
+        db,
+        std::path::Path::new("/nonexistent"),
+        vec![],
+        test_key(),
+        test_passkeys(),
+    );
     let r = app
         .oneshot(
             Request::builder()

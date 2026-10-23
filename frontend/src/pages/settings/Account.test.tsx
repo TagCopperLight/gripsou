@@ -51,6 +51,7 @@ const authValue: AuthValue = {
   isBootstrapping: false,
   prefs: DEFAULT_PREFS,
   login: vi.fn(),
+  loginWithPasskey: vi.fn(),
   verifyLogin: vi.fn(),
   adoptSession: () => {},
   logout: logoutSpy,
@@ -73,11 +74,15 @@ type Reply = () => Response;
 
 /** A fetch that answers `/auth/mfa/status` with the given two-factor state and
  *  any other path from `routes` (by path, after the `/api` prefix), else 204. */
-function stubFetch(totp: boolean, routes: Record<string, Reply> = {}) {
+function stubFetch(
+  totp: boolean,
+  routes: Record<string, Reply> = {},
+  passkeys: { id: string; name: string; createdAt: number; lastUsedAt: number | null }[] = [],
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input).replace(/^\/api/, "");
     if (path === "/auth/mfa/status") {
-      return new Response(JSON.stringify({ totp, recoveryRemaining: 10 }), { status: 200 });
+      return new Response(JSON.stringify({ totp, recoveryRemaining: 10, passkeys }), { status: 200 });
     }
     const reply = routes[path];
     return reply ? reply() : new Response(null, { status: 204 });
@@ -162,6 +167,57 @@ describe("SettingsAccount two-factor row", () => {
     ).toBeInTheDocument();
     // The window's backup-code count comes from the same status answer.
     expect(await screen.findByText("10 of 10 left")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount passkeys row", () => {
+  const PASSKEY = { id: "p1", name: "MacBook", createdAt: 1_760_000_000_000, lastUsedAt: null };
+  const passkeysIcon = (container: HTMLElement) => container.querySelector(".lucide-fingerprint");
+
+  it("shows a grey icon and only the add button when there are no passkeys", async () => {
+    stubFetch(false);
+    const { container } = render(withClient(<SettingsAccount />));
+    expect(screen.getByText("Passkeys")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add passkey" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+    const box = passkeysIcon(container)!.parentElement!;
+    expect(box).toHaveClass("bg-surface-3");
+    expect(box).not.toHaveClass("bg-green-soft");
+  });
+
+  it("shows a green icon and the gear when there are passkeys", async () => {
+    stubFetch(false, {}, [PASSKEY]);
+    const { container } = render(withClient(<SettingsAccount />));
+    expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add passkey" })).toBeInTheDocument();
+    const box = passkeysIcon(container)!.parentElement!;
+    expect(box).toHaveClass("bg-green-soft");
+    expect(box).not.toHaveClass("bg-surface-3");
+  });
+
+  it("opens the passkeys list from the gear", async () => {
+    stubFetch(false, {}, [PASSKEY]);
+    render(withClient(<SettingsAccount />));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getByRole("dialog", { name: "Passkeys" });
+    expect(await within(dialog).findByText("MacBook")).toBeInTheDocument();
+  });
+
+  it("opens the add window from the plus button", async () => {
+    stubFetch(false);
+    render(withClient(<SettingsAccount />));
+    fireEvent.click(await screen.findByRole("button", { name: "Add passkey" }));
+    expect(screen.getByRole("dialog", { name: "Add a passkey" })).toBeInTheDocument();
+  });
+
+  it("swaps the list for the add window when Add passkey is pressed inside the list", async () => {
+    stubFetch(false, {}, [PASSKEY]);
+    render(withClient(<SettingsAccount />));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getByRole("dialog", { name: "Passkeys" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add passkey" }));
+    expect(screen.queryByRole("dialog", { name: "Passkeys" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add a passkey" })).toBeInTheDocument();
   });
 });
 

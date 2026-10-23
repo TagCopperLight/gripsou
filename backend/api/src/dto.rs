@@ -1282,6 +1282,79 @@ pub struct ReauthTokenReq {
 pub struct MfaStatus {
     pub totp: bool,
     pub recovery_remaining: i64,
+    pub passkeys: Vec<PasskeyInfo>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyInfo {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
+}
+
+impl From<gripsou_core::repo::passkey::PasskeyRow> for PasskeyInfo {
+    fn from(r: gripsou_core::repo::passkey::PasskeyRow) -> Self {
+        PasskeyInfo {
+            id: r.id,
+            name: r.name,
+            created_at: r.created_at.timestamp_millis(),
+            last_used_at: r.last_used_at.map(|t| t.timestamp_millis()),
+        }
+    }
+}
+
+/// A WebAuthn ceremony to run in the browser: `options` is the
+/// `publicKey` member, as `@simplewebauthn/browser` takes it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyOptions {
+    pub challenge: String,
+    pub options: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyRegisterReq {
+    pub reauth: String,
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::RegisterPublicKeyCredential,
+}
+
+#[derive(Deserialize)]
+pub struct RenamePasskeyReq {
+    pub name: String,
+}
+
+/// Finish a passwordless sign-in.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeySignInReq {
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::PublicKeyCredential,
+    #[serde(default)]
+    pub remember: bool,
+}
+
+/// The second login step's challenge, to start a passkey ceremony on it.
+#[derive(Deserialize)]
+pub struct ChallengeReq {
+    pub challenge: String,
+}
+
+/// A passkey ceremony on the second login step: it rides on the step's own
+/// challenge, so only the `publicKey` options are sent.
+#[derive(Debug, Serialize)]
+pub struct PasskeyRequestOptions {
+    pub options: serde_json::Value,
+}
+
+/// Second login step with a passkey.
+#[derive(Deserialize)]
+pub struct LoginVerifyPasskeyReq {
+    pub challenge: String,
+    pub credential: webauthn_rs::prelude::PublicKeyCredential,
 }
 
 #[derive(Debug, Serialize)]

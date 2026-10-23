@@ -205,7 +205,14 @@
     }
   },
   "auth": {
+    "signInWithPasskey": "Se connecter avec une clé d'accès",
+    "usePassword": "Utiliser votre mot de passe",
     "mfa": {
+      "passkeyTitle": "Utilisez votre clé d'accès",
+      "useCode": "Utiliser votre code",
+      "usePasskey": "Utiliser une clé d'accès",
+      "or": "ou",
+      "passkeyRefused": "Cette clé d'accès n'a pas fonctionné. Réessayez.",
       "codeTitle": "Saisissez votre code",
       "backupTitle": "Saisissez un code de secours",
       "codeLabel": "Code à 6 chiffres",
@@ -876,5 +883,23 @@
     "turnOff": "Désactiver",
     "turnOffTitle": "Désactiver la double authentification ?",
     "turnOffBody": "Vous vous connecterez uniquement avec votre mot de passe."
+  },
+  "passkeys": {
+    "addTitle": "Ajouter une clé d'accès",
+    "waiting": "En attente de votre navigateur…",
+    "addedTitle": "Clé d'accès ajoutée",
+    "notAdded": "Aucune clé d'accès n'a été ajoutée",
+    "alreadyAdded": "Cet appareil a déjà une clé d'accès pour gripsou",
+    "tryAgain": "Réessayer",
+    "expired": "Cela a pris trop de temps. Saisissez à nouveau votre mot de passe.",
+    "title": "Clés d'accès",
+    "addPasskey": "Ajouter une clé d'accès",
+    "added": "Ajoutée le {{date}}",
+    "lastUsed": "Dernière utilisation : {{time}}",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "nameLabel": "Nom de la clé d'accès",
+    "deleteTitle": "Supprimer {{name}} ?",
+    "failed": "Une erreur s'est produite. Réessayez."
   }
 }

@@ -28,7 +28,9 @@ impl ServerHandle {
         let url = format!("http://{}", listener.local_addr()?);
         // Benchmarks never decrypt a second factor; any valid key will do.
         let key = gripsou_api::TotpKey::parse(Some(&"0".repeat(64))).map_err(anyhow::Error::msg)?;
-        let app = gripsou_api::router(pool.clone(), static_dir, vec![], key);
+        let passkeys = gripsou_api::Passkeys::parse(Some("http://localhost:5173"))
+            .map_err(anyhow::Error::msg)?;
+        let app = gripsou_api::router(pool.clone(), static_dir, vec![], key, passkeys);
         let (tx, rx) = oneshot::channel();
         let task = tokio::spawn(async move {
             axum::serve(

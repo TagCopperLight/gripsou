@@ -59,12 +59,13 @@ pub fn parse_user_agent(ua: &str) -> String {
     };
     let os = if ua.contains("Windows") {
         "Windows"
+    } else if ua.contains("iPhone") || ua.contains("iPad") {
+        // Their UAs also say "Mac OS X".
+        "iOS"
     } else if ua.contains("Mac OS X") || ua.contains("Macintosh") {
         "macOS"
     } else if ua.contains("Android") {
         "Android"
-    } else if ua.contains("iPhone") || ua.contains("iPad") {
-        "iOS"
     } else if ua.contains("Linux") {
         "Linux"
     } else {
@@ -337,6 +338,10 @@ mod tests {
             (KHTML, like Gecko) Chrome/120.0 Safari/537.36 Edg/120.0";
         assert_eq!(parse_user_agent(edge_win), "Edge on Windows");
 
+        let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+        assert_eq!(parse_user_agent(iphone), "Safari on iOS");
+        let ipad = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+        assert_eq!(parse_user_agent(ipad), "Safari on iOS");
         assert_eq!(parse_user_agent("weird"), "Unknown browser on Unknown OS");
     }
 

@@ -55,6 +55,27 @@ pub async fn find_valid(
     Ok(row)
 }
 
+/// Add keys to a live challenge's state without using it (the passkey
+/// ceremony started on the second login step). `false` when it is gone,
+/// expired or of another kind.
+pub async fn merge_state(
+    pool: &sqlx::PgPool,
+    token_hash: &[u8],
+    kind: &str,
+    patch: serde_json::Value,
+) -> Result<bool, CoreError> {
+    let res = sqlx::query!(
+        r#"update login_challenge set state = state || $3
+           where token_hash = $1 and kind = $2 and expires_at > now()"#,
+        token_hash,
+        kind,
+        patch,
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
 /// Use a challenge exactly once: a single atomic delete, so of two concurrent
 /// callers only one gets `Some`. `None` when it was already used, expired, or
 /// is of another kind (a wrong-kind call leaves the row alone). Runs on a pool
@@ -168,5 +189,39 @@ mod tests {
             .unwrap();
         assert_eq!(delete_expired(&pool).await.unwrap(), 1);
         assert!(find_valid(&pool, &[2], "mfa").await.unwrap().is_some());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn merge_state_adds_keys_to_a_live_challenge_of_that_kind(pool: PgPool) {
+        create(
+            &pool,
+            &[1],
+            None,
+            "mfa",
+            serde_json::json!({ "remember": true }),
+        )
+        .await
+        .unwrap();
+        assert!(
+            merge_state(&pool, &[1], "mfa", serde_json::json!({ "passkey": 1 }))
+                .await
+                .unwrap()
+        );
+        let c = find_valid(&pool, &[1], "mfa").await.unwrap().unwrap();
+        assert_eq!(
+            c.state,
+            serde_json::json!({ "remember": true, "passkey": 1 })
+        );
+        assert!(
+            !merge_state(&pool, &[1], "reauth", serde_json::json!({ "x": 1 }))
+                .await
+                .unwrap()
+        );
+        insert_expired(&pool, &[2], "mfa").await;
+        assert!(
+            !merge_state(&pool, &[2], "mfa", serde_json::json!({ "x": 1 }))
+                .await
+                .unwrap()
+        );
     }
 }

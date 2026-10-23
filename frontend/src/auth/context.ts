@@ -1,6 +1,13 @@
 import { createContext, useContext } from "react";
+import type { AuthenticationResponseJSON } from "@simplewebauthn/browser";
 import type { MfaRequired, SessionUser } from "../api/types";
+
 import type { UserPrefs } from "../lib/prefs";
+
+export type SecondFactor =
+  | { totp: string }
+  | { recoveryCode: string }
+  | { passkey: AuthenticationResponseJSON };
 
 export type AuthValue = {
   isAuthenticated: boolean;
@@ -10,10 +17,14 @@ export type AuthValue = {
   prefs: UserPrefs;
   /** `null` once signed in; the challenge when a second step is needed (nothing stored). */
   login: (email: string, password: string, remember: boolean) => Promise<MfaRequired | null>;
-  /** Finish a two-factor sign-in with an authenticator or backup code. */
+  /** Sign in with a passkey alone: asks the browser, then signs in. Throws
+   *  when the browser's window is cancelled or the server refuses it. */
+  loginWithPasskey: (remember: boolean) => Promise<void>;
+  /** Finish a two-factor sign-in with an authenticator code, a backup code
+   *  or a passkey's answer. */
   verifyLogin: (
     challenge: string,
-    code: { totp: string } | { recoveryCode: string },
+    code: SecondFactor,
     remember: boolean,
   ) => Promise<void>;
   /** Adopt a session returned by invite/reset redemption (auto-login). */
