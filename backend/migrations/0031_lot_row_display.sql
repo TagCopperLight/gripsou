@@ -1,15 +1,4 @@
--- Lot rows in the Transactions list name their instrument the way the
--- Holdings card does, and carry its logo.
---
--- The ticker used to fall back from `symbol` straight to the ISIN, so an
--- ISIN-identified instrument (symbol is null there by design) showed as
--- `US84615Q1031` while Holdings showed its resolved Yahoo ticker. Same
--- fallback as the holdings query now: symbol, then the resolved ticker in
--- meta, then the ISIN, then the name.
---
--- `logo_url` is appended rather than placed next to `ticker`: `add attribute`
--- only appends, and `budget_transaction_matches` returns `r.*` so it follows
--- the type without being touched.
+-- Lot rows show the resolved ticker and the instrument's logo.
 alter type budget_transaction_row add attribute logo_url text;
 
 create or replace function budget_transaction_rows(p_user uuid, p_threshold numeric)

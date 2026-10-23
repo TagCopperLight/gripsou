@@ -1,14 +1,6 @@
--- Saved application logs: every info-and-above line from gripsou's own
--- crates, written in batches by the in-process log writer, kept 90 days
--- (deleted by the scheduler's daily `logs` sweep).
---
--- `fields` holds the event's structured fields merged over those of every
--- enclosing span (innermost wins), plus `spans`: the span names, outermost
--- first. No foreign keys on purpose: a line about a deleted user or
--- connection must outlive it until it ages out.
---
--- Sync history is read from here: one `sync finished` line per sync, see
--- CLAUDE.md "Logs".
+-- Saved application logs. `fields` holds the event's fields merged over those
+-- of its enclosing spans, plus `spans`. No foreign keys: a line outlives the
+-- user or connection it is about.
 create table log (
     id      bigint generated always as identity primary key,
     at      timestamptz not null,

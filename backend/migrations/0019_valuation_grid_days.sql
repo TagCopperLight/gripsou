@@ -1,31 +1,17 @@
--- valuation_grid used to generate its own daily series from (p_from, p_to).
--- Its callers now sample their day axis down to a roughly constant number of
--- points, and a grid that kept generating every day would both waste the work
--- and, worse, silently disagree with the caller's axis — the join is on
--- equality of `as_of`, so a mismatch reads zero rather than failing.
---
--- Taking the days as an array removes the hazard by construction: the caller
--- computes the list once and both sides unnest the same one.
---
--- Body is otherwise unchanged from 0018.
+-- The caller passes its day axis, so both sides join on the same days.
 drop function if exists valuation_grid(uuid, date, date);
 
 create function valuation_grid(p_user uuid, p_days date[])
 returns table (as_of date, instrument_id uuid, kind text, currency text, unit_value numeric)
 language sql
 stable
--- The default estimate for a set-returning function is 1000 rows, which made
--- the planner nested-loop the callers' joins against it. One row per
--- instrument-day: a few hundred sampled days across a dozen instruments is
--- this order.
+-- The default estimate of 1000 rows makes the planner nested-loop the callers' joins.
 rows 10000
 as $$
     with dates as (
         select distinct unnest(p_days) as as_of
     ),
-    -- Every currency that can carry a rate: one per cash instrument, plus the
-    -- pivot itself — whose rate is 1 whether or not anyone ever stored a cash
-    -- instrument or a price for it, exactly as fx_asof answers.
+    -- One per cash instrument, plus the pivot, whose rate is always 1.
     currencies as (
         select i.id, i.currency from instrument i where i.kind = 'cash'
         union all
@@ -37,9 +23,7 @@ as $$
               where i.kind = 'cash' and i.currency = s.base_currency
           )
     ),
-    -- Last price on or before each day. `(as_of + 1)` at UTC midnight keeps the
-    -- comparison on (instrument_id, ts) as a backwards seek and does not depend
-    -- on the session TimeZone.
+    -- Last price on or before each day.
     fx as (
         select d.as_of, cu.currency, cu.id as instrument_id,
                case when cu.currency = (select base_currency from app_settings where id = 1)
@@ -57,9 +41,7 @@ as $$
             limit 1
         ) p on true
     ),
-    -- Only the securities this user holds. `instrument` is global across users,
-    -- so scanning all of it would make one user's dashboard pay for everybody's
-    -- holdings.
+    -- Only this user's securities: `instrument` is shared by all users.
     held as (
         select distinct i.id, i.kind, i.currency
         from instrument i
@@ -82,10 +64,8 @@ as $$
             limit 1
         ) p on true
     )
-    -- Securities: the price converted from the *price row's* currency, never
-    -- the instrument's. Cash: the rate is the unit value, and the row exists
-    -- even for a currency with no cash instrument (instrument_id then NULL,
-    -- which no holding can join to anyway) so callers can still read a rate.
+    -- A security's price is converted from the price row's currency. A cash
+    -- instrument's unit value is its rate.
     select lp.as_of, lp.id, lp.kind, lp.currency, lp.unit_price * quote.rate
     from lp
     left join fx quote on quote.as_of = lp.as_of and quote.currency = lp.price_currency

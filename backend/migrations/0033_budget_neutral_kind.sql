@@ -1,14 +1,8 @@
--- One `neutral` kind replaces `internal` and `excluded`. With every account
--- connected, moving money is neither spending nor income nor saving: saving
--- is income - expenses. Internal transfer, Investments, Savings and Ignore are
--- names on the same behaviour — counted in no total. The Overview's "Saved"
--- figure, the only thing that told the two kinds apart, is gone.
+-- One `neutral` kind, counted in no total, replaces `internal` and `excluded`.
 
 alter table budget_category drop constraint budget_category_kind_check;
 
--- Former internal rows first, then former excluded ones, each in its old
--- order: Internal transfer, Savings, Investments, Ignore for an untouched
--- user. Renumbered 1..n so the kind keeps its no-gap invariant.
+-- Former internal rows first, then former excluded ones, renumbered 1..n.
 with ranked as (
     select id,
            row_number() over (partition by user_id
@@ -25,8 +19,6 @@ alter table budget_category
     add constraint budget_category_kind_check
     check (kind in ('expense', 'income', 'neutral'));
 
--- The review rule: a guess into a neutral category hides money from every
--- total, so it is always reviewed however confident.
 create or replace function budget_needs_review(
     p_source text, p_reviewed_at timestamptz, p_confidence numeric,
     p_category_kind text, p_threshold numeric)

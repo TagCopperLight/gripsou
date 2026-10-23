@@ -1,5 +1,3 @@
--- Reference data (ARCHITECTURE §3.2). New rows here are data inserts, not migrations.
-
 insert into category (key, label) values
     ('cash',      'Cash'),
     ('savings',   'Savings'),

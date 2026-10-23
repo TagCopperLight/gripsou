@@ -1,11 +1,8 @@
--- Second factors (#12, #57). A user has two-factor on when they have a
--- confirmed user_totp row or at least one user_passkey: no separate flag.
-
 create table user_totp (
     user_id        uuid primary key references users (id) on delete cascade,
-    -- base64(nonce || AES-256-GCM ciphertext) under ENCRYPTION_KEY, like provider credentials.
+    -- Encrypted with ENCRYPTION_KEY.
     secret_enc     text not null,
-    -- Null while being set up; only confirmed rows count.
+    -- Null while being set up.
     confirmed_at   timestamptz,
     -- The last 30-second step accepted, so one code can't be used twice.
     last_used_step bigint,
@@ -15,7 +12,7 @@ create table user_totp (
 create table user_recovery_code (
     id        uuid primary key default gen_random_uuid(),
     user_id   uuid not null references users (id) on delete cascade,
-    -- SHA-256 of the normalised code (random, so no slow hash needed).
+    -- SHA-256 of the normalised code: random, so no slow hash is needed.
     code_hash bytea not null,
     used_at   timestamptz
 );

@@ -1,6 +1,3 @@
--- Rename the seeded 'marketdata' price-provider catalog row to 'yahoo', matching
--- the PriceProvider adapter key. No connection references it (it is a price
--- provider, not an account provider), so updating the PK is safe.
 update provider
 set key = 'yahoo',
     display_name = 'Yahoo Finance',

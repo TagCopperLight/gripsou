@@ -1,5 +1,4 @@
--- Allow connections to carry a 'pending' status while the OAuth round-trip
--- (connect → provider redirect → complete_connect) is in progress.
+-- 'pending': the provider's connect flow is not finished yet.
 do $$
 declare
     cname text;
