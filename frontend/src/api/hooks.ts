@@ -16,7 +16,6 @@ import type {
   AccountSeries,
   AccountType,
   BasisPreview,
-  DistributionAccount,
   EnabledProvider,
   Holding,
   InvestmentReturns,
@@ -73,14 +72,6 @@ export function useHealth() {
     // The version cannot change without a page reload, so never refetch it.
     queryFn: ({ signal }) => getJson<Health>(`/health`, { signal }),
     staleTime: Infinity,
-  });
-}
-
-export function useDistribution() {
-  return useQuery({
-    queryKey: keys.distribution(),
-    staleTime: PORTFOLIO_STALE_MS,
-    queryFn: ({ signal }) => getJson<DistributionAccount[]>(`/dashboard/distribution`, { signal }),
   });
 }
 

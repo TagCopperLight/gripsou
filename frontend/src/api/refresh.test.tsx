@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react
 import type { ReactNode } from "react";
 
 import {
-  useAccounts, useAccountSeries, useConnections, useDistribution, useHoldings,
+  useAccounts, useAccountSeries, useConnections, useHoldings,
   useInvestmentReturns, useNetWorth, useSyncConnection, useTransactions,
 } from "./hooks";
 import { useAiStatus, type AiStatus } from "./budget";
@@ -43,7 +43,6 @@ describe("portfolio navigation cache", () => {
     ["net worth", () => useNetWorth("1y"), {
       points: [], summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
     }],
-    ["distribution", useDistribution, []],
     ["holdings", useHoldings, []],
     ["accounts", useAccounts, []],
     ["account history", () => useAccountSeries("1y"), { accounts: [], points: [] }],

@@ -37,17 +37,6 @@ export type NetWorthSummary = {
 };
 export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSummary };
 
-export type DistributionAccount = {
-  id: string;
-  name: string;
-  accountType: string;
-  accountTypeLabel: string;
-  color: string;
-  value: string;
-  /** A holding in this slice could not be valued, so the slice understates. */
-  fxMissing: boolean;
-};
-
 export type Allocation = { name: string; weight: number };
 export type Composition = { countries: Allocation[]; sectors: Allocation[] };
 

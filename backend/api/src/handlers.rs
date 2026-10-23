@@ -92,20 +92,6 @@ pub async fn net_worth(
     Ok(Json(dto::NetWorthResponse::from_rows(&rows)))
 }
 
-pub async fn distribution(
-    State(pool): State<PgPool>,
-    AuthUser { user_id, .. }: AuthUser,
-) -> Result<Json<Vec<dto::DistributionAccount>>, (StatusCode, String)> {
-    let rows = gripsou_core::repo::query::distribution(&pool, user_id)
-        .await
-        .map_err(internal)?;
-    Ok(Json(
-        rows.into_iter()
-            .map(dto::DistributionAccount::from_row)
-            .collect(),
-    ))
-}
-
 pub async fn holdings(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -4843,20 +4829,6 @@ pub(crate) mod auth_tests {
         .expect("list ok")
         .0;
         assert!(list.is_empty());
-    }
-
-    /// The distribution pie shows only the caller's accounts.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn distribution_lists_only_own(pool: PgPool) {
-        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
-        seed_owned(&pool, "bob@t.local", "bob-txn").await;
-
-        let list = distribution(State(pool.clone()), auth(alice.user))
-            .await
-            .expect("distribution ok")
-            .0;
-        let ids: Vec<String> = list.into_iter().map(|a| a.id).collect();
-        assert_eq!(ids, vec![alice.account.to_string()]);
     }
 
     /// The account-type picker is served from the reference table, with labels.

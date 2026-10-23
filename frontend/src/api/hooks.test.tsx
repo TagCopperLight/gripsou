@@ -127,7 +127,6 @@ describe("useUpdateAccount invalidation", () => {
     expect(invalidatedKeys).toEqual([
       ["accounts"],
       ["connections"],
-      ["distribution"],
       ["account-series"],
       ["holdings"],
       ["investment-returns"],
@@ -155,7 +154,6 @@ describe("useDeleteConnection", () => {
     expect(invalidatedKeys).toEqual([
       ["connections"],
       ["net-worth"],
-      ["distribution"],
       ["accounts"],
       ["account-series"],
       ["holdings"],

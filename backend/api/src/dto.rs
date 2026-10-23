@@ -81,35 +81,6 @@ impl NetWorthResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DistributionAccount {
-    pub id: String,
-    pub name: String,
-    /// Stable account-type key; the frontend translates it via i18n.
-    pub account_type: String,
-    /// English account-type label — i18n fallback when the key has no locale entry.
-    pub account_type_label: String,
-    pub color: String,
-    pub value: String,
-    /// A holding in this slice could not be valued, so the slice understates.
-    pub fx_missing: bool,
-}
-
-impl DistributionAccount {
-    pub fn from_row(r: gripsou_core::repo::query::DistributionRow) -> Self {
-        DistributionAccount {
-            id: r.account_id.to_string(),
-            name: r.name,
-            account_type: r.type_key,
-            account_type_label: r.type_label,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
-            value: r.value.to_string(),
-            fx_missing: r.fx_missing,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Holding {
     pub id: String,
     pub ticker: String,

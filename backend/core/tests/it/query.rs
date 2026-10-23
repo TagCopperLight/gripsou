@@ -208,7 +208,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::Result<()> {
+async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
         &pool,
@@ -244,7 +244,7 @@ async fn distribution_sums_latest_snapshot_per_account(pool: PgPool) -> anyhow::
     let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
         .fetch_one(&pool)
         .await?;
-    let rows = query::distribution(&pool, user_id).await?;
+    let rows = query::accounts(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
@@ -462,9 +462,9 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
-    // The accounts grid and the distribution pie must value an equity from the
-    // price series (so they sum to the net-worth figure), not from the provider
+async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
+    // The accounts grid (and the distribution pie drawn from it) must value an
+    // equity from the price series (so they sum to the net-worth figure), not from the provider
     // valuation stored in snapshot.value.
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -506,14 +506,6 @@ async fn accounts_and_distribution_value_equity_by_price(pool: PgPool) -> anyhow
         accts[0].value,
         Decimal::new(630, 0),
         "accounts: equity valued by price (3*210), not snapshot.value 600"
-    );
-
-    let dist = query::distribution(&pool, user_id).await?;
-    let total: Decimal = dist.iter().map(|r| r.value).sum();
-    assert_eq!(
-        total,
-        Decimal::new(630, 0),
-        "distribution: same price-based value"
     );
     Ok(())
 }
@@ -804,7 +796,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// All four valuation paths (holdings, accounts, distribution, net_worth_series)
+/// All three valuation paths (holdings, accounts, net_worth_series)
 /// must sum to the exact same figure for the same portfolio: one EUR cash
 /// position, one CNY cash position with a seeded rate, a USD equity with a
 /// seeded price and rate, and — crucially — one equity with NO price row at all
@@ -899,7 +891,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     .await?;
     drop(conn);
 
-    // Snapshots are what net_worth_series/accounts/distribution read from (and
+    // Snapshots are what net_worth_series/accounts read from (and
     // now holdings() too, for its fallback); stamp today's for each holding.
     // Every priced holding gets value 0 so that a path accidentally reading
     // snapshot.value instead of the price would show up immediately; the
@@ -931,22 +923,13 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         .iter()
         .map(|r| r.value)
         .sum();
-    let distribution_total: Decimal = query::distribution(&pool, user_id)
-        .await?
-        .iter()
-        .map(|r| r.value)
-        .sum();
     let net_worth_rows = query::net_worth_series(&pool, user_id, today, today).await?;
     let net_worth_total = net_worth_rows[0].net_worth;
 
     assert_eq!(holdings_total, accounts_total, "holdings vs accounts");
     assert_eq!(
-        accounts_total, distribution_total,
-        "accounts vs distribution"
-    );
-    assert_eq!(
-        distribution_total, net_worth_total,
-        "distribution vs net_worth_series"
+        accounts_total, net_worth_total,
+        "accounts vs net_worth_series"
     );
     // 100 EUR cash + 1000 CNY x 0.12 + 10 x 200 USD x 0.90 + the unpriced
     // position's provider valuation of 400, which is denominated in the ACCOUNT's

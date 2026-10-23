@@ -58,8 +58,49 @@ pub async fn net_worth_series_with_target(
         .map_or(from, |h| h.max(from));
     let days = crate::repo::series::sample_days(start, to, target);
 
+    // Net worth is the sum of the account values: rows come ordered by day,
+    // so each day's accounts are consecutive.
+    let mut rows: Vec<NetWorthRow> = Vec::new();
+    for r in account_day_values(pool, user_id, &days).await? {
+        match rows.last_mut() {
+            Some(day) if day.as_of == r.as_of => {
+                day.net_worth += r.value;
+                day.invested += r.invested;
+                day.fx_missing |= r.fx_missing;
+            }
+            _ => rows.push(NetWorthRow {
+                as_of: r.as_of,
+                net_worth: r.value,
+                invested: r.invested,
+                fx_missing: r.fx_missing,
+                reporting_fx_missing: r.reporting_fx_missing,
+            }),
+        }
+    }
+    Ok(rows)
+}
+
+/// One account on one day, valued for both the net-worth line and the
+/// stacked accounts chart.
+struct AccountDayRow {
+    account_id: Uuid,
+    name: String,
+    color: Option<String>,
+    as_of: NaiveDate,
+    value: Decimal,
+    invested: Decimal,
+    fx_missing: bool,
+    reporting_fx_missing: bool,
+}
+
+/// The one per-day valuation, grouped by (day, account), ordered by day.
+async fn account_day_values(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    days: &[NaiveDate],
+) -> Result<Vec<AccountDayRow>, CoreError> {
     let rows = sqlx::query_as!(
-        NetWorthRow,
+        AccountDayRow,
         r#"
         -- Per day, value each holding from its as-of snapshot (quantity anchor)
         -- and valuation_grid's unit_value, which folds in the FX rate. The INNER JOIN LATERAL
@@ -67,8 +108,8 @@ pub async fn net_worth_series_with_target(
         -- position never contributes before it was acquired. A sold holding keeps
         -- its history (its zero snapshot values it at 0 thereafter). Falling back
         -- to the provider valuation (snap.value) still needs converting, hence
-        -- the account-currency rate (afx) on that branch. Everything is summed in the pivot,
-        -- then divided once into the reader's reporting currency.
+        -- the account-currency rate (afx) on that branch. Each account is summed in
+        -- the pivot, then divided into the reader's reporting currency.
         --
         -- Three currency domains, never conflated:
         --   price     — the `price` row's own currency, folded in by
@@ -76,7 +117,7 @@ pub async fn net_worth_series_with_target(
         --               instrument);
         --   amount    — `account.currency`, which is what the provider denominates
         --               snapshot.value in, hence the afx join on that branch;
-        --   reporting — `users.currency`, applied once by the final divide.
+        --   reporting — `users.currency`, applied by the final divide.
         -- `instrument.currency` is the quote currency of the security and is none
         -- of the three: a USD-quoted stock inside a EUR account has a EUR cost
         -- basis.
@@ -92,8 +133,9 @@ pub async fn net_worth_series_with_target(
         -- whose `sample_days` clamps the axis to real history and samples it
         -- down to roughly CHART_TARGET_POINTS points before this query ever
         -- runs.
-        with dates as (
-            select distinct unnest($2::date[]) as as_of
+        with dates as materialized (
+            select as_of, reporting_fx_degraded($1, as_of) as reporting_fx_missing
+            from (select distinct unnest($2::date[]) as as_of) d
         ),
         -- One valuation per instrument-day instead of one per holding-day, with
         -- the FX lookup folded into the same scan. `materialized` is load-bearing
@@ -119,12 +161,15 @@ pub async fn net_worth_series_with_target(
                 $2
             )
         )
-        select d.as_of as "as_of!",
+        select a.id    as "account_id!",
+               a.name  as "name!",
+               a.color as "color",
+               d.as_of as "as_of!",
                coalesce(sum(coalesce(
                    snap.quantity * uv.unit_value,
                    snap.value * afx.unit_value,
                    0
-               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "net_worth!",
+               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "value!",
                -- Per-row coalesce, not one around the sum: without it a single
                -- holding whose account currency has no rate turns its own term
                -- NULL, sum() skips it, and the invested line silently loses that
@@ -143,7 +188,7 @@ pub async fn net_worth_series_with_target(
                    -- false and only this one fires.
                    or (lb.basis <> 0 and afx.unit_value is null)
                ), false) as "fx_missing!",
-               reporting_fx_degraded($1, d.as_of) as "reporting_fx_missing!"
+               d.reporting_fx_missing as "reporting_fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -165,11 +210,11 @@ pub async fn net_worth_series_with_target(
             limit 1
         ) snap on true
         where c.user_id = $1
-        group by d.as_of, rep.unit_value
-        order by d.as_of
+        group by d.as_of, d.reporting_fx_missing, a.id, a.name, a.color, rep.unit_value
+        order by d.as_of, a.id
         "#,
         user_id,
-        &days,
+        days,
     )
     .fetch_all(pool)
     .await?;
@@ -267,7 +312,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     let bases = sqlx::query_as!(
         Base,
         r#"
-        -- Same valuation rule as net_worth_series/accounts/distribution: price
+        -- Same valuation rule as net_worth_series/accounts: price
         -- first, provider valuation (converted from the ACCOUNT's currency)
         -- second, zero last. Without the snapshot fallback this table would show
         -- 0 for an instrument with no usable price while the accounts card, the
@@ -520,19 +565,12 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         -- resolved) on a still-held position, matching holdings()'s
         -- `h.quantity <> 0`.
         --
-        -- Valued through `valuation_grid` rather than the scalar
-        -- unit_value_asof/fx_asof/reporting_fx_asof functions, for the reason
-        -- spelled out on distribution() — with one extra twist that made this
-        -- query the worst of the three. The scalars sit in the select list of a
-        -- `distinct on`, and Postgres projects *before* it uniquifies: every
-        -- historical snapshot row got priced (four lookups each), then all but
-        -- the newest per holding was discarded. That cost grows by one row per
-        -- holding per day forever while the result stays the same size. Joining
-        -- the grid instead makes the per-row work a hash probe, so the pricing
-        -- is proportional to what is owned, not to how long it has been owned.
-        --
-        -- Measured on the dev database (13 holdings, 197 snapshots): 58.7 ms ->
-        -- 2.9 ms, byte-identical output.
+        -- Valued through `valuation_grid`, not the scalar
+        -- unit_value_asof/fx_asof/reporting_fx_asof functions: in the select
+        -- list of a `distinct on` they would price every historical snapshot
+        -- row (Postgres projects before it uniquifies) and then discard all but
+        -- the newest, a cost that grows every day. Joined, the grid makes the
+        -- per-row work a hash probe.
         --
         -- The grid joins are LEFT on purpose: a missing row must leave
         -- unit_value NULL so the coalesce falls through to the provider
@@ -607,7 +645,8 @@ pub struct AccountSeriesRow {
     pub value: Decimal,
 }
 
-/// Stacked-area source: snapshot value summed per (account, day) over a window.
+/// Stacked-area source: each account's value per day over a window, from the
+/// same valuation as [`net_worth_series`].
 pub async fn account_series(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -620,53 +659,17 @@ pub async fn account_series(
     let days =
         crate::repo::series::sample_days(start, to, crate::repo::series::CHART_TARGET_POINTS);
 
-    let rows = sqlx::query_as!(
-        AccountSeriesRow,
-        r#"
-        -- Same valuation as net_worth_series (snapshot-anchored quantity via the
-        -- lateral join + valuation_grid), grouped per account for the
-        -- stacked area. No fx_missing flag: the accounts grid already surfaces it.
-        with dates as (
-            select distinct unnest($2::date[]) as as_of
-        ),
-        grid as materialized (select * from valuation_grid($1, $2)),
-        fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
-        rep  as materialized (
-            select as_of, unit_value from fx
-            where currency = (select currency from users where id = $1)
-        )
-        select a.id   as "account_id!",
-               a.name as "name!",
-               a.color as "color",
-               d.as_of as "as_of!",
-               coalesce(sum(coalesce(
-                   snap.quantity * uv.unit_value,
-                   snap.value * afx.unit_value,
-                   0
-               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "value!"
-        from dates d
-        cross join holding h
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        join grid uv      on uv.instrument_id = h.instrument_id and uv.as_of = d.as_of
-        left join fx afx  on afx.as_of = d.as_of and afx.currency = a.currency
-        left join rep     on rep.as_of = d.as_of
-        join lateral (
-            select hs.quantity, hs.value
-            from holding_point hs
-            where hs.holding_id = h.id and hs.as_of <= d.as_of
-            order by hs.as_of desc
-            limit 1
-        ) snap on true
-        where c.user_id = $1
-        group by a.id, a.name, a.color, d.as_of, rep.unit_value
-        order by d.as_of, a.id
-        "#,
-        user_id,
-        &days,
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = account_day_values(pool, user_id, &days)
+        .await?
+        .into_iter()
+        .map(|r| AccountSeriesRow {
+            account_id: r.account_id,
+            name: r.name,
+            color: r.color,
+            as_of: r.as_of,
+            value: r.value,
+        })
+        .collect();
     Ok(rows)
 }
 
@@ -714,97 +717,6 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
         from users
         order by created_at
         "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
-}
-
-#[derive(serde::Serialize)]
-pub struct DistributionRow {
-    pub account_id: Uuid,
-    pub name: String,
-    pub color: Option<String>,
-    pub type_key: String,
-    pub type_label: String,
-    pub value: Decimal,
-    /// At least one still-held holding in this slice could not be valued, so the
-    /// slice is understated.
-    pub fx_missing: bool,
-}
-
-pub async fn distribution(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<Vec<DistributionRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        DistributionRow,
-        r#"
-        -- Same per-holding valuation as accounts()/net_worth_series so the pie
-        -- sums to the net-worth figure.
-        --
-        -- Valued through `valuation_grid` rather than the scalar
-        -- unit_value_asof/fx_asof/reporting_fx_asof functions. The scalars are
-        -- fine for a single lookup, but this query made several per holding —
-        -- unit_value_asof and fx_asof twice each (once for the value, once for
-        -- the fx_missing test) and reporting_fx_asof twice more (select and
-        -- order by) — each one a planned index seek with a nested fx lookup
-        -- inside it. That was 33 ms of a 35 ms statement.
-        --
-        -- The grid computes the same arithmetic once per instrument instead of
-        -- once per holding, and folds the FX lookup into the same scan. Unlike
-        -- the chart series this needs a single day, so there is no sampling and
-        -- no day axis to keep in step — just a one-element array.
-        --
-        -- The joins are LEFT on purpose: a missing grid row must leave
-        -- unit_value NULL so the coalesce falls through to the provider
-        -- valuation, exactly as a NULL from unit_value_asof did.
-        with today as (select user_today($1) as d),
-        grid as materialized (
-            select * from valuation_grid($1, array[(select d from today)]::date[])
-        ),
-        fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
-        rep as materialized (
-            select unit_value from fx
-            where currency = (select currency from users where id = $1)
-        ),
-        latest as (
-            select distinct on (hs.holding_id)
-                   hs.holding_id,
-                   coalesce(
-                       hs.quantity * uv.unit_value,
-                       hs.value * afx.unit_value,
-                       0
-                   ) as value,
-                   h.quantity <> 0
-                   and uv.unit_value is null
-                   and coalesce(hs.value * afx.unit_value, 0) = 0
-                       as fx_missing
-            from holding_snapshot hs
-            join holding h    on h.id = hs.holding_id
-            join account a    on a.id = h.account_id
-            join connection c on c.id = a.connection_id
-            join instrument i on i.id = h.instrument_id
-            left join grid uv on uv.instrument_id = i.id
-            left join fx afx  on afx.currency = a.currency
-            where c.user_id = $1
-            order by hs.holding_id, hs.as_of desc
-        )
-        select a.id   as "account_id!",
-               a.name as "name!",
-               a.color,
-               a.type_key as "type_key!",
-               t.label    as "type_label!",
-               sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
-               coalesce(bool_or(l.fx_missing), false) as "fx_missing!"
-        from latest l
-        join holding h      on h.id = l.holding_id
-        join account a      on a.id = h.account_id
-        join account_type t on t.key = a.type_key
-        group by a.id, a.name, a.color, a.type_key, t.label
-        order by sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) desc
-        "#,
-        user_id,
     )
     .fetch_all(pool)
     .await?;

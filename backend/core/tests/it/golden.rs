@@ -564,22 +564,22 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// The distribution pie, valued through `valuation_grid` rather than the scalar
-/// per-holding functions. Same standard as the series above: every figure must
-/// stay identical.
+/// The accounts list (and the distribution pie drawn from it), valued through
+/// `valuation_grid` rather than the scalar per-holding functions. Same standard
+/// as the series above: every figure must stay identical.
 ///
 /// The digest is ordered by account name, not by the query's own value-descending
 /// order, because a uuid and a randomly-assigned colour cannot anchor a stable
 /// file. The value ordering is a real part of the contract though — the pie shows
 /// the largest slice first — so it is asserted separately below.
 #[sqlx::test(migrations = "../migrations")]
-async fn distribution_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
+async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     let mut conn = pool.acquire().await?;
     backfill_connection(&mut conn, connection_id).await?;
     drop(conn);
 
-    let rows = gripsou_core::repo::query::distribution(&pool, user_id).await?;
+    let rows = gripsou_core::repo::query::accounts(&pool, user_id).await?;
 
     let values: Vec<Decimal> = rows.iter().map(|r| r.value).collect();
     let mut sorted = values.clone();
@@ -594,6 +594,6 @@ async fn distribution_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
         .map(|r| format!("{} {} {} {}\n", r.name, r.type_key, r.value, r.fx_missing))
         .collect();
     out.sort();
-    assert_golden("distribution", &out.concat());
+    assert_golden("accounts", &out.concat());
     Ok(())
 }

@@ -126,7 +126,6 @@ pub fn router(
         )
         .route("/auth/sessions/{id}", delete(handlers::revoke_session))
         .route("/dashboard/net-worth", get(handlers::net_worth))
-        .route("/dashboard/distribution", get(handlers::distribution))
         .route("/accounts", get(handlers::accounts))
         .route("/accounts/series", get(handlers::account_series))
         .route("/accounts/{id}", patch(handlers::update_account))

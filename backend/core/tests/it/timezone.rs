@@ -115,10 +115,6 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         .await?
         .unwrap();
     assert_eq!(preview.explained_qty, Decimal::ONE);
-    assert_eq!(
-        query::distribution(&pool, user).await?[0].value,
-        Decimal::TEN
-    );
     let holdings = query::holdings(&pool, user).await?;
     assert_eq!(holdings[0].price, Some(Decimal::TEN));
     assert_eq!(holdings[0].value, Decimal::TEN);

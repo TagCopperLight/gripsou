@@ -36,7 +36,6 @@ function invalidateQuietly(
 export function afterSyncFinished(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.netWorth(),
-    keys.distribution(),
     keys.accounts(),
     keys.accountSeries(),
     keys.holdings(),
@@ -75,7 +74,6 @@ export function afterAccountEdit(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.accounts(),
     keys.connections(),
-    keys.distribution(),
     keys.accountSeries(),
     keys.holdings(),
     keys.investmentReturns(),
