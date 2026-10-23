@@ -5,6 +5,7 @@ mod dto;
 mod factors;
 mod handlers;
 mod mfa;
+pub mod passkey;
 mod security_headers;
 pub mod throttle;
 use axum::http::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE};
@@ -22,6 +23,8 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
+pub use passkey::Passkeys;
+
 use crate::throttle::{LoginThrottle, SecondFactorThrottle};
 
 #[derive(Clone)]
@@ -31,6 +34,7 @@ pub struct AppState {
     pub login_throttle: Arc<LoginThrottle>,
     pub second_factor_throttle: Arc<SecondFactorThrottle>,
     pub totp_key: TotpKey,
+    pub passkeys: Passkeys,
 }
 
 /// `ENCRYPTION_KEY` as the second-factor handlers see it. Always present and
@@ -59,6 +63,12 @@ impl TotpKey {
 impl FromRef<AppState> for TotpKey {
     fn from_ref(state: &AppState) -> TotpKey {
         state.totp_key.clone()
+    }
+}
+
+impl FromRef<AppState> for Passkeys {
+    fn from_ref(state: &AppState) -> Passkeys {
+        state.passkeys.clone()
     }
 }
 
@@ -91,6 +101,7 @@ pub fn router(
     static_dir: &std::path::Path,
     initial_cors: Vec<String>,
     totp_key: TotpKey,
+    passkeys: Passkeys,
 ) -> Router {
     let cors_origins = Arc::new(RwLock::new(initial_cors));
     let app_state = AppState {
@@ -99,6 +110,7 @@ pub fn router(
         login_throttle: Arc::new(LoginThrottle::default()),
         second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
         totp_key,
+        passkeys,
     };
 
     let index_html = static_dir.join("index.html");

@@ -10,14 +10,19 @@ async fn main() -> anyhow::Result<()> {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
     );
 
-    // Every subcommand but `reset-2fa` serves the app, which needs the key:
-    // checked before touching the database, and the value is never printed.
+    // Every subcommand but `reset-2fa` serves the app, which needs ENCRYPTION_KEY
+    // and PUBLIC_URL: checked before touching the database, and the key is never
+    // printed.
     let subcommand = env::args().nth(1);
-    let totp_key = if subcommand.as_deref() == Some("reset-2fa") {
+    let keys = if subcommand.as_deref() == Some("reset-2fa") {
         None
     } else {
         let raw = env::var("ENCRYPTION_KEY").ok();
-        Some(gripsou_api::TotpKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?)
+        let totp_key = gripsou_api::TotpKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?;
+        let public_url = env::var("PUBLIC_URL").ok();
+        let passkeys =
+            gripsou_api::Passkeys::parse(public_url.as_deref()).map_err(anyhow::Error::msg)?;
+        Some((totp_key, passkeys))
     };
 
     let database_url =
@@ -29,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
 
-    let Some(totp_key) = totp_key else {
+    let Some((totp_key, passkeys)) = keys else {
         let code = gripsou_api::cli::reset_two_factor(&db, env::args().nth(2)).await;
         log_handle.shutdown().await;
         std::process::exit(code);
@@ -46,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
         std::path::Path::new(&static_dir),
         initial_cors,
         totp_key,
+        passkeys,
     );
     // Hash the dummy password now so the first login isn't slower.
     std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
