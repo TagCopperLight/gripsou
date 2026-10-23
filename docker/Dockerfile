@@ -24,7 +24,7 @@ RUN cargo build --release --bin gripsou
 # --- Stage 3: runtime ---
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=backend /app/backend/target/release/gripsou /usr/local/bin/gripsou
