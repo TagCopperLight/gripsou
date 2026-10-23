@@ -1,6 +1,9 @@
-//! In-memory login throttle: slows guessing per account and per IP, never
-//! locks anyone out. gripsou runs as one instance, so a restart clearing the
-//! counters is acceptable (an attacker can't trigger one).
+//! In-memory login throttle: slows guessing per account and per IP. It never
+//! locks an account for good, but someone who keeps sending wrong passwords
+//! for an account's email keeps its password login in waits for as long as
+//! they go on; passkey sign-in, counted per IP only, still works. gripsou runs
+//! as one instance, so a restart clearing the counters is acceptable (an
+//! attacker can't trigger one).
 //!
 //! Two limiters share the same counting rules ([`Policy`]):
 //! - [`LoginThrottle`] for passwords (per account, short memory) and per IP;
