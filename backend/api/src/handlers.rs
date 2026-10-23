@@ -63,22 +63,18 @@ async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<(), (StatusCode, 
     Ok(())
 }
 
-/// Client IP, reverse-proxy aware: first X-Forwarded-For hop, then X-Real-IP,
-/// then the direct peer address.
+/// Client IP: the last X-Forwarded-For hop, which the nearest proxy wrote
+/// (earlier hops come from the client), else the direct peer address.
+/// The per-IP login limit relies on it, so the backend must sit behind a
+/// proxy that sets the header; Caddy replaces it, others append to it.
 pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        let first = xff.split(',').next().unwrap_or("").trim();
-        if !first.is_empty() {
-            return first.to_string();
-        }
-    }
-    if let Some(real) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
-        let real = real.trim();
-        if !real.is_empty() {
-            return real.to_string();
-        }
-    }
-    peer.ip().to_string()
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|xff| xff.rsplit(',').next())
+        .map(str::trim)
+        .filter(|ip| !ip.is_empty())
+        .map_or_else(|| peer.ip().to_string(), str::to_string)
 }
 
 pub async fn net_worth(
@@ -1710,6 +1706,17 @@ pub(crate) mod auth_tests {
     use axum::response::IntoResponse;
     use sqlx::PgPool;
     use std::sync::Arc;
+
+    #[test]
+    fn client_ip_takes_the_hop_the_nearest_proxy_wrote() {
+        let peer: SocketAddr = "10.0.0.9:443".parse().unwrap();
+        let mut h = HeaderMap::new();
+        assert_eq!(client_ip(&h, peer), "10.0.0.9");
+        h.insert("x-real-ip", "6.6.6.6".parse().unwrap());
+        assert_eq!(client_ip(&h, peer), "10.0.0.9");
+        h.insert("x-forwarded-for", "6.6.6.6, 203.0.113.7".parse().unwrap());
+        assert_eq!(client_ip(&h, peer), "203.0.113.7");
+    }
 
     fn no_throttle() -> State<Arc<LoginThrottle>> {
         State(Arc::new(LoginThrottle::default()))
