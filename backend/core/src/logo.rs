@@ -46,14 +46,17 @@ const INSTITUTION_DOMAINS: &[(&str, &str)] = &[
     ("5b6a646f-893d-5235-a57d-4b072860363c", "traderepublic.com"),
 ];
 
+/// `BRANDFETCH_CLIENT_ID`, read once: it only changes with a restart.
+static CLIENT_ID: std::sync::LazyLock<Option<String>> =
+    std::sync::LazyLock::new(|| std::env::var("BRANDFETCH_CLIENT_ID").ok());
+
 /// The Brandfetch parameters every logo uses: `/fallback/404/theme/light` and
 /// `?c={BRANDFETCH_CLIENT_ID}` when set.
 fn brandfetch_decorate(base: &str) -> String {
-    let mut url = format!("{base}/fallback/404/theme/light");
-    if let Ok(c) = std::env::var("BRANDFETCH_CLIENT_ID") {
-        url.push_str(&format!("?c={c}"));
+    match CLIENT_ID.as_deref() {
+        Some(c) => format!("{base}/fallback/404/theme/light?c={c}"),
+        None => format!("{base}/fallback/404/theme/light"),
     }
-    url
 }
 
 /// Logo URL for an institution by its connector key, or `None` when the key is
