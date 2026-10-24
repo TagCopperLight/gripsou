@@ -3,6 +3,7 @@ name: gripsou
 services:
   postgres:
     image: postgres:17-alpine
+    restart: always
     environment:
       POSTGRES_USER: gripsou
       POSTGRES_PASSWORD: gripsou
