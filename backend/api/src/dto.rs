@@ -293,7 +293,8 @@ pub struct BasisPreview {
     pub mean_price: String,
     pub invested: String,
     pub realised: String,
-    pub unrealised: String,
+    /// Null when today's price or rate is unknown.
+    pub unrealised: Option<String>,
 }
 
 #[derive(Serialize)]

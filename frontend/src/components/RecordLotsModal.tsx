@@ -474,7 +474,7 @@ export function RecordLotsModal({
             <SignedFigure
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
-              value={Number(figures.unrealised)}
+              value={figures.unrealised === null ? null : Number(figures.unrealised)}
               currency={currency}
             />
           </div>
@@ -516,7 +516,7 @@ function SignedFigure({
 }: {
   testId: string;
   label: string;
-  value: number;
+  value: number | null;
   currency: string;
 }) {
   return (
@@ -525,12 +525,16 @@ function SignedFigure({
       {/* `Money` renders only its own span and does not forward arbitrary
           props, so the test hook goes on a wrapper. */}
       <span data-testid={testId}>
-        <Money
-          value={value}
-          currency={currency}
-          signed
-          className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
-        />
+        {value === null ? (
+          <span className="text-fg-faint font-mono font-semibold text-sm">—</span>
+        ) : (
+          <Money
+            value={value}
+            currency={currency}
+            signed
+            className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
+          />
+        )}
       </span>
     </div>
   );

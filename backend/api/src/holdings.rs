@@ -266,18 +266,13 @@ pub async fn lot_suggestions(
     ))
 }
 
-/// Latest known unit price for a holding's instrument, in whatever currency
-/// that price row carries. No helper for this already existed outside the
-/// full `holdings()` listing query, so this is a new, narrow lookup rather
-/// than a reuse. Zero when no price row exists yet, mirroring `Holding`'s own
-/// fallback for the same case.
 /// Today's price of one share in the holding's account currency — the domain
-/// lots and their basis are in. Zero when the price or a rate is unknown.
+/// lots and their basis are in. `None` when the price or a rate is unknown.
 async fn current_price(
     pool: &PgPool,
     user_id: Uuid,
     holding_id: Uuid,
-) -> Result<Decimal, gripsou_core::error::CoreError> {
+) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
     let price = sqlx::query_scalar!(
         r#"
         select unit_value_asof(h.instrument_id, user_today($2))
@@ -291,7 +286,7 @@ async fn current_price(
     )
     .fetch_optional(pool)
     .await?;
-    Ok(price.flatten().unwrap_or(Decimal::ZERO))
+    Ok(price.flatten())
 }
 
 /// What the figures would be for a set of unsaved rows.
@@ -315,12 +310,13 @@ pub async fn preview_lots(
         .await?
         .ok_or(ApiError::NotFound("unknown holding"))?;
     let price = current_price(&pool, user_id, holding_id).await?;
-    let unrealised = f.explained_qty * price - f.basis;
+    // An unknown price is no figure, not a total loss.
+    let unrealised = price.map(|p| f.explained_qty * p - f.basis);
     Ok(Json(dto::BasisPreview {
         mean_price: f.mean_price.to_string(),
         invested: f.basis.to_string(),
         realised: f.realised.to_string(),
-        unrealised: unrealised.to_string(),
+        unrealised: unrealised.map(|u| u.to_string()),
     }))
 }
 
@@ -1037,8 +1033,48 @@ mod tests {
         .0;
         // 10 shares x 30 USD x 0.5 EUR per USD = 150 EUR, whatever the basis.
         let invested: Decimal = preview.invested.parse().unwrap();
-        let unrealised: Decimal = preview.unrealised.parse().unwrap();
+        let unrealised: Decimal = preview.unrealised.unwrap().parse().unwrap();
         assert_eq!(invested + unrealised, Decimal::new(150, 0));
+    }
+
+    /// Before the listing's rate is known the preview has no unrealised
+    /// figure, rather than valuing the shares at zero (a total loss).
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_leaves_unrealised_unknown_without_a_rate(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        let instrument: Uuid =
+            sqlx::query_scalar("select instrument_id from holding where id = $1")
+                .bind(holding_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let today = gripsou_core::repo::prefs::today(&pool, user_id)
+            .await
+            .unwrap();
+        let mut conn = pool.acquire().await.unwrap();
+        gripsou_core::testkit::insert_price(
+            &mut conn,
+            instrument,
+            today.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            Decimal::new(30, 0),
+            "USD",
+        )
+        .await
+        .unwrap();
+        drop(conn);
+
+        let preview = preview_lots(
+            State(pool.clone()),
+            auth(user_id),
+            Path(holding_id),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "10", "10")],
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(preview.unrealised, None);
     }
 
     /// The holdings list shows only the caller's holdings.

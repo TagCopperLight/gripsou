@@ -113,7 +113,8 @@ export type BasisPreview = {
   meanPrice: string;
   invested: string;
   realised: string;
-  unrealised: string;
+  /** Null while today's price or exchange rate is unknown. */
+  unrealised: string | null;
 };
 
 export type Account = {
