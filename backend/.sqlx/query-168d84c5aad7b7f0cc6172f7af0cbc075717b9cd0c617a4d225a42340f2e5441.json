@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id, password_hash from users where email = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "password_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "password_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "168d84c5aad7b7f0cc6172f7af0cbc075717b9cd0c617a4d225a42340f2e5441"
+}

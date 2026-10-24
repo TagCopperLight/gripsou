@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select budget_ai_threshold from users where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget_ai_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_threshold"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4c76db2e5ed60cb48b5d2b77e78e1d9e7ac81508eedf79eb7a3d68b5b35d71e2"
+}

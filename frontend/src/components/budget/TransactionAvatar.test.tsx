@@ -8,7 +8,7 @@ function tx(over: Partial<Transaction> = {}): Transaction {
   return {
     id: "t1", t: 0, type: "withdrawal", description: "ALDI", amount: "-12.00",
     amountReporting: "-12.00",
-    currency: "EUR", accountId: "a", accountName: "Current", accountColor: null,
+    currency: "EUR", accountId: "a", accountName: "Current", accountColor: "#4dd0b1",
     source: "cash", ticker: null, logo: null, quantity: null, unitPrice: null, fee: null,
     categoryId: null, categoryName: null, categoryDefaultKey: null, categoryColor: null,
     categoryIcon: null, categoryKind: null, categorySource: null, categoryConfidence: null,

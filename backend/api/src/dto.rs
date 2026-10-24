@@ -81,35 +81,6 @@ impl NetWorthResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DistributionAccount {
-    pub id: String,
-    pub name: String,
-    /// Stable account-type key; the frontend translates it via i18n.
-    pub account_type: String,
-    /// English account-type label — i18n fallback when the key has no locale entry.
-    pub account_type_label: String,
-    pub color: String,
-    pub value: String,
-    /// A holding in this slice could not be valued, so the slice understates.
-    pub fx_missing: bool,
-}
-
-impl DistributionAccount {
-    pub fn from_row(r: gripsou_core::repo::query::DistributionRow) -> Self {
-        DistributionAccount {
-            id: r.account_id.to_string(),
-            name: r.name,
-            account_type: r.type_key,
-            account_type_label: r.type_label,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
-            value: r.value.to_string(),
-            fx_missing: r.fx_missing,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Holding {
     pub id: String,
     pub ticker: String,
@@ -121,8 +92,6 @@ pub struct Holding {
     pub account_color: String,
     /// Stable account-type key; the frontend translates it via i18n.
     pub account_type: String,
-    /// English account-type label — i18n fallback when the key has no locale entry.
-    pub account_type_label: String,
     pub qty: String,
     /// Unit price, denominated in `price_currency` — NOT in `currency`.
     pub price: String,
@@ -212,9 +181,8 @@ impl Holding {
             logo: r.logo_url,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
-            account_color: r.account_color.unwrap_or_else(|| "#888888".to_string()),
+            account_color: r.account_color,
             account_type: r.type_key,
-            account_type_label: r.type_label,
             qty: r.quantity.to_string(),
             price: price.to_string(),
             currency: r.currency,
@@ -278,11 +246,7 @@ impl Lot {
     pub fn from_row(r: gripsou_core::repo::lot::LotRow) -> Self {
         Lot {
             id: r.id.to_string(),
-            t: r.acquired_on
-                .and_hms_opt(0, 0, 0)
-                .expect("midnight is a valid time")
-                .and_utc()
-                .timestamp_millis(),
+            t: day_to_millis(r.acquired_on),
             side: r.side,
             qty: r.quantity.to_string(),
             price: r.unit_price.to_string(),
@@ -329,7 +293,8 @@ pub struct BasisPreview {
     pub mean_price: String,
     pub invested: String,
     pub realised: String,
-    pub unrealised: String,
+    /// Null when today's price or rate is unknown.
+    pub unrealised: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -337,6 +302,7 @@ pub struct BasisPreview {
 pub struct PricePoint {
     pub t: i64,
     pub price: String,
+    pub account_price: Option<String>,
 }
 
 impl PricePoint {
@@ -344,6 +310,7 @@ impl PricePoint {
         PricePoint {
             t: r.ts.timestamp_millis(),
             price: r.unit_price.to_string(),
+            account_price: r.account_price.map(|p| p.to_string()),
         }
     }
 }
@@ -352,7 +319,8 @@ impl PricePoint {
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: String,
-    /// Epoch milliseconds, like every other timestamp in this API.
+    /// Epoch milliseconds at UTC midnight of the day, like every other date
+    /// in this API.
     pub t: i64,
     #[serde(rename = "type")]
     pub kind: String,
@@ -365,7 +333,7 @@ pub struct Transaction {
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
-    pub account_color: Option<String>,
+    pub account_color: String,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale. The
     /// frontend picks its rendering (and i18n) off this discriminator.
     pub source: String,
@@ -415,7 +383,7 @@ impl Transaction {
     ) -> Self {
         Transaction {
             id: r.id.to_string(),
-            t: r.ts.timestamp_millis(),
+            t: day_to_millis(r.day),
             kind: r.kind,
             description: r.description,
             amount: r.amount.to_string(),
@@ -426,7 +394,13 @@ impl Transaction {
             account_color: r.account_color,
             source: r.source,
             ticker: r.ticker,
-            logo: r.logo_url,
+            logo: r.instrument_kind.as_deref().and_then(|kind| {
+                gripsou_core::logo::instrument_logo_url(
+                    kind,
+                    r.instrument_isin.as_deref(),
+                    r.instrument_symbol.as_deref(),
+                )
+            }),
             quantity: r.quantity.map(|d| d.to_string()),
             unit_price: r.unit_price.map(|d| d.to_string()),
             fee: r.fee.map(|d| d.to_string()),
@@ -462,28 +436,27 @@ pub struct Account {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub type_label: String,
     pub value: String,
     pub fx_missing: bool,
     pub last_sync_at: Option<i64>,
-    pub source_name: Option<String>,
+    pub source_name: String,
     pub source_logo: Option<String>,
 }
 
 impl Account {
     pub fn from_row(r: gripsou_core::repo::query::AccountRow) -> Self {
+        let source_name = source_name(&r);
         Account {
             id: r.account_id.to_string(),
             connection_id: r.connection_id.to_string(),
             name: r.name,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            color: r.color,
             type_key: r.type_key,
-            type_label: r.type_label,
             value: r.value.to_string(),
             fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
             source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),
-            source_name: r.source_name,
+            source_name,
         }
     }
 }
@@ -532,7 +505,7 @@ impl AccountSeriesResponse {
                 accounts.push(SeriesAccount {
                     id: id.clone(),
                     name: r.name,
-                    color: r.color.unwrap_or_else(|| "#888888".to_string()),
+                    color: r.color,
                 });
             }
             latest_value.insert(id.clone(), r.value);
@@ -564,28 +537,12 @@ impl AccountSeriesResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AccountType {
-    pub key: String,
-    pub label: String,
-}
-
-impl AccountType {
-    pub fn from_row(r: gripsou_core::repo::query::AccountTypeRow) -> Self {
-        AccountType {
-            key: r.key,
-            label: r.label,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SyncAccount {
     pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub name: String,
-    pub color: Option<String>,
-    pub type_label: String,
+    pub color: String,
+    pub type_key: String,
     pub value: String,
     pub last_sync_at: Option<i64>,
 }
@@ -619,6 +576,7 @@ impl ProviderGroup {
     pub fn tree(
         conns: Vec<gripsou_core::repo::connection::ConnectionListRow>,
         accounts: Vec<gripsou_core::repo::connection::ConnectionAccountRow>,
+        jobs: &gripsou_jobs::Deps,
     ) -> Vec<ProviderGroup> {
         use std::collections::HashMap;
         let mut by_conn: HashMap<uuid::Uuid, Vec<SyncAccount>> = HashMap::new();
@@ -634,7 +592,7 @@ impl ProviderGroup {
                     id: a.account_id.to_string(),
                     name: a.name,
                     color: a.color,
-                    type_label: a.type_label,
+                    type_key: a.type_key,
                     value: a.value.to_string(),
                     last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
                 });
@@ -642,7 +600,7 @@ impl ProviderGroup {
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {
             let conn = SyncConnection {
-                can_manage: gripsou_jobs::supports_manage(&c.provider_key),
+                can_manage: jobs.supports_manage(&c.provider_key),
                 health: c
                     .provider_meta
                     .get("sync_health")
@@ -660,8 +618,8 @@ impl ProviderGroup {
             match groups.last_mut() {
                 Some(g) if g.provider_key == c.provider_key => g.connections.push(conn),
                 _ => groups.push(ProviderGroup {
+                    provider_name: provider_name(&c.provider_key).to_string(),
                     provider_key: c.provider_key,
-                    provider_name: c.provider_name,
                     connections: vec![conn],
                 }),
             }
@@ -705,7 +663,6 @@ pub struct UpdatedAccount {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub type_label: String,
 }
 
 impl UpdatedAccount {
@@ -713,9 +670,8 @@ impl UpdatedAccount {
         UpdatedAccount {
             id: r.id.to_string(),
             name: r.name,
-            color: r.color.unwrap_or_else(|| "#888888".to_string()),
+            color: r.color,
             type_key: r.type_key,
-            type_label: r.type_label,
         }
     }
 }
@@ -837,7 +793,6 @@ pub struct MfaRequired {
     /// Always true; lets the client tell this shape from a session.
     pub mfa_required: bool,
     pub challenge: String,
-    pub methods: Vec<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -865,9 +820,7 @@ pub struct ChangePasswordReq {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAccountReq {
-    /// The user re-types their own email to confirm; verified server-side as a
-    /// guard against a mis-targeted request.
-    pub email: String,
+    pub password: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -880,17 +833,17 @@ pub struct DeleteUserReq {
 pub struct Provider {
     pub key: String,
     pub display_name: String,
-    pub description: Option<String>,
+    pub description: String,
     pub enabled: bool,
 }
 
 impl Provider {
-    pub fn from_row(r: gripsou_core::repo::provider::ProviderRow) -> Self {
+    pub fn new(k: &gripsou_jobs::AccountProviderKind, enabled: bool) -> Self {
         Provider {
-            key: r.key,
-            display_name: r.display_name,
-            description: r.description,
-            enabled: r.enabled,
+            key: k.key.into(),
+            display_name: k.display_name.into(),
+            description: k.description.into(),
+            enabled,
         }
     }
 }
@@ -905,17 +858,29 @@ pub struct SetProviderReq {
 pub struct EnabledProvider {
     pub key: String,
     pub display_name: String,
-    pub description: Option<String>,
+    pub description: String,
 }
 
 impl EnabledProvider {
-    pub fn from_row(r: gripsou_core::repo::provider::EnabledProviderRow) -> Self {
+    pub fn new(k: &gripsou_jobs::AccountProviderKind) -> Self {
         EnabledProvider {
-            key: r.key,
-            display_name: r.display_name,
-            description: r.description,
+            key: k.key.into(),
+            display_name: k.display_name.into(),
+            description: k.description.into(),
         }
     }
+}
+
+/// A provider's display name, or its key for one this build no longer knows.
+fn provider_name(key: &str) -> &str {
+    gripsou_jobs::account_provider(key).map_or(key, |k| k.display_name)
+}
+
+/// Where an account comes from: its bank once known, else its provider.
+pub fn source_name(r: &gripsou_core::repo::query::AccountRow) -> String {
+    r.institution_name
+        .clone()
+        .unwrap_or_else(|| provider_name(&r.provider_key).to_string())
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -1037,7 +1002,6 @@ mod tests {
         assert_eq!(display_kind("equity", false), "equity");
         // A scrape never lands on these, but be explicit: nothing else moves.
         assert_eq!(display_kind("cash", true), "cash");
-        assert_eq!(display_kind("crypto", true), "crypto");
         assert_eq!(display_kind("etf", false), "etf");
     }
 
@@ -1045,7 +1009,7 @@ mod tests {
         AccountSeriesRow {
             account_id: id,
             name: format!("acct-{day}"),
-            color: None,
+            color: "#888888".into(),
             as_of: NaiveDate::from_ymd_opt(2026, 1, day).unwrap(),
             value: Decimal::from(value),
         }
@@ -1072,7 +1036,6 @@ mod tests {
             id: Uuid::from_u128(1),
             provider_meta: serde_json::json!({}),
             provider_key: "powens".into(),
-            provider_name: "Powens".into(),
             display_name: "My bank".into(),
             institution_key: institution_key.map(|s| s.to_string()),
             institution_name: Some("BNP Paribas".into()),
@@ -1086,7 +1049,11 @@ mod tests {
     fn connection_logo_derives_from_institution_key() {
         // logo must come from the connector key via the core helper — not be
         // hardcoded and not derived from the name.
-        let groups = ProviderGroup::tree(vec![conn_row(Some("some-key"))], vec![]);
+        let groups = ProviderGroup::tree(
+            vec![conn_row(Some("some-key"))],
+            vec![],
+            &crate::testkit::deps(),
+        );
         let conn = &groups[0].connections[0];
         assert_eq!(
             conn.logo,
@@ -1096,7 +1063,7 @@ mod tests {
 
     #[test]
     fn connection_logo_none_without_institution_key() {
-        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![]);
+        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![], &crate::testkit::deps());
         assert_eq!(groups[0].connections[0].logo, None);
     }
 }
@@ -1335,26 +1302,6 @@ pub struct PasskeySignInReq {
     pub credential: webauthn_rs::prelude::PublicKeyCredential,
     #[serde(default)]
     pub remember: bool,
-}
-
-/// The second login step's challenge, to start a passkey ceremony on it.
-#[derive(Deserialize)]
-pub struct ChallengeReq {
-    pub challenge: String,
-}
-
-/// A passkey ceremony on the second login step: it rides on the step's own
-/// challenge, so only the `publicKey` options are sent.
-#[derive(Debug, Serialize)]
-pub struct PasskeyRequestOptions {
-    pub options: serde_json::Value,
-}
-
-/// Second login step with a passkey.
-#[derive(Deserialize)]
-pub struct LoginVerifyPasskeyReq {
-    pub challenge: String,
-    pub credential: webauthn_rs::prelude::PublicKeyCredential,
 }
 
 #[derive(Debug, Serialize)]

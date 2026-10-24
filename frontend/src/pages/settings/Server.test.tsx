@@ -16,7 +16,7 @@ const budgetAiRes = (url: string) =>
     JSON.stringify(
       url.endsWith("/usage")
         ? { currency: "USD", models: [], totalCost: "0" }
-        : { provider: null, model: null, available: [], defaults: { gemini: "g", jev: "j" } },
+        : { provider: null, model: null, available: [], defaults: { jev: "j" } },
     ),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
@@ -32,9 +32,6 @@ describe("SettingsServer — data providers", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
-        if (url.includes("/settings/cors")) {
-          return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
-        }
         return new Response(
           JSON.stringify(init?.method === "PATCH" ? { ...PROVIDERS[0], enabled: false } : PROVIDERS),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -60,91 +57,5 @@ describe("SettingsServer — data providers", () => {
         expect.objectContaining({ method: "PATCH", body: JSON.stringify({ enabled: false }) }),
       ),
     );
-  });
-});
-
-describe("SettingsServer — CORS origins", () => {
-  beforeEach(() => {
-    let corsOrigins: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
-        if (url.includes("/settings/cors")) {
-          if (init?.method === "PATCH") {
-            corsOrigins = JSON.parse(init.body as string) as string[];
-            return new Response("null", { status: 200, headers: { "Content-Type": "application/json" } });
-          }
-          return new Response(JSON.stringify(corsOrigins), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
-      }),
-    );
-  });
-
-  it("adds a trimmed origin and clears the input, ignoring duplicates", async () => {
-    render(withClient(<SettingsServer />));
-    const input = await screen.findByPlaceholderText("https://gripsou.example.com");
-    const add = screen.getByRole("button", { name: "Add" });
-
-    fireEvent.change(input, { target: { value: "  https://a.test  " } });
-    fireEvent.click(add);
-    await waitFor(() => expect(screen.getByText("https://a.test")).toBeInTheDocument());
-    expect((input as HTMLInputElement).value).toBe("");
-
-    // Duplicate is ignored — still exactly one entry.
-    fireEvent.change(input, { target: { value: "https://a.test" } });
-    fireEvent.click(add);
-    await waitFor(() => expect(screen.getAllByText("https://a.test")).toHaveLength(1));
-  });
-
-  it("removes an origin via its delete button", async () => {
-    render(withClient(<SettingsServer />));
-    const input = await screen.findByPlaceholderText("https://gripsou.example.com");
-    fireEvent.change(input, { target: { value: "https://b.test" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove https://b.test" })).toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove https://b.test" }));
-    await waitFor(() => expect(screen.queryByText("https://b.test")).not.toBeInTheDocument());
-  });
-
-  it("disables Add when the input is empty", async () => {
-    render(withClient(<SettingsServer />));
-    await screen.findByPlaceholderText("https://gripsou.example.com");
-    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
-  });
-});
-
-describe("SettingsServer — about", () => {
-  it("renders the version from /api/health", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
-        if (url.includes("/health")) {
-          return new Response(JSON.stringify({ status: "ok", version: "v1.3.0-9-gd5fd32d" }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
-      }),
-    );
-    render(withClient(<SettingsServer />));
-    expect(await screen.findByText("v1.3.0-9-gd5fd32d")).toBeInTheDocument();
-    expect(screen.getByText("Version")).toBeInTheDocument();
-  });
-
-  it("shows a dash while the version is still loading", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => new Promise<Response>(() => {})),
-    );
-    render(withClient(<SettingsServer />));
-    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

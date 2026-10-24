@@ -28,8 +28,7 @@ use crate::repo::query::price_eligible_instruments_for_connection;
 /// the window only widens the response, not the round trips.
 ///
 /// 30 days rather than a handful so a gap survives a week of failed syncs, a
-/// holiday, or a laptop that was closed — and so this deploy repairs the holes
-/// already in the data without a one-off migration.
+/// holiday, or a laptop that was closed.
 const REFETCH_DAYS: i64 = 30;
 
 #[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -46,22 +45,9 @@ pub struct PriceSyncSummary {
 }
 
 // An FX rate can only be stored against a cash instrument, and cash instruments
-// otherwise only appear when a user actually holds cash in that currency. Every
-// currency this connection *converts through* therefore needs one backfilled,
-// or fx_asof() stays NULL for it forever and whatever it governs reads zero:
-//
-// * instrument.currency — a USD equity in a EUR account never holds USD cash.
-// * price.currency (the price domain) — Powens labels an instrument EUR, Yahoo
-//   resolves a London listing quoted GBP; unit_value_asof reads the price row's
-//   currency, so without GBP the position is unvaluable.
-// * account.currency (the amount domain) — cost_basis and snapshot.value
-//   convert from it.
-//
-// The `^[A-Z]{3}$` guard keeps a provider's stray `"usd"` (or worse) from
-// becoming a second, globally-shared cash instrument that the
-// `kind='cash'`-unique index on `currency` would not catch, and from being
-// pasted into a live Yahoo URL. instrument rows are global/shared across users
-// by design, so this is a plain insert, not a per-connection concept.
+// otherwise only appear when a user actually holds cash in that currency. So
+// every currency this connection converts through gets one (instrument rows are
+// global, shared across users).
 async fn ensure_cash_instruments_for_held_currencies(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
@@ -69,42 +55,8 @@ async fn ensure_cash_instruments_for_held_currencies(
     sqlx::query!(
         r#"
         insert into instrument (kind, symbol, isin, name, currency)
-        select distinct 'cash', null, null, needed.cur, needed.cur
-        from (
-            select i.currency as cur
-            from holding h
-            join account a    on a.id = h.account_id
-            join instrument i on i.id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select p.currency
-            from holding h
-            join account a on a.id = h.account_id
-            join price p   on p.instrument_id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select a.currency
-            from account a
-            where a.connection_id = $1
-
-            union
-
-            -- The owner's reporting preference. It is not held, quoted or
-            -- denominated in anything — it is only ever the divisor — so none
-            -- of the arms above reach it, and without this the rate is never
-            -- fetched: reporting_fx_asof falls back to 1 and every figure stays
-            -- in the pivot while wearing the chosen currency's symbol.
-            select u.prefs->>'currency'
-            from connection c
-            join users u on u.id = c.user_id
-            where c.id = $1
-        ) needed
-        where needed.cur <> (select base_currency from app_settings where id = 1)
-          and needed.cur ~ '^[A-Z]{3}$'
+        select 'cash', null, null, cur, cur
+        from connection_fx_currencies($1) cur
         on conflict (currency) where kind = 'cash' do nothing
         "#,
         connection_id,
@@ -128,47 +80,11 @@ pub async fn fetch_prices_for_connection(
     .await
 }
 
-/// Re-request every eligible instrument's ENTIRE history, ignoring both the
-/// freshness guard and [`REFETCH_DAYS`].
-///
-/// The routine pass only heals the trailing window, so a gap older than that —
-/// anything an instance accumulated before the window existed — needs asking
-/// for the whole series once. Since `insert_prices` upserts, this repairs in
-/// place: nothing is deleted first, so a failed or half-finished run leaves the
-/// existing history exactly as it was rather than a hole where it used to be.
-///
-/// Expensive (one full-history response per instrument) and not idempotent in
-/// cost, so it is a deliberate manual operation — see
-/// `jobs/examples/pricefix.rs` — never the scheduler.
-pub async fn refresh_all_prices_for_connection(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(
-        pool,
-        connection_id,
-        providers,
-        true,
-        chrono::Utc::now().date_naive(),
-    )
-    .await
-}
-
 /// Runs the routine pass for an explicit business date. Production callers use UTC today.
 pub async fn fetch_prices_for_connection_at(
     pool: &sqlx::PgPool,
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
-    today: chrono::NaiveDate,
-) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_inner(pool, connection_id, providers, false, today).await
-}
-async fn fetch_prices_for_connection_inner(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-    full: bool,
     today: chrono::NaiveDate,
 ) -> Result<PriceSyncSummary, CoreError> {
     let mut summary = PriceSyncSummary::default();
@@ -192,11 +108,9 @@ async fn fetch_prices_for_connection_inner(
             continue;
         };
 
-        // Freshness guard: already have today's point → nothing to do. A full
-        // refresh is asking for the history itself, not for today, so it is
-        // exactly the case the guard must not short-circuit.
+        // Freshness guard: already have today's point → nothing to do.
         let latest = latest_price_ts(&mut conn, row.id).await?;
-        if !full && latest.map(|ts| ts.date_naive()) == Some(today) {
+        if latest.map(|ts| ts.date_naive()) == Some(today) {
             summary.skipped_fresh += 1;
             continue;
         }
@@ -233,13 +147,10 @@ async fn fetch_prices_for_connection_inner(
             }
         };
 
-        // Re-fetch the trailing window (or full history when no prices yet, or
-        // when explicitly asked for one) and upsert. `latest` itself is
-        // deliberately not the start: see REFETCH_DAYS.
-        let since = match full {
-            true => None,
-            false => latest.map(|ts| ts - Duration::days(REFETCH_DAYS)),
-        };
+        // Re-fetch the trailing window (or full history when no prices yet)
+        // and upsert. `latest` itself is deliberately not the start: see
+        // REFETCH_DAYS.
+        let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
         match provider.fetch_prices(&symbol, since).await {
             Ok(points) => {
                 // Store points in whatever currency the listing is quoted in;

@@ -1,0 +1,133 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update users set name = $2, email = $3 where id = $1\n           returning id, name, email, role,\n                     welcomed_at is not null as \"welcome_done!\",\n                     prefs as \"prefs!: sqlx::types::Json<DisplayPrefs>\",\n                     currency, time_zone, budget_ai_enabled, budget_ai_threshold",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "welcome_done!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "prefs!: sqlx::types::Json<DisplayPrefs>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "prefs"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "currency",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "budget_ai_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "budget_ai_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_threshold"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9ca1b054325adfcd77453146fa439c085cc45de18503506cd5d1b2aa8c135989"
+}

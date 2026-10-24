@@ -47,7 +47,7 @@ describe("useHoldings", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0].ticker).toBe("AAPL");
     // getJson now attaches an (empty, unauthenticated) headers object.
-    expect(fetch).toHaveBeenCalledWith("/api/holdings", { headers: {}, signal: expect.any(AbortSignal) });
+    expect(fetch).toHaveBeenCalledWith("/api/holdings", { method: "GET", headers: {}, signal: expect.any(AbortSignal) });
   });
 });
 
@@ -122,12 +122,11 @@ describe("useUpdateAccount invalidation", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
-    // The last two are C-18: both tables print accountName/accountColor from
-    // their own payload, so a rename left them showing the old value.
+    // The last two: both tables print accountName/accountColor from their own
+    // payload, so a rename would leave them showing the old value.
     expect(invalidatedKeys).toEqual([
       ["accounts"],
       ["connections"],
-      ["distribution"],
       ["account-series"],
       ["holdings"],
       ["investment-returns"],
@@ -155,7 +154,6 @@ describe("useDeleteConnection", () => {
     expect(invalidatedKeys).toEqual([
       ["connections"],
       ["net-worth"],
-      ["distribution"],
       ["accounts"],
       ["account-series"],
       ["holdings"],
@@ -222,7 +220,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/transactions?search=leclerc&limit=${TRANSACTIONS_PAGE_SIZE}&offset=0`,
-      { headers: {}, signal: expect.any(AbortSignal) },
+      { method: "GET", headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(true);
   });
@@ -253,7 +251,7 @@ describe("useTransactions", () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/transactions?limit=${TRANSACTIONS_PAGE_SIZE}&offset=${TRANSACTIONS_PAGE_SIZE}`,
-      { headers: {}, signal: expect.any(AbortSignal) },
+      { method: "GET", headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(false);
   });

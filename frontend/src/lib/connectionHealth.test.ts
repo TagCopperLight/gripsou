@@ -13,7 +13,7 @@ describe("provider health", () => {
   });
   it("reports source errors even when the parent is healthy and deduplicates affected accounts", () => {
     const failed = {...health,state:"bug",errorMessage:"403 Client Error: Forbidden",nextRetryOn:"2026-10-11"};
-    const accounts = ["Livret A","Livret Jeune"].map((name,id) => ({id:String(id),name,typeLabel:"Savings",value:"0",color:null,lastSyncAt:null,health:failed}));
+    const accounts = ["Livret A","Livret Jeune"].map((name,id) => ({id:String(id),name,typeKey:"savings",value:"0",color:"#4dd0b1",lastSyncAt:null,health:failed}));
     const issues = connectionIssues({...conn,health,accounts},"2026-10-10");
     expect(issues).toEqual([{kind:"error",health:failed,accounts:["Livret A","Livret Jeune"]}]);
     expect(connectionIssues({...conn,health,accounts:accounts.map((a)=>({...a,health}))},"2026-10-10")).toEqual([]);

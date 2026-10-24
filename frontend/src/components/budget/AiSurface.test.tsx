@@ -30,7 +30,7 @@ describe("AiSurface", () => {
     const toggle = await screen.findByRole("switch");
     await waitFor(() => expect(toggle).not.toBeDisabled());
     fireEvent.click(toggle);
-    expect(updatePrefs).toHaveBeenCalledWith(expect.objectContaining({ budgetAiEnabled: true }));
+    expect(updatePrefs).toHaveBeenCalledWith({ budgetAiEnabled: true });
   });
 
   it("moves the threshold in steps of five", async () => {
@@ -38,7 +38,7 @@ describe("AiSurface", () => {
     const slider = await screen.findByRole("slider");
     fireEvent.change(slider, { target: { value: "65" } });
     fireEvent.pointerUp(slider);
-    expect(updatePrefs).toHaveBeenCalledWith(expect.objectContaining({ budgetAiThreshold: 65 }));
+    expect(updatePrefs).toHaveBeenCalledWith({ budgetAiThreshold: 65 });
   });
 
   it("is disabled with an explanation when the server has no provider", async () => {

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select budget_ai_enabled from users where id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget_ai_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_enabled"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "94116a176b1bfdd19f5e32836d93cda6229db84aeb53dc296f8e9a5fc5e70bdc"
+}

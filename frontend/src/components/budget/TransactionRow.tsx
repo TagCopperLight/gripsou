@@ -9,7 +9,7 @@ import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
 import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
-import { FALLBACK_COLOR, categoryOfTransaction } from "../../lib/budget";
+import { categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
 import type { Transaction } from "../../api/types";
 
@@ -84,7 +84,6 @@ export const TransactionRow = memo(function TransactionRow({
   return (
     <tr
       data-testid="tx-row"
-      data-transaction-id={tx.id}
       role="row"
       className={`col-span-full grid grid-cols-subgrid text-sm ${CELL} group ${
         selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : "hover:[&>td]:bg-hover"
@@ -170,7 +169,7 @@ export const TransactionRow = memo(function TransactionRow({
         <span className={`flex min-w-0 items-center gap-2 ${dim}`}>
           <span
             className="inline-block size-3 rounded"
-            style={{ backgroundColor: tx.accountColor ?? FALLBACK_COLOR }}
+            style={{ backgroundColor: tx.accountColor }}
           />
           <span className="truncate text-fg-dim">{tx.accountName}</span>
         </span>

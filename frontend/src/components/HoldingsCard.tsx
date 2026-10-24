@@ -89,14 +89,9 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const [selected, setSelected] = useState<Holding | null>(null);
   const [lotFor, setLotFor] = useState<Holding | null>(null);
 
-  // Filter by stable account-type key; keep the backend label around as the
-  // i18n fallback for each key.
+  // Filter by stable account-type key.
   const accountTypes = useMemo(
     () => ["All", ...new Set(holdings.map((h) => h.accountType))],
-    [holdings],
-  );
-  const accountTypeFallback = useMemo(
-    () => new Map(holdings.map((h) => [h.accountType, h.accountTypeLabel])),
     [holdings],
   );
 
@@ -171,7 +166,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               >
                 {c === "All"
                   ? t("dashboard.holdings.all")
-                  : accountTypeLabel(t, c, accountTypeFallback.get(c) ?? c)}
+                  : accountTypeLabel(t, c)}
               </button>
             );
           })}
@@ -303,7 +298,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* ACCOUNT TYPE */}
                   <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
                     <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
-                      {accountTypeLabel(t, h.accountType, h.accountTypeLabel)}
+                      {accountTypeLabel(t, h.accountType)}
                     </span>
                   </td>
                   {/* VALUE */}

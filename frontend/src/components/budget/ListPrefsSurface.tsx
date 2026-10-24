@@ -26,7 +26,7 @@ export function ListPrefsSurface() {
         </div>
         <Toggle
           checked={prefs.showChecked}
-          onChange={(v) => void updatePrefs({ ...prefs, showChecked: v })}
+          onChange={(v) => void updatePrefs({ showChecked: v })}
           aria-label={t("settings.budget.listPrefs.showChecked")}
         />
       </div>

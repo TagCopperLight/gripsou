@@ -12,6 +12,12 @@ export type DonutItem = {
   color: string;
   /** The leftover slice, drawn striped so it never reads as one more category. */
   other?: boolean;
+  /** The exact amount, when the legend shouldn't derive it from the share. */
+  value?: number | string;
+  /** A small badge after the label (the account's type). */
+  tag?: string;
+  /** Shown as ⚠ before the amount, this text as its title. */
+  warning?: string;
   children?: DonutItem[];
 };
 

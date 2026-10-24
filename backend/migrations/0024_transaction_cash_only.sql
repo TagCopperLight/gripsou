@@ -1,18 +1,5 @@
--- `transaction` is the cash ledger and nothing else. A purchase used to be one
--- row doing two jobs — the cash movement AND the investment record — which is
--- why it could not carry a fee and why the basis rule ended up in four places.
---
--- The hand-entered rows were copied into `lot` by 0021; delete them here so
--- nothing is counted twice. Provider rows stay: Powens' `ACHAT COMPTANT` lines
--- are real cash that really left the account.
---
--- Fail fast rather than lose data. 0021 copies only the manual buy/sell rows
--- that have BOTH a quantity and a unit price AND a matching holding; the delete
--- below is unconditional. A row that failed 0021's filter would therefore be
--- destroyed without ever having been copied, and the column drops after it are
--- irreversible. Every row qualifies in the database this was developed against,
--- so this guard should never fire — but it is the difference between a failed
--- deploy and a silently lost purchase on someone else's instance.
+-- `transaction` is the cash ledger only. Delete the hand-entered buy/sell rows,
+-- copied into `lot` by 0021, but refuse if one of them was not copied.
 do $$
 declare
     orphans int;
@@ -42,10 +29,6 @@ end $$;
 
 delete from transaction where external_id is null and type in ('buy', 'sell');
 
--- Verified before writing this migration: no provider row anywhere carries a
--- quantity, unit price or instrument — Powens sends none of the three (no
--- /marketorders, no instrument link on transactions). After the delete above
--- these three columns have no writer and no data.
 alter table transaction drop column instrument_id;
 alter table transaction drop column quantity;
 alter table transaction drop column unit_price;

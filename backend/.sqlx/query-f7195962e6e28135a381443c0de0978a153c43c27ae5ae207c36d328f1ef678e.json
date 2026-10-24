@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into instrument (kind, symbol, isin, name, currency)\n        select 'cash', null, null, cur, cur\n        from connection_fx_currencies($1) cur\n        on conflict (currency) where kind = 'cash' do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f7195962e6e28135a381443c0de0978a153c43c27ae5ae207c36d328f1ef678e"
+}

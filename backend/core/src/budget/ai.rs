@@ -85,8 +85,6 @@ const SHARED_EXAMPLES: i64 = 10;
 
 #[derive(Debug)]
 pub enum RunOutcome {
-    /// Another run holds this user.
-    Busy,
     /// Nothing was uncategorised; no run row written.
     Nothing,
     /// `outcome` is `ok` | `partial` | `error`, as written to `budget_ai_run`.
@@ -105,30 +103,16 @@ pub enum RunOutcome {
 /// The run row is written before the first call and updated after each one,
 /// so the spend survives a run that fails half-way; a database error closes
 /// it as `error` with the message before being returned.
+///
+/// The caller runs one at a time per user (`gripsou_jobs` keeps them in
+/// memory), so a run row still `running` here is a dead one and is closed.
 pub async fn run_for_user(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     categorizer: &dyn Categorizer,
 ) -> Result<RunOutcome, CoreError> {
-    if !repo::try_lock(pool, user_id).await? {
-        return Ok(RunOutcome::Busy);
-    }
-    let result = match repo::close_abandoned_runs(pool, Some(user_id)).await {
-        Ok(_) => run_locked(pool, user_id, categorizer).await,
-        Err(e) => Err(e),
-    };
-    if let Err(e) = repo::unlock(pool, user_id).await {
-        tracing::error!(user_id = %user_id, error = %crate::logs::error_chain(&e), "ai lock not released");
-    }
-    result
-}
-
-/// Cleanup after a run whose task died without returning (a panic): close
-/// its run row as `error` and free the user. Only for the caller that owns
-/// the user's run — this releases the lock whoever holds it.
-pub async fn abandon(pool: &sqlx::PgPool, user_id: Uuid) -> Result<(), CoreError> {
     repo::close_abandoned_runs(pool, Some(user_id)).await?;
-    repo::unlock(pool, user_id).await
+    run(pool, user_id, categorizer).await
 }
 
 /// What the run has done so far.
@@ -138,7 +122,7 @@ struct Tally {
     items: i32,
 }
 
-async fn run_locked(
+async fn run(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     categorizer: &dyn Categorizer,
@@ -229,7 +213,7 @@ async fn run_chunks(
         };
         tally.batches += 1;
         // The spend first: whatever fails next, the call was paid for.
-        repo::record_usage(pool, tally.run_id, user_id, out.usage).await?;
+        repo::record_usage(pool, tally.run_id, out.usage).await?;
         let decisions = decide(&req.items, out.guesses);
         let written = repo::write_decisions(pool, user_id, &decisions).await?;
         tally.items = tally

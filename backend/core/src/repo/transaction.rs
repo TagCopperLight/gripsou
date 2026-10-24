@@ -23,25 +23,23 @@ pub async fn upsert_transaction(
     let inserted = sqlx::query_scalar!(
         r#"
         insert into transaction
-            (account_id, ts, type, amount, fee,
+            (account_id, spent_on, type, amount,
              description, external_id, provider_meta, booked_on)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        values ($1, $2, $3, $4, $5, $6, $7, $8)
         on conflict (account_id, external_id) where external_id is not null
         do update set
-            ts            = excluded.ts,
+            spent_on      = excluded.spent_on,
             type          = excluded.type,
             amount        = excluded.amount,
-            fee           = excluded.fee,
             description   = excluded.description,
             booked_on     = excluded.booked_on,
             provider_meta = excluded.provider_meta
         returning (xmax = 0) as "inserted!"
         "#,
         account_id,
-        txn.ts,
+        txn.spent_on,
         txn.kind,
         txn.amount,
-        txn.fee,
         txn.description,
         txn.external_id,
         txn.provider_meta,

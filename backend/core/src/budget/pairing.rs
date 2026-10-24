@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::{DateTime, Utc};
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -29,7 +29,7 @@ const WINDOW_DAYS: i64 = 5;
 struct Candidate {
     id: Uuid,
     account_id: Uuid,
-    ts: DateTime<Utc>,
+    day: NaiveDate,
     amount: Decimal,
     currency: String,
 }
@@ -39,7 +39,7 @@ struct Candidate {
 /// only compare rows already sharing currency, amount and sign, so two on the
 /// same account are the same movement as far as any total can tell — whatever
 /// their date. [`forced_pairs`] merges rows on a stricter test (same account
-/// *and* same instant), because it measures reach from one timestamp per node.
+/// *and* same day), because it measures reach from one day per node.
 fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
     a.account_id == b.account_id
 }
@@ -82,7 +82,7 @@ pub async fn pair_internal_transfers(
         r#"
         select t.id          as "id!",
                t.account_id  as "account_id!",
-               t.ts          as "ts!",
+               t.spent_on    as "day!",
                t.amount      as "amount!",
                a.currency    as "currency!",
                t.transfer_pair_id
@@ -122,7 +122,7 @@ pub async fn pair_internal_transfers(
               -- card payment, once the user has filed it.
               or c.kind = 'neutral'
           )
-        order by t.ts
+        order by t.spent_on
         "#,
         user_id,
     )
@@ -136,7 +136,7 @@ pub async fn pair_internal_transfers(
         .map(|r| Candidate {
             id: r.id,
             account_id: r.account_id,
-            ts: r.ts,
+            day: r.day,
             amount: r.amount,
             currency: r.currency,
         })
@@ -204,7 +204,7 @@ pub async fn pair_internal_transfers(
     // transfer, and the AI's confidence and review stamp go with the guess
     // they described — left behind they would read as a reviewed transfer at
     // 27 %.
-    let result = sqlx::query!(
+    sqlx::query!(
         r#"
         update transaction t
            set transfer_pair_id = p.partner,
@@ -230,28 +230,14 @@ pub async fn pair_internal_transfers(
     .execute(&mut *conn)
     .await?;
 
-    // A write that doesn't touch every row is a hard error rather than a
-    // half-paired ledger: if the join above matched nothing (this user's
-    // `internal_transfer` category missing), pairs would be reported that
-    // were never written.
-    if result.rows_affected() != ids.len() as u64 {
-        return Err(CoreError::TransferPairNotWritten {
-            user_id,
-            out_id: ids[0],
-            in_id: partners[0],
-            rows: result.rows_affected(),
-        });
-    }
     // A moved pair writes both of its rows, as a new one does.
     Ok(ids.len() / 2)
 }
 
-/// One round: every mutual-nearest-neighbour pair among `candidates`. See
-/// [`pair_internal_transfers`] for why this needs to repeat.
-fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
-    // Group by (currency, |amount|): only rows inside one group can ever pair,
-    // which keeps the comparison quadratic in the size of a group rather than
-    // of the ledger.
+/// Candidates grouped by (currency, |amount|): only rows inside one group can
+/// ever pair, which keeps the comparison quadratic in the size of a group
+/// rather than of the ledger.
+fn groups(candidates: &[Candidate]) -> impl Iterator<Item = Vec<&Candidate>> {
     let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
     for c in candidates {
         groups
@@ -259,10 +245,14 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
             .or_default()
             .push(c);
     }
+    groups.into_values()
+}
 
-    let window = chrono::Duration::days(WINDOW_DAYS);
+/// One round: every mutual-nearest-neighbour pair among `candidates`. See
+/// [`pair_internal_transfers`] for why this needs to repeat.
+fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     let mut pairs: Vec<(Uuid, Uuid)> = vec![];
-    for (_key, group) in groups {
+    for group in groups(candidates) {
         let outs: Vec<&&Candidate> = group.iter().filter(|c| c.amount < Decimal::ZERO).collect();
         let ins: Vec<&&Candidate> = group.iter().filter(|c| c.amount > Decimal::ZERO).collect();
 
@@ -289,8 +279,8 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
                     if other.account_id == from.account_id {
                         continue;
                     }
-                    let gap = (other.ts - from.ts).num_seconds().abs();
-                    if gap > window.num_seconds() {
+                    let gap = (other.day - from.day).num_days().abs();
+                    if gap > WINDOW_DAYS {
                         continue;
                     }
                     match best {
@@ -322,12 +312,12 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
                 if tie_size > 1 {
                     // `from`'s own twins: same account, and close enough to the
                     // tied group to be one of its counterparts.
-                    let near = best.map(|(_, c)| c.ts).unwrap_or(from.ts);
+                    let near = best.map(|(_, c)| c.day).unwrap_or(from.day);
                     let twins = own
                         .iter()
                         .filter(|c| {
                             interchangeable(from, c)
-                                && (c.ts - near).num_seconds().abs() <= window.num_seconds()
+                                && (c.day - near).num_days().abs() <= WINDOW_DAYS
                         })
                         .count();
                     if twins != tie_size {
@@ -371,27 +361,19 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
 /// Reach grows a day at a time up to [`WINDOW_DAYS`], so same-day chains are
 /// settled before a wider window could tangle them with the next day's.
 ///
-/// Rows on one account at one instant are identical for this purpose, so
+/// Rows on one account on one day are identical for this purpose, so
 /// they are counted as one node of that many rows: two identical chains the
 /// same day pair, where treating each row apart would see two equally good
 /// ways to do it and pair nothing. Stricter than [`interchangeable`], which
-/// ignores the date: a node's reach is measured from its single timestamp.
+/// ignores the date: a node's reach is measured from its single day.
 fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
-    let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
-    for c in candidates {
-        groups
-            .entry((c.currency.as_str(), c.amount.abs()))
-            .or_default()
-            .push(c);
-    }
-
     let mut pairs = vec![];
-    for group in groups.into_values() {
+    for group in groups(candidates) {
         // Nodes: identical rows, each list sorted by id so both runs
         // of a converged pass pick the same rows.
         let mut outs: Vec<Vec<&Candidate>> = vec![];
         let mut ins: Vec<Vec<&Candidate>> = vec![];
-        let mut by_key: HashMap<(bool, Uuid, DateTime<Utc>), usize> = HashMap::new();
+        let mut by_key: HashMap<(bool, Uuid, NaiveDate), usize> = HashMap::new();
         for c in group {
             let side = if c.amount < Decimal::ZERO {
                 &mut outs
@@ -399,7 +381,7 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
                 &mut ins
             };
             let slot = *by_key
-                .entry((c.amount < Decimal::ZERO, c.account_id, c.ts))
+                .entry((c.amount < Decimal::ZERO, c.account_id, c.day))
                 .or_insert_with(|| {
                     side.push(vec![]);
                     side.len() - 1
@@ -410,8 +392,7 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
             node.sort_by_key(|c| c.id);
         }
 
-        for days in 0..=WINDOW_DAYS {
-            let reach = chrono::Duration::days(days).num_seconds();
+        for reach in 0..=WINDOW_DAYS {
             let found = forced_in_group(&outs, &ins, reach);
             if !found.is_empty() {
                 // The next round starts again at same-day reach on what is
@@ -434,7 +415,7 @@ fn forced_in_group(
         .flat_map(|o| (0..ins.len()).map(move |i| (o, i)))
         .filter(|&(o, i)| {
             let (a, b) = (outs[o][0], ins[i][0]);
-            a.account_id != b.account_id && (a.ts - b.ts).num_seconds().abs() <= reach
+            a.account_id != b.account_id && (a.day - b.day).num_days().abs() <= reach
         })
         .collect();
 

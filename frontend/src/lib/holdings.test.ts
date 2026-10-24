@@ -7,7 +7,6 @@ function cash(
   account: string,
   value: string,
   accountType = "checking",
-  accountTypeLabel = "Checking",
 ): Holding {
   return {
     id,
@@ -19,7 +18,6 @@ function cash(
     accountName: account,
     accountColor: "#888",
     accountType,
-    accountTypeLabel,
     qty: value,
     price: "1",
     currency: "EUR",
@@ -50,7 +48,6 @@ function equity(id: string, value: string): Holding {
     accountName: "Example Broker",
     accountColor: "#555",
     accountType: "brokerage",
-    accountTypeLabel: "Brokerage",
     qty: "1",
     price: value,
     currency: "EUR",
@@ -110,8 +107,8 @@ describe("aggregateCash", () => {
   it("marks the merged row \"multiple\" when account types differ", () => {
     const result = aggregateCash(
       [
-        cash("c1", "Checking", "100", "checking", "Checking"),
-        cash("c2", "PEA", "200", "pea", "PEA"),
+        cash("c1", "Checking", "100", "checking"),
+        cash("c2", "PEA", "200", "pea"),
       ],
       "Multiple accounts",
     );
@@ -119,14 +116,13 @@ describe("aggregateCash", () => {
     const cashRows = result.filter((h) => h.kind === "cash");
     expect(cashRows).toHaveLength(1);
     expect(cashRows[0].accountType).toBe("multiple");
-    expect(cashRows[0].accountTypeLabel).toBe("Multiple");
   });
 
   it("keeps the shared account type when merged rows agree", () => {
     const result = aggregateCash(
       [
-        cash("c1", "Checking A", "100", "savings", "Savings"),
-        cash("c2", "Checking B", "200", "savings", "Savings"),
+        cash("c1", "Checking A", "100", "savings"),
+        cash("c2", "Checking B", "200", "savings"),
       ],
       "Multiple accounts",
     );
@@ -134,7 +130,6 @@ describe("aggregateCash", () => {
     const cashRows = result.filter((h) => h.kind === "cash");
     expect(cashRows).toHaveLength(1);
     expect(cashRows[0].accountType).toBe("savings");
-    expect(cashRows[0].accountTypeLabel).toBe("Savings");
   });
 
   it("keeps the fx warning when merging cash rows", () => {

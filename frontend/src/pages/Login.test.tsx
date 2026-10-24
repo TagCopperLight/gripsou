@@ -5,9 +5,8 @@ import { Login } from "./Login";
 import { AuthProvider } from "../auth/AuthProvider";
 import { AuthContext, useAuth, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS } from "../lib/prefs";
-import * as client from "../api/client";
 import { ApiError, getAuthToken, setAuthToken } from "../api/client";
-import { startAuthentication, WebAuthnAbortService } from "@simplewebauthn/browser";
+import { WebAuthnAbortService } from "@simplewebauthn/browser";
 
 vi.mock("@simplewebauthn/browser", () => ({
   startAuthentication: vi.fn(),
@@ -103,7 +102,7 @@ describe("Login", () => {
   });
 
   describe("second step", () => {
-    const mfa = { mfaRequired: true as const, challenge: "ch1", methods: ["totp" as const, "recovery" as const] };
+    const mfa = { mfaRequired: true as const, challenge: "ch1" };
 
     /** Sign in with a password the server accepts for a two-factor account. */
     async function toCodeStep(verifyLogin: AuthValue["verifyLogin"], { remember = false } = {}) {
@@ -175,7 +174,7 @@ describe("Login", () => {
     });
 
     it("returns to the password step when the challenge expired, keeping the email", async () => {
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("challenge expired", 401));
+      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("challenge expired", 410));
       await toCodeStep(verifyLogin);
       typeCode("123456");
       expect(await screen.findByText("That took too long. Sign in again.")).toBeInTheDocument();
@@ -192,7 +191,7 @@ describe("Login", () => {
       expect(screen.getByText("Welcome back")).toBeInTheDocument();
     });
 
-    it("drops a late answer to a code sent before Change", async () => {
+    it("can't leave the code step while a code is being checked", async () => {
       let reject!: (err: unknown) => void;
       const verifyLogin = vi.fn<AuthValue["verifyLogin"]>(
         () => new Promise<void>((_, r) => { reject = r; }),
@@ -200,11 +199,11 @@ describe("Login", () => {
       await toCodeStep(verifyLogin);
       typeCode("123456");
       await waitFor(() => expect(verifyLogin).toHaveBeenCalled());
-      fireEvent.click(screen.getByRole("button", { name: "Change" }));
+      expect(screen.getByRole("button", { name: "Change" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Use a backup code instead" })).toBeDisabled();
       await act(async () => reject(new ApiError("invalid code", 400)));
-      expect(screen.getByText("Welcome back")).toBeInTheDocument();
-      expect(screen.queryByText("That code didn't work. Try again.")).toBeNull();
-      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+      expect(screen.getByText("That code didn't work. Try again.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Change" })).toBeEnabled();
     });
 
     it("signs in with a trimmed backup code, and goes back to the app", async () => {
@@ -253,152 +252,44 @@ describe("Login", () => {
   });
 
   describe("passkeys", () => {
-    const mfa = {
-      mfaRequired: true as const,
-      challenge: "ch1",
-      methods: ["totp" as const, "recovery" as const, "passkey" as const],
-    };
-    const options = { challenge: "abc" };
-    const credential = { id: "cred" };
     const refused = "That passkey didn't work. Try again.";
 
-    let postJson: ReturnType<typeof vi.spyOn>;
     beforeEach(() => {
-      vi.mocked(startAuthentication).mockReset();
       vi.mocked(WebAuthnAbortService.cancelCeremony).mockReset();
-      postJson = vi.spyOn(client, "postJson").mockResolvedValue({ options });
     });
-    afterEach(() => vi.restoreAllMocks());
 
-    /** Fill in the password step and submit it. */
-    async function signInWithPassword(
-      verifyLogin: AuthValue["verifyLogin"],
-      methodsMfa: typeof mfa | { mfaRequired: true; challenge: string; methods: ("totp" | "recovery")[] } = mfa,
-      { remember = false } = {},
-    ) {
-      const login = vi.fn<AuthValue["login"]>().mockResolvedValue(methodsMfa);
-      render(wrapWithMock(login, <Login />, verifyLogin));
-      fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
-      fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
-      if (remember) fireEvent.click(screen.getByLabelText("Remember me"));
-      await act(async () => {
+    describe("on the code page", () => {
+      /** Sign in with a password the server accepts for a two-factor account. */
+      async function toCodeStep(loginWithPasskey: AuthValue["loginWithPasskey"]) {
+        const login = vi.fn<AuthValue["login"]>().mockResolvedValue({ mfaRequired: true, challenge: "ch1" });
+        render(wrapWithMock(login, <Login />, undefined, loginWithPasskey));
+        fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
+        fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
         fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+        await screen.findByText("Enter your code");
+      }
+
+      it("offers a passkey sign-in in place of the code", async () => {
+        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockResolvedValue();
+        await toCodeStep(loginWithPasskey);
+        fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+        await waitFor(() => expect(loginWithPasskey).toHaveBeenCalledWith(false));
       });
-    }
 
-    it("tries the passkey first and signs in with the credential", async () => {
-      vi.mocked(startAuthentication).mockResolvedValue(credential as never);
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockResolvedValue();
-      await signInWithPassword(verifyLogin, mfa, { remember: true });
-      expect(await screen.findByText("Use your passkey")).toBeInTheDocument();
-      expect(screen.getByText("a@t.local")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
-      await waitFor(() =>
-        expect(verifyLogin).toHaveBeenCalledWith("ch1", { passkey: credential }, true),
-      );
-      expect(postJson).toHaveBeenCalledWith(
-        "/auth/login/verify/passkey/options",
-        { challenge: "ch1" },
-        expect.anything(),
-      );
-      expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: options });
-    });
+      it("Use your code instead returns to the code page", async () => {
+        await toCodeStep(vi.fn(() => new Promise<void>(() => {})));
+        fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Use your code instead" }));
+        expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
+        expect(screen.getByText("Enter your code")).toBeInTheDocument();
+      });
 
-    it("shows the waiting card with a way to the code while the browser answers", async () => {
-      vi.mocked(startAuthentication).mockReturnValue(new Promise(() => {}));
-      await signInWithPassword(vi.fn());
-      expect(await screen.findByText("Waiting for your browser…")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use your code instead" })).toBeInTheDocument();
-    });
-
-    it("lands on the code page without an error when the browser cancelled", async () => {
-      vi.mocked(startAuthentication).mockRejectedValue(new DOMException("cancelled", "NotAllowedError"));
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>();
-      await signInWithPassword(verifyLogin);
-      expect(await screen.findByText("Enter your code")).toBeInTheDocument();
-      expect(screen.getByLabelText("6-digit code")).toBeInTheDocument();
-      expect(screen.getByText("or")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use a passkey" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use a backup code instead" })).toBeInTheDocument();
-      expect(screen.queryByText(refused)).toBeNull();
-      expect(screen.queryByText("Something went wrong. Try again.")).toBeNull();
-      expect(verifyLogin).not.toHaveBeenCalled();
-    });
-
-    it("starts the passkey again from Use a passkey", async () => {
-      vi.mocked(startAuthentication)
-        .mockRejectedValueOnce(new DOMException("cancelled", "NotAllowedError"))
-        .mockResolvedValueOnce(credential as never);
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockResolvedValue();
-      await signInWithPassword(verifyLogin);
-      fireEvent.click(await screen.findByRole("button", { name: "Use a passkey" }));
-      await waitFor(() =>
-        expect(verifyLogin).toHaveBeenCalledWith("ch1", { passkey: credential }, false),
-      );
-      expect(startAuthentication).toHaveBeenCalledTimes(2);
-    });
-
-    it("says the passkey didn't work on a 400", async () => {
-      vi.mocked(startAuthentication).mockResolvedValue(credential as never);
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("bad", 400));
-      await signInWithPassword(verifyLogin);
-      expect(await screen.findByText(refused)).toBeInTheDocument();
-      expect(screen.getByText("Enter your code")).toBeInTheDocument();
-    });
-
-    it("returns to the password step when the challenge expired (401)", async () => {
-      vi.mocked(startAuthentication).mockResolvedValue(credential as never);
-      const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("expired", 401));
-      await signInWithPassword(verifyLogin);
-      expect(await screen.findByText("That took too long. Sign in again.")).toBeInTheDocument();
-      expect(screen.getByLabelText("Email")).toHaveValue("a@t.local");
-      expect(screen.getByLabelText("Password")).toHaveValue("");
-    });
-
-    it("says how long to wait when the passkey step is throttled", async () => {
-      postJson.mockRejectedValue(new ApiError("too many", 429, 120));
-      await signInWithPassword(vi.fn());
-      expect(await screen.findByText("Too many attempts. Try again in 2 minutes.")).toBeInTheDocument();
-      expect(screen.getByText("Enter your code")).toBeInTheDocument();
-    });
-
-    it("Use your code instead cancels the ceremony and shows the code page", async () => {
-      vi.mocked(startAuthentication).mockReturnValue(new Promise(() => {}));
-      await signInWithPassword(vi.fn());
-      fireEvent.click(await screen.findByRole("button", { name: "Use your code instead" }));
-      expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
-      expect(screen.getByText("Enter your code")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use a passkey" })).toBeInTheDocument();
-    });
-
-    it("opens no browser window when the user left before the options arrived", async () => {
-      let answer!: (v: unknown) => void;
-      postJson.mockReturnValue(new Promise((r) => { answer = r; }));
-      await signInWithPassword(vi.fn());
-      fireEvent.click(await screen.findByRole("button", { name: "Use your code instead" }));
-      await act(async () => answer({ options }));
-      expect(startAuthentication).not.toHaveBeenCalled();
-      expect(screen.getByText("Enter your code")).toBeInTheDocument();
-    });
-
-    it("hides the passkey option without a message when none is left (409)", async () => {
-      postJson.mockRejectedValue(new ApiError("no passkeys", 409));
-      await signInWithPassword(vi.fn());
-      expect(await screen.findByText("Enter your code")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Use a passkey" })).toBeNull();
-      expect(screen.queryByText("or")).toBeNull();
-      expect(screen.queryByText(refused)).toBeNull();
-      expect(screen.queryByText("Something went wrong. Try again.")).toBeNull();
-      expect(startAuthentication).not.toHaveBeenCalled();
-    });
-
-    it("keeps today's code page when the account has no passkey", async () => {
-      await signInWithPassword(vi.fn(), { mfaRequired: true, challenge: "ch1", methods: ["totp", "recovery"] });
-      expect(await screen.findByText("Enter your code")).toBeInTheDocument();
-      expect(screen.queryByText("or")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Use a passkey" })).toBeNull();
-      expect(startAuthentication).not.toHaveBeenCalled();
-      expect(postJson).not.toHaveBeenCalled();
+      it("goes back to the code page with a message when the server refused", async () => {
+        await toCodeStep(vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("bad", 400)));
+        fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+        expect(await screen.findByText(refused)).toBeInTheDocument();
+        expect(screen.getByText("Enter your code")).toBeInTheDocument();
+      });
     });
 
     describe("on the password page", () => {
@@ -431,8 +322,8 @@ describe("Login", () => {
         expect(screen.getByLabelText("Email")).toBeInTheDocument();
       });
 
-      it("goes back to the form with a message when the challenge expired (401)", async () => {
-        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 401));
+      it("goes back to the form with a message when the challenge expired (410)", async () => {
+        const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 410));
         render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText(refused)).toBeInTheDocument();
@@ -478,7 +369,7 @@ describe("Login", () => {
       const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) =>
         url === "/api/auth/login/verify"
           ? json({ token: "tok", user })
-          : json({ mfaRequired: true, challenge: "ch1", methods: ["totp", "recovery"] }),
+          : json({ mfaRequired: true, challenge: "ch1" }),
       );
       vi.stubGlobal("fetch", fetchMock);
       render(wrap(<><Status /><Login /></>));

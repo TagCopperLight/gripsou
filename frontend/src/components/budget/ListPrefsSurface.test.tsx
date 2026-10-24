@@ -21,11 +21,9 @@ describe("ListPrefsSurface", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   });
 
-  it("writes the whole prefs object with the flipped flag", () => {
+  it("saves the flipped flag", () => {
     const { updatePrefs } = renderWith({ ...DEFAULT_PREFS, showChecked: false });
     fireEvent.click(screen.getByRole("switch"));
-    expect(updatePrefs).toHaveBeenCalledWith(
-      expect.objectContaining({ ...DEFAULT_PREFS, showChecked: true }),
-    );
+    expect(updatePrefs).toHaveBeenCalledWith({ showChecked: true });
   });
 });

@@ -58,8 +58,49 @@ pub async fn net_worth_series_with_target(
         .map_or(from, |h| h.max(from));
     let days = crate::repo::series::sample_days(start, to, target);
 
+    // Net worth is the sum of the account values: rows come ordered by day,
+    // so each day's accounts are consecutive.
+    let mut rows: Vec<NetWorthRow> = Vec::new();
+    for r in account_day_values(pool, user_id, &days).await? {
+        match rows.last_mut() {
+            Some(day) if day.as_of == r.as_of => {
+                day.net_worth += r.value;
+                day.invested += r.invested;
+                day.fx_missing |= r.fx_missing;
+            }
+            _ => rows.push(NetWorthRow {
+                as_of: r.as_of,
+                net_worth: r.value,
+                invested: r.invested,
+                fx_missing: r.fx_missing,
+                reporting_fx_missing: r.reporting_fx_missing,
+            }),
+        }
+    }
+    Ok(rows)
+}
+
+/// One account on one day, valued for both the net-worth line and the
+/// stacked accounts chart.
+struct AccountDayRow {
+    account_id: Uuid,
+    name: String,
+    color: String,
+    as_of: NaiveDate,
+    value: Decimal,
+    invested: Decimal,
+    fx_missing: bool,
+    reporting_fx_missing: bool,
+}
+
+/// The one per-day valuation, grouped by (day, account), ordered by day.
+async fn account_day_values(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    days: &[NaiveDate],
+) -> Result<Vec<AccountDayRow>, CoreError> {
     let rows = sqlx::query_as!(
-        NetWorthRow,
+        AccountDayRow,
         r#"
         -- Per day, value each holding from its as-of snapshot (quantity anchor)
         -- and valuation_grid's unit_value, which folds in the FX rate. The INNER JOIN LATERAL
@@ -67,8 +108,8 @@ pub async fn net_worth_series_with_target(
         -- position never contributes before it was acquired. A sold holding keeps
         -- its history (its zero snapshot values it at 0 thereafter). Falling back
         -- to the provider valuation (snap.value) still needs converting, hence
-        -- the account-currency rate (afx) on that branch. Everything is summed in the pivot,
-        -- then divided once into the reader's reporting currency.
+        -- the account-currency rate (afx) on that branch. Each account is summed in
+        -- the pivot, then divided into the reader's reporting currency.
         --
         -- Three currency domains, never conflated:
         --   price     — the `price` row's own currency, folded in by
@@ -76,7 +117,7 @@ pub async fn net_worth_series_with_target(
         --               instrument);
         --   amount    — `account.currency`, which is what the provider denominates
         --               snapshot.value in, hence the afx join on that branch;
-        --   reporting — `users.prefs.currency`, applied once by the final divide.
+        --   reporting — `users.currency`, applied by the final divide.
         -- `instrument.currency` is the quote currency of the security and is none
         -- of the three: a USD-quoted stock inside a EUR account has a EUR cost
         -- basis.
@@ -92,8 +133,9 @@ pub async fn net_worth_series_with_target(
         -- whose `sample_days` clamps the axis to real history and samples it
         -- down to roughly CHART_TARGET_POINTS points before this query ever
         -- runs.
-        with dates as (
-            select distinct unnest($2::date[]) as as_of
+        with dates as materialized (
+            select as_of, reporting_fx_degraded($1, as_of) as reporting_fx_missing
+            from (select distinct unnest($2::date[]) as as_of) d
         ),
         -- One valuation per instrument-day instead of one per holding-day, with
         -- the FX lookup folded into the same scan. `materialized` is load-bearing
@@ -102,7 +144,7 @@ pub async fn net_worth_series_with_target(
         fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
         rep  as materialized (
             select as_of, unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         ),
         -- The invested line, from the one definition (0022). `materialized` for
         -- the same reason the grid is: inlined, this would be re-executed per
@@ -119,12 +161,15 @@ pub async fn net_worth_series_with_target(
                 $2
             )
         )
-        select d.as_of as "as_of!",
+        select a.id    as "account_id!",
+               a.name  as "name!",
+               a.color as "color",
+               d.as_of as "as_of!",
                coalesce(sum(coalesce(
                    snap.quantity * uv.unit_value,
                    snap.value * afx.unit_value,
                    0
-               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "net_worth!",
+               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "value!",
                -- Per-row coalesce, not one around the sum: without it a single
                -- holding whose account currency has no rate turns its own term
                -- NULL, sum() skips it, and the invested line silently loses that
@@ -143,7 +188,7 @@ pub async fn net_worth_series_with_target(
                    -- false and only this one fires.
                    or (lb.basis <> 0 and afx.unit_value is null)
                ), false) as "fx_missing!",
-               reporting_fx_degraded($1, d.as_of) as "reporting_fx_missing!"
+               d.reporting_fx_missing as "reporting_fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -165,11 +210,11 @@ pub async fn net_worth_series_with_target(
             limit 1
         ) snap on true
         where c.user_id = $1
-        group by d.as_of, rep.unit_value
-        order by d.as_of
+        group by d.as_of, d.reporting_fx_missing, a.id, a.name, a.color, rep.unit_value
+        order by d.as_of, a.id
         "#,
         user_id,
-        &days,
+        days,
     )
     .fetch_all(pool)
     .await?;
@@ -195,12 +240,9 @@ pub struct HoldingRow {
     pub account_currency: String,
     pub account_id: Uuid,
     pub account_name: String,
-    pub account_color: Option<String>,
-    /// Stable account-type key (`checking`, `pea`, …); the frontend translates
-    /// it, falling back to `type_label`.
+    pub account_color: String,
+    /// Stable account-type key (`checking`, `pea`, …); the frontend translates it.
     pub type_key: String,
-    /// English account-type label from the reference table — the i18n fallback.
-    pub type_label: String,
     pub quantity: Decimal,
     /// Latest unit price, in `price_currency` (NOT `currency`).
     pub price: Option<Decimal>,
@@ -241,16 +283,16 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         symbol: Option<String>,
         instrument_name: String,
         kind: String,
-        logo_url: Option<String>,
+        isin: Option<String>,
+        raw_symbol: Option<String>,
         currency: String,
         price_currency: Option<String>,
         account_currency: String,
         instrument_id: Uuid,
         account_id: Uuid,
         account_name: String,
-        account_color: Option<String>,
+        account_color: String,
         type_key: String,
-        type_label: String,
         quantity: Decimal,
         price: Option<Decimal>,
         composition: Option<serde_json::Value>,
@@ -266,7 +308,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     let bases = sqlx::query_as!(
         Base,
         r#"
-        -- Same valuation rule as net_worth_series/accounts/distribution: price
+        -- Same valuation rule as net_worth_series/accounts: price
         -- first, provider valuation (converted from the ACCOUNT's currency)
         -- second, zero last. Without the snapshot fallback this table would show
         -- 0 for an instrument with no usable price while the accounts card, the
@@ -292,7 +334,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                )               as "symbol",
                i.name          as "instrument_name!",
                i.kind          as "kind!",
-               i.logo_url,
+               i.isin,
+               i.symbol        as "raw_symbol",
                i.meta->'composition' as "composition?",
                i.currency      as "currency!",
                px.currency     as "price_currency?",
@@ -302,7 +345,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                a.name          as "account_name!",
                a.color         as "account_color",
                a.type_key      as "type_key!",
-               t.label         as "type_label!",
                h.quantity      as "quantity!",
                px.unit_price   as "price?",
                coalesce(
@@ -320,9 +362,9 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                lot.unexplained_cost as "unexplained_cost!",
                -- Two separate failures, one flag: the position could not be
                -- valued at all, OR it is priceable but its account's currency
-               -- has no rate, so `invested` above coalesced to zero. The second
-               -- used to pass unflagged, showing a real value against a zero
-               -- cost basis and an invented gain.
+               -- has no rate, so `invested` above coalesced to zero. Unflagged,
+               -- the second would show a real value against a zero cost basis
+               -- and an invented gain.
                ((unit_value_asof(i.id, (select d from today)) is null
                  and coalesce(snap.value * fx_asof(a.currency, (select d from today)), 0) = 0)
                 or (coalesce(lot.basis, 0) <> 0
@@ -344,7 +386,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
         join instrument i   on i.id = h.instrument_id
-        join account_type t on t.key = a.type_key
         left join lateral (
             select p.unit_price, p.currency
             from price p
@@ -415,8 +456,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             holding_id: b.holding_id,
             symbol: b.symbol,
             instrument_name: b.instrument_name,
+            logo_url: crate::logo::instrument_logo_url(
+                &b.kind,
+                b.isin.as_deref(),
+                b.raw_symbol.as_deref(),
+            ),
             kind: b.kind,
-            logo_url: b.logo_url,
             currency: b.currency,
             price_currency: b.price_currency,
             account_currency: b.account_currency,
@@ -424,7 +469,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             account_name: b.account_name,
             account_color: b.account_color,
             type_key: b.type_key,
-            type_label: b.type_label,
             quantity: b.quantity,
             price: b.price,
             spark,
@@ -444,7 +488,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 #[derive(serde::Serialize)]
 pub struct PricePointRow {
     pub ts: DateTime<Utc>,
+    /// In the price row's own currency (the listing's quote).
     pub unit_price: Decimal,
+    /// The same price in the holding's account currency, at that day's rates:
+    /// the domain lots are recorded in, so it can sit next to them. Null when
+    /// either rate is unknown.
+    pub account_price: Option<Decimal>,
 }
 
 pub async fn holding_prices(
@@ -457,13 +506,56 @@ pub async fn holding_prices(
     let rows = sqlx::query_as!(
         PricePointRow,
         r#"
-        select p.ts as "ts!", p.unit_price as "unit_price!"
-        from price p
-        join holding h    on h.instrument_id = p.instrument_id
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
-        order by p.ts
+        with pts as materialized (
+            select p.ts, p.unit_price, p.currency as quote, a.currency as acct,
+                   (p.ts at time zone 'utc')::date as day
+            from price p
+            join holding h    on h.instrument_id = p.instrument_id
+            join account a    on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
+        ),
+        asked as (
+            select quote as currency, day from pts
+            union
+            select acct, day from pts
+        ),
+        -- fx_asof for every asked (currency, day) in one ordered pass: each
+        -- asked day sorts after that day's rates, so it falls in the run of
+        -- the last rate stamped on or before it. Calling fx_asof twice per
+        -- price instead costs a few times longer on a long history.
+        runs as (
+            select currency, asked, rate, day,
+                   count(rate) over (partition by currency order by day, asked, ts) as run
+            from (
+                select i.currency, (r.ts at time zone 'utc')::date as day,
+                       r.unit_price as rate, r.ts, false as asked
+                from instrument i
+                join price r on r.instrument_id = i.id
+                where i.kind = 'cash' and i.currency in (select currency from asked)
+                union all
+                select currency, day, null, null, true from asked
+            ) t
+        ),
+        rates as materialized (
+            select currency, day,
+                   case when currency = (select base_currency from app_settings where id = 1)
+                        then 1::numeric
+                        else rate
+                   end as rate
+            from (
+                select currency, day, asked,
+                       max(rate) over (partition by currency, run) as rate
+                from runs
+            ) f
+            where asked
+        )
+        select pts.ts as "ts!", pts.unit_price as "unit_price!",
+               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?"
+        from pts
+        join rates q  on q.currency = pts.quote and q.day = pts.day
+        join rates ac on ac.currency = pts.acct and ac.day = pts.day
+        order by pts.ts
         "#,
         holding_id,
         user_id,
@@ -480,18 +572,18 @@ pub struct AccountRow {
     pub account_id: Uuid,
     pub connection_id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub type_key: String,
-    pub type_label: String,
     pub value: Decimal,
     pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub institution_key: Option<String>,
-    pub source_name: Option<String>,
+    pub institution_name: Option<String>,
+    pub provider_key: String,
 }
 
-/// One row per account: latest snapshot value per holding, summed, with the
-/// account-type label, its connection, and the connection's last sync time.
+/// One row per account: latest snapshot value per holding, summed, with its
+/// connection and the connection's last sync time.
 pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountRow,
@@ -506,19 +598,12 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         -- resolved) on a still-held position, matching holdings()'s
         -- `h.quantity <> 0`.
         --
-        -- Valued through `valuation_grid` rather than the scalar
-        -- unit_value_asof/fx_asof/reporting_fx_asof functions, for the reason
-        -- spelled out on distribution() — with one extra twist that made this
-        -- query the worst of the three. The scalars sit in the select list of a
-        -- `distinct on`, and Postgres projects *before* it uniquifies: every
-        -- historical snapshot row got priced (four lookups each), then all but
-        -- the newest per holding was discarded. That cost grows by one row per
-        -- holding per day forever while the result stays the same size. Joining
-        -- the grid instead makes the per-row work a hash probe, so the pricing
-        -- is proportional to what is owned, not to how long it has been owned.
-        --
-        -- Measured on the dev database (13 holdings, 197 snapshots): 58.7 ms ->
-        -- 2.9 ms, byte-identical output.
+        -- Valued through `valuation_grid`, not the scalar
+        -- unit_value_asof/fx_asof/reporting_fx_asof functions: in the select
+        -- list of a `distinct on` they would price every historical snapshot
+        -- row (Postgres projects before it uniquifies) and then discard all but
+        -- the newest, a cost that grows every day. Joined, the grid makes the
+        -- per-row work a hash probe.
         --
         -- The grid joins are LEFT on purpose: a missing row must leave
         -- unit_value NULL so the coalesce falls through to the provider
@@ -533,7 +618,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
         rep as materialized (
             select unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
+            where currency = (select currency from users where id = $1)
         ),
         latest as (
             select distinct on (hs.holding_id)
@@ -562,19 +647,17 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.name  as "name!",
                a.color,
                a.type_key as "type_key!",
-               t.label as "type_label!",
                sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
-               coalesce(c.institution_name, p.display_name) as source_name
+               c.institution_name,
+               c.provider_key
         from latest l
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
-        join account_type t on t.key = a.type_key
         join connection c   on c.id = a.connection_id
-        join provider p     on p.key = c.provider_key
-        group by a.id, c.id, a.name, a.color, a.type_key, t.label, c.last_sync_at, c.institution_key, c.institution_name, p.display_name
+        group by a.id, c.id, a.name, a.color, a.type_key, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
         order by sum(l.value) desc
         "#,
         user_id,
@@ -588,116 +671,46 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
 pub struct AccountSeriesRow {
     pub account_id: Uuid,
     pub name: String,
-    pub color: Option<String>,
+    pub color: String,
     pub as_of: NaiveDate,
     pub value: Decimal,
 }
 
-/// Stacked-area source: snapshot value summed per (account, day) over a window.
+/// Stacked-area source: each account's value per day over a window, from the
+/// same valuation as [`net_worth_series`].
 pub async fn account_series(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<AccountSeriesRow>, CoreError> {
-    account_series_with_target(
-        pool,
-        user_id,
-        from,
-        to,
-        crate::repo::series::CHART_TARGET_POINTS,
-    )
-    .await
-}
-
-/// Same as [`account_series`] but with the sample target exposed — see
-/// [`net_worth_series_with_target`] for why this seam exists. Not part of the
-/// public API.
-#[doc(hidden)]
-pub async fn account_series_with_target(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    from: NaiveDate,
-    to: NaiveDate,
-    target: usize,
-) -> Result<Vec<AccountSeriesRow>, CoreError> {
     let start = crate::repo::series::history_start(pool, user_id)
         .await?
         .map_or(from, |h| h.max(from));
-    let days = crate::repo::series::sample_days(start, to, target);
+    let days =
+        crate::repo::series::sample_days(start, to, crate::repo::series::CHART_TARGET_POINTS);
 
-    let rows = sqlx::query_as!(
-        AccountSeriesRow,
-        r#"
-        -- Same valuation as net_worth_series (snapshot-anchored quantity via the
-        -- lateral join + valuation_grid), grouped per account for the
-        -- stacked area. No fx_missing flag: the accounts grid already surfaces it.
-        with dates as (
-            select distinct unnest($2::date[]) as as_of
-        ),
-        grid as materialized (select * from valuation_grid($1, $2)),
-        fx   as materialized (select as_of, currency, unit_value from grid where kind = 'cash'),
-        rep  as materialized (
-            select as_of, unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
-        )
-        select a.id   as "account_id!",
-               a.name as "name!",
-               a.color as "color",
-               d.as_of as "as_of!",
-               coalesce(sum(coalesce(
-                   snap.quantity * uv.unit_value,
-                   snap.value * afx.unit_value,
-                   0
-               )), 0) / coalesce(nullif(rep.unit_value, 0), 1) as "value!"
-        from dates d
-        cross join holding h
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        join grid uv      on uv.instrument_id = h.instrument_id and uv.as_of = d.as_of
-        left join fx afx  on afx.as_of = d.as_of and afx.currency = a.currency
-        left join rep     on rep.as_of = d.as_of
-        join lateral (
-            select hs.quantity, hs.value
-            from holding_point hs
-            where hs.holding_id = h.id and hs.as_of <= d.as_of
-            order by hs.as_of desc
-            limit 1
-        ) snap on true
-        where c.user_id = $1
-        group by a.id, a.name, a.color, d.as_of, rep.unit_value
-        order by d.as_of, a.id
-        "#,
-        user_id,
-        &days,
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = account_day_values(pool, user_id, &days)
+        .await?
+        .into_iter()
+        .map(|r| AccountSeriesRow {
+            account_id: r.account_id,
+            name: r.name,
+            color: r.color,
+            as_of: r.as_of,
+            value: r.value,
+        })
+        .collect();
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
-pub struct AccountTypeRow {
-    pub key: String,
-    pub label: String,
-}
-
-/// All account types from the reference table, ordered by label. New types are
-/// data inserts here — no code change needed to surface them in the
-/// edit-account dropdown.
-pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<AccountTypeRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        AccountTypeRow,
-        r#"
-        select t.key   as "key!",
-               t.label as "label!"
-        from account_type t
-        order by t.label
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
+/// Every account-type key. New types are data inserts here — no code change
+/// needed to offer them in the edit-account dropdown.
+pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
+    let keys = sqlx::query_scalar!("select key from account_type order by key")
+        .fetch_all(pool)
+        .await?;
+    Ok(keys)
 }
 
 #[derive(serde::Serialize)]
@@ -727,100 +740,9 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
 }
 
 #[derive(serde::Serialize)]
-pub struct DistributionRow {
-    pub account_id: Uuid,
-    pub name: String,
-    pub color: Option<String>,
-    pub type_key: String,
-    pub type_label: String,
-    pub value: Decimal,
-    /// At least one still-held holding in this slice could not be valued, so the
-    /// slice is understated.
-    pub fx_missing: bool,
-}
-
-pub async fn distribution(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<Vec<DistributionRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        DistributionRow,
-        r#"
-        -- Same per-holding valuation as accounts()/net_worth_series so the pie
-        -- sums to the net-worth figure.
-        --
-        -- Valued through `valuation_grid` rather than the scalar
-        -- unit_value_asof/fx_asof/reporting_fx_asof functions. The scalars are
-        -- fine for a single lookup, but this query made several per holding —
-        -- unit_value_asof and fx_asof twice each (once for the value, once for
-        -- the fx_missing test) and reporting_fx_asof twice more (select and
-        -- order by) — each one a planned index seek with a nested fx lookup
-        -- inside it. That was 33 ms of a 35 ms statement.
-        --
-        -- The grid computes the same arithmetic once per instrument instead of
-        -- once per holding, and folds the FX lookup into the same scan. Unlike
-        -- the chart series this needs a single day, so there is no sampling and
-        -- no day axis to keep in step — just a one-element array.
-        --
-        -- The joins are LEFT on purpose: a missing grid row must leave
-        -- unit_value NULL so the coalesce falls through to the provider
-        -- valuation, exactly as a NULL from unit_value_asof did.
-        with today as (select user_today($1) as d),
-        grid as materialized (
-            select * from valuation_grid($1, array[(select d from today)]::date[])
-        ),
-        fx  as materialized (select currency, unit_value from grid where kind = 'cash'),
-        rep as materialized (
-            select unit_value from fx
-            where currency = coalesce((select prefs->>'currency' from users where id = $1), 'EUR')
-        ),
-        latest as (
-            select distinct on (hs.holding_id)
-                   hs.holding_id,
-                   coalesce(
-                       hs.quantity * uv.unit_value,
-                       hs.value * afx.unit_value,
-                       0
-                   ) as value,
-                   h.quantity <> 0
-                   and uv.unit_value is null
-                   and coalesce(hs.value * afx.unit_value, 0) = 0
-                       as fx_missing
-            from holding_snapshot hs
-            join holding h    on h.id = hs.holding_id
-            join account a    on a.id = h.account_id
-            join connection c on c.id = a.connection_id
-            join instrument i on i.id = h.instrument_id
-            left join grid uv on uv.instrument_id = i.id
-            left join fx afx  on afx.currency = a.currency
-            where c.user_id = $1
-            order by hs.holding_id, hs.as_of desc
-        )
-        select a.id   as "account_id!",
-               a.name as "name!",
-               a.color,
-               a.type_key as "type_key!",
-               t.label    as "type_label!",
-               sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
-               coalesce(bool_or(l.fx_missing), false) as "fx_missing!"
-        from latest l
-        join holding h      on h.id = l.holding_id
-        join account a      on a.id = h.account_id
-        join account_type t on t.key = a.type_key
-        group by a.id, a.name, a.color, a.type_key, t.label
-        order by sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) desc
-        "#,
-        user_id,
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
-}
-
-#[derive(serde::Serialize)]
 pub struct TransactionListRow {
     pub id: Uuid,
-    pub ts: DateTime<Utc>,
+    pub day: NaiveDate,
     pub kind: String,
     pub description: Option<String>,
     /// In `account_currency` — the amount domain, as the provider sent it. Not
@@ -840,23 +762,19 @@ pub struct TransactionListRow {
     /// frontend's i18n and per-user number formatting render the lot fields.
     pub source: String,
     pub ticker: Option<String>,
-    /// The instrument's logo on a lot row; null on a cash row.
-    pub logo_url: Option<String>,
+    /// What a lot row's logo is built from (`logo::instrument_logo_url`);
+    /// null on a cash row.
+    pub instrument_kind: Option<String>,
+    pub instrument_isin: Option<String>,
+    pub instrument_symbol: Option<String>,
     pub quantity: Option<Decimal>,
     pub unit_price: Option<Decimal>,
     pub fee: Option<Decimal>,
     pub account_id: Uuid,
     pub account_name: String,
-    pub account_color: Option<String>,
-    /// Also the currency `amount_reporting` converts FROM for a lot row —
-    /// an inherited assumption, not one this phase introduced. A lot's
-    /// `amount` is `quantity * unit_price ± fee` in the INSTRUMENT'S LISTING
-    /// currency, which can differ from the holding account's currency (a EUR
-    /// account holding a USD-listed line). The pairing predates this phase;
-    /// this phase is only the first to actually run a conversion over it, so
-    /// `amount_reporting` on such a row is converted at the wrong FX rate.
-    /// Left as-is — fixing it means threading the listing currency through,
-    /// which is a bigger change than this fix pass.
+    pub account_color: String,
+    /// Also the currency of a lot row's `amount`: lot prices are recorded in
+    /// the account's currency, as `lot_basis` and the holdings table assume.
     pub account_currency: String,
 
     // ── Budget ──────────────────────────────────────────────────────────────
@@ -955,9 +873,9 @@ pub struct TransactionFilters {
     pub offset: i64,
 }
 
-impl TransactionFilters {
-    /// Everything, unfiltered — the base a caller mutates.
-    pub fn unfiltered() -> Self {
+/// Everything, unfiltered — the base a caller mutates.
+impl Default for TransactionFilters {
+    fn default() -> Self {
         Self {
             search: None,
             account_id: None,
@@ -996,19 +914,19 @@ pub async fn transactions(
         with filtered as (
             select *
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            order by ts desc, id
+            order by day desc, id
             limit $13 offset $14
         ),
-        days as (select distinct (ts at time zone 'utc')::date as day from filtered),
+        days as (select distinct day from filtered),
         grid as materialized (
             select as_of, currency, unit_value
             from valuation_grid($1, array(select day from days)::date[])
             where kind = 'cash'
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         )
-        select id as "id!", ts as "ts!", kind as "kind!", description, amount as "amount!",
+        select id as "id!", day as "day!", kind as "kind!", description, amount as "amount!",
                -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
                -- `nullif`: when the reporting currency has no rate on this
                -- day the whole expression must still degrade to the pivot
@@ -1020,20 +938,21 @@ pub async fn transactions(
                coalesce(filtered.amount * afx.unit_value
                         / coalesce(nullif(rfx.unit_value, 0), 1), 0)
                    as "amount_reporting!",
-               source as "source!", ticker, logo_url, quantity, unit_price, fee,
+               source as "source!", ticker, instrument_kind, instrument_isin,
+               instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
-               account_color, account_currency as "account_currency!",
+               account_color as "account_color!", account_currency as "account_currency!",
                filtered.category_id, category_name, category_default_key, category_color,
                category_icon, category_kind, category_source, category_confidence,
                needs_review as "needs_review!", checked as "checked!",
                is_transfer as "is_transfer!",
                is_orphan_transfer as "is_orphan_transfer!"
         from filtered
-        left join grid afx on afx.as_of = (filtered.ts at time zone 'utc')::date
+        left join grid afx on afx.as_of = filtered.day
                           and afx.currency = filtered.account_currency
-        left join grid rfx on rfx.as_of = (filtered.ts at time zone 'utc')::date
+        left join grid rfx on rfx.as_of = filtered.day
                           and rfx.currency = (select code from reporting)
-        order by ts desc, id
+        order by day desc, id
         "#,
         user_id,
         f.review_threshold,
@@ -1143,11 +1062,11 @@ pub async fn transaction_counts(
     let row = sqlx::query!(
         r#"
         with matching as (
-            select amount, account_currency, (ts at time zone 'utc')::date as day
+            select amount, account_currency, day
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         ),
         -- One FX row per needed day and account currency, with both legs.
         -- Keeping reporting FX on the same row avoids a separate join whose
@@ -1226,7 +1145,7 @@ pub async fn matching_transaction_ids(
         select id as "id!"
         from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         where source = 'cash'
-        order by ts desc, id
+        order by day desc, id
         "#,
         user_id,
         f.review_threshold,
@@ -1279,7 +1198,6 @@ pub async fn composition_eligible_instruments_for_connection(
         join instrument i on i.id = h.instrument_id
         where a.connection_id = $1
           and i.kind <> 'cash'
-          and i.kind <> 'crypto'
           and h.quantity <> 0
           and (i.symbol is not null or i.isin is not null)
           and coalesce(i.meta->>'composition_status', '') <> 'none'
@@ -1298,19 +1216,8 @@ pub async fn composition_eligible_instruments_for_connection(
 
 /// Distinct non-cash instruments held (nonzero quantity) under a connection,
 /// plus the cash instrument (the FX rate) for every currency this connection
-/// needs a rate for, excluding the pivot. Three sources, one per currency
-/// domain, because a rate missing in any of them zeroes a figure:
-///
-/// * `instrument.currency` — a foreign security held in a base-currency account
-///   (a USD equity in a EUR account) never holds USD *cash* itself, so reaching
-///   rates only through `i.kind = 'cash'` rows would leave USD unfetchable.
-/// * `price.currency` — the price domain. Powens may label an instrument EUR
-///   while Yahoo resolves a London listing quoted GBP; `unit_value_asof` reads
-///   the price row's currency, so without GBP here the holding stays NULL —
-///   valued at zero — forever.
-/// * `account.currency` — the amount domain. `holding.cost_basis` and
-///   `holding_snapshot.value` convert from it, so a CHF account inside a EUR
-///   install needs CHF even if every instrument in it is quoted in EUR.
+/// needs a rate for, excluding the pivot (`connection_fx_currencies`, which
+/// says why each one is needed).
 ///
 /// Drives the per-connection price-fetch pass.
 pub async fn price_eligible_instruments_for_connection(
@@ -1338,54 +1245,16 @@ pub async fn price_eligible_instruments_for_connection(
         union
 
         -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
-        -- pivot is 1 by definition and has no Yahoo pair. This reaches the cash
-        -- instrument backing every currency this connection converts through,
-        -- not just an actually-held foreign cash position (see the doc comment).
-        select distinct
-               fx.id       as "id!",
+        -- pivot is 1 by definition and has no Yahoo pair.
+        select fx.id       as "id!",
                fx.kind     as "kind!",
                fx.symbol,
                fx.isin,
                fx.name     as "name!",
                fx.currency as "currency!",
                fx.meta     as "meta!"
-        from (
-            select i.currency as cur
-            from holding h
-            join account a    on a.id = h.account_id
-            join instrument i on i.id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select p.currency
-            from holding h
-            join account a on a.id = h.account_id
-            join price p   on p.instrument_id = h.instrument_id
-            where a.connection_id = $1 and h.quantity <> 0
-
-            union
-
-            select a.currency
-            from account a
-            where a.connection_id = $1
-
-            union
-
-            -- The owner's reporting preference, which is a divisor and nothing
-            -- else — no holding, price or account carries it, so it would never
-            -- otherwise become rate-eligible and reporting_fx_asof would fall
-            -- back to the pivot forever. Its cash instrument is created by
-            -- ensure_cash_instruments_for_held_currencies, which unions the
-            -- same arm.
-            select u.prefs->>'currency'
-            from connection c
-            join users u on u.id = c.user_id
-            where c.id = $1
-        ) needed
-        join instrument fx on fx.kind = 'cash' and fx.currency = needed.cur
-        where needed.cur <> (select base_currency from app_settings where id = 1)
-          and needed.cur ~ '^[A-Z]{3}$'
+        from connection_fx_currencies($1) cur
+        join instrument fx on fx.kind = 'cash' and fx.currency = cur
 
         order by 5
         "#,

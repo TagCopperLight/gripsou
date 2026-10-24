@@ -2,7 +2,10 @@ import type { PricePoint, Lot } from "../api/types";
 
 export type PositionPoint = { t: number; value: number; invested: number };
 
-// Quantity held and invested capital at each price point.
+// Quantity held and invested capital at each price point, both in the
+// account's currency: `accountPrice`, not `price`, so the value line and the
+// invested line (lots are recorded in the account's currency) compare like
+// with like on a foreign listing. Points without a rate are dropped.
 //
 // This file does NOT implement the cost-basis rule and must never start to.
 // `meanPrice` and `unexplainedCost` are computed by `lot_basis` in the backend
@@ -24,17 +27,18 @@ export function positionSeries(
 ): PositionPoint[] {
   // No lots at all (a provider that reports balances only): a flat current
   // position is the best available answer.
+  const priced = prices.filter((p) => p.accountPrice !== null);
   if (lots.length === 0) {
-    return prices.map((p) => ({
+    return priced.map((p) => ({
       t: p.t,
-      value: Number(p.price) * fallbackQty,
+      value: Number(p.accountPrice) * fallbackQty,
       invested: fallbackInvested,
     }));
   }
   // Points before the first lot are dropped — there was no position yet, and
   // charting one there is a lie.
   const firstLot = Math.min(...lots.map((l) => l.t));
-  return prices
+  return priced
     .filter((p) => p.t >= firstLot)
     .map((p) => {
       let qty = 0;
@@ -43,7 +47,7 @@ export function positionSeries(
       }
       return {
         t: p.t,
-        value: Number(p.price) * qty,
+        value: Number(p.accountPrice) * qty,
         invested: meanPrice * qty + unexplainedCost,
       };
     });

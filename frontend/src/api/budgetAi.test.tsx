@@ -61,7 +61,7 @@ describe("budget AI client", () => {
     const fetchMock = stub(null, 204);
     const { result } = renderHook(() => useSetBudgetAiSettings(), { wrapper: wrapper() });
     await expect(
-      result.current.mutateAsync({ provider: "gemini", model: null }),
+      result.current.mutateAsync({ provider: "jev", model: null }),
     ).resolves.toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(String(url)).toContain("/settings/budget-ai");

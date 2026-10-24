@@ -5,9 +5,9 @@ import { KeyRound } from "lucide-react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { BackupCodes } from "./BackupCodes";
-import { ApiError } from "../api/client";
-import { useMfaStatus, useReauth, useRegenerateRecovery, useRemoveTotp } from "../api/hooks";
-import { throttleMinutes } from "../lib/mfa";
+import { PasswordField } from "./PasswordField";
+import { useReauthStep } from "./useReauthStep";
+import { useMfaStatus, useRegenerateRecovery, useRemoveTotp } from "../api/hooks";
 
 type View = "menu" | "newCodes" | "codes" | "turnOff";
 
@@ -24,14 +24,12 @@ export function ManageTwoFactorModal({
   const { t } = useTranslation();
   const { data: status } = useMfaStatus();
   const [view, setView] = useState<View>(start);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
   const [codes, setCodes] = useState<string[]>([]);
 
-  const reauth = useReauth();
   const regenerate = useRegenerateRecovery();
   const remove = useRemoveTotp();
-  const busy = reauth.isPending || regenerate.isPending || remove.isPending;
+  const busy = checking || regenerate.isPending || remove.isPending;
 
   const open = (next: View) => {
     setPassword("");
@@ -41,21 +39,8 @@ export function ManageTwoFactorModal({
 
   const submit = async () => {
     if (!password || busy) return;
-    setError(null);
-    let token: string;
-    try {
-      token = (await reauth.mutateAsync(password)).reauth;
-    } catch (err) {
-      const minutes = throttleMinutes(err);
-      setError(
-        minutes !== null
-          ? t("auth.tooManyAttempts", { count: minutes })
-          : err instanceof ApiError && err.status === 400
-            ? t("twoFactor.wrongPassword")
-            : t("twoFactor.failed"),
-      );
-      return;
-    }
+    const token = await check();
+    if (!token) return;
     try {
       if (view === "newCodes") {
         setCodes((await regenerate.mutateAsync(token)).recoveryCodes);
@@ -133,16 +118,7 @@ export function ManageTwoFactorModal({
         }}
       >
         {turningOff && <p className="text-sm text-fg-dim">{t("twoFactor.turnOffBody")}</p>}
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-fg-faint">{t("settings.account.currentPassword")}</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
-          />
-        </label>
+        <PasswordField value={password} onChange={setPassword} />
         {error && <p className="text-sm text-red">{error}</p>}
         <button type="submit" hidden />
       </form>

@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
-
 import { Button } from "./Button";
 import { CardState } from "./CardState";
+import { Dialog } from "./Dialog";
 import { useEnabledProviders, useInitConnection } from "../api/hooks";
 import type { EnabledProvider } from "../api/types";
 import { goTo } from "../lib/navigate";
@@ -20,19 +19,6 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
   const initConnection = useInitConnection();
   const [selected, setSelected] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
-
   const connect = () => {
     if (!selected) return;
     initConnection.mutate(selected, {
@@ -43,54 +29,11 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("settings.connections.pickProvider")}
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-120 max-w-[90vw] bg-surface rounded-3xl flex flex-col"
-      >
-        <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
-          <h2 className="text-xl font-semibold text-fg">
-            {t("settings.connections.pickProvider")}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.close")}
-            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 px-6 py-4 flex flex-col gap-3 overflow-y-auto">
-          {isLoading && <CardState variant="loading" className="h-32" />}
-          {isError && <CardState variant="error" className="h-32" />}
-          {!isLoading && !isError && providers?.length === 0 && (
-            <p className="text-sm text-fg-faint py-6 text-center">
-              {t("settings.connections.noProviders")}
-            </p>
-          )}
-          {providers?.map((p) => (
-            <ProviderCard
-              key={p.key}
-              provider={p}
-              selected={selected === p.key}
-              onSelect={() => setSelected(p.key)}
-            />
-          ))}
-          {initConnection.isError && (
-            <p className="text-sm text-red">{t("settings.connections.connectError")}</p>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 pb-6 pt-3 shrink-0 border-t border-surface-2">
+    <Dialog
+      title={t("settings.connections.pickProvider")}
+      onClose={onClose}
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
@@ -102,9 +45,30 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
           >
             {t("settings.connections.connect")}
           </Button>
-        </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {isLoading && <CardState variant="loading" className="h-32" />}
+        {isError && <CardState variant="error" className="h-32" />}
+        {!isLoading && !isError && providers?.length === 0 && (
+          <p className="text-sm text-fg-faint py-6 text-center">
+            {t("settings.connections.noProviders")}
+          </p>
+        )}
+        {providers?.map((p) => (
+          <ProviderCard
+            key={p.key}
+            provider={p}
+            selected={selected === p.key}
+            onSelect={() => setSelected(p.key)}
+          />
+        ))}
+        {initConnection.isError && (
+          <p className="text-sm text-red">{t("settings.connections.connectError")}</p>
+        )}
       </div>
-    </div>
+    </Dialog>
   );
 }
 

@@ -17,7 +17,7 @@ pub struct CanonicalAccount {
 /// Reference to an instrument; the core resolves/creates the global row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentRef {
-    /// `cash` | `equity` | `etf` | `crypto` | …
+    /// `cash` | `equity` | `etf`
     pub kind: String,
     pub symbol: Option<String>,
     pub isin: Option<String>,
@@ -48,12 +48,10 @@ pub struct CanonicalTransaction {
     /// `deposit` | `withdrawal` | `buy` | `sell` | `dividend` | `fee` |
     /// `interest` | `transfer`
     pub kind: String,
-    pub ts: DateTime<Utc>,
-    pub quantity: Option<Decimal>,
-    pub unit_price: Option<Decimal>,
+    /// The day the user spent (Powens' `rdate`).
+    pub spent_on: NaiveDate,
     /// Cash impact on the account.
     pub amount: Decimal,
-    pub fee: Option<Decimal>,
     /// Human-readable label, provider-cleaned (card masks stripped). A column,
     /// not `provider_meta`: the list renders it and search matches it.
     pub description: Option<String>,
@@ -61,9 +59,9 @@ pub struct CanonicalTransaction {
     /// nothing the app reads lives here.
     pub provider_meta: serde_json::Value,
     /// The day the provider's balance actually moved, when it reports one
-    /// separately from `ts`. `ts` is the day the user spent (Powens' `rdate`);
-    /// these disagree on 70% of real rows by up to five days. The backfill walks
-    /// on this, because it anchors on the balance; the UI shows `ts`.
+    /// separately from `spent_on`. They disagree on 70% of real rows by up to
+    /// five days. The backfill walks on this, because it anchors on the
+    /// balance; the UI shows `spent_on`.
     pub booked_on: Option<NaiveDate>,
 }
 
@@ -131,29 +129,4 @@ pub struct Allocation {
 pub struct Composition {
     pub countries: Vec<Allocation>,
     pub sectors: Vec<Allocation>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn composition_round_trips_with_numeric_weights() {
-        let c = Composition {
-            countries: vec![Allocation {
-                name: "United States".into(),
-                weight: 0.621,
-            }],
-            sectors: vec![Allocation {
-                name: "Technology".into(),
-                weight: 0.312,
-            }],
-        };
-        let v = serde_json::to_value(&c).unwrap();
-        // Weights must be JSON numbers, not strings (display ratios, not money).
-        assert!(v["countries"][0]["weight"].is_number());
-        let back: Composition = serde_json::from_value(v).unwrap();
-        assert_eq!(back.countries[0].name, "United States");
-        assert_eq!(back.sectors[0].weight, 0.312);
-    }
 }

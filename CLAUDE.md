@@ -26,7 +26,7 @@ Backend (`cd backend`, Cargo workspace; the binary is `gripsou` in `api`):
 
 Frontend (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `bun run build`, `bun run lint`, `bun run test [pattern]`.
 
-`./ci.sh` at the root runs exactly what CI runs (fmt, clippy, tests with `SQLX_OFFLINE=true`, frontend lint/test/build). Run it before calling work done. The one thing CI adds is speed-only: it pre-migrates its throwaway Postgres's `template1` (`cargo run --example migrate`) so each `#[sqlx::test]` database starts migrated. Don't do that to the local server: a migrated `template1` keeps the old checksum of a migration you are still editing.
+`./ci.sh` at the root runs exactly what CI runs (fmt, clippy, tests with `SQLX_OFFLINE=true`, frontend lint/test/build). Run it before calling work done. Its backend tests run on a throwaway Postgres container it starts and removes itself (data in RAM, no fsync), whose `template1` it migrates first (`cargo run --example migrate`) so each `#[sqlx::test]` database starts migrated; CI does the same to its own Postgres. Never do that to the dev server: a migrated `template1` keeps the old checksum of a migration you are still editing. Plain `cargo test` still runs on whatever `DATABASE_URL` you export, the slow way.
 
 Local stack: `docker compose -f docker/docker-compose.yml up -d postgres` (or `up --build` for everything). Always pass `-f`: the file pins `name: gripsou`, and the host has an unrelated compose project called `docker` whose `docker_pgdata` volume must never be touched.
 
@@ -63,7 +63,7 @@ Older migrations cite sections of design docs (`TRANSACTIONS.md §6.1`, `ARCHITE
 Adding a provider must never need a migration. The crate split enforces this at compile time:
 
 - `core` — canonical DTOs (`dto.rs`), the provider ports (`provider.rs`: `AccountProvider`, `PriceProvider`, `CompositionProvider`; `categorize.rs`: `Categorizer`), repositories, ingest, backfill, price/composition sync, and the budget pipeline (`budget/`).
-- `providers` — adapters translating native payloads into canonical DTOs: `powens` (accounts), `yahoo` (prices and FX), `boursorama` (ETF composition), `gemini` / `jev` (budget categorisation). **Depends on `core`, never the reverse** — never import a provider's native types into `core`.
+- `providers` — adapters translating native payloads into canonical DTOs: `powens` (accounts), `yahoo` (prices and FX), `boursorama` (ETF composition), `jev` (budget categorisation). **Depends on `core`, never the reverse** — never import a provider's native types into `core`.
 - `jobs` — the in-process tokio scheduler and sync orchestration (per-connection tasks, one lock each; the `CATEGORIZERS` registry).
 - `api` — axum handlers, auth, routing, static files.
 
@@ -109,7 +109,7 @@ Per-user categories (`budget_category`, seeded by a trigger on `users` insert) a
 ## Conventions
 
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings; the frontend formats them with the user's prefs through `Intl`.
-- **Config split:** secrets and infra in env (see `.env.example`); admin-tunable values in the `app_settings` row (`cors_origins`, `enabled_providers`, `budget_ai_*`); per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Config split:** secrets and infra in env (see `.env.example`); admin-tunable values in the `app_settings` row (`enabled_providers`, `budget_ai_*`); per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next (en/fr in `src/i18n/` — every UI string in both). Pure logic lives in `src/lib/` with tests beside it.
 - **Translation quality:** Always review added or changed UI text in both English and French for natural phrasing, clarity, grammar and consistent terminology; preserve interpolation placeholders, pluralisation keys and rich-text tags.
 - ESLint's `react-refresh/only-export-components` forbids exporting anything but components from a component file; put shared constants/types in a sibling `.ts`. `bun run build` won't catch it — run `bun run lint`.
@@ -123,12 +123,12 @@ Every info-and-above line from gripsou's crates is printed *and* saved to the `l
 - **Message** is a fixed lowercase phrase (`sync finished`, `price fetch failed`); every variable is a field. Shared names: `connection_id`, `user_id`, `provider`, `instrument_id`, `step`, `trigger`, `outcome`, `duration_ms`, `error`, `reason`, `count`.
 - **Levels:** error = someone must look / work was lost; warn = degraded but recovered; info = something happened; debug = routine, not saved.
 - **Errors** go in `error = %gripsou_core::logs::error_chain(&e)`, logged once where handled.
-- **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names.
+- **Never log** passwords, credentials, tokens, invite/reset links, OAuth codes, raw provider bodies, amounts or merchant names. Log `user_id` once the user is known; an email only at the password step, where the account may not exist.
 - **Spans** carry the operation: `sync` (`sync_id`, `connection_id`, `user_id`, `provider`, `trigger`), `ai_run` (`user_id`, `run_id`, `model`), `sweep` (`name`), `request` (`request_id`, `route`, `user_id`). Spawned work must be `.instrument(...)`-ed or it loses them.
 - **The subscriber is installed by `gripsou_core::logs::install`, never `.init()`**: `.init()` adds the `log`-crate bridge, whose checks (sqlx makes one per query) made the per-output filters drop the next line, in the terminal too. `core/tests/logs_install.rs` pins it.
 - **The terminal shows UUIDs cut to 8 characters** (`core/src/logs/terminal.rs`); the saved log keeps them whole, so match a copied one with `like '1fe32d5a%'`.
 - **Tests** that assert on saved logs capture with `gripsou_core::logs::capture(capacity)`: it keeps tracing's per-callsite interest stable across parallel tests.
-- **Sync history is the `sync finished` lines**, one per sync: `outcome`, `failed_step` (`credentials`, `provider_fetch`, `ingest`, or `panic` when the sync's task panicked: its supervisor frees the lock and logs the line), `error`, `duration_ms`, counts. `jobs/tests/sync_log.rs` pins that shape; change both together. A sync cut off by a restart has no `sync finished` line (only the boot `boot_sync_locks` sweep count shows it), so the history is not guaranteed complete.
+- **Sync history is the `sync finished` lines**, one per sync: `outcome`, `failed_step` (`credentials`, `provider_fetch`, `ingest`, `panic` when the sync's task panicked, or `timeout` when it ran past 30 minutes and was stopped: either way its supervisor frees the lock and logs the line), `error`, `duration_ms`, counts. `jobs/tests/sync_log.rs` pins that shape; change both together. A sync cut off by a restart has no `sync finished` line (only the boot `boot_sync_locks` sweep count shows it), so the history is not guaranteed complete.
 
 ```sql
 -- Sync history of one connection

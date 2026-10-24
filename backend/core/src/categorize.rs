@@ -24,7 +24,7 @@ pub struct CategoryOption {
 }
 
 /// A transaction the user confirmed, shown to the model as evidence.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct Example {
     pub description: String,
     pub amount: Decimal,
@@ -134,7 +134,7 @@ pub enum CategorizeError {
 
 #[async_trait]
 pub trait Categorizer: Send + Sync {
-    /// `"gemini"` | `"jev"` — recorded on every run.
+    /// `"jev"` — recorded on every run.
     fn key(&self) -> &str;
     fn model(&self) -> &str;
     /// How many items one `categorize` call takes. Also the run's checkpoint size.

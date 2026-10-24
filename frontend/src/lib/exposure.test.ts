@@ -98,8 +98,7 @@ describe("exposure", () => {
       fund("Example MSCI World", 40, none, none),
       fund("Other MSCI World", 20, none, none),
       fund("Example S&P 500", 20, none, none),
-      fund("Example Robotics", 5, none, none),
-      { name: "Example Coin", kind: "crypto", value: 5, composition: null },
+      fund("Example Robotics", 10, none, none),
       { name: "Example Corp", kind: "equity", value: 6, composition: null },
       { name: "Other Corp", kind: "equity", value: 4, composition: null },
     ]);

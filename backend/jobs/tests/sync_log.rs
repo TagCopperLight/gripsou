@@ -2,25 +2,26 @@
 //! These tests pin its shape: one per sync, with the agreed fields.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use gripsou_core::dto::{Composition, InstrumentRef, SyncResult};
 use gripsou_core::provider::{
     AccountProvider, CompleteConnect, CompositionProvider, ConnectInit, ProviderError,
 };
-use gripsou_jobs::{SyncDeps, Trigger};
+use gripsou_jobs::{Deps, Trigger};
 use serde_json::Value;
 use sqlx::PgPool;
 use tracing::Instrument;
 use uuid::Uuid;
-
-const KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 #[derive(Clone, Copy)]
 enum Mode {
     Ok,
     Fail,
     Panic,
+    Hang,
 }
 
 struct FakeBank {
@@ -45,6 +46,7 @@ impl AccountProvider for FakeBank {
                 "GET /accounts failed: 503 Service Unavailable".into(),
             )),
             Mode::Panic => panic!("adapter bug"),
+            Mode::Hang => std::future::pending().await,
         }
     }
 }
@@ -64,24 +66,23 @@ impl CompositionProvider for NoComposition {
     }
 }
 
-fn deps(mode: Mode) -> SyncDeps {
+fn deps(mode: Mode) -> Arc<Deps> {
     let mut accounts: HashMap<String, Box<dyn AccountProvider>> = HashMap::new();
     accounts.insert("fake".into(), Box::new(FakeBank { mode }));
-    SyncDeps {
+    Arc::new(Deps {
+        key: gripsou_core::testkit::encryption_key(),
         accounts,
         prices: Vec::new(),
         composition: Box::new(NoComposition),
-    }
+        time_limit: Duration::from_millis(500),
+    })
 }
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
-    unsafe { std::env::set_var("ENCRYPTION_KEY", KEY) };
-    sqlx::query("insert into provider (key, display_name, kind, enabled) values ('fake','fake','account',true) on conflict (key) do nothing")
-        .execute(pool).await.unwrap();
-    let user: Uuid = sqlx::query_scalar(
-        "insert into users (email, name, password_hash) values (gen_random_uuid()::text || '@t', 'T', 'x') returning id",
-    ).fetch_one(pool).await.unwrap();
-    let ct = gripsou_core::crypto::encrypt(KEY, br#"{"auth_token":"tok"}"#).unwrap();
+    let user = gripsou_core::testkit::seed_user(pool).await;
+    let ct = gripsou_core::testkit::encryption_key()
+        .encrypt(br#"{"auth_token":"tok"}"#)
+        .unwrap();
     let conn: Uuid = sqlx::query_scalar(
         "insert into connection (user_id, provider_key, display_name, status, credentials, provider_meta) \
          values ($1, 'fake', 'Test bank', 'ok', $2, '{}') returning id",
@@ -105,7 +106,7 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Ok))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Ok), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(ok);
@@ -150,7 +151,7 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Fail))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Fail), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Daily))
         .await;
     assert!(!ok);
@@ -181,7 +182,7 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
         .await
         .unwrap();
 
-    let ok = gripsou_jobs::sync_connection_data_with(pool.clone(), conn, deps(Mode::Panic))
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Panic), conn)
         .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
         .await;
     assert!(!ok);
@@ -198,13 +199,50 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
     assert_eq!(f["connection_id"], conn.to_string());
     assert!(f["duration_ms"].is_u64());
 
-    // The lock is released now, not by the 30-minute stale-lock sweep.
     let status: String = sqlx::query_scalar("select status from connection where id = $1")
         .bind(conn)
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_ne!(status, "syncing");
+}
+
+/// A provider that never answers must not hold the connection: the sync is
+/// stopped at its time limit and recorded like any other failure.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) {
+    let (_g, mut writer) = gripsou_core::logs::capture(1000);
+    let (user, conn) = seed(&pool).await;
+    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
+        .await
+        .unwrap();
+
+    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Hang), conn)
+        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
+        .await;
+    assert!(!ok);
+    writer.flush(&pool).await;
+
+    let lines = finished_lines(&pool).await;
+    assert_eq!(
+        lines.len(),
+        1,
+        "exactly one sync finished, even on a timeout"
+    );
+    let (level, f) = &lines[0];
+    assert_eq!(level, "error");
+    assert_eq!(f["outcome"], "failed");
+    assert_eq!(f["failed_step"], "timeout");
+    assert!(f["duration_ms"].is_u64());
+
+    let (status, last_error): (String, Option<String>) =
+        sqlx::query_as("select status, last_error from connection where id = $1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "error");
+    assert_eq!(last_error.as_deref(), Some("sync took too long"));
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -216,7 +254,7 @@ async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
         .unwrap();
 
     // Already syncing: the second request is refused and says why.
-    let r = gripsou_jobs::request_sync(pool.clone(), user, conn, Trigger::Manual)
+    let r = gripsou_jobs::request_sync(pool.clone(), &deps(Mode::Ok), user, conn, Trigger::Manual)
         .await
         .unwrap();
     assert!(matches!(

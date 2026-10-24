@@ -49,7 +49,7 @@ export type Exposure = {
   sectors: Slice[];
   regions: RegionSlice[];
   /** Funds by the index they track, shares held directly as one STOCKS
-   *  slice, the rest (funds of no known index, crypto) as OTHER. */
+   *  slice, funds of no known index as OTHER. */
   indices: Slice[];
   /** Value of every holding. */
   total: number;

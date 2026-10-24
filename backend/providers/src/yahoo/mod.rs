@@ -120,14 +120,14 @@ fn is_iso_currency(code: &str) -> bool {
     code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase())
 }
 
-/// Eligible if it is a foreign cash instrument (its FX pair), or a non-crypto
-/// security we have an identifier for. Cash in the pivot needs no rate (it is 1
-/// by definition) and crypto has no clean ISIN→Yahoo path yet.
+/// Eligible if it is a foreign cash instrument (its FX pair), or a security we
+/// have an identifier for. Cash in the pivot needs no rate (it is 1 by
+/// definition).
 pub(crate) fn is_supported(instrument: &InstrumentRef, pivot: &str) -> bool {
     if instrument.kind == "cash" {
         return is_iso_currency(&instrument.currency) && instrument.currency != pivot;
     }
-    instrument.kind != "crypto" && (instrument.isin.is_some() || instrument.symbol.is_some())
+    instrument.isin.is_some() || instrument.symbol.is_some()
 }
 
 #[cfg(test)]
@@ -168,9 +168,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_cash_crypto_and_idless() {
+    fn rejects_pivot_cash_and_idless() {
         assert!(!is_supported(&cash("EUR"), "EUR"));
-        assert!(!is_supported(&iref("crypto", Some("X"), None), "EUR"));
         assert!(!is_supported(&iref("equity", None, None), "EUR"));
     }
 

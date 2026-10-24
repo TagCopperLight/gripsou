@@ -23,8 +23,8 @@
 //! [`apply_to_description`]) each run as one database transaction: they lock
 //! the rows they target, check that every category and tag named is the
 //! user's, ask for confirmation before dissolving a pair, and only then write.
-//! A refused request writes nothing. The lower-level writers below them are
-//! the confirmed, unchecked building blocks.
+//! A refused request writes nothing. The private writers below them are the
+//! confirmed, unchecked building blocks.
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -293,127 +293,6 @@ async fn write_checked(
     Ok(done.rows_affected())
 }
 
-/// How many of `ids` are half of an internal transfer — i.e. how many of the
-/// caller's own rows a category write over this set would unlink, when the
-/// category is not one that keeps pairs ([`keeps_pairs`]).
-///
-/// Counts rows, not pairs: when a selection holds both halves it returns 2,
-/// because what the confirmation names is how many transactions change, which
-/// is the number the user can check against what they selected.
-pub async fn count_paired(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    ids: &[Uuid],
-) -> Result<i64, CoreError> {
-    if ids.is_empty() {
-        return Ok(0);
-    }
-    let n = sqlx::query_scalar!(
-        r#"
-        select count(*) as "n!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where t.id = any($1) and k.user_id = $2 and t.transfer_pair_id is not null
-        "#,
-        ids,
-        user_id,
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(n)
-}
-
-/// Sets one row's category, pair or not. `false` when the row or the category
-/// is not the user's.
-pub async fn set_category(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-    category_id: Option<Uuid>,
-) -> Result<bool, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let written = write_category(&mut tx, user_id, &[txn_id], category_id).await?;
-    tx.commit().await?;
-    Ok(!written.is_empty())
-}
-
-/// Replaces the transaction's tag set wholesale. An empty slice clears it.
-/// Returns false when the transaction is not this user's. Foreign tag ids
-/// are left out rather than refused; [`patch_transaction`] refuses them.
-pub async fn set_tags(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-    tag_ids: &[Uuid],
-) -> Result<bool, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    if lock_owned(&mut tx, user_id, &[txn_id]).await?.is_empty() {
-        return Ok(false);
-    }
-    replace_tags(&mut tx, user_id, txn_id, tag_ids).await?;
-    tx.commit().await?;
-    Ok(true)
-}
-
-pub async fn set_checked(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-    checked: bool,
-) -> Result<bool, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let written = write_checked(&mut tx, user_id, &[txn_id], checked).await?;
-    tx.commit().await?;
-    Ok(written > 0)
-}
-
-pub async fn bulk_set_category(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_ids: &[Uuid],
-    category_id: Option<Uuid>,
-) -> Result<u64, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let written = write_category(&mut tx, user_id, txn_ids, category_id).await?;
-    tx.commit().await?;
-    Ok(written.len() as u64)
-}
-
-/// Adds tags without removing what is already there; re-adding is a no-op.
-/// Returns the number of transactions touched, not the number of rows inserted.
-/// An empty `tag_ids` touches nothing and returns 0 — there is no tag to add,
-/// so no transaction is touched by any definition.
-pub async fn bulk_add_tags(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_ids: &[Uuid],
-    tag_ids: &[Uuid],
-) -> Result<u64, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let touched = add_tags(&mut tx, user_id, txn_ids, tag_ids).await?;
-    tx.commit().await?;
-    Ok(touched)
-}
-
-pub async fn bulk_set_checked(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_ids: &[Uuid],
-    checked: bool,
-) -> Result<u64, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let written = write_checked(&mut tx, user_id, txn_ids, checked).await?;
-    tx.commit().await?;
-    Ok(written)
-}
-
 /// What a single-row save changes. `None` leaves a field alone;
 /// `category_id: Some(None)` clears the category.
 #[derive(Default)]
@@ -507,59 +386,13 @@ pub async fn count_same_description(
     txn_id: Uuid,
     scope: SameDescription,
 ) -> Result<i64, CoreError> {
-    let n = sqlx::query_scalar!(
-        r#"
-        select count(*) as "n!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $2
-          and t.id <> $1
-          and t.description_norm <> ''
-          and t.description_norm = (
-              select t2.description_norm
-              from transaction t2
-              join account a2    on a2.id = t2.account_id
-              join connection k2 on k2.id = a2.connection_id
-              where t2.id = $1 and k2.user_id = $2
-                and t2.description_norm <> ''
-          )
-          and ($3::numeric is null
-               or (t.id <> $1
-                   and t.id in (select r.id from budget_transaction_rows($2, $3) r
-                                where r.needs_review)))
-        "#,
-        txn_id,
-        user_id,
-        scope.threshold(),
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(n)
-}
-
-/// How many internal-transfer pairs an [`apply_category_to_same_description`]
-/// over this row would dissolve.
-///
-/// Mirrors that function's row set — the anchor row **included** — rather than
-/// `count_same_description`'s, which excludes it. The count must describe the
-/// write that will actually happen, not the "and N others" figure the offer is
-/// phrased with.
-pub async fn count_paired_same_description(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-) -> Result<i64, CoreError> {
-    let mut conn = pool.acquire().await?;
-    let rows =
-        same_description_rows(&mut conn, user_id, txn_id, false, SameDescription::All).await?;
-    Ok(rows.iter().filter(|(_, paired)| *paired).count() as i64)
+    let ids = same_description_ids(pool, user_id, txn_id, scope).await?;
+    Ok(ids.iter().filter(|&&id| id != txn_id).count() as i64)
 }
 
 /// The anchor row and every transaction of this user sharing its normalised
 /// description — or, under [`SameDescription::NeedsReview`], only those still
-/// in review, anchor excluded — with whether each is half of a pair. Locks them when `lock`
-/// is set.
+/// in review, anchor excluded — locked, with whether each is half of a pair.
 ///
 /// A description that is null, empty, or normalises to `''` (e.g.
 /// digit-only) never clusters with other blank descriptions as "the same
@@ -568,9 +401,20 @@ async fn same_description_rows(
     conn: &mut sqlx::PgConnection,
     user_id: Uuid,
     txn_id: Uuid,
-    lock: bool,
     scope: SameDescription,
 ) -> Result<Vec<(Uuid, bool)>, CoreError> {
+    let ids = same_description_ids(&mut *conn, user_id, txn_id, scope).await?;
+    lock_owned(conn, user_id, &ids).await
+}
+
+/// The ids behind both functions above: the anchor (outside the review
+/// scope) and every row sharing its normalised description.
+async fn same_description_ids<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    user_id: Uuid,
+    txn_id: Uuid,
+    scope: SameDescription,
+) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"
         select t.id as "id!"
@@ -596,40 +440,9 @@ async fn same_description_rows(
         user_id,
         scope.threshold(),
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(executor)
     .await?;
-    if lock {
-        lock_owned(conn, user_id, &ids).await
-    } else {
-        let paired = sqlx::query!(
-            r#"select id as "id!", (transfer_pair_id is not null) as "paired!"
-               from transaction where id = any($1)"#,
-            &ids,
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        Ok(paired.into_iter().map(|r| (r.id, r.paired)).collect())
-    }
-}
-
-/// Applies the category to the row and to every transaction sharing its
-/// normalised description, pairs included — unlinked unless the category
-/// keeps them. Returns the ids written, the row itself included. A category
-/// that is not the user's writes nothing. [`apply_to_description`] is the
-/// checked form the API calls.
-pub async fn apply_category_to_same_description(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    txn_id: Uuid,
-    category_id: Option<Uuid>,
-) -> Result<Vec<Uuid>, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
-    let rows = same_description_rows(&mut tx, user_id, txn_id, true, SameDescription::All).await?;
-    let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
-    let written = write_category(&mut tx, user_id, &ids, category_id).await?;
-    tx.commit().await?;
-    Ok(written)
+    Ok(ids)
 }
 
 /// "Apply to the same description", as one database transaction: the rows
@@ -653,7 +466,7 @@ pub async fn apply_to_description(
     if !category_is_mine(&mut tx, user_id, category_id).await? {
         return Ok(WriteOutcome::UnknownCategory);
     }
-    let rows = same_description_rows(&mut tx, user_id, txn_id, true, scope).await?;
+    let rows = same_description_rows(&mut tx, user_id, txn_id, scope).await?;
     let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
     if breaks > 0 && !confirm_break_pairs && !keeps_pairs(&mut tx, category_id).await? {
         return Ok(WriteOutcome::PendingPairBreaks(breaks));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownRight, ArrowUpRight, X } from "lucide-react";
 
@@ -10,6 +10,7 @@ import { ValueChart, type ChartSeries, type ChartUnit } from "./ValueChart";
 import { CardState } from "./CardState";
 import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
+import { Modal } from "./Modal";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
 import { formatMoney, formatQuantity, lotCashAmount } from "../lib/money";
 import { formatDay } from "../lib/date";
@@ -26,23 +27,18 @@ import { positionSeries } from "../lib/assetSeries";
 // - Price domain (`holding.priceCurrency` — the currency stamped on the `price`
 //   ROW we read, which is NOT necessarily `holding.currency`; Powens may label
 //   an instrument EUR while Yahoo resolves a London listing quoted GBP): the
-//   left chart panel's header figure and gain, and the chart itself.
+//   asset-mode chart, its header figure and gain.
 // - Amount domain (`holding.accountCurrency`): everything the provider
 //   denominated in the account — mean price per share (`holding.meanPrice`,
 //   the same fee-inclusive figure `lot_basis` computes for RecordLotsModal,
-//   NOT a market price) and the purchase-history table's price/amount
-//   columns (`Lot.price`/`Lot.fee`, and the derived cash amount, are all
-//   amount-domain).
+//   NOT a market price), the purchase-history table's price/amount columns
+//   (`Lot.price`/`Lot.fee`, and the derived cash amount), and the
+//   purchases-mode chart, whose value line uses prices the server converted
+//   into the account's currency (`PricePoint.accountPrice`).
 //
 // `holding.currency` is the instrument's QUOTE currency. It labels the asset's
 // identity, not any amount here, so it formats nothing on this screen.
 //
-// Caveat, deliberately left as-is: in purchases mode the chart overlays a
-// position-value series (price domain) on an invested series (amount domain).
-// Those coincide for the common case where the account and the listing share a
-// currency, and the chart is labelled with the price domain because the value
-// series is the one that moves. Splitting them needs a per-transaction FX rate
-// the provider does not give us.
 // Never mix the domains without labeling — an unlabelled figure sitting next to
 // one in another currency is the bug this split exists to prevent.
 
@@ -83,20 +79,6 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     { value: "percent", label: "%" },
   ];
 
-  // Close on Escape; lock background scroll while open.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
-
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
   const { data: txnData, isError: txnError, refetch: refetchTxn } =
@@ -134,6 +116,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         ? 0
         : Number(holding.investedNative) / qtyNum;
   const up = Number(holding.gl) >= 0;
+  const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
 
   // Chart series + header figures depend on the mode and range.
   const { series, headerValue, gainAbs, gainPct, chartLabel } = useMemo(() => {
@@ -173,8 +156,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
       ] satisfies ChartSeries[],
       // The chart's own last point, not `holding.value`: this series is
-      // price-domain (unit prices x quantity), so the header must read in the
-      // same currency as the axis beneath it — not the reporting currency.
+      // amount-domain, so the header must read in the same currency as the
+      // axis beneath it — not the reporting currency.
       headerValue: last,
       gainAbs: last - first,
       gainPct: first ? (last - first) / first : 0,
@@ -185,153 +168,145 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const gainUp = gainAbs >= 0;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onClose}
+    <Modal
+      label={holding.name}
+      onClose={onClose}
+      className="absolute inset-[5%] bg-surface rounded-3xl flex flex-col overflow-hidden"
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-        className="absolute inset-[5%] bg-surface rounded-3xl flex flex-col overflow-hidden"
-      >
-        <HoldingModalHeader holding={holding}>
-          <SegmentedControl
-            value={mode}
-            onChange={(v) => setMode(v as Mode)}
-            options={[
-              { value: "asset", label: t("dashboard.assetModal.asset") },
-              { value: "purchases", label: t("dashboard.assetModal.purchases") },
-            ]}
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.close")}
-            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
-          >
-            <X className="size-5" />
-          </button>
-        </HoldingModalHeader>
+      <HoldingModalHeader holding={holding}>
+        <SegmentedControl
+          value={mode}
+          onChange={(v) => setMode(v as Mode)}
+          options={[
+            { value: "asset", label: t("dashboard.assetModal.asset") },
+            { value: "purchases", label: t("dashboard.assetModal.purchases") },
+          ]}
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("common.close")}
+          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
+        >
+          <X className="size-5" />
+        </button>
+      </HoldingModalHeader>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 pt-0 flex flex-col gap-4">
-          <div className="flex gap-4 items-start">
-          {/* Left column */}
-          <div className="flex-1 min-w-0 bg-surface-2 rounded-2xl p-5 flex flex-col">
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-1">
-                <span className="text-fg-faint text-sm">{chartLabel}</span>
-                {/* Both headerValue and gainAbs follow the chart, which is
-                    price-domain in both modes: unit prices in asset mode, and
-                    unit prices x quantity in purchases mode. Never reporting
-                    currency — see the file header. */}
-                <Money
-                  value={headerValue}
-                  currency={holding.priceCurrency}
-                  className="text-fg text-2xl font-semibold tracking-tight"
-                />
-                <div
-                  className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${
-                    gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"
-                  }`}
-                >
-                  {gainUp ? (
-                    <ArrowUpRight className="size-4" />
-                  ) : (
-                    <ArrowDownRight className="size-4" />
-                  )}
-                  <Money
-                    value={gainAbs}
-                    currency={holding.priceCurrency}
-                    signed
-                  />
-                  <span className="font-mono ml-2">
-                    (<Percent value={gainPct} signed />)
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-3">
-                <SegmentedControl
-                  value={unit}
-                  onChange={(v) => setUnit(v as ChartUnit)}
-                  options={UNIT_OPTIONS}
-                />
-                {mode === "purchases" && (
-                  <ChartLegend
-                    items={
-                      unit === "percent"
-                        ? [{ label: t("common.return"), color: GREEN }]
-                        : [
-                            { label: t("dashboard.assetModal.positionValue"), color: GREEN },
-                            { label: t("dashboard.assetModal.invested"), color: FAINT, dashed: true },
-                          ]
-                    }
-                  />
+      {/* Body */}
+      <div data-modal-body className="flex-1 overflow-y-auto p-6 pt-0 flex flex-col gap-4">
+        <div className="flex gap-4 items-start">
+        {/* Left column */}
+        <div className="flex-1 min-w-0 bg-surface-2 rounded-2xl p-5 flex flex-col">
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="text-fg-faint text-sm">{chartLabel}</span>
+              {/* Both headerValue and gainAbs follow the chart: price
+                  domain in asset mode, amount domain in purchases mode.
+                  Never reporting currency — see the file header. */}
+              <Money
+                value={headerValue}
+                currency={chartCurrency}
+                className="text-fg text-2xl font-semibold tracking-tight"
+              />
+              <div
+                className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${
+                  gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"
+                }`}
+              >
+                {gainUp ? (
+                  <ArrowUpRight className="size-4" />
+                ) : (
+                  <ArrowDownRight className="size-4" />
                 )}
+                <Money
+                  value={gainAbs}
+                  currency={chartCurrency}
+                  signed
+                />
+                <span className="font-mono ml-2">
+                  (<Percent value={gainPct} signed />)
+                </span>
               </div>
             </div>
-
-            {chartReady ? (
-              <ValueChart
-                series={series}
-                unit={unit}
-                percentLabel={t("common.return")}
-                height={340}
-                className="mt-4"
-                currency={holding.priceCurrency}
-              />
-            ) : (
-              <CardState
-                variant={chartError ? "error" : "loading"}
-                onRetry={retryChart}
-                className="mt-4 h-85"
-              />
-            )}
-
-            <div className="flex justify-center mt-3">
+            <div className="flex flex-col items-end gap-3">
               <SegmentedControl
-                value={range}
-                onChange={setRange}
-                options={RANGE_OPTIONS}
+                value={unit}
+                onChange={(v) => setUnit(v as ChartUnit)}
+                options={UNIT_OPTIONS}
               />
+              {mode === "purchases" && (
+                <ChartLegend
+                  items={
+                    unit === "percent"
+                      ? [{ label: t("common.return"), color: GREEN }]
+                      : [
+                          { label: t("dashboard.assetModal.positionValue"), color: GREEN },
+                          { label: t("dashboard.assetModal.invested"), color: FAINT, dashed: true },
+                        ]
+                  }
+                />
+              )}
             </div>
           </div>
 
-          {/* Right column */}
-          <div className="w-lg shrink-0 flex flex-col gap-4">
-            <StatsSurface
-              holding={holding}
-              meanPrice={meanPrice}
-              up={up}
+          {chartReady ? (
+            <ValueChart
+              series={series}
+              unit={unit}
+              percentLabel={t("common.return")}
+              height={340}
+              className="mt-4"
+              currency={chartCurrency}
             />
-            {mode === "asset" ? (
-              <AboutSurface holding={holding} netWorth={netWorth} />
-            ) : (
-              <PurchaseHistorySurface
-                purchases={purchases}
-                currency={holding.accountCurrency}
-                ready={txnData !== undefined}
-                isError={txnError}
-                onRetry={() => refetchTxn()}
-              />
-            )}
-            {onRecordLots && (
-              <IncompleteHistoryStrip
-                unexplainedQty={holding.unexplainedQty}
-                onOpen={onRecordLots}
-              />
-            )}
-          </div>
-          </div>{/* end chart row */}
-
-          {mode === "asset" && holding.composition && (
-            <CompositionSurface composition={holding.composition} />
+          ) : (
+            <CardState
+              variant={chartError ? "error" : "loading"}
+              onRetry={retryChart}
+              className="mt-4 h-85"
+            />
           )}
-        </div>{/* end body */}
-      </div>
-    </div>
+
+          <div className="flex justify-center mt-3">
+            <SegmentedControl
+              value={range}
+              onChange={setRange}
+              options={RANGE_OPTIONS}
+            />
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="w-lg shrink-0 flex flex-col gap-4">
+          <StatsSurface
+            holding={holding}
+            meanPrice={meanPrice}
+            up={up}
+          />
+          {mode === "asset" ? (
+            <AboutSurface holding={holding} netWorth={netWorth} />
+          ) : (
+            <PurchaseHistorySurface
+              purchases={purchases}
+              currency={holding.accountCurrency}
+              ready={txnData !== undefined}
+              isError={txnError}
+              onRetry={() => refetchTxn()}
+            />
+          )}
+          {onRecordLots && (
+            <IncompleteHistoryStrip
+              unexplainedQty={holding.unexplainedQty}
+              onOpen={onRecordLots}
+            />
+          )}
+        </div>
+        </div>{/* end chart row */}
+
+        {mode === "asset" && holding.composition && (
+          <CompositionSurface composition={holding.composition} />
+        )}
+      </div>{/* end body */}
+    </Modal>
   );
 }
 

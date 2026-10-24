@@ -22,7 +22,6 @@ export const keys = {
 
   netWorth: (range?: string) =>
     (range === undefined ? ["net-worth"] : ["net-worth", range]) as readonly unknown[],
-  distribution: () => ["distribution"] as const,
   accounts: () => ["accounts"] as const,
   accountSeries: (range?: string) =>
     (range === undefined
@@ -71,5 +70,4 @@ export const keys = {
   connections: () => ["connections"] as const,
   providers: () => ["providers"] as const,
   providersEnabled: () => ["providers-enabled"] as const,
-  corsOrigins: () => ["cors-origins"] as const,
 };

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select enabled_providers as \"enabled_providers!\" from app_settings where id = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled_providers!",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "enabled_providers"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "913adc650a1029bf998e7dbb943dd46801893dcab330fc3cb4fa6120ea0c988d"
+}

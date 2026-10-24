@@ -20,6 +20,11 @@ tracing = { workspace = true }
 tokio.workspace = true
 tracing-subscriber.workspace = true
 
+[features]
+# Seeders and fixtures for the tests of every crate (`testkit`).
+test-util = []
+
 [dev-dependencies]
+gripsou-core = { path = ".", features = ["test-util"] }
 anyhow.workspace = true
 tokio.workspace = true

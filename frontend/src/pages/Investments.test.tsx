@@ -29,7 +29,7 @@ const RETURNS = {
 const FUND = {
   id: "h1", instrumentId: "i1", ticker: "WLD", name: "Example MSCI World ETF", kind: "etf", logo: null,
   accountId: "a1", accountName: "Example PEA", accountColor: "#5b9bf0", accountType: "pea",
-  accountTypeLabel: "PEA", qty: "1", price: "110", currency: "EUR", priceCurrency: "EUR",
+  qty: "1", price: "110", currency: "EUR", priceCurrency: "EUR",
   accountCurrency: "EUR", invested: "100", investedNative: "100", value: "110", gl: "10",
   glPct: "0.1", fxMissing: false, spark: null, unexplainedQty: "0", meanPrice: "100",
   unexplainedCost: "0",

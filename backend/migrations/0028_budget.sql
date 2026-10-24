@@ -1,24 +1,19 @@
--- Budget: a per-user taxonomy, tags, and the columns that hang a category off a
--- transaction. Everything is prefixed `budget_` because `category` already means
--- the account-type grouping (0001) — that collision was a bug once already.
+-- Budget: per-user categories, tags, and a category on each transaction.
+-- Prefixed `budget_` to avoid a clash with the account `category` table.
 
 create table budget_category (
     id          uuid primary key default gen_random_uuid(),
     user_id     uuid not null references users (id) on delete cascade,
     name        text not null,
-    -- Stable key for the seeded rows so the frontend can translate them.
-    -- Cleared on rename: from then on the user's own wording is shown verbatim.
+    -- Seeded rows' key, so the frontend can translate them. Cleared on rename.
     default_key text,
     color       text not null,
     icon        text,
     hint        text,
     kind        text not null check (kind in ('expense', 'income', 'internal', 'excluded')),
-    -- Only 'internal_transfer'. Non-null means the pairing pass writes here, so
-    -- the repository refuses to delete it.
+    -- Non-null for a category the app itself writes to; it cannot be deleted.
     system_key  text,
-    -- Position within a kind, 1..n with no gaps: every write that changes the
-    -- order renumbers the whole kind, so the numbers stay readable. The user
-    -- arranges these in Settings; the list is never re-sorted behind them.
+    -- Position within a kind, 1..n with no gaps.
     sort_order  int not null default 0,
     archived_at timestamptz,
     unique (user_id, name)
@@ -27,9 +22,6 @@ create table budget_category (
 create unique index budget_category_system_uq
     on budget_category (user_id, system_key) where system_key is not null;
 
--- Listed in creation order, not alphabetically: the list is short and personal,
--- and a tag just added belongs at the end where it was typed rather than
--- somewhere in the middle of the alphabet.
 create table budget_tag (
     id         uuid primary key default gen_random_uuid(),
     user_id    uuid not null references users (id) on delete cascade,
@@ -57,17 +49,11 @@ alter table transaction
 
 create index transaction_budget_category_idx on transaction (budget_category_id);
 
--- Deleting a transaction clears every link pointing at it; without this each
--- deleted row scans the whole table to find its partner.
+-- Deleting a transaction clears the links pointing at it.
 create index transaction_transfer_pair_idx
     on transaction (transfer_pair_id) where transfer_pair_id is not null;
 
--- A paired row whose partner is deleted (its connection removed) no longer
--- nets against anything, yet it would keep the internal-transfer category and
--- count as money set aside. Hand it back to the pipeline instead: uncategorised
--- again, and a candidate for the next pairing pass. A pair the user breaks by
--- recategorising one half is left alone: its partner still exists, and the
--- untouched half stays flagged as an orphaned transfer.
+-- A paired row whose partner was deleted goes back to uncategorised.
 create function transaction_partner_deleted_trg() returns trigger
 language plpgsql as $$
 begin
@@ -91,11 +77,7 @@ create index transaction_needs_review_idx
     on transaction (account_id)
     where category_source = 'ai' and category_reviewed_at is null;
 
--- The identity of "the same description": lowercased, dates removed, digit
--- runs removed, whitespace collapsed. No meaning is attached beyond string
--- identity. Card masks are the adapter's to strip at ingest; any left over
--- lose their digits here like every other number. Immutable so the
--- generated `transaction.description_norm` column (0029) can use it.
+-- "The same description": lowercased, dates and digit runs removed, whitespace collapsed.
 create function budget_norm_description(p text) returns text
 language sql immutable as $$
     select btrim(regexp_replace(
@@ -106,27 +88,15 @@ language sql immutable as $$
         '\s+', ' ', 'g'))
 $$;
 
--- A provider buy/sell on a PEA is the cash leg of a purchase the `lot` table
--- already holds. Every budget reader leaves it out: the list would show the
--- purchase twice, and buying an ETF is not spending. Scoped to provider rows
--- (`external_id is not null`); the user's own purchases live in `lot`.
---
--- Transfers into the PEA are NOT covered: pairing files both halves as
--- internal transfer, which is what keeps them from double-counting.
---
--- Plain SQL and immutable, so the planner inlines it into every caller.
 create function budget_hidden_pea_leg(p_account_type text, p_external_id text, p_type text)
 returns boolean
 language sql immutable as $$
     select p_account_type = 'pea' and p_external_id is not null and p_type in ('buy', 'sell')
 $$;
 
--- The review rule: an unreviewed AI guess below the reader's threshold, with
--- no category, or filed as internal/excluded — a guess there hides money from
--- every total, so it is always reviewed however confident. Null (not false)
--- when `category_source` is null, like the bare predicate it replaces, so a
--- `where` clause can still match the partial index on unreviewed AI rows;
--- a selected column wraps it in `coalesce`.
+-- An unreviewed AI guess needs review when it is below the threshold, has no
+-- category, or hides money from the totals. Null, not false, when the source is
+-- null, so a `where` clause can still use the partial index on unreviewed AI rows.
 create function budget_needs_review(
     p_source text, p_reviewed_at timestamptz, p_confidence numeric,
     p_category_kind text, p_threshold numeric)
@@ -148,21 +118,13 @@ create type budget_transaction_row as (
     category_color text, category_icon text, category_kind text,
     category_source text, category_confidence numeric,
     needs_review boolean, checked boolean, is_transfer boolean,
-    -- The pairing pass filed this row but its link is gone: a user corrected
-    -- the other half. Keyed on the source, since only pairing writes 'pair'
-    -- and it always writes a link.
+    -- Filed by pairing, but its link is gone.
     is_orphan_transfer boolean,
-    -- Filtered on, never shown: the list hides internal transfers by default.
     is_internal_transfer boolean);
 
--- Every row of the Transactions list, unfiltered: the user's cash
--- transactions (minus the hidden PEA legs) and their lots. Lots reach the
--- list as structured rows so the frontend's i18n formats them; they carry no
--- budget. A buy's amount is -(qty x price + fee), a sale's
--- +(qty x price - fee): the real cash impact either way.
---
--- Stable, plain SQL and not strict, so the planner inlines it and pushes the
--- caller's filters into both branches.
+-- Every row of the Transactions list: the user's cash transactions and lots.
+-- A lot's amount is its cash impact, fee included. Plain SQL and not strict,
+-- so the planner inlines it and pushes the caller's filters into both branches.
 create function budget_transaction_rows(p_user uuid, p_threshold numeric)
 returns setof budget_transaction_row
 language sql stable as $$
@@ -190,8 +152,6 @@ language sql stable as $$
            case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                 else l.quantity * l.unit_price - l.fee end,
            'lot'::text,
-           -- `symbol` is null whenever an ISIN identifies the instrument, the
-           -- common case on a PEA: fall back to the ISIN before the name.
            coalesce(i.symbol, i.isin, i.name),
            l.quantity, l.unit_price, l.fee,
            a.id, a.name, a.color, a.currency,
@@ -205,12 +165,8 @@ language sql stable as $$
     where c.user_id = p_user
 $$;
 
--- The Transactions filter, defined once: the list pages it, the header counts
--- it, and "select all shown" writes to its cash rows. Every argument but the
--- first two is optional (null, empty, false or 'all' means no filter), except
--- `p_include_transfers`: internal transfers are hidden unless it is set.
---
--- Days are UTC days, matched on `ts` directly so an index on it stays usable.
+-- The Transactions filter. Null, empty, false or 'all' means no filter, except
+-- that internal transfers are hidden unless `p_include_transfers` is set.
 create function budget_transaction_matches(
     p_user uuid, p_threshold numeric,
     p_search text, p_account uuid, p_from date, p_to date, p_bucket text,
@@ -221,7 +177,6 @@ language sql stable as $$
     select r.*
     from budget_transaction_rows(p_user, p_threshold) r
     where (p_search is null
-           -- Lot rows have no description; the list shows their ticker.
            or r.description ilike '%' || p_search || '%'
            or r.ticker ilike '%' || p_search || '%')
       and (p_account is null or r.account_id = p_account)
@@ -243,14 +198,8 @@ language sql stable as $$
       and (p_include_transfers or not r.is_internal_transfer)
 $$;
 
--- Seeded taxonomy. Inserted per user rather than as global reference rows: the
--- user owns these from the first second and may rename or delete any of them.
--- Colours walk one hue wheel at a fixed lightness and chroma —
--- `oklch(0.745 0.125 H)`, converted to sRGB here — so no category shouts
--- louder than its neighbour. Two rows keep a fixed hex where they mean
--- something: savings/investments the theme green, ignore the muted grey.
--- The hint is what the AI phase reads when it sorts a transaction: English
--- prompt text, unlike `default_key`, which translates the *name* only.
+-- Default categories, inserted per user so each user owns and may edit them.
+-- The hint is the English text the AI reads; `default_key` translates the name.
 create function seed_budget_categories(p_user uuid) returns void
 language sql as $$
     insert into budget_category
@@ -299,11 +248,8 @@ begin
 end
 $$;
 
--- A trigger rather than application code: there are two user-creation sites
--- today and more will appear, and tests insert users directly.
 create trigger users_seed_budget_categories
     after insert on users
     for each row execute function seed_budget_categories_trg();
 
--- Existing users get the same taxonomy.
 select seed_budget_categories(id) from users;

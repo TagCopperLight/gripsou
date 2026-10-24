@@ -1,37 +1,15 @@
--- The dashboard's two day-series queries called unit_value_asof/fx_asof once per
--- (holding × day) — 15,696 calls over a 3.5-year range, each one a planned
--- index seek, plus the nested fx_asof inside unit_value_asof. Measured: 3.36 s,
--- of which 3.28 s was function evaluation (the joins themselves took 81 ms).
---
--- Same arithmetic, computed once per (instrument × day) instead: 8 instruments
--- beat 13 holdings today and the gap only widens (several holdings of the same
--- instrument, several accounts). The nested FX lookup collapses too — the rate
--- for a currency IS the unit value of its cash instrument, so it is computed
--- once per currency-day and joined, not re-seeked inside every valuation.
---
--- Callers read a rate as the row where kind = 'cash' and currency = X, and an
--- instrument's unit value by instrument_id. Same NULL behaviour as the scalar
--- functions: no price and no rate → NULL unit_value, which the callers' coalesce
--- and fx_missing already handle. Measured on the same range: 3.36 s -> 86 ms.
---
--- The scalar functions stay: distribution() and friends value a single day,
--- where a grid is pure overhead.
+-- Unit values computed once per (instrument, day), for day series.
 create function valuation_grid(p_user uuid, p_from date, p_to date)
 returns table (as_of date, instrument_id uuid, kind text, currency text, unit_value numeric)
 language sql
 stable
--- The default estimate for a set-returning function is 1000 rows, which made
--- the planner nested-loop the callers' joins against it — 7.5 s, worse than the
--- scalar functions it replaced. One row per instrument-day: a few years of a
--- dozen instruments is this order.
+-- The default estimate of 1000 rows makes the planner nested-loop the callers' joins.
 rows 10000
 as $$
     with dates as (
         select generate_series(p_from, p_to, '1 day'::interval)::date as as_of
     ),
-    -- Every currency that can carry a rate: one per cash instrument, plus the
-    -- pivot itself — whose rate is 1 whether or not anyone ever stored a cash
-    -- instrument or a price for it, exactly as fx_asof answers.
+    -- One per cash instrument, plus the pivot, whose rate is always 1.
     currencies as (
         select i.id, i.currency from instrument i where i.kind = 'cash'
         union all
@@ -43,9 +21,7 @@ as $$
               where i.kind = 'cash' and i.currency = s.base_currency
           )
     ),
-    -- Last price on or before each day. `(as_of + 1)` at UTC midnight keeps the
-    -- comparison on (instrument_id, ts) as a backwards seek and does not depend
-    -- on the session TimeZone.
+    -- Last price on or before each day.
     fx as (
         select d.as_of, cu.currency, cu.id as instrument_id,
                case when cu.currency = (select base_currency from app_settings where id = 1)
@@ -63,9 +39,7 @@ as $$
             limit 1
         ) p on true
     ),
-    -- Only the securities this user holds. `instrument` is global across users,
-    -- so scanning all of it would make one user's dashboard pay for everybody's
-    -- holdings.
+    -- Only this user's securities: `instrument` is shared by all users.
     held as (
         select distinct i.id, i.kind, i.currency
         from instrument i
@@ -88,10 +62,8 @@ as $$
             limit 1
         ) p on true
     )
-    -- Securities: the price converted from the *price row's* currency, never
-    -- the instrument's. Cash: the rate is the unit value, and the row exists
-    -- even for a currency with no cash instrument (instrument_id then NULL,
-    -- which no holding can join to anyway) so callers can still read a rate.
+    -- A security's price is converted from the price row's currency. A cash
+    -- instrument's unit value is its rate.
     select lp.as_of, lp.id, lp.kind, lp.currency, lp.unit_price * quote.rate
     from lp
     left join fx quote on quote.as_of = lp.as_of and quote.currency = lp.price_currency

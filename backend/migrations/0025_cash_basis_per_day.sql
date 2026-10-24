@@ -1,27 +1,4 @@
--- Cash's invested figure must be the balance held ON THAT DAY, not today's.
---
--- 0022 answered `holding.cost_basis` for every cash holding regardless of the
--- day asked for — a single current number, flat across all of history. The
--- holdings table only ever asks for today, so it never noticed; the net-worth
--- chart asks for ~200 sampled days and every one of them got the balance the
--- account happens to hold now.
---
--- The visible damage: on the live tree the "Capital invested" line read
--- 6 120,00 EUR on a January day against a net worth of 4 800,00 EUR — the dashed
--- line sitting 1 320 EUR ABOVE the green area, because January's real 3 500,00
--- EUR of cash had been replaced by September's 4 900,00 EUR. The gap between
--- the two lines is supposed to be unrealised gain on securities and nothing
--- else, so cash must contribute exactly its own value on both sides.
---
--- The fix reads the same `holding_point` the net-worth side reads, with the
--- same "last point at or before this day" rule, so the two cancel by
--- construction. `quantity` and not `value`: the net-worth query prefers
--- `snap.quantity * unit_value` and only falls back to `snap.value`, and for a
--- cash holding the two are the same number anyway (map.rs sets both to the
--- balance).
---
--- Securities are untouched — their per-day walk through the lots was already
--- right. Everything else below is 0022 verbatim.
+-- A cash holding's basis is its balance on the day asked, not today's.
 create or replace function lot_basis(p_holding_ids uuid[], p_days date[])
 returns table (holding_id uuid, as_of date, mean_price numeric,
                explained_qty numeric, basis numeric, realised numeric)
@@ -35,9 +12,7 @@ as $$
     days as (
         select distinct unnest(p_days) as as_of
     ),
-    -- mu: the fee-inclusive lifetime mean buy price. Over ALL buys regardless
-    -- of date, which is what makes it order-independent and lets everything
-    -- below stay a plain aggregate instead of a recursive walk.
+    -- Mean buy price over all buys, whatever their date, so no recursive walk is needed.
     mu as (
         select l.holding_id,
                sum(l.quantity * l.unit_price + l.fee)
@@ -47,8 +22,7 @@ as $$
         where l.side = 'buy'
         group by l.holding_id
     ),
-    -- The anchor, evaluated once per holding: what the provider says is held
-    -- and what it cost, against what the lots actually account for.
+    -- What the provider says is held and cost, against what the lots explain.
     anchor as (
         select ids.holding_id,
                h.quantity   as held,
@@ -62,12 +36,7 @@ as $$
         left join lot l   on l.holding_id = ids.holding_id
         group by ids.holding_id, h.quantity, h.cost_basis, i.kind
     ),
-    -- Cash only, and only for the days asked: the balance standing at the end
-    -- of that day. NULL when the holding has no point yet (a day before its
-    -- first snapshot or backfill row) — the caller's own snapshot join drops
-    -- that holding-day from the net worth too, so the `provider_basis`
-    -- fallback below keeps the holdings table answering for a never-synced
-    -- holding without putting today's balance back into the chart's history.
+    -- Cash balance at the end of each day; NULL before the holding's first point.
     cash_day as (
         select a.holding_id, d.as_of, hp.quantity
         from anchor a
@@ -81,8 +50,7 @@ as $$
         ) hp on true
         where a.is_cash
     ),
-    -- Per requested day: the net quantity the lots explain, and the profit the
-    -- sales up to that day realised.
+    -- Per day: the quantity the lots explain, and the profit realised by sales.
     per_day as (
         select ids.holding_id,
                d.as_of,
@@ -100,23 +68,15 @@ as $$
     )
     select p.holding_id,
            p.as_of,
-           -- Deliberately nullable: NULL means no buy lots are recorded for
-           -- this holding at all, which is NOT the same thing as a mean buy
-           -- price of zero (a legitimate value — e.g. a free-share lot).
-           -- Consumers that want a number coalesce at their own boundary
-           -- (see basis_preview in core/src/repo/lot.rs).
+           -- NULL when no buy lot is recorded, unlike a real mean price of 0.
            m.mean_price,
            p.explained_qty,
            case
-               -- Cash is a holding of a cash instrument valued at book, so its
-               -- basis IS its balance on the day — see the header.
                when a.is_cash then coalesce(cd.quantity, a.provider_basis)
                when m.mean_price is null then a.provider_basis
-               -- The lots account for the position exactly, so they ARE the
-               -- basis: nothing is unexplained to carry.
+               -- The lots explain the whole position.
                when a.explained_now = a.held then m.mean_price * p.explained_qty
-               -- Partial history: today anchors on the provider's figure and
-               -- the unexplained remainder is carried flat backward (§8.2).
+               -- The unexplained remainder is carried flat backward.
                else m.mean_price * p.explained_qty
                     + (a.provider_basis - m.mean_price * a.explained_now)
            end as basis,

@@ -1,19 +1,5 @@
--- A buy/sell is the cash leg of an investment, on whatever account it lands:
--- the `lot` is the record of the purchase, and the user's lots outrank
--- anything imported. Every budget reader leaves these rows out — the list
--- would show a purchase twice (or three times, with a broker's echo account),
--- and moving cash into a security is neither spending nor income.
---
--- Replaces `budget_hidden_pea_leg` (0028), which only looked at accounts of
--- type `pea` and so let Trade Republic's trades (booked on a checking account
--- and mirrored on a brokerage one) through. `external_id` is no longer tested:
--- since 0024 `transaction` is cash-only and hand-entered purchases live in
--- `lot`.
---
--- Charts and the balance backfill do NOT use this: the cash balance really
--- moved.
---
--- Plain SQL and immutable, so the planner inlines it into every caller.
+-- A buy/sell is the cash leg of an investment, recorded by its `lot`: budget
+-- readers leave it out on every account type.
 create function budget_investment_leg(p_type text)
 returns boolean
 language sql immutable as $$

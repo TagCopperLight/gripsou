@@ -4,15 +4,17 @@ use axum::{
 };
 use tower::ServiceExt;
 
-fn test_key() -> gripsou_api::TotpKey {
-    gripsou_api::TotpKey::parse(Some(&"a".repeat(64))).unwrap()
+/// The job deps with whatever adapters the environment configures.
+fn test_deps() -> std::sync::Arc<gripsou_jobs::Deps> {
+    let key = gripsou_core::testkit::encryption_key();
+    std::sync::Arc::new(gripsou_jobs::Deps::from_env(key, "EUR".into()))
 }
 fn test_passkeys() -> gripsou_api::Passkeys {
     gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap()
 }
 
 #[tokio::test]
-async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
+async fn public_health_auth_static_fallback_and_webhook_limit() {
     // Short wait: a route reaching the database fails fast instead of
     // retrying the connection for the default 30 s.
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -22,13 +24,7 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(
-        db,
-        &dir,
-        vec!["http://example.test".into()],
-        test_key(),
-        test_passkeys(),
-    );
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
     for (path, status) in [
         ("/api/health", StatusCode::OK),
         ("/api/holdings", StatusCode::UNAUTHORIZED),
@@ -42,36 +38,6 @@ async fn public_health_auth_cors_static_fallback_and_webhook_limit() {
             .unwrap();
         assert_eq!(response.status(), status);
     }
-    let r = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("OPTIONS")
-                .uri("/api/holdings")
-                .header("origin", "http://example.test")
-                .header("access-control-request-method", "GET")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        r.headers()["access-control-allow-origin"],
-        "http://example.test"
-    );
-    // A throttled login's wait must be readable from another origin.
-    let r = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/health")
-                .header("origin", "http://example.test")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(r.headers()["access-control-expose-headers"], "retry-after");
     // Passwordless sign-in starts without a session (the unused pool makes
     // it fail later, but never as unauthorised).
     let r = app
@@ -117,7 +83,7 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
         "console.log(1);".repeat(100),
     )
     .unwrap();
-    let app = gripsou_api::router(db, &dir, vec![], test_key(), test_passkeys());
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
     let get = |path: &str| {
         Request::builder()
             .uri(path)
@@ -161,7 +127,7 @@ async fn every_response_carries_the_security_headers() {
     let dir = std::env::temp_dir().join(format!("gripsou-router-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<html>SPA fixture</html>").unwrap();
-    let app = gripsou_api::router(db, &dir, vec![], test_key(), test_passkeys());
+    let app = gripsou_api::router(db, &dir, test_deps(), test_passkeys());
 
     for path in ["/api/health", "/api/holdings", "/", "/some/spa/route"] {
         let r = app
@@ -208,8 +174,7 @@ async fn totp_setup_without_a_token_is_unauthorized() {
     let app = gripsou_api::router(
         db,
         std::path::Path::new("/nonexistent"),
-        vec![],
-        test_key(),
+        test_deps(),
         test_passkeys(),
     );
     let r = app
@@ -223,4 +188,52 @@ async fn totp_setup_without_a_token_is_unauthorized() {
         .await
         .unwrap();
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// Every admin route refuses a member's session, before the handler runs.
+#[sqlx::test(migrations = "../migrations")]
+async fn admin_routes_refuse_members(pool: sqlx::PgPool) {
+    let member = gripsou_core::testkit::seed_user(&pool).await;
+    let token = gripsou_api::auth::generate_token();
+    gripsou_core::repo::session::create(
+        &pool,
+        member,
+        &gripsou_api::auth::hash_token(&token),
+        None,
+        None,
+        false,
+        chrono::Utc::now() + chrono::Duration::hours(1),
+    )
+    .await
+    .unwrap();
+    let dir = std::env::temp_dir();
+    let app = gripsou_api::router(pool, &dir, test_deps(), test_passkeys());
+    let id = uuid::Uuid::new_v4();
+    for (method, path) in [
+        ("GET", "/api/users".to_string()),
+        ("POST", "/api/invites".to_string()),
+        ("POST", format!("/api/users/{id}/reset-link")),
+        ("DELETE", format!("/api/users/{id}")),
+        ("GET", "/api/providers".to_string()),
+        ("PATCH", "/api/providers/powens".to_string()),
+        ("GET", "/api/settings/budget-ai".to_string()),
+        ("PATCH", "/api/settings/budget-ai".to_string()),
+        ("GET", "/api/settings/budget-ai/usage".to_string()),
+        ("GET", "/api/settings/budget-ai/models/jev".to_string()),
+        ("PUT", "/api/settings/budget-ai/prices".to_string()),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(&path)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method} {path}");
+    }
 }

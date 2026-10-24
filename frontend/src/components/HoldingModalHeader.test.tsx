@@ -10,7 +10,6 @@ const holding = {
   accountName: "Boursorama",
   accountColor: "#34d399",
   accountType: "pea",
-  accountTypeLabel: "PEA",
 } as Holding;
 
 describe("HoldingModalHeader", () => {

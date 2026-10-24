@@ -13,7 +13,7 @@ vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 const BASE: Holding = {
   id: "h1", ticker: "PUST", name: "Amundi Nasdaq", kind: "etf", logo: null,
   accountId: "a1", accountName: "PEA", accountColor: "#6ea8fe",
-  accountType: "pea", accountTypeLabel: "PEA", qty: "10", price: "100", currency: "EUR",
+  accountType: "pea", qty: "10", price: "100", currency: "EUR",
   priceCurrency: "EUR", accountCurrency: "EUR",
   invested: "800", investedNative: "800", value: "1000", gl: "200", glPct: "0.25",
   fxMissing: false, spark: null,
@@ -95,6 +95,29 @@ describe("AssetModal currency domains", () => {
     // figures. Nothing on the price or amount side may carry it.
     expect(screen.queryByText("100,00 €")).not.toBeInTheDocument();
     expect(screen.queryByText("80,00 €")).not.toBeInTheDocument();
+  });
+});
+
+describe("AssetModal purchases chart", () => {
+  // A GBP quote in a USD account: the purchases chart values the position at
+  // the account-currency price, so it reads in USD like the invested line.
+  it("reads in the account's currency", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      new Response(JSON.stringify(
+        url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120" }] : [],
+      ), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+    const user = userEvent.setup();
+    render(withClient(
+      <AssetModal
+        holding={{ ...BASE, priceCurrency: "GBP", accountCurrency: "USD" }}
+        netWorth={5000}
+        onClose={() => {}}
+      />,
+    ));
+    await user.click(screen.getByRole("radio", { name: /purchases/i }));
+    // 10 shares x 120 USD.
+    expect(await screen.findByText(/^1.200,00.\$$/)).toBeInTheDocument();
   });
 });
 

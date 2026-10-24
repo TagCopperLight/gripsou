@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select prefs as \"prefs!: sqlx::types::Json<DisplayPrefs>\",\n                  currency, time_zone, budget_ai_enabled, budget_ai_threshold\n             from users where id = $1\n              for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "prefs!: sqlx::types::Json<DisplayPrefs>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "prefs"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "currency",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "budget_ai_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "budget_ai_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "budget_ai_threshold"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "67f2edbad8fdbcee512b2753a3a355f1620b9d15a9946b07c4abed4a5b0b89c2"
+}

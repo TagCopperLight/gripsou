@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { Avatar } from "./Avatar";
+import { TextInput } from "./TextInput";
 import { useUpdateProfile } from "../api/hooks";
 import { useAuth } from "../auth/context";
 import { fileToAvatarDataUrl } from "../lib/avatar";
@@ -29,7 +30,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
     setPictureError(false);
     try {
       const avatar = await fileToAvatarDataUrl(file);
-      void updatePrefs({ ...prefs, avatar });
+      void updatePrefs({ avatar });
     } catch {
       setPictureError(true);
     }
@@ -97,7 +98,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             {prefs.avatar && (
               <button
                 type="button"
-                onClick={() => void updatePrefs({ ...prefs, avatar: undefined })}
+                onClick={() => void updatePrefs({ avatar: null })}
                 className="cursor-pointer text-xs font-medium text-red hover:opacity-70"
               >
                 {t("settings.account.removeImage")}
@@ -115,19 +116,17 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-5">
             <label className="flex flex-col gap-2">
               <span className="text-sm text-fg-faint">{t("settings.account.name")}</span>
-              <input
+              <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
               />
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-sm text-fg-faint">{t("settings.account.email")}</span>
-              <input
+              <TextInput
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
               />
             </label>
           </div>

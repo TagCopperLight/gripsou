@@ -6,8 +6,9 @@ import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { ApiError } from "../api/client";
-import { usePasskeyRegisterOptions, useReauth, useRegisterPasskey } from "../api/hooks";
-import { throttleMinutes } from "../lib/mfa";
+import { usePasskeyRegisterOptions, useRegisterPasskey } from "../api/hooks";
+import { PasswordField } from "./PasswordField";
+import { useReauthStep } from "./useReauthStep";
 
 type Step = "password" | "waiting" | "done" | "failed";
 
@@ -16,15 +17,13 @@ type Step = "password" | "waiting" | "done" | "failed";
 export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("password");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("passkeys.failed"));
   const [failure, setFailure] = useState<"notAdded" | "alreadyAdded">("notAdded");
   const [name, setName] = useState("");
   const token = useRef<string | null>(null);
   // Set when the window closes, so a browser window still settling is ignored.
   const closed = useRef(false);
 
-  const reauth = useReauth();
   const options = usePasskeyRegisterOptions();
   const register = useRegisterPasskey();
 
@@ -57,7 +56,9 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
       setStep("done");
     } catch (err) {
       if (closed.current) return;
-      if (err instanceof ApiError && err.status === 401) {
+      // 403: the password check is used up; 410: the browser window stayed
+      // open past the challenge's 5 minutes.
+      if (err instanceof ApiError && (err.status === 403 || err.status === 410)) {
         backToPassword(t("passkeys.expired"));
         return;
       }
@@ -72,21 +73,8 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   };
 
   const submitPassword = async () => {
-    if (!password || reauth.isPending) return;
-    setError(null);
-    try {
-      token.current = (await reauth.mutateAsync(password)).reauth;
-    } catch (err) {
-      const minutes = throttleMinutes(err);
-      setError(
-        minutes !== null
-          ? t("auth.tooManyAttempts", { count: minutes })
-          : err instanceof ApiError && err.status === 400
-            ? t("twoFactor.wrongPassword")
-            : t("passkeys.failed"),
-      );
-      return;
-    }
+    if (!password || checking) return;
+    token.current = await check();
     void create();
   };
 
@@ -96,17 +84,7 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   if (step === "password") {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-fg-faint">{t("settings.account.currentPassword")}</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-10.25 w-full rounded-xl bg-surface-2 px-4 py-3 text-[15px] text-fg outline-none focus:ring-1 focus:ring-green"
-          />
-        </label>
+        <PasswordField value={password} onChange={setPassword} autoFocus />
         {error && <p className="text-sm text-red">{error}</p>}
         <button type="submit" hidden />
       </form>
@@ -114,7 +92,7 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
     footer = (
       <>
         <Button variant="ghost" onClick={close}>{t("common.cancel")}</Button>
-        <Button onClick={() => void submitPassword()} disabled={!password || reauth.isPending}>
+        <Button onClick={() => void submitPassword()} disabled={!password || checking}>
           {t("twoFactor.continue")}
         </Button>
       </>
@@ -158,7 +136,7 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title={t("passkeys.addTitle")} onClose={close} busy={reauth.isPending} footer={footer}>
+    <Dialog title={t("passkeys.addTitle")} onClose={close} busy={checking} footer={footer}>
       {body}
     </Dialog>
   );

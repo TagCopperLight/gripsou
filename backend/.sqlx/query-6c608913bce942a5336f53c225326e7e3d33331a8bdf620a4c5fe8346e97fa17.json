@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update users\n            set prefs = $2, currency = $3, time_zone = $4,\n                budget_ai_enabled = $5, budget_ai_threshold = $6\n          where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Bool",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c608913bce942a5336f53c225326e7e3d33331a8bdf620a4c5fe8346e97fa17"
+}

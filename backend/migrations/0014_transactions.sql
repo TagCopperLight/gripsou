@@ -1,5 +1,3 @@
--- Transactions phase 1 (TRANSACTIONS.md §4).
-
 -- Trigram search over transaction descriptions.
 create extension if not exists "pg_trgm";
 
@@ -9,9 +7,7 @@ create index transaction_account_ts_idx on transaction (account_id, ts desc);
 create index transaction_description_trgm_idx
     on transaction using gin (description gin_trgm_ops);
 
--- Derived history: values computed from transactions for days that have no
--- real snapshot. Mirrors holding_snapshot's columns on purpose so the two can
--- be unioned rather than reconciled.
+-- History derived from transactions for the days without a real snapshot.
 create table holding_backfill (
     holding_id uuid    not null references holding (id) on delete cascade,
     as_of      date    not null,
@@ -21,9 +17,7 @@ create table holding_backfill (
     primary key (holding_id, as_of)
 );
 
--- The invariant (§4): no backfill row may exist for a day that has a snapshot.
--- stamp_snapshot enforces it on write, so this union is unambiguous and every
--- chart query can read `holding_point` exactly where it read `holding_snapshot`.
+-- No backfill row exists for a day that has a snapshot, so this union has one row per day.
 create view holding_point as
     select holding_id, as_of, quantity, value, cost_basis from holding_snapshot
     union all

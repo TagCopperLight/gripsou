@@ -10,13 +10,11 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
-import { deleteJson, getAuthToken, getJson, patchJson, postJson, putJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
-  AccountType,
   BasisPreview,
-  DistributionAccount,
   EnabledProvider,
   Holding,
   InvestmentReturns,
@@ -45,9 +43,9 @@ import {
   afterConnectionDeleted,
   afterLotsSaved,
   afterProviderChange,
-  afterCorsOriginsChange,
   afterMfaChange,
   afterSessionChange,
+  afterConnectFailed,
   afterSyncRequested,
   afterUserChange,
 } from "./invalidate";
@@ -73,14 +71,6 @@ export function useHealth() {
     // The version cannot change without a page reload, so never refetch it.
     queryFn: ({ signal }) => getJson<Health>(`/health`, { signal }),
     staleTime: Infinity,
-  });
-}
-
-export function useDistribution() {
-  return useQuery({
-    queryKey: keys.distribution(),
-    staleTime: PORTFOLIO_STALE_MS,
-    queryFn: ({ signal }) => getJson<DistributionAccount[]>(`/dashboard/distribution`, { signal }),
   });
 }
 
@@ -208,7 +198,7 @@ export function useTransactionCounts(q: TransactionFilterQuery) {
 export function useAccountTypes() {
   return useQuery({
     queryKey: keys.accountTypes(),
-    queryFn: ({ signal }) => getJson<AccountType[]>(`/account-types`, { signal }),
+    queryFn: ({ signal }) => getJson<string[]>(`/account-types`, { signal }),
   });
 }
 
@@ -273,9 +263,9 @@ export function useChangePassword() {
 
 export function useDeleteAccount() {
   return useMutation({
-    // The email is re-typed by the user and verified server-side before the
-    // account (and all its data) is permanently deleted.
-    mutationFn: (email: string) => deleteJson<void>("/auth/account", { email }),
+    // The password is checked server-side (throttled like login) before the
+    // account and all its data are permanently deleted.
+    mutationFn: (password: string) => deleteJson<void>("/auth/account", { password }),
   });
 }
 
@@ -309,22 +299,17 @@ export function useMfaStatus() {
   });
 }
 
-// The routes that take a reauth token answer 401 for a bad or used token,
-// which is not a lost login: skip the global handler that would sign the user
-// out. /auth/reauth itself answers 400 for a wrong password.
-const KEEP_SESSION = { skipGlobalUnauthorized: true } as const;
-
 export function useReauth() {
   return useMutation({
     mutationFn: (password: string) =>
-      postJson<{ reauth: string }>("/auth/reauth", { password }, KEEP_SESSION),
+      postJson<{ reauth: string }>("/auth/reauth", { password }),
   });
 }
 
 export function useTotpSetup() {
   return useMutation({
     mutationFn: (reauth: string) =>
-      postJson<TotpSetup>("/auth/mfa/totp/setup", { reauth }, KEEP_SESSION),
+      postJson<TotpSetup>("/auth/mfa/totp/setup", { reauth }),
   });
 }
 
@@ -341,7 +326,7 @@ export function useRemoveTotp() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reauth: string) =>
-      deleteJson<void>("/auth/mfa/totp", { reauth }, KEEP_SESSION),
+      deleteJson<void>("/auth/mfa/totp", { reauth }),
     onSuccess: () => afterMfaChange(qc),
   });
 }
@@ -353,7 +338,6 @@ export function useRegenerateRecovery() {
       postJson<{ recoveryCodes: string[] }>(
         "/auth/mfa/recovery/regenerate",
         { reauth },
-        KEEP_SESSION,
       ),
     onSuccess: () => afterMfaChange(qc),
   });
@@ -368,7 +352,6 @@ export function usePasskeyRegisterOptions() {
       postJson<{ challenge: string; options: PublicKeyCredentialCreationOptionsJSON }>(
         "/auth/mfa/passkeys/register/options",
         { reauth },
-        KEEP_SESSION,
       ),
   });
 }
@@ -377,7 +360,7 @@ export function useRegisterPasskey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { reauth: string; challenge: string; credential: RegistrationResponseJSON }) =>
-      postJson<Passkey>("/auth/mfa/passkeys/register", body, KEEP_SESSION),
+      postJson<Passkey>("/auth/mfa/passkeys/register", body),
     onSuccess: () => afterMfaChange(qc),
   });
 }
@@ -423,12 +406,7 @@ export function useSyncConnection() {
 
 export function useManageConnection() {
   return useMutation({
-    mutationFn: async (id: string) => {
-      const token = getAuthToken();
-      const result = await postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {});
-      if (token !== getAuthToken()) throw new Error("session changed");
-      return result;
-    },
+    mutationFn: (id: string) => postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {}),
   });
 }
 
@@ -454,21 +432,17 @@ export function useSetProviderEnabled() {
       patchJson<Provider>(`/providers/${key}`, { enabled }),
     // Optimistically flip the toggle; roll back on error.
     onMutate: async ({ key, enabled }) => {
-      const token = getAuthToken();
       await qc.cancelQueries({ queryKey: keys.providers() });
-      if (token !== getAuthToken()) throw new Error("session changed");
       const prev = qc.getQueryData<Provider[]>(keys.providers());
       qc.setQueryData<Provider[]>(keys.providers(), (old) =>
         old?.map((p) => (p.key === key ? { ...p, enabled } : p)),
       );
-      return { prev, token };
+      return { prev };
     },
     onError: (_e, _vars, ctx) => {
-      if (ctx?.token === getAuthToken() && ctx.prev) qc.setQueryData(keys.providers(), ctx.prev);
+      if (ctx?.prev) qc.setQueryData(keys.providers(), ctx.prev);
     },
-    onSettled: (_data, _error, _vars, ctx) => {
-      if (ctx?.token === getAuthToken()) return afterProviderChange(qc);
-    },
+    onSettled: () => afterProviderChange(qc),
   });
 }
 
@@ -476,21 +450,6 @@ export function useEnabledProviders() {
   return useQuery({
     queryKey: keys.providersEnabled(),
     queryFn: ({ signal }) => getJson<EnabledProvider[]>("/providers/enabled", { signal }),
-  });
-}
-
-export function useCorsOrigins() {
-  return useQuery({
-    queryKey: keys.corsOrigins(),
-    queryFn: ({ signal }) => getJson<string[]>("/settings/cors", { signal }),
-  });
-}
-
-export function useSetCorsOrigins() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (origins: string[]) => patchJson<void>("/settings/cors", origins),
-    onSuccess: () => afterCorsOriginsChange(qc),
   });
 }
 
@@ -517,6 +476,7 @@ export function useCompleteConnection() {
     // A completed connect kicks an initial sync server-side, so the poll that
     // `afterSyncRequested` starts is what eventually refreshes the data views.
     onSuccess: () => afterSyncRequested(qc),
+    onError: () => afterConnectFailed(qc),
   });
 }
 
@@ -538,7 +498,8 @@ export function useCreateInvite() {
 
 export function useCreateResetLink() {
   return useMutation({
-    mutationFn: (id: string) => postJson<{ token: string }>(`/users/${id}/reset-link`, {}),
+    mutationFn: ({ id, reauth }: { id: string; reauth: string }) =>
+      postJson<{ token: string }>(`/users/${id}/reset-link`, { reauth }),
   });
 }
 

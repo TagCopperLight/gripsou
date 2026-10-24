@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { NetWorthCard } from "./NetWorthCard";
 import { DistributionCard } from "./DistributionCard";
-import type { DistributionAccount, NetWorthResponse } from "../api/types";
+import type { Account, NetWorthResponse } from "../api/types";
 import { AuthContext, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 
@@ -66,14 +66,17 @@ const netWorth = (
   },
 });
 
-const slice = (fxMissing: boolean): DistributionAccount[] => [
+const slice = (fxMissing: boolean): Account[] => [
   {
     id: "a1",
+    connectionId: "c1",
     name: "Brokerage account",
-    accountType: "pea",
-    accountTypeLabel: "PEA",
+    typeKey: "pea",
     color: "#6ea8fe",
     value: "1000",
+    lastSyncAt: null,
+    sourceName: null,
+    sourceLogo: null,
     fxMissing,
   },
 ];

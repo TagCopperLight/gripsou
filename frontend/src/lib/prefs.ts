@@ -54,3 +54,11 @@ export function getPrefs(): UserPrefs {
 export function setPrefs(prefs: UserPrefs): void {
   current = prefs;
 }
+
+/** The settings one save changes, the rest untouched. `avatar: null` removes it. */
+export type PrefsPatch = Partial<Omit<UserPrefs, "avatar">> & { avatar?: string | null };
+
+export function withPatch(prefs: UserPrefs, patch: PrefsPatch): UserPrefs {
+  const { avatar, ...rest } = { ...prefs, ...patch };
+  return avatar === null || avatar === undefined ? rest : { ...rest, avatar };
+}

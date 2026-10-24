@@ -14,11 +14,11 @@ saving preferences; changing the setting refreshes cached reports.
 
 - `core/src/ingest.rs`: daily snapshots, including closed holdings.
 - `core/src/backfill.rs`: horizon fallback and end of the derived day axis.
-- `core/src/repo/query.rs`: holdings, accounts and distribution valuations;
+- `core/src/repo/query.rs`: holdings and accounts valuations;
   the displayed holding price uses the same day cutoff as its value.
 - `core/src/repo/lot.rs`: current-day lot basis previews.
-- `api/src/handlers.rs`: dashboard, account and holding-price range bounds,
-  including the year for YTD. These are inclusive calendar-day windows.
+- `api/src/accounts.rs` (`range_window`): dashboard, account and
+  holding-price range bounds, including the year for YTD. These are inclusive calendar-day windows.
 - `frontend/src/lib/period.ts`: current month and preset date ranges;
   calendar arithmetic is separate from instant-to-day conversion.
 - `frontend/src/components/RecordLotsModal.tsx`: new-lot date defaults.

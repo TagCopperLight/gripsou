@@ -13,31 +13,10 @@ use crate::error::CoreError;
 /// one sync and symbol-only in another resolves via two different natural keys
 /// and can produce two `instrument` rows. Cross-key dedup is intentionally left
 /// for when real provider payloads inform the rule.
-fn brandfetch_logo_url(ins: &InstrumentRef) -> Option<String> {
-    let base_url = match ins.kind.as_str() {
-        "crypto" => ins
-            .symbol
-            .as_ref()
-            .map(|s| format!("https://cdn.brandfetch.io/crypto/{}", s)),
-        _ => ins
-            .isin
-            .as_ref()
-            .map(|s| format!("https://cdn.brandfetch.io/isin/{}", s))
-            .or_else(|| {
-                ins.symbol
-                    .as_ref()
-                    .map(|s| format!("https://cdn.brandfetch.io/ticker/{}", s))
-            }),
-    }?;
-
-    Some(crate::logo::brandfetch_decorate(&base_url))
-}
-
 pub async fn resolve_instrument(
     conn: &mut sqlx::PgConnection,
     ins: &InstrumentRef,
 ) -> Result<Uuid, CoreError> {
-    let logo_url = brandfetch_logo_url(ins);
     if ins.kind == "cash" {
         let id = sqlx::query_scalar!(
             r#"
@@ -63,17 +42,16 @@ pub async fn resolve_instrument(
         // the symbol-only path below, where no ISIN is available to identify the row.
         let id = sqlx::query_scalar!(
             r#"
-            insert into instrument (kind, symbol, isin, name, currency, logo_url)
-            values ($1, null, $2, $3, $4, $5)
+            insert into instrument (kind, symbol, isin, name, currency)
+            values ($1, null, $2, $3, $4)
             on conflict (isin) where isin is not null
-            do update set name = excluded.name, logo_url = coalesce(instrument.logo_url, excluded.logo_url)
+            do update set name = excluded.name
             returning id
             "#,
             ins.kind,
             isin,
             ins.name,
             ins.currency,
-            logo_url,
         )
         .fetch_one(&mut *conn)
         .await?;
@@ -83,17 +61,16 @@ pub async fn resolve_instrument(
     if let Some(symbol) = &ins.symbol {
         let id = sqlx::query_scalar!(
             r#"
-            insert into instrument (kind, symbol, isin, name, currency, logo_url)
-            values ($1, $2, null, $3, $4, $5)
+            insert into instrument (kind, symbol, isin, name, currency)
+            values ($1, $2, null, $3, $4)
             on conflict (kind, symbol) where symbol is not null
-            do update set name = excluded.name, logo_url = coalesce(instrument.logo_url, excluded.logo_url)
+            do update set name = excluded.name
             returning id
             "#,
             ins.kind,
             symbol,
             ins.name,
             ins.currency,
-            logo_url,
         )
         .fetch_one(&mut *conn)
         .await?;

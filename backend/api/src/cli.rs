@@ -46,28 +46,15 @@ pub async fn reset_two_factor(db: &sqlx::PgPool, email: Option<String>) -> i32 {
 mod tests {
     use super::reset_two_factor;
     use sqlx::PgPool;
-    use uuid::Uuid;
 
-    async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-        let id = Uuid::new_v4();
-        sqlx::query(
-            "insert into users (id, email, name, password_hash, role) \
-             values ($1, $2, 'U', 'h', 'user')",
-        )
-        .bind(id)
-        .bind(email)
-        .execute(pool)
-        .await
-        .unwrap();
-        id
-    }
+    use gripsou_core::testkit::seed_user_email;
 
     /// The `second factors cleared` line is written only when something was.
     #[sqlx::test(migrations = "../migrations")]
     async fn logs_only_when_something_was_cleared(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);
-        let plain = seed_user(&pool, "plain@t.local").await;
-        let with = seed_user(&pool, "with@t.local").await;
+        let plain = seed_user_email(&pool, "plain@t.local").await;
+        let with = seed_user_email(&pool, "with@t.local").await;
         gripsou_core::repo::mfa::upsert_unconfirmed_totp(&pool, with, "s")
             .await
             .unwrap();

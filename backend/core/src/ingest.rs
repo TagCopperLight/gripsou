@@ -16,7 +16,7 @@ use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::{TxnWrite, upsert_transaction};
 
 /// Counts of what an ingest wrote (handy for logging and tests).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct IngestSummary {
     pub accounts: usize,
     pub holdings: usize,
@@ -95,7 +95,7 @@ pub async fn ingest(
     // Close holdings that existed before but are absent from this sync (e.g. a
     // position fully sold, or an invest account's cash residual that went to
     // zero). Zero the position and stamp a zero snapshot for today so the
-    // "latest snapshot per holding" aggregations (accounts, distribution) and
+    // "latest snapshot per holding" aggregations (accounts) and
     // the holdings list stop counting their stale values. History is kept.
     let mut holdings_closed = 0;
     for existing in ids_for_connection(&mut tx, connection_id).await? {

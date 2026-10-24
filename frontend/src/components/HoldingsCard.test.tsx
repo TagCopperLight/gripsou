@@ -7,7 +7,7 @@ import { HoldingsCard } from "./HoldingsCard";
 const HOLDING = {
   id: "h1", ticker: "AAPL", name: "Apple Inc.", kind: "equity", logo: "#555",
   accountId: "a1", accountName: "Example Broker", accountColor: "#f0b35b",
-  accountType: "brokerage", accountTypeLabel: "Brokerage", qty: "60", price: "214.3", currency: "EUR",
+  accountType: "brokerage", qty: "60", price: "214.3", currency: "EUR",
   invested: "11000", investedNative: "11000",
   value: "12858", gl: "1858", glPct: "0.168", fxMissing: false, spark: ["200", "214.3"],
   unexplainedQty: "0",
@@ -16,14 +16,14 @@ const HOLDING = {
 const CASH_CHECKING = {
   id: "c1", ticker: "EUR", name: "Euro", kind: "cash", logo: "#888",
   accountId: "a1", accountName: "Main Checking", accountColor: "#888",
-  accountType: "checking", accountTypeLabel: "Checking", qty: "100", price: "1", currency: "EUR",
+  accountType: "checking", qty: "100", price: "1", currency: "EUR",
   invested: "100", investedNative: "100",
   value: "100", gl: "0", glPct: "0", fxMissing: false, spark: null,
   unexplainedQty: "0",
 };
 
 const CASH_PEA = {
-  ...CASH_CHECKING, id: "c2", accountId: "a2", accountName: "PEA", accountType: "pea", accountTypeLabel: "PEA",
+  ...CASH_CHECKING, id: "c2", accountId: "a2", accountName: "PEA", accountType: "pea",
   qty: "200", invested: "200", value: "200",
 };
 

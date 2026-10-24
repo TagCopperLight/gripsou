@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::error::CoreError;
 
 /// One (day, category) bucket, already in the reader's reporting currency.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct DayCategoryRow {
     pub day: NaiveDate,
     /// `None` is the Uncategorised slice — on day one, most of them.
@@ -55,62 +55,45 @@ pub async fn day_category_totals(
         --
         -- `txn_day()` is deliberately not used: it exists for the balance walk,
         -- the list does not use it, and agreeing with the list is what counts.
+        --
+        -- The rows are the list's own (`budget_transaction_rows`), cash only:
+        -- a lot is the record of an investment, and buying a security is not
+        -- spending. The threshold only feeds `needs_review`, unused here.
         with base as (
-            select (t.ts at time zone 'utc')::date as day,
-                   t.amount,
-                   a.currency as account_currency,
-                   -- A `pair` row reaching here has lost its partner: the
-                   -- user recategorised the other half. What is left is money
-                   -- that moved with nothing on the other side, so it counts
-                   -- by its sign like any uncategorised row. Only paired rows
-                   -- carry this source, and the pair rule below has already
-                   -- dropped the live ones.
-                   case when t.category_source = 'pair' then null
-                        else t.budget_category_id end as category_id,
-                   case when t.category_source = 'pair' then null
-                        else bc.kind end as category_kind,
+            select r.day,
+                   r.amount,
+                   r.account_currency,
+                   -- An orphaned `pair` row lost its partner: the user
+                   -- recategorised the other half. What is left is money that
+                   -- moved with nothing on the other side, so it counts by its
+                   -- sign like any uncategorised row.
+                   case when r.is_orphan_transfer then null
+                        else r.category_id end as category_id,
+                   case when r.is_orphan_transfer then null
+                        else r.category_kind end as category_kind,
                    -- Uncategorised rows have no category to net within, so
-                   -- `figures()` reads the sign of each row
-                   -- directly to decide income vs expense. Grouping only by
-                   -- (day, category_id, category_kind) would net an
-                   -- uncategorised payday's salary against its coffee before
-                   -- Rust ever saw either sign. This discriminator is 0 for
-                   -- every categorised row (so their grouping is completely
-                   -- unaffected — netting per category is exactly the rule
-                   -- there) and +1/-1 for an uncategorised row,
-                   -- splitting a mixed-sign uncategorised day into two rows
-                   -- instead of one netted one. It exists only to widen the
-                   -- grouping key; nothing downstream needs its value.
-                   case when t.budget_category_id is null
-                             or t.category_source = 'pair' then sign(t.amount)
+                   -- `figures()` reads the sign of each row directly to decide
+                   -- income vs expense. This discriminator is 0 for every
+                   -- categorised row and +1/-1 for an uncategorised one, so a
+                   -- mixed-sign uncategorised day becomes two rows instead of
+                   -- its salary netted against its coffee. It only widens the
+                   -- grouping key; nothing downstream reads its value.
+                   case when r.category_id is null
+                             or r.is_orphan_transfer then sign(r.amount)
                         else 0 end as uncategorised_sign
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection c on c.id = a.connection_id
-            left join budget_category bc on bc.id = t.budget_category_id
-            where c.user_id = $1
-              -- On `ts` itself, not on a cast of it, so the (account, ts)
-              -- index bounds the scan.
-              and t.ts >= ($2::date::timestamp at time zone 'UTC')
-              and t.ts < (($3::date + 1)::timestamp at time zone 'UTC')
-              -- The list's own exclusion: a buy/sell is the cash leg of an
-              -- investment the lot table records, and buying a security is
-              -- not spending. Transfers stay: once paired, the pair rule
-              -- below drops both halves together.
-              and not budget_investment_leg(t.type)
+            from budget_transaction_rows($1, 0) r
+            where r.source = 'cash'
+              and r.day between $2 and $3
               -- A paired transfer nets to zero by construction, so both halves
-              -- are dropped here rather than left to cancel. Netting only
-              -- works when both halves fall inside the window: a pair
-              -- straddling a month end left -x in one month and +x in the
-              -- next. Dropping is the same answer when they do cancel, and the
-              -- right one when they don't (including cross-currency pairs,
-              -- whose halves convert at different rates).
-              and t.transfer_pair_id is null
+              -- are dropped rather than left to cancel: a pair straddling a
+              -- month end would leave -x in one month and +x in the next, and
+              -- cross-currency halves convert at different rates.
+              and not r.is_transfer
               -- A neutral category (Internal transfer, Investments, Savings,
-              -- Ignore — names on one behaviour) counts toward nothing. Except
-              -- a `pair` row that lost its partner: it is read above as
-              -- uncategorised, so it must not be dropped with its old category.
-              and (t.category_source = 'pair' or coalesce(bc.kind, '') <> 'neutral')
+              -- Ignore) counts toward nothing. Except an orphaned `pair` row:
+              -- it is read above as uncategorised, so it must not be dropped
+              -- with its old category.
+              and (r.is_orphan_transfer or coalesce(r.category_kind, '') <> 'neutral')
         ),
         -- The distinct days actually present, not every day in the window.
         -- 0019 dropped valuation_grid's (uuid, date, date) overload precisely
@@ -124,7 +107,7 @@ pub async fn day_category_totals(
             where kind = 'cash'
         ),
         reporting as (
-            select coalesce((select prefs->>'currency' from users where id = $1), 'EUR') as code
+            select (select currency from users where id = $1) as code
         )
         select b.day as "day!",
                b.category_id as "category_id?",

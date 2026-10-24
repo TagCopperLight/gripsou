@@ -1,8 +1,7 @@
--- gripsou initial schema (ARCHITECTURE §3.2).
--- Domain-first; providers map into this. Money is NUMERIC, time is timestamptz,
--- provider extras live in *_meta JSONB, external_id enables idempotent upserts.
+-- Providers map into this schema: provider extras live in *_meta JSONB, and
+-- external_id makes provider upserts idempotent.
 
-create extension if not exists "pgcrypto";  -- gen_random_uuid()
+create extension if not exists "pgcrypto";
 
 -- ── Identity & access ───────────────────────────────────────────────────────
 
@@ -40,7 +39,7 @@ create table provider (
     enabled      boolean not null default true
 );
 
--- ── Reference (extensible by data insert, never migration) ──────────────────
+-- ── Reference ───────────────────────────────────────────────────────────────
 
 create table category (
     key   text primary key,
@@ -63,14 +62,14 @@ create table connection (
     status        text not null default 'ok' check (status in ('ok', 'syncing', 'error')),
     last_sync_at  timestamptz,
     last_error    text,
-    credentials   jsonb not null default '{}'::jsonb,  -- encrypted at rest
+    credentials   jsonb not null default '{}'::jsonb,
     provider_meta jsonb not null default '{}'::jsonb,
     created_at    timestamptz not null default now()
 );
 
 create table account (
     id            uuid primary key default gen_random_uuid(),
-    connection_id uuid references connection (id) on delete cascade,  -- null = manual (future)
+    connection_id uuid references connection (id) on delete cascade,
     name          text not null,
     color         text,
     currency      text not null,
@@ -84,7 +83,7 @@ create table account (
 
 create table instrument (
     id       uuid primary key default gen_random_uuid(),
-    kind     text not null,  -- cash | equity | etf | crypto | …
+    kind     text not null,
     symbol   text,
     isin     text,
     name     text not null,
@@ -92,7 +91,7 @@ create table instrument (
     currency text not null,
     meta     jsonb not null default '{}'::jsonb
 );
--- one cash instrument per currency; natural-id uniqueness for the rest
+-- One cash instrument per currency.
 create unique index instrument_cash_currency_uq
     on instrument (currency) where kind = 'cash';
 create unique index instrument_isin_uq
@@ -134,7 +133,7 @@ create table price (
 create table transaction (
     id            uuid primary key default gen_random_uuid(),
     account_id    uuid not null references account (id) on delete cascade,
-    instrument_id uuid references instrument (id),  -- null = pure cash movement
+    instrument_id uuid references instrument (id),
     ts            timestamptz not null,
     type          text not null check (type in (
         'deposit', 'withdrawal', 'buy', 'sell', 'dividend', 'fee', 'interest', 'transfer'
@@ -147,8 +146,6 @@ create table transaction (
     provider_meta jsonb not null default '{}'::jsonb
 );
 
--- Idempotent provider upserts: dedup accounts/transactions on external_id.
--- Partial so future manual rows (null external_id) are unconstrained.
 create unique index account_conn_external_uq
     on account (connection_id, external_id) where external_id is not null;
 create unique index txn_account_external_uq

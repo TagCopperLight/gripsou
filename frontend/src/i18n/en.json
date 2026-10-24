@@ -25,19 +25,14 @@
     "title": "Sync",
     "openLabel": "Sync data",
     "syncAll": "Sync all",
-    "syncing": "Syncing…",
-    "awaiting": "Waiting for bank sync…",
     "sync": "Sync",
-    "lastSync": "Last synced {{when}}",
     "neverSynced": "Never synced",
-    "error": "Sync failed",
     "empty": "No connections yet."
   },
   "holdingKind": {
     "cash": "Cash",
     "etf": "ETF",
-    "equity": "Stock",
-    "crypto": "Crypto"
+    "equity": "Stock"
   },
   "accountTypes": {
     "checking": "Checking",
@@ -46,7 +41,6 @@
     "brokerage": "Brokerage",
     "life_insurance": "Life insurance",
     "retirement": "Retirement",
-    "crypto": "Crypto",
     "multiple": "Multiple"
   },
   "time": {
@@ -208,9 +202,7 @@
     "signInWithPasskey": "Sign in with a passkey",
     "usePassword": "Use your password instead",
     "mfa": {
-      "passkeyTitle": "Use your passkey",
       "useCode": "Use your code instead",
-      "usePasskey": "Use a passkey",
       "or": "or",
       "passkeyRefused": "That passkey didn't work. Try again.",
       "codeTitle": "Enter your code",
@@ -247,7 +239,6 @@
     "emailExists": "An account with this email already exists",
     "createAccountButton": "Create account",
     "resetPassword": "Reset your password",
-    "resetForEmail": "Set a new password for {{email}}.",
     "newPassword": "New password",
     "updatePasswordButton": "Update password",
     "resetLinkInvalid": "This reset link is no longer valid.",
@@ -306,7 +297,6 @@
       "sessionIp": "IP address",
       "sessionLastActive": "Last active",
       "sessionSignedIn": "Signed in",
-      "sessionDetails": "Session details",
       "signedInOn": "Signed in {{date}}",
       "lastActive": "Last active {{time}}",
       "revokeSession": "Log out",
@@ -316,11 +306,10 @@
       "deleteAccountDescription": "Permanently delete your account and all of its data. This action cannot be undone.",
       "deleteAccountTitle": "Delete your account?",
       "deleteAccountBody": "This permanently deletes your account, your connections, and all synced data. This action cannot be undone.",
-      "deleteAccountConfirmLabel": "Type {{email}} to confirm",
+      "deleteAccountConfirmLabel": "Enter your password to confirm",
       "deleteAccountConfirm": "Delete my account",
       "deleteAccountPending": "Deleting…",
       "deleteAccountError": "Couldn't delete your account",
-      "avatar": "Avatar",
       "removeImage": "Remove",
       "editProfile": "Edit profile",
       "changePicture": "Change picture",
@@ -336,7 +325,6 @@
       "usersCount_one": "{{count}} member",
       "usersCount_other": "{{count}} members",
       "inviteUser": "Invite user",
-      "addUser": "Add user",
       "columns": {
         "member": "MEMBER",
         "role": "ROLE",
@@ -354,7 +342,9 @@
       "reset": {
         "title": "Reset password",
         "heading": "Share this one-time link",
-        "body": "{{name}} must open this link to choose a new password. It expires in 24 hours and can be used once."
+        "body": "{{name}} must open this link to choose a new password. It expires in 24 hours and can be used once.",
+        "create": "Create link",
+        "confirm": "Enter your password to create a reset link for {{name}}. Using it also turns off their two-factor authentication and removes their passkeys."
       },
       "removeUser": {
         "title": "Remove {{name}}",
@@ -364,7 +354,6 @@
         "error": "Could not delete the user. Please try again."
       },
       "copyLink": "Copy link",
-      "copied": "Copied",
       "linkError": "Could not generate the link. Please try again.",
       "done": "Done"
     },
@@ -374,10 +363,6 @@
       "version": "Version",
       "providers": "Data providers",
       "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",
-      "cors": "CORS origins",
-      "corsHint": "Browser origins allowed to call the gripsou API. Add the address you use to reach this dashboard.",
-      "corsPlaceholder": "https://gripsou.example.com",
-      "add": "Add",
       "budgetAi": "Budget AI",
       "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
       "budgetAiProvider": "Provider",
@@ -418,7 +403,6 @@
       "deleteConnectionBody": "This permanently removes the connection and all synced accounts, holdings, transactions, and snapshots. This cannot be undone.",
       "deleteConnectionError": "Could not delete the connection. Please try again.",
       "status": {
-        "ok": "Synced",
         "syncing": "Syncing…",
         "awaiting": "Waiting for bank sync…",
         "error": "Sync failed",

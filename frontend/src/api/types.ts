@@ -4,21 +4,18 @@
 import type { TFunction } from "i18next";
 import type { UserPrefs } from "../lib/prefs";
 
-export type HoldingKind = "cash" | "etf" | "equity" | "crypto";
+export type HoldingKind = "cash" | "etf" | "equity";
 
 export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
   cash: "holdingKind.cash",
   etf: "holdingKind.etf",
   equity: "holdingKind.equity",
-  crypto: "holdingKind.crypto",
 };
 
-// Account types are data-driven: the backend sends a stable `key` plus an
-// English `label`. We translate `accountTypes.<key>` and fall back to the
-// backend label when a key has no locale entry yet (e.g. a type added to the DB
-// but not the locale files).
-export function accountTypeLabel(t: TFunction, key: string, fallback: string): string {
-  return t(`accountTypes.${key}`, { defaultValue: fallback });
+// Account types are data-driven: the backend sends a stable key. A type added
+// to the database but not yet to the locale files shows its key.
+export function accountTypeLabel(t: TFunction, key: string): string {
+  return t(`accountTypes.${key}`, { defaultValue: key });
 }
 
 export type NetWorthPoint = { t: number; netWorth: string; invested: string };
@@ -38,17 +35,6 @@ export type NetWorthSummary = {
 };
 export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSummary };
 
-export type DistributionAccount = {
-  id: string;
-  name: string;
-  accountType: string;
-  accountTypeLabel: string;
-  color: string;
-  value: string;
-  /** A holding in this slice could not be valued, so the slice understates. */
-  fxMissing: boolean;
-};
-
 export type Allocation = { name: string; weight: number };
 export type Composition = { countries: Allocation[]; sectors: Allocation[] };
 
@@ -62,7 +48,6 @@ export type Holding = {
   accountName: string;
   accountColor: string;
   accountType: string;
-  accountTypeLabel: string;
   qty: string;
   /** Unit price, denominated in `priceCurrency` — NOT in `currency`. */
   price: string;
@@ -91,7 +76,14 @@ export type Holding = {
   unexplainedCost: string;
 };
 
-export type PricePoint = { t: number; price: string };
+export type PricePoint = {
+  t: number;
+  /** In the price row's currency (`Holding.priceCurrency`). */
+  price: string;
+  /** The same price in the account's currency at that day's rates; null when
+   *  a rate is missing. */
+  accountPrice: string | null;
+};
 
 export type Lot = {
   id: string;
@@ -121,7 +113,8 @@ export type BasisPreview = {
   meanPrice: string;
   invested: string;
   realised: string;
-  unrealised: string;
+  /** Null while today's price or exchange rate is unknown. */
+  unrealised: string | null;
 };
 
 export type Account = {
@@ -130,17 +123,11 @@ export type Account = {
   name: string;
   color: string;
   typeKey: string;
-  typeLabel: string;
   value: string;
   lastSyncAt: number | null;
   sourceName: string | null;
   sourceLogo: string | null;
   fxMissing: boolean;
-};
-
-export type AccountType = {
-  key: string;
-  label: string;
 };
 
 export type AccountSeries = {
@@ -194,8 +181,8 @@ export type SyncAccount = {
   health?: SyncHealth | null;
   id: string;
   name: string;
-  color: string | null;
-  typeLabel: string;
+  color: string;
+  typeKey: string;
   value: string;
   lastSyncAt: number | null;
 };
@@ -264,7 +251,7 @@ export type Transaction = {
   currency: string;
   accountId: string;
   accountName: string;
-  accountColor: string | null;
+  accountColor: string;
   /** "cash" for a ledger row, "lot" for a purchase or sale. Lot rows carry the
    *  four instrument fields below and no description. */
   source: "cash" | "lot";
@@ -364,8 +351,7 @@ export type InvestmentReturns = {
   accounts: ReturnAccount[];
 };
 
-export type MfaMethod = "totp" | "recovery" | "passkey";
-export type MfaRequired = { mfaRequired: true; challenge: string; methods: MfaMethod[] };
+export type MfaRequired = { mfaRequired: true; challenge: string };
 
 export type Passkey = { id: string; name: string; createdAt: number; lastUsedAt: number | null };
 export type MfaStatus = { totp: boolean; recoveryRemaining: number; passkeys: Passkey[] };

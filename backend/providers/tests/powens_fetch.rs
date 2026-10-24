@@ -128,7 +128,7 @@ fn checking_account(id: i64) -> serde_json::Value {
 /// `/accounts` and `/investments` document `limit`/`offset` and no cursor, so a
 /// full page with no `_links.next` means "there is probably more" — not "that
 /// is all there is". Stopping there would hand the ingest a short holding list,
-/// which it reads as "those positions were sold" and zeroes (C-4).
+/// which it reads as "those positions were sold" and zeroes.
 #[tokio::test]
 async fn a_full_account_page_without_a_cursor_is_followed_by_offset() {
     let server = MockServer::start().await;

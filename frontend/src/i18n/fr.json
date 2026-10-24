@@ -25,19 +25,14 @@
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
-    "syncing": "Synchronisation…",
-    "awaiting": "En attente de la banque…",
     "sync": "Synchroniser",
-    "lastSync": "Synchronisé {{when}}",
     "neverSynced": "Jamais synchronisé",
-    "error": "Échec de la synchronisation",
     "empty": "Aucune connexion pour le moment."
   },
   "holdingKind": {
     "cash": "Liquidités",
     "etf": "ETF",
-    "equity": "Action",
-    "crypto": "Cryptomonnaie"
+    "equity": "Action"
   },
   "accountTypes": {
     "checking": "Compte courant",
@@ -46,7 +41,6 @@
     "brokerage": "Compte-titres",
     "life_insurance": "Assurance-vie",
     "retirement": "Épargne retraite",
-    "crypto": "Cryptomonnaies",
     "multiple": "Plusieurs types"
   },
   "time": {
@@ -208,9 +202,7 @@
     "signInWithPasskey": "Se connecter avec une clé d'accès",
     "usePassword": "Utiliser votre mot de passe",
     "mfa": {
-      "passkeyTitle": "Utilisez votre clé d'accès",
       "useCode": "Utiliser votre code",
-      "usePasskey": "Utiliser une clé d'accès",
       "or": "ou",
       "passkeyRefused": "Cette clé d'accès n'a pas fonctionné. Réessayez.",
       "codeTitle": "Saisissez votre code",
@@ -247,7 +239,6 @@
     "emailExists": "Un compte avec cet e-mail existe déjà",
     "createAccountButton": "Créer le compte",
     "resetPassword": "Réinitialiser votre mot de passe",
-    "resetForEmail": "Définissez un nouveau mot de passe pour {{email}}.",
     "newPassword": "Nouveau mot de passe",
     "updatePasswordButton": "Mettre à jour le mot de passe",
     "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
@@ -306,7 +297,6 @@
       "sessionIp": "Adresse IP",
       "sessionLastActive": "Dernière activité",
       "sessionSignedIn": "Connecté le",
-      "sessionDetails": "Détails de la session",
       "signedInOn": "Connecté le {{date}}",
       "lastActive": "Dernière activité {{time}}",
       "revokeSession": "Déconnecter",
@@ -316,11 +306,10 @@
       "deleteAccountDescription": "Supprimer définitivement votre compte et toutes ses données. Cette action est irréversible.",
       "deleteAccountTitle": "Supprimer votre compte ?",
       "deleteAccountBody": "Votre compte, vos connexions et toutes les données synchronisées seront définitivement supprimés. Cette action est irréversible.",
-      "deleteAccountConfirmLabel": "Saisissez {{email}} pour confirmer",
+      "deleteAccountConfirmLabel": "Saisissez votre mot de passe pour confirmer",
       "deleteAccountConfirm": "Supprimer mon compte",
       "deleteAccountPending": "Suppression…",
       "deleteAccountError": "Impossible de supprimer votre compte",
-      "avatar": "Photo de profil",
       "removeImage": "Supprimer",
       "editProfile": "Modifier le profil",
       "changePicture": "Changer la photo",
@@ -336,7 +325,6 @@
       "usersCount_one": "{{count}} membre",
       "usersCount_other": "{{count}} membres",
       "inviteUser": "Inviter un utilisateur",
-      "addUser": "Ajouter un utilisateur",
       "columns": {
         "member": "MEMBRE",
         "role": "RÔLE",
@@ -354,7 +342,9 @@
       "reset": {
         "title": "Réinitialiser le mot de passe",
         "heading": "Envoyez ce lien à usage unique",
-        "body": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut servir qu'une fois."
+        "body": "{{name}} doit ouvrir ce lien pour choisir un nouveau mot de passe. Il expire dans 24 heures et ne peut servir qu'une fois.",
+        "create": "Créer le lien",
+        "confirm": "Saisissez votre mot de passe pour créer un lien de réinitialisation pour {{name}}. S'en servir désactive aussi sa double authentification et supprime ses clés d'accès."
       },
       "removeUser": {
         "title": "Supprimer {{name}}",
@@ -364,7 +354,6 @@
         "error": "Impossible de supprimer l'utilisateur. Veuillez réessayer."
       },
       "copyLink": "Copier le lien",
-      "copied": "Copié",
       "linkError": "Impossible de générer le lien. Veuillez réessayer.",
       "done": "Terminé"
     },
@@ -374,10 +363,6 @@
       "version": "Version",
       "providers": "Fournisseurs de données",
       "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",
-      "cors": "Origines CORS",
-      "corsHint": "Origines autorisées à appeler l'API gripsou depuis un navigateur. Ajoutez l'adresse par laquelle vous accédez à ce tableau de bord.",
-      "corsPlaceholder": "https://gripsou.example.com",
-      "add": "Ajouter",
       "budgetAi": "IA pour le budget",
       "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
       "budgetAiProvider": "Fournisseur",
@@ -418,7 +403,6 @@
       "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
       "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
       "status": {
-        "ok": "Synchronisée",
         "syncing": "Synchronisation…",
         "awaiting": "En attente de la banque…",
         "error": "Échec de la synchronisation",

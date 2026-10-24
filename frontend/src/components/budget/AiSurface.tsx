@@ -18,7 +18,7 @@ export function AiSurface() {
 
   const commit = () => {
     if (draft !== null && draft !== prefs.budgetAiThreshold) {
-      void updatePrefs({ ...prefs, budgetAiThreshold: draft });
+      void updatePrefs({ budgetAiThreshold: draft });
     }
     setDraft(null);
   };
@@ -35,7 +35,7 @@ export function AiSurface() {
         <Toggle
           checked={prefs.budgetAiEnabled}
           disabled={!configured}
-          onChange={(v) => void updatePrefs({ ...prefs, budgetAiEnabled: v })}
+          onChange={(v) => void updatePrefs({ budgetAiEnabled: v })}
           aria-label={t("settings.budget.ai.enable")}
         />
       </div>

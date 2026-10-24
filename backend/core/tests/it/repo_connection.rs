@@ -1,0 +1,288 @@
+use gripsou_core::repo::connection::{
+    BeginSync, begin_sync, clear_syncing, insert_pending, mark_synced_error, mark_synced_ok,
+};
+use gripsou_core::testkit::{self, seed_connection};
+use sqlx::PgPool;
+
+#[sqlx::test(migrations = "../migrations")]
+async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+
+    // First claim succeeds and flips to 'syncing'.
+    match begin_sync(&pool, user_id, conn).await? {
+        BeginSync::Started(s) => assert_eq!(s.status, "syncing"),
+        _ => panic!("expected Started"),
+    }
+    // Second claim while syncing → AlreadySyncing.
+    assert!(matches!(
+        begin_sync(&pool, user_id, conn).await?,
+        BeginSync::AlreadySyncing
+    ));
+    // Unknown id → NotFound.
+    assert!(matches!(
+        begin_sync(&pool, user_id, uuid::Uuid::new_v4()).await?,
+        BeginSync::NotFound
+    ));
+    // Connection exists but is owned by a different user → NotFound (not AlreadySyncing).
+    assert!(matches!(
+        begin_sync(&pool, uuid::Uuid::new_v4(), conn).await?,
+        BeginSync::NotFound
+    ));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+
+    mark_synced_error(&pool, conn, "boom").await?;
+    let (status, err): (String, Option<String>) =
+        sqlx::query_as("select status, last_error from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(status, "error");
+    assert_eq!(err.as_deref(), Some("boom"));
+
+    mark_synced_ok(&pool, conn).await?;
+    let (status, err, synced): (
+        String,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as("select status, last_error, last_sync_at from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(status, "ok");
+    assert!(err.is_none());
+    assert!(synced.is_some());
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn insert_pending_creates_row(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
+
+    let (status,): (String,) = sqlx::query_as("select status from connection where id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(status, "pending");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
+
+    let creds = serde_json::json!({"token": "abc"});
+    let updated = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        id,
+        user_id,
+        creds.clone(),
+        serde_json::json!({}),
+    )
+    .await?;
+    assert!(updated);
+
+    let (status, stored_creds): (String, serde_json::Value) =
+        sqlx::query_as("select status, credentials from connection where id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(status, "ok");
+    assert_eq!(stored_creds, creds);
+
+    // finish_connect with wrong user_id returns false
+    let not_updated = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        id,
+        uuid::Uuid::new_v4(),
+        serde_json::json!({}),
+        serde_json::json!({}),
+    )
+    .await?;
+    assert!(!not_updated);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "My bank").await?;
+
+    let ok = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        id,
+        user_id,
+        serde_json::json!({"auth_token": "x"}),
+        serde_json::json!({"external_connection_id": "99"}),
+    )
+    .await
+    .unwrap();
+    assert!(ok);
+
+    let meta = sqlx::query_scalar!(
+        r#"select provider_meta as "m!" from connection where id=$1"#,
+        id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(meta["external_connection_id"], "99");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
+    let conn = testkit::seed_connection(&pool).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+
+    // Wrong user — returns false, row still exists
+    let not_deleted =
+        gripsou_core::repo::connection::delete_connection(&pool, uuid::Uuid::new_v4(), conn)
+            .await?;
+    assert!(!not_deleted);
+
+    // Correct user — returns true and row is gone
+    let deleted = gripsou_core::repo::connection::delete_connection(&pool, user_id, conn).await?;
+    assert!(deleted);
+
+    let count: i64 = sqlx::query_scalar("select count(*) from connection where id=$1")
+        .bind(conn)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(count, 0);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+
+    let id =
+        gripsou_core::repo::connection::insert_pending(&pool, user_id, "powens", "Acme").await?;
+
+    sqlx::query!(
+        "update connection set status='awaiting', sync_requested_at=now() where id=$1",
+        id
+    )
+    .execute(&pool)
+    .await?;
+
+    let row = sqlx::query!(
+        r#"select status as "status!", sync_requested_at from connection where id=$1"#,
+        id
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    assert_eq!(row.status, "awaiting");
+    assert!(row.sync_requested_at.is_some());
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
+    let user_id = testkit::seed_user(&pool).await;
+    let fresh = insert_pending(&pool, user_id, "powens", "fresh")
+        .await
+        .unwrap();
+    let stale = insert_pending(&pool, user_id, "powens", "stale")
+        .await
+        .unwrap();
+    sqlx::query!(
+        "update connection set status='awaiting', sync_requested_at=now() where id=$1",
+        fresh
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!("update connection set status='awaiting', sync_requested_at=now() - interval '10 minutes' where id=$1", stale).execute(&pool).await.unwrap();
+    let due = gripsou_core::repo::connection::connections_awaiting_timeout(&pool, 5)
+        .await
+        .unwrap();
+    let ids: Vec<_> = due.iter().map(|c| c.id).collect();
+    assert!(ids.contains(&stale) && !ids.contains(&fresh));
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
+    let user_id = testkit::seed_user(&pool).await;
+    let fresh = insert_pending(&pool, user_id, "powens", "fresh")
+        .await
+        .unwrap();
+    let stale = insert_pending(&pool, user_id, "powens", "stale")
+        .await
+        .unwrap();
+    // An old non-pending row must be left alone.
+    let ok = insert_pending(&pool, user_id, "powens", "ok")
+        .await
+        .unwrap();
+    sqlx::query!(
+        "update connection set created_at=now() - interval '20 minutes' where id=$1",
+        stale
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "update connection set status='ok', created_at=now() - interval '20 minutes' where id=$1",
+        ok
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let n = gripsou_core::repo::connection::delete_stale_pending(&pool, 10)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+
+    let remaining: Vec<uuid::Uuid> =
+        sqlx::query_scalar("select id from connection where user_id=$1")
+            .bind(user_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(remaining.contains(&fresh) && remaining.contains(&ok) && !remaining.contains(&stale));
+}
+
+/// The boot sweep: every claim predates the process, so all are released, and
+/// they land in 'error' so the user sees the sync did not finish.
+#[sqlx::test(migrations = "../migrations")]
+async fn clear_syncing_releases_every_claim(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+    let syncing = insert_pending(&pool, user_id, "powens", "syncing").await?;
+    let idle = insert_pending(&pool, user_id, "powens", "idle").await?;
+    begin_sync(&pool, user_id, syncing).await?;
+    begin_sync(&pool, user_id, idle).await?;
+    mark_synced_ok(&pool, idle).await?;
+
+    assert_eq!(clear_syncing(&pool).await?, 1);
+
+    let (status, last_error): (String, Option<String>) =
+        sqlx::query_as("select status, last_error from connection where id=$1")
+            .bind(syncing)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(status, "error");
+    assert!(last_error.is_some_and(|e| e.contains("interrupted")));
+    Ok(())
+}

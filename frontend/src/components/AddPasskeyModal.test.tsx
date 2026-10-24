@@ -214,9 +214,9 @@ describe("AddPasskeyModal", () => {
   });
 
   it.each([
-    ["options", { ...OK, "/auth/mfa/passkeys/register/options": { status: 401 } }],
-    ["register", { ...OK, "/auth/mfa/passkeys/register": { status: 401 } }],
-  ])("goes back to an empty password step on a 401 from %s", async (_name, routes) => {
+    ["options", { ...OK, "/auth/mfa/passkeys/register/options": { status: 403 } }],
+    ["register", { ...OK, "/auth/mfa/passkeys/register": { status: 410 } }],
+  ])("goes back to an empty password step on a refused reauth or expired challenge from %s", async (_name, routes) => {
     const fetchMock = stubApi(routes);
     mockedStart.mockResolvedValue(CREDENTIAL as never);
     const { user } = renderModal();
