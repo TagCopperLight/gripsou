@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "./ConfirmDialog";
+import { PasswordField } from "./PasswordField";
 import { ApiError } from "../api/client";
 import { useDeleteAccount } from "../api/hooks";
 import { throttleMinutes } from "../lib/mfa";
@@ -54,18 +55,12 @@ export function DeleteAccountModal({
           confirm();
         }}
       >
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-fg-faint">
-            {t("settings.account.deleteAccountConfirmLabel")}
-          </span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-red"
-          />
-        </label>
+        <PasswordField
+          value={password}
+          onChange={setPassword}
+          label={t("settings.account.deleteAccountConfirmLabel")}
+          danger
+        />
         <button type="submit" hidden />
       </form>
     </ConfirmDialog>
