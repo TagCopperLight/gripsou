@@ -18,11 +18,11 @@ type AvatarProps = {
   color?: string;
   src?: string;
   className?: string;
-  /** Size of the initials; the default suits small avatars. */
-  initialsClassName?: string;
 };
 
-export function Avatar({ name, color, src, className = "size-9", initialsClassName = "text-[13px]" }: AvatarProps) {
+// The initials are sized from the circle's own width (cqw), so they keep the
+// same proportions at every avatar size without each caller picking a text size.
+export function Avatar({ name, color, src, className = "size-9" }: AvatarProps) {
   if (src) {
     return (
       <img
@@ -32,12 +32,19 @@ export function Avatar({ name, color, src, className = "size-9", initialsClassNa
       />
     );
   }
+  const c = color ?? colorForName(name);
   return (
-    <span
-      className={`flex items-center justify-center rounded-full shrink-0 font-semibold text-black leading-none ${className}`}
-      style={{ background: color ?? colorForName(name) }}
-    >
-      <span className={initialsClassName}>{initials(name)}</span>
+    <span className={`@container block shrink-0 ${className}`}>
+      <span
+        className="flex size-full items-center justify-center rounded-full"
+        style={{
+          background: `color-mix(in srgb, ${c} 16%, transparent)`,
+          boxShadow: `inset 0 0 0 max(1px, 2.5cqw) color-mix(in srgb, ${c} 45%, transparent)`,
+          color: c,
+        }}
+      >
+        <span className="font-wordmark text-[32cqw] font-semibold leading-none tracking-[-0.04em]">{initials(name)}</span>
+      </span>
     </span>
   );
 }
