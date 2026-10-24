@@ -661,8 +661,16 @@ pub async fn sync_connection_data(db: Db, deps: Arc<Deps>, connection_id: Uuid) 
             // Dropping the handle would leave the task running: stop it. Its
             // open DB transaction, if any, is rolled back.
             handle.abort();
-            let error = format!("still running after {} minutes", limit.as_secs() / 60);
-            ("timeout", "sync took too long", error)
+            match handle.await {
+                // It finished before the abort landed, and has already
+                // released the lock and logged its `sync finished`.
+                Ok(ok) => return ok,
+                Err(e) if e.is_panic() => ("panic", "sync crashed", e.to_string()),
+                Err(_) => {
+                    let error = format!("still running after {} minutes", limit.as_secs() / 60);
+                    ("timeout", "sync took too long", error)
+                }
+            }
         }
     };
     if let Err(e) = connection::mark_synced_error(&db, connection_id, message).await {
