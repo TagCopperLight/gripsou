@@ -1,3 +1,4 @@
+use gripsou_core::dto::Freshness;
 use gripsou_providers::powens::{
     map,
     model::{BankAccount, Connection},
@@ -25,6 +26,21 @@ fn source_failure_does_not_poison_checking_or_refresh_savings_date() {
     assert_eq!(savings["state"], "bug");
     assert_eq!(savings["nextRetryOn"], "2026-10-11");
     assert_eq!(savings["errorMessage"], "403 Client Error: Forbidden");
+    let day = |d| chrono::NaiveDate::from_ymd_opt(2026, 10, d);
+    assert_eq!(
+        result.accounts[0].freshness,
+        Freshness {
+            as_of: day(10),
+            error: false
+        }
+    );
+    assert_eq!(
+        result.accounts[1].freshness,
+        Freshness {
+            as_of: day(8),
+            error: true
+        }
+    );
 }
 
 #[test]

@@ -37,4 +37,5 @@ mod repo_snapshot;
 mod repo_transaction;
 mod repo_users;
 mod returns;
+mod stale_snapshots;
 mod timezone;

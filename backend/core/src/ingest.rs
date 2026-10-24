@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -12,7 +13,7 @@ use crate::error::CoreError;
 use crate::repo::account::upsert_account;
 use crate::repo::holding::{ids_for_connection, upsert_holding, zero_holding};
 use crate::repo::instrument::resolve_instrument;
-use crate::repo::snapshot::stamp_snapshot;
+use crate::repo::snapshot::{delete_snapshots_after, has_snapshot, stamp_snapshot};
 use crate::repo::transaction::{TxnWrite, upsert_transaction};
 
 /// Counts of what an ingest wrote (handy for logging and tests).
@@ -28,6 +29,12 @@ pub struct IngestSummary {
     /// Holdings present in a prior sync but absent from this one: their position
     /// was zeroed and a zero snapshot stamped for today.
     pub holdings_closed: usize,
+    /// Accounts whose provider hasn't reached the institution today, or
+    /// reports an error for them: no snapshot for today.
+    pub accounts_stale: usize,
+    /// Snapshots deleted because they were dated after their account's last
+    /// refresh.
+    pub snapshots_discarded: usize,
     /// Derived history rows written by the backfill engine.
     pub backfill_rows: usize,
     /// Internal-transfer pairs written by the budget pairing pass, counted in
@@ -60,13 +67,35 @@ pub async fn ingest(
         .await?;
 
     // Accounts first; map external_id -> account id for later lookups.
+    //
+    // An account whose provider hasn't reached the institution today, or
+    // reports an error for it, gets no snapshot for today: its balances are
+    // the provider's last good ones, or not trusted at all (#58). The days
+    // since are left to the backfill, which rebuilds them from transactions
+    // once a fresh snapshot anchors it again. `stamp_on` is the day its
+    // holdings can be stamped on (`None` for none) and its last refresh day.
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();
+    let mut stamp_on: HashMap<Uuid, (Option<NaiveDate>, NaiveDate)> = HashMap::new();
+    let mut accounts_stale = 0;
+    let mut snapshots_discarded = 0;
     for acct in &sync.accounts {
         let id = upsert_account(&mut tx, connection_id, acct).await?;
         account_ids.insert(acct.external_id.as_str(), id);
+        let refreshed_on = acct.freshness.as_of.map(|d| d.min(today));
+        let day = (!acct.freshness.error).then(|| refreshed_on.unwrap_or(today));
+        stamp_on.insert(id, (day, refreshed_on.unwrap_or(today)));
+        if day != Some(today) {
+            accounts_stale += 1;
+        }
+        // Snapshots stamped after the last refresh came from stale balances,
+        // taken before this rule existed or on a day the provider didn't
+        // flag. Dropping them lets the backfill rebuild those days too.
+        if let Some(refreshed_on) = refreshed_on {
+            snapshots_discarded += delete_snapshots_after(&mut tx, id, refreshed_on).await?;
+        }
     }
 
-    // Holdings: resolve instrument, upsert holding, stamp today's snapshot.
+    // Holdings: resolve instrument, upsert holding, stamp its snapshot.
     let mut snapshots = 0;
     let mut present: HashSet<Uuid> = HashSet::new();
     for holding in &sync.holdings {
@@ -79,6 +108,15 @@ pub async fn ingest(
         let holding_id = upsert_holding(&mut tx, account_id, instrument_id, holding).await?;
         present.insert(holding_id);
 
+        // A holding with no snapshot at all is left out of every valuation,
+        // so one first seen while its account is in error is still stamped
+        // once, on the last day its provider reached the institution.
+        let day = match stamp_on[&account_id] {
+            (Some(day), _) => day,
+            (None, refreshed_on) if !has_snapshot(&mut tx, holding_id).await? => refreshed_on,
+            (None, _) => continue,
+        };
+
         // Snapshot value is the provider's current valuation — a flat fallback.
         // Price-based valuation is derived at read time from the `price` series
         // (see query.rs / unit_value_asof), so it stays consistent across reads and
@@ -88,7 +126,7 @@ pub async fn ingest(
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
         };
-        stamp_snapshot(&mut tx, holding_id, today, holding.quantity, value).await?;
+        stamp_snapshot(&mut tx, holding_id, day, holding.quantity, value).await?;
         snapshots += 1;
     }
 
@@ -97,9 +135,14 @@ pub async fn ingest(
     // zero). Zero the position and stamp a zero snapshot for today so the
     // "latest snapshot per holding" aggregations (accounts) and
     // the holdings list stop counting their stale values. History is kept.
+    // Not on an account this sync found stale: a provider that can't reach
+    // the bank may return less than there is. They close once it's fresh.
     let mut holdings_closed = 0;
-    for existing in ids_for_connection(&mut tx, connection_id).await? {
-        if !present.contains(&existing) {
+    for (existing, account_id) in ids_for_connection(&mut tx, connection_id).await? {
+        let stale = stamp_on
+            .get(&account_id)
+            .is_some_and(|(day, _)| *day != Some(today));
+        if !present.contains(&existing) && !stale {
             zero_holding(&mut tx, existing).await?;
             stamp_snapshot(&mut tx, existing, today, Decimal::ZERO, Decimal::ZERO).await?;
             holdings_closed += 1;
@@ -180,6 +223,8 @@ pub async fn ingest(
         transactions_skipped,
         snapshots,
         holdings_closed,
+        accounts_stale,
+        snapshots_discarded: snapshots_discarded as usize,
         backfill_rows,
         transfers_paired,
     })

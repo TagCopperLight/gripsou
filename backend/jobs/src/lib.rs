@@ -791,6 +791,8 @@ async fn run_sync(
         transactions_updated = s.transactions_updated as u64,
         transactions_skipped = s.transactions_skipped as u64,
         snapshots = s.snapshots as u64,
+        snapshots_discarded = s.snapshots_discarded as u64,
+        accounts_stale = s.accounts_stale as u64,
         holdings_closed = s.holdings_closed as u64,
         backfill_rows = s.backfill_rows as u64,
         transfers_paired = s.transfers_paired as u64,

@@ -45,3 +45,41 @@ pub async fn stamp_snapshot(
     .await?;
     Ok(())
 }
+
+/// Delete an account's snapshots dated after `day`. Its provider hasn't
+/// reached the institution since, so they were stamped from stale balances;
+/// the backfill rebuilds those days from transactions instead. Their derived
+/// rows need no cleanup: the ingest rebuilds the connection's whole backfill.
+pub async fn delete_snapshots_after(
+    conn: &mut sqlx::PgConnection,
+    account_id: Uuid,
+    day: NaiveDate,
+) -> Result<u64, CoreError> {
+    let deleted = sqlx::query!(
+        r#"
+        delete from holding_snapshot hs
+        using holding h
+        where hs.holding_id = h.id and h.account_id = $1 and hs.as_of > $2
+        "#,
+        account_id,
+        day,
+    )
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    Ok(deleted)
+}
+
+/// Whether a holding has at least one snapshot.
+pub async fn has_snapshot(
+    conn: &mut sqlx::PgConnection,
+    holding_id: Uuid,
+) -> Result<bool, CoreError> {
+    let found = sqlx::query_scalar!(
+        r#"select exists (select 1 from holding_snapshot where holding_id = $1) as "found!""#,
+        holding_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(found)
+}

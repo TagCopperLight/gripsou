@@ -84,6 +84,7 @@ pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
         name,
         type_key: type_key.to_string(),
         currency,
+        freshness: Default::default(),
         meta: json!({
             "powens_type": type_name,
             "is_invest": is_invest,
@@ -423,6 +424,16 @@ pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connectio
                 .next_retry_on
                 .or_else(|| day(c.health.next_try.as_deref()));
         }
+        // While Powens can't reach the bank it keeps returning the balances of
+        // its last successful refresh: they are only good for that day, and
+        // not at all once Powens reports an error (#58).
+        mapped.freshness = gripsou_core::dto::Freshness {
+            as_of: observed.last_updated_on,
+            error: [&observed.state, &observed.error_message]
+                .into_iter()
+                .flatten()
+                .any(|s| !s.trim().is_empty()),
+        };
         mapped.meta["sync_health"] = json!(observed);
         mapped.meta["id_source"] = json!(account.id_source);
     }

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from holding_snapshot hs\n        using holding h\n        where hs.holding_id = h.id and h.account_id = $1 and hs.as_of > $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9b809091cf619ace37aac7a2e5a2046a615039fb5380eb43cbe76650575ef028"
+}

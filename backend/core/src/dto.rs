@@ -12,6 +12,23 @@ pub struct CanonicalAccount {
     pub type_key: String,
     pub currency: String,
     pub meta: Value,
+    /// How current the provider says this account's balances are.
+    #[serde(default)]
+    pub freshness: Freshness,
+}
+
+/// How current a provider says an account's balances are. Decides which day
+/// the ingest stamps a snapshot on, if any (see `ingest`). The default means
+/// current as of this sync, which is what a provider that reports nothing
+/// gets.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Freshness {
+    /// The day the provider last reached the institution for this account.
+    /// `None` when it doesn't say, taken as today.
+    pub as_of: Option<NaiveDate>,
+    /// The provider reports an error for this account: its balances are not
+    /// trusted at all, not even for `as_of`.
+    pub error: bool,
 }
 
 /// Reference to an instrument; the core resolves/creates the global row.

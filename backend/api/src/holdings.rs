@@ -579,6 +579,7 @@ mod tests {
             name: "Livret".into(),
             type_key: "pea".into(),
             currency: "EUR".into(),
+            freshness: Default::default(),
             meta: serde_json::json!({}),
         };
         let account_id = upsert_account(&mut conn, conn_id, &account).await.unwrap();
