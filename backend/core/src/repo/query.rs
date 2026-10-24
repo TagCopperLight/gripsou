@@ -506,16 +506,56 @@ pub async fn holding_prices(
     let rows = sqlx::query_as!(
         PricePointRow,
         r#"
-        select p.ts as "ts!", p.unit_price as "unit_price!",
-               p.unit_price * fx_asof(p.currency, (p.ts at time zone 'utc')::date)
-                   / nullif(fx_asof(a.currency, (p.ts at time zone 'utc')::date), 0)
-                   as "account_price?"
-        from price p
-        join holding h    on h.instrument_id = p.instrument_id
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
-        order by p.ts
+        with pts as materialized (
+            select p.ts, p.unit_price, p.currency as quote, a.currency as acct,
+                   (p.ts at time zone 'utc')::date as day
+            from price p
+            join holding h    on h.instrument_id = p.instrument_id
+            join account a    on a.id = h.account_id
+            join connection c on c.id = a.connection_id
+            where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
+        ),
+        asked as (
+            select quote as currency, day from pts
+            union
+            select acct, day from pts
+        ),
+        -- fx_asof for every asked (currency, day) in one ordered pass: each
+        -- asked day sorts after that day's rates, so it falls in the run of
+        -- the last rate stamped on or before it. Calling fx_asof twice per
+        -- price instead costs a few times longer on a long history.
+        runs as (
+            select currency, asked, rate, day,
+                   count(rate) over (partition by currency order by day, asked, ts) as run
+            from (
+                select i.currency, (r.ts at time zone 'utc')::date as day,
+                       r.unit_price as rate, r.ts, false as asked
+                from instrument i
+                join price r on r.instrument_id = i.id
+                where i.kind = 'cash' and i.currency in (select currency from asked)
+                union all
+                select currency, day, null, null, true from asked
+            ) t
+        ),
+        rates as materialized (
+            select currency, day,
+                   case when currency = (select base_currency from app_settings where id = 1)
+                        then 1::numeric
+                        else rate
+                   end as rate
+            from (
+                select currency, day, asked,
+                       max(rate) over (partition by currency, run) as rate
+                from runs
+            ) f
+            where asked
+        )
+        select pts.ts as "ts!", pts.unit_price as "unit_price!",
+               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?"
+        from pts
+        join rates q  on q.currency = pts.quote and q.day = pts.day
+        join rates ac on ac.currency = pts.acct and ac.day = pts.day
+        order by pts.ts
         "#,
         holding_id,
         user_id,

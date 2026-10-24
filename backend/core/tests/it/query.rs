@@ -380,6 +380,71 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Each price is converted at the last rate stamped on or before its day (the
+/// latest of that day when there are several), and has no account price
+/// before the first rate.
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow::Result<()> {
+    use gripsou_core::testkit::{insert_price, rate_on, seed_cash_instrument};
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(3, 0),
+                Decimal::new(450, 0),
+                None,
+            )],
+            ..Default::default()
+        },
+    )
+    .await?;
+    let holding_id = holding_ids(&pool).await[0];
+    let instrument_id: Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'")
+        .fetch_one(&pool)
+        .await?;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let d = |n: u32| NaiveDate::from_ymd_opt(2026, 3, n).unwrap();
+    let at = |n: u32, h: u32| d(n).and_hms_opt(h, 0, 0).unwrap().and_utc();
+
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, d(5), Decimal::new(5, 1)).await;
+    rate_on(&pool, usd, d(8), Decimal::new(7, 1)).await;
+    let mut conn = pool.acquire().await?;
+    // A later rate the same day wins.
+    insert_price(&mut conn, usd, at(8, 18), Decimal::new(8, 1), "EUR").await?;
+    for day in [4, 5, 7, 8] {
+        insert_price(
+            &mut conn,
+            instrument_id,
+            at(day, 12),
+            Decimal::new(10, 0),
+            "USD",
+        )
+        .await?;
+    }
+    drop(conn);
+
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
+    let account: Vec<_> = prices.iter().map(|p| p.account_price).collect();
+    assert_eq!(
+        account,
+        vec![
+            None,
+            Some(Decimal::new(5, 0)),
+            Some(Decimal::new(5, 0)),
+            Some(Decimal::new(8, 0)),
+        ]
+    );
+    Ok(())
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
