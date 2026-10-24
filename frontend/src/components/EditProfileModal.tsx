@@ -88,7 +88,6 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
                 name={name || (user?.name ?? "?")}
                 src={prefs.avatar}
                 className="size-24 transition-opacity duration-140 group-hover:opacity-40"
-                initialsClassName="text-2xl"
               />
               <Pencil
                 className="absolute inset-0 m-auto size-5 text-fg opacity-0 transition-opacity duration-140 group-hover:opacity-100"
