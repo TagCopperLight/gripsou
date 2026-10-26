@@ -13,6 +13,8 @@ export type Store = BaseData & {
   lotSuggestions: Record<string, LotSuggestion[]>;
   /** Ledger buys the user deleted from the "record purchases" window. */
   deletedLots: string[];
+  /** Ledger lots a provider sent: listed locked, kept by the preview. */
+  providerLots: string[];
 };
 
 export function createStore(): Store {
@@ -22,6 +24,7 @@ export function createStore(): Store {
     ...data,
     lotSuggestions: {},
     deletedLots: [],
+    providerLots: [],
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",

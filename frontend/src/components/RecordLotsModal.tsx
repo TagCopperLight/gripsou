@@ -1,7 +1,7 @@
-import { calendarDay, zonedDay } from "../lib/date";
+import { calendarDay, formatDate, zonedDay } from "../lib/date";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Trash2, X } from "lucide-react";
+import { Lock, Trash2, X } from "lucide-react";
 
 import { Button } from "./Button";
 import { CardState } from "./CardState";
@@ -9,6 +9,7 @@ import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "./Modal";
 import { Money } from "./Money";
 import { MoneyHint } from "./MoneyHint";
+import { SegmentedControl } from "./SegmentedControl";
 import { getPrefs } from "../lib/prefs";
 import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
@@ -28,8 +29,6 @@ import type { BasisPreview, Holding } from "../api/types";
 // This file must never grow a `buyCost / buyQty` of its own: a second copy of
 // the rule is how two figures for the same holding ended up disagreeing.
 
-const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0", reporting: null };
-
 /** How long to wait after the last edit before asking the server for updated
  *  figures — avoids firing a request per keystroke. */
 const PREVIEW_DEBOUNCE_MS = 300;
@@ -41,8 +40,13 @@ const EPS = 1e-8;
 const today = () => zonedDay();
 
 type Row = {
+  /** Stable React key: rows move when they are put back in date order. */
+  key: string;
   /** Present on a row already saved; absent on one the user just added. */
   id?: string;
+  /** A provider's lot: shown and counted, never edited, deleted or sent. The
+   *  preview keeps the provider's lots on its own, as saving does. */
+  locked?: boolean;
   type: "buy" | "sell";
   date: string;
   quantity: string;
@@ -52,7 +56,7 @@ type Row = {
   /** Present only on rows seeded from the server: the values as loaded, so an
    *  edit can be detected later. A saved row is "changed" when its date differs
    *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
-  pristine?: { date: string; quantity: string; unitPrice: string; fee: string };
+  pristine?: { type: "buy" | "sell"; date: string; quantity: string; unitPrice: string; fee: string };
   /** True on a row pre-filled from a suggestion, until it is binned. Drives
    *  the note under the table; editing the row keeps it. */
   suggested?: boolean;
@@ -60,6 +64,12 @@ type Row = {
 
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
+
+let nextKey = 0;
+const newKey = () => `row-${nextKey++}`;
+
+/** Oldest first; `sort` is stable, so rows on the same day keep their order. */
+const byDate = (rows: Row[]): Row[] => [...rows].sort((a, b) => a.date.localeCompare(b.date));
 
 /** True for a saved row whose date/quantity/unitPrice no longer match what it
  *  was seeded with. Always false for a row the user just added (no pristine).
@@ -79,7 +89,8 @@ const sameAmount = (a: string, b: string): boolean =>
 
 const isRowChanged = (r: Row): boolean =>
   r.pristine !== undefined &&
-  (r.date.trim() !== r.pristine.date.trim() ||
+  (r.type !== r.pristine.type ||
+    r.date.trim() !== r.pristine.date.trim() ||
     !sameAmount(r.quantity, r.pristine.quantity) ||
     !sameAmount(r.unitPrice, r.pristine.unitPrice) ||
     !sameAmount(r.fee, r.pristine.fee));
@@ -132,27 +143,28 @@ export function RecordLotsModal({
     !(rows !== null && dirty)
   ) {
     setSeededFrom({ lots: data, suggested: suggestions.data });
-    setRows([
-      ...data
-        .filter((l) => l.manual)
-        .map((l) => {
-          const date = calendarDay(l.t);
-          const quantity = l.qty;
-          const unitPrice = l.price;
-          const fee = l.fee;
-          return {
-            id: l.id,
-            type: l.side,
-            date,
-            quantity,
-            unitPrice,
-            fee,
-            pristine: { date, quantity, unitPrice, fee },
-          };
-        }),
+    setRows(byDate([
+      ...data.map((l) => {
+        const date = calendarDay(l.t);
+        const quantity = l.qty;
+        const unitPrice = l.price;
+        const fee = l.fee;
+        return {
+          key: l.id,
+          id: l.id,
+          locked: !l.manual,
+          type: l.side,
+          date,
+          quantity,
+          unitPrice,
+          fee,
+          pristine: { type: l.side, date, quantity, unitPrice, fee },
+        };
+      }),
       // New, unsaved rows: they count on Save and feed the preview and the
       // bar like any row the user added.
       ...(suggestions.data ?? []).map((s) => ({
+        key: newKey(),
         type: s.type,
         date: s.date,
         quantity: s.quantity,
@@ -160,13 +172,22 @@ export function RecordLotsModal({
         fee: s.fee,
         suggested: true,
       })),
-    ]);
+    ]));
   }
 
   const list = rows ?? [];
   const set = (i: number, patch: Partial<Row>) => {
     setDirty(true);
     setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  };
+
+  /** Back in date order once a date is settled, not on every keystroke, so a
+   *  row never jumps away from the field being typed in. */
+  const sortRows = () => setRows((rs) => (rs === null ? rs : byDate(rs)));
+
+  const addRow = () => {
+    setDirty(true);
+    setRows((rs) => byDate([...(rs ?? []), { key: newKey(), type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" }]));
   };
 
   const remove = (i: number) => {
@@ -191,17 +212,18 @@ export function RecordLotsModal({
     return { type: r.type, date: r.date, quantity, unitPrice, ...(fee !== undefined ? { fee } : {}) };
   };
 
+  const editable = list.filter((r) => !r.locked);
   const parsed = useMemo(
-    () => list.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
+    () => editable.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [list, i18n.language],
   );
-  const anyInvalid = list.some((r) => toLotEntry(r) === null);
+  const anyInvalid = editable.some((r) => toLotEntry(r) === null);
 
   // Net quantity is a plain count, not a money figure — safe to derive locally
   // (unlike mean price / invested / realised, which only ever come from the
   // preview endpoint).
-  const recorded = parsed.reduce(
+  const recorded = [...parsed, ...list.filter((r) => r.locked).map(toLotEntry).filter((p) => p !== null)].reduce(
     (acc, p) => acc + (p.type === "sell" ? -Number(p.quantity) : Number(p.quantity)),
     0,
   );
@@ -217,7 +239,8 @@ export function RecordLotsModal({
   // the panel to zero on every request, not just the first. So the last
   // successful result is held here explicitly, and THAT is what renders;
   // `preview.data` is read only inside `onSuccess`, never for display.
-  const [lastPreview, setLastPreview] = useState<BasisPreview>(ZERO_PREVIEW);
+  // Null until the first answer: no figure rather than a wrong "0,00 €".
+  const [lastPreview, setLastPreview] = useState<BasisPreview | null>(null);
   useEffect(() => {
     if (rows === null) return;
     let current = true;
@@ -234,13 +257,13 @@ export function RecordLotsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
-  const figures: BasisPreview = lastPreview;
+  const figures = lastPreview;
 
   // A changed saved row is saved as a delete + re-add in the same atomic
   // batch — the backend applies both halves in one DB transaction, so the
   // row picking up a new id is harmless (manual lots aren't referenced by id).
-  const newRows = list.filter((r) => r.id === undefined);
-  const changedSaved = list.filter((r) => r.id !== undefined && isRowChanged(r));
+  const newRows = editable.filter((r) => r.id === undefined);
+  const changedSaved = editable.filter((r) => r.id !== undefined && isRowChanged(r));
 
   const adds: SaveLotAdd[] = [...newRows, ...changedSaved]
     .map(toLotEntry)
@@ -345,12 +368,38 @@ export function RecordLotsModal({
                 const ring = "ring-1 ring-red";
                 const input =
                   "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
+                const cell = "py-1.5 pr-2 border-t border-surface-2";
+                if (r.locked) {
+                  // A provider's lot: the same columns, as text, and a lock where the bin goes.
+                  return (
+                    <tr key={r.key} data-testid="lot-row" className="text-sm text-fg-dim">
+                      <td className={`${cell} px-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
+                      <td className={`${cell} px-3 font-mono`}>{formatDate(r.date)}</td>
+                      <td className={`${cell} px-3 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
+                      <td className={`${cell} px-3 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
+                      <td className={`${cell} px-3 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
+                      <td className={`${cell} text-right font-mono whitespace-nowrap`}>
+                        {p === null ? "—" : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), { currency })}
+                      </td>
+                      <td className="py-1.5 border-t border-surface-2 text-right">
+                        <span title={t("dashboard.holdings.gap.locked")} aria-label={t("dashboard.holdings.gap.locked")} className="inline-flex p-1.5 text-fg-faint">
+                          <Lock className="size-4" />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={r.id ?? `new-${i}`} data-testid="lot-row" className="text-sm">
-                    <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <span className={r.type === "sell" ? "text-fg-dim" : "text-fg"}>
-                        {t(`dashboard.holdings.gap.${r.type}`)}
-                      </span>
+                  <tr key={r.key} data-testid="lot-row" className="text-sm">
+                    <td className={cell}>
+                      <SegmentedControl
+                        value={r.type}
+                        onChange={(v) => set(i, { type: v })}
+                        options={[
+                          { value: "buy", label: t("dashboard.holdings.gap.buy") },
+                          { value: "sell", label: t("dashboard.holdings.gap.sell") },
+                        ]}
+                      />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
                       <input
@@ -358,6 +407,7 @@ export function RecordLotsModal({
                         data-testid="lot-date"
                         value={r.date}
                         onChange={(e) => set(i, { date: e.target.value })}
+                        onBlur={sortRows}
                         className={`${input} ${r.date === "" ? ring : ""}`}
                       />
                     </td>
@@ -419,33 +469,10 @@ export function RecordLotsModal({
         )}
 
         <div className="flex items-center gap-2">
-          {/* Bordered, not bare text: these sit under a table of inputs, where
-              an unboxed label reads as a column heading rather than a control. */}
-          <Button
-            variant="ghost"
-            className={ADD_ROW_BUTTON}
-            onClick={() => {
-              setDirty(true);
-              setRows((rs) => [
-                ...(rs ?? []),
-                { type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" },
-              ]);
-            }}
-          >
-            {t("dashboard.holdings.gap.addBuy")}
-          </Button>
-          <Button
-            variant="ghost"
-            className={ADD_ROW_BUTTON}
-            onClick={() => {
-              setDirty(true);
-              setRows((rs) => [
-                ...(rs ?? []),
-                { type: "sell", date: today(), quantity: "", unitPrice: "", fee: "" },
-              ]);
-            }}
-          >
-            {t("dashboard.holdings.gap.addSell")}
+          {/* Bordered, not bare text: it sits under a table of inputs, where an
+              unboxed label reads as a column heading rather than a control. */}
+          <Button variant="ghost" className={ADD_ROW_BUTTON} onClick={addRow}>
+            {t("dashboard.holdings.gap.add")}
           </Button>
         </div>
 
@@ -462,29 +489,29 @@ export function RecordLotsModal({
           </span>
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
             <Figure
-              hint={reportingHint(figures.reporting?.invested)}
+              hint={reportingHint(figures?.reporting?.invested)}
               testId="figure-invested"
               label={t("dashboard.holdings.gap.capitalInvested")}
-              value={formatMoney(figures.invested, { currency })}
+              value={figures ? formatMoney(figures.invested, { currency }) : "—"}
             />
             <Figure
-              hint={reportingHint(figures.reporting?.meanPrice)}
+              hint={reportingHint(figures?.reporting?.meanPrice)}
               testId="figure-meanPrice"
               label={t("dashboard.holdings.gap.meanPricePerShare")}
-              value={formatMoney(figures.meanPrice, { currency })}
+              value={figures ? formatMoney(figures.meanPrice, { currency }) : "—"}
             />
             <SignedFigure
-              hint={reportingHint(figures.reporting?.realised, true)}
+              hint={reportingHint(figures?.reporting?.realised, true)}
               testId="figure-realised"
               label={t("dashboard.holdings.gap.realisedPnl")}
-              value={Number(figures.realised)}
+              value={figures ? Number(figures.realised) : null}
               currency={currency}
             />
             <SignedFigure
-              hint={reportingHint(figures.reporting?.unrealised, true)}
+              hint={reportingHint(figures?.reporting?.unrealised, true)}
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
-              value={figures.unrealised === null ? null : Number(figures.unrealised)}
+              value={figures?.unrealised == null ? null : Number(figures.unrealised)}
               currency={currency}
             />
           </div>

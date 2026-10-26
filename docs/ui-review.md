@@ -69,7 +69,7 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Asset modal: no rate (native value with asterisk, no P/L, no share of net worth) | state "Two dollar ETFs have no rate" |
 | Asset modal: private mode (amounts masked, purchases chart in % only) | state "Private mode on" |
 | Asset modal: below `xl` the chart stacks over the stats; full screen on a phone | resize |
-| Record lots modal: loading / error, empty, suggested rows, provisional figures, save error, invalid row | action; state; query |
+| Record lots modal: loading / error, empty, suggested rows, provider (locked) rows, provisional figures, save error, invalid row | action; state (`FOCUS = "Record purchases"`); query |
 
 Findings:
 
@@ -113,6 +113,12 @@ Findings:
 | D38 | Composition half French, half English: Boursorama relabelled its sectors (October 2026: "Finance", "Produits industriels", "Télécommunications", "Biens de consommation cycliques", "Matières non énergétiques"), and the translation table only knew the old labels, so those stayed French in English. The mock's funds used English names production never receives, which hid it (and broke the Investments regions). | User | fixed: the new labels translate to the same names as the old ones in both languages (old kept for older data); the mock's funds use Boursorama's French names; bars sorted largest first, "Other" last (a merged D37 line no longer sits out of order). |
 | D39 | Asset window: the chart legend only showed on the Purchases tab. | User | fixed: the Asset tab shows its legend too, in the line's colour: "Unit price", and "Return" in % (the line is then the change since the range's start, as on every chart in %) |
 | D40 | The asset window's identity header (badge, provider name in capitals, "ticker · type tag · account"). | User | won't fix: options and tunings drawn on the companion (quiet, ticker first, breadcrumb, account by the tabs; balanced / prominent / compact spacing), kept as is. |
+| D41 | Record purchases: private mode left the Summary readable. | Claude | won't fix: the user is typing these amounts; masking them here is useless. |
+| D42 | Record purchases: the Summary showed "0,00 €" everywhere until the first preview answered. | Claude | fixed: "—" until the first answer. |
+| D43 | Record purchases: a row's type was fixed text, so a purchase entered as a sale meant deleting and re-adding it; two add buttons. | Claude | fixed: one "Add entry" button, a Purchase / Sale switch on each row (a saved row switched counts as a change). |
+| D44 | Record purchases: a new row stayed at the bottom whatever its date. | Claude | fixed: rows in date order, re-sorted when a date field is left (never while typing). |
+| D45 | "Realised / Unrealised P/L" reads as jargon. | Claude | won't fix: the term is used across the app and the user likes it. |
+| D46 | Record purchases: lots a provider sends would be hidden and left out of the bar, and the live preview replaced them too, so the figures while editing would disagree with the saved ones. No provider sends lots yet, but the schema plans for one. | Claude (code) | fixed: provider lots listed locked and counted in the bar; the preview (`basis_preview`) replaces only the user's own lots, as saving does (backend test `preview_keeps_the_provider_lots`). |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`

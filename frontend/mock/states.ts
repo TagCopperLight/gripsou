@@ -172,6 +172,16 @@ export const STATES: MockState[] = [
     },
   },
   {
+    id: "record-provider-lots",
+    label: "CW8: the broker sent its first 4 buys (locked), 3 shares unexplained",
+    pieces: ["Record purchases"],
+    apply(store) {
+      const first = lotsOf(store, CW8).slice(0, 4);
+      store.providerLots.push(...first.map((l) => l.id));
+      security(store, CW8).reportedQty = lotShares(store, CW8) + 3;
+    },
+  },
+  {
     id: "record-suggestions",
     label: "CW8 3 shares short, 3 buys pre-filled from the cash ledger",
     pieces: ["Record purchases"],

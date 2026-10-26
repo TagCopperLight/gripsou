@@ -31,10 +31,10 @@ const CASH_PEA = {
 
 function renderCard(holdings: unknown[], prefs = DEFAULT_PREFS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // Every URL gets the holdings list, except the modal's suggestions: that
-  // endpoint returns lots to pre-fill, and none is what these tests want.
+  // Every URL gets the holdings list, except the record window's lots and
+  // suggestions: none of either is what these tests want.
   vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-    new Response(JSON.stringify(String(url).includes("/lots/suggestions") ? [] : holdings), { status: 200, headers: { "Content-Type": "application/json" } }),
+    new Response(JSON.stringify(/\/lots(\/suggestions)?$/.test(String(url)) ? [] : holdings), { status: 200, headers: { "Content-Type": "application/json" } }),
   ));
   return render(
     <QueryClientProvider client={client}>

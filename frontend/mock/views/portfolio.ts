@@ -31,7 +31,7 @@ export function lotsOf(store: Store, holdingId: string): Lot[] {
       qty: String(x.quantity),
       price: money(x.unitPrice ?? 0),
       fee: money(x.fee ?? 0),
-      manual: true,
+      manual: !store.providerLots.includes(x.id),
     }));
   return [...fromLedger, ...(store.manualLots[holdingId] ?? [])].sort((a, b) => a.t - b.t);
 }
@@ -299,9 +299,13 @@ export function returns(store: Store): InvestmentReturns {
 
 /** The figures for a full set of rows, as `lot_basis` would give them:
  *  fee-inclusive weighted average in date order, a sale realising its proceeds
- *  minus fee over that average. The real preview replaces every lot of the
- *  holding with the rows sent, so this does too. */
-export function previewLots(store: Store, holdingId: string, rows: SaveLotAdd[]): BasisPreview {
+ *  minus fee over that average. */
+export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[]): BasisPreview {
+  // The rows replace the user's lots only; the provider's stay, as on the server.
+  const provider: SaveLotAdd[] = lotsOf(store, holdingId)
+    .filter((l) => !l.manual)
+    .map((l) => ({ type: l.side, date: isoDay(l.t), quantity: l.qty, unitPrice: l.price, fee: l.fee }));
+  const rows = [...provider, ...sent];
   let qty = 0;
   let cost = 0;
   let realised = 0;

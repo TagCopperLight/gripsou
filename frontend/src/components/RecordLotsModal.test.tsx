@@ -128,10 +128,53 @@ describe("RecordLotsModal", () => {
     });
   });
 
-  it("shows only user-entered rows", () => {
+  it("lists a provider's lot locked, counts it, and never sends it", async () => {
+    const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20"), { ...lot("b", "buy", "5", "20"), manual: false }];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
+    expect(screen.getAllByTestId("lot-row")).toHaveLength(2);
+    expect(screen.getByLabelText(/sent by your bank/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /delete entry/i })).toHaveLength(1);
+    expect(screen.getByText((_, el) => /^15 \/ \d+ shares accounted for$/.test(el?.textContent ?? "") && el?.tagName === "SPAN")).toBeInTheDocument();
+    // The server keeps the provider's lots itself: only the user's rows go out.
+    expect(previewMutate).toHaveBeenLastCalledWith([{ type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" }]);
+
+    await user.click(screen.getByRole("button", { name: /delete entry/i }));
+    await user.click(screen.getByRole("button", { name: /save 1 entry/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({ adds: [], deletes: ["a"] });
+  });
+
+  it("saves a row switched from purchase to sale as a changed row", async () => {
+    const user = userEvent.setup();
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    await user.click(screen.getByRole("radio", { name: "Sale" }));
+    await user.click(screen.getByRole("button", { name: /save 1 entry/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      adds: [{ type: "sell", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" }],
+      deletes: ["a"],
+    });
+  });
+
+  it("puts a row back in date order once its date is set, not while typing", async () => {
+    const user = userEvent.setup();
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
+    const date = screen.getAllByTestId("lot-date")[1];
+    fireEvent.change(date, { target: { value: "2023-01-15" } });
+    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2024-05-02", "2023-01-15"]);
+    fireEvent.blur(date);
+    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2023-01-15", "2024-05-02"]);
+  });
+
+  it("shows no figure until the first preview answers", () => {
+    holdPreviewResolution = true;
+    txns = [lot("a", "buy", "10", "20")];
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("—");
+    releaseHeldPreview();
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
   });
 
   it("shows the populated preview immediately when lots have loaded", () => {
@@ -241,7 +284,7 @@ describe("RecordLotsModal", () => {
     await waitFor(() => expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("25"));
 
     holdPreviewResolution = true;
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     await user.type(screen.getAllByTestId("lot-quantity")[1], "1");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
 
@@ -267,7 +310,7 @@ describe("RecordLotsModal", () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20")];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     await user.type(screen.getAllByTestId("lot-quantity")[1], "0");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
@@ -289,7 +332,7 @@ describe("RecordLotsModal", () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20")];
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     const dateInput = screen.getAllByTestId("lot-date")[1];
     await user.clear(dateInput);
     await user.type(screen.getAllByTestId("lot-quantity")[1], "5");
@@ -304,7 +347,7 @@ describe("RecordLotsModal", () => {
   it("keeps Save enabled when the bar is red", async () => {
     const user = userEvent.setup();
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     await user.type(screen.getAllByTestId("lot-quantity")[0], "50");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "10");
     expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-red");
@@ -318,7 +361,8 @@ describe("RecordLotsModal", () => {
     render(<RecordLotsModal holding={holding} onClose={onClose} />);
 
     await user.click(screen.getByRole("button", { name: /delete entry/i }));
-    await user.click(screen.getByRole("button", { name: /add sale/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
+    await user.click(screen.getAllByRole("radio", { name: "Sale" }).at(-1)!);
     const rows = screen.getAllByTestId("lot-row");
     const dateInput = screen.getAllByTestId("lot-date")[rows.length - 1];
     await user.clear(dateInput);
@@ -341,7 +385,7 @@ describe("RecordLotsModal", () => {
     txns = [];
     render(<RecordLotsModal holding={holding} onClose={onClose} />);
 
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     await user.type(screen.getAllByTestId("lot-quantity")[0], "2");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "98.37");
     await user.type(screen.getAllByTestId("lot-fee")[0], "1.05");
@@ -357,7 +401,7 @@ describe("RecordLotsModal", () => {
     await i18n.changeLanguage("fr");
     const user = userEvent.setup();
     render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /ajouter un achat/i }));
+    await user.click(screen.getByRole("button", { name: /ajouter une opération/i }));
     const frDateInput = screen.getAllByTestId("lot-date")[0];
     await user.clear(frDateInput);
     await user.type(frDateInput, "2024-06-02");
@@ -460,7 +504,7 @@ describe("RecordLotsModal", () => {
     const onClose = vi.fn();
     mutateAsync.mockRejectedValue(new Error("boom"));
     render(<RecordLotsModal holding={holding} onClose={onClose} />);
-    await user.click(screen.getByRole("button", { name: /add purchase/i }));
+    await user.click(screen.getByRole("button", { name: /add entry/i }));
     const failDateInput = screen.getAllByTestId("lot-date")[0];
     await user.clear(failDateInput);
     await user.type(failDateInput, "2024-06-02");
