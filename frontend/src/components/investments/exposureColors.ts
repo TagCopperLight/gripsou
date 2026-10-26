@@ -8,7 +8,8 @@ import { OTHER, STOCKS, type RegionSlice, type Slice } from "../../lib/exposure"
 export type DonutItem = {
   key: string;
   label: string;
-  share: number;
+  /** Null: no slice, no % (an overdrawn account). */
+  share: number | null;
   color: string;
   /** The leftover slice, drawn striped so it never reads as one more category. */
   other?: boolean;

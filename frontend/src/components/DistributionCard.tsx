@@ -5,6 +5,8 @@ import { ExposureDonut } from "./investments/ExposureDonut";
 import { accountTypeLabel } from "../api/types";
 import { useAccounts, useHoldings } from "../api/hooks";
 import { ExcludedNote } from "./FxNote";
+import { distribution } from "../lib/distribution";
+import { usePrivacy } from "../auth/usePrivacy";
 
 type DistributionCardProps = {
   className?: string;
@@ -14,21 +16,25 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
   const holdings = useHoldings();
+  const privacy = usePrivacy();
   const accounts = data ?? [];
   const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
+  // The middle shows the net worth, overdrafts included; the ring shows how
+  // what is owned is spread (`distribution`).
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
-  // Largest proportion first, in both the donut and the legend.
-  const items = [...accounts]
-    .sort((a, b) => Number(b.value) - Number(a.value))
-    .map((a) => ({
+  const items = distribution(accounts).map(({ account: a, share }) => {
+    const tag = accountTypeLabel(t, a.typeKey);
+    return {
       key: a.id,
       label: a.name,
-      share: Number(a.value) / total,
+      share,
       color: a.color,
       value: a.value,
-      tag: accountTypeLabel(t, a.typeKey),
+      // "PEA PEA" says nothing more than "PEA".
+      tag: tag.toLowerCase() === a.name.toLowerCase() ? undefined : tag,
       fxMissing: a.fxMissing,
-    }));
+    };
+  });
   const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)
     ? <ExcludedNote count={excluded} />
     : undefined;
@@ -41,6 +47,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       items={items}
       total={total}
       fxFootnote={fxFootnote}
+      privacy={privacy}
       placeholder={
         data === undefined ? (
           <CardState

@@ -4,10 +4,11 @@ import ReactECharts from "../EChart";
 import type { EChartsOption } from "echarts";
 
 import { Surface } from "../Surface";
-import { Money } from "../Money";
-import { Percent } from "../Percent";
+import { MaskedMoney, PrivacyEye } from "../PrivateMoney";
 import { FxAsterisk, FxFootnote } from "../FxNote";
-import { SURFACE } from "../../lib/chartTheme";
+import { GRID, SURFACE } from "../../lib/chartTheme";
+import { formatShare } from "../../lib/distribution";
+import type { Privacy } from "../../auth/usePrivacy";
 import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 
 type ExposureDonutProps = {
@@ -25,6 +26,9 @@ type ExposureDonutProps = {
   /** Why holdings are left out of `total` for want of an exchange rate:
    *  an asterisk on the total, and this under the card. */
   fxFootnote?: ReactNode;
+  /** Private mode: the amounts are masked (the shares stay), and an eye by
+   *  the title reveals them. */
+  privacy?: Privacy;
   className?: string;
 };
 
@@ -48,11 +52,16 @@ export function ExposureDonut({
   centerLabel,
   placeholder,
   fxFootnote,
+  privacy,
   className = "",
 }: ExposureDonutProps) {
   const { t } = useTranslation();
   const [active, setActive] = useState<string | null>(null);
   const nested = items.some((i) => i.children && i.children.length > 0);
+  const masked = privacy?.masked ?? false;
+  // Nothing has a share (every account at zero or below): a plain grey ring,
+  // so no slice pretends to be data.
+  const blank = !items.some((i) => (i.share ?? 0) > 0);
 
   // Hovering a child also lights its parent, whose row is highlighted
   // alongside the child's; its siblings fade with everything else.
@@ -93,7 +102,12 @@ export function ExposureDonut({
         ...base,
         radius: nested ? ["50%", "80%"] : ["62%", "92%"],
         itemStyle: { borderColor: SURFACE, borderWidth: 2, borderRadius: 4 },
-        data: items.map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i), opacity: isLit(i.key) ? 1 : DONUT_DIM } })),
+        silent: blank,
+        data: blank
+          ? [{ name: "", value: 1, itemStyle: { color: GRID } }]
+          : items
+              .filter((i) => (i.share ?? 0) > 0)
+              .map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i), opacity: isLit(i.key) ? 1 : DONUT_DIM } })),
       },
       ...(nested
         ? [
@@ -120,6 +134,8 @@ export function ExposureDonut({
     return child === undefined ? item : (item.children?.find((c) => c.key === child) ?? null);
   })();
 
+  const amount = (item: DonutItem) => item.value ?? (item.share ?? 0) * total;
+
   const row = (key: string, item: DonutItem, child: boolean) => (
     <div
       key={key}
@@ -142,12 +158,16 @@ export function ExposureDonut({
           </span>
         )}
       </span>
-      <Percent value={item.share} fractionDigits={1} className={`text-right text-fg ${child ? "text-xs" : "text-sm"}`} />
+      {/* No share (overdrawn, or nothing owned): the amount alone. */}
+      <span className={`text-right font-mono text-fg ${child ? "text-xs" : "text-sm"}`}>
+        {item.share !== null && formatShare(item.share, 1)}
+      </span>
       <span className="relative min-w-14 text-right whitespace-nowrap">
-        <Money
-          value={item.value ?? item.share * total}
+        <MaskedMoney
+          masked={masked}
+          value={amount(item)}
           fractionDigits={0}
-          className={`text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
+          className={`${Number(amount(item)) < 0 ? "text-red" : "text-fg-faint"} ${child ? "text-[11px]" : "text-xs"}`}
         />
         {item.fxMissing && <FxAsterisk />}
       </span>
@@ -157,7 +177,10 @@ export function ExposureDonut({
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
-        <p className="text-fg font-semibold text-sm">{title}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-fg font-semibold text-sm">{title}</p>
+          {privacy?.enabled && !placeholder && <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />}
+        </div>
         {placeholder ?? (
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
@@ -166,13 +189,17 @@ export function ExposureDonut({
               {hovered ? (
                 <>
                   <span className="line-clamp-2 text-fg-faint text-xs">{hovered.label}</span>
-                  <Percent value={hovered.share} fractionDigits={1} className="text-fg text-xl font-semibold tracking-tight" />
+                  {hovered.share !== null ? (
+                    <span className="font-mono text-fg text-xl font-semibold tracking-tight">{formatShare(hovered.share, 1)}</span>
+                  ) : (
+                    <MaskedMoney masked={masked} value={amount(hovered)} fractionDigits={0} className="whitespace-nowrap text-fg text-lg font-semibold tracking-tight" />
+                  )}
                 </>
               ) : (
                 <>
                   <span className="text-fg-faint text-xs">{centerLabel ?? t("investments.exposure.center")}</span>
                   <span className="relative whitespace-nowrap">
-                    <Money value={total} fractionDigits={0} className="text-fg text-lg font-semibold tracking-tight" />
+                    <MaskedMoney masked={masked} value={total} fractionDigits={0} className="text-fg text-lg font-semibold tracking-tight" />
                     {fxFootnote && <FxAsterisk size="md" />}
                   </span>
                 </>

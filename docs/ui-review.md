@@ -49,6 +49,10 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Value / % unit; ranges 7D…Max | action |
 | Distribution: loading / error / no accounts | query `/accounts`; state for empty |
 | Distribution: asterisk on the total and the account (`fxMissing`) | state "Two dollar ETFs have no rate" |
+| Distribution: an overdrawn account (no slice, no %, amount in red) | state "Checking account overdrawn" |
+| Distribution: an account at 0 € (listed, no %); a tiny one ("<0,1 %"); many accounts, long names | states "An account at 0 €", "12 accounts" |
+| Distribution: every account at 0 € (grey ring, no %) | state Data → Zero |
+| Distribution: private mode, amounts masked, % kept, eye by the title | state "Private mode on" |
 | Holdings: loading / error | query `/holdings` |
 | Holdings: no holdings at all | state |
 | Holdings: search with no match | action |
@@ -67,7 +71,7 @@ Findings:
 | D1 | The range labels are raw codes in both languages ("over 6mo", "sur 6mo"; buttons "1mo", "ytd", "max"). | Claude | fixed: one list of ranges (`lib/ranges.ts`), labels in i18n ("7D…Max", "over 6 months" / "sur 6 mois", "since January 1") |
 | D5 | The 24h range is useless (daily data: two points). | User | fixed: removed from every range picker and from the API |
 | D6 | The legend stays green when the line turns red on a loss, in value and % mode (also the tooltip swatch, and the asset modal's legend). | User | fixed: legend and tooltip read their colour off the plotted series (`lib/valueChart.ts`) |
-| D2 | `DistributionCard` with no accounts shows an empty ring and "Total 0 €" with no message; with every account at zero it divides by a zero total (NaN shares). | Claude (code) | |
+| D2 | `DistributionCard` with no accounts shows an empty ring and "Total 0 €" with no message; with every account at zero it divides by a zero total (NaN shares). | Claude (code) | fixed: no accounts by D10, every account at zero by D17 |
 | D3 | `HoldingsCard` has no empty state: no holdings, or a search with no match, leaves a bare table header. | Claude (code) | |
 | D7 | With no accounts the net worth card shows a big "0 €", a green "+0 € (+0 %)" pill, a flat line at zero and range / unit switches that do nothing. Reached by skipping the bank step in Welcome, deleting the last connection, or right after connecting. | User | fixed: the card keeps its title and height; headline, pill, legend and switches go; the chart area says why it is empty (`NetWorthEmpty`, same look as `InvestmentsEmpty`). Picked from three layouts (full height / compact strip / ghost line): full height, so the dashboard doesn't jump when accounts arrive, and no made-up line that could read as data. |
 | D8 | "Connect a bank" is wrong right after connecting: the first sync is still running. | User | fixed: three cases read off the connections (`lib/netWorthEmpty.ts`): none → "No accounts yet" + Connect a bank; one syncing / awaiting / pending → "Syncing in progress", spinner, no button; all settled with still no account (failed first sync, or a bank with only loans and cards, which are skipped) → "No accounts found" + Manage connections. Both buttons go to Settings · Connections. French reworded by the user's review (first draft read badly). |
@@ -77,6 +81,11 @@ Findings:
 | D12 | Private mode masked the net worth but left the gain amount in the pill readable, which gives most of it away. | User | fixed: the gain is masked too, the % stays; one eye per card reveals both (`usePrivacy`, `MaskedMoney`) |
 | D13 | The exchange-rate warnings look bad and are inconsistent: a ⚠ with a long tooltip on some figures, an amber box elsewhere, long sentences. | User | fixed: one treatment everywhere (`FxNote.tsx`): a small amber asterisk on each figure something is missing from and a short footnote in the same card (net worth: under the chart). No tooltip on the asterisk. The asterisk hangs past the figure's right edge, so a marked figure stays aligned with the unmarked ones. Picked over a line under the figure and a chip. See the cross-screen row. |
 | D14 | Changing the display currency did not fetch its rate: until the next sync every figure stayed in euros while wearing the new symbol (`reportingFxMissing`). | User | fixed at the source: saving a new currency fetches its rate first (`price_sync::ensure_fx_rate`, at most 10 s); if none can be had the change is refused and the old currency stays. The "shown in the base currency" notice and `reportingFxMissing` are removed everywhere (API, queries, UI). |
+| D16 | Distribution with an overdrawn account: it vanished from the ring, the legend said "−6,8 %", and the other shares added to more than 100 %. | Claude | fixed: shares are of what the accounts own (`lib/distribution.ts`), so they add to 100 %; an account at or below zero has no slice and no %, its amount in red. The middle still shows the net worth, overdrafts included, so it matches the net worth card. |
+| D17 | Every account at 0 € showed "NaN%" on each row (D2's second case). | Claude | fixed: a plain grey ring, "Total 0 €", rows with their amount and no %. |
+| D18 | Private mode masked the net worth but the distribution showed the same figure in the middle, in clear, with every account's amount. | Claude | fixed: amounts and the middle masked, % kept, one eye at the card's top right (`PrivacyEye`, shared with `PrivateMoney`). Same rule as D12. |
+| D19 | A small account read "0 %"; "PEA PEA" when an account is named after its type. | Claude | fixed: "<0,1 %" below what one decimal shows (`formatShare`, also on the Investments donuts); the type tag is hidden when it repeats the name. Accounts at 0 € stay listed (user's choice). |
+| D20 | With every account at 0 € the net worth chart's axis reads "1 €, 1 €, 1 €, 0 €, 0 €", with a "+0,00 € (0 %)" pill. | Claude | |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`
@@ -247,4 +256,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
 | No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
+| Private mode on a card without a headline: amounts masked, shares kept, `PrivacyEye` by the title (D18) | Dashboard distribution; to apply to Holdings, Accounts list, Investments |
+| Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

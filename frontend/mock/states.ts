@@ -4,8 +4,8 @@
 // fresh data. The panel lists the
 // states of the piece under review (`FOCUS`).
 
-import { CHECKING, CW8, ESE, HISTORY_DAYS } from "./data/base";
-import { daysAgo } from "./data/util";
+import { BANK, CHECKING, CW8, ESE, HISTORY_DAYS } from "./data/base";
+import { daysAgo, id } from "./data/util";
 import type { Store } from "./store";
 import { lotsOf } from "./views/portfolio";
 
@@ -38,10 +38,80 @@ function emptyHousehold(store: Store) {
   store.openingCash = {};
 }
 
+/** One more account at the bank, holding `cash` today. */
+function extraAccount(store: Store, n: number, name: string, typeKey: string, color: string, cash: number) {
+  const accountId = id("acc", 10 + n);
+  store.accounts.push({ id: accountId, connectionId: BANK, name, color, typeKey, currency: "EUR", sourceName: "Crédit Mutuel", sourceLogo: null });
+  store.openingCash[accountId] = cash;
+}
+
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Exchange rates";
+export const FOCUS = "Distribution";
 
 export const STATES: MockState[] = [
+  // ── Distribution ──
+  {
+    id: "distribution-overdraft",
+    label: "Checking account overdrawn (negative balance)",
+    pieces: ["Distribution"],
+    apply(store) {
+      const row = store.txns.find((x) => x.accountId === CHECKING && x.source === "cash")!;
+      store.txns.unshift({
+        ...row,
+        id: "00000000-0000-4000-8000-0000000ovrd1",
+        t: daysAgo(2),
+        description: "PRLV SEPA LOYER",
+        amount: -4500,
+        categoryId: null,
+        categorySource: null,
+        categoryConfidence: null,
+        needsReview: false,
+        isTransfer: false,
+        tagIds: [],
+      });
+    },
+  },
+  {
+    id: "distribution-empty-account",
+    label: "An account at 0 € (emptied savings book)",
+    pieces: ["Distribution"],
+    apply(store) {
+      extraAccount(store, 1, "LDDS", "savings", "#f0b952", 0);
+    },
+  },
+  {
+    id: "distribution-many",
+    label: "12 accounts, long names, tiny ones",
+    pieces: ["Distribution"],
+    apply(store) {
+      const more: [string, string, number][] = [
+        ["Compte joint Camille et Alex", "checking", 1840],
+        ["Livret Développement Durable et Solidaire", "savings", 4200],
+        ["Livret Jeune", "savings", 1600],
+        ["PEL", "savings", 7300],
+        ["Compte à terme 2027", "savings", 3000],
+        ["Assurance vie Linxea Spirit 2", "brokerage", 12500],
+        ["CEL", "savings", 310],
+        ["Compte courant pro", "checking", 42],
+        ["Cagnotte vacances", "savings", 12],
+      ];
+      more.forEach(([name, type, cash], i) =>
+        extraAccount(store, 2 + i, name, type, ["#f08fb0", "#9bb06b", "#e88a5f", "#6aa0e0", "#b8a8f0", "#5fcf9e", "#5b9bf0", "#4dd0b1", "#b07ef0"][i], cash),
+      );
+    },
+  },
+  {
+    id: "distribution-all-zero",
+    label: "Every account at 0 €",
+    pieces: ["Distribution", "Net worth chart", "Holdings"],
+    group: "Data",
+    option: "Zero",
+    apply(store) {
+      emptyHousehold(store);
+      extraAccount(store, 20, "Compte courant", "checking", "#60b4f5", 0);
+      extraAccount(store, 21, "Livret A", "savings", "#34d399", 0);
+    },
+  },
   // ── Dashboard ──
   {
     id: "dashboard-loss",
@@ -114,7 +184,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart"],
+    pieces: ["Net worth chart", "Distribution"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },
