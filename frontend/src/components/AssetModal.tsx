@@ -225,10 +225,11 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
 
       {/* Body */}
       <div data-modal-body className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
-        {/* Side by side from lg; below, the chart on top and the stats under it. */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {/* Side by side from xl (a chart of at least ~580 px beside the 512 px
+            column); below, the chart on top and the stats under it. */}
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         {/* Left column */}
-        <div className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 lg:flex-1">
+        <div className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 xl:flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-fg-faint text-sm">{chartLabel}</span>
@@ -301,7 +302,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         </div>
 
         {/* Right column */}
-        <div className="flex w-full flex-col gap-4 lg:w-lg lg:shrink-0">
+        <div className="flex w-full flex-col gap-4 xl:w-lg xl:shrink-0">
           <StatsSurface
             holding={holding}
             meanPrice={meanPrice}
