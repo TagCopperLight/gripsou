@@ -103,6 +103,20 @@ describe("Welcome", () => {
     expect(screen.getByRole("button", { name: "Add another bank" })).toBeInTheDocument();
   });
 
+  it("explains how a connection works until a bank is connected", async () => {
+    search = { step: "bank" };
+    renderWelcome();
+    expect(await screen.findByText("Read-only")).toBeInTheDocument();
+  });
+
+  it("drops the explanation once a bank is connected", async () => {
+    search = { step: "bank" };
+    server.connections = 1;
+    renderWelcome();
+    await screen.findByText("Bank 1");
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+  });
+
   it("goes straight to the only provider, without the picker", async () => {
     search = { step: "bank" };
     renderWelcome();

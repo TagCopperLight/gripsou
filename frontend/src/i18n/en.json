@@ -160,9 +160,27 @@
       }
     }
   },
+  "connectionGuide": {
+    "howItWorks": "How does it work?",
+    "readOnly": {
+      "title": "Read-only",
+      "bodyOne": "gripsou gets your accounts and transactions through {{provider}}, a licensed provider, and keeps a copy. It can't move money.",
+      "body": "gripsou gets your accounts and transactions through a licensed provider, and keeps a copy. It can't move money."
+    },
+    "powens": {
+      "psd2": {
+        "title": "Your bank's official access first",
+        "body": "You approve access (PSD2) on your bank's site or app."
+      },
+      "login": {
+        "title": "Then maybe your bank login",
+        "body": "Official access misses some accounts, often a PEA or life insurance. Powens may ask for your login and password to get them, never sent to gripsou. You can decline; those accounts will just be missing."
+      }
+    }
+  },
   "welcome": {
     "title": "Welcome, {{name}}",
-    "privacy": "This gripsou instance is hosted by the person who invited you. As the server owner, they can access your data. You enter your bank passwords on the connection provider's website; they are never sent to gripsou.",
+    "privacy": "This gripsou instance is hosted by the person who invited you. As the server owner, they can access your data.",
     "edit": "Edit",
     "continue": "Continue",
     "finish": "Finish",
@@ -176,7 +194,6 @@
     },
     "bank": {
       "title": "Connect a bank",
-      "body": "You'll log in to your bank on the connection provider's page, then come back here.",
       "connect": "Connect a bank",
       "addAnother": "Add another bank",
       "skip": "Skip this step",

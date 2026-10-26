@@ -70,6 +70,25 @@ describe("SettingsConnections", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
+  it("explains how a connection works when there is none", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url === "/api/providers/enabled" ? json(providers) : json([]),
+    );
+    render(withClient(<SettingsConnections />));
+    expect(await screen.findByText("No connections yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Then maybe your bank login")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "How does it work?" })).not.toBeInTheDocument();
+  });
+
+  it("opens the explanation from the header once there are connections", async () => {
+    render(withClient(<SettingsConnections />));
+    await screen.findByText("Boursorama");
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "How does it work?" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Then maybe your bank login");
+  });
+
   it("shows the connection + account counts in the header", async () => {
     render(withClient(<SettingsConnections />));
     await screen.findByText("Boursorama");

@@ -160,9 +160,27 @@
       }
     }
   },
+  "connectionGuide": {
+    "howItWorks": "Comment ça marche ?",
+    "readOnly": {
+      "title": "Lecture seule",
+      "bodyOne": "gripsou consulte vos comptes et vos transactions par l'intermédiaire de {{provider}}, un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement.",
+      "body": "gripsou consulte vos comptes et vos transactions par l'intermédiaire d'un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement."
+    },
+    "powens": {
+      "psd2": {
+        "title": "Une autorisation auprès de votre banque",
+        "body": "Vous donnez votre accord (DSP2) depuis le site ou l'application de votre banque."
+      },
+      "login": {
+        "title": "Parfois, vos identifiants bancaires",
+        "body": "Certains comptes, souvent un PEA ou une assurance vie, échappent à cette autorisation. Pour les récupérer, Powens peut vous demander l'identifiant et le mot de passe de votre banque ; gripsou ne les voit jamais. Libre à vous de refuser : ces comptes seront alors absents."
+      }
+    }
+  },
   "welcome": {
     "title": "Bienvenue, {{name}}",
-    "privacy": "Cette instance de gripsou est hébergée par la personne qui vous a invité. Elle peut accéder à vos données en tant que propriétaire du serveur. Vous saisissez vos mots de passe bancaires sur le site du fournisseur de connexion ; ils ne sont jamais transmis à gripsou.",
+    "privacy": "Cette instance de gripsou est hébergée par la personne qui vous a invité. Elle peut accéder à vos données en tant que propriétaire du serveur.",
     "edit": "Modifier",
     "continue": "Continuer",
     "finish": "Terminer",
@@ -176,7 +194,6 @@
     },
     "bank": {
       "title": "Connecter une banque",
-      "body": "Vous serez redirigé vers le site du fournisseur de connexion pour vous connecter à votre banque, puis vous reviendrez ici.",
       "connect": "Connecter une banque",
       "addAnother": "Ajouter une autre banque",
       "skip": "Passer cette étape",
