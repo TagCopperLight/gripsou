@@ -6,7 +6,7 @@ Every screen of gripsou, every state it can be in, and what the review found. Bu
 
 Run the review mode: `cd frontend && bun run dev:mock` (no backend, no database). The app runs on an in-memory fake API (`frontend/mock/`) holding one healthy household. The panel at the bottom left:
 
-- **States on this screen**: the states added for the current page. Toggling one rebuilds the data and reloads.
+- **States · <piece>**: the states of the piece under review (`FOCUS` in `mock/states.ts`). Toggling one rebuilds the data and reloads.
 - **Reset data**: back to the base household (keeps the active states).
 - **Sign out / Sign in**: to reach the login, invite and reset screens.
 - **EN / FR**, **EUR / USD / GBP**: saved through the app's own prefs endpoint.

@@ -112,8 +112,9 @@ export function Panel() {
     setOpen(!open);
   };
 
-  const here = info?.states.filter((st) => st.route === path) ?? [];
-  const elsewhere = info?.states.filter((st) => st.route !== path && st.active) ?? [];
+  const focus = info?.focus ?? "";
+  const here = info?.states.filter((st) => st.pieces.includes(focus)) ?? [];
+  const elsewhere = info?.states.filter((st) => !st.pieces.includes(focus) && st.active) ?? [];
   const overridden = Object.entries(info?.overrides ?? {});
   const unhandled = info?.unhandled ?? [];
   const user = info?.user;
@@ -128,7 +129,7 @@ export function Panel() {
       </div>
       {open && (
         <div style={s.body}>
-          <Section title="States on this screen" first>
+          <Section title={focus ? `States · ${focus}` : "States"} first>
             {here.length === 0 && <div style={s.muted}>None yet: the base data.</div>}
             {here.map((st) => (
               <label key={st.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>

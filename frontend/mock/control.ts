@@ -9,7 +9,9 @@ import { createStore } from "./store";
 export type OverrideMode = "loading" | "error";
 
 export type ControlInfo = {
-  states: { id: string; label: string; route: string; active: boolean }[];
+  /** The piece under review (`FOCUS` in states.ts). */
+  focus: string;
+  states: { id: string; label: string; pieces: string[]; active: boolean }[];
   overrides: Record<string, OverrideMode>;
   /** GET paths the app asked for, for the override list. */
   seen: string[];
@@ -18,7 +20,7 @@ export type ControlInfo = {
 };
 
 /** `initial`: the states active before a restart; `onChange` sees every change. */
-export function createControl(states: MockState[], initial: string[] = [], onChange?: (active: string[]) => void) {
+export function createControl(states: MockState[], focus = "", initial: string[] = [], onChange?: (active: string[]) => void) {
   const active = new Set(initial.filter((id) => states.some((s) => s.id === id)));
   const overrides = new Map<string, OverrideMode>();
   const seen = new Set<string>();
@@ -55,7 +57,8 @@ export function createControl(states: MockState[], initial: string[] = [], onCha
 
   function info(): ControlInfo {
     return {
-      states: states.map(({ id, label, route }) => ({ id, label, route, active: active.has(id) })),
+      focus,
+      states: states.map(({ id, label, pieces }) => ({ id, label, pieces, active: active.has(id) })),
       overrides: Object.fromEntries(overrides),
       seen: [...seen].sort(),
       unhandled: [...unhandled],

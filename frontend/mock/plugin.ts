@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { createControl, type OverrideMode } from "./control";
-import { STATES } from "./states";
+import { FOCUS, STATES } from "./states";
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -55,7 +55,7 @@ if (!localStorage.getItem("gripsou.mock.started")) {
 }`;
 
 export function mockApi(): Plugin {
-  const control = createControl(STATES, loadActive(), saveActive);
+  const control = createControl(STATES, FOCUS, loadActive(), saveActive);
   let held: Held[] = [];
 
   async function api(req: IncomingMessage, res: ServerResponse): Promise<void> {
