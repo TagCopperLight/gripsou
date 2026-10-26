@@ -46,7 +46,7 @@ function extraAccount(store: Store, n: number, name: string, typeKey: string, co
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Holdings";
+export const FOCUS = "Asset window";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -112,6 +112,29 @@ export const STATES: MockState[] = [
       extraAccount(store, 21, "Livret A", "savings", "#34d399", 0);
     },
   },
+  // ── Asset window ──
+  {
+    id: "asset-sold",
+    label: "CW8: 2 shares sold last month",
+    pieces: ["Asset window"],
+    apply(store) {
+      const c = security(store, CW8).closes;
+      store.manualLots[CW8] = [
+        ...(store.manualLots[CW8] ?? []),
+        { id: id("lot", 90), t: daysAgo(25), side: "sell", qty: "2", price: c[HISTORY_DAYS - 26].toFixed(2), fee: "1.99", manual: true },
+      ];
+      // The provider's quantity follows the sale.
+      security(store, CW8).reportedQty = lotShares(store, CW8);
+    },
+  },
+  {
+    id: "asset-no-composition",
+    label: "ESE has no composition (not an ETF Boursorama knows)",
+    pieces: ["Asset window"],
+    apply(store) {
+      security(store, ESE).composition = null;
+    },
+  },
   // ── Holdings ──
   {
     id: "holdings-many",
@@ -172,7 +195,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-fx-missing",
     label: "Two dollar ETFs have no rate (left out of totals)",
-    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings"],
+    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window"],
     apply(store) {
       store.fx.missing = [ESE, CW8];
     },
@@ -196,7 +219,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-short",
     label: "Lots explain 3 shares fewer than CW8 holds",
-    pieces: ["Holdings"],
+    pieces: ["Holdings", "Asset window"],
     apply(store) {
       security(store, CW8).reportedQty = lotShares(store, CW8) + 3;
     },
@@ -204,7 +227,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-excess",
     label: "Lots explain 2 shares more than ESE holds",
-    pieces: ["Holdings"],
+    pieces: ["Holdings", "Asset window"],
     apply(store) {
       security(store, ESE).reportedQty = lotShares(store, ESE) - 2;
     },
@@ -212,7 +235,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },

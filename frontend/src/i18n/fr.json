@@ -190,8 +190,10 @@
         "date": "DATE",
         "qty": "QTÉ",
         "price": "PRIX",
-        "invested": "INVESTI"
-      }
+        "amount": "MONTANT"
+      },
+      "buy": "Achat",
+      "sell": "Vente"
     }
   },
   "connectionGuide": {

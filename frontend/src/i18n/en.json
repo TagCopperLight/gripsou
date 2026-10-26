@@ -190,8 +190,10 @@
         "date": "DATE",
         "qty": "QTY",
         "price": "PRICE",
-        "invested": "INVESTED"
-      }
+        "amount": "AMOUNT"
+      },
+      "buy": "Buy",
+      "sell": "Sell"
     }
   },
   "connectionGuide": {

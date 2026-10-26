@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownRight, ArrowUpRight, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, TrendingDown, TrendingUp, X } from "lucide-react";
 
-import { Money } from "./Money";
+import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
+import { FxAsterisk, FxFootnote } from "./FxNote";
+import { GridTable } from "./GridTable";
+import { HEAD_CELL, ROW_CELLS } from "./gridTable";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { ChartLegend } from "./ChartLegend";
@@ -12,12 +15,13 @@ import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "./Modal";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
-import { formatMoney, formatQuantity, lotCashAmount } from "../lib/money";
+import { formatQuantity, lotCashAmount } from "../lib/money";
 import { formatDay } from "../lib/date";
 import { colorForString } from "../lib/palette";
 import { KIND_LABEL_KEY, type Holding, type Lot } from "../api/types";
 import { useHoldingLots, useHoldingPrices } from "../api/hooks";
-import { positionSeries } from "../lib/assetSeries";
+import { positionSeries, windowReturn } from "../lib/assetSeries";
+import { usePrivacy } from "../auth/usePrivacy";
 import { reportingOffered } from "../lib/reportingUnit";
 import { currencySymbol } from "../lib/currency";
 import { getPrefs } from "../lib/prefs";
@@ -71,6 +75,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const [mode, setMode] = useState<Mode>("asset");
   const [range, setRange] = useState<Range>("1mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
+  const privacy = usePrivacy();
+  const masked = privacy.masked;
 
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
@@ -112,8 +118,11 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
   const reader = getPrefs().currency;
   const offered = reportingOffered(chartCurrency, reader, prices);
+  // Private mode: the purchases chart plots the position's own value, so it
+  // shows in % only (the unit price of the asset tab is public).
+  const percentOnly = masked && mode === "purchases";
   // A tab where the choice is not offered never leaves the switch on it.
-  const shownUnit: ChartUnit = unit === "reporting" && !offered ? "value" : unit;
+  const shownUnit: ChartUnit = percentOnly ? "percent" : unit === "reporting" && !offered ? "value" : unit;
   const inReporting = shownUnit === "reporting";
   const shownCurrency = inReporting ? reader : chartCurrency;
   const UNIT_OPTIONS = [
@@ -158,8 +167,16 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       inReporting ? "reporting" : "account",
     );
     const values = pts.map((p) => p.value);
-    const first = values[0] ?? 0;
     const last = values[values.length - 1] ?? 0;
+    // What the position made over the window: its value's change minus what
+    // was bought or sold meanwhile. A purchase is money put in, not a gain.
+    const first = pts[0];
+    const end = pts[pts.length - 1];
+    const gain = first && end ? end.value - end.invested - (first.value - first.invested) : 0;
+    const returns = windowReturn(
+      pts.map((p) => [p.t, p.value] as [number, number]),
+      pts.map((p) => [p.t, p.invested] as [number, number]),
+    );
     return {
       series: [
         { name: t("dashboard.assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
@@ -169,8 +186,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       // amount-domain, so the header must read in the same currency as the
       // axis beneath it — not the reporting currency.
       headerValue: last,
-      gainAbs: last - first,
-      gainPct: first ? (last - first) / first : 0,
+      gainAbs: gain,
+      gainPct: returns[returns.length - 1]?.[1] ?? 0,
       chartLabel: t("dashboard.assetModal.positionValue"),
     };
   }, [holding, mode, prices, purchases, qtyNum, investedNum, inReporting, t]);
@@ -182,9 +199,12 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     <Modal
       label={holding.name}
       onClose={onClose}
-      className="absolute inset-[5%] bg-surface rounded-3xl flex flex-col overflow-hidden"
+      className="absolute inset-0 flex flex-col overflow-hidden bg-surface md:inset-[5%] md:rounded-3xl"
     >
-      <HoldingModalHeader holding={holding}>
+      <HoldingModalHeader
+        holding={holding}
+        afterName={privacy.enabled && <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />}
+      >
         <SegmentedControl
           value={mode}
           onChange={(v) => setMode(v as Mode)}
@@ -204,17 +224,19 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       </HoldingModalHeader>
 
       {/* Body */}
-      <div data-modal-body className="flex-1 overflow-y-auto p-6 pt-0 flex flex-col gap-4">
-        <div className="flex gap-4 items-start">
+      <div data-modal-body className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
+        {/* Side by side from lg; below, the chart on top and the stats under it. */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         {/* Left column */}
-        <div className="flex-1 min-w-0 bg-surface-2 rounded-2xl p-5 flex flex-col">
-          <div className="flex items-start justify-between">
+        <div className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 lg:flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-fg-faint text-sm">{chartLabel}</span>
               {/* Both headerValue and gainAbs follow the chart: price
                   domain in asset mode, amount domain in purchases mode.
                   Reporting currency only behind the unit switch — see the file header. */}
-              <Money
+              <MaskedMoney
+                masked={masked && mode === "purchases"}
                 value={headerValue}
                 currency={shownCurrency}
                 className="text-fg text-2xl font-semibold tracking-tight"
@@ -229,7 +251,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 ) : (
                   <ArrowDownRight className="size-4" />
                 )}
-                <Money
+                <MaskedMoney
+                  masked={masked && mode === "purchases"}
                   value={gainAbs}
                   currency={shownCurrency}
                   signed
@@ -240,11 +263,13 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
               </div>
             </div>
             <div className="flex flex-col items-end gap-3">
-              <SegmentedControl
-                value={shownUnit}
-                onChange={(v) => setUnit(v as ChartUnit)}
-                options={UNIT_OPTIONS}
-              />
+              {!percentOnly && (
+                <SegmentedControl
+                  value={shownUnit}
+                  onChange={(v) => setUnit(v as ChartUnit)}
+                  options={UNIT_OPTIONS}
+                />
+              )}
               {mode === "purchases" && (
                 <ChartLegend items={legendItems(plotSeries(series, chartUnit, t("common.return")))} />
               )}
@@ -268,7 +293,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             />
           )}
 
-          <div className="flex justify-center mt-3">
+          <div className="mt-3 flex justify-center overflow-x-auto">
             <SegmentedControl
               value={range}
               onChange={(v) => setRange(v as Range)}
@@ -278,11 +303,12 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         </div>
 
         {/* Right column */}
-        <div className="w-lg shrink-0 flex flex-col gap-4">
+        <div className="flex w-full flex-col gap-4 lg:w-lg lg:shrink-0">
           <StatsSurface
             holding={holding}
             meanPrice={meanPrice}
             up={up}
+            masked={masked}
           />
           {mode === "asset" ? (
             <AboutSurface holding={holding} netWorth={netWorth} />
@@ -290,6 +316,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             <PurchaseHistorySurface
               purchases={purchases}
               currency={holding.accountCurrency}
+              masked={masked}
               ready={txnData !== undefined}
               isError={txnError}
               onRetry={() => refetchTxn()}
@@ -312,11 +339,11 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-fg-faint text-xs">{label}</span>
-      <span className="text-fg font-mono font-semibold text-sm">{value}</span>
+      <span className="relative w-fit text-fg font-mono font-semibold text-sm">{children}</span>
     </div>
   );
 }
@@ -325,37 +352,57 @@ function StatsSurface({
   holding,
   meanPrice,
   up,
+  masked,
 }: {
   holding: Holding;
   meanPrice: number;
   up: boolean;
+  masked: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
       <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-        <Stat label={t("dashboard.assetModal.quantityOwned")} value={formatQuantity(holding.qty)} />
-        <Stat
-          label={t("dashboard.assetModal.meanPricePerShare")}
-          value={formatMoney(meanPrice, { currency: holding.accountCurrency })}
-        />
-        <Stat label={t("dashboard.assetModal.capitalInvested")} value={formatMoney(holding.invested)} />
-        <Stat label={t("dashboard.assetModal.currentValue")} value={formatMoney(holding.value)} />
+        <Stat label={t("dashboard.assetModal.quantityOwned")}>{formatQuantity(holding.qty)}</Stat>
+        <Stat label={t("dashboard.assetModal.meanPricePerShare")}>
+          <MaskedMoney masked={masked} value={meanPrice} currency={holding.accountCurrency} />
+        </Stat>
+        <Stat label={t("dashboard.assetModal.capitalInvested")}>
+          <MaskedMoney masked={masked} value={holding.invested} />
+        </Stat>
+        <Stat label={t("dashboard.assetModal.currentValue")}>
+          {/* No rate: the converted value is zero, so show what it is worth
+              in its own currency, marked, as the Holdings table does. */}
+          {holding.fxMissing && holding.valueNative !== null ? (
+            <>
+              <MaskedMoney masked={masked} value={holding.valueNative} currency={holding.priceCurrency} className="text-fg-dim" />
+              <FxAsterisk />
+            </>
+          ) : (
+            <MaskedMoney masked={masked} value={holding.value} />
+          )}
+        </Stat>
       </div>
       <hr className="border-surface-3 my-4" />
       <div className="flex flex-col items-start gap-1">
         <span className="text-fg-faint text-xs">{t("dashboard.assetModal.totalUnrealizedPnl")}</span>
-        <div className="flex items-baseline gap-2">
-          <Money
-            value={holding.gl}
-            signed
-            className={`text-base font-semibold ${up ? "text-green" : "text-red"}`}
-          />
-          <span className={`font-mono text-base ml-2 ${up ? "text-green" : "text-red"}`}>
-            (<Percent value={holding.glPct} signed />)
-          </span>
-        </div>
+        {holding.fxMissing ? (
+          <span className="text-fg-faint text-base">-</span>
+        ) : (
+          <div className="flex items-baseline gap-2">
+            <MaskedMoney
+              masked={masked}
+              value={holding.gl}
+              signed
+              className={`text-base font-semibold ${up ? "text-green" : "text-red"}`}
+            />
+            <span className={`font-mono text-base ml-2 ${up ? "text-green" : "text-red"}`}>
+              (<Percent value={holding.glPct} signed />)
+            </span>
+          </div>
+        )}
       </div>
+      {holding.fxMissing && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
     </div>
   );
 }
@@ -368,9 +415,9 @@ function AboutRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
+    <div className="flex items-center justify-between gap-4 py-2.5">
       <span className="text-fg-faint text-sm">{label}</span>
-      <span className="text-fg text-sm">{children}</span>
+      <span className="min-w-0 text-fg text-sm">{children}</span>
     </div>
   );
 }
@@ -389,37 +436,48 @@ function AboutSurface({
       <div className="mt-1 divide-y divide-surface-3">
         <AboutRow label={t("dashboard.assetModal.type")}>{t(KIND_LABEL_KEY[holding.kind])}</AboutRow>
         <AboutRow label={t("dashboard.assetModal.account")}>
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             <span
-              className="size-2.5 rounded-sm"
+              className="size-2.5 shrink-0 rounded-sm"
               style={{ background: holding.accountColor }}
             />
-            {holding.accountName}
+            <span className="truncate">{holding.accountName}</span>
           </span>
         </AboutRow>
         <AboutRow label={t("dashboard.assetModal.weightOfNetWorth")}>
-          <Percent
-            value={netWorth ? Number(holding.value) / netWorth : 0}
-            fractionDigits={1}
-            className="text-fg"
-          />
+          {/* Left out of the net worth for want of a rate: no share of it. */}
+          {holding.fxMissing ? (
+            <span className="text-fg-faint">-</span>
+          ) : (
+            <Percent
+              value={netWorth ? Number(holding.value) / netWorth : 0}
+              fractionDigits={1}
+              className="text-fg"
+            />
+          )}
         </AboutRow>
       </div>
     </div>
   );
 }
 
+// The purchase history's columns: date with the side, quantity, unit price,
+// cash amount. Fixed tracks like every grid table (see `gridTable.ts`).
+const HISTORY_TRACKS = "minmax(150px, 1fr) minmax(64px, max-content) minmax(96px, max-content) minmax(108px, max-content)";
+
 /// `currency` is the ACCOUNT's currency: transaction.amount and
 /// transaction.unit_price are amount-domain, not price-domain.
 function PurchaseHistorySurface({
   purchases,
   currency,
+  masked,
   ready,
   isError,
   onRetry,
 }: {
   purchases: Lot[];
   currency: string;
+  masked: boolean;
   ready: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -437,38 +495,46 @@ function PurchaseHistorySurface({
       ) : purchases.length === 0 ? (
         <p className="text-fg-faint text-sm mt-4">{t("dashboard.assetModal.noPurchases")}</p>
       ) : (
-        <table className="w-full mt-3 border-separate border-spacing-0">
-          <thead>
-            <tr className="text-[11px] font-mono text-fg-faint">
-              <th className="text-left font-medium pb-2">{t("dashboard.assetModal.columns.date")}</th>
-              <th className="text-right font-medium pb-2">{t("dashboard.assetModal.columns.qty")}</th>
-              <th className="text-right font-medium pb-2">{t("dashboard.assetModal.columns.price")}</th>
-              <th className="text-right font-medium pb-2">{t("dashboard.assetModal.columns.invested")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {purchases.map((p, i) => (
-              <tr key={i} className="font-mono text-sm">
-                <td className="py-2 border-t border-surface-3 text-fg-dim">
-                  {formatDay(p.t)}
-                </td>
-                <td className="py-2 border-t border-surface-3 text-right text-fg-dim">
-                  {formatQuantity(p.qty)}
-                </td>
-                <td className="py-2 border-t border-surface-3 text-right text-fg-dim">
-                  {formatMoney(p.price, { currency })}
-                </td>
-                <td className="py-2 border-t border-surface-3 text-right text-fg">
-                  {/* Same convention as the transactions ledger and
-                      RecordLotsModal: a buy is negative (cash out, fee
-                      included), a sale is positive (cash in, net of fee). Plain
-                      cash arithmetic, not the cost-basis rule. */}
-                  {formatMoney(lotCashAmount(p.side, p.qty, p.price, p.fee), { currency })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-3 -mx-3">
+          <GridTable
+            columns={HISTORY_TRACKS}
+            minWidth="26rem"
+            head={
+              <>
+                <th role="columnheader" className={`${HEAD_CELL} pl-3 pr-4`}>{t("dashboard.assetModal.columns.date")}</th>
+                <th role="columnheader" className={`${HEAD_CELL} justify-end pr-4`}>{t("dashboard.assetModal.columns.qty")}</th>
+                <th role="columnheader" className={`${HEAD_CELL} justify-end pr-4`}>{t("dashboard.assetModal.columns.price")}</th>
+                <th role="columnheader" className={`${HEAD_CELL} justify-end pr-3`}>{t("dashboard.assetModal.columns.amount")}</th>
+              </>
+            }
+          >
+            {purchases.map((p) => {
+              const Icon = p.side === "sell" ? TrendingDown : TrendingUp;
+              return (
+                <tr key={p.id} role="row" className={`${ROW_CELLS} font-mono`}>
+                  <td role="cell" className="gap-2 py-2 pl-3 pr-4 text-fg-dim">
+                    {formatDay(p.t)}
+                    <span className="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 font-sans text-[11px] text-fg-faint">
+                      <Icon className="size-3" />
+                      {t(p.side === "sell" ? "dashboard.assetModal.sell" : "dashboard.assetModal.buy")}
+                    </span>
+                  </td>
+                  <td role="cell" className="justify-end pr-4 text-fg-dim">{formatQuantity(p.qty)}</td>
+                  <td role="cell" className="justify-end pr-4 text-fg-dim">
+                    <MaskedMoney masked={masked} value={p.price} currency={currency} />
+                  </td>
+                  <td role="cell" className="justify-end whitespace-nowrap pr-3 text-fg">
+                    {/* Same convention as the transactions ledger and
+                        RecordLotsModal: a buy is negative (cash out, fee
+                        included), a sale is positive (cash in, net of fee). Plain
+                        cash arithmetic, not the cost-basis rule. */}
+                    <MaskedMoney masked={masked} value={lotCashAmount(p.side, p.qty, p.price, p.fee)} currency={currency} signed />
+                  </td>
+                </tr>
+              );
+            })}
+          </GridTable>
+        </div>
       )}
     </div>
   );

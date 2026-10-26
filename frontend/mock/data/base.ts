@@ -54,7 +54,7 @@ export type SecurityRow = {
   name: string;
   /** Daily closes, oldest first, one per day of `HISTORY_DAYS` ending today. */
   closes: number[];
-  composition: Composition;
+  composition: Composition | null;
   /** The quantity the provider reports, when the lots don't explain it. */
   reportedQty?: number;
 };
@@ -179,7 +179,6 @@ export const WORLD: Composition = {
     { name: "France", weight: 0.027 },
     { name: "Switzerland", weight: 0.025 },
     { name: "Germany", weight: 0.022 },
-    { name: "Other", weight: 0.094 },
   ],
   sectors: [
     { name: "Information Technology", weight: 0.26 },
@@ -189,7 +188,6 @@ export const WORLD: Composition = {
     { name: "Consumer Discretionary", weight: 0.1 },
     { name: "Communication Services", weight: 0.08 },
     { name: "Consumer Staples", weight: 0.06 },
-    { name: "Other", weight: 0.13 },
   ],
 };
 
@@ -202,7 +200,6 @@ export const SP500: Composition = {
     { name: "Consumer Discretionary", weight: 0.1 },
     { name: "Communication Services", weight: 0.09 },
     { name: "Industrials", weight: 0.08 },
-    { name: "Other", weight: 0.19 },
   ],
 };
 

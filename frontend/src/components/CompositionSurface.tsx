@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { ACCOUNT_PALETTE } from "../lib/palette";
+import { STRIPE_CSS } from "./investments/exposureColors";
 import { localizeCountry, localizeSector } from "../lib/composition-i18n";
 import type { Allocation, Composition } from "../api/types";
 
 // Boursorama only lists the top holdings, so the listed weights sum to less
-// than 100%. "Other" is the remainder (everything not broken out individually).
-const OTHER_COLOR = "var(--color-fg-faint)";
+// than 100%. "Other" is the remainder (everything not broken out
+// individually), striped like the leftover slice of the Investments donuts.
+const OTHER_COLOR = STRIPE_CSS;
 
 type Slice = { name: string; percent: number; color: string };
 

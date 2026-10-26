@@ -64,6 +64,11 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Holdings: cash aggregated over several accounts ("Multiple accounts") | base |
 | Asset modal: asset / purchases tabs, prices loading / error, no purchases, composition | action; query `/holdings/:id/prices`, `/transactions` |
 | Asset modal: incomplete-history strip (short / excess) | state |
+| Asset modal: a sale in the history (Sell tag, positive amount) | state "CW8: 2 shares sold last month" |
+| Asset modal: no composition (no bars) | state "ESE has no composition" |
+| Asset modal: no rate (native value with asterisk, no P/L, no share of net worth) | state "Two dollar ETFs have no rate" |
+| Asset modal: private mode (amounts masked, purchases chart in % only) | state "Private mode on" |
+| Asset modal: below `lg` the chart stacks over the stats; full screen on a phone | resize |
 | Record lots modal: loading / error, empty, suggested rows, provisional figures, save error, invalid row | action; state; query |
 
 Findings:
@@ -98,6 +103,13 @@ Findings:
 | D28 | Holdings: long fund names wrap onto two lines on desktop, so rows have uneven heights. | Claude | fixed by D30 |
 | D30 | Holdings' table recalculated its widths from what was shown, wrapped long names, had square hovers and full-width lines, and hid columns on a phone. | User | fixed: built on the transactions table's layout, now one shared piece (`GridTable`, `gridTable.ts`) that Transactions also uses (no visible change there). Fixed column tracks (only the asset column grows; account names and type tags cut with "…"), one-line names with the full name on hover, rounded row hover, inset lines, every row the same height; on a phone every column stays and the table scrolls sideways (user's choice). No match: icon, "No asset matches "xyz".", and a "Clear search" button that also resets the type filter. |
 | D29 | The net worth eye sat next to the big figure, while the distribution's and the holdings' sit after the card title. | User | fixed: after the title on the net worth card and on the Accounts page chart too, which shares the headline |
+| D31 | Asset window, Purchases tab: the gain pill was the position value's change, so money put in counted as gain (+473 € over a month on a holding down 56 €, because of a 534 € purchase). | Claude | fixed: value change minus what was bought or sold meanwhile; the % is the chart's own window return (`windowReturn`). Test pins it. |
+| D32 | Asset window with no exchange rate: "Current value 0,00 €", "P/L +0,00 € (0 %)", "Share of net worth 0 %". | Claude | fixed: its value in its own currency with the asterisk, no P/L, no share, the holdings footnote (same as D15) |
+| D33 | Asset window: private mode left every amount in clear. | Claude | fixed: mean price, invested, value, P/L, history prices and amounts masked; the purchases tab's chart (which plots the position's value) shows in % only; the asset tab's unit price stays (public). Eye after the name. |
+| D34 | Purchase history: the "Invested" column showed −554 € for a buy and +1 105 € for a sale, nothing else telling them apart. | Claude | fixed (user's pick): a Buy / Sell tag with an up / down arrow after the date, column renamed "Amount" (signs kept: cash out / in); the table is a `GridTable` |
+| D35 | Asset window: a fixed 512 px right column that never wraps squeezed the chart on a laptop and made the window unusable on a phone. | Claude | fixed (user's pick): side by side from `lg`, stacked below (chart first); full screen on a phone. Not checked in a browser at small sizes (the preview can't resize). |
+| D36 | Composition bars: the computed "Other" remainder was plain grey; the Investments donuts stripe theirs. | Claude | fixed: striped (`STRIPE_CSS`). The mock's funds had their own blue "Other" line, which real Boursorama data never has; removed. |
+| D37 | Boursorama now sends two different sectors under one name ("Biens de consommation cycliques" twice, "Finance" twice) on every fund, so the window showed two same-name slices and the Investments page merged them silently. | Claude | fixed in the adapter (user's pick): same-name lines are added together and a `composition names repeated` warning is logged. Stored compositions fix themselves at their 30-day refresh. |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`

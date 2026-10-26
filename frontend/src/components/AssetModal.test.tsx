@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AssetModal } from "./AssetModal";
 import type { Holding } from "../api/types";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
 // the chart mid-test — stub it out, as FxNote.test.tsx does.
@@ -24,7 +26,11 @@ const BASE: Holding = {
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <AuthContext.Provider value={{ prefs: DEFAULT_PREFS } as unknown as AuthValue}>{children}</AuthContext.Provider>
+    </QueryClientProvider>
+  );
 }
 
 describe("AssetModal composition surface", () => {
@@ -118,6 +124,28 @@ describe("AssetModal purchases chart", () => {
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
     // 10 shares x 120 USD.
     expect(await screen.findByText(/^1.200,00.\$$/)).toBeInTheDocument();
+  });
+});
+
+describe("AssetModal purchases gain", () => {
+  // Five shares on day 1, five more on day 2, the price flat at 100: the
+  // position doubles in value, but only because money went in.
+  it("does not count a purchase as a gain", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      new Response(JSON.stringify(
+        url.includes("/prices")
+          ? [{ t: 1, price: "100", accountPrice: "100" }, { t: 2, price: "100", accountPrice: "100" }]
+          : url.includes("/lots")
+            ? [1, 2].map((t) => ({ id: `l${t}`, t, side: "buy", qty: "5", price: "100", fee: "0", manual: true }))
+            : [],
+      ), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+    const user = userEvent.setup();
+    render(withClient(<AssetModal holding={{ ...BASE, meanPrice: "100" }} netWorth={5000} onClose={() => {}} />));
+    await user.click(screen.getByRole("radio", { name: /purchases/i }));
+    // Position value 1 000 €, gain zero: before the fix the pill said +500 €.
+    expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^\+500,00.€$/)).not.toBeInTheDocument();
   });
 });
 
