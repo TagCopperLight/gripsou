@@ -5,7 +5,7 @@ import { formatDay } from "../lib/date";
 import { windowReturn } from "../lib/assetSeries";
 import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
-export type ChartUnit = "value" | "percent";
+export type ChartUnit = "value" | "reporting" | "percent";
 
 // A line series over a time axis. `area` adds a fading fill (matching
 // NetWorthChart); `dashed` renders the line dashed (e.g. invested capital).

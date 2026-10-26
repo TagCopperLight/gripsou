@@ -24,15 +24,26 @@ export function positionSeries(
   unexplainedCost: number,
   fallbackQty: number,
   fallbackInvested: number,
+  domain: "account" | "reporting" = "account",
 ): PositionPoint[] {
   // No lots at all (a provider that reports balances only): a flat current
   // position is the best available answer.
-  const priced = prices.filter((p) => p.accountPrice !== null);
+  // In the reader's currency each day carries its own account->reader rate
+  // (reportingPrice / accountPrice), which also converts the invested line;
+  // a day missing either price is dropped.
+  const reporting = domain === "reporting";
+  const priced = prices
+    .filter((p) => p.accountPrice !== null && (!reporting || p.reportingPrice !== null))
+    .map((p) => ({
+      t: p.t,
+      price: Number(reporting ? p.reportingPrice : p.accountPrice),
+      rate: reporting ? Number(p.reportingPrice) / Number(p.accountPrice) : 1,
+    }));
   if (lots.length === 0) {
     return priced.map((p) => ({
       t: p.t,
-      value: Number(p.accountPrice) * fallbackQty,
-      invested: fallbackInvested,
+      value: p.price * fallbackQty,
+      invested: fallbackInvested * p.rate,
     }));
   }
   // Points before the first lot are dropped — there was no position yet, and
@@ -47,8 +58,8 @@ export function positionSeries(
       }
       return {
         t: p.t,
-        value: Number(p.accountPrice) * qty,
-        invested: meanPrice * qty + unexplainedCost,
+        value: p.price * qty,
+        invested: (meanPrice * qty + unexplainedCost) * p.rate,
       };
     });
 }

@@ -111,4 +111,11 @@ describe("windowReturn", () => {
     const r = windowReturn([[1, 100], [2, 200]], [[1, 50], [2, 150]]);
     expect(r[1][1]).toBe(0);
   });
+
+  it("values the position and its invested line in the reader's currency at each day's rate", () => {
+    const prices = [{ t: 1, price: "10", accountPrice: "20", reportingPrice: "10" }]; // 1 account unit = 0.5 reader
+    const [pt] = positionSeries(prices, [buy(0, "2", "1")], 15, 4, 2, 34, "reporting");
+    expect(pt.value).toBe(20);
+    expect(pt.invested).toBe((15 * 2 + 4) * 0.5);
+  });
 });
