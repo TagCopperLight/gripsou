@@ -129,13 +129,15 @@
         "thirtyDays": "30 J"
       },
       "gap": {
-        "open": "Compléter l'historique des achats et des ventes",
+        "open": "Compléter l'historique",
         "tooltipShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus. Complétez-le pour corriger le prix de revient et le graphique.",
         "tooltipExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez. Vérifiez les opérations saisies.",
         "title": "Historique des achats et des ventes",
-        "stripTitle": "Historique des achats et des ventes incomplet",
-        "stripBodyShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus.",
-        "stripBodyExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez.",
+        "stripTitle": "Historique incomplet",
+        "stripBodyShort_one": "{{qty}} titre détenu n'a aucun achat enregistré.",
+        "stripBodyShort_other": "{{qty}} titres détenus n'ont aucun achat enregistré.",
+        "stripBodyExcess_one": "L'historique compte {{qty}} titre de trop.",
+        "stripBodyExcess_other": "L'historique compte {{qty}} titres de trop.",
         "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> titres comptabilisés",
         "columns": {
           "type": "TYPE",

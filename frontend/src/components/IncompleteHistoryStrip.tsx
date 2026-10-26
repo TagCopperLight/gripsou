@@ -28,7 +28,7 @@ export function IncompleteHistoryStrip({
             gap > 0
               ? "dashboard.holdings.gap.stripBodyShort"
               : "dashboard.holdings.gap.stripBodyExcess",
-            { qty: formatQuantity(String(Math.abs(gap))) },
+            { qty: formatQuantity(String(Math.abs(gap))), count: Math.abs(gap) },
           )}
         </span>
       </div>

@@ -169,9 +169,9 @@ describe("incomplete-history strip", () => {
         onRecordLots={onRecordLots}
       />,
     ));
-    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
-    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
     expect(onRecordLots).toHaveBeenCalled();
   });
@@ -185,6 +185,6 @@ describe("incomplete-history strip", () => {
         onRecordLots={vi.fn()}
       />,
     ));
-    expect(screen.queryByText(/incomplete buy\/sell history/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^incomplete history$/i)).not.toBeInTheDocument();
   });
 });
