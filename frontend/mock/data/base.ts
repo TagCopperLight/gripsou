@@ -57,6 +57,9 @@ export type SecurityRow = {
   composition: Composition | null;
   /** The quantity the provider reports, when the lots don't explain it. */
   reportedQty?: number;
+  /** Day index of the first price (a fund launched inside the history):
+   *  no price is served before it, as Yahoo has none. */
+  listedFrom?: number;
 };
 
 export type ConnectionRow = Omit<SyncConnection, "accounts"> & { providerKey: string };

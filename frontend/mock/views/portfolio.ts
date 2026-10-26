@@ -255,7 +255,7 @@ export function prices(store: Store, holdingId: string, range: string): PricePoi
   const s = store.securities.find((x) => x.id === holdingId);
   if (!s) return [];
   const out: PricePoint[] = [];
-  for (let i = firstIndex(range); i < HISTORY_DAYS; i++) {
+  for (let i = Math.max(firstIndex(range), s.listedFrom ?? 0); i < HISTORY_DAYS; i++) {
     const p = money(s.closes[i]);
     out.push({ t: dayT(i), price: p, accountPrice: p, reportingPrice: p });
   }

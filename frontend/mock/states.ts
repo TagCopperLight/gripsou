@@ -4,8 +4,8 @@
 // fresh data. The panel lists the
 // states of the piece under review (`FOCUS`).
 
-import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, SP500, WORLD, closes } from "./data/base";
-import { daysAgo, id } from "./data/util";
+import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, closes } from "./data/base";
+import { TODAY, daysAgo, id } from "./data/util";
 import type { Store } from "./store";
 import { lotsOf } from "./views/portfolio";
 
@@ -113,6 +113,46 @@ export const STATES: MockState[] = [
     },
   },
   // ── Asset window ──
+  {
+    id: "asset-dcam",
+    label: "DCAM.PA in the PEA (launched March 2025, ~6 € a share)",
+    pieces: ["Asset window", "Holdings"],
+    apply(store) {
+      // Public market data as production stores it: the Yahoo ticker, the
+      // provider's name, a price near 6,30 €, prices only from the fund's
+      // launch (4 March 2025), and Boursorama's composition with its repeated
+      // sector. Quantities and dates of the purchases are made up.
+      const sec = id("hol", 60);
+      const launch = HISTORY_DAYS - 1 - Math.round((TODAY - Date.UTC(2025, 2, 4)) / 86_400_000);
+      const c = closes(60, 6.301, 0.0005, 0.011);
+      store.securities.push({
+        id: sec,
+        accountId: PEA,
+        ticker: "DCAM.PA",
+        name: "AMUNDI PEA MONDE MSCI WORLD UCITS ETF ACC",
+        closes: c,
+        listedFrom: launch,
+        composition: {
+          countries: [
+            ["Etats-Unis", 0.7276], ["Japon", 0.0591], ["Royaume-Uni", 0.0333], ["Canada", 0.033], ["Suisse", 0.0245],
+            ["Allemagne", 0.0205], ["France", 0.0199], ["Australie", 0.0155], ["Pays-Bas", 0.0149], ["Espagne", 0.0093],
+          ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
+          sectors: [
+            ["Technologie", 0.325], ["Finance", 0.1553], ["Produits industriels", 0.1046], ["Santé", 0.092],
+            ["Télécommunications", 0.0838], ["Biens de consommation cycliques", 0.0824], ["Biens de consommation cycliques", 0.0473],
+            ["Énergie", 0.0404], ["Matières non énergétiques", 0.0306], ["Services publics", 0.0226],
+          ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
+        },
+      });
+      // A buy every two months from a month after launch.
+      store.manualLots[sec] = [];
+      for (let i = launch + 30, n = 0; i < HISTORY_DAYS; i += 61, n++) {
+        store.manualLots[sec].push({
+          id: id("lot", 60 + n), t: daysAgo(HISTORY_DAYS - 1 - i), side: "buy", qty: "80", price: c[i].toFixed(3), fee: "0", manual: true,
+        });
+      }
+    },
+  },
   {
     id: "asset-sold",
     label: "CW8: 2 shares sold last month",
