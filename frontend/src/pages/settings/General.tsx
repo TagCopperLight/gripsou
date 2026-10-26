@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
@@ -38,11 +38,15 @@ export function SettingsGeneral() {
   // The server fetches the new currency's rate before saving it, and refuses
   // it when the rate can't be had: the select shows the pick meanwhile.
   const [currency, setCurrency] = useState<{ code: string; state: "fetching" | "refused" } | null>(null);
+  const latest = useRef<string | null>(null);
   const changeCurrency = (code: string) => {
+    // Only the last pick speaks: an earlier one answering late must not clear it.
+    latest.current = code;
     setCurrency({ code, state: "fetching" });
     updatePrefs({ currency: code }).then(
-      () => setCurrency(null),
+      () => latest.current === code && setCurrency(null),
       (err: unknown) =>
+        latest.current === code &&
         setCurrency(err instanceof ApiError && err.status === 502 ? { code, state: "refused" } : null),
     );
   };

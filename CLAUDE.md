@@ -72,7 +72,7 @@ Provider weirdness is absorbed by the adapter, using `*_meta` JSONB columns and 
 ### One holding model, one valuation path
 
 - Everything owned is a `holding` of an `instrument`. A checking account is a holding of the `EUR` cash instrument (quantity = balance, price = 1). Cash is never special-cased.
-- An FX rate is just a `price` of a cash instrument. Prices are stored in whatever currency the listing quotes; conversion happens at read time from the **price row's** currency, via `unit_value_asof` / `fx_asof`. Sums are in the hidden pivot (`app_settings.base_currency`), then divided once into the reader's `prefs.currency` by `reporting_fx_asof`. When that rate is missing it falls back to the pivot and `reporting_fx_degraded` says so — never show an unconverted figure under the chosen currency's symbol.
+- An FX rate is just a `price` of a cash instrument. Prices are stored in whatever currency the listing quotes; conversion happens at read time from the **price row's** currency, via `unit_value_asof` / `fx_asof`. Sums are in the hidden pivot (`app_settings.base_currency`), then divided once into the reader's `prefs.currency` by `reporting_fx_asof`. A currency change fetches that rate before it is saved, and is refused when none can be had (`update_prefs`, `price_sync::ensure_fx_rate`), so the readers assume it exists and carry no flag for it — never show an unconverted figure under the chosen currency's symbol. (`reporting_fx_degraded` is left over from the old fallback, unused by the app.)
 - `instrument` and `price` are global (shared by all users); everything else is user-scoped through `connection.user_id`.
 
 ### History: snapshots, backfill, lots
