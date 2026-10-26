@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
-import { Money } from "./Money";
-import { PrivateMoney } from "./PrivateMoney";
+import { MaskedMoney, PrivateMoney } from "./PrivateMoney";
+import { usePrivacy } from "../auth/usePrivacy";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
 import { ValueChart } from "./ValueChart";
@@ -23,6 +23,8 @@ const GRAY = "#777471"; // fg-faint
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
+  // One eye for the headline and the gain; the percentage is never masked.
+  const privacy = usePrivacy();
   const [range, setRange] = useState<Range>("6mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
@@ -78,7 +80,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     that can silently omit a zeroed holding — so it carries the
                     same warning treatment as the holdings/accounts cards. */}
                 <span className="flex items-baseline gap-2">
-                  <PrivateMoney value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
+                  <PrivateMoney privacy={privacy} value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                   {summary?.fxMissing && (
                     <span
                       title={t("dashboard.fxMissing")}
@@ -92,7 +94,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
-                    <Money value={summary?.gainAbs ?? "0"} signed />
+                    <MaskedMoney masked={privacy.masked} value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
                   <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>

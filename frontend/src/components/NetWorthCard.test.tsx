@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { NetWorthCard } from "./NetWorthCard";
 import type { NetWorthResponse, ProviderGroup, SyncStatus } from "../api/types";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
@@ -38,9 +40,14 @@ function stubApi(groups: ProviderGroup[]) {
   );
 }
 
-function renderCard() {
+function renderCard(prefs = DEFAULT_PREFS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><NetWorthCard /></QueryClientProvider>);
+  const auth = { prefs } as unknown as AuthValue;
+  render(
+    <QueryClientProvider client={client}>
+      <AuthContext.Provider value={auth}><NetWorthCard /></AuthContext.Provider>
+    </QueryClientProvider>,
+  );
 }
 
 describe("NetWorthCard with no accounts", () => {
@@ -76,5 +83,25 @@ describe("NetWorthCard with no accounts", () => {
     expect(await screen.findByText("No accounts found")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Manage connections" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" });
+  });
+});
+
+describe("NetWorthCard in private mode", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("masks the gain with the headline, keeps the percentage, and one eye reveals both", async () => {
+    const body: NetWorthResponse = {
+      points: [{ t: 0, netWorth: "10000", invested: "9000" }, { t: 1, netWorth: "11234.56", invested: "9000" }],
+      summary: { netWorth: "11234.56", invested: "9000", gainAbs: "1234.56", gainPct: "0.1235", fxMissing: false, reportingFxMissing: false },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+    renderCard({ ...DEFAULT_PREFS, privateMode: true });
+
+    expect(await screen.findByText(/12,35\s?%/)).toBeInTheDocument();
+    expect(screen.queryByText(/234,56/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show amount" }));
+    expect(screen.getByText(/11\s?234,56/)).toBeInTheDocument();
+    expect(screen.getByText(/\+\s?1\s?234,56/)).toBeInTheDocument();
   });
 });

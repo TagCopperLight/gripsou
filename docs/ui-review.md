@@ -75,6 +75,7 @@ Findings:
 | D9 | The fake API sent a zero point per day with no accounts; the server sends no points at all (`NetWorthResponse::from_rows` on no rows). The card keys its empty state on that. | Claude (code) | fixed in `mock/views/portfolio.ts` |
 | D10 | Distribution and Holdings are empty for the same reason (D2, D3): an empty ring and a bare table header under the net worth message. | User | fixed: with no accounts (`/accounts` answers `[]`) the dashboard shows only the net worth card, which becomes the dashboard's get-started message. While accounts load or fail, both cards stay and show their own state. D2 / D3 still matter for their other cases (every account at zero, a search with no match). |
 | D11 | The green primary button pulls harder than the message in an empty state. | User | fixed: new `outline` variant of `Button` (thin border, transparent, hover fill), picked from four (small grey, text link, outline, solid grey). Use it for empty-state actions. |
+| D12 | Private mode masked the net worth but left the gain amount in the pill readable, which gives most of it away. | User | fixed: the gain is masked too, the % stays; one eye per card reveals both (`usePrivacy`, `MaskedMoney`) |
 
 ### Accounts `/accounts`
 
@@ -239,5 +240,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 |---|---|
 | One range list with localized labels, no 24h (D1, D5) | Dashboard net worth, Accounts chart, asset modal |
 | Chart legend and tooltip coloured like the line (D6) | Dashboard net worth, asset modal |
+| Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
 | No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
