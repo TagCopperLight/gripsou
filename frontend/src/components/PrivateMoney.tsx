@@ -39,7 +39,7 @@ export function PrivateMoney({ privacy, after, ...props }: PrivateMoneyProps) {
   if (!enabled) {
     if (after == null) return <Money {...props} />;
     return (
-      <span className="relative">
+      <span className="relative w-fit">
         <Money {...props} />
         {after}
       </span>
@@ -48,7 +48,7 @@ export function PrivateMoney({ privacy, after, ...props }: PrivateMoneyProps) {
 
   return (
     <span className="flex items-center gap-2">
-      <span className="relative">
+      <span className="relative w-fit">
         <MaskedMoney masked={masked} {...props} />
         {after}
       </span>
