@@ -14,7 +14,7 @@ import { getPrefs } from "../lib/prefs";
 import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
 import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
-import type { BasisPreview, Holding } from "../api/types";
+import type { BasisPreview, Holding, LotSuggestion } from "../api/types";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
 // quantities, unit prices, and everything the preview endpoint derives from
@@ -57,10 +57,13 @@ type Row = {
    *  edit can be detected later. A saved row is "changed" when its date differs
    *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
   pristine?: { type: "buy" | "sell"; date: string; quantity: string; unitPrice: string; fee: string };
-  /** True on a row pre-filled from a suggestion, until it is binned. Drives
-   *  the note under the table; editing the row keeps it. */
-  suggested?: boolean;
+  /** The suggestion this row was added from: binning the row puts it back in
+   *  the "found in your transactions" panel. */
+  fromSuggestion?: Found;
 };
+
+/** A suggestion waiting in the panel, until the user adds or dismisses it. */
+type Found = LotSuggestion & { key: string };
 
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
@@ -69,7 +72,7 @@ let nextKey = 0;
 const newKey = () => `row-${nextKey++}`;
 
 /** Oldest first; `sort` is stable, so rows on the same day keep their order. */
-const byDate = (rows: Row[]): Row[] => [...rows].sort((a, b) => a.date.localeCompare(b.date));
+const byDate = <T extends { date: string }>(rows: T[]): T[] => [...rows].sort((a, b) => a.date.localeCompare(b.date));
 
 /** True for a saved row whose date/quantity/unitPrice no longer match what it
  *  was seeded with. Always false for a row the user just added (no pristine).
@@ -109,6 +112,9 @@ export function RecordLotsModal({
   const suggestions = useLotSuggestions(holding.id);
 
   const [rows, setRows] = useState<Row[] | null>(null);
+  // Suggestions stay out of the table until the user adds them.
+  const [found, setFound] = useState<Found[]>([]);
+  const [dismissed, setDismissed] = useState(false);
   // Ids the user explicitly binned via the delete button. A changed-but-not-
   // binned saved row is NOT in here — its delete half is derived at save time
   // (see `deletes` below), so a row that is both edited and then binned only
@@ -143,6 +149,7 @@ export function RecordLotsModal({
     !(rows !== null && dirty)
   ) {
     setSeededFrom({ lots: data, suggested: suggestions.data });
+    setFound(byDate((suggestions.data ?? []).map((sg) => ({ ...sg, key: newKey() }))));
     setRows(byDate([
       ...data.map((l) => {
         const date = calendarDay(l.t);
@@ -161,18 +168,8 @@ export function RecordLotsModal({
           pristine: { type: l.side, date, quantity, unitPrice, fee },
         };
       }),
-      // New, unsaved rows: they count on Save and feed the preview and the
-      // bar like any row the user added.
-      ...(suggestions.data ?? []).map((s) => ({
-        key: newKey(),
-        type: s.type,
-        date: s.date,
-        quantity: s.quantity,
-        unitPrice: s.unitPrice,
-        fee: s.fee,
-        suggested: true,
-      })),
     ]));
+
   }
 
   const list = rows ?? [];
@@ -190,9 +187,23 @@ export function RecordLotsModal({
     setRows((rs) => byDate([...(rs ?? []), { key: newKey(), type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" }]));
   };
 
+  const addFound = (adding: Found[]) => {
+    setDirty(true);
+    const keys = new Set(adding.map((f) => f.key));
+    setFound((fs) => fs.filter((f) => !keys.has(f.key)));
+    setRows((rs) => byDate([
+      ...(rs ?? []),
+      ...adding.map((f) => ({
+        key: newKey(), type: f.type, date: f.date, quantity: f.quantity, unitPrice: f.unitPrice, fee: f.fee, fromSuggestion: f,
+      })),
+    ]));
+  };
+
   const remove = (i: number) => {
     setDirty(true);
     const row = list[i];
+    const back = row.fromSuggestion;
+    if (back) setFound((fs) => byDate([...fs, back]));
     if (row.id) setQueuedDeletes((ds) => [...ds, row.id!]);
     setRows((rs) => (rs ?? []).filter((_, j) => j !== i));
   };
@@ -335,6 +346,10 @@ export function RecordLotsModal({
           </div>
         </div>
 
+        {found.length > 0 && !dismissed && (
+          <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
+        )}
+
         {/* Table — no surface, deliberately: it is the working area, not a card. */}
         {rows === null ? (
           <CardState
@@ -463,11 +478,6 @@ export function RecordLotsModal({
           </table>
         )}
 
-        {list.some((r) => r.suggested) && (
-          <p className="text-fg-faint text-sm">
-            {t("dashboard.holdings.gap.prefilled", { count: list.filter((r) => r.suggested).length })}
-          </p>
-        )}
 
         <div className="flex items-center gap-2">
           {/* Bordered, not bare text: it sits under a table of inputs, where an
@@ -579,5 +589,62 @@ function SignedFigure({
         </MoneyHint>
       </span>
     </div>
+  );
+}
+
+/** Purchases and sales found in the user's transactions, offered before they
+ *  touch the table: added one by one or all at once, or dismissed for now. */
+function FoundPanel({ found, currency, onAdd, onDismiss }: {
+  found: Found[];
+  currency: string;
+  onAdd: (f: Found[]) => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const buys = found.filter((f) => f.type === "buy").length;
+  const title =
+    buys === found.length ? t("dashboard.holdings.gap.found.buys", { count: buys })
+    : buys === 0 ? t("dashboard.holdings.gap.found.sells", { count: found.length })
+    : t("dashboard.holdings.gap.found.mixed", { count: found.length });
+  return (
+    <section aria-label={title} className="rounded-2xl border border-blue/30 bg-blue-soft px-5 py-4">
+      <div className="mb-1.5 flex items-center justify-between gap-4">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={onDismiss}>{t("dashboard.holdings.gap.found.dismiss")}</Button>
+          <Button variant="outline" onClick={() => onAdd(found)}>{t("dashboard.holdings.gap.found.addAll")}</Button>
+        </div>
+      </div>
+      <ul>
+        {found.map((f, i) => (
+          <li key={f.key} className={`flex items-center gap-4 py-2.5 ${i > 0 ? "border-t border-surface-3" : ""}`}>
+            <span className="w-24 shrink-0 font-mono text-[13px] text-fg-dim">{formatDate(f.date)}</span>
+            <span className="flex-1 text-sm text-fg">
+              <Trans
+                i18nKey="dashboard.holdings.gap.found.line"
+                count={Number(f.quantity)}
+                values={{
+                  type: t(`dashboard.holdings.gap.${f.type}`),
+                  quantity: formatQuantity(f.quantity),
+                  price: formatMoney(f.unitPrice, { currency }),
+                }}
+                components={{ num: <span className="font-mono" /> }}
+              />
+              {Number(f.fee) > 0 && (
+                <span className="text-fg-faint">
+                  {" · "}
+                  <Trans
+                    i18nKey="dashboard.holdings.gap.found.fee"
+                    values={{ fee: formatMoney(f.fee, { currency }) }}
+                    components={{ num: <span className="font-mono" /> }}
+                  />
+                </span>
+              )}
+            </span>
+            <Button variant="outline" onClick={() => onAdd([f])}>{t("dashboard.holdings.gap.found.add")}</Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

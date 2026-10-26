@@ -530,48 +530,48 @@ describe("RecordLotsModal", () => {
       fee: "0",
     };
 
-    it("adds each suggestion as an editable row after the saved ones", () => {
+    it("keeps suggestions out of the table and off the Save button until added", () => {
       txns = [lot("a", "buy", "10", "20")];
       suggestions = [suggestion];
       render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-      const rows = screen.getAllByTestId("lot-row");
-      expect(rows).toHaveLength(2);
-      expect(screen.getAllByTestId("lot-date")[1]).toHaveValue("2026-10-08");
-      expect(screen.getAllByTestId("lot-quantity")[1]).toHaveValue("23");
-      expect(screen.getAllByTestId("lot-unitPrice")[1]).toHaveValue("6.35521739");
-      expect(screen.getAllByTestId("lot-fee")[1]).toHaveValue("0");
+      expect(screen.getByRole("region", { name: "1 purchase found in your transactions" })).toBeInTheDocument();
+      expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     });
 
-    it("counts a suggestion on the Save button and says it was pre-filled", () => {
-      suggestions = [suggestion];
-      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-      expect(screen.getByRole("button", { name: "Save 1 entry" })).toBeEnabled();
-      expect(screen.getByText(/1 row pre-filled from your transactions/)).toBeInTheDocument();
-    });
-
-    it("saves a suggestion unchanged", async () => {
-      suggestions = [suggestion];
+    it("adds a suggestion as an editable row in date order, and saves it unchanged", async () => {
+      txns = [lot("a", "buy", "10", "20")];
+      suggestions = [{ ...suggestion, date: "2024-01-03" }];
       const user = userEvent.setup();
       render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      expect(screen.queryByRole("region", { name: /found in your transactions/ })).not.toBeInTheDocument();
+      expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2024-01-03", "2024-05-02"]);
       await user.click(screen.getByRole("button", { name: "Save 1 entry" }));
       expect(mutateAsync).toHaveBeenCalledWith({
-        adds: [{ type: "buy", date: "2026-10-08", quantity: "23", unitPrice: "6.35521739", fee: "0" }],
+        adds: [{ type: "buy", date: "2024-01-03", quantity: "23", unitPrice: "6.35521739", fee: "0" }],
         deletes: [],
       });
     });
 
-    it("drops the note once the pre-filled row is binned", async () => {
+    it("adds them all at once, and puts a binned one back in the panel", async () => {
+      suggestions = [suggestion, { ...suggestion, date: "2026-10-09" }];
+      const user = userEvent.setup();
+      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: "Add all" }));
+      expect(screen.getAllByTestId("lot-row")).toHaveLength(2);
+      await user.click(screen.getAllByRole("button", { name: /delete entry/i })[0]);
+      expect(screen.getByRole("region", { name: "1 purchase found in your transactions" })).toBeInTheDocument();
+      expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
+    });
+
+    it("hides the panel on Dismiss without adding anything", async () => {
       suggestions = [suggestion];
       const user = userEvent.setup();
       render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-      await user.click(screen.getByRole("button", { name: /delete entry/i }));
-      expect(screen.queryByText(/pre-filled/)).not.toBeInTheDocument();
-    });
-
-    it("shows no note without suggestions", () => {
-      txns = [lot("a", "buy", "10", "20")];
-      render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-      expect(screen.queryByText(/pre-filled/)).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("region", { name: /found in your transactions/ })).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId("lot-row")).toHaveLength(0);
     });
 
     it("still shows the saved lots when suggestions fail to load", () => {
