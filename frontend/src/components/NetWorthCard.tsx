@@ -13,7 +13,6 @@ import { CardState } from "./CardState";
 import { NetWorthEmpty } from "./NetWorthEmpty";
 import { useHoldings, useNetWorth } from "../api/hooks";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
-import { unconverted } from "../lib/fxNote";
 import { getPrefs } from "../lib/prefs";
 import { currencySymbol } from "../lib/currency";
 import { SURFACE } from "../lib/chartTheme";
@@ -30,7 +29,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const [range, setRange] = useState<Range>("6mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
-  // Names what the headline leaves out; shares the holdings card's query.
+  // Counts what the headline leaves out; shares the holdings card's query.
   const holdings = useHoldings();
   const ready = data !== undefined;
   // No points means no accounts (the server sends none then): a 0 €
@@ -61,7 +60,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
 
   const summary = data?.summary;
   const fxMissing = summary?.fxMissing ?? false;
-  const excluded = unconverted(holdings.data ?? []);
+  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
   const gainUp = summary ? Number(summary.gainAbs) >= 0 : true;
 
   return (
@@ -137,7 +136,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
         {/* Last, after the phone's range row too. */}
         {ready && !empty && fxMissing && (
           <FxFootnote className="order-last mt-3">
-            <ExcludedNote items={excluded} masked={privacy.masked} />
+            <ExcludedNote count={excluded} />
           </FxFootnote>
         )}
       </div>

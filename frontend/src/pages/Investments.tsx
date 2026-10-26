@@ -11,7 +11,6 @@ import { indexItems, regionItems, sectorItems } from "../components/investments/
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
-import { unconverted, type Unconverted } from "../lib/fxNote";
 import { ExcludedNote } from "../components/FxNote";
 
 /** The securities the page is about: cash never counts here. */
@@ -34,7 +33,7 @@ export function Investments() {
   const failed = returns.isError || holdings.isError;
   const ready = returns.data !== undefined && holdings.data !== undefined;
   const held = ready ? securities(holdings.data) : [];
-  const excluded = unconverted((holdings.data ?? []).filter((h) => h.kind !== "cash"));
+  const excluded = (holdings.data ?? []).filter((h) => h.kind !== "cash" && h.fxMissing).length;
 
   return (
     <div>
@@ -56,11 +55,11 @@ export function Investments() {
   );
 }
 
-function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: Unconverted[] }) {
+function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: number }) {
   const { t, i18n } = useTranslation();
   const e = exposure(held);
   // Securities with no rate are worth zero here, so every donut leaves them out.
-  const fxFootnote = excluded.length > 0 ? <ExcludedNote items={excluded} /> : undefined;
+  const fxFootnote = excluded > 0 ? <ExcludedNote count={excluded} /> : undefined;
 
   return (
     <>

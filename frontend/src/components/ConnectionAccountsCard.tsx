@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "./Surface";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
 import { useHoldings } from "../api/hooks";
-import { unconverted } from "../lib/fxNote";
 import { Money } from "./Money";
 import { MoneyHint } from "./MoneyHint";
 import { getPrefs } from "../lib/prefs";
@@ -30,7 +29,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
   const name = group.sourceName ?? t("account.unknownSource");
   const holdings = useHoldings();
   const ids = new Set(group.accounts.map((a) => a.id));
-  const excluded = unconverted(holdings.data ?? []).filter((h) => ids.has(h.accountId));
+  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing && ids.has(h.accountId)).length;
 
   return (
     <Surface className={`p-4 pb-3.5 md:p-5 md:pb-4.5 ${className}`}>
@@ -92,7 +91,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
       </ul>
       {group.accounts.some((a) => a.fxMissing) && (
         <FxFootnote className="mt-2 px-0.5">
-          <ExcludedNote items={excluded} />
+          <ExcludedNote count={excluded} />
         </FxFootnote>
       )}
 

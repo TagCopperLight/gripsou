@@ -5,7 +5,6 @@ import { ExposureDonut } from "./investments/ExposureDonut";
 import { accountTypeLabel } from "../api/types";
 import { useAccounts, useHoldings } from "../api/hooks";
 import { ExcludedNote } from "./FxNote";
-import { unconverted } from "../lib/fxNote";
 
 type DistributionCardProps = {
   className?: string;
@@ -16,7 +15,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { data, isError, refetch } = useAccounts();
   const holdings = useHoldings();
   const accounts = data ?? [];
-  const excluded = unconverted(holdings.data ?? []);
+  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
   // Largest proportion first, in both the donut and the legend.
   const items = [...accounts]
@@ -30,8 +29,8 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       tag: accountTypeLabel(t, a.typeKey),
       fxMissing: a.fxMissing,
     }));
-  const fxFootnote = excluded.length > 0 || accounts.some((a) => a.fxMissing)
-    ? <ExcludedNote items={excluded} />
+  const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)
+    ? <ExcludedNote count={excluded} />
     : undefined;
 
   return (

@@ -79,14 +79,7 @@ describe("missing exchange rate", () => {
     setPrefs(DEFAULT_PREFS);
   });
 
-  it("names the one holding the net worth leaves out, with its value in its own currency", async () => {
-    stubApi({ "/net-worth": netWorth(true), "/holdings": [unconverted("ese", "ESE")] });
-    render(withClient(<NetWorthCard />));
-    const note = await screen.findByText(/Excludes ESE/);
-    expect(note).toHaveTextContent("Excludes ESE (4 812,30 $): no USD rate yet.");
-  });
-
-  it("counts them when there are several", async () => {
+  it("counts the holdings the net worth leaves out", async () => {
     stubApi({
       "/net-worth": netWorth(true),
       "/holdings": [unconverted("ese", "ESE"), unconverted("spy", "SPY")],
@@ -105,7 +98,7 @@ describe("missing exchange rate", () => {
   it("explains the understated distribution under its card", async () => {
     stubApi({ "/accounts": [account(true)], "/holdings": [unconverted("ese", "ESE")] });
     render(withClient(<DistributionCard />));
-    expect(await screen.findByText(/Excludes ESE \(/)).toBeInTheDocument();
+    expect(await screen.findByText("Excludes 1 holding: no exchange rate yet.")).toBeInTheDocument();
   });
 
   it("shows the holding in its own currency, with no gain or loss", async () => {

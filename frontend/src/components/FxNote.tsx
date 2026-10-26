@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
-import { MaskedMoney } from "./PrivateMoney";
-import { excludedText, type Unconverted } from "../lib/fxNote";
 
 const SIZE = {
   lg: "text-[20px]",
@@ -30,19 +28,9 @@ export function FxFootnote({ children, className = "" }: { children: ReactNode; 
   );
 }
 
-/** The footnote of a total that leaves holdings out: the one holding named
- *  with its own-currency value, or how many there are. */
-export function ExcludedNote({ items, masked = false }: { items: Unconverted[]; masked?: boolean }) {
+/** The footnote of a total that leaves `count` holdings out. Zero is
+ *  "some amounts": the holdings list hasn't loaded, so how many is unknown. */
+export function ExcludedNote({ count }: { count: number }) {
   const { t } = useTranslation();
-  const one = items.length === 1 ? items[0] : null;
-  if (one?.valueNative != null) {
-    return (
-      <Trans
-        i18nKey="fx.excludesOne"
-        values={{ name: one.name, currency: one.currency }}
-        components={{ value: <MaskedMoney masked={masked} value={one.valueNative} currency={one.currency} /> }}
-      />
-    );
-  }
-  return <>{excludedText(t, items)}</>;
+  return <>{count > 0 ? t("fx.excludes", { count }) : t("fx.excludesSome")}</>;
 }

@@ -43,18 +43,18 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 |---|---|
 | Net worth: loading / error | query `/dashboard/net-worth` |
 | Net worth: gain up / down over the range | base (up); state for down |
-| Net worth: a holding has no exchange rate, left out (`fxMissing`): asterisk + footnote, one holding named / several counted | state "No rate" (1 ETF / 2 ETFs) |
+| Net worth: a holding has no exchange rate, left out (`fxMissing`): asterisk + footnote counting the holdings left out | state "Two dollar ETFs have no rate" |
 | Net worth: no accounts: nothing connected / first sync running / connected but nothing came in | state |
 | Net worth: private mode, masked / revealed | Settings · General → private mode |
 | Value / % unit; ranges 7D…Max | action |
 | Distribution: loading / error / no accounts | query `/accounts`; state for empty |
-| Distribution: asterisk on the total and the account (`fxMissing`) | state "No rate" |
+| Distribution: asterisk on the total and the account (`fxMissing`) | state "Two dollar ETFs have no rate" |
 | Holdings: loading / error | query `/holdings` |
 | Holdings: no holdings at all | state |
 | Holdings: search with no match | action |
 | Holdings: account-type filter chips | base |
 | Holdings: amber dot, lots don't explain the quantity (short / excess) | state |
-| Holdings: no rate, value shown in its own currency with an asterisk, no gain/loss | state "No rate" |
+| Holdings: no rate, value shown in its own currency with an asterisk, no gain/loss | state "Two dollar ETFs have no rate" |
 | Holdings: cash aggregated over several accounts ("Multiple accounts") | base |
 | Asset modal: asset / purchases tabs, prices loading / error, no purchases, composition | action; query `/holdings/:id/prices`, `/transactions` |
 | Asset modal: incomplete-history strip (short / excess) | state |
@@ -77,7 +77,7 @@ Findings:
 | D12 | Private mode masked the net worth but left the gain amount in the pill readable, which gives most of it away. | User | fixed: the gain is masked too, the % stays; one eye per card reveals both (`usePrivacy`, `MaskedMoney`) |
 | D13 | The exchange-rate warnings look bad and are inconsistent: a ⚠ with a long tooltip on some figures, an amber box elsewhere, long sentences. | User | fixed: one treatment everywhere (`FxNote.tsx`): a small amber asterisk on each figure something is missing from and a short footnote in the same card (net worth: under the chart). No tooltip on the asterisk. The asterisk hangs past the figure's right edge, so a marked figure stays aligned with the unmarked ones. Picked over a line under the figure and a chip. See the cross-screen row. |
 | D14 | Changing the display currency did not fetch its rate: until the next sync every figure stayed in euros while wearing the new symbol (`reportingFxMissing`). | User | fixed at the source: saving a new currency fetches its rate first (`price_sync::ensure_fx_rate`, at most 10 s); if none can be had the change is refused and the old currency stays. The "shown in the base currency" notice and `reportingFxMissing` are removed everywhere (API, queries, UI). |
-| D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The net worth footnote names it: "Excludes ESE (4 812,30 $): no USD rate yet." |
+| D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`
 
@@ -89,7 +89,7 @@ Components: `PageHeader`, `AccountsChartCard` (`StackedAreaChart`), `AccountsLis
 | List: loading / error | query `/accounts` |
 | List: no accounts | state |
 | Connection card: never synced / synced x ago; unknown source name | state |
-| Account: asterisk on an account a holding with no rate is left out of, footnote under the connection card | state "No rate" |
+| Account: asterisk on an account a holding with no rate is left out of, footnote under the connection card | state "Two dollar ETFs have no rate" |
 | Account: foreign currency with native value shown | state |
 | Edit account modal: saving, save error | action; query (PATCH) |
 
@@ -110,7 +110,7 @@ Components: `PageHeader`, `AnnualisedReturnCard`, `ReturnsCard` (`ReturnSpan`), 
 | Annualised return unknown (null) | state |
 | Account with missing purchases (dot, "no return") | state |
 | Span: days / months / years | base + state |
-| Exposure donuts: asterisk on the total, footnote, when a security has no rate | state "No rate" |
+| Exposure donuts: asterisk on the total, footnote, when a security has no rate | state "Two dollar ETFs have no rate" |
 
 ### Budget · Overview `/budget/overview`
 
@@ -247,4 +247,4 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
 | No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
-| Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` names one holding or counts several; `lib/fxNote.ts`). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |
+| Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

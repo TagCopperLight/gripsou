@@ -81,9 +81,8 @@
   "fx": {
     "fetching": "Getting the {{currency}} rate…",
     "refused": "Couldn't get the {{currency}} rate. Try again later.",
-    "excludesOne": "Excludes {{name}} (<value/>): no {{currency}} rate yet.",
-    "excludesOneShort": "Excludes {{name}}: no {{currency}} rate yet.",
-    "excludesMany": "Excludes {{count}} holdings: no exchange rate yet.",
+    "excludes_one": "Excludes {{count}} holding: no exchange rate yet.",
+    "excludes_other": "Excludes {{count}} holdings: no exchange rate yet.",
     "excludesSome": "Some amounts are excluded: no exchange rate yet.",
     "budget": "Excludes transactions in a currency with no exchange rate yet.",
     "holdings": "No exchange rate yet: shown in its own currency and not counted in the totals."

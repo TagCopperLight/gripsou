@@ -73,20 +73,8 @@ export const STATES: MockState[] = [
   },
   {
     id: "dashboard-fx-missing",
-    label: "A dollar ETF has no rate (left out of totals)",
+    label: "Two dollar ETFs have no rate (left out of totals)",
     pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings"],
-    group: "No rate",
-    option: "1 ETF",
-    apply(store) {
-      store.fx.missing = [ESE];
-    },
-  },
-  {
-    id: "fx-missing-two",
-    label: "Two dollar ETFs have no rate",
-    pieces: ["Exchange rates"],
-    group: "No rate",
-    option: "2 ETFs",
     apply(store) {
       store.fx.missing = [ESE, CW8];
     },
