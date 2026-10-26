@@ -6,6 +6,8 @@ import { TransactionRow } from "./TransactionRow";
 import { CardState } from "../CardState";
 import { Button } from "../Button";
 import { COL_PAD, MIN_TABLE_WIDTH, gridTemplate } from "./transactionsGrid";
+import { GridTable, TableEmpty } from "../GridTable";
+import { HEAD_CELL } from "../gridTable";
 import type { Transaction, TransactionCounts } from "../../api/types";
 
 type TransactionsTableProps = {
@@ -107,94 +109,76 @@ export function TransactionsTable(props: TransactionsTableProps) {
     // is empty.
     const nothingAtAll = counts ? counts.total === 0 : !filtered;
     return nothingAtAll ? (
-      <div data-testid="empty-nothing" className="flex flex-col items-center gap-2 py-16">
-        <Inbox className="size-6 text-fg-faint" />
-        <p className="text-sm text-fg-faint">{t("budget.transactions.emptyNothing")}</p>
-      </div>
+      <TableEmpty testId="empty-nothing" icon={<Inbox />} message={t("budget.transactions.emptyNothing")} />
     ) : (
-      <div data-testid="empty-no-match" className="flex flex-col items-center gap-3 py-16">
-        <Filter className="size-6 text-fg-faint" />
-        <p className="text-sm text-fg-faint">{t("budget.transactions.emptyNoMatch")}</p>
-        {filtered && (
+      <TableEmpty
+        testId="empty-no-match"
+        icon={<Filter />}
+        message={t("budget.transactions.emptyNoMatch")}
+        action={filtered && (
           <Button variant="ghost" data-testid="empty-clear-filters" onClick={onClearFilters}>
             {t("budget.transactions.clearAll")}
           </Button>
         )}
-      </div>
+      />
     );
   }
 
   return (
     <div className="flex flex-col">
       {/* The tracks have floors, so a narrow viewport scrolls the table rather
-          than crushing a column. The sentinel below stays outside this box:
+          than crushing a column. The sentinel below stays outside it:
           `overflow-x` would make it the sentinel's scroll parent and quietly
           undo the preloading margin. */}
-      <div className="overflow-x-auto">
-        <table
-          role="table"
-          className="grid w-full text-sm"
-          style={{ gridTemplateColumns: gridTemplate(showChecked), minWidth: MIN_TABLE_WIDTH }}
-        >
-          {/* `display: contents` drops the groups out of the layout so the rows
-              themselves are the grid's items — and, with them, their implicit
-              ARIA roles, which is why every element here names its own. */}
-          <thead role="rowgroup" className="contents">
-            {/* Same head treatment as every other table in the app (holdings,
-             *  users, asset modal): 11px uppercase mono, faint, wide-tracked. */}
-            <tr
-              role="row"
-              className="col-span-full grid grid-cols-subgrid text-left text-[11px] font-mono uppercase tracking-wide text-fg-faint"
-            >
-              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.transaction}`}>
-                {t("budget.transactions.columns.transaction")}
-              </th>
-              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.date}`}>
-                {t("budget.transactions.columns.date")}
-              </th>
-              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.account}`}>
-                {t("budget.transactions.columns.account")}
-              </th>
-              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.category}`}>
-                {t("budget.transactions.columns.category")}
-              </th>
-              <th role="columnheader" className={`flex items-center py-2 font-medium ${COL_PAD.tags}`}>
-                {t("budget.transactions.columns.tags")}
-              </th>
-              {showChecked && (
-                <th
-                  role="columnheader"
-                  className={`flex items-center justify-center py-2 font-medium ${COL_PAD.checked}`}
-                  aria-label={t("budget.transactions.checked")}
-                >
-                  <Check className="size-4" aria-hidden="true" />
-                </th>
-              )}
+      <GridTable
+        columns={gridTemplate(showChecked)}
+        minWidth={MIN_TABLE_WIDTH}
+        head={
+          <>
+            <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.transaction}`}>
+              {t("budget.transactions.columns.transaction")}
+            </th>
+            <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.date}`}>
+              {t("budget.transactions.columns.date")}
+            </th>
+            <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.account}`}>
+              {t("budget.transactions.columns.account")}
+            </th>
+            <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.category}`}>
+              {t("budget.transactions.columns.category")}
+            </th>
+            <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.tags}`}>
+              {t("budget.transactions.columns.tags")}
+            </th>
+            {showChecked && (
               <th
                 role="columnheader"
-                className={`flex items-center justify-end py-2 font-medium ${COL_PAD.amount}`}
+                className={`${HEAD_CELL} justify-center ${COL_PAD.checked}`}
+                aria-label={t("budget.transactions.checked")}
               >
-                {t("budget.transactions.columns.amount")}
+                <Check className="size-4" aria-hidden="true" />
               </th>
-            </tr>
-          </thead>
-          <tbody role="rowgroup" className="contents">
-            {rows.map((row) => (
-              <TransactionRow
-                key={row.id}
-                tx={row}
-                showChecked={showChecked}
-                selected={props.isSelected(row.id)}
-                anySelected={props.anySelected}
-                onToggleSelect={props.onToggleSelect}
-                onOpenCategory={props.onOpenCategory}
-                onOpenTags={props.onOpenTags}
-                onToggleChecked={props.onToggleChecked}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            )}
+            <th role="columnheader" className={`${HEAD_CELL} justify-end ${COL_PAD.amount}`}>
+              {t("budget.transactions.columns.amount")}
+            </th>
+          </>
+        }
+      >
+        {rows.map((row) => (
+          <TransactionRow
+            key={row.id}
+            tx={row}
+            showChecked={showChecked}
+            selected={props.isSelected(row.id)}
+            anySelected={props.anySelected}
+            onToggleSelect={props.onToggleSelect}
+            onOpenCategory={props.onOpenCategory}
+            onOpenTags={props.onOpenTags}
+            onToggleChecked={props.onToggleChecked}
+          />
+        ))}
+      </GridTable>
       <div ref={sentinel} className="h-px" />
       {hasNextPage && (
         <div className="flex justify-center pt-3">

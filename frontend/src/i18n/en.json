@@ -116,6 +116,7 @@
       "title": "Holdings",
       "searchPlaceholder": "Search assets…",
       "noMatch": "No asset matches “{{query}}”.",
+      "clearSearch": "Clear search",
       "all": "All",
       "multipleAccounts": "Multiple accounts",
       "columns": {

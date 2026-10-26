@@ -116,6 +116,7 @@
       "title": "Positions",
       "searchPlaceholder": "Rechercher un actif…",
       "noMatch": "Aucun actif ne correspond à « {{query}} ».",
+      "clearSearch": "Effacer la recherche",
       "all": "Tous",
       "multipleAccounts": "Plusieurs comptes",
       "columns": {

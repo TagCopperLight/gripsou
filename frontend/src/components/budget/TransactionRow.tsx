@@ -13,6 +13,7 @@ import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
 import { categoryOfTransaction } from "../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
+import { ROW_CELLS, ROW_HOVER } from "../gridTable";
 import type { Transaction } from "../../api/types";
 
 type TransactionRowProps = {
@@ -27,38 +28,6 @@ type TransactionRowProps = {
   onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
 };
-
-/** Everything the row's cells share, applied from the `<tr>`.
- *
- *  The background lives on the cells, not on the `<tr>`: only a cell can round
- *  a corner, so the first and last one carry the row's rounded ends.
- *
- *  Each cell is a grid item on the table's tracks (see `transactionsGrid`), so
- *  it stretches to the row's height — `flex items-center` is what centres the
- *  content inside it now that no table layout does.
- *
- *  Vertical geometry, top to bottom: a 1px transparent top border, the
- *  rectangle (9px of padding either side of the content), then a 2px
- *  transparent bottom border. `bg-clip-padding` keeps the hover fill off those
- *  borders, so each rectangle stops 1px short of its neighbours; `::after`
- *  draws the separator into the middle of the resulting 3px band — 1px gap,
- *  1px rule, 1px gap. The 2px that band needed came out of the padding
- *  (10px → 9px), so the row's total height is exactly what it was.
- *
- *  Horizontally the rule is flush with the text, not with the row: the end
- *  cells pull it in by their own edge padding, so it runs from the T of
- *  TRANSACTION to the last digit of the amount. The hover rectangle still
- *  goes full-bleed underneath — only the separator is inset.
- */
-const CELL = [
-  "[&>td]:flex [&>td]:items-center [&>td]:min-w-0",
-  "[&>td]:relative [&>td]:border-y [&>td]:border-b-2 [&>td]:border-transparent [&>td]:bg-clip-padding",
-  "[&>td]:after:content-[''] [&>td]:after:absolute [&>td]:after:inset-x-0",
-  "[&>td]:after:-top-0.5 [&>td]:after:h-px [&>td]:after:bg-surface-2",
-  "[&>td]:transition-colors [&>td]:duration-140",
-  "[&>td:first-child]:after:left-3 [&>td:last-child]:after:right-3",
-  "[&>td:first-child]:rounded-l-xl [&>td:last-child]:rounded-r-xl",
-].join(" ");
 
 /** Memoised: a ledger can hold thousands of mounted rows, and the page above
  *  re-renders on every search keystroke and selection click. The table hands
@@ -87,8 +56,8 @@ export const TransactionRow = memo(function TransactionRow({
     <tr
       data-testid="tx-row"
       role="row"
-      className={`col-span-full grid grid-cols-subgrid text-sm ${CELL} group ${
-        selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : "hover:[&>td]:bg-hover"
+      className={`text-sm ${ROW_CELLS} group ${
+        selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : ROW_HOVER
       }`}
     >
       <td role="cell" className={`py-2.25 ${COL_PAD.transaction}`}>

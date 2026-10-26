@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { Surface } from "./Surface";
+import { Button } from "./Button";
+import { GridTable, TableEmpty } from "./GridTable";
+import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "./gridTable";
 import { FxAsterisk, FxFootnote } from "./FxNote";
 import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
 import { Percent } from "./Percent";
@@ -25,22 +28,27 @@ type Column = {
   labelKey: string;
   align: "left" | "right";
   sort?: SortKey;
-  /** Dropped below md — a phone fits asset / value / P L and nothing more. */
-  desktopOnly?: boolean;
+  /** The column's grid track (see `gridTable.ts`). */
+  track: string;
+  /** Its gutter: every cell pays for the space on its right. */
+  pad: string;
 };
 
-const HIDDEN_ON_PHONE = "hidden md:table-cell";
-
+// Only the asset column grows; the others have floors (and the text ones
+// ceilings, truncating past them), so searching or filtering never moves a
+// column. Below the sum of the floors the table scrolls sideways.
 const COLUMNS: Column[] = [
-  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset" },
-  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", desktopOnly: true },
-  { labelKey: "dashboard.holdings.columns.account", align: "left", desktopOnly: true },
-  { labelKey: "dashboard.holdings.columns.accountType", align: "left", desktopOnly: true },
-  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value" },
-  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl" },
-  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", desktopOnly: true },
+  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: "minmax(220px, 3fr)", pad: "pl-3 pr-4" },
+  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: "minmax(96px, max-content)", pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.account", align: "left", track: "minmax(110px, 180px)", pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.accountType", align: "left", track: "minmax(110px, 150px)", pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value", track: "minmax(7rem, max-content)", pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl", track: "minmax(7rem, max-content)", pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", track: "108px", pad: "pr-3" },
 ];
-
+const TRACKS = COLUMNS.map((c) => c.track).join(" ");
+const PAD = COLUMNS.map((c) => c.pad);
+const MIN_WIDTH = "55rem";
 
 // Cash has no meaningful quantity or P/L; those rows always sort to the bottom.
 function qtyOf(h: Holding): number | null {
@@ -179,45 +187,52 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           })}
         </div>
 
-        <table className="w-full mt-4 border-separate border-spacing-0">
-          <thead>
-            <tr>
-              {COLUMNS.map((col) => {
-                const active = col.sort && sort?.key === col.sort;
-                return (
-                  <th
-                    key={col.labelKey}
-                    className={`pb-2 px-2 md:px-3 text-[11px] font-medium tracking-wide font-mono whitespace-nowrap ${
-                      col.align === "right" ? "text-right" : "text-left"
-                    } ${col.desktopOnly ? HIDDEN_ON_PHONE : ""}`}
+        {rows.length === 0 ? (
+          <TableEmpty
+            icon={<Search />}
+            message={t("dashboard.holdings.noMatch", { query: query.trim() })}
+            action={
+              <Button variant="ghost" onClick={() => { setQuery(""); setAccountType("All"); }}>
+                {t("dashboard.holdings.clearSearch")}
+              </Button>
+            }
+          />
+        ) : (
+        <div className="mt-4">
+        <GridTable
+          columns={TRACKS}
+          minWidth={MIN_WIDTH}
+          head={COLUMNS.map((col) => {
+            const active = col.sort && sort?.key === col.sort;
+            return (
+              <th
+                key={col.labelKey}
+                role="columnheader"
+                className={`${HEAD_CELL} whitespace-nowrap ${col.pad} ${col.align === "right" ? "justify-end" : ""}`}
+              >
+                {col.sort ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(col.sort!)}
+                    className={`inline-flex h-4 items-center gap-1 cursor-pointer uppercase transition-colors duration-140 ${
+                      col.align === "right" ? "flex-row-reverse" : ""
+                    } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
                   >
-                    {col.sort ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(col.sort!)}
-                        className={`inline-flex h-4 items-center align-middle gap-1 cursor-pointer transition-colors duration-140 ${
-                          col.align === "right" ? "flex-row-reverse" : ""
-                        } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
-                      >
-                        {t(col.labelKey)}
-                        {active &&
-                          (sort.dir === "asc" ? (
-                            <ChevronUp className="size-3.5" />
-                          ) : (
-                            <ChevronDown className="size-3.5" />
-                          ))}
-                      </button>
-                    ) : (
-                      <span className="inline-flex h-4 items-center align-middle text-fg-faint">
-                        {t(col.labelKey)}
-                      </span>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
+                    {t(col.labelKey)}
+                    {active &&
+                      (sort.dir === "asc" ? (
+                        <ChevronUp className="size-3.5" />
+                      ) : (
+                        <ChevronDown className="size-3.5" />
+                      ))}
+                  </button>
+                ) : (
+                  t(col.labelKey)
+                )}
+              </th>
+            );
+          })}
+        >
             {rows.map((h) => {
               const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
@@ -228,14 +243,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               return (
                 <tr
                   key={h.id}
+                  role="row"
                   onClick={hasPnl ? () => setSelected(h) : undefined}
-                  className={`transition-colors duration-140 ${
-                    hasPnl ? "cursor-pointer hover:bg-hover" : ""
-                  }`}
+                  className={`${ROW_CELLS} ${hasPnl ? `cursor-pointer ${ROW_HOVER}` : ""}`}
                 >
                   {/* ASSET */}
-                  <td className="max-w-0 w-full py-3 px-2 md:px-3 border-t border-surface-2">
-                    <div className="flex items-center gap-3">
+                  <td role="cell" className={`py-2.25 ${PAD[0]}`}>
+                    <div className="flex min-w-0 items-center gap-3">
                       {Number(h.unexplainedQty) !== 0 ? (
                         <button
                           type="button"
@@ -273,7 +287,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         />
                       )}
                       <div className="flex min-w-0 flex-col">
-                        <span className="truncate text-sm text-fg leading-tight md:whitespace-normal">
+                        <span className="truncate text-sm text-fg leading-tight" title={h.name}>
                           {h.name}
                         </span>
                         <span className="truncate text-xs text-fg-faint font-mono">
@@ -283,57 +297,50 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     </div>
                   </td>
                   {/* QUANTITY */}
-                  <td className={`py-3 px-3 border-t border-surface-2 text-right ${HIDDEN_ON_PHONE}`}>
+                  <td role="cell" className={`justify-end ${PAD[1]}`}>
                     {hasPnl ? (
-                      <span className="text-sm text-fg-dim font-mono">
-                        {formatQuantity(h.qty)}
-                      </span>
+                      <span className="text-fg-dim font-mono">{formatQuantity(h.qty)}</span>
                     ) : (
-                      <span className="text-sm text-fg-faint">-</span>
+                      <span className="text-fg-faint">-</span>
                     )}
                   </td>
                   {/* ACCOUNT */}
-                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="size-2.5 rounded-sm shrink-0"
-                        style={{ background: h.accountColor }}
-                      />
-                      <span className="text-sm text-fg-dim whitespace-nowrap">
-                        {h.accountName}
-                      </span>
-                    </div>
+                  <td role="cell" className={PAD[2]}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="inline-block size-3 shrink-0 rounded" style={{ background: h.accountColor }} />
+                      <span className="truncate text-fg-dim" title={h.accountName}>{h.accountName}</span>
+                    </span>
                   </td>
                   {/* ACCOUNT TYPE */}
-                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
-                    <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5 whitespace-nowrap">
+                  <td role="cell" className={PAD[3]}>
+                    <span className="truncate whitespace-nowrap rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-faint">
                       {accountTypeLabel(t, h.accountType)}
                     </span>
                   </td>
                   {/* VALUE */}
-                  <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
+                  <td role="cell" className={`justify-end whitespace-nowrap ${PAD[4]}`}>
                     {h.fxMissing ? (
                       <span className="relative">
                         {h.valueNative === null ? (
-                          <span className="text-sm text-fg-faint">-</span>
+                          <span className="text-fg-faint">-</span>
                         ) : (
-                          <MaskedMoney masked={privacy.masked} value={h.valueNative} currency={h.priceCurrency} className="text-sm text-fg-dim" />
+                          <MaskedMoney masked={privacy.masked} value={h.valueNative} currency={h.priceCurrency} className="text-fg-dim" />
                         )}
                         <FxAsterisk />
                       </span>
                     ) : (
-                      <MaskedMoney masked={privacy.masked} value={h.value} className="text-sm text-fg" />
+                      <MaskedMoney masked={privacy.masked} value={h.value} className="text-fg" />
                     )}
                   </td>
                   {/* UNREALIZED P/L */}
-                  <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
+                  <td role="cell" className={`justify-end whitespace-nowrap ${PAD[5]}`}>
                     {showPnl ? (
                       <div className="flex flex-col items-end">
                         <MaskedMoney
                           masked={privacy.masked}
                           value={h.gl}
                           signed
-                          className={`text-sm ${up ? "text-green" : "text-red"}`}
+                          className={up ? "text-green" : "text-red"}
                         />
                         <Percent
                           value={h.glPct}
@@ -343,28 +350,22 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         />
                       </div>
                     ) : (
-                      <span className="text-sm text-fg-faint">-</span>
+                      <span className="text-fg-faint">-</span>
                     )}
                   </td>
                   {/* 30D */}
-                  <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
-                    <div className="flex justify-end">
-                      {h.spark ? (
-                        <Sparkline data={h.spark.map(Number)} />
-                      ) : (
-                        <span className="text-sm text-fg-faint">-</span>
-                      )}
-                    </div>
+                  <td role="cell" className={`justify-end ${PAD[6]}`}>
+                    {h.spark ? (
+                      <Sparkline data={h.spark.map(Number)} />
+                    ) : (
+                      <span className="text-fg-faint">-</span>
+                    )}
                   </td>
                 </tr>
               );
             })}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <p className="border-t border-surface-2 py-6 text-center text-fg-faint text-sm">
-            {t("dashboard.holdings.noMatch", { query: query.trim() })}
-          </p>
+        </GridTable>
+        </div>
         )}
         {holdings.some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
         </>
