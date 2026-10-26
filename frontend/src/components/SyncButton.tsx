@@ -11,9 +11,9 @@ import { SyncModal } from "./SyncModal";
 // connection is syncing; a red dot appears when any connection is in error.
 //
 // Vertical placement: it is centred in the band above the first surface, which
-// every page builds the same way — `main`'s own `pt-6` (24px), then PageHeader
-// (a 32px title). The 32px button starts at the same 24px → `top-6`, level
-// with the title.
+// every page builds the same way (see PageHeader): `main`'s own `pt-6` (24px),
+// then the 32px title line, then 24px down to the first card. The 32px button
+// starts at the same 24px → `top-6`, level with the title.
 //
 // Its size and inset are CSS variables (index.css) because a page whose header
 // row reaches the right edge has to stay clear of it: `clear-sync-button`
