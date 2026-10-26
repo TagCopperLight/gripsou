@@ -9,7 +9,7 @@ export function RootLayout() {
       <Sidebar />
       <main
         data-scroll-restoration-id={MAIN_SCROLL_ID}
-        className="flex-1 relative overflow-auto px-4 pt-4 md:pl-0"
+        className="flex-1 relative overflow-auto px-4 pt-6 md:pl-0"
       >
         <Outlet />
         <SyncButton />
