@@ -60,6 +60,8 @@ export function ExposureDonut({
   const [active, setActive] = useState<string | null>(null);
   const nested = items.some((i) => i.children && i.children.length > 0);
   const masked = privacy?.masked ?? false;
+  // The hole's diameter, as a share of the chart's width.
+  const hole = nested ? 0.5 : 0.62;
   // Nothing has a share (every account at zero or below): a plain grey ring,
   // so no slice pretends to be data.
   const blank = !items.some((i) => (i.share ?? 0) > 0);
@@ -101,7 +103,7 @@ export function ExposureDonut({
     series: [
       {
         ...base,
-        radius: nested ? ["50%", "80%"] : ["62%", "92%"],
+        radius: [`${hole * 100}%`, nested ? "80%" : "92%"],
         itemStyle: { borderColor: SURFACE, borderWidth: 2, borderRadius: 4 },
         silent: blank,
         data: blank
@@ -196,10 +198,15 @@ export function ExposureDonut({
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
             <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+            {/* Kept inside the hole: a long name wraps, then is cut, rather
+                than running over the ring. */}
+            <div
+              className="pointer-events-none absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center"
+              style={{ width: `${hole * 72}%` }}
+            >
               {hovered ? (
                 <>
-                  <span className="line-clamp-2 text-fg-faint text-xs">{hovered.label}</span>
+                  <span className="line-clamp-2 break-words text-fg-faint text-xs" style={{ hyphens: "auto" }}>{hovered.label}</span>
                   {hovered.share !== null ? (
                     <span className="font-mono text-fg text-xl font-semibold tracking-tight">{formatShare(hovered.share, 1)}</span>
                   ) : (

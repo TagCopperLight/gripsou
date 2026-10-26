@@ -87,6 +87,7 @@ Findings:
 | D19 | A small account read "0 %". | Claude | fixed: "<0,1 %" below what one decimal shows (`formatShare`, also on the Investments donuts). Accounts at 0 € stay listed (user's choice). |
 | D21 | "PEA PEA" when an account is named after its type. | Claude | won't fix: the user keeps the type tag on every row. |
 | D22 | The legend's tags followed each name, so they zigzagged; the share and the amount sat close together. | User | fixed: every row has the same column widths (each as wide as its longest entry), so tags, shares and amounts line up; more room before the amount; long names cut with "…" (full name on hover). Also applies to the Investments donuts. |
+| D23 | A long name hovered in the donut ran over the ring. | User | fixed: the middle text is kept to the hole's width (from the ring's inner radius), wraps, and is cut with "…" after two lines. |
 | D20 | With every account at 0 € the net worth chart's axis reads "1 €, 1 €, 1 €, 0 €, 0 €", with a "+0,00 € (0 %)" pill. | Claude | won't fix: only the labels are off, in a state that almost never happens (accounts present, every one at exactly 0 €) |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
