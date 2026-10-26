@@ -631,9 +631,9 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
   // Cells line their text up with the inputs' text below (input padding + cell gap).
   const cell = "border-t border-blue/20 py-2.5 font-mono text-sm";
   return (
-    // The blue reaches 16 px past the table on each side; the padding puts the
-    // columns back over the table's.
-    <section aria-label={title} className="-mx-4 rounded-2xl bg-blue-soft px-4 pt-3.5 pb-1.5">
+    // A band across the whole window, not a card: the blue runs edge to edge
+    // between two rules, and the window's own margin keeps the columns over the table's.
+    <section aria-label={title} className="-mx-6 border-y border-blue/25 bg-blue-soft px-6 pt-3.5 pb-1.5">
       <div className="flex items-center justify-between gap-4 pb-2">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
         <div className="flex items-center gap-4">
