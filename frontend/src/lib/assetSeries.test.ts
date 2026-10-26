@@ -3,7 +3,7 @@ import { positionSeries, windowReturn } from "./assetSeries";
 import type { Lot, PricePoint } from "../api/types";
 
 // A same-currency listing: the account price equals the quoted one.
-const px = (t: number, price: string): PricePoint => ({ t, price, accountPrice: price });
+const px = (t: number, price: string): PricePoint => ({ t, price, accountPrice: price, reportingPrice: price });
 
 const prices: PricePoint[] = [
   px(100, "10"),
@@ -75,7 +75,7 @@ describe("positionSeries on a foreign listing", () => {
   // must be in euros like the invested line, or the exchange rate reads as gain.
   it("values the position at the account-currency price", () => {
     const pts = positionSeries(
-      [{ t: 100, price: "115", accountPrice: "100.05" }],
+      [{ t: 100, price: "115", accountPrice: "100.05", reportingPrice: "100.05" }],
       [buy(50, "10", "100")],
       100,
       0,
@@ -88,7 +88,7 @@ describe("positionSeries on a foreign listing", () => {
 
   it("drops a day whose rate is missing instead of charting zero", () => {
     const pts = positionSeries(
-      [{ t: 100, price: "115", accountPrice: null }, { t: 300, price: "115", accountPrice: "100" }],
+      [{ t: 100, price: "115", accountPrice: null, reportingPrice: null }, { t: 300, price: "115", accountPrice: "100", reportingPrice: "100" }],
       [],
       0,
       0,

@@ -83,6 +83,8 @@ export type PricePoint = {
   /** The same price in the account's currency at that day's rates; null when
    *  a rate is missing. */
   accountPrice: string | null;
+  /** The same price in the reader's currency; null when a rate is missing. */
+  reportingPrice: string | null;
 };
 
 export type Lot = {

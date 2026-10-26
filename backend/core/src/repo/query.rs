@@ -494,6 +494,9 @@ pub struct PricePointRow {
     /// the domain lots are recorded in, so it can sit next to them. Null when
     /// either rate is unknown.
     pub account_price: Option<Decimal>,
+    /// The same price in the reader's currency at that day's rates. Null when
+    /// either rate is unknown.
+    pub reporting_price: Option<Decimal>,
 }
 
 pub async fn holding_prices(
@@ -519,6 +522,8 @@ pub async fn holding_prices(
             select quote as currency, day from pts
             union
             select acct, day from pts
+            union
+            select (select currency from users where id = $2), day from pts
         ),
         -- fx_asof for every asked (currency, day) in one ordered pass: each
         -- asked day sorts after that day's rates, so it falls in the run of
@@ -551,10 +556,12 @@ pub async fn holding_prices(
             where asked
         )
         select pts.ts as "ts!", pts.unit_price as "unit_price!",
-               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?"
+               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?",
+               pts.unit_price * q.rate / nullif(rp.rate, 0) as "reporting_price?"
         from pts
         join rates q  on q.currency = pts.quote and q.day = pts.day
         join rates ac on ac.currency = pts.acct and ac.day = pts.day
+        join rates rp on rp.currency = (select currency from users where id = $2) and rp.day = pts.day
         order by pts.ts
         "#,
         holding_id,

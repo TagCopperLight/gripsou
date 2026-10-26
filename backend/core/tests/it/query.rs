@@ -442,6 +442,26 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
             Some(Decimal::new(8, 0)),
         ]
     );
+    // The reader is in EUR like the account: the two prices agree.
+    assert!(prices.iter().all(|p| p.reporting_price == p.account_price));
+
+    // Read in USD: the USD listing needs no rate; day 4 (no USD rate yet)
+    // stays unknown because the quote leg has none either.
+    sqlx::query("update users set currency = 'USD' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
+    let reporting: Vec<_> = prices.iter().map(|p| p.reporting_price).collect();
+    assert_eq!(
+        reporting,
+        vec![
+            None,
+            Some(Decimal::new(10, 0)),
+            Some(Decimal::new(10, 0)),
+            Some(Decimal::new(10, 0)),
+        ]
+    );
     Ok(())
 }
 

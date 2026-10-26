@@ -303,6 +303,7 @@ pub struct PricePoint {
     pub t: i64,
     pub price: String,
     pub account_price: Option<String>,
+    pub reporting_price: Option<String>,
 }
 
 impl PricePoint {
@@ -311,6 +312,7 @@ impl PricePoint {
             t: r.ts.timestamp_millis(),
             price: r.unit_price.to_string(),
             account_price: r.account_price.map(|p| p.to_string()),
+            reporting_price: r.reporting_price.map(|p| p.to_string()),
         }
     }
 }
