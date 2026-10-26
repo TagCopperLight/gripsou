@@ -17,7 +17,7 @@ export function HoldingModalHeader({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:p-6">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 p-4 md:p-6">
       <div className="flex min-w-0 items-center gap-4">
         <HoldingBadge
           logo={holding.logo}

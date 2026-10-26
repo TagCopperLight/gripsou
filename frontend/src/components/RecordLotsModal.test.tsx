@@ -168,6 +168,12 @@ describe("RecordLotsModal", () => {
     expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2023-01-15", "2024-05-02"]);
   });
 
+  it("shows no figure while nothing is recorded, not the server's zeros", () => {
+    render(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    expect(screen.getByTestId("figure-invested")).toHaveTextContent("—");
+    expect(screen.getByTestId("figure-realised")).toHaveTextContent("—");
+  });
+
   it("shows no figure until the first preview answers", () => {
     holdPreviewResolution = true;
     txns = [lot("a", "buy", "10", "20")];

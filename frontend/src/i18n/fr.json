@@ -154,7 +154,6 @@
         "prefilled": "{{count}} ligne préremplie à partir de vos transactions. Vérifiez-la avant d'enregistrer.",
         "prefilled_other": "{{count}} lignes préremplies à partir de vos transactions. Vérifiez-les avant d'enregistrer.",
         "figures": "Bilan",
-        "figuresProvisional": "provisoire tant que les quantités ne correspondent pas",
         "capitalInvested": "Capital investi",
         "meanPricePerShare": "Prix de revient unitaire",
         "realisedPnl": "Plus-value / moins-value réalisée",

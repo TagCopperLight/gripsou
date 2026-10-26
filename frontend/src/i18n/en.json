@@ -154,7 +154,6 @@
         "prefilled": "{{count}} row pre-filled from your transactions. Check it before saving.",
         "prefilled_other": "{{count}} rows pre-filled from your transactions. Check them before saving.",
         "figures": "Summary",
-        "figuresProvisional": "provisional until quantities match",
         "capitalInvested": "Capital invested",
         "meanPricePerShare": "Cost basis per share",
         "realisedPnl": "Realised P/L",

@@ -257,7 +257,8 @@ export function RecordLotsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
-  const figures = lastPreview;
+  // Nothing to compute from: no figure, rather than the server's all-zero answer.
+  const figures = list.some((r) => toLotEntry(r) !== null) ? lastPreview : null;
 
   // A changed saved row is saved as a delete + re-add in the same atomic
   // batch — the backend applies both halves in one DB transaction, so the
@@ -312,7 +313,7 @@ export function RecordLotsModal({
         </button>
       </HoldingModalHeader>
 
-      <div data-modal-body className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
+      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
         {/* Accounted bar */}
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           <span className="text-fg-dim text-sm">
@@ -480,12 +481,6 @@ export function RecordLotsModal({
         <div className="bg-surface-2 rounded-2xl p-5">
           <span className="text-fg text-sm font-semibold">
             {t("dashboard.holdings.gap.figures")}
-            {(short || over) && (
-              <span className="text-fg-faint font-normal">
-                {" · "}
-                {t("dashboard.holdings.gap.figuresProvisional")}
-              </span>
-            )}
           </span>
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
             <Figure
@@ -520,7 +515,7 @@ export function RecordLotsModal({
         {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
       </div>
 
-      <div data-modal-footer className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
+      <div data-modal-footer className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
         <Button variant="ghost" onClick={onClose} disabled={saveLots.isPending}>
           {t("dashboard.holdings.gap.cancel")}
         </Button>
