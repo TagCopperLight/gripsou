@@ -7,6 +7,8 @@ import { Button } from "../../components/Button";
 import { CardState } from "../../components/CardState";
 import { ConnectionRow } from "../../components/ConnectionRow";
 import { AddConnectionModal } from "../../components/AddConnectionModal";
+import { ConnectionGuide } from "../../components/ConnectionGuide";
+import { Dialog } from "../../components/Dialog";
 import { DeleteConnectionModal } from "../../components/DeleteConnectionModal";
 import { useConnections, useEnabledProviders, useInitConnection } from "../../api/hooks";
 import { goTo } from "../../lib/navigate";
@@ -25,6 +27,7 @@ export function SettingsConnections() {
   const acctCount = conns.reduce((n, c) => n + c.accounts.length, 0);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SyncConnection | null>(null);
 
   const addConnection = () => {
@@ -55,10 +58,17 @@ export function SettingsConnections() {
                 </span>
               )}
             </h2>
-            <Button onClick={addConnection} disabled={providersLoading || initConnection.isPending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
-              <Plus className="size-4" />
-              {t("settings.connections.addConnection")}
-            </Button>
+            <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:gap-4">
+              {connCount > 0 && (
+                <Button variant="ghost" padded={false} className="text-xs" onClick={() => setGuideOpen(true)}>
+                  {t("connectionGuide.howItWorks")}
+                </Button>
+              )}
+              <Button onClick={addConnection} disabled={providersLoading || initConnection.isPending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
+                <Plus className="size-4" />
+                {t("settings.connections.addConnection")}
+              </Button>
+            </div>
           </div>
 
           {initConnection.isError && (
@@ -76,9 +86,12 @@ export function SettingsConnections() {
               className="mt-4 h-64"
             />
           ) : connCount === 0 ? (
-            <p className="text-sm text-fg-faint py-10 text-center">
-              {t("sync.empty")}
-            </p>
+            <div className="mx-auto flex w-full max-w-md flex-col gap-6 py-10">
+              <p className="text-sm text-fg-faint text-center">
+                {t("sync.empty")}
+              </p>
+              <ConnectionGuide providers={providers ?? []} />
+            </div>
           ) : (
             <div className="flex flex-col gap-2.5 mt-4">
               {conns.map((c) => (
@@ -94,6 +107,11 @@ export function SettingsConnections() {
       </Surface>
 
       {addOpen && <AddConnectionModal onClose={() => setAddOpen(false)} />}
+      {guideOpen && (
+        <Dialog title={t("connectionGuide.howItWorks")} onClose={() => setGuideOpen(false)}>
+          <ConnectionGuide providers={providers ?? []} />
+        </Dialog>
+      )}
       {deleteTarget && (
         <DeleteConnectionModal
           connection={deleteTarget}

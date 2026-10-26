@@ -7,6 +7,7 @@ import { Select } from "../components/Select";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { Toggle } from "../components/Toggle";
 import { AddConnectionModal } from "../components/AddConnectionModal";
+import { ConnectionGuide } from "../components/ConnectionGuide";
 import { useAuth } from "../auth/context";
 import { postJson } from "../api/client";
 import {
@@ -208,7 +209,7 @@ export function Welcome() {
               summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: readyBanks.length })}
               onEdit={() => setStep(2)}
             >
-              <p className="text-sm text-fg-dim">{t("welcome.bank.body")}</p>
+              {!hasBank && <ConnectionGuide providers={providers ?? []} />}
               {connections.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {connections.map((c) => <BankRow key={c.id} connection={c} />)}
