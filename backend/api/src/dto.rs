@@ -295,6 +295,18 @@ pub struct BasisPreview {
     pub realised: String,
     /// Null when today's price or rate is unknown.
     pub unrealised: Option<String>,
+    /// The same figures in the reader's currency; null when the rate from the
+    /// account's currency is unknown today.
+    pub reporting: Option<BasisFigures>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasisFigures {
+    pub mean_price: String,
+    pub invested: String,
+    pub realised: String,
+    pub unrealised: Option<String>,
 }
 
 #[derive(Serialize)]

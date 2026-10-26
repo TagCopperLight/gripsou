@@ -25,7 +25,7 @@ import type { BasisPreview, Holding } from "../api/types";
 // This file must never grow a `buyCost / buyQty` of its own: a second copy of
 // the rule is how two figures for the same holding ended up disagreeing.
 
-const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" };
+const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0", reporting: null };
 
 /** How long to wait after the last edit before asking the server for updated
  *  figures — avoids firing a request per keystroke. */

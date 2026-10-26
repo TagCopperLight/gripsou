@@ -289,6 +289,30 @@ async fn current_price(
     Ok(price.flatten())
 }
 
+/// How many units of the reader's currency one unit of the holding's account
+/// currency is worth today; `None` when either rate is unknown.
+async fn account_to_reader_rate(
+    pool: &PgPool,
+    user_id: Uuid,
+    holding_id: Uuid,
+) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
+    let rate = sqlx::query_scalar!(
+        r#"
+        select fx_asof(a.currency, user_today($2))
+               / nullif(fx_asof(u.currency, user_today($2)), 0)
+        from holding h
+        join account a on a.id = h.account_id
+        join users u on u.id = $2
+        where h.id = $1
+        "#,
+        holding_id,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(rate.flatten())
+}
+
 /// What the figures would be for a set of unsaved rows.
 ///
 /// The math is not duplicated here: `basis_preview` writes the rows, calls
@@ -312,11 +336,19 @@ pub async fn preview_lots(
     let price = current_price(&pool, user_id, holding_id).await?;
     // An unknown price is no figure, not a total loss.
     let unrealised = price.map(|p| f.explained_qty * p - f.basis);
+    let rate = account_to_reader_rate(&pool, user_id, holding_id).await?;
+    let reporting = rate.map(|r| dto::BasisFigures {
+        mean_price: (f.mean_price * r).to_string(),
+        invested: (f.basis * r).to_string(),
+        realised: (f.realised * r).to_string(),
+        unrealised: unrealised.map(|u| (u * r).to_string()),
+    });
     Ok(Json(dto::BasisPreview {
         mean_price: f.mean_price.to_string(),
         invested: f.basis.to_string(),
         realised: f.realised.to_string(),
         unrealised: unrealised.map(|u| u.to_string()),
+        reporting,
     }))
 }
 
@@ -1075,6 +1107,66 @@ mod tests {
         .unwrap()
         .0;
         assert_eq!(preview.unrealised, None);
+    }
+
+    /// The figures also come in the reader's currency, converted from the
+    /// account's, and are absent while that rate is unknown.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_also_gives_the_figures_in_the_readers_currency(pool: PgPool) {
+        use gripsou_core::testkit::{rate_on, seed_cash_instrument};
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        sqlx::query("update account set currency = 'USD' where id = (select account_id from holding where id = $1)")
+            .bind(holding_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let today = gripsou_core::repo::prefs::today(&pool, user_id)
+            .await
+            .unwrap();
+        let usd = seed_cash_instrument(&pool, "USD").await;
+        rate_on(&pool, usd, today, Decimal::new(5, 1)).await;
+
+        let p = preview_lots(
+            State(pool.clone()),
+            auth(user_id),
+            Path(holding_id),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "10", "10")],
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        let r = p.reporting.expect("a rate exists today");
+        let half = |s: &str| s.parse::<Decimal>().unwrap() * Decimal::new(5, 1);
+        assert_eq!(r.invested.parse::<Decimal>().unwrap(), half(&p.invested));
+        assert_eq!(
+            r.mean_price.parse::<Decimal>().unwrap(),
+            half(&p.mean_price)
+        );
+        assert_eq!(r.realised.parse::<Decimal>().unwrap(), half(&p.realised));
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn preview_lots_has_no_reporting_figures_without_a_rate(pool: PgPool) {
+        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
+        sqlx::query("update account set currency = 'USD' where id = (select account_id from holding where id = $1)")
+            .bind(holding_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let p = preview_lots(
+            State(pool.clone()),
+            auth(user_id),
+            Path(holding_id),
+            Json(dto::PreviewLotsReq {
+                rows: vec![add("buy", (2024, 5, 2), "10", "10")],
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(p.reporting.is_none());
     }
 
     /// The holdings list shows only the caller's holdings.
