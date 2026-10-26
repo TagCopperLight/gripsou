@@ -7,6 +7,9 @@ const TOKEN = "mock";
 
 export function authRoutes(r: Router<Store>): void {
   r.route("GET", "/auth/me", ({ store }) => store.user);
+  r.route("GET", "/auth/sessions", ({ store }) => store.sessions);
+  r.route("GET", "/auth/mfa/status", ({ store }) => store.mfa);
+  r.route("GET", "/auth/token/:token", () => ({ type: "invite", email: null }));
 
   r.route("PATCH", "/auth/prefs", ({ store, body }): SessionUser => {
     store.user = { ...store.user, prefs: withPatch(store.user.prefs, body as PrefsPatch) };
