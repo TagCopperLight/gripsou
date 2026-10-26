@@ -66,15 +66,15 @@ describe("NetWorthCard with no accounts", () => {
   it("says the first sync is running, without sending the user away", async () => {
     stubApi(connections("syncing"));
     renderCard();
-    expect(await screen.findByText("Your first sync is running")).toBeInTheDocument();
+    expect(await screen.findByText("Syncing in progress")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("points to the connections when a settled connection brought nothing in", async () => {
     stubApi(connections("error"));
     renderCard();
-    expect(await screen.findByText("Nothing came in from your bank")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Check connections" }));
+    expect(await screen.findByText("No accounts found")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Manage connections" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" });
   });
 });

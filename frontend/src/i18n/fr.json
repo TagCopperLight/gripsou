@@ -87,18 +87,18 @@
       "capitalInvested": "Capital investi",
       "empty": {
         "noConnection": {
-          "title": "Aucun compte pour l'instant",
-          "body": "Connectez une banque pour suivre votre patrimoine net et son évolution.",
+          "title": "Aucun compte pour le moment",
+          "body": "Connectez votre banque pour suivre l'évolution de votre patrimoine.",
           "action": "Connecter une banque"
         },
         "syncing": {
-          "title": "Première synchronisation en cours",
-          "body": "Vos comptes apparaîtront ici d'ici une à deux minutes."
+          "title": "Synchronisation en cours",
+          "body": "Vos comptes s'afficheront ici dans quelques instants."
         },
         "nothingCameIn": {
-          "title": "Aucun compte récupéré",
-          "body": "Votre connexion n'a récupéré aucun compte que gripsou peut afficher.",
-          "action": "Voir les connexions"
+          "title": "Aucun compte trouvé",
+          "body": "Votre banque n'a renvoyé aucun compte affichable.",
+          "action": "Gérer les connexions"
         }
       }
     },

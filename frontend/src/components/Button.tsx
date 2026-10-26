@@ -1,10 +1,14 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-type ButtonVariant = "primary" | "ghost" | "ghostStrong" | "danger" | "amber";
+type ButtonVariant = "primary" | "outline" | "ghost" | "ghostStrong" | "danger" | "amber";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-green text-black font-semibold transition-opacity duration-140 disabled:opacity-40 disabled:cursor-not-allowed",
+  // A real button that doesn't shout: for the one action of an empty state,
+  // where a green primary would pull more than the message itself.
+  outline:
+    "border border-surface-3 text-fg font-medium transition-colors duration-140 hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed",
   ghost: "text-fg-dim hover:text-fg font-medium transition-colors duration-140",
   // Same shape as `ghost` but already at full contrast — for a bare action that
   // is the primary thing to do in its row (see the `amber` note below on why

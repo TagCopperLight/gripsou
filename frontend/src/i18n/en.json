@@ -88,17 +88,17 @@
       "empty": {
         "noConnection": {
           "title": "No accounts yet",
-          "body": "Connect a bank to see your net worth and how it changes over time.",
+          "body": "Connect your bank to follow how your net worth changes.",
           "action": "Connect a bank"
         },
         "syncing": {
-          "title": "Your first sync is running",
-          "body": "Your accounts will show up here in a minute or two."
+          "title": "Syncing in progress",
+          "body": "Your accounts will show up here in a moment."
         },
         "nothingCameIn": {
-          "title": "Nothing came in from your bank",
-          "body": "Your connection didn't bring in any account gripsou can show.",
-          "action": "Check connections"
+          "title": "No accounts found",
+          "body": "Your bank didn't return any account gripsou can show.",
+          "action": "Manage connections"
         }
       }
     },

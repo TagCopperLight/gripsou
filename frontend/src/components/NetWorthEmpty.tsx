@@ -25,7 +25,7 @@ export function NetWorthEmpty({ className = "" }: { className?: string }) {
       <p className="text-fg text-sm font-medium">{t(`dashboard.netWorth.empty.${kind}.title`)}</p>
       <p className="max-w-md text-sm text-fg-faint">{t(`dashboard.netWorth.empty.${kind}.body`)}</p>
       {kind !== "syncing" && (
-        <Button className="mt-2" onClick={() => navigate({ to: "/settings/connections" })}>
+        <Button variant="outline" className="mt-2" onClick={() => navigate({ to: "/settings/connections" })}>
           {t(`dashboard.netWorth.empty.${kind}.action`)}
         </Button>
       )}
