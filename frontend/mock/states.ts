@@ -116,7 +116,7 @@ export const STATES: MockState[] = [
     label: "New user: nothing connected yet",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
     group: "Data",
-    option: "Empty",
+    option: "New",
     apply(store) {
       emptyHousehold(store);
       store.connections = [];
@@ -138,7 +138,7 @@ export const STATES: MockState[] = [
     label: "Bank connected, no account came in",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
     group: "Data",
-    option: "No account",
+    option: "Empty",
     apply(store) {
       emptyHousehold(store);
       store.connections = [store.connections[0]];

@@ -55,7 +55,7 @@ const s = {
   grid: { display: "grid", gridTemplateColumns: "64px 1fr", alignItems: "center", rowGap: 6, columnGap: 8 },
   label: { color: "#a1a1aa" },
   segmented: { display: "flex", border: "1px solid #3f3f46", borderRadius: 5, overflow: "hidden" },
-  segment: { flex: 1, background: "#27272a", color: "#fafafa", border: 0, padding: "3px 0", cursor: "pointer", font: "inherit" },
+  segment: { flex: 1, background: "#27272a", color: "#fafafa", border: 0, padding: "3px 0", cursor: "pointer", font: "inherit", whiteSpace: "nowrap" },
 } satisfies Record<string, CSSProperties>;
 
 function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; children: ReactNode }) {
@@ -147,9 +147,10 @@ export function Panel() {
           <Section title={focus ? `States · ${focus}` : "States"} first>
             {here.length === 0 && <div style={s.muted}>None yet: the base data.</div>}
             {groups.length > 0 && (
-              <div style={{ ...s.grid, marginBottom: 6 }}>
+              <div style={{ display: "grid", rowGap: 4, marginBottom: 6 }}>
                 {groups.map(([name, members]) => (
                   <Fragment key={name}>
+                    {/* Full width, name above: a group can hold more options than fit beside a label. */}
                     <span style={s.label}>{name}</span>
                     <Segmented
                       options={[["", "Base"], ...members.map((st): [string, string] => [st.id, st.option ?? st.label])]}
