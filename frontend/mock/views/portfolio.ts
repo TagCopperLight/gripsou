@@ -80,8 +80,12 @@ function accountDaily(store: Store): { value: Daily; invested: Daily } {
     invested[a.id] = [...cash[a.id]];
   }
   for (const s of store.securities) {
+    // A security with no exchange rate is left out of every sum, as the server does.
+    if (store.fx.missing.includes(s.id)) continue;
     const q = qtyDaily(store, s);
     const c = costDaily(store, s);
+    // What the provider reports today, even when the lots don't explain it.
+    if (s.reportedQty !== undefined) q[HISTORY_DAYS - 1] = s.reportedQty;
     for (let i = 0; i < HISTORY_DAYS; i++) {
       value[s.accountId][i] += q[i] * s.closes[i];
       invested[s.accountId][i] += c[i];
@@ -116,8 +120,8 @@ export function netWorth(store: Store, range: string): NetWorthResponse {
       invested: points[points.length - 1].invested,
       gainAbs: money(last - first),
       gainPct: first === 0 ? "0" : ((last - first) / first).toFixed(4),
-      fxMissing: false,
-      reportingFxMissing: false,
+      fxMissing: store.fx.missing.length > 0,
+      reportingFxMissing: store.fx.reportingMissing,
     },
   };
 }
@@ -142,7 +146,7 @@ export function accounts(store: Store): Account[] {
     value: money(value[a.id][HISTORY_DAYS - 1]),
     valueNative: null,
     lastSyncAt: lastSyncOf(store, a.connectionId),
-    fxMissing: false,
+    fxMissing: store.securities.some((s) => s.accountId === a.id && store.fx.missing.includes(s.id)),
   }));
 }
 
@@ -200,16 +204,19 @@ export function holdings(store: Store): Holding[] {
   });
   for (const s of store.securities) {
     const lots = lotsOf(store, s.id);
-    const qty = lots.reduce((q, l) => q + lotQty(l), 0);
+    const explained = lots.reduce((q, l) => q + lotQty(l), 0);
+    const qty = s.reportedQty ?? explained;
+    const missingFx = store.fx.missing.includes(s.id);
     const buys = lots.filter((l) => l.side === "buy");
     const boughtQty = buys.reduce((q, l) => q + Number(l.qty), 0);
     const boughtCost = buys.reduce((c, l) => c + Number(l.qty) * Number(l.price) + Number(l.fee), 0);
     const mean = boughtQty === 0 ? 0 : boughtCost / boughtQty;
     const price = s.closes[HISTORY_DAYS - 1];
-    const invested = mean * qty;
-    const value = qty * price;
+    const invested = mean * explained;
+    const value = missingFx ? 0 : qty * price;
     out.push({
       ...holdingBase(store, s.accountId),
+      fxMissing: missingFx,
       id: s.id,
       ticker: s.ticker,
       name: s.name,
@@ -221,13 +228,13 @@ export function holdings(store: Store): Holding[] {
       invested: money(invested),
       investedNative: money(invested),
       value: money(value),
-      gl: money(value - invested),
-      glPct: invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
+      gl: missingFx ? "0" : money(value - invested),
+      glPct: missingFx || invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
       spark: s.closes.slice(-30).map((p) => money(p)),
       composition: s.composition,
-      unexplainedQty: "0",
+      unexplainedQty: String(qty - explained),
       meanPrice: money(mean),
-      unexplainedCost: "0",
+      unexplainedCost: money(Math.max(0, qty - explained) * mean),
     });
   }
   return out;

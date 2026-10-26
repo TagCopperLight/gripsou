@@ -17,8 +17,9 @@ export type ControlInfo = {
   user: { role: string; uiLanguage: string; currency: string };
 };
 
-export function createControl(states: MockState[]) {
-  const active = new Set<string>();
+/** `initial`: the states active before a restart; `onChange` sees every change. */
+export function createControl(states: MockState[], initial: string[] = [], onChange?: (active: string[]) => void) {
+  const active = new Set(initial.filter((id) => states.some((s) => s.id === id)));
   const overrides = new Map<string, OverrideMode>();
   const seen = new Set<string>();
   const unhandled = new Set<string>();
@@ -33,6 +34,7 @@ export function createControl(states: MockState[]) {
     if (on) active.add(id);
     else active.delete(id);
     reset();
+    onChange?.([...active]);
   }
 
   function setOverride(path: string, mode: OverrideMode | null): void {
@@ -60,6 +62,8 @@ export function createControl(states: MockState[]) {
       user: { role: store.user.role, uiLanguage: store.user.prefs.uiLanguage, currency: store.user.prefs.currency },
     };
   }
+
+  reset();
 
   return { reset, setState, setOverride, handle, info, store: () => store };
 }

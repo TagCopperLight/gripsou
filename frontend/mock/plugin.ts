@@ -3,6 +3,7 @@
 // review panel and injects the panel. Dev server only (`apply: "serve"`), and
 // vite.config.ts only imports it in mock mode, so a build never sees it.
 
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { createControl, type OverrideMode } from "./control";
@@ -27,6 +28,24 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
 
 type Held = { path: string; release: () => void };
 
+// Vite restarts the server whenever a file under mock/ changes; the active
+// states are kept here so a restart doesn't drop them mid-review.
+const CACHE_DIR = "node_modules/.cache";
+const ACTIVE_FILE = `${CACHE_DIR}/gripsou-mock-states.json`;
+
+function loadActive(): string[] {
+  try {
+    return JSON.parse(readFileSync(ACTIVE_FILE, "utf8")) as string[];
+  } catch {
+    return [];
+  }
+}
+
+function saveActive(active: string[]): void {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  writeFileSync(ACTIVE_FILE, JSON.stringify(active));
+}
+
 // Signs in on the first visit only, so signing out (to review the login
 // screen) sticks across reloads.
 const BOOTSTRAP = `
@@ -36,7 +55,7 @@ if (!localStorage.getItem("gripsou.mock.started")) {
 }`;
 
 export function mockApi(): Plugin {
-  const control = createControl(STATES);
+  const control = createControl(STATES, loadActive(), saveActive);
   let held: Held[] = [];
 
   async function api(req: IncomingMessage, res: ServerResponse): Promise<void> {

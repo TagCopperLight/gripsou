@@ -31,6 +31,15 @@ describe("review control", () => {
     expect(c.store().user.name).toBe("Camille Martin");
   });
 
+  it("starts with the states active before a restart, and reports changes", () => {
+    const rename: MockState = { id: "x", label: "x", route: "/", apply: (s) => { s.user.name = "Renamed"; } };
+    const seen: string[][] = [];
+    const c = createControl([rename], ["x", "gone"], (a) => seen.push(a));
+    expect(c.store().user.name).toBe("Renamed");
+    c.setState("x", false);
+    expect(seen).toEqual([[]]);
+  });
+
   it("records unknown routes", () => {
     const c = createControl([]);
     c.handle("GET", "/nope", q, undefined);

@@ -55,6 +55,8 @@ export type SecurityRow = {
   /** Daily closes, oldest first, one per day of `HISTORY_DAYS` ending today. */
   closes: number[];
   composition: Composition;
+  /** The quantity the provider reports, when the lots don't explain it. */
+  reportedQty?: number;
 };
 
 export type ConnectionRow = Omit<SyncConnection, "accounts"> & { providerKey: string };
@@ -75,6 +77,9 @@ export type BaseData = {
   txns: TxnRow[];
   categories: CategoryRow[];
   tags: TagRow[];
+  /** Exchange-rate gaps: securities with no rate today (left out of every
+   *  sum, flagged ⚠), and no rate at all into the reader's currency. */
+  fx: { missing: string[]; reportingMissing: boolean };
 };
 
 /** Days of price and balance history, today included. */
@@ -391,5 +396,6 @@ export function baseData(): BaseData {
     txns: transactions(cats, tags, securities, openingCash[PEA]),
     categories: cats,
     tags,
+    fx: { missing: [], reportingMissing: false },
   };
 }
