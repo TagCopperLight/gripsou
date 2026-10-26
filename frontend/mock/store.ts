@@ -1,5 +1,5 @@
-// The review mode's in-memory database. One base dataset; `resetStore` puts it
-// back. Lives in the Vite process, so it survives page reloads.
+// The review mode's in-memory database: one base dataset, built fresh by
+// `createStore`. The control (control.ts) holds the live one.
 
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget";
 import { baseData, type BaseData } from "./data/base";
@@ -10,7 +10,7 @@ export type Store = BaseData & {
   aiStatus: AiStatus;
 };
 
-function baseStore(): Store {
+export function createStore(): Store {
   const data = baseData();
   data.user.prefs.budgetAiEnabled = true;
   return {
@@ -29,15 +29,4 @@ function baseStore(): Store {
       lastRun: { outcome: "ok", error: null, startedAt: new Date(Date.now() - 2 * 3_600_000).toISOString() },
     },
   };
-}
-
-let store = baseStore();
-
-export function getStore(): Store {
-  return store;
-}
-
-export function resetStore(): Store {
-  store = baseStore();
-  return store;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CW8 } from "./data/base";
 import { router } from "./routes";
-import { resetStore } from "./store";
+import { createStore } from "./store";
 
 // One concrete request per GET the app makes (`grep getJson src`).
 const GETS = [
@@ -40,12 +40,12 @@ const GETS = [
 describe("base dataset", () => {
   it.each(GETS)("answers GET %s", (url) => {
     const u = new URL(url, "http://mock");
-    const out = router.dispatch(resetStore(), "GET", u.pathname, u.searchParams, undefined);
+    const out = router.dispatch(createStore(), "GET", u.pathname, u.searchParams, undefined);
     expect(out.status).toBe(200);
   });
 
   it("values the PEA from its lots and cash", () => {
-    const store = resetStore();
+    const store = createStore();
     const accounts = router.dispatch(store, "GET", "/accounts", new URLSearchParams(), undefined).body as { id: string; value: string }[];
     const holdings = router.dispatch(store, "GET", "/holdings", new URLSearchParams(), undefined).body as { accountId: string; value: string }[];
     for (const a of accounts) {
@@ -55,7 +55,7 @@ describe("base dataset", () => {
   });
 
   it("pages the transaction list", () => {
-    const store = resetStore();
+    const store = createStore();
     const page = (offset: number) =>
       router.dispatch(store, "GET", "/transactions", new URLSearchParams({ limit: "200", offset: String(offset) }), undefined).body as unknown[];
     expect(page(0)).toHaveLength(200);

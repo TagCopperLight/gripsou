@@ -1,13 +1,12 @@
 // Vite plugin behind `bun run dev:mock`: answers /api/* from the in-memory
-// store instead of proxying to the Rust server, and exposes /__mock/* for the
-// review panel. Dev server only (`apply: "serve"`), so a build never sees it.
+// store instead of proxying to the Rust server, exposes /__mock/* for the
+// review panel and injects the panel. Dev server only (`apply: "serve"`), and
+// vite.config.ts only imports it in mock mode, so a build never sees it.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { router } from "./routes";
-import { getStore, resetStore } from "./store";
-
-const unhandled = new Set<string>();
+import { createControl, type OverrideMode } from "./control";
+import { STATES } from "./states";
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -26,26 +25,7 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const url = new URL(req.url ?? "/", "http://mock");
-  const method = req.method ?? "GET";
-  const out = router.dispatch(getStore(), method, url.pathname, url.searchParams, await readBody(req));
-  if (out.status === 501) unhandled.add(`${method} ${url.pathname}`);
-  send(res, out.status, out.body);
-}
-
-function handleControl(req: IncomingMessage, res: ServerResponse): void {
-  const path = new URL(req.url ?? "/", "http://mock").pathname;
-  if (req.method === "POST" && path === "/reset") {
-    resetStore();
-    unhandled.clear();
-    send(res, 204);
-  } else if (req.method === "GET" && path === "/unhandled") {
-    send(res, 200, [...unhandled]);
-  } else {
-    send(res, 404);
-  }
-}
+type Held = { path: string; release: () => void };
 
 // Signs in on the first visit only, so signing out (to review the login
 // screen) sticks across reloads.
@@ -56,17 +36,63 @@ if (!localStorage.getItem("gripsou.mock.started")) {
 }`;
 
 export function mockApi(): Plugin {
+  const control = createControl(STATES);
+  let held: Held[] = [];
+
+  async function api(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? "/", "http://mock");
+    const method = req.method ?? "GET";
+    const body = await readBody(req);
+    const answer = () => {
+      const out = control.handle(method, url.pathname, url.searchParams, body);
+      if (out === "hold") held.push({ path: url.pathname, release: answer });
+      else send(res, out.status, out.body);
+    };
+    answer();
+  }
+
+  async function panel(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const path = new URL(req.url ?? "/", "http://mock").pathname;
+    const body = (await readBody(req)) as Record<string, unknown> | undefined;
+    if (req.method === "GET" && path === "/info") return send(res, 200, control.info());
+    if (req.method !== "POST") return send(res, 404);
+    switch (path) {
+      case "/reset":
+        control.reset();
+        break;
+      case "/state":
+        control.setState(String(body?.id), Boolean(body?.on));
+        break;
+      case "/override": {
+        const target = String(body?.path);
+        control.setOverride(target, (body?.mode as OverrideMode | null) ?? null);
+        const release = held.filter((h) => h.path === target);
+        held = held.filter((h) => h.path !== target);
+        release.forEach((h) => h.release());
+        break;
+      }
+      case "/role":
+        control.store().user.role = body?.role === "user" ? "user" : "admin";
+        break;
+      default:
+        return send(res, 404);
+    }
+    send(res, 204);
+  }
+
   return {
     name: "gripsou-mock-api",
     apply: "serve",
     configureServer(server) {
-      server.middlewares.use("/api", (req, res) => {
-        handleApi(req, res).catch((err: unknown) => send(res, 500, { error: String(err) }));
-      });
-      server.middlewares.use("/__mock", handleControl);
+      const fail = (res: ServerResponse) => (err: unknown) => send(res, 500, { error: String(err) });
+      server.middlewares.use("/api", (req, res) => void api(req, res).catch(fail(res)));
+      server.middlewares.use("/__mock", (req, res) => void panel(req, res).catch(fail(res)));
     },
     transformIndexHtml() {
-      return [{ tag: "script", children: BOOTSTRAP, injectTo: "head-prepend" }];
+      return [
+        { tag: "script", children: BOOTSTRAP, injectTo: "head-prepend" },
+        { tag: "script", attrs: { type: "module", src: "/mock/panel/main.tsx" }, injectTo: "body" },
+      ];
     },
   };
 }
