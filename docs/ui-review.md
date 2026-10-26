@@ -12,7 +12,6 @@ Run the review mode: `cd frontend && bun run dev:mock` (no backend, no database)
 - **EN / FR**, **EUR / USD / GBP**: saved through the app's own prefs endpoint.
 - **admin / user**: the signed-in user's role.
 - **Queries**: keep any request loading forever, or make it fail with a 500. A failing query shows its error only after React Query's three retries (about 7 s), as in production.
-- **Screens**: this list, with a "reviewed" checkbox kept in the browser.
 - A ⚠ count in the header lists API calls the fake API does not answer yet (501).
 
 "How to reach" below says **base** (the default data), **query** (a Queries override), **state** (a panel state, added when the screen is reviewed) or **action** (something to click).

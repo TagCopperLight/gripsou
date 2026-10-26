@@ -3,11 +3,9 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { ControlInfo, OverrideMode } from "../control";
-import { SCREENS } from "./screens";
 
 const TOKEN_KEY = "gripsou.token";
 const OPEN_KEY = "gripsou.mock.open";
-const REVIEWED_KEY = "gripsou.mock.reviewed";
 
 async function control(path: string, body?: unknown): Promise<void> {
   await fetch(`/__mock${path}`, {
@@ -33,14 +31,6 @@ function setSignedIn(on: boolean): void {
   localStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
   if (on) localStorage.setItem(TOKEN_KEY, "mock");
-}
-
-function loadReviewed(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(REVIEWED_KEY) ?? "[]") as string[];
-  } catch {
-    return [];
-  }
 }
 
 /** Every change goes through a reload: React Query's cache would otherwise
@@ -85,7 +75,6 @@ export function Panel() {
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "0");
   const [info, setInfo] = useState<ControlInfo | null>(null);
   const [path, setPath] = useState(location.pathname);
-  const [reviewed, setReviewed] = useState(loadReviewed);
 
   useEffect(() => {
     const refresh = async () => {
@@ -100,12 +89,6 @@ export function Panel() {
   const toggleOpen = () => {
     localStorage.setItem(OPEN_KEY, open ? "0" : "1");
     setOpen(!open);
-  };
-
-  const toggleReviewed = (p: string) => {
-    const next = reviewed.includes(p) ? reviewed.filter((x) => x !== p) : [...reviewed, p];
-    localStorage.setItem(REVIEWED_KEY, JSON.stringify(next));
-    setReviewed(next);
   };
 
   const here = info?.states.filter((st) => st.route === path) ?? [];
@@ -195,17 +178,6 @@ export function Panel() {
                 </div>
               ))}
             </details>
-          </Section>
-
-          <Section title={`Screens · ${reviewed.length}/${SCREENS.length} reviewed`}>
-            {SCREENS.map((sc) => (
-              <div key={sc.path} style={s.row}>
-                <input type="checkbox" checked={reviewed.includes(sc.path)} onChange={() => toggleReviewed(sc.path)} />
-                <a href={sc.path} style={{ color: sc.path === path ? "#a5b4fc" : "#fafafa" }}>
-                  {sc.label}
-                </a>
-              </div>
-            ))}
           </Section>
 
           {unhandled.length > 0 && (
