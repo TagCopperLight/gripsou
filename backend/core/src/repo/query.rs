@@ -582,6 +582,8 @@ pub struct AccountRow {
     pub color: String,
     pub type_key: String,
     pub value: Decimal,
+    pub currency: String,
+    pub value_native: Option<Decimal>,
     pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub institution_key: Option<String>,
@@ -655,6 +657,11 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.color,
                a.type_key as "type_key!",
                sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
+               a.currency as "currency!",
+               -- `value` is in the reader's currency; `value_native` is the same
+               -- sum in the account's own, null when that currency has no rate today.
+               sum(l.value) / nullif((select unit_value from fx where currency = a.currency), 0)
+                   as "value_native?",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
@@ -664,7 +671,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
-        group by a.id, c.id, a.name, a.color, a.type_key, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
+        group by a.id, c.id, a.name, a.color, a.type_key, a.currency, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
         order by sum(l.value) desc
         "#,
         user_id,

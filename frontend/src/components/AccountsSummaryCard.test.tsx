@@ -11,6 +11,8 @@ function account(id: string, name: string, value: string): Account {
     color: "#5b9bf0",
     typeKey: "checking",
     value,
+    currency: "EUR",
+    valueNative: null,
     lastSyncAt: null,
     sourceName: null,
     sourceLogo: null,

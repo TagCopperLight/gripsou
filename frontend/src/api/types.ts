@@ -126,6 +126,8 @@ export type Account = {
   color: string;
   typeKey: string;
   value: string;
+  currency: string;
+  valueNative: string | null;
   lastSyncAt: number | null;
   sourceName: string | null;
   sourceLogo: string | null;

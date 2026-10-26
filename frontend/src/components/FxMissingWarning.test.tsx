@@ -74,6 +74,8 @@ const slice = (fxMissing: boolean): Account[] => [
     typeKey: "pea",
     color: "#6ea8fe",
     value: "1000",
+    currency: "EUR",
+    valueNative: null,
     lastSyncAt: null,
     sourceName: null,
     sourceLogo: null,
