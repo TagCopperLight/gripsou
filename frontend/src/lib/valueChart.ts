@@ -23,7 +23,8 @@ export const RED = "#f87171"; // color-red
  * invested) plots the ONE thing that means something: return over the displayed
  * window, starting at 0% — profit since the range's start over the capital at
  * work, so deposits don't read as growth. Without a baseline (a unit-price
- * chart) it falls back to change relative to the first point.
+ * chart) it falls back to change relative to the first point. Either way the
+ * line is a return now, and is named `percentLabel` in the legend and tooltip.
  */
 export function plotSeries(series: ChartSeries[], unit: ChartUnit, percentLabel?: string): ChartSeries[] {
   if (unit !== "percent") return series;
@@ -35,7 +36,7 @@ export function plotSeries(series: ChartSeries[], unit: ChartUnit, percentLabel?
   }
   return series.map((s) => {
     const base = s.data[0]?.[1] ?? 0;
-    return { ...s, data: s.data.map(([t, v]) => [t, base ? (v - base) / base : 0] as [number, number]) };
+    return { ...s, name: percentLabel ?? s.name, data: s.data.map(([t, v]) => [t, base ? (v - base) / base : 0] as [number, number]) };
   });
 }
 
