@@ -364,12 +364,12 @@ export function RecordLotsModal({
             <LotColumns />
             <thead>
               <tr className="text-[11px] font-mono text-fg-faint">
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.fee")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
+                <th className="text-left font-medium pb-2 pl-3">{t("dashboard.holdings.gap.columns.type")}</th>
+                <th className="text-left font-medium pb-2 pl-3">{t("dashboard.holdings.gap.columns.date")}</th>
+                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.quantity")}</th>
+                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.fee")}</th>
+                <th className="text-right font-medium pb-2 pr-2">{t("dashboard.holdings.gap.columns.total")}</th>
                 <th className="pb-2" />
               </tr>
             </thead>
@@ -386,15 +386,17 @@ export function RecordLotsModal({
                 const input =
                   "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
                 const cell = "py-1.5 pr-2 border-t border-surface-2";
+                // Text cells line their text up with the inputs' text (input padding + cell gap).
+                const lockedCell = "py-1.5 border-t border-surface-2";
                 if (r.locked) {
                   // A provider's lot: the same columns, as text, and a lock where the bin goes.
                   return (
                     <tr key={r.key} data-testid="lot-row" className="text-sm text-fg-dim">
-                      <td className={`${cell} px-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
-                      <td className={`${cell} px-3 font-mono`}>{formatDate(r.date)}</td>
-                      <td className={`${cell} px-3 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
-                      <td className={`${cell} px-3 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
-                      <td className={`${cell} px-3 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
+                      <td className={`${lockedCell} pl-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
+                      <td className={`${lockedCell} pl-3 font-mono`}>{formatDate(r.date)}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
                       <td className={`${cell} text-right font-mono whitespace-nowrap`}>
                         {p === null ? "—" : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), { currency })}
                       </td>
