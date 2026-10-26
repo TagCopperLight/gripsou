@@ -1,7 +1,7 @@
 // The review panel: bottom-left, collapsible. A dev tool, so English only and
 // styled on its own (inline styles), apart from the app's design.
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { ControlInfo, OverrideMode } from "../control";
 
 const TOKEN_KEY = "gripsou.token";
@@ -66,13 +66,20 @@ function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; chi
   );
 }
 
-function Segmented({ options, value, onChange }: { options: [string, string][]; value: string; onChange: (v: string) => void }) {
+function Segmented({ options, value, onChange, titles }: {
+  options: [string, string][];
+  value: string;
+  onChange: (v: string) => void;
+  /** Hover text per option, for labels shortened to fit. */
+  titles?: Record<string, string>;
+}) {
   return (
     <div style={s.segmented}>
       {options.map(([v, label], i) => (
         <button
           key={v}
           type="button"
+          title={titles?.[v]}
           style={{ ...s.segment, ...(v === value ? s.on : {}), ...(i > 0 ? { borderLeft: "1px solid #3f3f46" } : {}) }}
           onClick={() => v !== value && onChange(v)}
         >
@@ -114,6 +121,14 @@ export function Panel() {
 
   const focus = info?.focus ?? "";
   const here = info?.states.filter((st) => st.pieces.includes(focus)) ?? [];
+  // States sharing a group can't be on together: one segmented control each.
+  const groups: [string, typeof here][] = [];
+  for (const st of here) {
+    if (!st.group) continue;
+    const g = groups.find(([name]) => name === st.group);
+    if (g) g[1].push(st);
+    else groups.push([st.group, [st]]);
+  }
   const elsewhere = info?.states.filter((st) => !st.pieces.includes(focus) && st.active) ?? [];
   const overridden = Object.entries(info?.overrides ?? {});
   const unhandled = info?.unhandled ?? [];
@@ -131,7 +146,25 @@ export function Panel() {
         <div style={s.body}>
           <Section title={focus ? `States · ${focus}` : "States"} first>
             {here.length === 0 && <div style={s.muted}>None yet: the base data.</div>}
-            {here.map((st) => (
+            {groups.length > 0 && (
+              <div style={{ ...s.grid, marginBottom: 6 }}>
+                {groups.map(([name, members]) => (
+                  <Fragment key={name}>
+                    <span style={s.label}>{name}</span>
+                    <Segmented
+                      options={[["", "Base"], ...members.map((st): [string, string] => [st.id, st.option ?? st.label])]}
+                      value={members.find((st) => st.active)?.id ?? ""}
+                      onChange={(v) => {
+                        const on = members.find((st) => st.active);
+                        void (v ? control("/state", { id: v, on: true }) : control("/state", { id: on?.id, on: false })).then(reload);
+                      }}
+                      titles={Object.fromEntries(members.map((st) => [st.id, st.label]))}
+                    />
+                  </Fragment>
+                ))}
+              </div>
+            )}
+            {here.filter((st) => !st.group).map((st) => (
               <label key={st.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={st.active} onChange={() => void control("/state", { id: st.id, on: !st.active }).then(reload)} />
                 {st.label}

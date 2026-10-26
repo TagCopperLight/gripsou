@@ -1,6 +1,7 @@
 // States for the review panel, added as each piece of the UI is reviewed.
 // Each one tweaks the base data (or forces an answer); several can be on at
-// once, and Reset re-applies the active ones on fresh data. The panel lists the
+// once, unless they share a `group`, and Reset re-applies the active ones on
+// fresh data. The panel lists the
 // states of the piece under review (`FOCUS`).
 
 import { CHECKING, CW8, ESE, HISTORY_DAYS } from "./data/base";
@@ -13,6 +14,10 @@ export type MockState = {
   label: string;
   /** The pieces of the UI it shows something on. */
   pieces: string[];
+  /** States that can't be on together share a group; the panel shows the
+   *  group as one segmented control, each state as its `option`. */
+  group?: string;
+  option?: string;
   apply(store: Store): void;
 };
 
@@ -42,6 +47,8 @@ export const STATES: MockState[] = [
     id: "dashboard-loss",
     label: "Net worth down: markets fell, a big payment left",
     pieces: ["Net worth chart"],
+    group: "Data",
+    option: "Loss",
     apply(store) {
       // The last 180 days slide down to 45% below where they started.
       for (const s of store.securities) {
@@ -108,6 +115,8 @@ export const STATES: MockState[] = [
     id: "dashboard-empty",
     label: "New user: nothing connected yet",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
+    group: "Data",
+    option: "Empty",
     apply(store) {
       emptyHousehold(store);
       store.connections = [];
@@ -117,6 +126,8 @@ export const STATES: MockState[] = [
     id: "dashboard-first-sync",
     label: "Bank just connected, first sync running",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
+    group: "Data",
+    option: "Syncing",
     apply(store) {
       emptyHousehold(store);
       store.connections = [{ ...store.connections[0], status: "syncing", lastSyncAt: null }];
@@ -126,6 +137,8 @@ export const STATES: MockState[] = [
     id: "dashboard-nothing-came-in",
     label: "Bank connected, no account came in",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
+    group: "Data",
+    option: "No account",
     apply(store) {
       emptyHousehold(store);
       store.connections = [store.connections[0]];

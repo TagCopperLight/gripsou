@@ -6,7 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { createControl, type OverrideMode } from "./control";
+import { createControl, type OverrideMode, type Saved } from "./control";
 import { FOCUS, STATES } from "./states";
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -29,21 +29,22 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
 type Held = { path: string; release: () => void };
 
 // Vite restarts the server whenever a file under mock/ changes; the active
-// states are kept here so a restart doesn't drop them mid-review.
+// states and the App settings are kept here so a restart doesn't drop them.
 const CACHE_DIR = "node_modules/.cache";
-const ACTIVE_FILE = `${CACHE_DIR}/gripsou-mock-states.json`;
+const SAVED_FILE = `${CACHE_DIR}/gripsou-mock-states.json`;
 
-function loadActive(): string[] {
+function loadSaved(): Saved {
   try {
-    return JSON.parse(readFileSync(ACTIVE_FILE, "utf8")) as string[];
+    const raw = JSON.parse(readFileSync(SAVED_FILE, "utf8")) as Saved | string[];
+    return Array.isArray(raw) ? { active: raw, app: null } : raw;
   } catch {
-    return [];
+    return { active: [], app: null };
   }
 }
 
-function saveActive(active: string[]): void {
+function save(saved: Saved): void {
   mkdirSync(CACHE_DIR, { recursive: true });
-  writeFileSync(ACTIVE_FILE, JSON.stringify(active));
+  writeFileSync(SAVED_FILE, JSON.stringify(saved));
 }
 
 // Signs in on the first visit only, so signing out (to review the login
@@ -55,7 +56,7 @@ if (!localStorage.getItem("gripsou.mock.started")) {
 }`;
 
 export function mockApi(): Plugin {
-  const control = createControl(STATES, FOCUS, loadActive(), saveActive);
+  const control = createControl(STATES, { focus: FOCUS, saved: loadSaved(), onChange: save });
   let held: Held[] = [];
 
   async function api(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -91,7 +92,7 @@ export function mockApi(): Plugin {
         break;
       }
       case "/role":
-        control.store().user.role = body?.role === "user" ? "user" : "admin";
+        control.setRole(body?.role === "user" ? "user" : "admin");
         break;
       default:
         return send(res, 404);

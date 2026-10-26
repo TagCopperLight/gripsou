@@ -34,7 +34,7 @@ describe("review control", () => {
   it("starts with the states active before a restart, and reports changes", () => {
     const rename: MockState = { id: "x", label: "x", pieces: [], apply: (s) => { s.user.name = "Renamed"; } };
     const seen: string[][] = [];
-    const c = createControl([rename], "", ["x", "gone"], (a) => seen.push(a));
+    const c = createControl([rename], { saved: { active: ["x", "gone"], app: null }, onChange: (s) => seen.push(s.active) });
     expect(c.store().user.name).toBe("Renamed");
     c.setState("x", false);
     expect(seen).toEqual([[]]);
@@ -44,5 +44,24 @@ describe("review control", () => {
     const c = createControl([]);
     c.handle("GET", "/nope", q, undefined);
     expect(c.info().unhandled).toEqual(["GET /nope"]);
+  });
+
+  it("keeps the panel's language, currency and role through state changes and Reset", () => {
+    const rename: MockState = { id: "x", label: "x", pieces: [], apply: (s) => { s.user.name = "Renamed"; } };
+    const c = createControl([rename]);
+    c.handle("PATCH", "/auth/prefs", q, { uiLanguage: "fr", currency: "USD" });
+    c.setRole("user");
+    c.setState("x", true);
+    c.reset();
+    expect(c.info().user).toEqual({ role: "user", uiLanguage: "fr", currency: "USD" });
+  });
+
+  it("turns the other states of a group off", () => {
+    const a: MockState = { id: "a", label: "a", pieces: [], group: "g", apply: () => {} };
+    const b: MockState = { id: "b", label: "b", pieces: [], group: "g", apply: () => {} };
+    const c = createControl([a, b]);
+    c.setState("a", true);
+    c.setState("b", true);
+    expect(c.info().states.filter((s) => s.active).map((s) => s.id)).toEqual(["b"]);
   });
 });
