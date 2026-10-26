@@ -22,19 +22,15 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   // The middle shows the net worth, overdrafts included; the ring shows how
   // what is owned is spread (`distribution`).
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
-  const items = distribution(accounts).map(({ account: a, share }) => {
-    const tag = accountTypeLabel(t, a.typeKey);
-    return {
-      key: a.id,
-      label: a.name,
-      share,
-      color: a.color,
-      value: a.value,
-      // "PEA PEA" says nothing more than "PEA".
-      tag: tag.toLowerCase() === a.name.toLowerCase() ? undefined : tag,
-      fxMissing: a.fxMissing,
-    };
-  });
+  const items = distribution(accounts).map(({ account: a, share }) => ({
+    key: a.id,
+    label: a.name,
+    share,
+    color: a.color,
+    value: a.value,
+    tag: accountTypeLabel(t, a.typeKey),
+    fxMissing: a.fxMissing,
+  }));
   const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)
     ? <ExcludedNote count={excluded} />
     : undefined;
