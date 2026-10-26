@@ -15,7 +15,10 @@ type Slice = { name: string; percent: number; color: string };
 /// percents always total exactly 100%. "Other" absorbs both the unlisted holdings
 /// and the leftover from rounding each slice; it is shown only when it is >= 1%.
 function buildSlices(items: Allocation[], otherLabel: string): Slice[] {
-  const slices: Slice[] = items.map((a, i) => ({
+  // Largest first: Boursorama's own order breaks once repeated lines are
+  // merged (a 13 % line after an 8 % one).
+  const sorted = [...items].sort((a, b) => b.weight - a.weight);
+  const slices: Slice[] = sorted.map((a, i) => ({
     name: a.name,
     percent: Math.round(a.weight * 100),
     // Cycle the fixed account palette by position for well-spaced, distinct

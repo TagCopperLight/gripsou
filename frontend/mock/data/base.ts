@@ -173,36 +173,37 @@ export function closes(seed: number, last: number, drift: number, vol: number): 
   return out.map((p) => Math.round(p * 100) / 100);
 }
 
+// Named as Boursorama names them (French, its October 2026 labels), as
+// production stores them: the app translates them for display.
 export const WORLD: Composition = {
   countries: [
-    { name: "United States", weight: 0.71 },
-    { name: "Japan", weight: 0.055 },
-    { name: "United Kingdom", weight: 0.037 },
+    { name: "Etats-Unis", weight: 0.71 },
+    { name: "Japon", weight: 0.055 },
+    { name: "Royaume-Uni", weight: 0.037 },
     { name: "Canada", weight: 0.03 },
     { name: "France", weight: 0.027 },
-    { name: "Switzerland", weight: 0.025 },
-    { name: "Germany", weight: 0.022 },
+    { name: "Suisse", weight: 0.025 },
+    { name: "Allemagne", weight: 0.022 },
   ],
   sectors: [
-    { name: "Information Technology", weight: 0.26 },
-    { name: "Financials", weight: 0.16 },
-    { name: "Health Care", weight: 0.1 },
-    { name: "Industrials", weight: 0.11 },
-    { name: "Consumer Discretionary", weight: 0.1 },
-    { name: "Communication Services", weight: 0.08 },
-    { name: "Consumer Staples", weight: 0.06 },
+    { name: "Technologie", weight: 0.26 },
+    { name: "Finance", weight: 0.16 },
+    { name: "Produits industriels", weight: 0.11 },
+    { name: "Santé", weight: 0.1 },
+    { name: "Biens de consommation cycliques", weight: 0.16 },
+    { name: "Télécommunications", weight: 0.08 },
   ],
 };
 
 export const SP500: Composition = {
-  countries: [{ name: "United States", weight: 1 }],
+  countries: [{ name: "Etats-Unis", weight: 1 }],
   sectors: [
-    { name: "Information Technology", weight: 0.31 },
-    { name: "Financials", weight: 0.13 },
-    { name: "Health Care", weight: 0.1 },
-    { name: "Consumer Discretionary", weight: 0.1 },
-    { name: "Communication Services", weight: 0.09 },
-    { name: "Industrials", weight: 0.08 },
+    { name: "Technologie", weight: 0.31 },
+    { name: "Finance", weight: 0.13 },
+    { name: "Santé", weight: 0.1 },
+    { name: "Biens de consommation cycliques", weight: 0.1 },
+    { name: "Télécommunications", weight: 0.09 },
+    { name: "Produits industriels", weight: 0.08 },
   ],
 };
 

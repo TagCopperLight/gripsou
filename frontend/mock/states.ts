@@ -120,8 +120,8 @@ export const STATES: MockState[] = [
     apply(store) {
       // Public market data as production stores it: the Yahoo ticker, the
       // provider's name, a price near 6,30 €, prices only from the fund's
-      // launch (4 March 2025), and Boursorama's composition with its repeated
-      // sector. Quantities and dates of the purchases are made up.
+      // launch (4 March 2025), and Boursorama's composition as of October
+      // 2026. Quantities and dates of the purchases are made up.
       const sec = id("hol", 60);
       const launch = HISTORY_DAYS - 1 - Math.round((TODAY - Date.UTC(2025, 2, 4)) / 86_400_000);
       const c = closes(60, 6.301, 0.0005, 0.011);
@@ -139,7 +139,8 @@ export const STATES: MockState[] = [
           ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
           sectors: [
             ["Technologie", 0.325], ["Finance", 0.1553], ["Produits industriels", 0.1046], ["Santé", 0.092],
-            ["Télécommunications", 0.0838], ["Biens de consommation cycliques", 0.0824], ["Biens de consommation cycliques", 0.0473],
+            // Sent twice by Boursorama (8,24 % and 4,73 %), stored merged by the adapter.
+            ["Télécommunications", 0.0838], ["Biens de consommation cycliques", 0.1297],
             ["Énergie", 0.0404], ["Matières non énergétiques", 0.0306], ["Services publics", 0.0226],
           ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
         },

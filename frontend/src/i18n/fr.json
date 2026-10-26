@@ -588,7 +588,12 @@
     "Matières premières de base": "Matériaux de base",
     "Énergie": "Énergie",
     "Services financiers": "Services financiers",
-    "Immobilier": "Immobilier"
+    "Immobilier": "Immobilier",
+    "Finance": "Services financiers",
+    "Produits industriels": "Industrie",
+    "Télécommunications": "Services de communication",
+    "Biens de consommation cycliques": "Consommation cyclique",
+    "Matières non énergétiques": "Matériaux de base"
   },
   "budget": {
     "uncategorized": "Non catégorisé",
