@@ -44,7 +44,6 @@ export function id(tag: string, n: number): string {
 /** Days back from `RANGE` keys, as the backend's `range_window`. */
 export function rangeDays(range: string): number {
   switch (range) {
-    case "24h": return 1;
     case "7d": return 7;
     case "1mo": return 30;
     case "6mo": return 182;

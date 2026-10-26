@@ -21,6 +21,17 @@
     "showAmount": "Afficher le montant",
     "hideAmount": "Masquer le montant"
   },
+  "range": {
+    "short": { "7d": "7J", "1mo": "1M", "6mo": "6M", "1y": "1A", "ytd": "YTD", "max": "Max" },
+    "over": {
+      "7d": "sur 7 jours",
+      "1mo": "sur 1 mois",
+      "6mo": "sur 6 mois",
+      "1y": "sur 1 an",
+      "ytd": "depuis le 1er janvier",
+      "max": "depuis le début"
+    }
+  },
   "sync": {
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
@@ -72,7 +83,6 @@
     "reportingFxMissing": "Le taux de change vers {{currency}} n'est pas encore disponible. Les montants ci-dessous sont affichés dans la devise de base de l'application. Le taux sera récupéré à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
-      "over": "sur {{range}}",
       "netWorth": "Patrimoine net",
       "capitalInvested": "Capital investi"
     },

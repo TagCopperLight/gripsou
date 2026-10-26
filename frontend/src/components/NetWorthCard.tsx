@@ -7,31 +7,22 @@ import { Money } from "./Money";
 import { PrivateMoney } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
-import { NetWorthChart } from "./NetWorthChart";
+import { ValueChart } from "./ValueChart";
 import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
-import type { ChartUnit } from "./ValueChart";
 import { useNetWorth } from "../api/hooks";
 import { getPrefs } from "../lib/prefs";
 import { currencySymbol } from "../lib/currency";
+import { SURFACE } from "../lib/chartTheme";
+import { rangeOptions, type Range } from "../lib/ranges";
+import { legendItems, plotSeries, type ChartSeries, type ChartUnit } from "../lib/valueChart";
 
-const RANGE_OPTIONS = [
-  { value: "24h", label: "24h" },
-  { value: "7d", label: "7d" },
-  { value: "1mo", label: "1mo" },
-  { value: "6mo", label: "6mo" },
-  { value: "1y", label: "1y" },
-  { value: "ytd", label: "ytd" },
-  { value: "max", label: "max" },
-];
-
-const RANGE_LABEL: Record<string, string> = {
-  "24h": "24h", "7d": "7d", "1mo": "1mo", "6mo": "6mo", "1y": "1y", ytd: "ytd", max: "max",
-};
+const GREEN = "#34d399"; // color-green
+const GRAY = "#777471"; // fg-faint
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
-  const [range, setRange] = useState("6mo");
+  const [range, setRange] = useState<Range>("6mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
   const ready = data !== undefined;
@@ -47,19 +38,17 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
     { value: "percent", label: "%" },
   ];
 
-  const LEGEND_ITEMS =
-    unit === "percent"
-      ? [{ label: t("common.return"), color: "var(--color-green)" }]
-      : [
-          { label: t("dashboard.netWorth.netWorth"), color: "var(--color-green)" },
-          { label: t("dashboard.netWorth.capitalInvested"), color: "var(--color-fg-faint)", dashed: true },
-        ];
+  const RANGE_OPTIONS = rangeOptions(t);
 
-  const points = (data?.points ?? []).map((p) => ({
-    t: p.t,
-    netWorth: Number(p.netWorth),
-    invested: Number(p.invested),
-  }));
+  // Net worth (green area) over capital invested (dashed). The legend is read
+  // off the plotted series, so it turns red with the line.
+  const points = data?.points ?? [];
+  const series: ChartSeries[] = [
+    { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, Number(p.invested)]), color: GRAY, dashed: true },
+    { name: t("dashboard.netWorth.netWorth"), data: points.map((p) => [p.t, Number(p.netWorth)]), color: GREEN, area: true },
+  ];
+  const legend = legendItems(plotSeries(series, unit, t("common.return")));
+
   const summary = data?.summary;
   const gainUp = summary ? Number(summary.gainAbs) >= 0 : true;
 
@@ -100,7 +89,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
-                  <p className="text-fg-faint text-sm">{t("dashboard.netWorth.over", { range: RANGE_LABEL[range] })}</p>
+                  <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>
                 </div>
                 {/* Not the ⚠ glyph the other warnings use: this one is not about
                     one holding being left out, it is about every figure on the
@@ -122,18 +111,24 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
           </div>
           <div className="flex flex-col gap-2 md:gap-3">
             <div className="hidden items-center gap-6 md:flex">
-              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
+              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
               <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
             </div>
-            <ChartLegend items={LEGEND_ITEMS} className="md:self-end" />
+            <ChartLegend items={legend} className="md:self-end" />
           </div>
         </div>
         {/* Phone: the seven ranges scroll on their own row under the chart. */}
         <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
-          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="w-max" />
+          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
         </div>
         {ready ? (
-          <NetWorthChart className="mt-4" data={points} unit={unit} />
+          <ValueChart
+            series={series}
+            unit={unit}
+            percentLabel={t("common.return")}
+            className="mt-4"
+            surfaceColor={SURFACE}
+          />
         ) : (
           <CardState
             variant={isError ? "error" : "loading"}

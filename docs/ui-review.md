@@ -46,7 +46,7 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Net worth: ⚠ some holding not valued (`fxMissing`) | state |
 | Net worth: whole figure in the pivot currency (`reportingFxMissing`) | state |
 | Net worth: private mode, masked / revealed | Settings · General → private mode |
-| Value / % unit; ranges 24h…max | action |
+| Value / % unit; ranges 7D…Max | action |
 | Distribution: loading / error / no accounts | query `/accounts`; state for empty |
 | Distribution: ⚠ on an account (`fxMissing`) | state |
 | Holdings: loading / error | query `/holdings` |
@@ -64,7 +64,9 @@ Findings:
 
 | # | Finding | By | Outcome |
 |---|---|---|---|
-| D1 | The range labels are raw codes in both languages ("over 6mo", "sur 6mo"; buttons "1mo", "ytd", "max"). | Claude | |
+| D1 | The range labels are raw codes in both languages ("over 6mo", "sur 6mo"; buttons "1mo", "ytd", "max"). | Claude | fixed: one list of ranges (`lib/ranges.ts`), labels in i18n ("7D…Max", "over 6 months" / "sur 6 mois", "since January 1") |
+| D5 | The 24h range is useless (daily data: two points). | User | fixed: removed from every range picker and from the API |
+| D6 | The legend stays green when the line turns red on a loss, in value and % mode (also the tooltip swatch, and the asset modal's legend). | User | fixed: legend and tooltip read their colour off the plotted series (`lib/valueChart.ts`) |
 | D2 | `DistributionCard` with no accounts shows an empty ring and "Total 0 €" with no message; with every account at zero it divides by a zero total (NaN shares). | Claude (code) | |
 | D3 | `HoldingsCard` has no empty state: no holdings, or a search with no match, leaves a bare table header. | Claude (code) | |
 
@@ -85,7 +87,7 @@ Findings:
 
 | # | Finding | By | Outcome |
 |---|---|---|---|
-| A1 | Same raw range labels as D1 (`AccountsChartCard` keeps its own copy of `RANGE_LABEL`). | Claude (code) | |
+| A1 | Same raw range labels as D1 (`AccountsChartCard` keeps its own copy of `RANGE_LABEL`). | Claude (code) | fixed with D1 |
 
 ### Investments `/investments`
 
@@ -229,3 +231,5 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 
 | Fix | Screens touched |
 |---|---|
+| One range list with localized labels, no 24h (D1, D5) | Dashboard net worth, Accounts chart, asset modal |
+| Chart legend and tooltip coloured like the line (D6) | Dashboard net worth, asset modal |

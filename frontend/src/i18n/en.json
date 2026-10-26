@@ -21,6 +21,17 @@
     "showAmount": "Show amount",
     "hideAmount": "Hide amount"
   },
+  "range": {
+    "short": { "7d": "7D", "1mo": "1M", "6mo": "6M", "1y": "1Y", "ytd": "YTD", "max": "Max" },
+    "over": {
+      "7d": "over 7 days",
+      "1mo": "over 1 month",
+      "6mo": "over 6 months",
+      "1y": "over 1 year",
+      "ytd": "since January 1",
+      "max": "since the start"
+    }
+  },
   "sync": {
     "title": "Sync",
     "openLabel": "Sync data",
@@ -72,7 +83,6 @@
     "reportingFxMissing": "The exchange rate to {{currency}} is not available yet. The figures below are shown in the app’s base currency. The rate will be fetched on the next sync.",
     "netWorth": {
       "title": "Net Worth",
-      "over": "over {{range}}",
       "netWorth": "Net worth",
       "capitalInvested": "Capital invested"
     },

@@ -11,24 +11,12 @@ import { StackedAreaChart, type StackedSeries } from "./StackedAreaChart";
 import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
 import { useNetWorth, useAccountSeries } from "../api/hooks";
-
-const RANGE_OPTIONS = [
-  { value: "24h", label: "24h" },
-  { value: "7d", label: "7d" },
-  { value: "1mo", label: "1mo" },
-  { value: "6mo", label: "6mo" },
-  { value: "1y", label: "1y" },
-  { value: "ytd", label: "ytd" },
-  { value: "max", label: "max" },
-];
-
-const RANGE_LABEL: Record<string, string> = {
-  "24h": "24h", "7d": "7d", "1mo": "1mo", "6mo": "6mo", "1y": "1y", ytd: "ytd", max: "max",
-};
+import { rangeOptions, type Range } from "../lib/ranges";
 
 export function AccountsChartCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
-  const [range, setRange] = useState("6mo");
+  const [range, setRange] = useState<Range>("6mo");
+  const RANGE_OPTIONS = rangeOptions(t);
   const nw = useNetWorth(range);
   const series = useAccountSeries(range);
   const ready = nw.data !== undefined && series.data !== undefined;
@@ -61,14 +49,14 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
                     <Money value={summary?.gainAbs ?? "0"} signed />
                     <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
                   </div>
-                  <p className="text-fg-faint text-sm">{t("dashboard.netWorth.over", { range: RANGE_LABEL[range] })}</p>
+                  <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>
                 </div>
               </>
             )}
           </div>
           <div className="flex flex-col md:items-end">
             <div className="hidden md:block">
-              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
+              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
             </div>
             {/* Phone: one swipeable row instead of three wrapped ones. */}
             <ChartLegend className="-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible" items={legendItems} />
@@ -76,7 +64,7 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
         </div>
         {/* Phone: the seven ranges scroll on their own row under the chart. */}
         <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
-          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="w-max" />
+          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
         </div>
         {ready ? (
           <StackedAreaChart className="mt-4" series={stacked} />

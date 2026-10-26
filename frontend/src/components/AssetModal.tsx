@@ -21,6 +21,8 @@ import { positionSeries } from "../lib/assetSeries";
 import { reportingOffered } from "../lib/reportingUnit";
 import { currencySymbol } from "../lib/currency";
 import { getPrefs } from "../lib/prefs";
+import { rangeOptions, type Range } from "../lib/ranges";
+import { legendItems, plotSeries } from "../lib/valueChart";
 
 // This modal shows THREE currency domains on screen, plus a fourth behind the chart's unit
 // switch. They are distinct and must
@@ -52,23 +54,9 @@ import { getPrefs } from "../lib/prefs";
 // Never mix the domains without labeling — an unlabelled figure sitting next to
 // one in another currency is the bug this split exists to prevent.
 
-// Range buttons for the modal (canonical API keys).
-const RANGES = [
-  { key: "24h", label: "24h" },
-  { key: "7d", label: "7d" },
-  { key: "1mo", label: "1mo" },
-  { key: "6mo", label: "6mo" },
-  { key: "1y", label: "1y" },
-  { key: "ytd", label: "ytd" },
-  { key: "max", label: "max" },
-];
-
-const GREEN = "var(--color-green)";
-const FAINT = "var(--color-fg-faint)";
 
 type Mode = "asset" | "purchases";
 
-const RANGE_OPTIONS = RANGES.map((r) => ({ value: r.key, label: r.label }));
 
 type AssetModalProps = {
   holding: Holding;
@@ -81,7 +69,7 @@ type AssetModalProps = {
 export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetModalProps) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("asset");
-  const [range, setRange] = useState("1mo");
+  const [range, setRange] = useState<Range>("1mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
 
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
@@ -188,6 +176,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   }, [holding, mode, prices, purchases, qtyNum, investedNum, inReporting, t]);
 
   const gainUp = gainAbs >= 0;
+  const chartUnit: ChartUnit = inReporting ? "value" : shownUnit;
 
   return (
     <Modal
@@ -257,16 +246,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 options={UNIT_OPTIONS}
               />
               {mode === "purchases" && (
-                <ChartLegend
-                  items={
-                    shownUnit === "percent"
-                      ? [{ label: t("common.return"), color: GREEN }]
-                      : [
-                          { label: t("dashboard.assetModal.positionValue"), color: GREEN },
-                          { label: t("dashboard.assetModal.invested"), color: FAINT, dashed: true },
-                        ]
-                  }
-                />
+                <ChartLegend items={legendItems(plotSeries(series, chartUnit, t("common.return")))} />
               )}
             </div>
           </div>
@@ -274,7 +254,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           {chartReady ? (
             <ValueChart
               series={series}
-              unit={inReporting ? "value" : shownUnit}
+              unit={chartUnit}
               percentLabel={t("common.return")}
               height={340}
               className="mt-4"
@@ -291,8 +271,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           <div className="flex justify-center mt-3">
             <SegmentedControl
               value={range}
-              onChange={setRange}
-              options={RANGE_OPTIONS}
+              onChange={(v) => setRange(v as Range)}
+              options={rangeOptions(t)}
             />
           </div>
         </div>
