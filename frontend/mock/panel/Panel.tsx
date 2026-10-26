@@ -43,8 +43,8 @@ const s = {
     background: "#18181b", color: "#fafafa", border: "1px solid #3f3f46", borderRadius: 8,
     boxShadow: "0 8px 24px rgba(0,0,0,.35)",
   },
-  body: { width: 320, maxHeight: "70vh", overflowY: "auto", padding: "8px 10px 10px" },
-  head: { display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", cursor: "pointer", userSelect: "none" },
+  body: { width: 320, maxHeight: "70vh", overflowY: "auto", padding: "0 10px 10px", borderTop: "1px solid #3f3f46" },
+  head: { display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", cursor: "pointer", userSelect: "none", fontSize: 12 },
   section: { borderTop: "1px solid #3f3f46", paddingTop: 8, marginTop: 8 },
   title: { color: "#a1a1aa", textTransform: "uppercase", fontSize: 10, letterSpacing: ".08em", marginBottom: 4 },
   row: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
@@ -62,9 +62,9 @@ function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; chi
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, first = false, children }: { title: string; first?: boolean; children: ReactNode }) {
   return (
-    <div style={s.section}>
+    <div style={first ? { paddingTop: 8 } : s.section}>
       <div style={s.title}>{title}</div>
       {children}
     </div>
@@ -107,7 +107,7 @@ export function Panel() {
       </div>
       {open && (
         <div style={s.body}>
-          <Section title="States on this screen">
+          <Section title="States on this screen" first>
             {here.length === 0 && <div style={s.muted}>None yet: the base data.</div>}
             {here.map((st) => (
               <label key={st.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
