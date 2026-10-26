@@ -4,7 +4,7 @@
 // fresh data. The panel lists the
 // states of the piece under review (`FOCUS`).
 
-import { BANK, CHECKING, CW8, ESE, HISTORY_DAYS } from "./data/base";
+import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, SP500, WORLD, closes } from "./data/base";
 import { daysAgo, id } from "./data/util";
 import type { Store } from "./store";
 import { lotsOf } from "./views/portfolio";
@@ -46,7 +46,7 @@ function extraAccount(store: Store, n: number, name: string, typeKey: string, co
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Distribution";
+export const FOCUS = "Holdings";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -110,6 +110,34 @@ export const STATES: MockState[] = [
       emptyHousehold(store);
       extraAccount(store, 20, "Compte courant", "checking", "#60b4f5", 0);
       extraAccount(store, 21, "Livret A", "savings", "#34d399", 0);
+    },
+  },
+  // ── Holdings ──
+  {
+    id: "holdings-many",
+    label: "Life insurance with 7 funds: long names, fractions",
+    pieces: ["Holdings"],
+    apply(store) {
+      const account = id("acc", 40);
+      store.accounts.push({ id: account, connectionId: BROKER, name: "Assurance vie Linxea Spirit 2", color: "#f0b952", typeKey: "life_insurance", currency: "EUR", sourceName: "Boursorama", sourceLogo: null });
+      store.openingCash[account] = 1250;
+      const funds: [string, string, number, number][] = [
+        ["IWDA", "iShares Core MSCI World UCITS ETF USD (Acc)", 98.42, 42],
+        ["PAEEM", "Amundi PEA MSCI Emerging Markets ESG Leaders UCITS ETF", 24.11, 120],
+        ["BTCE", "WisdomTree Physical Bitcoin", 61430.5, 0.0421],
+        ["SXR8", "iShares Core S&P 500 UCITS ETF", 612.9, 3.5],
+        ["EUNA", "iShares Core Global Aggregate Bond UCITS ETF EUR Hedged (Dist)", 4.82, 900],
+        ["FEX", "Fonds Euro Nouvelle Génération", 1, 3500],
+        ["LVC", "Amundi ETF Leveraged MSCI USA Daily UCITS ETF", 14.2, 15],
+      ];
+      funds.forEach(([ticker, name, last, qty], i) => {
+        const sec = id("hol", 40 + i);
+        const c = closes(40 + i, last, 0.0002, 0.012);
+        store.securities.push({ id: sec, accountId: account, ticker, name, closes: c, composition: i % 2 ? SP500 : WORLD });
+        store.manualLots[sec] = [
+          { id: id("lot", 40 + i), t: daysAgo(300), side: "buy", qty: String(qty), price: c[HISTORY_DAYS - 301].toFixed(2), fee: "0", manual: true },
+        ];
+      });
     },
   },
   // ── Dashboard ──
@@ -184,7 +212,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution"],
+    pieces: ["Net worth chart", "Distribution", "Holdings"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },

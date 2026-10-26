@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { Surface } from "./Surface";
 import { FxAsterisk, FxFootnote } from "./FxNote";
-import { Money } from "./Money";
+import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
@@ -15,6 +15,7 @@ import { formatQuantity } from "../lib/money";
 import { aggregateCash } from "../lib/holdings";
 import { KIND_LABEL_KEY, accountTypeLabel, type Holding } from "../api/types";
 import { useHoldings } from "../api/hooks";
+import { usePrivacy } from "../auth/usePrivacy";
 
 type SortKey = "asset" | "qty" | "value" | "pnl";
 type SortDir = "asc" | "desc";
@@ -78,22 +79,22 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useHoldings();
   const ready = data !== undefined;
+  const privacy = usePrivacy();
   // Cash is the same instrument across accounts; show one summed line per
   // currency here, with the per-account split living on the Accounts tab.
-  const holdings = useMemo(
-    () => aggregateCash(data ?? [], t("dashboard.holdings.multipleAccounts")),
-    [data, t],
-  );
+  const multiple = t("dashboard.holdings.multipleAccounts");
+  const holdings = useMemo(() => aggregateCash(data ?? [], multiple), [data, multiple]);
   const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
   const [accountType, setAccountType] = useState("All");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
   const [lotFor, setLotFor] = useState<Holding | null>(null);
 
-  // Filter by stable account-type key.
+  // Filter by stable account-type key, read off the accounts themselves
+  // rather than the merged cash line, which may span several types.
   const accountTypes = useMemo(
-    () => ["All", ...new Set(holdings.map((h) => h.accountType))],
-    [holdings],
+    () => ["All", ...new Set((data ?? []).map((h) => h.accountType))],
+    [data],
   );
 
   const netWorth = useMemo(
@@ -103,15 +104,20 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = holdings.filter(
-      (h) =>
-        (accountType === "All" || h.accountType === accountType) &&
-        (q === "" ||
-          h.name.toLowerCase().includes(q) ||
-          h.ticker.toLowerCase().includes(q)),
+    // Filter before merging the cash, so a filtered list's cash line is that
+    // type's cash only (the PEA's own liquidity under "PEA").
+    const filtered = aggregateCash(
+      (data ?? []).filter(
+        (h) =>
+          (accountType === "All" || h.accountType === accountType) &&
+          (q === "" ||
+            h.name.toLowerCase().includes(q) ||
+            h.ticker.toLowerCase().includes(q)),
+      ),
+      multiple,
     );
     return sort ? [...filtered].sort((a, b) => compare(a, b, sort)) : filtered;
-  }, [holdings, accountType, query, sort]);
+  }, [data, multiple, accountType, query, sort]);
 
   const toggleSort = (key: SortKey) =>
     setSort((prev) =>
@@ -129,6 +135,11 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             {ready && (
               <span className="text-fg-faint font-normal ml-3">
                 {t("dashboard.holdings.assetsCount", { count: holdings.length })}
+              </span>
+            )}
+            {ready && privacy.enabled && (
+              <span className="ml-3 inline-flex align-middle">
+                <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
               </span>
             )}
           </h2>
@@ -280,7 +291,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   <td className={`py-3 px-3 border-t border-surface-2 text-right ${HIDDEN_ON_PHONE}`}>
                     {hasPnl ? (
                       <span className="text-sm text-fg-dim font-mono">
-                        {formatQuantity(h.qty, { fractionDigits: 2 })}
+                        {formatQuantity(h.qty)}
                       </span>
                     ) : (
                       <span className="text-sm text-fg-faint">-</span>
@@ -300,7 +311,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   </td>
                   {/* ACCOUNT TYPE */}
                   <td className={`py-3 px-3 border-t border-surface-2 ${HIDDEN_ON_PHONE}`}>
-                    <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5">
+                    <span className="font-mono text-[11px] text-fg-faint bg-surface-3 rounded px-1.5 py-0.5 whitespace-nowrap">
                       {accountTypeLabel(t, h.accountType)}
                     </span>
                   </td>
@@ -311,19 +322,20 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         {h.valueNative === null ? (
                           <span className="text-sm text-fg-faint">-</span>
                         ) : (
-                          <Money value={h.valueNative} currency={h.priceCurrency} className="text-sm text-fg-dim" />
+                          <MaskedMoney masked={privacy.masked} value={h.valueNative} currency={h.priceCurrency} className="text-sm text-fg-dim" />
                         )}
                         <FxAsterisk />
                       </span>
                     ) : (
-                      <Money value={h.value} className="text-sm text-fg" />
+                      <MaskedMoney masked={privacy.masked} value={h.value} className="text-sm text-fg" />
                     )}
                   </td>
                   {/* UNREALIZED P/L */}
                   <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
                     {showPnl ? (
                       <div className="flex flex-col items-end">
-                        <Money
+                        <MaskedMoney
+                          masked={privacy.masked}
                           value={h.gl}
                           signed
                           className={`text-sm ${up ? "text-green" : "text-red"}`}
@@ -354,6 +366,11 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             })}
           </tbody>
         </table>
+        {rows.length === 0 && (
+          <p className="border-t border-surface-2 py-6 text-center text-fg-faint text-sm">
+            {t("dashboard.holdings.noMatch", { query: query.trim() })}
+          </p>
+        )}
         {holdings.some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
         </>
         )}

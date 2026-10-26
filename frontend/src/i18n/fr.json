@@ -116,6 +116,7 @@
       "title": "Positions",
       "assetsCount": "{{count}} actifs",
       "searchPlaceholder": "Rechercher un actif…",
+      "noMatch": "Aucun actif ne correspond à « {{query}} ».",
       "all": "Tous",
       "multipleAccounts": "Plusieurs comptes",
       "columns": {

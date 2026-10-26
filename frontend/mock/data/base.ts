@@ -159,7 +159,7 @@ export function cat(rows: CategoryRow[], key: string): string {
 }
 
 /** Daily closes ending at `last`, as a seeded random walk with a drift. */
-function closes(seed: number, last: number, drift: number, vol: number): number[] {
+export function closes(seed: number, last: number, drift: number, vol: number): number[] {
   const r = rng(seed);
   const out = new Array<number>(HISTORY_DAYS);
   out[HISTORY_DAYS - 1] = last;
@@ -170,7 +170,7 @@ function closes(seed: number, last: number, drift: number, vol: number): number[
   return out.map((p) => Math.round(p * 100) / 100);
 }
 
-const WORLD: Composition = {
+export const WORLD: Composition = {
   countries: [
     { name: "United States", weight: 0.71 },
     { name: "Japan", weight: 0.055 },
@@ -193,7 +193,7 @@ const WORLD: Composition = {
   ],
 };
 
-const SP500: Composition = {
+export const SP500: Composition = {
   countries: [{ name: "United States", weight: 1 }],
   sectors: [
     { name: "Information Technology", weight: 0.31 },

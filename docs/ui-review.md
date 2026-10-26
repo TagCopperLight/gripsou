@@ -56,7 +56,9 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Holdings: loading / error | query `/holdings` |
 | Holdings: no holdings at all | state |
 | Holdings: search with no match | action |
-| Holdings: account-type filter chips | base |
+| Holdings: account-type filter chips; under a filter the cash line is that type's cash | base |
+| Holdings: many holdings in a second account, long names, fractional quantities | state "Life insurance with 7 funds" |
+| Holdings: private mode, values and gains masked, % kept | state "Private mode on" |
 | Holdings: amber dot, lots don't explain the quantity (short / excess) | state |
 | Holdings: no rate, value shown in its own currency with an asterisk, no gain/loss | state "Two dollar ETFs have no rate" |
 | Holdings: cash aggregated over several accounts ("Multiple accounts") | base |
@@ -72,7 +74,7 @@ Findings:
 | D5 | The 24h range is useless (daily data: two points). | User | fixed: removed from every range picker and from the API |
 | D6 | The legend stays green when the line turns red on a loss, in value and % mode (also the tooltip swatch, and the asset modal's legend). | User | fixed: legend and tooltip read their colour off the plotted series (`lib/valueChart.ts`) |
 | D2 | `DistributionCard` with no accounts shows an empty ring and "Total 0 €" with no message; with every account at zero it divides by a zero total (NaN shares). | Claude (code) | fixed: no accounts by D10, every account at zero by D17 |
-| D3 | `HoldingsCard` has no empty state: no holdings, or a search with no match, leaves a bare table header. | Claude (code) | |
+| D3 | `HoldingsCard` has no empty state: no holdings, or a search with no match, leaves a bare table header. | Claude (code) | fixed: no holdings by D10; a search with no match says "No asset matches "xyz"." (D24) |
 | D7 | With no accounts the net worth card shows a big "0 €", a green "+0 € (+0 %)" pill, a flat line at zero and range / unit switches that do nothing. Reached by skipping the bank step in Welcome, deleting the last connection, or right after connecting. | User | fixed: the card keeps its title and height; headline, pill, legend and switches go; the chart area says why it is empty (`NetWorthEmpty`, same look as `InvestmentsEmpty`). Picked from three layouts (full height / compact strip / ghost line): full height, so the dashboard doesn't jump when accounts arrive, and no made-up line that could read as data. |
 | D8 | "Connect a bank" is wrong right after connecting: the first sync is still running. | User | fixed: three cases read off the connections (`lib/netWorthEmpty.ts`): none → "No accounts yet" + Connect a bank; one syncing / awaiting / pending → "Syncing in progress", spinner, no button; all settled with still no account (failed first sync, or a bank with only loans and cards, which are skipped) → "No accounts found" + Manage connections. Both buttons go to Settings · Connections. French reworded by the user's review (first draft read badly). |
 | D9 | The fake API sent a zero point per day with no accounts; the server sends no points at all (`NetWorthResponse::from_rows` on no rows). The card keys its empty state on that. | Claude (code) | fixed in `mock/views/portfolio.ts` |
@@ -89,6 +91,11 @@ Findings:
 | D22 | The legend's tags followed each name, so they zigzagged; the share and the amount sat close together. | User | fixed: every row has the same column widths (each as wide as its longest entry), so tags, shares and amounts line up; more room before the amount; long names cut with "…" (full name on hover). Also applies to the Investments donuts. |
 | D23 | A long name hovered in the donut ran over the ring. | User | fixed: the middle text is kept to the hole's width (from the ring's inner radius), wraps, and is cut with "…" after two lines. |
 | D20 | With every account at 0 € the net worth chart's axis reads "1 €, 1 €, 1 €, 0 €, 0 €", with a "+0,00 € (0 %)" pill. | Claude | won't fix: only the labels are off, in a state that almost never happens (accounts present, every one at exactly 0 €) |
+| D24 | Holdings: a search with no match left only the column headers. | Claude | fixed: a line under the headers, "No asset matches "xyz"." |
+| D25 | Holdings: all cash was one "Euro · Multiple accounts" line, so a "Multiple" chip existed that only ever showed it, and filtering "PEA" hid the PEA's own cash. | Claude | fixed (user's pick of three): the cash is merged after filtering, so "All" shows one Euro line and a filter shows that type's cash only; the chips come from the accounts, so no "Multiple" chip. One cash line per account and leaving cash out were the other options. |
+| D26 | Holdings: private mode left every value and gain readable. | Claude | fixed: values and gains masked, gain % and quantities kept, an eye after the count (same rule as D12, D18) |
+| D27 | Holdings: "Life insurance" wrapped onto two lines in its tag; a fractional quantity was cut to two decimals (0,0421 → "0,04"). | Claude | fixed: the tag never wraps; quantities show the decimals they have (up to 8) |
+| D28 | Holdings: long fund names wrap onto two lines on desktop, so rows have uneven heights. | Claude | deferred: the table layout is to be reviewed as a whole |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`
@@ -259,6 +266,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
 | No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
-| Private mode on a card without a headline: amounts masked, shares kept, `PrivacyEye` by the title (D18) | Dashboard distribution; to apply to Holdings, Accounts list, Investments |
+| Private mode on a card without a headline: amounts masked, shares kept, `PrivacyEye` by the title (D18, D26) | Dashboard distribution, holdings; to apply to the Accounts list, Investments, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

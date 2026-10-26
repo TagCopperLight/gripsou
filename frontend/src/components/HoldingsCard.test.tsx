@@ -3,6 +3,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HoldingsCard } from "./HoldingsCard";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 const HOLDING = {
   id: "h1", ticker: "AAPL", name: "Apple Inc.", kind: "equity", logo: "#555",
@@ -27,7 +29,7 @@ const CASH_PEA = {
   qty: "200", invested: "200", value: "200",
 };
 
-function renderCard(holdings: unknown[]) {
+function renderCard(holdings: unknown[], prefs = DEFAULT_PREFS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Every URL gets the holdings list, except the modal's suggestions: that
   // endpoint returns lots to pre-fill, and none is what these tests want.
@@ -36,7 +38,9 @@ function renderCard(holdings: unknown[]) {
   ));
   return render(
     <QueryClientProvider client={client}>
-      <HoldingsCard />
+      <AuthContext.Provider value={{ prefs } as unknown as AuthValue}>
+        <HoldingsCard />
+      </AuthContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -52,6 +56,26 @@ describe("HoldingsCard", () => {
     const table = within(screen.getByRole("table"));
     expect(table.queryByText("Main Checking")).not.toBeInTheDocument();
     expect(table.queryByText("PEA")).not.toBeInTheDocument();
+  });
+
+  it("under a type filter, shows only that type's cash, not the merged line", async () => {
+    renderCard([HOLDING, CASH_CHECKING, CASH_PEA]);
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "PEA" }));
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("200,00 €")).toBeInTheDocument();
+    expect(table.queryByText("Multiple accounts")).not.toBeInTheDocument();
+    expect(table.queryByText("Apple Inc.")).not.toBeInTheDocument();
+    // Chips come from the accounts, so no "Multiple" type for the merged line.
+    expect(screen.queryByRole("button", { name: "Multiple" })).not.toBeInTheDocument();
+  });
+
+  it("masks values and gains in private mode, keeping the gain %", async () => {
+    renderCard([HOLDING], { ...DEFAULT_PREFS, privateMode: true });
+    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
+    expect(screen.queryByText(/12 858/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 858/)).not.toBeInTheDocument();
+    expect(screen.getByText("+16,8%")).toBeInTheDocument();
   });
 
   it("warns on a holding whose FX rate is missing", async () => {
