@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import { Surface } from "./Surface";
 import { Money } from "./Money";
+import { MoneyHint } from "./MoneyHint";
+import { getPrefs } from "../lib/prefs";
 import { Percent } from "./Percent";
 import { HoldingBadge } from "./HoldingBadge";
 import { EditAccountModal } from "./EditAccountModal";
@@ -73,7 +75,13 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                       ⚠
                     </span>
                   )}
-                  <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
+                  {a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? (
+                    <MoneyHint hint={<Money value={a.value} />}>
+                      <Money value={a.valueNative} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
+                    </MoneyHint>
+                  ) : (
+                    <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
+                  )}
                 </span>
               </button>
             </li>

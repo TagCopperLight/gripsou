@@ -8,6 +8,9 @@ import { CardState } from "./CardState";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "./Modal";
 import { Money } from "./Money";
+import { MoneyHint } from "./MoneyHint";
+import { getPrefs } from "../lib/prefs";
+import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
 import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
 import type { BasisPreview, Holding } from "../api/types";
@@ -263,6 +266,9 @@ export function RecordLotsModal({
   };
 
   const currency = holding.accountCurrency;
+  // The same figure in the reader's currency, only when it differs from the account's.
+  const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
+    v != null && currency !== getPrefs().currency ? <Money value={v} signed={signed} /> : null;
 
   return (
     <Modal
@@ -456,22 +462,26 @@ export function RecordLotsModal({
           </span>
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
             <Figure
+              hint={reportingHint(figures.reporting?.invested)}
               testId="figure-invested"
               label={t("dashboard.holdings.gap.capitalInvested")}
               value={formatMoney(figures.invested, { currency })}
             />
             <Figure
+              hint={reportingHint(figures.reporting?.meanPrice)}
               testId="figure-meanPrice"
               label={t("dashboard.holdings.gap.meanPricePerShare")}
               value={formatMoney(figures.meanPrice, { currency })}
             />
             <SignedFigure
+              hint={reportingHint(figures.reporting?.realised, true)}
               testId="figure-realised"
               label={t("dashboard.holdings.gap.realisedPnl")}
               value={Number(figures.realised)}
               currency={currency}
             />
             <SignedFigure
+              hint={reportingHint(figures.reporting?.unrealised, true)}
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
               value={figures.unrealised === null ? null : Number(figures.unrealised)}
@@ -497,12 +507,16 @@ export function RecordLotsModal({
   );
 }
 
-function Figure({ testId, label, value }: { testId: string; label: string; value: string }) {
+function Figure({ testId, label, value, hint }: { testId: string; label: string; value: string; hint: ReactNode | null }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-fg-faint text-xs">{label}</span>
-      <span data-testid={testId} className="text-fg font-mono font-semibold text-sm">
-        {value}
+      <span className="self-start">
+        <MoneyHint side="right" hint={hint}>
+          <span data-testid={testId} className="text-fg font-mono font-semibold text-sm">
+            {value}
+          </span>
+        </MoneyHint>
       </span>
     </div>
   );
@@ -513,7 +527,9 @@ function SignedFigure({
   label,
   value,
   currency,
+  hint,
 }: {
+  hint: ReactNode | null;
   testId: string;
   label: string;
   value: number | null;
@@ -524,17 +540,21 @@ function SignedFigure({
       <span className="text-fg-faint text-xs">{label}</span>
       {/* `Money` renders only its own span and does not forward arbitrary
           props, so the test hook goes on a wrapper. */}
-      <span data-testid={testId}>
-        {value === null ? (
-          <span className="text-fg-faint font-mono font-semibold text-sm">—</span>
-        ) : (
-          <Money
-            value={value}
-            currency={currency}
-            signed
-            className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
-          />
-        )}
+      <span className="self-start">
+        <MoneyHint side="right" hint={hint}>
+          <span data-testid={testId}>
+            {value === null ? (
+              <span className="text-fg-faint font-mono font-semibold text-sm">—</span>
+            ) : (
+              <Money
+                value={value}
+                currency={currency}
+                signed
+                className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
+              />
+            )}
+          </span>
+        </MoneyHint>
       </span>
     </div>
   );
