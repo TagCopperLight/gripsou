@@ -84,7 +84,23 @@
     "netWorth": {
       "title": "Net Worth",
       "netWorth": "Net worth",
-      "capitalInvested": "Capital invested"
+      "capitalInvested": "Capital invested",
+      "empty": {
+        "noConnection": {
+          "title": "No accounts yet",
+          "body": "Connect a bank to see your net worth and how it changes over time.",
+          "action": "Connect a bank"
+        },
+        "syncing": {
+          "title": "Your first sync is running",
+          "body": "Your accounts will show up here in a minute or two."
+        },
+        "nothingCameIn": {
+          "title": "Nothing came in from your bank",
+          "body": "Your connection didn't bring in any account gripsou can show.",
+          "action": "Check connections"
+        }
+      }
     },
     "distribution": {
       "title": "Account distribution"

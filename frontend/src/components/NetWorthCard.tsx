@@ -10,6 +10,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { ValueChart } from "./ValueChart";
 import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
+import { NetWorthEmpty } from "./NetWorthEmpty";
 import { useNetWorth } from "../api/hooks";
 import { getPrefs } from "../lib/prefs";
 import { currencySymbol } from "../lib/currency";
@@ -26,6 +27,9 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
   const ready = data !== undefined;
+  // No points means no accounts (the server sends none then): a 0 €
+  // headline, a gain pill and a flat line would only look like data.
+  const empty = ready && data.points.length === 0;
 
   const UNIT_OPTIONS = [
     { value: "value", label: t("common.value") },
@@ -59,14 +63,16 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
               <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
-              <SegmentedControl
-                options={UNIT_OPTIONS_SHORT}
-                value={unit}
-                onChange={(v) => setUnit(v as ChartUnit)}
-                className="md:hidden"
-              />
+              {!empty && (
+                <SegmentedControl
+                  options={UNIT_OPTIONS_SHORT}
+                  value={unit}
+                  onChange={(v) => setUnit(v as ChartUnit)}
+                  className="md:hidden"
+                />
+              )}
             </div>
-            {ready && (
+            {ready && !empty && (
               <>
                 {/* The dashboard's single biggest number, and the only place
                     that can silently omit a zeroed holding — so it carries the
@@ -109,19 +115,25 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
               </>
             )}
           </div>
-          <div className="flex flex-col gap-2 md:gap-3">
-            <div className="hidden items-center gap-6 md:flex">
-              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
-              <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
+          {!empty && (
+            <div className="flex flex-col gap-2 md:gap-3">
+              <div className="hidden items-center gap-6 md:flex">
+                <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
+                <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
+              </div>
+              <ChartLegend items={legend} className="md:self-end" />
             </div>
-            <ChartLegend items={legend} className="md:self-end" />
-          </div>
+          )}
         </div>
         {/* Phone: the seven ranges scroll on their own row under the chart. */}
-        <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
-          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
-        </div>
-        {ready ? (
+        {!empty && (
+          <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
+            <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
+          </div>
+        )}
+        {empty ? (
+          <NetWorthEmpty className="mt-4 h-80" />
+        ) : ready ? (
           <ValueChart
             series={series}
             unit={unit}

@@ -25,6 +25,14 @@ function security(store: Store, id: string) {
   return store.securities.find((s) => s.id === id)!;
 }
 
+/** No accounts, holdings or transactions; connections left as they are. */
+function emptyHousehold(store: Store) {
+  store.accounts = [];
+  store.securities = [];
+  store.txns = [];
+  store.openingCash = {};
+}
+
 /** The piece under review: the panel lists its states. */
 export const FOCUS = "Net worth chart";
 
@@ -101,11 +109,26 @@ export const STATES: MockState[] = [
     label: "New user: nothing connected yet",
     pieces: ["Net worth chart", "Distribution", "Holdings"],
     apply(store) {
+      emptyHousehold(store);
       store.connections = [];
-      store.accounts = [];
-      store.securities = [];
-      store.txns = [];
-      store.openingCash = {};
+    },
+  },
+  {
+    id: "dashboard-first-sync",
+    label: "Bank just connected, first sync running",
+    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    apply(store) {
+      emptyHousehold(store);
+      store.connections = [{ ...store.connections[0], status: "syncing", lastSyncAt: null }];
+    },
+  },
+  {
+    id: "dashboard-nothing-came-in",
+    label: "Bank connected, no account came in",
+    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    apply(store) {
+      emptyHousehold(store);
+      store.connections = [store.connections[0]];
     },
   },
 ];

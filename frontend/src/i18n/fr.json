@@ -84,7 +84,23 @@
     "netWorth": {
       "title": "Patrimoine net",
       "netWorth": "Patrimoine net",
-      "capitalInvested": "Capital investi"
+      "capitalInvested": "Capital investi",
+      "empty": {
+        "noConnection": {
+          "title": "Aucun compte pour l'instant",
+          "body": "Connectez une banque pour suivre votre patrimoine net et son évolution.",
+          "action": "Connecter une banque"
+        },
+        "syncing": {
+          "title": "Première synchronisation en cours",
+          "body": "Vos comptes apparaîtront ici d'ici une à deux minutes."
+        },
+        "nothingCameIn": {
+          "title": "Aucun compte récupéré",
+          "body": "Votre connexion n'a récupéré aucun compte que gripsou peut afficher.",
+          "action": "Voir les connexions"
+        }
+      }
     },
     "distribution": {
       "title": "Répartition des comptes"

@@ -45,6 +45,7 @@ Components: `PageHeader`, `NetWorthCard` (`NetWorthChart`, `ChartLegend`, `Segme
 | Net worth: gain up / down over the range | base (up); state for down |
 | Net worth: ⚠ some holding not valued (`fxMissing`) | state |
 | Net worth: whole figure in the pivot currency (`reportingFxMissing`) | state |
+| Net worth: no accounts: nothing connected / first sync running / connected but nothing came in | state |
 | Net worth: private mode, masked / revealed | Settings · General → private mode |
 | Value / % unit; ranges 7D…Max | action |
 | Distribution: loading / error / no accounts | query `/accounts`; state for empty |
@@ -69,6 +70,10 @@ Findings:
 | D6 | The legend stays green when the line turns red on a loss, in value and % mode (also the tooltip swatch, and the asset modal's legend). | User | fixed: legend and tooltip read their colour off the plotted series (`lib/valueChart.ts`) |
 | D2 | `DistributionCard` with no accounts shows an empty ring and "Total 0 €" with no message; with every account at zero it divides by a zero total (NaN shares). | Claude (code) | |
 | D3 | `HoldingsCard` has no empty state: no holdings, or a search with no match, leaves a bare table header. | Claude (code) | |
+| D7 | With no accounts the net worth card shows a big "0 €", a green "+0 € (+0 %)" pill, a flat line at zero and range / unit switches that do nothing. Reached by skipping the bank step in Welcome, deleting the last connection, or right after connecting. | User | fixed: the card keeps its title and height; headline, pill, legend and switches go; the chart area says why it is empty (`NetWorthEmpty`, same look as `InvestmentsEmpty`). Picked from three layouts (full height / compact strip / ghost line): full height, so the dashboard doesn't jump when accounts arrive, and no made-up line that could read as data. |
+| D8 | "Connect a bank" is wrong right after connecting: the first sync is still running. | User | fixed: three cases read off the connections (`lib/netWorthEmpty.ts`): none → "No accounts yet" + Connect a bank; one syncing / awaiting / pending → "Your first sync is running", spinner, no button; all settled with still no account (failed first sync, or a bank with only loans and cards, which are skipped) → "Nothing came in from your bank" + Check connections. Both buttons go to Settings · Connections. |
+| D9 | The fake API sent a zero point per day with no accounts; the server sends no points at all (`NetWorthResponse::from_rows` on no rows). The card keys its empty state on that. | Claude (code) | fixed in `mock/views/portfolio.ts` |
+| D10 | Distribution and Holdings are empty for the same reason (D2, D3). Open question for the whole dashboard: one "get started" panel instead of three empty cards? The net worth empty state works either way: it would simply be what the panel replaces. | Claude | open, for the Distribution / Holdings pieces |
 
 ### Accounts `/accounts`
 
@@ -233,3 +238,4 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 |---|---|
 | One range list with localized labels, no 24h (D1, D5) | Dashboard net worth, Accounts chart, asset modal |
 | Chart legend and tooltip coloured like the line (D6) | Dashboard net worth, asset modal |
+| No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for Distribution, Holdings and the Accounts chart, which still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard net worth (others to do) |

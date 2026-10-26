@@ -103,6 +103,13 @@ function firstIndex(range: string): number {
 }
 
 export function netWorth(store: Store, range: string): NetWorthResponse {
+  // Like the server: no accounts, no points, and a zero summary.
+  if (store.accounts.length === 0) {
+    return {
+      points: [],
+      summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
+    };
+  }
   const { value, invested } = accountDaily(store);
   const ids = store.accounts.map((a) => a.id);
   const points = [];
