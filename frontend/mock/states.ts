@@ -45,8 +45,47 @@ function extraAccount(store: Store, n: number, name: string, typeKey: string, co
   store.openingCash[accountId] = cash;
 }
 
+/** DCAM.PA in the PEA, as production stores it; returns its id. */
+function addDcam(store: Store): string {
+  // Public market data as production stores it: the Yahoo ticker, the
+  // provider's name, a price near 6,30 €, prices only from the fund's
+  // launch (4 March 2025), and Boursorama's composition as of October
+  // 2026. Quantities and dates of the purchases are made up.
+  const sec = id("hol", 60);
+  const launch = HISTORY_DAYS - 1 - Math.round((TODAY - Date.UTC(2025, 2, 4)) / 86_400_000);
+  const c = closes(60, 6.301, 0.0005, 0.011);
+  store.securities.push({
+    id: sec,
+    accountId: PEA,
+    ticker: "DCAM.PA",
+    name: "AMUNDI PEA MONDE MSCI WORLD UCITS ETF ACC",
+    closes: c,
+    listedFrom: launch,
+    composition: {
+      countries: [
+        ["Etats-Unis", 0.7276], ["Japon", 0.0591], ["Royaume-Uni", 0.0333], ["Canada", 0.033], ["Suisse", 0.0245],
+        ["Allemagne", 0.0205], ["France", 0.0199], ["Australie", 0.0155], ["Pays-Bas", 0.0149], ["Espagne", 0.0093],
+      ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
+      sectors: [
+        ["Technologie", 0.325], ["Finance", 0.1553], ["Produits industriels", 0.1046], ["Santé", 0.092],
+        // Sent twice by Boursorama (8,24 % and 4,73 %), stored merged by the adapter.
+        ["Télécommunications", 0.0838], ["Biens de consommation cycliques", 0.1297],
+        ["Énergie", 0.0404], ["Matières non énergétiques", 0.0306], ["Services publics", 0.0226],
+      ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
+    },
+  });
+  // A buy every two months from a month after launch.
+  store.manualLots[sec] = [];
+  for (let i = launch + 30, n = 0; i < HISTORY_DAYS; i += 61, n++) {
+    store.manualLots[sec].push({
+      id: id("lot", 60 + n), t: daysAgo(HISTORY_DAYS - 1 - i), side: "buy", qty: "80", price: c[i].toFixed(3), fee: "0", manual: true,
+    });
+  }
+  return sec;
+}
+
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Asset window";
+export const FOCUS = "Record purchases";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -118,46 +157,40 @@ export const STATES: MockState[] = [
     label: "DCAM.PA in the PEA (launched March 2025, ~6 € a share)",
     pieces: ["Asset window", "Holdings"],
     apply(store) {
-      // Public market data as production stores it: the Yahoo ticker, the
-      // provider's name, a price near 6,30 €, prices only from the fund's
-      // launch (4 March 2025), and Boursorama's composition as of October
-      // 2026. Quantities and dates of the purchases are made up.
-      const sec = id("hol", 60);
-      const launch = HISTORY_DAYS - 1 - Math.round((TODAY - Date.UTC(2025, 2, 4)) / 86_400_000);
-      const c = closes(60, 6.301, 0.0005, 0.011);
-      store.securities.push({
-        id: sec,
-        accountId: PEA,
-        ticker: "DCAM.PA",
-        name: "AMUNDI PEA MONDE MSCI WORLD UCITS ETF ACC",
-        closes: c,
-        listedFrom: launch,
-        composition: {
-          countries: [
-            ["Etats-Unis", 0.7276], ["Japon", 0.0591], ["Royaume-Uni", 0.0333], ["Canada", 0.033], ["Suisse", 0.0245],
-            ["Allemagne", 0.0205], ["France", 0.0199], ["Australie", 0.0155], ["Pays-Bas", 0.0149], ["Espagne", 0.0093],
-          ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
-          sectors: [
-            ["Technologie", 0.325], ["Finance", 0.1553], ["Produits industriels", 0.1046], ["Santé", 0.092],
-            // Sent twice by Boursorama (8,24 % and 4,73 %), stored merged by the adapter.
-            ["Télécommunications", 0.0838], ["Biens de consommation cycliques", 0.1297],
-            ["Énergie", 0.0404], ["Matières non énergétiques", 0.0306], ["Services publics", 0.0226],
-          ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
-        },
-      });
-      // A buy every two months from a month after launch.
+      addDcam(store);
+    },
+  },
+  // ── Record purchases ──
+  {
+    id: "record-no-lots",
+    label: "DCAM.PA held, no purchase recorded at all",
+    pieces: ["Record purchases", "Holdings"],
+    apply(store) {
+      const sec = addDcam(store);
+      security(store, sec).reportedQty = lotShares(store, sec);
       store.manualLots[sec] = [];
-      for (let i = launch + 30, n = 0; i < HISTORY_DAYS; i += 61, n++) {
-        store.manualLots[sec].push({
-          id: id("lot", 60 + n), t: daysAgo(HISTORY_DAYS - 1 - i), side: "buy", qty: "80", price: c[i].toFixed(3), fee: "0", manual: true,
-        });
-      }
+    },
+  },
+  {
+    id: "record-suggestions",
+    label: "CW8 3 shares short, 3 buys pre-filled from the cash ledger",
+    pieces: ["Record purchases"],
+    apply(store) {
+      const c = security(store, CW8).closes;
+      security(store, CW8).reportedQty = lotShares(store, CW8) + 3;
+      store.lotSuggestions[CW8] = [400, 280, 150].map((ago) => ({
+        type: "buy" as const,
+        date: new Date(daysAgo(ago)).toISOString().slice(0, 10),
+        quantity: "1",
+        unitPrice: c[HISTORY_DAYS - 1 - ago].toFixed(2),
+        fee: "1.99",
+      }));
     },
   },
   {
     id: "asset-sold",
     label: "CW8: 2 shares sold last month",
-    pieces: ["Asset window"],
+    pieces: ["Asset window", "Record purchases"],
     apply(store) {
       const c = security(store, CW8).closes;
       store.manualLots[CW8] = [
@@ -260,7 +293,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-short",
     label: "Lots explain 3 shares fewer than CW8 holds",
-    pieces: ["Holdings", "Asset window"],
+    pieces: ["Holdings", "Asset window", "Record purchases"],
     apply(store) {
       security(store, CW8).reportedQty = lotShares(store, CW8) + 3;
     },
@@ -268,7 +301,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-excess",
     label: "Lots explain 2 shares more than ESE holds",
-    pieces: ["Holdings", "Asset window"],
+    pieces: ["Holdings", "Asset window", "Record purchases"],
     apply(store) {
       security(store, ESE).reportedQty = lotShares(store, ESE) - 2;
     },
@@ -276,7 +309,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },

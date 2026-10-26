@@ -1,4 +1,5 @@
-import type { Router } from "../router";
+import { reply, type Router } from "../router";
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks";
 import type { Store } from "../store";
 import * as v from "../views/portfolio";
 
@@ -12,5 +13,11 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/investments/returns", ({ store }) => v.returns(store));
   r.route("GET", "/holdings/:id/prices", ({ store, params, query }) => v.prices(store, params.id, query.get("range") ?? "1y"));
   r.route("GET", "/holdings/:id/lots", ({ store, params }) => v.lotsOf(store, params.id));
-  r.route("GET", "/holdings/:id/lots/suggestions", () => []);
+  r.route("GET", "/holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
+  r.route("POST", "/holdings/:id/lots/preview", ({ store, params, body }) =>
+    v.previewLots(store, params.id, (body as { rows: SaveLotAdd[] }).rows));
+  r.route("PUT", "/holdings/:id/lots", ({ store, params, body }) => {
+    v.saveLots(store, params.id, body as SaveLotsInput);
+    return reply(204);
+  });
 }

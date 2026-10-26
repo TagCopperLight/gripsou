@@ -2,12 +2,15 @@
 // `createStore`. The control (control.ts) holds the live one.
 
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget";
+import type { LotSuggestion } from "../src/api/types";
 import { baseData, type BaseData } from "./data/base";
 
 export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
   aiUsage: BudgetAiUsage;
   aiStatus: AiStatus;
+  /** Rows the "record purchases" window pre-fills, per holding (none in the base data). */
+  lotSuggestions: Record<string, LotSuggestion[]>;
 };
 
 export function createStore(): Store {
@@ -15,6 +18,7 @@ export function createStore(): Store {
   data.user.prefs.budgetAiEnabled = true;
   return {
     ...data,
+    lotSuggestions: {},
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",

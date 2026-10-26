@@ -1,8 +1,10 @@
 // Valuations computed from the store, so a write (a lot, a transaction) shows
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks";
 import type {
   Account,
+  BasisPreview,
   AccountSeries,
   Holding,
   InvestmentReturns,
@@ -291,4 +293,48 @@ export function returns(store: Store): InvestmentReturns {
       missing: hs.filter((h) => h.accountId === a.id && Number(h.unexplainedQty) !== 0).map((h) => ({ id: h.id, name: h.name })),
     })),
   };
+}
+
+/** The figures for a full set of rows, as `lot_basis` would give them:
+ *  fee-inclusive weighted average in date order, a sale realising its proceeds
+ *  minus fee over that average. The real preview replaces every lot of the
+ *  holding with the rows sent, so this does too. */
+export function previewLots(store: Store, holdingId: string, rows: SaveLotAdd[]): BasisPreview {
+  let qty = 0;
+  let cost = 0;
+  let realised = 0;
+  for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
+    const q = Number(r.quantity);
+    const p = Number(r.unitPrice);
+    const fee = Number(r.fee ?? 0);
+    if (r.type === "buy") {
+      qty += q;
+      cost += q * p + fee;
+    } else {
+      const mean = qty === 0 ? 0 : cost / qty;
+      realised += q * p - fee - q * mean;
+      cost -= q * mean;
+      qty -= q;
+    }
+  }
+  const mean = qty === 0 ? 0 : cost / qty;
+  const s = store.securities.find((x) => x.id === holdingId);
+  const unrealised = s && !store.fx.missing.includes(s.id) ? money(qty * s.closes[HISTORY_DAYS - 1] - cost) : null;
+  const figures = { meanPrice: money(mean), invested: money(cost), realised: money(realised), unrealised };
+  return { ...figures, reporting: figures };
+}
+
+/** One batch, like the real endpoint: deletes manual lots, adds the new rows as manual lots. */
+export function saveLots(store: Store, holdingId: string, batch: SaveLotsInput): void {
+  const kept = (store.manualLots[holdingId] ?? []).filter((l) => !batch.deletes.includes(l.id));
+  const added = batch.adds.map((r, i) => ({
+    id: `manual-${holdingId}-${Date.now()}-${i}`,
+    t: Date.parse(`${r.date}T00:00:00Z`),
+    side: r.type,
+    qty: r.quantity,
+    price: r.unitPrice,
+    fee: r.fee ?? "0",
+    manual: true,
+  }));
+  store.manualLots[holdingId] = [...kept, ...added];
 }
