@@ -44,7 +44,7 @@ function FigureCell({ name, figure, fxMissing }: { name: FigureKey; figure: Figu
       <PrivateMoney
         value={figure.amount}
         className={`text-2xl font-semibold tracking-tight ${spec.tone}`}
-        after={fxMissing && <FxAsterisk size="md" title={t("fx.budget")} />}
+        after={fxMissing && <FxAsterisk size="md" />}
       />
       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 text-xs">
         <Comparison

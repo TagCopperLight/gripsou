@@ -102,11 +102,10 @@ describe("missing exchange rate", () => {
     expect(screen.queryByText(/Excludes/)).not.toBeInTheDocument();
   });
 
-  it("marks the understated account and the total of the distribution", async () => {
+  it("explains the understated distribution under its card", async () => {
     stubApi({ "/accounts": [account(true)], "/holdings": [unconverted("ese", "ESE")] });
     render(withClient(<DistributionCard />));
     expect(await screen.findByText(/Excludes ESE \(/)).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Excludes ESE: no USD rate yet.")).toHaveLength(2);
   });
 
   it("shows the holding in its own currency, with no gain or loss", async () => {

@@ -13,7 +13,7 @@ import { CardState } from "./CardState";
 import { NetWorthEmpty } from "./NetWorthEmpty";
 import { useHoldings, useNetWorth } from "../api/hooks";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
-import { excludedText, unconverted } from "../lib/fxNote";
+import { unconverted } from "../lib/fxNote";
 import { getPrefs } from "../lib/prefs";
 import { currencySymbol } from "../lib/currency";
 import { SURFACE } from "../lib/chartTheme";
@@ -87,7 +87,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                     privacy={privacy}
                     value={summary?.netWorth ?? "0"}
                     className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]"
-                    after={fxMissing && <FxAsterisk size="lg" title={excludedText(t, excluded)} />}
+                    after={fxMissing && <FxAsterisk size="lg" />}
                   />
                 </span>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -98,12 +98,6 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                   </div>
                   <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>
                 </div>
-                {/* Right under the figure it explains, not under the chart. */}
-                {fxMissing && (
-                  <FxFootnote className="mt-1">
-                    <ExcludedNote items={excluded} masked={privacy.masked} />
-                  </FxFootnote>
-                )}
               </>
             )}
           </div>
@@ -139,6 +133,12 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
             onRetry={() => refetch()}
             className="mt-4 h-80"
           />
+        )}
+        {/* Last, after the phone's range row too. */}
+        {ready && !empty && fxMissing && (
+          <FxFootnote className="order-last mt-3">
+            <ExcludedNote items={excluded} masked={privacy.masked} />
+          </FxFootnote>
         )}
       </div>
     </Surface>

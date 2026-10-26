@@ -24,7 +24,8 @@ export function MaskedMoney({ value, masked, className = "", ...options }: Maske
 type PrivateMoneyProps = Omit<MaskedMoneyProps, "masked"> & {
   /** The card's shared privacy, when other figures follow the same eye. */
   privacy?: Privacy;
-  /** Right after the amount, before the eye (a footnote's asterisk). */
+  /** Hung on the amount's right edge (a footnote's asterisk, which
+   *  positions itself against this `relative` wrapper). */
   after?: ReactNode;
 };
 
@@ -38,7 +39,7 @@ export function PrivateMoney({ privacy, after, ...props }: PrivateMoneyProps) {
   if (!enabled) {
     if (after == null) return <Money {...props} />;
     return (
-      <span>
+      <span className="relative">
         <Money {...props} />
         {after}
       </span>
@@ -47,7 +48,7 @@ export function PrivateMoney({ privacy, after, ...props }: PrivateMoneyProps) {
 
   return (
     <span className="flex items-center gap-2">
-      <span>
+      <span className="relative">
         <MaskedMoney masked={masked} {...props} />
         {after}
       </span>

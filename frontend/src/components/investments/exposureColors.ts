@@ -17,8 +17,8 @@ export type DonutItem = {
   /** A small badge after the label (the account's type). */
   tag?: string;
   /** Something is missing from this row's amount for want of an exchange
-   *  rate: an asterisk after it, with this text as its title. */
-  fxNote?: string;
+   *  rate: an asterisk after it. */
+  fxMissing?: boolean;
   children?: DonutItem[];
 };
 

@@ -5,7 +5,7 @@ import { ExposureDonut } from "./investments/ExposureDonut";
 import { accountTypeLabel } from "../api/types";
 import { useAccounts, useHoldings } from "../api/hooks";
 import { ExcludedNote } from "./FxNote";
-import { excludedText, unconverted } from "../lib/fxNote";
+import { unconverted } from "../lib/fxNote";
 
 type DistributionCardProps = {
   className?: string;
@@ -28,10 +28,10 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       color: a.color,
       value: a.value,
       tag: accountTypeLabel(t, a.typeKey),
-      fxNote: a.fxMissing ? excludedText(t, excluded.filter((h) => h.accountId === a.id)) : undefined,
+      fxMissing: a.fxMissing,
     }));
-  const fxNote = excluded.length > 0 || accounts.some((a) => a.fxMissing)
-    ? { title: excludedText(t, excluded), footnote: <ExcludedNote items={excluded} /> }
+  const fxFootnote = excluded.length > 0 || accounts.some((a) => a.fxMissing)
+    ? <ExcludedNote items={excluded} />
     : undefined;
 
   return (
@@ -41,7 +41,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       centerLabel={t("common.total")}
       items={items}
       total={total}
-      fxNote={fxNote}
+      fxFootnote={fxFootnote}
       placeholder={
         data === undefined ? (
           <CardState

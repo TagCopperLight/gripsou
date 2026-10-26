@@ -11,7 +11,7 @@ import { indexItems, regionItems, sectorItems } from "../components/investments/
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
-import { excludedText, unconverted, type Unconverted } from "../lib/fxNote";
+import { unconverted, type Unconverted } from "../lib/fxNote";
 import { ExcludedNote } from "../components/FxNote";
 
 /** The securities the page is about: cash never counts here. */
@@ -60,9 +60,7 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
   const { t, i18n } = useTranslation();
   const e = exposure(held);
   // Securities with no rate are worth zero here, so every donut leaves them out.
-  const fxNote = excluded.length > 0
-    ? { title: excludedText(t, excluded), footnote: <ExcludedNote items={excluded} /> }
-    : undefined;
+  const fxFootnote = excluded.length > 0 ? <ExcludedNote items={excluded} /> : undefined;
 
   return (
     <>
@@ -78,20 +76,20 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
             title={t("investments.exposure.regions")}
             items={regionItems(e.regions, t, i18n.language)}
             total={e.covered}
-            fxNote={fxNote}
+            fxFootnote={fxFootnote}
           />
           <div className="grid gap-4 md:grid-cols-2">
             <ExposureDonut
               title={t("investments.exposure.sectors")}
               items={sectorItems(e.sectors, t)}
               total={e.covered}
-              fxNote={fxNote}
+              fxFootnote={fxFootnote}
             />
             <ExposureDonut
               title={t("investments.exposure.indices")}
               items={indexItems(e.indices, t)}
               total={e.total}
-              fxNote={fxNote}
+              fxFootnote={fxFootnote}
             />
           </div>
         </div>

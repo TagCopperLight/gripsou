@@ -5,18 +5,19 @@ import { MaskedMoney } from "./PrivateMoney";
 import { excludedText, type Unconverted } from "../lib/fxNote";
 
 const SIZE = {
-  lg: "text-[20px] -top-[0.7em]",
-  md: "text-[14px] -top-[0.5em]",
-  sm: "text-[12px] -top-[0.35em]",
+  lg: "text-[20px]",
+  md: "text-[14px]",
+  sm: "text-[12px]",
 };
 
 /** The amber asterisk on a figure some amount is missing from for want of an
- *  exchange rate. Its card's `FxFootnote` says why; hovering says it too. */
-export function FxAsterisk({ title, size = "sm" }: { title: string; size?: keyof typeof SIZE }) {
+ *  exchange rate; its card's `FxFootnote` says why. Hangs past the figure's
+ *  right edge, so the figure keeps its place: its parent must be `relative`. */
+export function FxAsterisk({ size = "sm" }: { size?: keyof typeof SIZE }) {
   return (
-    <sup title={title} aria-label={title} className={`relative ml-0.5 cursor-help font-sans text-amber ${SIZE[size]}`}>
+    <span aria-hidden className={`absolute top-0 left-full ml-0.5 font-sans leading-none text-amber ${SIZE[size]}`}>
       *
-    </sup>
+    </span>
   );
 }
 

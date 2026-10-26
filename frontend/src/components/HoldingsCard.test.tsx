@@ -57,13 +57,13 @@ describe("HoldingsCard", () => {
   it("warns on a holding whose FX rate is missing", async () => {
     renderCard([{ ...HOLDING, fxMissing: true }]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.getByTitle(/exchange rate/i)).toBeInTheDocument();
+    expect(screen.getByText(/No exchange rate yet/)).toBeInTheDocument();
   });
 
   it("does not warn when every rate is known", async () => {
     renderCard([HOLDING]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.queryByTitle(/exchange rate/i)).toBeNull();
+    expect(screen.queryByText(/No exchange rate yet/)).toBeNull();
   });
 
   it("shows the gap dot for a holding with an unexplained quantity", async () => {

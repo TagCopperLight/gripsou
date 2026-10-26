@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "./Surface";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
 import { useHoldings } from "../api/hooks";
-import { excludedText, unconverted } from "../lib/fxNote";
+import { unconverted } from "../lib/fxNote";
 import { Money } from "./Money";
 import { MoneyHint } from "./MoneyHint";
 import { getPrefs } from "../lib/prefs";
@@ -75,7 +75,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   </span>
                   <Percent value={share} fractionDigits={1} className="w-12 text-right text-fg-faint text-xs" />
                 </span>
-                <span className="text-right whitespace-nowrap">
+                <span className="relative text-right whitespace-nowrap">
                   {a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? (
                     <MoneyHint hint={<Money value={a.value} />}>
                       <Money value={a.valueNative} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
@@ -83,9 +83,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   ) : (
                     <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
                   )}
-                  {a.fxMissing && (
-                    <FxAsterisk title={excludedText(t, excluded.filter((h) => h.accountId === a.id))} />
-                  )}
+                  {a.fxMissing && <FxAsterisk />}
                 </span>
               </button>
             </li>

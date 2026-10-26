@@ -22,9 +22,9 @@ type ExposureDonutProps = {
   centerLabel?: string;
   /** Shown under the title instead of the chart (loading, error). */
   placeholder?: ReactNode;
-  /** Holdings left out of `total` for want of an exchange rate: an asterisk
-   *  on the total (`title` on hover) and `footnote` under the card. */
-  fxNote?: { title: string; footnote: ReactNode };
+  /** Why holdings are left out of `total` for want of an exchange rate:
+   *  an asterisk on the total, and this under the card. */
+  fxFootnote?: ReactNode;
   className?: string;
 };
 
@@ -47,7 +47,7 @@ export function ExposureDonut({
   wide = false,
   centerLabel,
   placeholder,
-  fxNote,
+  fxFootnote,
   className = "",
 }: ExposureDonutProps) {
   const { t } = useTranslation();
@@ -143,13 +143,13 @@ export function ExposureDonut({
         )}
       </span>
       <Percent value={item.share} fractionDigits={1} className={`text-right text-fg ${child ? "text-xs" : "text-sm"}`} />
-      <span className="min-w-14 text-right whitespace-nowrap">
+      <span className="relative min-w-14 text-right whitespace-nowrap">
         <Money
           value={item.value ?? item.share * total}
           fractionDigits={0}
           className={`text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
         />
-        {item.fxNote && <FxAsterisk title={item.fxNote} />}
+        {item.fxMissing && <FxAsterisk />}
       </span>
     </div>
   );
@@ -171,9 +171,9 @@ export function ExposureDonut({
               ) : (
                 <>
                   <span className="text-fg-faint text-xs">{centerLabel ?? t("investments.exposure.center")}</span>
-                  <span className="whitespace-nowrap">
+                  <span className="relative whitespace-nowrap">
                     <Money value={total} fractionDigits={0} className="text-fg text-lg font-semibold tracking-tight" />
-                    {fxNote && <FxAsterisk size="md" title={fxNote.title} />}
+                    {fxFootnote && <FxAsterisk size="md" />}
                   </span>
                 </>
               )}
@@ -190,7 +190,7 @@ export function ExposureDonut({
           </div>
         </div>
         )}
-        {!placeholder && fxNote && <FxFootnote className="mt-4">{fxNote.footnote}</FxFootnote>}
+        {!placeholder && fxFootnote && <FxFootnote className="mt-4">{fxFootnote}</FxFootnote>}
       </div>
     </Surface>
   );

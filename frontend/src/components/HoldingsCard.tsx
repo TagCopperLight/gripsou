@@ -307,13 +307,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* VALUE */}
                   <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
                     {h.fxMissing ? (
-                      <span>
+                      <span className="relative">
                         {h.valueNative === null ? (
                           <span className="text-sm text-fg-faint">-</span>
                         ) : (
                           <Money value={h.valueNative} currency={h.priceCurrency} className="text-sm text-fg-dim" />
                         )}
-                        <FxAsterisk title={t("fx.holdings")} />
+                        <FxAsterisk />
                       </span>
                     ) : (
                       <Money value={h.value} className="text-sm text-fg" />
