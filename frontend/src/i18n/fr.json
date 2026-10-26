@@ -157,9 +157,6 @@
         "sells_one": "{{count}} vente trouvée dans vos transactions",
         "sells_other": "{{count}} ventes trouvées dans vos transactions",
         "mixed_other": "{{count}} opérations trouvées dans vos transactions",
-        "line_one": "{{type}} · <num>{{quantity}}</num> titre à <num>{{price}}</num>",
-        "line_other": "{{type}} · <num>{{quantity}}</num> titres à <num>{{price}}</num>",
-        "fee": "frais <num>{{fee}}</num>",
         "add": "Ajouter",
         "addAll": "Tout ajouter",
         "dismiss": "Ignorer"

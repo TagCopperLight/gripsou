@@ -360,7 +360,8 @@ export function RecordLotsModal({
         ) : list.length === 0 ? (
           <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
         ) : (
-          <table className="w-full border-separate border-spacing-0">
+          <table className="w-full table-fixed border-separate border-spacing-0">
+            <LotColumns />
             <thead>
               <tr className="text-[11px] font-mono text-fg-faint">
                 <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
@@ -594,8 +595,25 @@ function SignedFigure({
   );
 }
 
+/** One set of column widths for the table and the "found" panel above it, so
+ *  a suggestion sits exactly over the row it will become. */
+function LotColumns() {
+  return (
+    <colgroup>
+      <col className="w-38" />
+      <col className="w-42" />
+      <col />
+      <col />
+      <col />
+      <col className="w-30" />
+      <col className="w-12" />
+    </colgroup>
+  );
+}
+
 /** Purchases and sales found in the user's transactions, offered before they
- *  touch the table: added one by one or all at once, or dismissed for now. */
+ *  touch the table: a row each, in the table's own columns, added one by one
+ *  or all at once, or dismissed for now. */
 function FoundPanel({ found, currency, onAdd, onDismiss }: {
   found: Found[];
   currency: string;
@@ -608,45 +626,53 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
     buys === found.length ? t("dashboard.holdings.gap.found.buys", { count: buys })
     : buys === 0 ? t("dashboard.holdings.gap.found.sells", { count: found.length })
     : t("dashboard.holdings.gap.found.mixed", { count: found.length });
+  // Cells line their text up with the inputs' text below (input padding + cell gap).
+  const cell = "border-t border-blue/20 py-2.5 font-mono text-sm";
   return (
-    <section aria-label={title} className="rounded-2xl border border-blue/30 bg-blue-soft px-5 py-4">
-      <div className="mb-1.5 flex items-center justify-between gap-4">
+    // The blue reaches 16 px past the table on each side; the padding puts the
+    // columns back over the table's.
+    <section aria-label={title} className="-mx-4 rounded-2xl bg-blue-soft px-4 pt-3.5 pb-1.5">
+      <div className="flex items-center justify-between gap-4 pb-2">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={onDismiss}>{t("dashboard.holdings.gap.found.dismiss")}</Button>
-          <Button variant="outline" onClick={() => onAdd(found)}>{t("dashboard.holdings.gap.found.addAll")}</Button>
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={onDismiss} className="cursor-pointer text-[13px] font-medium text-fg-dim transition-colors duration-140 hover:text-fg">
+            {t("dashboard.holdings.gap.found.dismiss")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onAdd(found)}
+            className="cursor-pointer rounded-[10px] bg-blue/20 px-3 py-1.25 text-[13px] font-medium text-blue-light transition-colors duration-140 hover:bg-blue/30"
+          >
+            {t("dashboard.holdings.gap.found.addAll")}
+          </button>
         </div>
       </div>
-      <ul>
-        {found.map((f, i) => (
-          <li key={f.key} className={`flex items-center gap-4 py-2.5 ${i > 0 ? "border-t border-surface-3" : ""}`}>
-            <span className="w-24 shrink-0 font-mono text-[13px] text-fg-dim">{formatDate(f.date)}</span>
-            <span className="flex-1 text-sm text-fg">
-              <Trans
-                i18nKey="dashboard.holdings.gap.found.line"
-                count={Number(f.quantity)}
-                values={{
-                  type: t(`dashboard.holdings.gap.${f.type}`),
-                  quantity: formatQuantity(f.quantity),
-                  price: formatMoney(f.unitPrice, { currency }),
-                }}
-                components={{ num: <span className="font-mono" /> }}
-              />
-              {Number(f.fee) > 0 && (
-                <span className="text-fg-faint">
-                  {" · "}
-                  <Trans
-                    i18nKey="dashboard.holdings.gap.found.fee"
-                    values={{ fee: formatMoney(f.fee, { currency }) }}
-                    components={{ num: <span className="font-mono" /> }}
-                  />
-                </span>
-              )}
-            </span>
-            <Button variant="outline" onClick={() => onAdd([f])}>{t("dashboard.holdings.gap.found.add")}</Button>
-          </li>
-        ))}
-      </ul>
+      <table className="w-full table-fixed border-separate border-spacing-0">
+        <LotColumns />
+        <tbody>
+          {found.map((f) => (
+            <tr key={f.key}>
+              <td className={`${cell} pl-3 font-sans text-fg`}>{t(`dashboard.holdings.gap.${f.type}`)}</td>
+              <td className={`${cell} pl-3 text-fg-dim`}>{formatDate(f.date)}</td>
+              <td className={`${cell} pr-5 text-right text-fg`}>{formatQuantity(f.quantity)}</td>
+              <td className={`${cell} pr-5 text-right text-fg`}>{formatMoney(f.unitPrice, { currency })}</td>
+              <td className={`${cell} pr-5 text-right text-fg-dim`}>{formatMoney(f.fee, { currency })}</td>
+              <td className={`${cell} pr-2 text-right text-fg-dim whitespace-nowrap`}>
+                {formatMoney(lotCashAmount(f.type, f.quantity, f.unitPrice, f.fee), { currency })}
+              </td>
+              <td className={`${cell} text-right`}>
+                <button
+                  type="button"
+                  onClick={() => onAdd([f])}
+                  className="cursor-pointer font-sans text-[13px] font-medium text-blue-light transition-opacity duration-140 hover:opacity-70"
+                >
+                  {t("dashboard.holdings.gap.found.add")}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

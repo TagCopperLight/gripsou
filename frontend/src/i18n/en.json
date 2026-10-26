@@ -157,9 +157,6 @@
         "sells_one": "{{count}} sale found in your transactions",
         "sells_other": "{{count}} sales found in your transactions",
         "mixed_other": "{{count}} entries found in your transactions",
-        "line_one": "{{type}} · <num>{{quantity}}</num> share at <num>{{price}}</num>",
-        "line_other": "{{type}} · <num>{{quantity}}</num> shares at <num>{{price}}</num>",
-        "fee": "fee <num>{{fee}}</num>",
         "add": "Add",
         "addAll": "Add all",
         "dismiss": "Dismiss"
