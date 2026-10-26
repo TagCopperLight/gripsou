@@ -487,7 +487,11 @@ export function RecordLotsModal({
           </Button>
         </div>
 
-        {/* Resulting figures */}
+        {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
+      </div>
+
+      {/* The figures stay in view while the table scrolls above them. */}
+      <div className="shrink-0 border-t border-surface-2 px-6 pt-4">
         <div className="bg-surface-2 rounded-2xl p-5">
           <span className="text-fg text-sm font-semibold">
             {t("dashboard.holdings.gap.figures")}
@@ -521,8 +525,6 @@ export function RecordLotsModal({
             />
           </div>
         </div>
-
-        {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
       </div>
 
       <div data-modal-footer className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
