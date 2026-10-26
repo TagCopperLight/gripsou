@@ -48,10 +48,14 @@ const s = {
   section: { borderTop: "1px solid #3f3f46", paddingTop: 8, marginTop: 8 },
   title: { color: "#a1a1aa", textTransform: "uppercase", fontSize: 10, letterSpacing: ".08em", marginBottom: 4 },
   row: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  btn: { background: "#27272a", color: "#fafafa", border: "1px solid #3f3f46", borderRadius: 5, padding: "2px 8px", cursor: "pointer", font: "inherit" },
+  btn: { background: "#27272a", color: "#fafafa", border: "1px solid #3f3f46", borderRadius: 5, padding: "3px 8px", cursor: "pointer", font: "inherit" },
   on: { background: "#4338ca", borderColor: "#6366f1" },
   muted: { color: "#71717a" },
   warn: { color: "#fbbf24" },
+  grid: { display: "grid", gridTemplateColumns: "64px 1fr", alignItems: "center", rowGap: 6, columnGap: 8 },
+  label: { color: "#a1a1aa" },
+  segmented: { display: "flex", border: "1px solid #3f3f46", borderRadius: 5, overflow: "hidden" },
+  segment: { flex: 1, background: "#27272a", color: "#fafafa", border: 0, padding: "3px 0", cursor: "pointer", font: "inherit" },
 } satisfies Record<string, CSSProperties>;
 
 function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; children: ReactNode }) {
@@ -59,6 +63,23 @@ function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; chi
     <button type="button" style={{ ...s.btn, ...(on ? s.on : {}) }} onClick={onClick}>
       {children}
     </button>
+  );
+}
+
+function Segmented({ options, value, onChange }: { options: [string, string][]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={s.segmented}>
+      {options.map(([v, label], i) => (
+        <button
+          key={v}
+          type="button"
+          style={{ ...s.segment, ...(v === value ? s.on : {}), ...(i > 0 ? { borderLeft: "1px solid #3f3f46" } : {}) }}
+          onClick={() => v !== value && onChange(v)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -123,38 +144,39 @@ export function Panel() {
           </Section>
 
           <Section title="App">
-            <div style={s.row}>
-              <Btn onClick={() => void control("/reset").then(reload)}>Reset data</Btn>
-              {signedIn() ? (
-                <Btn onClick={() => { setSignedIn(false); location.assign("/login"); }}>Sign out</Btn>
-              ) : (
-                <Btn onClick={() => { setSignedIn(true); location.assign("/"); }}>Sign in</Btn>
+            <div style={s.grid}>
+              {user && (
+                <>
+                  <span style={s.label}>Language</span>
+                  <Segmented
+                    options={[["en", "EN"], ["fr", "FR"]]}
+                    value={user.uiLanguage}
+                    onChange={(v) => void patchPrefs({ uiLanguage: v }).then(reload)}
+                  />
+                  <span style={s.label}>Currency</span>
+                  <Segmented
+                    options={[["EUR", "EUR"], ["USD", "USD"], ["GBP", "GBP"]]}
+                    value={user.currency}
+                    onChange={(v) => void patchPrefs({ currency: v }).then(reload)}
+                  />
+                  <span style={s.label}>Role</span>
+                  <Segmented
+                    options={[["admin", "Admin"], ["user", "Member"]]}
+                    value={user.role}
+                    onChange={(v) => void control("/role", { role: v }).then(reload)}
+                  />
+                </>
               )}
+              <span style={s.label}>Data</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <Btn onClick={() => void control("/reset").then(reload)}>Reset</Btn>
+                {signedIn() ? (
+                  <Btn onClick={() => { setSignedIn(false); location.assign("/login"); }}>Sign out</Btn>
+                ) : (
+                  <Btn onClick={() => { setSignedIn(true); location.assign("/"); }}>Sign in</Btn>
+                )}
+              </div>
             </div>
-            {user && (
-              <div style={{ ...s.row, marginTop: 6 }}>
-                {(["en", "fr"] as const).map((l) => (
-                  <Btn key={l} on={user.uiLanguage === l} onClick={() => void patchPrefs({ uiLanguage: l }).then(reload)}>
-                    {l.toUpperCase()}
-                  </Btn>
-                ))}
-                <span style={s.muted}>·</span>
-                {["EUR", "USD", "GBP"].map((c) => (
-                  <Btn key={c} on={user.currency === c} onClick={() => void patchPrefs({ currency: c }).then(reload)}>
-                    {c}
-                  </Btn>
-                ))}
-              </div>
-            )}
-            {user && (
-              <div style={{ ...s.row, marginTop: 6 }}>
-                {(["admin", "user"] as const).map((r) => (
-                  <Btn key={r} on={user.role === r} onClick={() => void control("/role", { role: r }).then(reload)}>
-                    {r}
-                  </Btn>
-                ))}
-              </div>
-            )}
           </Section>
 
           <Section title="Queries">
