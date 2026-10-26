@@ -81,11 +81,11 @@
   "fx": {
     "fetching": "Récupération du taux {{currency}}…",
     "refused": "Impossible d'obtenir le taux {{currency}}. Réessayez plus tard.",
-    "excludes_one": "Hors {{count}} actif : taux de change pas encore disponible.",
-    "excludes_other": "Hors {{count}} actifs : taux de change pas encore disponible.",
-    "excludesSome": "Certains montants sont exclus : taux de change pas encore disponible.",
-    "budget": "Hors opérations dans une devise sans taux de change pour l'instant.",
-    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise, non compté dans les totaux."
+    "excludes_one": "{{count}} actif n'est pas compté : son taux de change n'est pas encore disponible.",
+    "excludes_other": "{{count}} actifs ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "excludesSome": "Certains montants ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "budget": "Les opérations dans une devise sans taux de change ne sont pas encore comptées.",
+    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise d'origine, non compté dans les totaux."
   },
   "dashboard": {
     "netWorth": {
