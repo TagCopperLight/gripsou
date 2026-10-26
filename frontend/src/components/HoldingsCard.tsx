@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { Surface } from "./Surface";
+import { FxAsterisk, FxFootnote } from "./FxNote";
 import { Money } from "./Money";
 import { Percent } from "./Percent";
 import { Sparkline } from "./Sparkline";
@@ -214,6 +215,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             {rows.map((h) => {
               const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
+              // No rate: the value is zero, so a gain would be invented.
+              const showPnl = hasPnl && !h.fxMissing;
               // Cash rows are summary lines (no asset detail / purchase history),
               // so they are not clickable.
               return (
@@ -303,22 +306,22 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   </td>
                   {/* VALUE */}
                   <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1.5">
-                      {h.fxMissing && (
-                        <span
-                          title={t("dashboard.fxMissing")}
-                          className="text-fg-faint text-xs leading-none"
-                          aria-label={t("dashboard.fxMissing")}
-                        >
-                          ⚠
-                        </span>
-                      )}
+                    {h.fxMissing ? (
+                      <span>
+                        {h.valueNative === null ? (
+                          <span className="text-sm text-fg-faint">-</span>
+                        ) : (
+                          <Money value={h.valueNative} currency={h.priceCurrency} className="text-sm text-fg-dim" />
+                        )}
+                        <FxAsterisk title={t("fx.holdings")} />
+                      </span>
+                    ) : (
                       <Money value={h.value} className="text-sm text-fg" />
-                    </span>
+                    )}
                   </td>
                   {/* UNREALIZED P/L */}
                   <td className="py-3 px-2 md:px-3 border-t border-surface-2 text-right whitespace-nowrap">
-                    {hasPnl ? (
+                    {showPnl ? (
                       <div className="flex flex-col items-end">
                         <Money
                           value={h.gl}
@@ -351,6 +354,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             })}
           </tbody>
         </table>
+        {holdings.some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
         </>
         )}
       </div>

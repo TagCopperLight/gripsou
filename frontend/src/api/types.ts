@@ -25,13 +25,6 @@ export type NetWorthSummary = {
   gainAbs: string;
   gainPct: string;
   fxMissing: boolean;
-  /**
-   * No rate exists for the reporting currency, so every figure on this response
-   * is still in the pivot currency despite wearing the chosen one's symbol.
-   * Distinct from `fxMissing`: nothing is absent from the sum, the whole sum is
-   * in the wrong currency.
-   */
-  reportingFxMissing: boolean;
 };
 export type NetWorthResponse = { points: NetWorthPoint[]; summary: NetWorthSummary };
 
@@ -61,6 +54,10 @@ export type Holding = {
   invested: string;
   investedNative: string;
   value: string;
+  /** `qty × price` in `priceCurrency`, before any conversion: what the
+   *  holding shows when `fxMissing` leaves `value` at zero. Null with no
+   *  price at all. */
+  valueNative: string | null;
   gl: string;
   glPct: string;
   fxMissing: boolean;
@@ -326,7 +323,6 @@ export type TransactionCounts = {
    *  a query that mirrors `matching`'s predicates exactly. */
   matchingTotal: string;
   fxMissing: boolean;
-  reportingFxMissing: boolean;
 };
 
 /** A `TransactionQuery` minus the pagination the infinite query owns — i.e. the

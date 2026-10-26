@@ -39,7 +39,7 @@ function emptyHousehold(store: Store) {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Net worth chart";
+export const FOCUS = "Exchange rates";
 
 export const STATES: MockState[] = [
   // ── Dashboard ──
@@ -73,18 +73,38 @@ export const STATES: MockState[] = [
   },
   {
     id: "dashboard-fx-missing",
-    label: "An ETF has no exchange rate (⚠, left out)",
-    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    label: "A dollar ETF has no rate (left out of totals)",
+    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings"],
+    group: "No rate",
+    option: "1 ETF",
     apply(store) {
       store.fx.missing = [ESE];
     },
   },
   {
-    id: "dashboard-reporting-fx",
-    label: "No rate into the chosen currency",
-    pieces: ["Net worth chart"],
+    id: "fx-missing-two",
+    label: "Two dollar ETFs have no rate",
+    pieces: ["Exchange rates"],
+    group: "No rate",
+    option: "2 ETFs",
     apply(store) {
-      store.fx.reportingMissing = true;
+      store.fx.missing = [ESE, CW8];
+    },
+  },
+  {
+    id: "fx-budget",
+    label: "Budget: a transaction has no rate",
+    pieces: ["Exchange rates"],
+    apply(store) {
+      store.fx.budget = true;
+    },
+  },
+  {
+    id: "fx-rate-down",
+    label: "Currency change can't get its rate (Settings)",
+    pieces: ["Exchange rates"],
+    apply(store) {
+      store.fx.rateDown = true;
     },
   },
   {

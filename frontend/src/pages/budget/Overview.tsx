@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 
 import { CardState } from "../../components/CardState";
@@ -16,7 +15,6 @@ import {
 } from "../../api/overview";
 import { addMonths, anchorMonth, currentMonth, periodBounds, type Period } from "../../lib/period";
 import { hasFlow } from "../../lib/sankeyGraph";
-import { getPrefs } from "../../lib/prefs";
 import type { Slice } from "../../api/overview";
 
 export function BudgetOverview() {
@@ -35,7 +33,6 @@ export function BudgetOverview() {
 }
 
 function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string | null }) {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { setPeriod, patchFilters } = useBudget();
 
@@ -99,24 +96,10 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
       <PeriodLine
         period={period}
         txnCount={data?.txnCount ?? 0}
-        fxMissing={data?.fxMissing ?? false}
         canStepBack={canStepBack}
         canStepForward={canStepForward}
         onStep={step}
       />
-
-      {/* Not a tooltip: every figure below is in the app's base currency rather
-          than the reader's, and a reader who does not hover would take them for
-          converted ones. Same treatment as the dashboard's headline. */}
-      {data?.reportingFxMissing && (
-        <p
-          role="status"
-          data-testid="reporting-fx-missing"
-          className="bg-amber-soft text-fg-dim self-start rounded-lg px-2 py-1 text-sm"
-        >
-          {t("dashboard.reportingFxMissing", { currency: getPrefs().currency })}
-        </p>
-      )}
 
       <AiBanner />
 

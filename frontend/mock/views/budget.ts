@@ -115,7 +115,6 @@ export function counts(store: Store, q: URLSearchParams): TransactionCounts {
     uncategorized: visible.filter((x) => x.categoryId === null).length,
     matchingTotal: money(rows.reduce((s, x) => s + x.amount, 0)),
     fxMissing: false,
-    reportingFxMissing: false,
   };
 }
 
@@ -252,8 +251,7 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
 
   return {
     txnCount: rows.length,
-    fxMissing: false,
-    reportingFxMissing: false,
+    fxMissing: store.fx.budget,
     figures: {
       income: figure(income, incomeOf),
       expenses: figure(expenses, expensesOf),

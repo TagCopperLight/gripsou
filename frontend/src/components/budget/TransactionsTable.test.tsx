@@ -43,7 +43,7 @@ class NoopObserver {
 const BASE = {
   rows: [tx({})],
   showChecked: false,
-  counts: { matching: 1, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false },
+  counts: { matching: 1, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false },
   filtered: false,
   loading: false,
   error: false,
@@ -80,7 +80,7 @@ describe("TransactionsTable", () => {
       <TransactionsTable
         {...BASE}
         rows={[]}
-        counts={{ matching: 0, total: 0, uncategorized: 0, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
+        counts={{ matching: 0, total: 0, uncategorized: 0, matchingTotal: "0", fxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-nothing")).toBeVisible();
@@ -90,7 +90,7 @@ describe("TransactionsTable", () => {
         {...BASE}
         rows={[]}
         filtered
-        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
+        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-no-match")).toBeVisible();
@@ -116,7 +116,7 @@ describe("TransactionsTable", () => {
         {...BASE}
         rows={[]}
         filtered={false}
-        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false, reportingFxMissing: false }}
+        counts={{ matching: 0, total: 400, uncategorized: 300, matchingTotal: "0", fxMissing: false }}
       />,
     );
     expect(screen.getByTestId("empty-no-match")).toBeVisible();

@@ -10,7 +10,6 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
   return {
     txnCount: 412,
     fxMissing: false,
-    reportingFxMissing: false,
     figures: {
       income: { amount: "3200.00", prevMonth: "2980.00", avg12: "3050.00" },
       expenses: { amount: "1940.00", prevMonth: "2010.00", avg12: "1870.00" },

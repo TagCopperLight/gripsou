@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Comparison } from "./Comparison";
 import { Surface } from "../../Surface";
 import { PrivateMoney } from "../../PrivateMoney";
+import { FxAsterisk, FxFootnote } from "../../FxNote";
 import type { BudgetSummary, Figure } from "../../../api/overview";
 
 type FigureKey = "income" | "expenses" | "net";
@@ -18,7 +19,7 @@ const SPEC: Record<FigureKey, { tone: string; format: "percent" | "absolute"; go
 
 const ORDER: FigureKey[] = ["income", "expenses", "net"];
 
-function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
+function FigureCell({ name, figure, fxMissing }: { name: FigureKey; figure: Figure; fxMissing: boolean }) {
   const { t } = useTranslation();
   const spec = SPEC[name];
   return (
@@ -43,6 +44,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
       <PrivateMoney
         value={figure.amount}
         className={`text-2xl font-semibold tracking-tight ${spec.tone}`}
+        after={fxMissing && <FxAsterisk size="md" title={t("fx.budget")} />}
       />
       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 text-xs">
         <Comparison
@@ -67,6 +69,7 @@ function FigureCell({ name, figure }: { name: FigureKey; figure: Figure }) {
 }
 
 export function FiguresSurface({ summary }: { summary: BudgetSummary }) {
+  const { t } = useTranslation();
   return (
     <Surface className="w-full">
       {/* Three across from `lg` up; stacked on a phone, where three columns of
@@ -76,9 +79,10 @@ export function FiguresSurface({ summary }: { summary: BudgetSummary }) {
           breathing room between stacked cells on a phone. */}
       <div className="grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
         {ORDER.map((name) => (
-          <FigureCell key={name} name={name} figure={summary.figures[name]} />
+          <FigureCell key={name} name={name} figure={summary.figures[name]} fxMissing={summary.fxMissing} />
         ))}
       </div>
+      {summary.fxMissing && <FxFootnote className="px-5 pb-4 -mt-1">{t("fx.budget")}</FxFootnote>}
     </Surface>
   );
 }

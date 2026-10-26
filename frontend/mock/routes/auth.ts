@@ -1,4 +1,3 @@
-import type { SessionUser } from "../../src/api/types";
 import { withPatch, type PrefsPatch } from "../../src/lib/prefs";
 import { reply, type Router } from "../router";
 import type { Store } from "../store";
@@ -11,7 +10,11 @@ export function authRoutes(r: Router<Store>): void {
   r.route("GET", "/auth/mfa/status", ({ store }) => store.mfa);
   r.route("GET", "/auth/token/:token", () => ({ type: "invite", email: null }));
 
-  r.route("PATCH", "/auth/prefs", ({ store, body }): SessionUser => {
+  r.route("PATCH", "/auth/prefs", ({ store, body }) => {
+    const currency = (body as PrefsPatch).currency;
+    if (store.fx.rateDown && currency !== undefined && currency !== store.user.prefs.currency && currency !== "EUR") {
+      return reply(502, { error: `no exchange rate into ${currency} right now` });
+    }
     store.user = { ...store.user, prefs: withPatch(store.user.prefs, body as PrefsPatch) };
     return store.user;
   });

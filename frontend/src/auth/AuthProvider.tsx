@@ -160,7 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (patch: PrefsPatch) => {
       const u = shown.current;
       if (!u) return;
-      applyUser({ ...u, prefs: withPatch(u.prefs, patch) });
+      // A new currency waits for the server, which first fetches its rate and
+      // may refuse it: shown early, it would put its symbol on figures still
+      // in the old one.
+      const waits = "currency" in patch;
+      if (!waits) applyUser({ ...u, prefs: withPatch(u.prefs, patch) });
       // One save at a time, so two changes of one setting are stored in order.
       const save = prefsSaves.current.then(() => patchJson<SessionUser>("/auth/prefs", patch));
       prefsSaves.current = save.catch(() => {});
@@ -170,6 +174,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Show what is stored, once the saves queued behind this one are in.
         prefsSaves.current = prefsSaves.current.then(showStoredPrefs);
         throw err;
+      }
+      if (waits && shown.current) {
+        applyUser({ ...shown.current, prefs: withPatch(shown.current.prefs, patch) });
       }
       if ("currency" in patch || "timeZone" in patch) {
         await queryClient.cancelQueries();

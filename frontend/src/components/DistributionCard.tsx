@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { CardState } from "./CardState";
 import { ExposureDonut } from "./investments/ExposureDonut";
 import { accountTypeLabel } from "../api/types";
-import { useAccounts } from "../api/hooks";
+import { useAccounts, useHoldings } from "../api/hooks";
+import { ExcludedNote } from "./FxNote";
+import { excludedText, unconverted } from "../lib/fxNote";
 
 type DistributionCardProps = {
   className?: string;
@@ -12,7 +14,9 @@ type DistributionCardProps = {
 export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
+  const holdings = useHoldings();
   const accounts = data ?? [];
+  const excluded = unconverted(holdings.data ?? []);
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
   // Largest proportion first, in both the donut and the legend.
   const items = [...accounts]
@@ -24,8 +28,11 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       color: a.color,
       value: a.value,
       tag: accountTypeLabel(t, a.typeKey),
-      warning: a.fxMissing ? t("dashboard.fxMissing") : undefined,
+      fxNote: a.fxMissing ? excludedText(t, excluded.filter((h) => h.accountId === a.id)) : undefined,
     }));
+  const fxNote = excluded.length > 0 || accounts.some((a) => a.fxMissing)
+    ? { title: excludedText(t, excluded), footnote: <ExcludedNote items={excluded} /> }
+    : undefined;
 
   return (
     <ExposureDonut
@@ -34,6 +41,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       centerLabel={t("common.total")}
       items={items}
       total={total}
+      fxNote={fxNote}
       placeholder={
         data === undefined ? (
           <CardState

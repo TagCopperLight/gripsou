@@ -41,7 +41,7 @@ function groups(...connections: ProviderGroup["connections"]): ProviderGroup[] {
 describe("portfolio navigation cache", () => {
   const cases = [
     ["net worth", () => useNetWorth("1y"), {
-      points: [], summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
+      points: [], summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },
     }],
     ["holdings", useHoldings, []],
     ["accounts", useAccounts, []],

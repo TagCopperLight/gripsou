@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "./Surface";
+import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
+import { useHoldings } from "../api/hooks";
+import { excludedText, unconverted } from "../lib/fxNote";
 import { Money } from "./Money";
 import { MoneyHint } from "./MoneyHint";
 import { getPrefs } from "../lib/prefs";
@@ -25,6 +28,9 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
   const { t } = useTranslation();
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
+  const holdings = useHoldings();
+  const ids = new Set(group.accounts.map((a) => a.id));
+  const excluded = unconverted(holdings.data ?? []).filter((h) => ids.has(h.accountId));
 
   return (
     <Surface className={`p-4 pb-3.5 md:p-5 md:pb-4.5 ${className}`}>
@@ -69,12 +75,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   </span>
                   <Percent value={share} fractionDigits={1} className="w-12 text-right text-fg-faint text-xs" />
                 </span>
-                <span className="flex items-baseline justify-end gap-1.5">
-                  {a.fxMissing && (
-                    <span title={t("dashboard.fxMissing")} aria-label={t("dashboard.fxMissing")} className="text-fg-faint text-xs">
-                      ⚠
-                    </span>
-                  )}
+                <span className="text-right whitespace-nowrap">
                   {a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? (
                     <MoneyHint hint={<Money value={a.value} />}>
                       <Money value={a.valueNative} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
@@ -82,12 +83,20 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   ) : (
                     <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
                   )}
+                  {a.fxMissing && (
+                    <FxAsterisk title={excludedText(t, excluded.filter((h) => h.accountId === a.id))} />
+                  )}
                 </span>
               </button>
             </li>
           );
         })}
       </ul>
+      {group.accounts.some((a) => a.fxMissing) && (
+        <FxFootnote className="mt-2 px-0.5">
+          <ExcludedNote items={excluded} />
+        </FxFootnote>
+      )}
 
       {editing && <EditAccountModal account={editing} onClose={() => setEditing(null)} />}
     </Surface>

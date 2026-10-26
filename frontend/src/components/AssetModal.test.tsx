@@ -7,7 +7,7 @@ import { AssetModal } from "./AssetModal";
 import type { Holding } from "../api/types";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
-// the chart mid-test — stub it out, as FxMissingWarning.test.tsx does.
+// the chart mid-test — stub it out, as FxNote.test.tsx does.
 vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
@@ -16,7 +16,7 @@ const BASE: Holding = {
   accountType: "pea", qty: "10", price: "100", currency: "EUR",
   priceCurrency: "EUR", accountCurrency: "EUR",
   invested: "800", investedNative: "800", value: "1000", gl: "200", glPct: "0.25",
-  fxMissing: false, spark: null,
+  valueNative: "1000", fxMissing: false, spark: null,
   composition: { countries: [{ name: "United States", weight: 0.62 }], sectors: [] },
   unexplainedQty: "0",
   meanPrice: "80", unexplainedCost: "0",

@@ -6,6 +6,7 @@ import type { EChartsOption } from "echarts";
 import { Surface } from "../Surface";
 import { Money } from "../Money";
 import { Percent } from "../Percent";
+import { FxAsterisk, FxFootnote } from "../FxNote";
 import { SURFACE } from "../../lib/chartTheme";
 import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 
@@ -21,6 +22,9 @@ type ExposureDonutProps = {
   centerLabel?: string;
   /** Shown under the title instead of the chart (loading, error). */
   placeholder?: ReactNode;
+  /** Holdings left out of `total` for want of an exchange rate: an asterisk
+   *  on the total (`title` on hover) and `footnote` under the card. */
+  fxNote?: { title: string; footnote: ReactNode };
   className?: string;
 };
 
@@ -43,6 +47,7 @@ export function ExposureDonut({
   wide = false,
   centerLabel,
   placeholder,
+  fxNote,
   className = "",
 }: ExposureDonutProps) {
   const { t } = useTranslation();
@@ -138,17 +143,13 @@ export function ExposureDonut({
         )}
       </span>
       <Percent value={item.share} fractionDigits={1} className={`text-right text-fg ${child ? "text-xs" : "text-sm"}`} />
-      <span className="flex min-w-14 items-center justify-end gap-1.5">
-        {item.warning && (
-          <span title={item.warning} aria-label={item.warning} className="text-fg-faint text-xs leading-none">
-            ⚠
-          </span>
-        )}
+      <span className="min-w-14 text-right whitespace-nowrap">
         <Money
           value={item.value ?? item.share * total}
           fractionDigits={0}
-          className={`text-right text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
+          className={`text-fg-faint ${child ? "text-[11px]" : "text-xs"}`}
         />
+        {item.fxNote && <FxAsterisk title={item.fxNote} />}
       </span>
     </div>
   );
@@ -170,7 +171,10 @@ export function ExposureDonut({
               ) : (
                 <>
                   <span className="text-fg-faint text-xs">{centerLabel ?? t("investments.exposure.center")}</span>
-                  <Money value={total} fractionDigits={0} className="whitespace-nowrap text-fg text-lg font-semibold tracking-tight" />
+                  <span className="whitespace-nowrap">
+                    <Money value={total} fractionDigits={0} className="text-fg text-lg font-semibold tracking-tight" />
+                    {fxNote && <FxAsterisk size="md" title={fxNote.title} />}
+                  </span>
                 </>
               )}
             </div>
@@ -186,6 +190,7 @@ export function ExposureDonut({
           </div>
         </div>
         )}
+        {!placeholder && fxNote && <FxFootnote className="mt-4">{fxNote.footnote}</FxFootnote>}
       </div>
     </Surface>
   );

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -27,7 +27,6 @@ vi.mock("../../components/EChart", () => ({
 const SUMMARY = {
   txnCount: 412,
   fxMissing: false,
-  reportingFxMissing: false,
   figures: {
     income: { amount: "3200.00" },
     expenses: { amount: "1940.00" },
@@ -77,7 +76,7 @@ function stubApi(summary: unknown = SUMMARY, data: Data = {}) {
       const u = String(url);
       const counts = {
         matching: before, total: before, uncategorized: 0, matchingTotal: "0",
-        fxMissing: false, reportingFxMissing: false,
+        fxMissing: false,
       };
       const rows = latest === null ? [] : [{ id: "x", t: inMonth(latest) }];
       const body = u.includes("/budget/trend")
@@ -211,10 +210,17 @@ describe("BudgetOverview", () => {
     expect(screen.queryByText("Categories")).toBeNull();
   });
 
-  it("shows the pivot-currency notice when the reporting rate is missing", async () => {
-    stubApi({ ...SUMMARY, reportingFxMissing: true });
+  it("says the figures leave out what could not be converted, only when something was", async () => {
+    const note = "Excludes transactions in a currency with no exchange rate yet.";
+    stubApi(SUMMARY);
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("reporting-fx-missing")).toBeVisible());
+    await waitFor(() => expect(screen.getByTestId("figure-income")).toBeVisible());
+    expect(screen.queryByText(note)).toBeNull();
+    cleanup();
+
+    stubApi({ ...SUMMARY, fxMissing: true });
+    renderPage();
+    await waitFor(() => expect(screen.getByText(note)).toBeVisible());
   });
 
   it("deep-links a category row with the period and the category", async () => {

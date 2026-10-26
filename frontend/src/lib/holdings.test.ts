@@ -26,6 +26,7 @@ function cash(
     invested: value,
     investedNative: value,
     value,
+    valueNative: value,
     gl: "0",
     glPct: "0",
     fxMissing: false,
@@ -56,6 +57,7 @@ function equity(id: string, value: string): Holding {
     invested: value,
     investedNative: value,
     value,
+    valueNative: value,
     gl: "0",
     glPct: "0",
     fxMissing: false,
@@ -132,14 +134,15 @@ describe("aggregateCash", () => {
     expect(cashRows[0].accountType).toBe("savings");
   });
 
-  it("keeps the fx warning when merging cash rows", () => {
+  it("keeps the missing rate and the own-currency total when merging cash rows", () => {
     const merged = aggregateCash(
       [
-        { ...cash("c1", "A", "10"), fxMissing: true },
+        { ...cash("c1", "A", "10"), fxMissing: true, value: "0" },
         { ...cash("c2", "B", "20") },
       ],
       "Multiple",
     );
     expect(merged[0].fxMissing).toBe(true);
+    expect(merged[0].valueNative).toBe("30");
   });
 });

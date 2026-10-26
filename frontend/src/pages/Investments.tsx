@@ -11,6 +11,8 @@ import { indexItems, regionItems, sectorItems } from "../components/investments/
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
+import { excludedText, unconverted, type Unconverted } from "../lib/fxNote";
+import { ExcludedNote } from "../components/FxNote";
 
 /** The securities the page is about: cash never counts here. */
 function securities(holdings: Holding[]): ExposureHolding[] {
@@ -32,6 +34,7 @@ export function Investments() {
   const failed = returns.isError || holdings.isError;
   const ready = returns.data !== undefined && holdings.data !== undefined;
   const held = ready ? securities(holdings.data) : [];
+  const excluded = unconverted((holdings.data ?? []).filter((h) => h.kind !== "cash"));
 
   return (
     <div>
@@ -47,15 +50,19 @@ export function Investments() {
       ) : held.length === 0 && returns.data.accounts.length === 0 ? (
         <InvestmentsEmpty />
       ) : (
-        <InvestmentsBody data={returns.data} held={held} />
+        <InvestmentsBody data={returns.data} held={held} excluded={excluded} />
       )}
     </div>
   );
 }
 
-function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: ExposureHolding[] }) {
+function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: Unconverted[] }) {
   const { t, i18n } = useTranslation();
   const e = exposure(held);
+  // Securities with no rate are worth zero here, so every donut leaves them out.
+  const fxNote = excluded.length > 0
+    ? { title: excludedText(t, excluded), footnote: <ExcludedNote items={excluded} /> }
+    : undefined;
 
   return (
     <>
@@ -71,17 +78,20 @@ function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: Exposu
             title={t("investments.exposure.regions")}
             items={regionItems(e.regions, t, i18n.language)}
             total={e.covered}
+            fxNote={fxNote}
           />
           <div className="grid gap-4 md:grid-cols-2">
             <ExposureDonut
               title={t("investments.exposure.sectors")}
               items={sectorItems(e.sectors, t)}
               total={e.covered}
+              fxNote={fxNote}
             />
             <ExposureDonut
               title={t("investments.exposure.indices")}
               items={indexItems(e.indices, t)}
               total={e.total}
+              fxNote={fxNote}
             />
           </div>
         </div>

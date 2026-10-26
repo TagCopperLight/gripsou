@@ -78,9 +78,17 @@
       "saving": "Enregistrement…"
     }
   },
+  "fx": {
+    "fetching": "Récupération du taux {{currency}}…",
+    "refused": "Impossible d'obtenir le taux {{currency}}. Réessayez plus tard.",
+    "excludesOne": "Hors {{name}} (<value/>) : taux {{currency}} pas encore disponible.",
+    "excludesOneShort": "Hors {{name}} : taux {{currency}} pas encore disponible.",
+    "excludesMany": "Hors {{count}} actifs : taux de change pas encore disponible.",
+    "excludesSome": "Certains montants sont exclus : taux de change pas encore disponible.",
+    "budget": "Hors opérations dans une devise sans taux de change pour l'instant.",
+    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise, non compté dans les totaux."
+  },
   "dashboard": {
-    "fxMissing": "Le taux de change de cette devise n'est pas encore disponible. Ce montant est exclu des totaux jusqu'à la prochaine synchronisation, qui récupérera le taux.",
-    "reportingFxMissing": "Le taux de change vers {{currency}} n'est pas encore disponible. Les montants ci-dessous sont affichés dans la devise de base de l'application. Le taux sera récupéré à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
       "netWorth": "Patrimoine net",

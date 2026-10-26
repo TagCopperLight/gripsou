@@ -12,8 +12,6 @@ type PeriodLineProps = {
   /** The summary's own count — deliberately NOT the transactions list's number
    *  for the same month. It leaves out lot rows; both are correct. */
   txnCount: number;
-  /** Some row could not be valued, so the figures are understated. */
-  fxMissing: boolean;
   /** The carets follow the data's own bounds, never whether the month on
    *  screen happens to be empty: a gap month is not the edge of the data. */
   canStepBack: boolean;
@@ -47,7 +45,7 @@ function Caret({
 }
 
 export function PeriodLine({
-  period, txnCount, fxMissing, canStepBack, canStepForward, onStep,
+  period, txnCount, canStepBack, canStepForward, onStep,
 }: PeriodLineProps) {
   const { t, i18n } = useTranslation();
   const { setPeriod } = useBudget();
@@ -108,19 +106,6 @@ export function PeriodLine({
       <span data-testid="period-count" className="text-[12.5px] text-fg-faint">
         {t("budget.overview.transactionCount", { count: txnCount })}
       </span>
-
-      {/* Same treatment the dashboard gives an unvalued holding: the figures on
-          this page are understated, and the tooltip says why. */}
-      {fxMissing && (
-        <span
-          data-testid="period-fx-missing"
-          title={t("dashboard.fxMissing")}
-          aria-label={t("dashboard.fxMissing")}
-          className="text-sm text-fg-faint"
-        >
-          ⚠
-        </span>
-      )}
 
       {rangeOpen && (
         <RangeModal

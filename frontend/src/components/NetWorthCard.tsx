@@ -11,7 +11,9 @@ import { ValueChart } from "./ValueChart";
 import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
 import { NetWorthEmpty } from "./NetWorthEmpty";
-import { useNetWorth } from "../api/hooks";
+import { useHoldings, useNetWorth } from "../api/hooks";
+import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
+import { excludedText, unconverted } from "../lib/fxNote";
 import { getPrefs } from "../lib/prefs";
 import { currencySymbol } from "../lib/currency";
 import { SURFACE } from "../lib/chartTheme";
@@ -28,6 +30,8 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const [range, setRange] = useState<Range>("6mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
+  // Names what the headline leaves out; shares the holdings card's query.
+  const holdings = useHoldings();
   const ready = data !== undefined;
   // No points means no accounts (the server sends none then): a 0 €
   // headline, a gain pill and a flat line would only look like data.
@@ -56,6 +60,8 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const legend = legendItems(plotSeries(series, unit, t("common.return")));
 
   const summary = data?.summary;
+  const fxMissing = summary?.fxMissing ?? false;
+  const excluded = unconverted(holdings.data ?? []);
   const gainUp = summary ? Number(summary.gainAbs) >= 0 : true;
 
   return (
@@ -76,20 +82,13 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
             </div>
             {ready && !empty && (
               <>
-                {/* The dashboard's single biggest number, and the only place
-                    that can silently omit a zeroed holding — so it carries the
-                    same warning treatment as the holdings/accounts cards. */}
                 <span className="flex items-baseline gap-2">
-                  <PrivateMoney privacy={privacy} value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
-                  {summary?.fxMissing && (
-                    <span
-                      title={t("dashboard.fxMissing")}
-                      className="text-fg-faint text-sm"
-                      aria-label={t("dashboard.fxMissing")}
-                    >
-                      ⚠
-                    </span>
-                  )}
+                  <PrivateMoney
+                    privacy={privacy}
+                    value={summary?.netWorth ?? "0"}
+                    className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]"
+                    after={fxMissing && <FxAsterisk size="lg" title={excludedText(t, excluded)} />}
+                  />
                 </span>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
@@ -99,20 +98,11 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                   </div>
                   <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>
                 </div>
-                {/* Not the ⚠ glyph the other warnings use: this one is not about
-                    one holding being left out, it is about every figure on the
-                    dashboard being denominated in a currency the user did not
-                    pick. A tooltip nobody hovers would leave them reading euros
-                    as dollars. */}
-                {summary?.reportingFxMissing && (
-                  <p
-                    role="status"
-                    className="bg-amber-soft text-fg-dim self-start rounded-lg px-2 py-1 text-sm"
-                  >
-                    {t("dashboard.reportingFxMissing", {
-                      currency: getPrefs().currency,
-                    })}
-                  </p>
+                {/* Right under the figure it explains, not under the chart. */}
+                {fxMissing && (
+                  <FxFootnote className="mt-1">
+                    <ExcludedNote items={excluded} masked={privacy.masked} />
+                  </FxFootnote>
                 )}
               </>
             )}

@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../components/Surface";
@@ -11,6 +11,7 @@ import { formatMoney } from "../../lib/money";
 import { formatDate } from "../../lib/date";
 import { CURRENCIES } from "../../lib/currency";
 import { TIME_ZONES } from "../../lib/timeZoneList";
+import { ApiError } from "../../api/client";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
@@ -33,6 +34,26 @@ export function SettingsGeneral() {
   // Auto-save: every change persists that one setting and applies app-wide.
   const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
     void updatePrefs({ [key]: value });
+
+  // The server fetches the new currency's rate before saving it, and refuses
+  // it when the rate can't be had: the select shows the pick meanwhile.
+  const [currency, setCurrency] = useState<{ code: string; state: "fetching" | "refused" } | null>(null);
+  const changeCurrency = (code: string) => {
+    setCurrency({ code, state: "fetching" });
+    updatePrefs({ currency: code }).then(
+      () => setCurrency(null),
+      (err: unknown) =>
+        setCurrency(err instanceof ApiError && err.status === 502 ? { code, state: "refused" } : null),
+    );
+  };
+  const currencyHint =
+    currency?.state === "fetching" ? (
+      t("fx.fetching", { currency: currency.code })
+    ) : currency?.state === "refused" ? (
+      <span role="alert" className="text-red">{t("fx.refused", { currency: currency.code })}</span>
+    ) : (
+      t("settings.general.baseReportingCurrency")
+    );
 
   // Drive the preview from the reactive context prefs, not the module singleton
   // that formatMoney reads by default — the singleton isn't a React-tracked
@@ -105,11 +126,11 @@ export function SettingsGeneral() {
         <div className="flex flex-col gap-5">
           <Setting
             label={t("settings.general.currency")}
-            hint={t("settings.general.baseReportingCurrency")}
+            hint={currencyHint}
           >
             <Select
-              value={prefs.currency}
-              onChange={(v) => set("currency", v)}
+              value={currency?.state === "fetching" ? currency.code : prefs.currency}
+              onChange={changeCurrency}
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               className="w-36 md:w-60"
             />
@@ -196,7 +217,7 @@ function Setting({
   children,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   return (

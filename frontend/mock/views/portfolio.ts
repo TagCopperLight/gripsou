@@ -107,7 +107,7 @@ export function netWorth(store: Store, range: string): NetWorthResponse {
   if (store.accounts.length === 0) {
     return {
       points: [],
-      summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
+      summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },
     };
   }
   const { value, invested } = accountDaily(store);
@@ -128,7 +128,6 @@ export function netWorth(store: Store, range: string): NetWorthResponse {
       gainAbs: money(last - first),
       gainPct: first === 0 ? "0" : ((last - first) / first).toFixed(4),
       fxMissing: store.fx.missing.length > 0,
-      reportingFxMissing: store.fx.reportingMissing,
     },
   };
 }
@@ -183,6 +182,8 @@ function holdingBase(store: Store, accountId: string) {
   return { accountId, accountName: a.name, accountColor: a.color, accountType: a.typeKey, accountCurrency: a.currency, fxMissing: false, logo: null };
 }
 
+const USD_PER_EUR = 1.08;
+
 export function holdings(store: Store): Holding[] {
   const cash = cashDaily(store);
   const out: Holding[] = store.accounts.map((a) => {
@@ -200,6 +201,7 @@ export function holdings(store: Store): Holding[] {
       invested: v,
       investedNative: v,
       value: v,
+      valueNative: v,
       gl: "0",
       glPct: "0",
       spark: null,
@@ -230,11 +232,13 @@ export function holdings(store: Store): Holding[] {
       kind: "etf",
       qty: String(qty),
       price: money(price),
-      currency: "EUR",
-      priceCurrency: "EUR",
+      // A missing rate stands for a listing quoted in dollars.
+      currency: missingFx ? "USD" : "EUR",
+      priceCurrency: missingFx ? "USD" : "EUR",
       invested: money(invested),
       investedNative: money(invested),
       value: money(value),
+      valueNative: money(qty * price * (missingFx ? USD_PER_EUR : 1)),
       gl: missingFx ? "0" : money(value - invested),
       glPct: missingFx || invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
       spark: s.closes.slice(-30).map((p) => money(p)),

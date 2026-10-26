@@ -78,9 +78,17 @@
       "saving": "Saving…"
     }
   },
+  "fx": {
+    "fetching": "Getting the {{currency}} rate…",
+    "refused": "Couldn't get the {{currency}} rate. Try again later.",
+    "excludesOne": "Excludes {{name}} (<value/>): no {{currency}} rate yet.",
+    "excludesOneShort": "Excludes {{name}}: no {{currency}} rate yet.",
+    "excludesMany": "Excludes {{count}} holdings: no exchange rate yet.",
+    "excludesSome": "Some amounts are excluded: no exchange rate yet.",
+    "budget": "Excludes transactions in a currency with no exchange rate yet.",
+    "holdings": "No exchange rate yet: shown in its own currency and not counted in the totals."
+  },
   "dashboard": {
-    "fxMissing": "The exchange rate for this currency is not available yet. This amount is excluded from totals until the rate is fetched on the next sync.",
-    "reportingFxMissing": "The exchange rate to {{currency}} is not available yet. The figures below are shown in the app’s base currency. The rate will be fetched on the next sync.",
     "netWorth": {
       "title": "Net Worth",
       "netWorth": "Net worth",

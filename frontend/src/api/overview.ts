@@ -53,9 +53,6 @@ export type BudgetSummary = {
   txnCount: number;
   /** Some row could not be valued — the figures are UNDERSTATED. */
   fxMissing: boolean;
-  /** Nothing is missing; the whole sum is in the PIVOT currency, so it must not
-   *  be labelled with the reader's reporting symbol as if converted. */
-  reportingFxMissing: boolean;
   figures: { income: Figure; expenses: Figure; net: Figure };
   sankey: Sankey;
   /** Expense side only: expense-kind categories plus the uncategorised OUTFLOW

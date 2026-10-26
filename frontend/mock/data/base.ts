@@ -79,7 +79,10 @@ export type BaseData = {
   tags: TagRow[];
   /** Exchange-rate gaps: securities with no rate today (left out of every
    *  sum, flagged ⚠), and no rate at all into the reader's currency. */
-  fx: { missing: string[]; reportingMissing: boolean };
+  /** `missing`: securities quoted in dollars with no dollar rate. `budget`:
+   *  some transaction has no rate. `rateDown`: a currency change can't get
+   *  its rate, so the server refuses it. */
+  fx: { missing: string[]; budget: boolean; rateDown: boolean };
 };
 
 /** Days of price and balance history, today included. */
@@ -396,6 +399,6 @@ export function baseData(): BaseData {
     txns: transactions(cats, tags, securities, openingCash[PEA]),
     categories: cats,
     tags,
-    fx: { missing: [], reportingMissing: false },
+    fx: { missing: [], budget: false, rateDown: false },
   };
 }

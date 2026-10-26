@@ -19,7 +19,6 @@ function Line(props: Partial<Parameters<typeof PeriodLine>[0]>) {
     <PeriodLine
       period={shown}
       txnCount={412}
-      fxMissing={false}
       canStepBack
       canStepForward
       onStep={() => {}}
@@ -56,13 +55,6 @@ describe("PeriodLine", () => {
     renderLine({ canStepBack: false, canStepForward: false });
     expect(screen.getByTestId("period-prev")).toBeDisabled();
     expect(screen.getByTestId("period-next")).toBeDisabled();
-  });
-
-  it("shows the FX warning only when a row could not be valued", () => {
-    renderLine();
-    expect(screen.queryByTestId("period-fx-missing")).toBeNull();
-    renderLine({ fxMissing: true });
-    expect(screen.getAllByTestId("period-fx-missing")[0]).toBeVisible();
   });
 
   it("replaces the stepper with the range and a clearing cross under a range", () => {

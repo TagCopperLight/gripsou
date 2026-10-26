@@ -15,7 +15,7 @@ vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 // What the server sends while the user has no accounts.
 const NO_ACCOUNTS: NetWorthResponse = {
   points: [],
-  summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false, reportingFxMissing: false },
+  summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },
 };
 
 function connections(...statuses: SyncStatus[]): ProviderGroup[] {
@@ -32,7 +32,7 @@ function stubApi(groups: ProviderGroup[]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
-      new Response(JSON.stringify(String(url).includes("/connections") ? groups : NO_ACCOUNTS), {
+      new Response(JSON.stringify(String(url).includes("/connections") ? groups : String(url).includes("/holdings") ? [] : NO_ACCOUNTS), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -92,9 +92,9 @@ describe("NetWorthCard in private mode", () => {
   it("masks the gain with the headline, keeps the percentage, and one eye reveals both", async () => {
     const body: NetWorthResponse = {
       points: [{ t: 0, netWorth: "10000", invested: "9000" }, { t: 1, netWorth: "11234.56", invested: "9000" }],
-      summary: { netWorth: "11234.56", invested: "9000", gainAbs: "1234.56", gainPct: "0.1235", fxMissing: false, reportingFxMissing: false },
+      summary: { netWorth: "11234.56", invested: "9000", gainAbs: "1234.56", gainPct: "0.1235", fxMissing: false },
     };
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body)));
     renderCard({ ...DEFAULT_PREFS, privateMode: true });
 
     expect(await screen.findByText(/12,35\s?%/)).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -23,20 +24,33 @@ export function MaskedMoney({ value, masked, className = "", ...options }: Maske
 type PrivateMoneyProps = Omit<MaskedMoneyProps, "masked"> & {
   /** The card's shared privacy, when other figures follow the same eye. */
   privacy?: Privacy;
+  /** Right after the amount, before the eye (a footnote's asterisk). */
+  after?: ReactNode;
 };
 
 /** The headline figure. With private mode off this is exactly a `Money`. With
  *  it on the amount is masked, and the eye next to it reveals it. */
-export function PrivateMoney({ privacy, ...props }: PrivateMoneyProps) {
+export function PrivateMoney({ privacy, after, ...props }: PrivateMoneyProps) {
   const { t } = useTranslation();
   const own = usePrivacy();
   const { enabled, masked, toggle } = privacy ?? own;
 
-  if (!enabled) return <Money {...props} />;
+  if (!enabled) {
+    if (after == null) return <Money {...props} />;
+    return (
+      <span>
+        <Money {...props} />
+        {after}
+      </span>
+    );
+  }
 
   return (
     <span className="flex items-center gap-2">
-      <MaskedMoney masked={masked} {...props} />
+      <span>
+        <MaskedMoney masked={masked} {...props} />
+        {after}
+      </span>
       <button
         type="button"
         onClick={toggle}
