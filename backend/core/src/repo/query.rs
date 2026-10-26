@@ -494,6 +494,9 @@ pub struct PricePointRow {
     /// the domain lots are recorded in, so it can sit next to them. Null when
     /// either rate is unknown.
     pub account_price: Option<Decimal>,
+    /// The same price in the reader's currency at that day's rates. Null when
+    /// either rate is unknown.
+    pub reporting_price: Option<Decimal>,
 }
 
 pub async fn holding_prices(
@@ -519,6 +522,8 @@ pub async fn holding_prices(
             select quote as currency, day from pts
             union
             select acct, day from pts
+            union
+            select (select currency from users where id = $2), day from pts
         ),
         -- fx_asof for every asked (currency, day) in one ordered pass: each
         -- asked day sorts after that day's rates, so it falls in the run of
@@ -551,10 +556,12 @@ pub async fn holding_prices(
             where asked
         )
         select pts.ts as "ts!", pts.unit_price as "unit_price!",
-               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?"
+               pts.unit_price * q.rate / nullif(ac.rate, 0) as "account_price?",
+               pts.unit_price * q.rate / nullif(rp.rate, 0) as "reporting_price?"
         from pts
         join rates q  on q.currency = pts.quote and q.day = pts.day
         join rates ac on ac.currency = pts.acct and ac.day = pts.day
+        join rates rp on rp.currency = (select currency from users where id = $2) and rp.day = pts.day
         order by pts.ts
         "#,
         holding_id,
@@ -575,6 +582,8 @@ pub struct AccountRow {
     pub color: String,
     pub type_key: String,
     pub value: Decimal,
+    pub currency: String,
+    pub value_native: Option<Decimal>,
     pub fx_missing: bool,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub institution_key: Option<String>,
@@ -648,6 +657,11 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
                a.color,
                a.type_key as "type_key!",
                sum(l.value) / coalesce(nullif((select unit_value from rep), 0), 1) as "value!",
+               a.currency as "currency!",
+               -- `value` is in the reader's currency; `value_native` is the same
+               -- sum in the account's own, null when that currency has no rate today.
+               sum(l.value) / nullif((select unit_value from fx where currency = a.currency), 0)
+                   as "value_native?",
                coalesce(bool_or(l.fx_missing), false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
@@ -657,7 +671,7 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
         join holding h      on h.id = l.holding_id
         join account a      on a.id = h.account_id
         join connection c   on c.id = a.connection_id
-        group by a.id, c.id, a.name, a.color, a.type_key, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
+        group by a.id, c.id, a.name, a.color, a.type_key, a.currency, c.last_sync_at, c.institution_key, c.institution_name, c.provider_key
         order by sum(l.value) desc
         "#,
         user_id,
@@ -748,15 +762,11 @@ pub struct TransactionListRow {
     /// In `account_currency` — the amount domain, as the provider sent it. Not
     /// converted: the list shows what actually moved in the account.
     pub amount: Decimal,
-    /// The same movement in the reader's reporting currency, converted at the
-    /// transaction's own date. The list renders `amount`; this exists so an
-    /// explicit multi-row selection can be totalled without a round trip.
-    /// Zero when the ACCOUNT leg's rate was unknown — see `fx_missing` on the
-    /// sibling summary types for the analogous flag. When only the REPORTING
-    /// leg's rate is unknown, this is NOT zero: it silently degrades to the
-    /// pivot currency instead (see the divisor comment on the query below),
-    /// so nothing here flags that case for a caller of this row type.
-    pub amount_reporting: Decimal,
+    /// The same movement in the reader's currency at the transaction's own
+    /// date. The list renders `amount`; this exists so an explicit multi-row
+    /// selection can be totalled without a round trip.
+    /// `None` when the account's or the reader's currency has no rate that day.
+    pub amount_reporting: Option<Decimal>,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale that now
     /// lives in the `lot` table. Structured, not a pre-built sentence: the
     /// frontend's i18n and per-user number formatting render the lot fields.
@@ -927,17 +937,10 @@ pub async fn transactions(
             select (select currency from users where id = $1) as code
         )
         select id as "id!", day as "day!", kind as "kind!", description, amount as "amount!",
-               -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
-               -- `nullif`: when the reporting currency has no rate on this
-               -- day the whole expression must still degrade to the pivot
-               -- currency (divide by 1) rather than yield NULL, which
-               -- `coalesce(..., 0)` around the multiplication would then
-               -- silently turn into a zeroed amount indistinguishable from a
-               -- genuinely unrateable account leg. Do not "simplify" this to
-               -- a bare `nullif` — see the doc comment on this field above.
-               coalesce(filtered.amount * afx.unit_value
-                        / coalesce(nullif(rfx.unit_value, 0), 1), 0)
-                   as "amount_reporting!",
+               -- Null, not zero or a pivot figure, when either rate is
+               -- missing: the list then shows no converted value at all.
+               filtered.amount * afx.unit_value / nullif(rfx.unit_value, 0)
+                   as "amount_reporting?",
                source as "source!", ticker, instrument_kind, instrument_isin,
                instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",

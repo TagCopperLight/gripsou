@@ -83,6 +83,8 @@ export type PricePoint = {
   /** The same price in the account's currency at that day's rates; null when
    *  a rate is missing. */
   accountPrice: string | null;
+  /** The same price in the reader's currency; null when a rate is missing. */
+  reportingPrice: string | null;
 };
 
 export type Lot = {
@@ -115,6 +117,13 @@ export type BasisPreview = {
   realised: string;
   /** Null while today's price or exchange rate is unknown. */
   unrealised: string | null;
+  /** The same figures in the reader's currency; null while that rate is unknown. */
+  reporting: {
+    meanPrice: string;
+    invested: string;
+    realised: string;
+    unrealised: string | null;
+  } | null;
 };
 
 export type Account = {
@@ -124,6 +133,8 @@ export type Account = {
   color: string;
   typeKey: string;
   value: string;
+  currency: string;
+  valueNative: string | null;
   lastSyncAt: number | null;
   sourceName: string | null;
   sourceLogo: string | null;
@@ -244,10 +255,11 @@ export type Transaction = {
   /** Decimal string, denominated in the ACCOUNT's own currency (see `currency`),
    *  never the user's reporting currency — do not relabel it. */
   amount: string;
-  /** `amount` converted to the reader's reporting currency at the
-   *  transaction's own date. The list is capped at 200 rows, so summing these
-   *  client-side for an explicit selection is cheap. */
-  amountReporting: string;
+  /** `amount` in the reader's currency at the transaction's own date; null
+   *  when the account's or the reader's currency has no rate that day. The
+   *  list is capped at 200 rows, so summing these client-side for an explicit
+   *  selection is cheap. */
+  amountReporting: string | null;
   currency: string;
   accountId: string;
   accountName: string;

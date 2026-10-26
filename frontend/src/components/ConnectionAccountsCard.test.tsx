@@ -13,6 +13,8 @@ const ACCOUNT: Account = {
   color: "#6ea8fe",
   typeKey: "checking",
   value: "300",
+  currency: "EUR",
+  valueNative: null,
   lastSyncAt: null,
   sourceName: "Online Bank",
   sourceLogo: null,

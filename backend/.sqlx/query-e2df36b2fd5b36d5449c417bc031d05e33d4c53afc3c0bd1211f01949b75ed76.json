@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select fx_asof(a.currency, user_today($2))\n               / nullif(fx_asof(u.currency, user_today($2)), 0)\n        from holding h\n        join account a on a.id = h.account_id\n        join users u on u.id = $2\n        where h.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e2df36b2fd5b36d5449c417bc031d05e33d4c53afc3c0bd1211f01949b75ed76"
+}

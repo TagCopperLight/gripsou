@@ -628,7 +628,70 @@ async fn list_rows_carry_both_their_own_and_the_reporting_amount(
     let rows = transactions(&pool, user_id, &filters()).await?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].amount, eur(-100), "the list still shows what moved");
-    assert_eq!(rows[0].amount_reporting, eur(-50));
+    assert_eq!(rows[0].amount_reporting, Some(eur(-50)));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_row_without_a_rate_has_no_reporting_amount(pool: PgPool) -> anyhow::Result<()> {
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    // The only USD rate is AFTER the row: nothing to convert it with.
+    rate_on(&pool, usd, day(2026, 3, 10), Decimal::new(50, 2)).await;
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let usd_acct =
+        upsert_account(&mut conn, conn_id, &checking_account_in("acct-usd", "USD")).await?;
+    upsert_transaction(
+        &mut conn,
+        usd_acct,
+        &txn_on_day(
+            "acct-usd",
+            "t1",
+            "withdrawal",
+            eur(-100),
+            day(2026, 3, 4),
+            "US SPEND",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    assert_eq!(rows[0].amount_reporting, None);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn no_reporting_amount_when_the_readers_currency_has_no_rate(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    sqlx::query("update users set currency = 'GBP' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let mut conn = pool.acquire().await?;
+    let acct = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    upsert_transaction(
+        &mut conn,
+        acct,
+        &txn_on_day(
+            "acct-1",
+            "t1",
+            "withdrawal",
+            eur(-10),
+            day(2026, 3, 4),
+            "SPEND",
+        ),
+    )
+    .await?;
+    drop(conn);
+
+    let rows = transactions(&pool, user_id, &filters()).await?;
+    assert_eq!(
+        rows[0].amount_reporting, None,
+        "never a pivot figure under the reader's symbol"
+    );
     Ok(())
 }
 
@@ -818,10 +881,14 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
         let rows = transactions(&pool, user_id, &f).await?;
         let counts = transaction_counts(&pool, user_id, &f).await?;
         assert_eq!(counts.matching, rows.len() as i64);
-        assert_eq!(
-            counts.matching_total,
-            rows.iter().map(|r| r.amount_reporting).sum::<Decimal>()
-        );
+        if !counts.reporting_fx_missing {
+            assert_eq!(
+                counts.matching_total,
+                rows.iter()
+                    .filter_map(|r| r.amount_reporting)
+                    .sum::<Decimal>()
+            );
+        }
         assert_eq!(
             counts.fx_missing,
             matches!(currency, None | Some("USD") | Some("GBP"))

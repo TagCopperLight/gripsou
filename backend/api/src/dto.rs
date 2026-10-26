@@ -295,6 +295,18 @@ pub struct BasisPreview {
     pub realised: String,
     /// Null when today's price or rate is unknown.
     pub unrealised: Option<String>,
+    /// The same figures in the reader's currency; null when the rate from the
+    /// account's currency is unknown today.
+    pub reporting: Option<BasisFigures>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasisFigures {
+    pub mean_price: String,
+    pub invested: String,
+    pub realised: String,
+    pub unrealised: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -303,6 +315,7 @@ pub struct PricePoint {
     pub t: i64,
     pub price: String,
     pub account_price: Option<String>,
+    pub reporting_price: Option<String>,
 }
 
 impl PricePoint {
@@ -311,6 +324,7 @@ impl PricePoint {
             t: r.ts.timestamp_millis(),
             price: r.unit_price.to_string(),
             account_price: r.account_price.map(|p| p.to_string()),
+            reporting_price: r.reporting_price.map(|p| p.to_string()),
         }
     }
 }
@@ -327,9 +341,9 @@ pub struct Transaction {
     pub description: Option<String>,
     /// Decimal string in `currency` — never a float.
     pub amount: String,
-    /// The same movement in the reader's reporting currency, converted at the
-    /// transaction's own date. Decimal string, never a float.
-    pub amount_reporting: String,
+    /// The same movement in the reader's currency at the transaction's own
+    /// date. Decimal string, never a float; null when no rate applies.
+    pub amount_reporting: Option<String>,
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
@@ -387,7 +401,7 @@ impl Transaction {
             kind: r.kind,
             description: r.description,
             amount: r.amount.to_string(),
-            amount_reporting: r.amount_reporting.to_string(),
+            amount_reporting: r.amount_reporting.map(|a| a.to_string()),
             currency: r.account_currency,
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
@@ -437,6 +451,8 @@ pub struct Account {
     pub color: String,
     pub type_key: String,
     pub value: String,
+    pub currency: String,
+    pub value_native: Option<String>,
     pub fx_missing: bool,
     pub last_sync_at: Option<i64>,
     pub source_name: String,
@@ -453,6 +469,8 @@ impl Account {
             color: r.color,
             type_key: r.type_key,
             value: r.value.to_string(),
+            currency: r.currency,
+            value_native: r.value_native.map(|v| v.to_string()),
             fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
             source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),

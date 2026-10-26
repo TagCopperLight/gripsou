@@ -11,6 +11,8 @@ const ACCOUNT: Account = {
   connectionId: "c1",
   typeKey: "checking",
   value: "12480.30",
+  currency: "EUR",
+  valueNative: null,
   lastSyncAt: null,
   sourceName: null,
   sourceLogo: null,

@@ -19,9 +19,9 @@ let suggestionsFailed = false;
 // server and the figures the server sends back reaching the screen — and
 // nothing about the formula, which only the backend may compute.
 const PREVIEW_RESULTS: BasisPreview[] = [
-  { meanPrice: "25", invested: "375", realised: "0", unrealised: "12" },
-  { meanPrice: "30", invested: "400", realised: "5", unrealised: "20" },
-  { meanPrice: "35", invested: "450", realised: "7", unrealised: "25" },
+  { meanPrice: "25", invested: "375", realised: "0", unrealised: "12", reporting: null },
+  { meanPrice: "30", invested: "400", realised: "5", unrealised: "20", reporting: null },
+  { meanPrice: "35", invested: "450", realised: "7", unrealised: "25", reporting: null },
 ];
 
 let previewMutate: ReturnType<typeof vi.fn<(rows: SaveLotAdd[]) => void>>;
@@ -61,7 +61,7 @@ vi.mock("../api/hooks", async () => {
           // by assertions about populated rows.
           const result =
             rows.length === 0
-              ? { meanPrice: "0", invested: "0", realised: "0", unrealised: "0" }
+              ? { meanPrice: "0", invested: "0", realised: "0", unrealised: "0", reporting: null }
               : PREVIEW_RESULTS[Math.min(previewCallCount, PREVIEW_RESULTS.length - 1)];
           if (rows.length > 0) previewCallCount += 1;
           const resolve = () => {

@@ -109,7 +109,11 @@ export function TransactionsMode() {
   const selectionTotal =
     selection.mode === "allShown"
       ? (counts.data?.matchingTotal ?? "0")
-      : sumDecimals(rows.filter((r) => selection.ids.has(r.id)).map((r) => r.amountReporting));
+      : sumDecimals(
+          rows
+            .filter((r) => selection.ids.has(r.id) && r.amountReporting !== null)
+            .map((r) => r.amountReporting!),
+        );
   const categoryFor = categoryForId ? (rows.find((r) => r.id === categoryForId) ?? null) : null;
   const tagsFor = tagsForId ? (rows.find((r) => r.id === tagsForId) ?? null) : null;
 

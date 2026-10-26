@@ -18,8 +18,12 @@ import { colorForString } from "../lib/palette";
 import { KIND_LABEL_KEY, type Holding, type Lot } from "../api/types";
 import { useHoldingLots, useHoldingPrices } from "../api/hooks";
 import { positionSeries } from "../lib/assetSeries";
+import { reportingOffered } from "../lib/reportingUnit";
+import { currencySymbol } from "../lib/currency";
+import { getPrefs } from "../lib/prefs";
 
-// This modal shows THREE currency domains on screen. They are distinct and must
+// This modal shows THREE currency domains on screen, plus a fourth behind the chart's unit
+// switch. They are distinct and must
 // never be collapsed into one "native" currency:
 //
 // - Reporting domain (`users.prefs.currency`, so no explicit `currency` option):
@@ -35,6 +39,12 @@ import { positionSeries } from "../lib/assetSeries";
 //   (`Lot.price`/`Lot.fee`, and the derived cash amount), and the
 //   purchases-mode chart, whose value line uses prices the server converted
 //   into the account's currency (`PricePoint.accountPrice`).
+//
+// - Reader's currency again, as a chart choice: only when the chart's own
+//   currency differs and a day converts, the switch's middle option redraws the
+//   chart, header and gain from each day's converted price
+//   (`PricePoint.reportingPrice`, at that day's rates). Its gain is last minus
+//   first of that series, so it includes the currency's own move.
 //
 // `holding.currency` is the instrument's QUOTE currency. It labels the asset's
 // identity, not any amount here, so it formats nothing on this screen.
@@ -74,11 +84,6 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const [range, setRange] = useState("1mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
 
-  const UNIT_OPTIONS = [
-    { value: "value", label: t("common.value") },
-    { value: "percent", label: "%" },
-  ];
-
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
   const { data: txnData, isError: txnError, refetch: refetchTxn } =
@@ -117,23 +122,39 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         : Number(holding.investedNative) / qtyNum;
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
+  const reader = getPrefs().currency;
+  const offered = reportingOffered(chartCurrency, reader, prices);
+  // A tab where the choice is not offered never leaves the switch on it.
+  const shownUnit: ChartUnit = unit === "reporting" && !offered ? "value" : unit;
+  const inReporting = shownUnit === "reporting";
+  const shownCurrency = inReporting ? reader : chartCurrency;
+  const UNIT_OPTIONS = [
+    { value: "value", label: t("common.value") },
+    ...(offered ? [{ value: "reporting", label: currencySymbol(reader) }] : []),
+    { value: "percent", label: "%" },
+  ];
 
   // Chart series + header figures depend on the mode and range.
   const { series, headerValue, gainAbs, gainPct, chartLabel } = useMemo(() => {
     if (mode === "asset") {
-      const values = prices.map((p) => Number(p.price));
+      const shown = inReporting
+        ? prices
+            .filter((p) => p.reportingPrice !== null)
+            .map((p) => ({ t: p.t, v: Number(p.reportingPrice) }))
+        : prices.map((p) => ({ t: p.t, v: Number(p.price) }));
+      const values = shown.map((p) => p.v);
       const first = values[0] ?? 0;
       const last = values[values.length - 1] ?? 0;
       return {
         series: [
           {
             name: t("dashboard.assetModal.unitPrice"),
-            data: prices.map((p) => [p.t, Number(p.price)] as [number, number]),
+            data: shown.map((p) => [p.t, p.v] as [number, number]),
             color: colorForString(holding.ticker),
             area: true,
           },
         ] satisfies ChartSeries[],
-        headerValue: Number(holding.price),
+        headerValue: inReporting ? last : Number(holding.price),
         gainAbs: last - first,
         gainPct: first ? (last - first) / first : 0,
         chartLabel: t("dashboard.assetModal.unitPrice"),
@@ -146,6 +167,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       Number(holding.unexplainedCost),
       qtyNum,
       investedNum,
+      inReporting ? "reporting" : "account",
     );
     const values = pts.map((p) => p.value);
     const first = values[0] ?? 0;
@@ -163,7 +185,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       gainPct: first ? (last - first) / first : 0,
       chartLabel: t("dashboard.assetModal.positionValue"),
     };
-  }, [holding, mode, prices, purchases, qtyNum, investedNum, t]);
+  }, [holding, mode, prices, purchases, qtyNum, investedNum, inReporting, t]);
 
   const gainUp = gainAbs >= 0;
 
@@ -202,10 +224,10 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
               <span className="text-fg-faint text-sm">{chartLabel}</span>
               {/* Both headerValue and gainAbs follow the chart: price
                   domain in asset mode, amount domain in purchases mode.
-                  Never reporting currency — see the file header. */}
+                  Reporting currency only behind the unit switch — see the file header. */}
               <Money
                 value={headerValue}
-                currency={chartCurrency}
+                currency={shownCurrency}
                 className="text-fg text-2xl font-semibold tracking-tight"
               />
               <div
@@ -220,7 +242,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 )}
                 <Money
                   value={gainAbs}
-                  currency={chartCurrency}
+                  currency={shownCurrency}
                   signed
                 />
                 <span className="font-mono ml-2">
@@ -230,14 +252,14 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             </div>
             <div className="flex flex-col items-end gap-3">
               <SegmentedControl
-                value={unit}
+                value={shownUnit}
                 onChange={(v) => setUnit(v as ChartUnit)}
                 options={UNIT_OPTIONS}
               />
               {mode === "purchases" && (
                 <ChartLegend
                   items={
-                    unit === "percent"
+                    shownUnit === "percent"
                       ? [{ label: t("common.return"), color: GREEN }]
                       : [
                           { label: t("dashboard.assetModal.positionValue"), color: GREEN },
@@ -252,11 +274,11 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           {chartReady ? (
             <ValueChart
               series={series}
-              unit={unit}
+              unit={inReporting ? "value" : shownUnit}
               percentLabel={t("common.return")}
               height={340}
               className="mt-4"
-              currency={chartCurrency}
+              currency={shownCurrency}
             />
           ) : (
             <CardState

@@ -442,6 +442,26 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
             Some(Decimal::new(8, 0)),
         ]
     );
+    // The reader is in EUR like the account: the two prices agree.
+    assert!(prices.iter().all(|p| p.reporting_price == p.account_price));
+
+    // Read in USD: the USD listing needs no rate; day 4 (no USD rate yet)
+    // stays unknown because the quote leg has none either.
+    sqlx::query("update users set currency = 'USD' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
+    let reporting: Vec<_> = prices.iter().map(|p| p.reporting_price).collect();
+    assert_eq!(
+        reporting,
+        vec![
+            None,
+            Some(Decimal::new(10, 0)),
+            Some(Decimal::new(10, 0)),
+            Some(Decimal::new(10, 0)),
+        ]
+    );
     Ok(())
 }
 
@@ -2269,5 +2289,77 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].invested, "72.00".parse()?, "600 CNY at 0.12");
     assert!(!rows[0].fx_missing);
+    Ok(())
+}
+
+async fn cny_account(pool: &PgPool) -> anyhow::Result<Uuid> {
+    use gripsou_core::testkit::checking_account_in;
+    let conn_id = seed_connection(pool).await;
+    let mut cash = cash_holding("acct-cny", Decimal::new(800, 0));
+    cash.instrument.currency = "CNY".into();
+    cash.instrument.name = "CNY".into();
+    ingest(
+        pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account_in("acct-cny", "CNY")],
+            holdings: vec![cash],
+            ..Default::default()
+        },
+    )
+    .await?;
+    Ok(sqlx::query_scalar("select user_id from connection")
+        .fetch_one(pool)
+        .await?)
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn accounts_carry_their_balance_in_their_own_currency(pool: PgPool) -> anyhow::Result<()> {
+    use gripsou_core::testkit::rate_on;
+    let user_id = cny_account(&pool).await?;
+    let today = chrono::Utc::now().date_naive();
+    let cny: Uuid =
+        sqlx::query_scalar("select id from instrument where kind = 'cash' and currency = 'CNY'")
+            .fetch_one(&pool)
+            .await?;
+    rate_on(&pool, cny, today, "0.125".parse()?).await;
+
+    let rows = query::accounts(&pool, user_id).await?;
+    assert_eq!(rows[0].currency, "CNY");
+    assert_eq!(rows[0].value, Decimal::new(100, 0));
+    assert_eq!(rows[0].value_native, Some(Decimal::new(800, 0)));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn accounts_native_balance_is_null_without_a_rate(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = cny_account(&pool).await?;
+    let rows = query::accounts(&pool, user_id).await?;
+    assert_eq!(rows[0].currency, "CNY");
+    assert_eq!(rows[0].value_native, None);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn accounts_in_the_readers_currency_have_native_equal_value(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![cash_holding("acct-1", Decimal::new(150, 0))],
+            ..Default::default()
+        },
+    )
+    .await?;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
+        .fetch_one(&pool)
+        .await?;
+    let rows = query::accounts(&pool, user_id).await?;
+    assert_eq!(rows[0].currency, "EUR");
+    assert_eq!(rows[0].value_native, Some(rows[0].value));
     Ok(())
 }

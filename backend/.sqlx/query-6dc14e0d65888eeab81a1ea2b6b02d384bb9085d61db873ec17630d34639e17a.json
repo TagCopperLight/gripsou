@@ -1,0 +1,57 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with pts as materialized (\n            select p.ts, p.unit_price, p.currency as quote, a.currency as acct,\n                   (p.ts at time zone 'utc')::date as day\n            from price p\n            join holding h    on h.instrument_id = p.instrument_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4\n        ),\n        asked as (\n            select quote as currency, day from pts\n            union\n            select acct, day from pts\n            union\n            select (select currency from users where id = $2), day from pts\n        ),\n        -- fx_asof for every asked (currency, day) in one ordered pass: each\n        -- asked day sorts after that day's rates, so it falls in the run of\n        -- the last rate stamped on or before it. Calling fx_asof twice per\n        -- price instead costs a few times longer on a long history.\n        runs as (\n            select currency, asked, rate, day,\n                   count(rate) over (partition by currency order by day, asked, ts) as run\n            from (\n                select i.currency, (r.ts at time zone 'utc')::date as day,\n                       r.unit_price as rate, r.ts, false as asked\n                from instrument i\n                join price r on r.instrument_id = i.id\n                where i.kind = 'cash' and i.currency in (select currency from asked)\n                union all\n                select currency, day, null, null, true from asked\n            ) t\n        ),\n        rates as materialized (\n            select currency, day,\n                   case when currency = (select base_currency from app_settings where id = 1)\n                        then 1::numeric\n                        else rate\n                   end as rate\n            from (\n                select currency, day, asked,\n                       max(rate) over (partition by currency, run) as rate\n                from runs\n            ) f\n            where asked\n        )\n        select pts.ts as \"ts!\", pts.unit_price as \"unit_price!\",\n               pts.unit_price * q.rate / nullif(ac.rate, 0) as \"account_price?\",\n               pts.unit_price * q.rate / nullif(rp.rate, 0) as \"reporting_price?\"\n        from pts\n        join rates q  on q.currency = pts.quote and q.day = pts.day\n        join rates ac on ac.currency = pts.acct and ac.day = pts.day\n        join rates rp on rp.currency = (select currency from users where id = $2) and rp.day = pts.day\n        order by pts.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "account_price?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "reporting_price?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "6dc14e0d65888eeab81a1ea2b6b02d384bb9085d61db873ec17630d34639e17a"
+}
