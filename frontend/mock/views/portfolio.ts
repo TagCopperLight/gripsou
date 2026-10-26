@@ -20,8 +20,10 @@ import type { Store } from "../store";
 
 /** Every lot of a security: provider lots from the ledger, plus manual ones. */
 export function lotsOf(store: Store, holdingId: string): Lot[] {
+  // The ledger's buys stand for lots the user recorded: in production every lot
+  // is manual (Powens sends none), so the "record purchases" window lists them.
   const fromLedger: Lot[] = store.txns
-    .filter((x) => x.source === "lot" && x.holdingId === holdingId)
+    .filter((x) => x.source === "lot" && x.holdingId === holdingId && !store.deletedLots.includes(x.id))
     .map((x) => ({
       id: x.id,
       t: x.t,
@@ -29,7 +31,7 @@ export function lotsOf(store: Store, holdingId: string): Lot[] {
       qty: String(x.quantity),
       price: money(x.unitPrice ?? 0),
       fee: money(x.fee ?? 0),
-      manual: false,
+      manual: true,
     }));
   return [...fromLedger, ...(store.manualLots[holdingId] ?? [])].sort((a, b) => a.t - b.t);
 }
@@ -326,6 +328,7 @@ export function previewLots(store: Store, holdingId: string, rows: SaveLotAdd[])
 
 /** One batch, like the real endpoint: deletes manual lots, adds the new rows as manual lots. */
 export function saveLots(store: Store, holdingId: string, batch: SaveLotsInput): void {
+  store.deletedLots.push(...batch.deletes);
   const kept = (store.manualLots[holdingId] ?? []).filter((l) => !batch.deletes.includes(l.id));
   const added = batch.adds.map((r, i) => ({
     id: `manual-${holdingId}-${Date.now()}-${i}`,

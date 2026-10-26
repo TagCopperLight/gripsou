@@ -11,6 +11,8 @@ export type Store = BaseData & {
   aiStatus: AiStatus;
   /** Rows the "record purchases" window pre-fills, per holding (none in the base data). */
   lotSuggestions: Record<string, LotSuggestion[]>;
+  /** Ledger buys the user deleted from the "record purchases" window. */
+  deletedLots: string[];
 };
 
 export function createStore(): Store {
@@ -19,6 +21,7 @@ export function createStore(): Store {
   return {
     ...data,
     lotSuggestions: {},
+    deletedLots: [],
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",
