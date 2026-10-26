@@ -96,6 +96,7 @@ Findings:
 | D26 | Holdings: private mode left every value and gain readable. | Claude | fixed: values and gains masked, gain % and quantities kept, an eye right after the title. The "N assets" count by the title is removed (user). (same rule as D12, D18) |
 | D27 | Holdings: "Life insurance" wrapped onto two lines in its tag; a fractional quantity was cut to two decimals (0,0421 → "0,04"). | Claude | fixed: the tag never wraps; quantities show the decimals they have (up to 8) |
 | D28 | Holdings: long fund names wrap onto two lines on desktop, so rows have uneven heights. | Claude | deferred: the table layout is to be reviewed as a whole |
+| D29 | The net worth eye sat next to the big figure, while the distribution's and the holdings' sit after the card title. | User | fixed: after the title on the net worth card and on the Accounts page chart too, which shares the headline |
 | D15 | A holding with no rate showed "0,00 €" with a ⚠: true for the totals, useless to read. | Claude | fixed: it shows its value in its own currency (`valueNative`, e.g. "4 812,30 $*"), dimmed, with no gain/loss; the footnote says it isn't counted. The footnotes only count what is left out ("Excludes 2 holdings: no exchange rate yet."): naming a single holding with its value was dropped as a special case not worth having. |
 
 ### Accounts `/accounts`
@@ -266,6 +267,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
 | No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
-| Private mode on a card without a headline: amounts masked, shares kept, `PrivacyEye` by the title (D18, D26) | Dashboard distribution, holdings; to apply to the Accounts list, Investments, the asset modal |
+| Private mode: amounts masked, shares and % kept, one `PrivacyEye` right after the card's title, never next to a figure (D18, D26, D29) | Dashboard net worth, distribution, holdings; Accounts chart. To apply: Accounts list, Investments, Budget figures, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

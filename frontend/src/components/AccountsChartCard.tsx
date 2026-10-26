@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "./Surface";
-import { MaskedMoney, PrivateMoney } from "./PrivateMoney";
+import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
 import { usePrivacy } from "../auth/usePrivacy";
 import { Percent } from "./Percent";
 import { SegmentedControl } from "./SegmentedControl";
@@ -41,10 +41,17 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
       <div className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">{t("dashboard.netWorth.title")}</p>
+            <p className="text-fg font-semibold text-sm">
+              {t("dashboard.netWorth.title")}
+              {ready && privacy.enabled && (
+                <span className="ml-3 inline-flex align-middle">
+                  <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+                </span>
+              )}
+            </p>
             {ready && (
               <>
-                <PrivateMoney privacy={privacy} value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
+                <MaskedMoney masked={privacy.masked} value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
                     {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
