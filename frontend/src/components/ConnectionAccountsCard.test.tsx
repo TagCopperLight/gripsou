@@ -28,8 +28,6 @@ function group(overrides: Partial<ConnectionGroup> = {}): ConnectionGroup {
     connectionId: "c1",
     sourceName: "Online Bank",
     sourceLogo: null,
-    currency: "EUR",
-    valueNative: null,
     lastSyncAt: null,
     total: 400,
     accounts: [ACCOUNT, SAVINGS],
