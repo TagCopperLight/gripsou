@@ -5,7 +5,6 @@ import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 
 import { CategoryChooser } from "./CategoryChooser";
-import { EntityChooser } from "./EntityChooser";
 import type { BudgetCategory } from "../../api/budget";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
@@ -236,31 +235,4 @@ describe("CategoryChooser", () => {
     expect(search.getAttribute("aria-activedescendant")).toBe(screen.getByTestId("chooser-option-fun").id);
   });
 
-  describe("footer", () => {
-    const items = [{ id: "a", label: "Alpha", render: <span>Alpha</span> }];
-
-    it("renders the caller's footer under its own rule", () => {
-      render(
-        <EntityChooser
-          title="t"
-          items={items}
-          mode="multi"
-          selectedIds={[]}
-          onToggle={vi.fn()}
-          onClose={vi.fn()}
-          footer={<button data-testid="chooser-save">Save</button>}
-        />,
-      );
-      expect(screen.getByTestId("chooser-footer")).toContainElement(
-        screen.getByTestId("chooser-save"),
-      );
-    });
-
-    it("draws no footer band when the caller passes none", () => {
-      render(
-        <EntityChooser title="t" items={items} mode="multi" selectedIds={[]} onToggle={vi.fn()} onClose={vi.fn()} />,
-      );
-      expect(screen.queryByTestId("chooser-footer")).toBeNull();
-    });
-  });
 });

@@ -42,12 +42,6 @@ function renderCard(holdings: unknown[]) {
 }
 
 describe("HoldingsCard", () => {
-  it("renders a holding row from the API", async () => {
-    renderCard([HOLDING]);
-    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.getByText(/1 assets/)).toBeInTheDocument();
-  });
-
   it("merges same-currency cash across accounts into one row", async () => {
     renderCard([HOLDING, CASH_CHECKING, CASH_PEA]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
@@ -78,10 +72,10 @@ describe("HoldingsCard", () => {
     expect(screen.getByTestId("gap-dot")).toBeInTheDocument();
   });
 
-  it("hides the gap dot when unexplainedQty is 0", async () => {
-    renderCard([{ ...HOLDING, unexplainedQty: "0" }]);
-    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.queryByTestId("gap-dot")).toBeNull();
+  // The clamp used to hide this state entirely — the dot exists to surface it.
+  it("shows the dot when MORE is recorded than held", async () => {
+    renderCard([{ ...HOLDING, unexplainedQty: "-5" }]);
+    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
   });
 
   it("hides the gap dot on a cash row", async () => {
@@ -100,33 +94,5 @@ describe("HoldingsCard", () => {
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs).toHaveLength(1);
     expect(dialogs[0]).toHaveAttribute("aria-label", "Record buy/sell history");
-  });
-});
-
-describe("HoldingsCard gap dot", () => {
-  it("shows the dot when shares are unaccounted for", async () => {
-    renderCard([{ ...HOLDING, unexplainedQty: "5" }]);
-    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
-  });
-
-  // The clamp used to hide this state entirely — the dot exists to surface it.
-  it("shows the dot when MORE is recorded than held", async () => {
-    renderCard([{ ...HOLDING, unexplainedQty: "-5" }]);
-    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
-  });
-
-  it("shows no dot when the history is complete", async () => {
-    renderCard([HOLDING]);
-    await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    expect(screen.queryByTestId("gap-dot")).not.toBeInTheDocument();
-  });
-
-  it("opens the record modal from the icon without opening the asset modal", async () => {
-    const user = userEvent.setup();
-    renderCard([{ ...HOLDING, unexplainedQty: "5" }]);
-    await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
-    // The record modal's own heading, not the asset modal's chart controls.
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

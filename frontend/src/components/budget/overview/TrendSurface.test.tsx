@@ -83,22 +83,11 @@ describe("TrendSurface", () => {
     });
   });
 
-  it("labels the x axis with the months it was given", () => {
-    render(<TrendSurface trend={trend} onSelectMonth={vi.fn()} />);
-    const option = JSON.parse(screen.getByTestId("chart").getAttribute("data-option")!);
-    expect(option.xAxis.data).toHaveLength(3);
-  });
-
   it("selects the clicked month as the period", () => {
     const onSelectMonth = vi.fn();
     render(<TrendSurface trend={trend} onSelectMonth={onSelectMonth} />);
     screen.getByTestId("chart").click();
     expect(onSelectMonth).toHaveBeenCalledWith("2026-09");
-  });
-
-  it("legends every slice with its chip", () => {
-    render(<TrendSurface trend={trend} onSelectMonth={vi.fn()} />);
-    expect(screen.getAllByTestId("category-chip")).toHaveLength(2);
   });
 
   it("sorts each month's tooltip by ascending amount", () => {

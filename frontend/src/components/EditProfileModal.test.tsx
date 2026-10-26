@@ -104,14 +104,6 @@ describe("EditProfileModal", () => {
     expect(await screen.findByText("Couldn't save changes")).toBeInTheDocument();
   });
 
-  it("opens the file picker from the picture button", () => {
-    const { container } = renderModal();
-    const input = fileInput(container);
-    const click = vi.spyOn(input, "click").mockImplementation(() => {});
-    fireEvent.click(screen.getByRole("button", { name: "Change picture" }));
-    expect(click).toHaveBeenCalled();
-  });
-
   it("saves a picked picture into prefs right away", async () => {
     const { container, updatePrefs } = renderModal();
     const file = new File(["x"], "me.png", { type: "image/png" });

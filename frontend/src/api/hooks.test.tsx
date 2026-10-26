@@ -1,12 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import {
   useSaveLots,
   useChangePassword,
-  useHealth,
-  useHoldings,
   useTransactions,
   useUpdateAccount,
   useDeleteConnection,
@@ -32,25 +30,6 @@ function makeWrapper() {
   return { client, wrapper: Wrapper };
 }
 
-describe("useHoldings", () => {
-  beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify([{ id: "1", ticker: "AAPL", kind: "equity" }]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ));
-  });
-
-  it("fetches /api/holdings", async () => {
-    const { result } = renderHook(() => useHoldings(), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].ticker).toBe("AAPL");
-    // getJson now attaches an (empty, unauthenticated) headers object.
-    expect(fetch).toHaveBeenCalledWith("/api/holdings", { method: "GET", headers: {}, signal: expect.any(AbortSignal) });
-  });
-});
-
 it("refreshes the connection picker after a provider is disabled", async () => {
   let enabled = true;
   vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
@@ -67,38 +46,6 @@ it("refreshes the connection picker after a provider is disabled", async () => {
     result.current.toggle.mutate({ key: "powens", enabled: false });
     await waitFor(() => expect(result.current.list.data).toEqual([]));
   } finally { unmount(); client.clear(); }
-});
-
-describe("useUpdateAccount", () => {
-  it("PATCHes /api/accounts/:id with name, typeKey and color", async () => {
-    const fetchMock = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ id: "a1" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useUpdateAccount(), { wrapper });
-    result.current.mutate({
-      id: "a1",
-      name: "New name",
-      typeKey: "savings",
-      color: "#4dd0b1",
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(fetchMock).toHaveBeenCalledWith("/api/accounts/a1", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "New name",
-        typeKey: "savings",
-        color: "#4dd0b1",
-      }),
-    });
-  });
 });
 
 describe("useUpdateAccount invalidation", () => {
@@ -254,24 +201,6 @@ describe("useTransactions", () => {
       { method: "GET", headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(result.current.hasNextPage).toBe(false);
-  });
-});
-
-describe("useHealth", () => {
-  beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify({ status: "ok", version: "v1.3.0-9-gd5fd32d" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ));
-  });
-
-  it("fetches /api/health and exposes the version", async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(fetch).toHaveBeenCalledWith("/api/health", expect.anything());
-    expect(result.current.data?.version).toBe("v1.3.0-9-gd5fd32d");
   });
 });
 

@@ -48,14 +48,6 @@ function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
 }
 
 describe("FiguresSurface", () => {
-  it("shows the three figures", () => {
-    renderSurface(summary());
-    expect(screen.getByTestId("figure-income")).toHaveTextContent("3");
-    expect(screen.getByTestId("figure-expenses")).toBeVisible();
-    expect(screen.getByTestId("figure-net")).toBeVisible();
-    expect(screen.queryByTestId("figure-saved")).not.toBeInTheDocument();
-  });
-
   it("renders income's comparison as a percentage", () => {
     renderSurface(summary());
     // 3200 vs 2980 → +7,4 %
@@ -111,20 +103,4 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("figure-income")).toHaveTextContent("*");
   });
 
-  it("scopes the separator to each breakpoint's own siblings instead of a fixed 'not first' rule", () => {
-    // Every cell shares one class string — the `sm:even:`/`lg:not-first:`
-    // pseudo-selectors are what makes the bar land only where a cell is
-    // actually beside a predecessor at that column count. Before the fix,
-    // `sm:not-first:border-l` also barred the 3rd cell (`net`), which on the
-    // 2-column `sm` grid is the FIRST cell of its own row — a stray bar.
-    renderSurface(summary());
-    const className = screen.getByTestId("figure-income").className;
-    // Every FigureCell renders the identical string — assert it directly
-    // rather than by index, since Tailwind applies these through CSS sibling
-    // selectors (`:nth-child(even)`, `:not(:first-child)`), not per-instance
-    // markup.
-    expect(className).toContain("sm:even:border-l");
-    expect(className).toContain("lg:not-first:border-l");
-    expect(className).not.toContain("sm:not-first:border-l");
-  });
 });

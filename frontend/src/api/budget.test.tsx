@@ -6,14 +6,11 @@ import type { ReactNode } from "react";
 import { ApiError } from "./client";
 import { keys } from "./keys";
 import {
-  useBudgetCategories,
-  useBudgetTags,
   useCreateBudgetCategory,
   useUpdateBudgetCategory,
   useDeleteBudgetCategory,
   useReorderBudgetCategories,
   useCreateBudgetTag,
-  useUpdateBudgetTag,
   useDeleteBudgetTag,
   type BudgetCategory,
   type BudgetTag,
@@ -63,17 +60,6 @@ function makeWrapper() {
   }
   return { client, wrapper: Wrapper };
 }
-
-describe("useBudgetCategories", () => {
-  it("GETs the category list", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json([GROCERIES])));
-    const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useBudgetCategories(), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].defaultKey).toBe("groceries");
-    expect(fetch).toHaveBeenCalledWith("/api/budget/categories", { method: "GET", headers: {}, signal: expect.any(AbortSignal) });
-  });
-});
 
 describe("useUpdateBudgetCategory", () => {
   beforeEach(() => {
@@ -154,17 +140,6 @@ describe("useDeleteBudgetCategory", () => {
   });
 });
 
-describe("useBudgetTags", () => {
-  it("GETs the tag list", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json([HOLIDAY])));
-    const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useBudgetTags(), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.[0].name).toBe("Holiday");
-    expect(fetch).toHaveBeenCalledWith("/api/budget/tags", { method: "GET", headers: {}, signal: expect.any(AbortSignal) });
-  });
-});
-
 describe("useCreateBudgetTag", () => {
   it("POSTs the body and refreshes only the tag list — a new tag is on no row", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json(HOLIDAY, 201)));
@@ -185,27 +160,6 @@ describe("useCreateBudgetTag", () => {
     );
     expect(client.getQueryState(keys.budgetTags())?.isInvalidated).toBe(true);
     expect(client.getQueryState(keys.transactions())?.isInvalidated).toBe(false);
-  });
-});
-
-describe("useUpdateBudgetTag", () => {
-  it("PATCHes the full body", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json({ ...HOLIDAY, color: "#fff" })));
-    const { client, wrapper } = makeWrapper();
-    client.setQueryData(keys.budgetTags(), [HOLIDAY]);
-    const { result } = renderHook(() => useUpdateBudgetTag(), { wrapper });
-
-    result.current.mutate({ id: "t1", body: { name: "Holiday", color: "#fff" } });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/budget/tags/t1",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({ name: "Holiday", color: "#fff" }),
-      }),
-    );
-    expect(client.getQueryState(keys.budgetTags())?.isInvalidated).toBe(true);
   });
 });
 

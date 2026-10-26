@@ -40,12 +40,6 @@ describe("SettingsServer — data providers", () => {
     );
   });
 
-  it("renders a row per provider with name and description", async () => {
-    render(withClient(<SettingsServer />));
-    expect(await screen.findByText("Powens")).toBeInTheDocument();
-    expect(screen.getByText("Bank aggregation.")).toBeInTheDocument();
-  });
-
   it("PATCHes the provider when its toggle is flipped", async () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     render(withClient(<SettingsServer />));

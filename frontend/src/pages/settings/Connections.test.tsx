@@ -79,14 +79,6 @@ describe("SettingsConnections", () => {
     expect(heading).toHaveTextContent(/2 accounts/);
   });
 
-  it("renders a card per connection with status tags", async () => {
-    render(withClient(<SettingsConnections />));
-    await screen.findByText("Boursorama");
-    expect(screen.getByText("Example Broker")).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getByText("Credentials expired")).toBeInTheDocument();
-  });
-
   it("expands a connection to reveal its accounts", async () => {
     render(withClient(<SettingsConnections />));
     const header = await screen.findByText("Boursorama");

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { RED, legendItems, lineColor, plotSeries, type ChartSeries } from "./valueChart";
+import { RED, legendItems, plotSeries, type ChartSeries } from "./valueChart";
 
 const GREEN = "#34d399";
 const GRAY = "#777471";
@@ -11,18 +11,6 @@ function netWorth(values: number[], invested: number[]): ChartSeries[] {
     { name: "Net worth", data: values.map((v, i) => [i, v]), color: GREEN, area: true },
   ];
 }
-
-describe("lineColor", () => {
-  it("keeps the caller's colour on a gain, turns red on a loss or below zero", () => {
-    expect(lineColor({ name: "", data: [[0, 100], [1, 120]], color: GREEN, area: true })).toBe(GREEN);
-    expect(lineColor({ name: "", data: [[0, 100], [1, 80]], color: GREEN, area: true })).toBe(RED);
-    expect(lineColor({ name: "", data: [[0, -50], [1, -10]], color: GREEN, area: true })).toBe(RED);
-  });
-
-  it("never recolours a line without an area", () => {
-    expect(lineColor({ name: "", data: [[0, 100], [1, 80]], color: GRAY, dashed: true })).toBe(GRAY);
-  });
-});
 
 describe("legendItems", () => {
   it("lists the main line first, in the colour the chart draws it", () => {

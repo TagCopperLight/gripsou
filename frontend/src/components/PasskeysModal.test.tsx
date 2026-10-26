@@ -74,13 +74,6 @@ describe("PasskeysModal list", () => {
     expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(2);
   });
 
-  it("calls onAdd from the footer button", async () => {
-    stubApi([MAC]);
-    const { onAdd, user } = await renderModal();
-    await screen.findByText("MacBook");
-    await user.click(screen.getByRole("button", { name: "Add passkey" }));
-    expect(onAdd).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("PasskeysModal rename", () => {

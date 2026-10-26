@@ -10,11 +10,6 @@ describe("BackupCodes", () => {
     vi.restoreAllMocks();
   });
 
-  it("lists every code", () => {
-    render(<BackupCodes codes={CODES} />);
-    for (const c of CODES) expect(screen.getByText(c)).toBeInTheDocument();
-  });
-
   it("copies the codes one per line and says so", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });

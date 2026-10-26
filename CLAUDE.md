@@ -115,6 +115,7 @@ Per-user categories (`budget_category`, seeded by a trigger on `users` insert) a
 - ESLint's `react-refresh/only-export-components` forbids exporting anything but components from a component file; put shared constants/types in a sibling `.ts`. `bun run build` won't catch it — run `bun run lint`.
 - Vitest hides console output of passing tests when piped. To check for warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
 - Tests: adapter mapping tests against recorded provider fixtures; integration tests against a real Postgres; Vitest for the frontend.
+- **Frontend tests pin behaviour, not code.** Write one only when it can fail for a reason a user would notice: a branch or edge case, a computed figure, a regression, a request the server must receive exactly. Don't test that a component renders its props or a static string, that a button calls the callback it was given, that a hook calls its own URL, CSS class names, or a constant's value; don't test the same case twice (a `lib/` helper and the component that shows it); and don't restate an implementation's formula as the expected value. Fewer, sharper tests: an earlier pass removed about 60 that only restated the code.
 
 ## Logs
 

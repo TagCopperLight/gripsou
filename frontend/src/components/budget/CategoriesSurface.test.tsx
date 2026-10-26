@@ -304,20 +304,6 @@ describe("CategoriesSurface", () => {
     expect(screen.getByText("Groceries")).toBeVisible();
   });
 
-  it("opens the edit modal from Modify", async () => {
-    renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Groceries" }));
-    expect(await screen.findByRole("dialog", { name: "Edit category" })).toBeVisible();
-  });
-
-  it("opens the delete modal from Delete", async () => {
-    renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Groceries" }));
-    expect(await screen.findByRole("dialog", { name: "Delete category" })).toBeVisible();
-  });
-
   it("has its own loading, error-with-retry and empty states", async () => {
     vi.mocked(fetch).mockImplementation(async () => new Response("no", { status: 500 }));
     renderSurface();

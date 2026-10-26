@@ -153,12 +153,6 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("BudgetOverview", () => {
-  it("renders the period line and the four figures", async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("figure-income")).toBeVisible());
-    expect(screen.getByTestId("period-count")).toHaveTextContent("412");
-  });
-
   it("replaces the last three surfaces when the period is empty", async () => {
     stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] });
     renderPage();
