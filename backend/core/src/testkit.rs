@@ -373,3 +373,41 @@ async fn patch(pool: &PgPool, user_id: Uuid, txn_id: Uuid, patch: &TransactionPa
         .unwrap();
     assert_eq!(outcome, WriteOutcome::Done(()));
 }
+
+/// A price provider for currencies only: answers every rate with `rate`
+/// stamped today, or fails every request when `rate` is `None` (Yahoo down).
+pub struct FixedRateProvider {
+    pub rate: Option<Decimal>,
+}
+
+#[async_trait::async_trait]
+impl crate::provider::PriceProvider for FixedRateProvider {
+    fn key(&self) -> &str {
+        "fixed-rate"
+    }
+    fn supports(&self, instrument: &InstrumentRef) -> bool {
+        instrument.kind == "cash"
+    }
+    async fn resolve_symbol(
+        &self,
+        instrument: &InstrumentRef,
+    ) -> Result<Option<String>, crate::provider::ProviderError> {
+        Ok(Some(format!("{}EUR=X", instrument.currency)))
+    }
+    async fn fetch_prices(
+        &self,
+        _symbol: &str,
+        _since: Option<DateTime<Utc>>,
+    ) -> Result<Vec<crate::dto::PricePoint>, crate::provider::ProviderError> {
+        match self.rate {
+            Some(rate) => Ok(vec![crate::dto::PricePoint {
+                ts: Utc::now(),
+                unit_price: rate,
+                currency: "EUR".into(),
+            }]),
+            None => Err(crate::provider::ProviderError::Other(
+                "rate unavailable".into(),
+            )),
+        }
+    }
+}

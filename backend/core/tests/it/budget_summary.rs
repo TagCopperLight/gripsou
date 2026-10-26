@@ -551,7 +551,6 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
     assert_eq!(march.amount, eur(-80), "100 EUR / 1.25 GBP-rate = 80 GBP");
     assert_eq!(april.amount, eur(-100), "100 EUR / 1.00 GBP-rate = 100 GBP");
     assert!(!march.fx_missing && !april.fx_missing);
-    assert!(!march.reporting_fx_missing && !april.reporting_fx_missing);
     Ok(())
 }
 
@@ -561,7 +560,8 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
 ) -> anyhow::Result<()> {
     // No rate at all for CHF: the fallback is "report in the pivot", not zero
     // — a user whose reporting currency has no stored rate must still see
-    // their net worth's figures, just unconverted, with a flag saying why.
+    // their figures, just unconverted. (A currency change fetches its rate
+    // first, so this is only a guard against dividing by nothing.)
     seed_cash_instrument(&pool, "CHF").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     set_reporting_currency(&pool, user_id, "CHF").await;
@@ -585,10 +585,6 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
     assert!(
         !rows[0].fx_missing,
         "the account leg (EUR, the pivot) was fine"
-    );
-    assert!(
-        rows[0].reporting_fx_missing,
-        "the reporting leg had no rate"
     );
     Ok(())
 }

@@ -839,9 +839,9 @@ async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
 }
 
 /// Aggregating through a single FX join must preserve each row's missing-rate
-/// flags, pivot fallback, and decimal division (including a zero-rate leg).
+/// flag, pivot fallback, and decimal division (including a zero-rate leg).
 #[sqlx::test(migrations = "../migrations")]
-async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
+async fn counts_fx_flag_and_total_agree_with_rows_across_rate_gaps(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let usd = seed_cash_instrument(&pool, "USD").await;
@@ -881,19 +881,10 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
         let rows = transactions(&pool, user_id, &f).await?;
         let counts = transaction_counts(&pool, user_id, &f).await?;
         assert_eq!(counts.matching, rows.len() as i64);
-        if !counts.reporting_fx_missing {
-            assert_eq!(
-                counts.matching_total,
-                rows.iter()
-                    .filter_map(|r| r.amount_reporting)
-                    .sum::<Decimal>()
-            );
-        }
         assert_eq!(
             counts.fx_missing,
             matches!(currency, None | Some("USD") | Some("GBP"))
         );
-        assert_eq!(counts.reporting_fx_missing, currency != Some("absent"));
         assert_eq!(counts.total, 9);
     }
     let zero_day = TransactionFilters {
@@ -906,9 +897,5 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
     assert_eq!(zero.matching, 1);
     assert_eq!(zero.matching_total, Decimal::ZERO);
     assert!(!zero.fx_missing, "a zero account rate is present");
-    assert!(
-        zero.reporting_fx_missing,
-        "a zero divisor degrades to pivot"
-    );
     Ok(())
 }

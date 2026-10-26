@@ -24,7 +24,6 @@ fn row(d: NaiveDate, cat: Option<Uuid>, kind: Option<&str>, amount: Decimal) -> 
         amount,
         txn_count: 1,
         fx_missing: false,
-        reporting_fx_missing: false,
     }
 }
 

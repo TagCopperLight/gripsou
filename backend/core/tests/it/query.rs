@@ -2174,12 +2174,13 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// Picking a reporting currency the install has no rate for must not
-/// silently relabel pivot figures with the wrong symbol. The fallback to the
-/// pivot stays — it beats collapsing every figure to NULL — but the row now
-/// says the conversion did not happen so the UI can too.
+/// A reporting currency with no rate falls back to the pivot rather than
+/// collapsing every figure to NULL. `update_prefs` fetches the rate before
+/// saving a currency, so this is a guard, not a state the reader sees.
 #[sqlx::test(migrations = "../migrations")]
-async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow::Result<()> {
+async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
+    pool: PgPool,
+) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = user_of(&pool, conn_id).await?;
     ingest(
@@ -2194,27 +2195,16 @@ async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow
     .await?;
     let today = chrono::Utc::now().date_naive();
 
-    // Reporting in the pivot: nothing to convert, nothing to warn about.
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert!(!rows[0].reporting_fx_missing);
-
-    // Switch to a currency no rate exists for. The figure stays 100 — it is
-    // euros — and that is exactly what makes the flag necessary: without it the
-    // UI renders "$100" for 100 EUR.
+    // Switch to a currency no rate exists for. The figure stays 100 euros.
     sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, Decimal::new(100, 0), "still the pivot");
-    assert!(rows[0].reporting_fx_missing, "and the UI must be told");
-    assert!(
-        !rows[0].fx_missing,
-        "distinct from a holding that could not be valued: nothing is missing \
-         from the sum, the whole sum is in the wrong currency"
-    );
+    assert!(!rows[0].fx_missing, "nothing is left out of the sum");
 
-    // Once the rate lands the flag clears and the figure converts.
+    // Once the rate lands the figure converts.
     let usd: uuid::Uuid = sqlx::query_scalar(
         "insert into instrument (kind, name, currency) values ('cash', 'Dollar', 'USD') returning id",
     )
@@ -2223,7 +2213,6 @@ async fn reporting_in_a_currency_with_no_rate_is_flagged(pool: PgPool) -> anyhow
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, "125".parse()?);
-    assert!(!rows[0].reporting_fx_missing);
     Ok(())
 }
 

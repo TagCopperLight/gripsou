@@ -354,9 +354,6 @@ pub struct SummaryDto {
     /// list shows lots and neutral rows (internal transfers on request).
     pub txn_count: i64,
     pub fx_missing: bool,
-    /// Nothing is missing from these figures — the whole sum is in the
-    /// pivot currency, because the reader's reporting currency had no rate.
-    pub reporting_fx_missing: bool,
     pub figures: FiguresDto,
     pub sankey: SankeyDto,
     pub breakdown: Vec<BreakdownRowDto>,
@@ -485,7 +482,6 @@ pub async fn summary(
     Ok(Json(SummaryDto {
         txn_count: period.iter().map(|r| r.txn_count).sum(),
         fx_missing: period.iter().any(|r| r.fx_missing),
-        reporting_fx_missing: period.iter().any(|r| r.reporting_fx_missing),
         figures: FiguresDto {
             income: figure(f.income, prev_f.map(|x| x.income), base_f.map(|x| x.income)),
             expenses: figure(
@@ -871,11 +867,6 @@ pub struct CountsDto {
     /// `matchingTotal` is understated by whatever that row was worth. Same
     /// convention as `SummaryDto.fxMissing`.
     pub fx_missing: bool,
-    /// Nothing is missing from `matchingTotal` — the reader's reporting
-    /// currency had no rate on at least one matching row's day, so that
-    /// row's contribution is in the pivot currency instead. Same convention
-    /// as `SummaryDto.reportingFxMissing`.
-    pub reporting_fx_missing: bool,
 }
 
 pub async fn transaction_count_summary(
@@ -892,7 +883,6 @@ pub async fn transaction_count_summary(
         uncategorized: c.uncategorized,
         matching_total: c.matching_total.to_string(),
         fx_missing: c.fx_missing,
-        reporting_fx_missing: c.reporting_fx_missing,
     }))
 }
 

@@ -25,9 +25,6 @@ pub struct NetWorthSummary {
     pub gain_abs: String,
     pub gain_pct: String,
     pub fx_missing: bool,
-    /// The reporting currency has no rate, so every figure on this response is
-    /// still in the pivot despite being labelled with the chosen currency.
-    pub reporting_fx_missing: bool,
 }
 
 #[derive(Serialize)]
@@ -60,10 +57,6 @@ impl NetWorthResponse {
         };
         let invested = rows.last().map(|r| r.invested).unwrap_or(Decimal::ZERO);
         let fx_missing = rows.last().map(|r| r.fx_missing).unwrap_or(false);
-        // Read off the last point, like every other summary field: the question
-        // the banner answers is "is the number I am looking at right now
-        // converted?", which is a fact about today, not about the range.
-        let reporting_fx_missing = rows.last().map(|r| r.reporting_fx_missing).unwrap_or(false);
 
         NetWorthResponse {
             points,
@@ -73,7 +66,6 @@ impl NetWorthResponse {
                 gain_abs: gain_abs.to_string(),
                 gain_pct: gain_pct.to_string(),
                 fx_missing,
-                reporting_fx_missing,
             },
         }
     }
@@ -106,6 +98,10 @@ pub struct Holding {
     pub invested: String,
     pub invested_native: String,
     pub value: String,
+    /// `qty × price` in `price_currency`: what the holding is worth before any
+    /// conversion, shown when `fx_missing` leaves `value` at zero. Absent when
+    /// there is no price at all.
+    pub value_native: Option<String>,
     pub gl: String,
     pub gl_pct: String,
     pub fx_missing: bool,
@@ -161,6 +157,7 @@ impl Holding {
         } else {
             r.price_currency.unwrap_or_else(|| r.currency.clone())
         };
+        let value_native = (is_cash || r.price.is_some()).then(|| (r.quantity * price).to_string());
         let gl = r.value - r.invested;
         let gl_pct = if r.invested.is_zero() {
             Decimal::ZERO
@@ -191,6 +188,7 @@ impl Holding {
             invested: r.invested.to_string(),
             invested_native: r.invested_native.to_string(),
             value: r.value.to_string(),
+            value_native,
             gl: gl.to_string(),
             gl_pct: gl_pct.to_string(),
             fx_missing: r.fx_missing,
