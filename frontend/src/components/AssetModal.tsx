@@ -270,9 +270,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                   options={UNIT_OPTIONS}
                 />
               )}
-              {mode === "purchases" && (
-                <ChartLegend items={legendItems(plotSeries(series, chartUnit, t("common.return")))} />
-              )}
+              <ChartLegend items={legendItems(plotSeries(series, chartUnit, t("common.return")))} />
             </div>
           </div>
 
