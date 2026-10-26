@@ -324,7 +324,7 @@ export function RecordLotsModal({
         </button>
       </HoldingModalHeader>
 
-      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
+      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
         {/* Accounted bar */}
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           <span className="text-fg-dim text-sm">
