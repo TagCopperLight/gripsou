@@ -68,6 +68,9 @@ type Found = LotSuggestion & { key: string };
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
 
+/** Column titles stay pinned while the rows scroll under them. */
+const TH = "sticky top-0 z-10 bg-surface pt-4 pb-2 font-medium";
+
 let nextKey = 0;
 const newKey = () => `row-${nextKey++}`;
 
@@ -324,7 +327,9 @@ export function RecordLotsModal({
         </button>
       </HoldingModalHeader>
 
-      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
+      {/* Fixed above the scrolling table: the shares bar, then the found band
+          when there is one. Its bottom rule, or this one, separates them from the table. */}
+      <div className={`shrink-0 px-6 pb-4 ${found.length > 0 && !dismissed ? "" : "border-b border-surface-2"}`}>
         {/* Accounted bar */}
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           <span className="text-fg-dim text-sm">
@@ -345,17 +350,18 @@ export function RecordLotsModal({
             />
           </div>
         </div>
+      </div>
+      {found.length > 0 && !dismissed && (
+        <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
+      )}
 
-        {found.length > 0 && !dismissed && (
-          <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
-        )}
-
+      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
         {/* Table — no surface, deliberately: it is the working area, not a card. */}
         {rows === null ? (
           <CardState
             variant={isError ? "error" : "loading"}
             onRetry={() => refetch()}
-            className="h-32"
+            className="mt-4 h-32"
           />
         ) : list.length === 0 ? (
           <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
@@ -364,13 +370,13 @@ export function RecordLotsModal({
             <LotColumns />
             <thead>
               <tr className="text-[11px] font-mono text-fg-faint">
-                <th className="text-left font-medium pb-2 pl-3">{t("dashboard.holdings.gap.columns.type")}</th>
-                <th className="text-left font-medium pb-2 pl-3">{t("dashboard.holdings.gap.columns.date")}</th>
-                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.quantity")}</th>
-                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                <th className="text-right font-medium pb-2 pr-5">{t("dashboard.holdings.gap.columns.fee")}</th>
-                <th className="text-right font-medium pb-2 pr-2">{t("dashboard.holdings.gap.columns.total")}</th>
-                <th className="pb-2" />
+                <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.type")}</th>
+                <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.date")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.quantity")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.fee")}</th>
+                <th className={`${TH} text-right pr-2`}>{t("dashboard.holdings.gap.columns.total")}</th>
+                <th className={TH} />
               </tr>
             </thead>
             <tbody>
@@ -633,7 +639,8 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
   return (
     // A band across the whole window, not a card: the blue runs edge to edge
     // between two rules, and the window's own margin keeps the columns over the table's.
-    <section aria-label={title} className="-mx-6 border-y border-blue/25 bg-blue-soft px-6 pt-3.5 pb-1.5">
+    // It stays put above the scrolling table.
+    <section aria-label={title} className="shrink-0 border-y border-blue/25 bg-blue-soft px-6 pt-3.5 pb-1.5">
       <div className="flex items-center justify-between gap-4 pb-2">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
         <div className="flex items-center gap-4">
