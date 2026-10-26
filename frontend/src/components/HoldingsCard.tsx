@@ -132,11 +132,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <h2 className="text-fg font-semibold text-sm">
             {t("dashboard.holdings.title")}
-            {ready && (
-              <span className="text-fg-faint font-normal ml-3">
-                {t("dashboard.holdings.assetsCount", { count: holdings.length })}
-              </span>
-            )}
             {ready && privacy.enabled && (
               <span className="ml-3 inline-flex align-middle">
                 <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />

@@ -190,10 +190,14 @@ export function ExposureDonut({
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-fg font-semibold text-sm">{title}</p>
-          {privacy?.enabled && !placeholder && <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />}
-        </div>
+        <p className="text-fg font-semibold text-sm">
+          {title}
+          {privacy?.enabled && !placeholder && (
+            <span className="ml-3 inline-flex align-middle">
+              <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />
+            </span>
+          )}
+        </p>
         {placeholder ?? (
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>

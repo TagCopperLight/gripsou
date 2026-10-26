@@ -49,8 +49,8 @@ describe("HoldingsCard", () => {
   it("merges same-currency cash across accounts into one row", async () => {
     renderCard([HOLDING, CASH_CHECKING, CASH_PEA]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    // Two cash holdings collapse into one → 1 equity + 1 cash = 2 assets.
-    expect(screen.getByText(/2 assets/)).toBeInTheDocument();
+    // Two cash holdings collapse into one: 1 equity + 1 cash row.
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
     expect(screen.getByText("Multiple accounts")).toBeInTheDocument();
     // The individual cash account names are no longer shown as separate rows.
     const table = within(screen.getByRole("table"));
