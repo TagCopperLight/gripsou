@@ -748,15 +748,11 @@ pub struct TransactionListRow {
     /// In `account_currency` — the amount domain, as the provider sent it. Not
     /// converted: the list shows what actually moved in the account.
     pub amount: Decimal,
-    /// The same movement in the reader's reporting currency, converted at the
-    /// transaction's own date. The list renders `amount`; this exists so an
-    /// explicit multi-row selection can be totalled without a round trip.
-    /// Zero when the ACCOUNT leg's rate was unknown — see `fx_missing` on the
-    /// sibling summary types for the analogous flag. When only the REPORTING
-    /// leg's rate is unknown, this is NOT zero: it silently degrades to the
-    /// pivot currency instead (see the divisor comment on the query below),
-    /// so nothing here flags that case for a caller of this row type.
-    pub amount_reporting: Decimal,
+    /// The same movement in the reader's currency at the transaction's own
+    /// date. The list renders `amount`; this exists so an explicit multi-row
+    /// selection can be totalled without a round trip.
+    /// `None` when the account's or the reader's currency has no rate that day.
+    pub amount_reporting: Option<Decimal>,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale that now
     /// lives in the `lot` table. Structured, not a pre-built sentence: the
     /// frontend's i18n and per-user number formatting render the lot fields.
@@ -927,17 +923,10 @@ pub async fn transactions(
             select (select currency from users where id = $1) as code
         )
         select id as "id!", day as "day!", kind as "kind!", description, amount as "amount!",
-               -- `coalesce(nullif(rfx.unit_value, 0), 1)`, not a bare
-               -- `nullif`: when the reporting currency has no rate on this
-               -- day the whole expression must still degrade to the pivot
-               -- currency (divide by 1) rather than yield NULL, which
-               -- `coalesce(..., 0)` around the multiplication would then
-               -- silently turn into a zeroed amount indistinguishable from a
-               -- genuinely unrateable account leg. Do not "simplify" this to
-               -- a bare `nullif` — see the doc comment on this field above.
-               coalesce(filtered.amount * afx.unit_value
-                        / coalesce(nullif(rfx.unit_value, 0), 1), 0)
-                   as "amount_reporting!",
+               -- Null, not zero or a pivot figure, when either rate is
+               -- missing: the list then shows no converted value at all.
+               filtered.amount * afx.unit_value / nullif(rfx.unit_value, 0)
+                   as "amount_reporting?",
                source as "source!", ticker, instrument_kind, instrument_isin,
                instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",

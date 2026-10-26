@@ -244,10 +244,11 @@ export type Transaction = {
   /** Decimal string, denominated in the ACCOUNT's own currency (see `currency`),
    *  never the user's reporting currency — do not relabel it. */
   amount: string;
-  /** `amount` converted to the reader's reporting currency at the
-   *  transaction's own date. The list is capped at 200 rows, so summing these
-   *  client-side for an explicit selection is cheap. */
-  amountReporting: string;
+  /** `amount` in the reader's currency at the transaction's own date; null
+   *  when the account's or the reader's currency has no rate that day. The
+   *  list is capped at 200 rows, so summing these client-side for an explicit
+   *  selection is cheap. */
+  amountReporting: string | null;
   currency: string;
   accountId: string;
   accountName: string;
