@@ -142,7 +142,7 @@ Components: `PageHeader`, `AccountsChartCard` (`StackedAreaChart`), `AccountsLis
 |---|---|
 | Chart: loading / error (net worth or series) | query `/dashboard/net-worth`, `/accounts/series` |
 | List: loading / error | query `/accounts` |
-| List: no accounts | state |
+| List: no accounts (hidden, A3) | states "Accounts chart · Data": New, Syncing, Empty |
 | Connection card: never synced / synced x ago; unknown source name | state |
 | Account: asterisk on an account a holding with no rate is left out of, footnote under the connection card | state "Two dollar ETFs have no rate" |
 | Account: foreign currency with native value shown | state |
@@ -153,6 +153,8 @@ Findings:
 | # | Finding | By | Outcome |
 |---|---|---|---|
 | A1 | Same raw range labels as D1 (`AccountsChartCard` keeps its own copy of `RANGE_LABEL`). | Claude (code) | fixed with D1 |
+| A2 | Chart with no accounts: a "0,00 €" headline, a green "0,00 € (0 %)" pill, the ranges and an empty legend, as on the dashboard before D7. | Claude (code) | fixed: the dashboard's empty state (`NetWorthEmpty`: nothing connected, first sync running, nothing came in), no figure, pill, ranges or legend. States "Accounts chart · Data": New, Syncing, Empty. |
+| A3 | List with no accounts: an "All accounts 0,00 €" card under the chart's empty state. | User | fixed: the list is hidden while there are no accounts; the chart above says why and what to do. |
 
 ### Investments `/investments`
 
@@ -300,7 +302,7 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | One range list with localized labels, no 24h (D1, D5) | Dashboard net worth, Accounts chart, asset modal |
 | Chart legend and tooltip coloured like the line (D6) | Dashboard net worth, asset modal |
 | Private mode masks the gain amount with the headline, one eye per card (D12) | Dashboard net worth, Accounts chart |
-| No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). Reuse for the Accounts page, whose chart still shows "0 €" and a green "+0 €" pill with no accounts. | Dashboard (Accounts to do) |
+| No-accounts empty state that tells "nothing connected", "first sync running" and "nothing came in" apart (D7, D8; `lib/netWorthEmpty.ts`). | Dashboard net worth, Accounts chart (A2; the list is hidden, A3) |
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
 | Private mode: amounts masked, shares and % kept, one `PrivacyEye` right after the card's title, never next to a figure (D18, D26, D29) | Dashboard net worth, distribution, holdings; Accounts chart. To apply: Accounts list, Investments, Budget figures, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
