@@ -24,8 +24,8 @@ Used on many screens; a change here changes them all.
 
 | Piece | Where | States |
 |---|---|---|
-| `RootLayout`, `Sidebar` | every signed-in page | admin / member label under the name; version line (from `/health`) |
-| `SyncButton` + `SyncModal` | top right of every signed-in page | idle; spinning (a connection `syncing`/`awaiting`); red dot (a connection in `error`); amber dot (a health warning: stale, unknown, provider error) · modal: loading, no connections, per-connection rows (`ConnectionRow`) |
+| `RootLayout`, `Sidebar` | every signed-in page | admin / member label under the name; version line (from `/health`). Reviewed: validated as is. |
+| `SyncButton` + `SyncModal` | top right of every signed-in page | idle; spinning (a connection `syncing`/`awaiting`); red dot (a connection in `error`); amber dot (a health warning: stale, unknown, provider error) · modal: loading, no connections, per-connection rows (`ConnectionRow`). States "Sync · Connections": every status at once, one syncing, one failed, outdated data, none; Sync all and each row's sync spin for 4 s then come back healthy. |
 | `ConnectionRow` | sync modal, Settings · Connections | status tag: connected / syncing / waiting / pending / error (shows `lastError` as the tag text) / stale / partial / needs attention; amber health box per issue; expanded account list; "manage" popup blocked; manage failed |
 | `PageHeader` | Dashboard, Accounts, Investments, Budget | title, centred above the first surface (Budget: with its mode switch) |
 | `CardState` | most cards | loading (spinner + "Loading…"); error ("Can't reach the server" + Retry) |

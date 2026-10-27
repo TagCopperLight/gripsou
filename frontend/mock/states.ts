@@ -5,7 +5,7 @@
 // states of the piece under review (`FOCUS`).
 
 import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, closes } from "./data/base";
-import { TODAY, daysAgo, id } from "./data/util";
+import { TODAY, daysAgo, id, isoDay } from "./data/util";
 import type { Store } from "./store";
 import { lotsOf } from "./views/portfolio";
 
@@ -37,6 +37,25 @@ function emptyHousehold(store: Store) {
   store.txns = [];
   store.openingCash = {};
 }
+
+type Health = { verified?: boolean; lastUpdatedOn?: string | null; state?: string | null; errorMessage?: string | null; nextRetryOn?: string | null };
+
+function health(h: Health = {}) {
+  return { verified: true, lastUpdatedOn: isoDay(TODAY), state: null, errorMessage: null, nextRetryOn: null, ...h };
+}
+
+/** One more Powens connection holding one account (none: `account` null). */
+function extraConnection(store: Store, n: number, displayName: string, conn: Partial<Store["connections"][number]> = {}, account: string | null = "Compte courant") {
+  const connectionId = id("con", 10 + n);
+  const accountId = id("acc", 30 + n);
+  store.connections.push({ providerKey: "powens", id: connectionId, displayName, status: "ok", lastSyncAt: Date.now() - 2 * 3_600_000, lastError: null, logo: null, canManage: true, health: health(), ...conn });
+  if (account === null) return;
+  store.accounts.push({ id: accountId, connectionId, name: account, color: "#f0b952", typeKey: "checking", currency: "EUR", sourceName: displayName, sourceLogo: null });
+  store.openingCash[accountId] = 500 + 100 * n;
+}
+
+/** Bank data last updated `days` ago. */
+const staleDay = (days: number) => isoDay(daysAgo(days));
 
 /** One more account at the bank, holding `cash` today. */
 function extraAccount(store: Store, n: number, name: string, typeKey: string, color: string, cash: number) {
@@ -85,7 +104,7 @@ function addDcam(store: Store): string {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Record purchases";
+export const FOCUS = "Sync";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -355,6 +374,66 @@ export const STATES: MockState[] = [
     apply(store) {
       emptyHousehold(store);
       store.connections = [store.connections[0]];
+    },
+  },
+  {
+    id: "sync-every-status",
+    label: "A connection in every status",
+    pieces: ["Sync"],
+    group: "Connections",
+    option: "Every status",
+    apply(store) {
+      extraConnection(store, 1, "Société Générale", { status: "syncing" });
+      extraConnection(store, 2, "Fortuneo", { status: "awaiting" });
+      extraConnection(store, 3, "Hello bank!", { status: "pending", lastSyncAt: null, health: null }, null);
+      extraConnection(store, 4, "Linxea", { status: "error", lastError: "provider fetch: powens: GET /users/me/connections/42/accounts: 503 Service Unavailable" }, "Assurance vie Linxea Spirit 2");
+      extraConnection(store, 5, "La Banque Postale", { health: health({ state: "SCARequired" }) });
+      extraConnection(store, 6, "Caisse d'Épargne Île-de-France", { health: health({ state: "wrongpass", errorMessage: null, nextRetryOn: staleDay(-2) }) }, "Livret Développement Durable et Solidaire");
+      extraConnection(store, 7, "LCL", { health: health({ lastUpdatedOn: staleDay(6) }) });
+      extraConnection(store, 8, "Banque Populaire", { health: health({ verified: false, lastUpdatedOn: null }) });
+      // A partial update: the bank's checking account is fresh, the Livret A is not.
+      store.accountHealth[id("acc", 2)] = health({ lastUpdatedOn: staleDay(9) });
+    },
+  },
+  {
+    id: "sync-one-syncing",
+    label: "One connection syncing (the button spins)",
+    pieces: ["Sync"],
+    group: "Connections",
+    option: "Syncing",
+    apply(store) {
+      store.connections[1].status = "syncing";
+    },
+  },
+  {
+    id: "sync-one-error",
+    label: "One connection failed (red dot)",
+    pieces: ["Sync"],
+    group: "Connections",
+    option: "Error",
+    apply(store) {
+      Object.assign(store.connections[1], { status: "error", lastError: "sync interrupted (the server restarted)" });
+    },
+  },
+  {
+    id: "sync-one-warning",
+    label: "Bank data outdated (amber dot)",
+    pieces: ["Sync"],
+    group: "Connections",
+    option: "Warning",
+    apply(store) {
+      store.connections[0].health = health({ lastUpdatedOn: staleDay(5) });
+    },
+  },
+  {
+    id: "sync-none",
+    label: "No connections",
+    pieces: ["Sync"],
+    group: "Connections",
+    option: "None",
+    apply(store) {
+      emptyHousehold(store);
+      store.connections = [];
     },
   },
 ];

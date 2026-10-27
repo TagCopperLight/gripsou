@@ -160,6 +160,18 @@ export function accounts(store: Store): Account[] {
   }));
 }
 
+/** A sync: the connection spins for a few seconds, then is healthy and fresh. */
+export function syncConnection(store: Store, connectionId: string): void {
+  const c = store.connections.find((x) => x.id === connectionId);
+  if (!c) return;
+  c.status = "syncing";
+  setTimeout(() => {
+    Object.assign(c, { status: "ok", lastSyncAt: Date.now(), lastError: null });
+    c.health = { verified: true, lastUpdatedOn: isoDay(TODAY), state: null, errorMessage: null, nextRetryOn: null };
+    for (const a of store.accounts) if (a.connectionId === connectionId) delete store.accountHealth[a.id];
+  }, 4000);
+}
+
 export function connections(store: Store): ProviderGroup[] {
   const accs = accounts(store);
   const groups: ProviderGroup[] = [];
@@ -175,7 +187,7 @@ export function connections(store: Store): ProviderGroup[] {
       ...conn,
       accounts: accs
         .filter((a) => a.connectionId === c.id)
-        .map((a) => ({ id: a.id, name: a.name, color: a.color, typeKey: a.typeKey, value: a.value, lastSyncAt: a.lastSyncAt, health: c.health })),
+        .map((a) => ({ id: a.id, name: a.name, color: a.color, typeKey: a.typeKey, value: a.value, lastSyncAt: a.lastSyncAt, health: store.accountHealth[a.id] ?? c.health })),
     });
   }
   return groups;

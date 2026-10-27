@@ -2,7 +2,7 @@
 // `createStore`. The control (control.ts) holds the live one.
 
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget";
-import type { LotSuggestion } from "../src/api/types";
+import type { LotSuggestion, SyncHealth } from "../src/api/types";
 import { baseData, type BaseData } from "./data/base";
 
 export type Store = BaseData & {
@@ -15,6 +15,8 @@ export type Store = BaseData & {
   deletedLots: string[];
   /** Ledger lots a provider sent: listed locked, kept by the preview. */
   providerLots: string[];
+  /** An account's own bank-update health, when it differs from its connection's. */
+  accountHealth: Record<string, SyncHealth>;
 };
 
 export function createStore(): Store {
@@ -25,6 +27,7 @@ export function createStore(): Store {
     lotSuggestions: {},
     deletedLots: [],
     providerLots: [],
+    accountHealth: {},
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",
