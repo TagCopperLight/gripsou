@@ -68,6 +68,8 @@
     "lastWeek": "last week"
   },
   "account": {
+    "legendOthers_one": "+{{count}} other",
+    "legendOthers_other": "+{{count}} others",
     "allAccounts": "All accounts",
     "unknownSource": "Other",
     "edit": {

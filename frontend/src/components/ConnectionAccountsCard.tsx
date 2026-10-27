@@ -24,13 +24,14 @@ type ConnectionAccountsCardProps = {
   tagCh: number;
   /** Private mode, revealed by the summary card's eye. */
   masked: boolean;
+  onHover?: (accountId: string | null) => void;
   className?: string;
 };
 
 /** One bank connection: its subtotal, a dot on its logo when it has a
  * problem (as in the sync window), then a row per account.
  * Clicking a row opens the account's edit modal. */
-export function ConnectionAccountsCard({ group, owned, tagCh, masked, className = "" }: ConnectionAccountsCardProps) {
+export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
@@ -67,6 +68,8 @@ export function ConnectionAccountsCard({ group, owned, tagCh, masked, className 
               <button
                 type="button"
                 onClick={() => setEditing(a)}
+                onMouseEnter={() => onHover?.(a.id)}
+                onMouseLeave={() => onHover?.(null)}
                 className="grid w-full cursor-pointer grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] items-center gap-3 rounded-lg py-2.5 pr-2 pl-5 text-left transition-colors duration-140 hover:bg-surface-2 md:grid-cols-[1fr_auto_11rem_8rem]"
               >
                 <span className="flex min-w-0 items-center gap-2.5">

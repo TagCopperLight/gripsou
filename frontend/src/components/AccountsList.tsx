@@ -9,11 +9,13 @@ import { usePrivacy } from "../auth/usePrivacy";
 import { groupByConnection } from "../lib/accounts";
 
 type AccountsListProps = {
+  /** The account under the pointer (null when it leaves), for the chart. */
+  onHover?: (accountId: string | null) => void;
   className?: string;
 };
 
 /** The all-accounts summary, then one card per connection. */
-export function AccountsList({ className = "" }: AccountsListProps) {
+export function AccountsList({ onHover, className = "" }: AccountsListProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
   // One eye, on the summary card, for every amount of the list.
@@ -41,9 +43,9 @@ export function AccountsList({ className = "" }: AccountsListProps) {
 
   return (
     <section className={`flex flex-col gap-4 ${className}`}>
-      <AccountsSummaryCard accounts={data} privacy={privacy} />
+      <AccountsSummaryCard accounts={data} privacy={privacy} onHover={onHover} />
       {groupByConnection(data).map((g) => (
-        <ConnectionAccountsCard key={g.connectionId} group={g} owned={owned} tagCh={tagCh} masked={privacy.masked} />
+        <ConnectionAccountsCard key={g.connectionId} group={g} owned={owned} tagCh={tagCh} masked={privacy.masked} onHover={onHover} />
       ))}
     </section>
   );

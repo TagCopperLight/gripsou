@@ -11,6 +11,7 @@ type AccountsSummaryCardProps = {
   accounts: Account[];
   /** Shared with the bank cards below: this card's eye reveals them all. */
   privacy: Privacy;
+  onHover?: (accountId: string | null) => void;
   className?: string;
 };
 
@@ -19,7 +20,7 @@ type Hover = { account: Account; x: number };
 
 /** A bar split by each account's share of the total. Hovering a segment shows
  * a tooltip styled like the charts' (see chartTheme's tooltipRow). */
-export function AccountsSummaryCard({ accounts, privacy, className = "" }: AccountsSummaryCardProps) {
+export function AccountsSummaryCard({ accounts, privacy, onHover, className = "" }: AccountsSummaryCardProps) {
   const { t } = useTranslation();
   const [hover, setHover] = useState<Hover | null>(null);
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
@@ -39,7 +40,10 @@ export function AccountsSummaryCard({ accounts, privacy, className = "" }: Accou
         <MaskedMoney masked={privacy.masked} value={total} className="text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
       {total > 0 && (
-        <div className="relative mt-3" onMouseLeave={() => setHover(null)}>
+        <div className="relative mt-3" onMouseLeave={() => {
+          setHover(null);
+          onHover?.(null);
+        }}>
           <div className="flex h-2.5 gap-1">
             {shown.map((a) => (
               <span
@@ -55,6 +59,7 @@ export function AccountsSummaryCard({ accounts, privacy, className = "" }: Accou
                 onMouseMove={(e) => {
                   const box = e.currentTarget.parentElement!.getBoundingClientRect();
                   setHover({ account: a, x: (e.clientX - box.left) / box.width });
+                  if (hover?.account.id !== a.id) onHover?.(a.id);
                 }}
               />
             ))}

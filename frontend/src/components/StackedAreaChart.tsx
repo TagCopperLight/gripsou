@@ -6,6 +6,8 @@ import { formatDay } from "../lib/date";
 import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
 export type StackedSeries = {
+  /** What `highlight` names; defaults to the name. */
+  key?: string;
   name: string;
   color: string;
   /** [epoch-ms, value] points; all series share the same timestamps. */
@@ -16,13 +18,15 @@ type TooltipParam = { axisValue: number; seriesName: string; value: [number, num
 
 type StackedAreaChartProps = {
   series: StackedSeries[];
+  /** A series to bring forward: the others fade. */
+  highlight?: string | null;
   height?: number;
   className?: string;
 };
 
 // Stacked area, one band per account (account colors). Y anchored at 0 — this is
 // a composition. Tooltip lists each account plus a Total row.
-export function StackedAreaChart({ series, height = 320, className = "" }: StackedAreaChartProps) {
+export function StackedAreaChart({ series, highlight = null, height = 320, className = "" }: StackedAreaChartProps) {
   const { t } = useTranslation();
   const colorByName = new Map(series.map((s) => [s.name, s.color]));
 
@@ -83,17 +87,20 @@ export function StackedAreaChart({ series, height = 320, className = "" }: Stack
         formatter: (v: number) => formatMoney(v, { fractionDigits: 0 }),
       },
     },
-    series: series.map((s) => ({
-      name: s.name,
-      type: "line",
-      stack: "total",
-      data: s.data,
-      showSymbol: false,
-      lineStyle: { width: 1.5, color: s.color },
-      itemStyle: { color: s.color },
-      areaStyle: { color: rgba(s.color, 0.55) },
-      emphasis: { disabled: true },
-    })),
+    series: series.map((s) => {
+      const faded = highlight !== null && (s.key ?? s.name) !== highlight;
+      return {
+        name: s.name,
+        type: "line",
+        stack: "total",
+        data: s.data,
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: s.color, opacity: faded ? 0.25 : 1 },
+        itemStyle: { color: s.color },
+        areaStyle: { color: rgba(s.color, faded ? 0.1 : 0.55) },
+        emphasis: { disabled: true },
+      };
+    }),
   };
 
   return (
