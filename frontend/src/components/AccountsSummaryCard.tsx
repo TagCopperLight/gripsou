@@ -11,6 +11,7 @@ type AccountsSummaryCardProps = {
   className?: string;
 };
 
+/** `x` is the pointer's position across the bar, from 0 (left) to 1 (right). */
 type Hover = { account: Account; x: number };
 
 /** A bar split by each account's share of the total. Hovering a segment shows
@@ -43,7 +44,7 @@ export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummar
                 }}
                 onMouseMove={(e) => {
                   const box = e.currentTarget.parentElement!.getBoundingClientRect();
-                  setHover({ account: a, x: e.clientX - box.left });
+                  setHover({ account: a, x: (e.clientX - box.left) / box.width });
                 }}
               />
             ))}
@@ -51,8 +52,10 @@ export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummar
           {hover && (
             <div
               role="tooltip"
-              className="pointer-events-none absolute bottom-full z-10 mb-2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl bg-surface-3 px-3 py-2 font-mono text-xs"
-              style={{ left: hover.x }}
+              className="pointer-events-none absolute bottom-full z-10 mb-2 flex items-center gap-2 whitespace-nowrap rounded-xl bg-surface-3 px-3 py-2 font-mono text-xs"
+              // Slides under the pointer from left-aligned at the bar's left end to
+              // right-aligned at its right end, so it never leaves the card.
+              style={{ left: `${hover.x * 100}%`, transform: `translateX(${-hover.x * 100}%)` }}
             >
               <span className="flex items-center gap-2">
                 <span className="size-2.25 shrink-0 rounded-[3px]" style={{ background: hover.account.color }} />

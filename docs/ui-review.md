@@ -155,6 +155,8 @@ Findings:
 | A1 | Same raw range labels as D1 (`AccountsChartCard` keeps its own copy of `RANGE_LABEL`). | Claude (code) | fixed with D1 |
 | A2 | Chart with no accounts: a "0,00 €" headline, a green "0,00 € (0 %)" pill, the ranges and an empty legend, as on the dashboard before D7. | Claude (code) | fixed: the dashboard's empty state (`NetWorthEmpty`: nothing connected, first sync running, nothing came in), no figure, pill, ranges or legend. States "Accounts chart · Data": New, Syncing, Empty. |
 | A3 | List with no accounts: an "All accounts 0,00 €" card under the chart's empty state. | User | fixed: the list is hidden while there are no accounts; the chart above says why and what to do. |
+| A4 | Order of the accounts in the bar and the list: looked random. | User | the server sends them biggest first (`order by sum(value) desc`); only the mock didn't sort. Mock fixed; biggest first kept. |
+| A5 | Bar tooltip on the first and last segments: centred on the pointer, so it ran off the card and under the sidebar or past the page. | User | fixed: it slides with the pointer, left-aligned at the bar's left end and right-aligned at its right end, so it stays inside the card. |
 
 ### Investments `/investments`
 

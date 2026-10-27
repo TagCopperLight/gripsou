@@ -157,7 +157,7 @@ export function accounts(store: Store): Account[] {
     valueNative: null,
     lastSyncAt: lastSyncOf(store, a.connectionId),
     fxMissing: store.securities.some((s) => s.accountId === a.id && store.fx.missing.includes(s.id)),
-  }));
+  })).sort((x, y) => Number(y.value) - Number(x.value)); // as the server sends them
 }
 
 /** A sync: the connection spins for a few seconds, then is healthy and fresh. */
