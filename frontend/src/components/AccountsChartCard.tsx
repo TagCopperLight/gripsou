@@ -10,6 +10,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { StackedAreaChart, type StackedSeries } from "./StackedAreaChart";
 import { ChartLegend } from "./ChartLegend";
 import { CardState } from "./CardState";
+import { NetWorthEmpty } from "./NetWorthEmpty";
 import { useNetWorth, useAccountSeries } from "../api/hooks";
 import { rangeOptions, type Range } from "../lib/ranges";
 
@@ -23,6 +24,9 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
   const series = useAccountSeries(range);
   const ready = nw.data !== undefined && series.data !== undefined;
   const isError = nw.isError || series.isError;
+  // No accounts: the same stand-in as the dashboard's chart, rather than a
+  // 0 € headline and a gain pill that would only look like data.
+  const empty = ready && nw.data.points.length === 0;
 
   const summary = nw.data?.summary;
   const gainUp = summary ? Number(summary.gainAbs) >= 0 : true;
@@ -43,13 +47,13 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
           <div className="flex flex-col gap-1">
             <p className="text-fg font-semibold text-sm">
               {t("dashboard.netWorth.title")}
-              {ready && privacy.enabled && (
+              {ready && !empty && privacy.enabled && (
                 <span className="ml-3 inline-flex align-middle">
                   <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
                 </span>
               )}
             </p>
-            {ready && (
+            {ready && !empty && (
               <>
                 <MaskedMoney masked={privacy.masked} value={summary?.netWorth ?? "0"} className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]" />
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -63,19 +67,25 @@ export function AccountsChartCard({ className = "" }: { className?: string }) {
               </>
             )}
           </div>
-          <div className="flex flex-col md:items-end">
-            <div className="hidden md:block">
-              <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
+          {!empty && (
+            <div className="flex flex-col md:items-end">
+              <div className="hidden md:block">
+                <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
+              </div>
+              {/* Phone: one swipeable row instead of three wrapped ones. */}
+              <ChartLegend className="-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible" items={legendItems} />
             </div>
-            {/* Phone: one swipeable row instead of three wrapped ones. */}
-            <ChartLegend className="-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible" items={legendItems} />
-          </div>
+          )}
         </div>
         {/* Phone: the seven ranges scroll on their own row under the chart. */}
-        <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
-          <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
-        </div>
-        {ready ? (
+        {!empty && (
+          <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
+            <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
+          </div>
+        )}
+        {empty ? (
+          <NetWorthEmpty className="mt-4 h-80" />
+        ) : ready ? (
           <StackedAreaChart className="mt-4" series={stacked} />
         ) : (
           <CardState

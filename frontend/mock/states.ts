@@ -104,14 +104,14 @@ function addDcam(store: Store): string {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Sync";
+export const FOCUS = "Accounts chart";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
   {
     id: "distribution-overdraft",
     label: "Checking account overdrawn (negative balance)",
-    pieces: ["Distribution"],
+    pieces: ["Distribution", "Accounts chart"],
     apply(store) {
       const row = store.txns.find((x) => x.accountId === CHECKING && x.source === "cash")!;
       store.txns.unshift({
@@ -140,7 +140,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-many",
     label: "12 accounts, long names, tiny ones",
-    pieces: ["Distribution"],
+    pieces: ["Distribution", "Accounts chart"],
     apply(store) {
       const more: [string, string, number][] = [
         ["Compte joint Camille et Alex", "checking", 1840],
@@ -161,7 +161,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-all-zero",
     label: "Every account at 0 €",
-    pieces: ["Distribution", "Net worth chart", "Holdings"],
+    pieces: ["Distribution", "Net worth chart", "Holdings", "Accounts chart"],
     group: "Data",
     option: "Zero",
     apply(store) {
@@ -270,7 +270,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-loss",
     label: "Net worth down: markets fell, a big payment left",
-    pieces: ["Net worth chart"],
+    pieces: ["Net worth chart", "Accounts chart"],
     group: "Data",
     option: "Loss",
     apply(store) {
@@ -298,7 +298,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-fx-missing",
     label: "Two dollar ETFs have no rate (left out of totals)",
-    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window"],
+    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window", "Accounts chart"],
     apply(store) {
       store.fx.missing = [ESE, CW8];
     },
@@ -338,7 +338,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },
@@ -346,7 +346,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-empty",
     label: "New user: nothing connected yet",
-    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "New",
     apply(store) {
@@ -357,7 +357,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-first-sync",
     label: "Bank just connected, first sync running",
-    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "Syncing",
     apply(store) {
@@ -368,7 +368,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-nothing-came-in",
     label: "Bank connected, no account came in",
-    pieces: ["Net worth chart", "Distribution", "Holdings"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "Empty",
     apply(store) {
