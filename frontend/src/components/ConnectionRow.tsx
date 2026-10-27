@@ -220,7 +220,11 @@ export function ConnectionRow({
                     {/* Always one line: a long account name is cut, never the message. */}
                     <p className="flex min-w-0 whitespace-nowrap">
                       {p.accounts.length > 0 && (
-                        <span className="min-w-0 truncate font-medium text-fg">{p.accounts.join(", ")}:&nbsp;</span>
+                        <>
+                          <span className="min-w-0 truncate font-medium text-fg">{p.accounts.join(", ")}</span>
+                          {/* Outside the cut name, so it survives the cut: ": " in English, " : " in French. */}
+                          <span className="shrink-0 whitespace-pre font-medium text-fg">{t("settings.connections.problemSeparator")}</span>
+                        </>
                       )}
                       <span className="shrink-0">{p.text}</span>
                     </p>

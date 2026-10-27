@@ -472,6 +472,7 @@
       "connect": "Connecter",
       "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
       "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
+      "problemSeparator": " : ",
       "neverSynced": "Jamais synchronisée",
       "synced": "Synchronisée {{date}}",
       "health": {
@@ -481,13 +482,13 @@
         "bankUpdated": "Dernière mise à jour par la banque",
         "providerError": "Powens signale un problème ({{state}}).",
         "staleMessage": "Aucune nouvelle donnée de la banque depuis le {{date}}.",
-        "unknownMessage": "Impossible de savoir quand la banque a mis à jour ces données. Relancez une synchronisation.",
+        "unknownMessage": "Impossible de savoir quand la banque a mis à jour ces données.",
         "retry": "Nouvel essai automatique le {{date}}.",
         "states": {
           "bug": "Powens a rencontré un problème avec cette banque.",
-          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
-          "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer pour continuer.",
-          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer pour continuer.",
+          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer.",
+          "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer.",
+          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
         }
       },

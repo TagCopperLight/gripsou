@@ -472,6 +472,7 @@
       "connect": "Connect",
       "connectError": "Could not start the connection. Please try again.",
       "syncFailedMessage": "The last sync failed. Try again in a few minutes.",
+      "problemSeparator": ": ",
       "neverSynced": "Never synced",
       "synced": "Synced {{date}}",
       "health": {
