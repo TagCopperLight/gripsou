@@ -228,7 +228,12 @@ export function ConnectionRow({
                       )}
                       <span className="shrink-0">{p.text}</span>
                     </p>
-                    {p.detail && <p className={`text-fg-faint ${p.technical ? "font-mono text-[11px] break-words" : "text-xs"}`}>{p.detail}</p>}
+                    {/* A technical error (in English, often long) stays on one line, whole on hover. */}
+                    {p.detail && (
+                      <p className={`text-fg-faint ${p.technical ? "truncate font-mono text-[11px]" : "text-xs"}`} title={p.technical ? p.detail : undefined}>
+                        {p.detail}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
