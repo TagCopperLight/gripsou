@@ -45,7 +45,7 @@ describe("legendAccounts", () => {
   const series = (n: number) => ({
     accounts: Array.from({ length: n }, (_, i) => ({ id: `a${i}`, name: `A${i}`, color: "#fff" })),
     // A value that grows with the index: the last accounts are the biggest.
-    points: [{ t: 0, values: Object.fromEntries(Array.from({ length: n }, (_, i) => [`a${i}`, String(i * 10)])) }],
+    points: [{ t: 0, values: Object.fromEntries(Array.from({ length: n }, (_, i) => [`a${i}`, String((i + 1) * 10)])) }],
   });
 
   it("names the five biggest at the range's end and counts the rest", () => {
@@ -57,5 +57,16 @@ describe("legendAccounts", () => {
   it("names a sixth rather than writing '+1 other'", () => {
     expect(legendAccounts(series(6))).toMatchObject({ others: [] });
     expect(legendAccounts(series(6)).shown.map((a) => a.id)).toEqual(["a5", "a4", "a3", "a2", "a1", "a0"]);
+  });
+
+  it("leaves out an account at zero over the whole range, not one emptied during it", () => {
+    const s = {
+      accounts: ["kept", "emptied", "zero"].map((id) => ({ id, name: id, color: "#fff" })),
+      points: [
+        { t: 0, values: { kept: "5", emptied: "40", zero: "0" } },
+        { t: 1, values: { kept: "5", emptied: "0", zero: "0" } },
+      ],
+    };
+    expect(legendAccounts(s).shown.map((a) => a.id)).toEqual(["kept", "emptied"]);
   });
 });

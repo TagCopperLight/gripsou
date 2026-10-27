@@ -34,10 +34,14 @@ export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
 export const LEGEND_MAX = 5;
 
 /** The chart's accounts, biggest first at the range's end: the stack's
- *  bottom band, the tooltip's first line, the legend's first name. */
+ *  bottom band, the tooltip's first line, the legend's first name. One at
+ *  zero over the whole range has no band, so it's left out of the tooltip
+ *  and the legend too; one emptied during the range keeps its history. */
 export function bySize(series: AccountSeries): AccountSeries["accounts"] {
   const last = series.points.at(-1)?.values ?? {};
-  return [...series.accounts].sort((a, b) => Number(last[b.id] ?? 0) - Number(last[a.id] ?? 0));
+  return series.accounts
+    .filter((a) => series.points.some((p) => Number(p.values[a.id] ?? 0) !== 0))
+    .sort((a, b) => Number(last[b.id] ?? 0) - Number(last[a.id] ?? 0));
 }
 
 /** The accounts the chart's legend names: the biggest at the range's end,
