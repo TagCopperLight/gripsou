@@ -101,3 +101,22 @@ export function shade(hex: string, index: number, count: number, spread = 0.22):
   const l = hsl.l + spread / 2 - (spread * index) / (count - 1);
   return rgbToHex(hslToRgb({ ...hsl, l: Math.min(0.85, Math.max(0.25, l)) }));
 }
+
+/** Hue (0–360), saturation and value (0–1): the colour picker's axes. */
+export type Hsv = { h: number; s: number; v: number };
+
+export function hexToHsv(hex: string): Hsv {
+  const { r, g, b } = hexToRgb(hex);
+  const max = Math.max(r, g, b) / 255;
+  const d = max - Math.min(r, g, b) / 255;
+  const { h } = rgbToHsl({ r, g, b });
+  return { h: h * 360, s: max === 0 ? 0 : d / max, v: max };
+}
+
+export function hsvToHex({ h, s, v }: Hsv): string {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255;
+  };
+  return rgbToHex({ r: f(5), g: f(3), b: f(1) });
+}

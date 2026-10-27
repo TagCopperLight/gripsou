@@ -7,6 +7,11 @@
     "investments": "Investissements"
   },
   "common": {
+    "colorPicker": {
+      "shade": "Saturation et luminosité",
+      "hue": "Teinte",
+      "hex": "Code hexadécimal"
+    },
     "loading": "Chargement…",
     "retry": "Réessayer",
     "cantReachServer": "Impossible de joindre le serveur",

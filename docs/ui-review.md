@@ -164,6 +164,7 @@ Findings:
 | A10 | "synced 2 h ago" next to the bank's name: lowercase, masculine in French, unlike the sync window. | Claude | removed: the sync window says it. |
 | A11 | Account type next to the name as plain grey text. | User | the sync window's tag style (rounded, `surface-3`). Hiding it when it repeats the name ("PEA · PEA") was declined. |
 | A12 | Sync window: account names dimmer and bigger than on the Accounts page. | User | fixed: same colour (`text-fg`) and size (13px); the bar and the lines moved 5px left, so each account's square ends where the bank's logo ends. |
+| A13 | Edit account: the custom colour opened the system's picker, a separate window the page can't close; it stayed open after the Edit window closed. | User | fixed (option A of three shown in the companion): our own picker in a small panel under the pencil swatch (above it when there's no room below): a colour area (drawn on a canvas; CSS gradients left a line of the hue at the rounded corners), a hue slider, the hex code. Closes on Escape (not the window), a click outside, or with the window. Shared by the budget category window. |
 
 ### Investments `/investments`
 

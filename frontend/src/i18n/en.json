@@ -7,6 +7,11 @@
     "investments": "Investments"
   },
   "common": {
+    "colorPicker": {
+      "shade": "Saturation and brightness",
+      "hue": "Hue",
+      "hex": "Hex code"
+    },
     "loading": "Loading…",
     "retry": "Retry",
     "cantReachServer": "Can't reach the server",
