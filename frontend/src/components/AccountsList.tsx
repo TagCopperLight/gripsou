@@ -22,6 +22,10 @@ export function AccountsList({ className = "" }: AccountsListProps) {
     );
   }
 
+  // No accounts (nothing connected, a first sync running, or nothing came
+  // in): the chart above already says so and what to do.
+  if (data.length === 0) return null;
+
   const netWorth = data.reduce((sum, a) => sum + Number(a.value), 0);
 
   return (
