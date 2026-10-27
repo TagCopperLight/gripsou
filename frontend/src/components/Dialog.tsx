@@ -17,6 +17,8 @@ type DialogProps = {
   icon?: ReactNode;
   busy?: boolean;
   large?: boolean;
+  /** Wider still, for a list with several columns (the sync window). */
+  wide?: boolean;
   /** Shown in the header, just before the close button (e.g. step progress). */
   aside?: ReactNode;
 };
@@ -25,7 +27,7 @@ type DialogProps = {
  *  body that scrolls, and a footer of actions that stays in view. The
  *  behaviour (focus trap, Escape, `busy`) is [`Modal`](./Modal.tsx)'s. */
 export function Dialog({
-  title, heading, subtitle, onClose, children, footer, icon, busy = false, large = false, aside,
+  title, heading, subtitle, onClose, children, footer, icon, busy = false, large = false, wide = false, aside,
 }: DialogProps) {
   const { t } = useTranslation();
 
@@ -34,7 +36,7 @@ export function Dialog({
       label={title}
       onClose={onClose}
       busy={busy}
-      className={`relative ${large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col`}
+      className={`relative ${wide ? "w-170" : large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col`}
     >
       <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-2">
         <div className="flex flex-col gap-1">

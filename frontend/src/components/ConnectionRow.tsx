@@ -162,26 +162,28 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-3.5">
-            {/* One grid for every account, so the bank dates and the amounts
-                line up in two columns on the right; the amount column has a
-                fixed width so the dates also line up from one bank to the next. */}
-            <ul className="grid grid-cols-[minmax(0,1fr)_auto_8.5rem] divide-y divide-surface-3">
+            {/* A table without a header: the account on the left, the type
+                and bank date in aligned columns close to the amount. The type
+                and amount columns have fixed widths (the type's fits the
+                longest label, "Épargne retraite") so the columns also line up
+                from one bank to the next. */}
+            <ul className="grid grid-cols-[minmax(0,1fr)_7rem_auto_8.5rem] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
                   key={a.id}
-                  className="col-span-3 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
+                  className="col-span-4 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
                 >
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 pr-4">
                     <span
                       className="size-2.5 rounded-sm shrink-0"
                       style={{ background: a.color }}
                     />
                     <span className="text-sm text-fg-dim truncate">{a.name}</span>
-                    <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
-                      {accountTypeLabel(t, a.typeKey)}
-                    </span>
                   </div>
-                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-6 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
+                  <span className="justify-self-start text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
+                    {accountTypeLabel(t, a.typeKey)}
+                  </span>
+                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-4 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                     {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
                   </span>
                   <span className="text-right text-sm text-fg font-mono">

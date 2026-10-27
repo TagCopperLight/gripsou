@@ -21,7 +21,7 @@ export function SyncModal({ onClose }: SyncModalProps) {
   return (
     <Dialog
       title={t("sync.title")}
-      large
+      wide
       onClose={onClose}
       footer={
         <>
