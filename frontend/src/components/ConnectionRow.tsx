@@ -212,10 +212,11 @@ export function ConnectionRow({
           {problems.length > 0 && (
             <div className={`flex flex-col gap-2.5 ${conn.accounts.length > 0 ? "mt-3" : ""}`}>
               {problems.map((p, index) => (
-                <div key={index} className="flex items-center gap-2.5 text-[13px] leading-relaxed text-fg-dim">
+                <div key={index} className="flex items-center gap-3 text-[13px] leading-relaxed text-fg-dim">
+                  {/* The app's usual icon size (16px), between the old 14px and the banners' 20px. */}
                   {p.severity === "error"
-                    ? <CircleAlert className="size-3.5 shrink-0 text-red" />
-                    : <TriangleAlert className="size-3.5 shrink-0 text-amber" />}
+                    ? <CircleAlert className="size-4 shrink-0 text-red" aria-hidden />
+                    : <TriangleAlert className="size-4 shrink-0 text-amber" aria-hidden />}
                   <div className="min-w-0 flex-1">
                     {/* Always one line: a long account name is cut, never the message. */}
                     <p className="flex min-w-0 whitespace-nowrap">
