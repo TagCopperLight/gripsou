@@ -5,6 +5,7 @@ import { Surface } from "./Surface";
 import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import type { Account } from "../api/types";
+import { distribution, isDrawn } from "../lib/distribution";
 import type { Privacy } from "../auth/usePrivacy";
 
 type AccountsSummaryCardProps = {
@@ -24,7 +25,10 @@ export function AccountsSummaryCard({ accounts, privacy, onHover, className = ""
   const { t } = useTranslation();
   const [hover, setHover] = useState<Hover | null>(null);
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
-  const shown = accounts.filter((a) => Number(a.value) > 0);
+  // Too thin to see (1 % or less of what's owned): left out of the bar, whose
+  // other segments fill the space; the list below still shows them.
+  const drawn = new Set(distribution(accounts).filter((r) => isDrawn(r.share)).map((r) => r.account.id));
+  const shown = accounts.filter((a) => drawn.has(a.id));
 
   return (
     <Surface className={`p-4 md:p-5 ${className}`}>

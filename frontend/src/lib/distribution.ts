@@ -22,6 +22,16 @@ export function distribution(accounts: Account[]): DistributionRow[] {
     });
 }
 
+/** Shares up to this one are too thin to draw: the ring and the bar leave
+ *  them out (the others fill the space, being proportions of what's drawn),
+ *  and the lists still name them with their real share. */
+export const MIN_DRAWN_SHARE = 0.01;
+
+/** Whether a share is wide enough to draw in a ring or a bar. */
+export function isDrawn(share: number | null): boolean {
+  return share !== null && share > MIN_DRAWN_SHARE;
+}
+
 /** A share as a percentage, with "<0,1 %" for one too small to show rather
  *  than a "0 %" that reads as nothing. */
 export function formatShare(share: number, fractionDigits: number): string {

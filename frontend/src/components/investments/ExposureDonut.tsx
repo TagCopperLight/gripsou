@@ -30,6 +30,8 @@ type ExposureDonutProps = {
   /** Private mode: the amounts are masked (the shares stay), and an eye by
    *  the title reveals them. */
   privacy?: Privacy;
+  /** Slices up to this share stay out of the ring (still in the legend). */
+  minSlice?: number;
   className?: string;
 };
 
@@ -54,6 +56,7 @@ export function ExposureDonut({
   placeholder,
   fxFootnote,
   privacy,
+  minSlice = 0,
   className = "",
 }: ExposureDonutProps) {
   const { t } = useTranslation();
@@ -109,7 +112,7 @@ export function ExposureDonut({
         data: blank
           ? [{ name: "", value: 1, itemStyle: { color: GRID } }]
           : items
-              .filter((i) => (i.share ?? 0) > 0)
+              .filter((i) => (i.share ?? 0) > minSlice)
               .map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i), opacity: isLit(i.key) ? 1 : DONUT_DIM } })),
       },
       ...(nested

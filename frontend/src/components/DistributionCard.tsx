@@ -4,7 +4,7 @@ import { CardState } from "./CardState";
 import { ExposureDonut } from "./investments/ExposureDonut";
 import { useAccounts, useHoldings } from "../api/hooks";
 import { ExcludedNote } from "./FxNote";
-import { distribution } from "../lib/distribution";
+import { MIN_DRAWN_SHARE, distribution } from "../lib/distribution";
 import { usePrivacy } from "../auth/usePrivacy";
 
 type DistributionCardProps = {
@@ -42,6 +42,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       total={total}
       fxFootnote={fxFootnote}
       privacy={privacy}
+      minSlice={MIN_DRAWN_SHARE}
       placeholder={
         data === undefined ? (
           <CardState

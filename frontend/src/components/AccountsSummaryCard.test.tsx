@@ -32,6 +32,13 @@ describe("AccountsSummaryCard", () => {
     expect(screen.getAllByTestId("account-share")).toHaveLength(2);
   });
 
+  it("leaves out an account of 1 % or less, too thin to see", () => {
+    const accounts = [account("a", "Livret A", "990"), account("b", "Tiny", "10"), account("c", "Small", "11")];
+    render(<AccountsSummaryCard accounts={accounts} privacy={PRIVACY_OFF} />);
+    // 10 / 1011 is under 1 %; 11 / 1011 is just over.
+    expect(screen.getAllByTestId("account-share")).toHaveLength(2);
+  });
+
   it("shows the hovered account's name, share and value, and hides it on leave", () => {
     render(<AccountsSummaryCard accounts={ACCOUNTS} privacy={PRIVACY_OFF} />);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();

@@ -93,6 +93,7 @@ Findings:
 | D17 | Every account at 0 € showed "NaN%" on each row (D2's second case). | Claude | fixed: a plain grey ring, "Total 0 €", rows with their amount and no %. |
 | D18 | Private mode masked the net worth but the distribution showed the same figure in the middle, in clear, with every account's amount. | Claude | fixed: amounts and the middle masked, % kept, one eye right after the title (as on Holdings) (`PrivacyEye`, shared with `PrivateMoney`). Same rule as D12. |
 | D19 | A small account read "0 %". | Claude | fixed: "<0,1 %" below what one decimal shows (`formatShare`, also on the Investments donuts). Accounts at 0 € stay listed (user's choice). |
+| D60 | Distribution ring: accounts of 1 % or less drew slivers too thin to see or hover. | User | fixed: left out of the ring (`MIN_DRAWN_SHARE`, `isDrawn`, `ExposureDonut` `minSlice`); the other slices fill the space by themselves, as the ring draws proportions of what's in it. The legend still lists them with their real share. Same on the Accounts page (A20). |
 | D21 | "PEA PEA" when an account is named after its type. | Claude | won't fix: the user keeps the type tag on every row. |
 | D22 | The legend's tags followed each name, so they zigzagged; the share and the amount sat close together. | User | fixed: every row has the same column widths (each as wide as its longest entry), so tags, shares and amounts line up; more room before the amount; long names cut with "…" (full name on hover). Also applies to the Investments donuts. |
 | D23 | A long name hovered in the donut ran over the ring. | User | fixed: the middle text is kept to the hole's width (from the ring's inner radius), wraps, and is cut with "…" after two lines. |
@@ -172,6 +173,7 @@ Findings:
 | A17 | Edit account: nothing said which bank the account is at (two "Compte courant" open identical windows). | Claude | fixed: the bank's name under the title. |
 | A18 | Focused text field: the green 1px ring looked jagged in the rounded corners. | User | fixed: the ring is drawn inside the field (`ring-inset`). |
 | A19 | Colour picker: the handles had a hard black outline that looked dirty at the edges. | User | fixed: a smaller hollow white ring with a soft shadow in the colour area, a white pill on the hue slider. |
+| A20 | "All accounts" bar: accounts of 1 % or less drew slivers. | User | fixed as on the dashboard (D60): left out of the bar, the others filling it; the list below and its shares unchanged. |
 
 ### Investments `/investments`
 
