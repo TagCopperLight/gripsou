@@ -306,8 +306,10 @@ function IconButton({
   return (
     <button
       type="button"
-      // Disabled: faded like a row's caret when it can't open, and no hover.
-      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 enabled:hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed ${
+      // Disabled: faded like a row's caret when it can't open, and it lets the
+      // pointer through to the row, so the cursor doesn't change and a click
+      // opens or closes the row like anywhere else on it.
+      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 enabled:hover:bg-surface-2 disabled:opacity-30 disabled:pointer-events-none ${
         danger ? "enabled:hover:text-red" : "enabled:hover:text-fg"
       } ${className}`}
       {...props}
