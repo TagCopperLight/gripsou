@@ -20,6 +20,8 @@ type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
   /** What every account owns together (overdrafts left out), for each row's share. */
   owned: number;
+  /** The longest type tag on the page, in characters: the tag column's width. */
+  tagCh: number;
   /** Private mode, revealed by the summary card's eye. */
   masked: boolean;
   className?: string;
@@ -28,7 +30,7 @@ type ConnectionAccountsCardProps = {
 /** One bank connection: its subtotal, a dot on its logo when it has a
  * problem (as in the sync window), then a row per account.
  * Clicking a row opens the account's edit modal. */
-export function ConnectionAccountsCard({ group, owned, masked, className = "" }: ConnectionAccountsCardProps) {
+export function ConnectionAccountsCard({ group, owned, tagCh, masked, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
@@ -65,12 +67,16 @@ export function ConnectionAccountsCard({ group, owned, masked, className = "" }:
               <button
                 type="button"
                 onClick={() => setEditing(a)}
-                className="grid w-full cursor-pointer grid-cols-[1fr_auto_auto] items-center gap-3 rounded-lg py-2.5 pr-2 pl-5 text-left transition-colors duration-140 hover:bg-surface-2 md:grid-cols-[1fr_11rem_8rem]"
+                className="grid w-full cursor-pointer grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] items-center gap-3 rounded-lg py-2.5 pr-2 pl-5 text-left transition-colors duration-140 hover:bg-surface-2 md:grid-cols-[1fr_auto_11rem_8rem]"
               >
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
-                  <span className="ml-auto hidden text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0 sm:inline">
+                </span>
+                {/* Its own column, as wide as the page's longest tag: the tags
+                    start at the same place on every row, apart from the bar. */}
+                <span className="hidden box-content pr-1 text-[11px] sm:block" style={{ width: `calc(${tagCh}ch + 1rem)` }}>
+                  <span className="rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>

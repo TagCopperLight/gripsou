@@ -53,7 +53,7 @@ describe("ConnectionAccountsCard", () => {
     const overdrawn: Account = { ...ACCOUNT, id: "a3", name: "Overdrawn", value: "-50" };
     const tiny: Account = { ...ACCOUNT, id: "a4", name: "Tiny", value: "0.2" };
     render(withClient(
-      <ConnectionAccountsCard group={group({ accounts: [ACCOUNT, overdrawn, tiny] })} owned={1000} masked={false} />,
+      <ConnectionAccountsCard group={group({ accounts: [ACCOUNT, overdrawn, tiny] })} owned={1000} tagCh={10} masked={false} />,
     ));
     expect(screen.getByText(/^30([,.]0)?\s?%$/)).toBeInTheDocument();
     expect(screen.getByText(/^<0[,.]1\s?%$/)).toBeInTheDocument();
@@ -68,12 +68,12 @@ describe("ConnectionAccountsCard", () => {
         { id: "c1", displayName: "Online Bank", status: "error", lastSyncAt: null, lastError: "boom", accounts: [], logo: null },
       ] }]), { status: 200, headers: { "Content-Type": "application/json" } }),
     ));
-    render(withClient(<ConnectionAccountsCard group={group()} owned={400} masked={false} />));
+    render(withClient(<ConnectionAccountsCard group={group()} owned={400} tagCh={10} masked={false} />));
     expect(await screen.findByTestId("connection-error-dot")).toBeInTheDocument();
   });
 
   it("opens the edit modal for the clicked row", () => {
-    render(withClient(<ConnectionAccountsCard group={group()} owned={400} masked={false} />));
+    render(withClient(<ConnectionAccountsCard group={group()} owned={400} tagCh={10} masked={false} />));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Livret A/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();

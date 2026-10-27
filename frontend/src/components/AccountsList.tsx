@@ -1,7 +1,10 @@
 import { AccountsSummaryCard } from "./AccountsSummaryCard";
 import { ConnectionAccountsCard } from "./ConnectionAccountsCard";
 import { CardState } from "./CardState";
+import { useTranslation } from "react-i18next";
+
 import { useAccounts } from "../api/hooks";
+import { accountTypeLabel } from "../api/types";
 import { usePrivacy } from "../auth/usePrivacy";
 import { groupByConnection } from "../lib/accounts";
 
@@ -11,6 +14,7 @@ type AccountsListProps = {
 
 /** The all-accounts summary, then one card per connection. */
 export function AccountsList({ className = "" }: AccountsListProps) {
+  const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
   // One eye, on the summary card, for every amount of the list.
   const privacy = usePrivacy();
@@ -31,13 +35,15 @@ export function AccountsList({ className = "" }: AccountsListProps) {
 
   // Shares are of what the accounts own, as on the dashboard's distribution:
   // an overdraft is not a slice of anything.
+  // One width for the type tags on every card, so they line up page-wide.
+  const tagCh = Math.max(0, ...data.map((a) => accountTypeLabel(t, a.typeKey).length));
   const owned = data.reduce((sum, a) => sum + Math.max(0, Number(a.value)), 0);
 
   return (
     <section className={`flex flex-col gap-4 ${className}`}>
       <AccountsSummaryCard accounts={data} privacy={privacy} />
       {groupByConnection(data).map((g) => (
-        <ConnectionAccountsCard key={g.connectionId} group={g} owned={owned} masked={privacy.masked} />
+        <ConnectionAccountsCard key={g.connectionId} group={g} owned={owned} tagCh={tagCh} masked={privacy.masked} />
       ))}
     </section>
   );
