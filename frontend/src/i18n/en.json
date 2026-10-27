@@ -64,7 +64,6 @@
   },
   "account": {
     "allAccounts": "All accounts",
-    "synced": "synced {{time}}",
     "unknownSource": "Other",
     "edit": {
       "title": "Edit account",

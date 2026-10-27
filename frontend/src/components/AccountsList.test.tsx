@@ -18,7 +18,7 @@ function account(id: string, connectionId: string, value: string): Account {
 
 function renderList(accounts: Account[], privateMode = false) {
   vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-    new Response(String(url).includes("/holdings") ? "[]" : JSON.stringify(accounts), { status: 200, headers: { "Content-Type": "application/json" } }),
+    new Response(/\/(holdings|connections)/.test(String(url)) ? "[]" : JSON.stringify(accounts), { status: 200, headers: { "Content-Type": "application/json" } }),
   ));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const auth = { prefs: { ...DEFAULT_PREFS, privateMode } } as unknown as AuthValue;

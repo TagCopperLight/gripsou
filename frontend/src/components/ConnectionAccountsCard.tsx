@@ -3,52 +3,53 @@ import { useTranslation } from "react-i18next";
 
 import { Surface } from "./Surface";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
-import { useHoldings } from "../api/hooks";
+import { useConnections, useHoldings } from "../api/hooks";
+import { AlertDot } from "./AlertDot";
 import { Money } from "./Money";
 import { MaskedMoney } from "./PrivateMoney";
 import { MoneyHint } from "./MoneyHint";
 import { getPrefs } from "../lib/prefs";
-import { Percent } from "./Percent";
 import { HoldingBadge } from "./HoldingBadge";
 import { EditAccountModal } from "./EditAccountModal";
-import { formatRelative } from "../lib/date";
+import { formatShare } from "../lib/distribution";
+import { connectionAlert } from "../lib/connectionHealth";
 import type { ConnectionGroup } from "../lib/accounts";
-import { accountTypeLabel, type Account } from "../api/types";
+import { accountTypeLabel, flattenConnections, type Account } from "../api/types";
 
 type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
-  /** Net worth across every account, for each row's share bar. */
-  netWorth: number;
+  /** What every account owns together (overdrafts left out), for each row's share. */
+  owned: number;
   /** Private mode, revealed by the summary card's eye. */
   masked: boolean;
   className?: string;
 };
 
-/** One bank connection: its sync time and subtotal, then a row per account.
+/** One bank connection: its subtotal, a dot on its logo when it has a
+ * problem (as in the sync window), then a row per account.
  * Clicking a row opens the account's edit modal. */
-export function ConnectionAccountsCard({ group, netWorth, masked, className = "" }: ConnectionAccountsCardProps) {
+export function ConnectionAccountsCard({ group, owned, masked, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
   const holdings = useHoldings();
   const ids = new Set(group.accounts.map((a) => a.id));
+  const connections = useConnections();
+  const conn = flattenConnections(connections.data ?? []).find((c) => c.id === group.connectionId);
   const excluded = (holdings.data ?? []).filter((h) => h.fxMissing && ids.has(h.accountId)).length;
 
   return (
     <Surface className={`p-4 pb-3.5 md:p-5 md:pb-4.5 ${className}`}>
       <div className="flex items-center gap-2.5 pb-[9.5px]">
-        <HoldingBadge
-          logo={group.sourceLogo}
-          ticker={name}
-          className="size-6 rounded-md text-[10px]"
-        />
-        <h2 className="text-fg font-semibold text-sm truncate">{name}</h2>
-        <span aria-hidden className="text-fg-faint text-xs">·</span>
-        <span className="text-fg-faint text-xs whitespace-nowrap">
-          {group.lastSyncAt === null
-            ? t("sync.neverSynced")
-            : t("account.synced", { time: formatRelative(group.lastSyncAt) })}
+        <span className="relative shrink-0">
+          <HoldingBadge
+            logo={group.sourceLogo}
+            ticker={name}
+            className="size-6 rounded-md text-[10px]"
+          />
+          <AlertDot alert={conn ? connectionAlert(conn) : null} className="ring-surface" />
         </span>
+        <h2 className="text-fg font-semibold text-sm truncate">{name}</h2>
         <MaskedMoney masked={masked} value={group.total} className="ml-auto text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
 
@@ -56,7 +57,7 @@ export function ConnectionAccountsCard({ group, netWorth, masked, className = ""
           line while the values stay flush with the bank's subtotal. */}
       <ul className="-mx-2">
         {group.accounts.map((a) => {
-          const share = netWorth > 0 ? Number(a.value) / netWorth : 0;
+          const share = Number(a.value) > 0 ? Number(a.value) / owned : null;
           // A foreign account reads in its own currency, the converted value on hover.
           const native = a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
           return (
@@ -69,15 +70,20 @@ export function ConnectionAccountsCard({ group, netWorth, masked, className = ""
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
-                  <span className="hidden text-fg-faint text-xs whitespace-nowrap sm:inline">
+                  <span className="hidden text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0 sm:inline">
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>
+                {/* No share (overdrawn, or at zero): the amount alone, as on the dashboard. */}
                 <span className="flex items-center gap-3">
-                  <span className="hidden h-1 flex-1 overflow-hidden rounded-full bg-surface-3 md:block">
-                    <span className="block h-full" style={{ width: `${share * 100}%`, background: a.color }} />
-                  </span>
-                  <Percent value={share} fractionDigits={1} className="w-12 text-right text-fg-faint text-xs" />
+                  {share !== null && (
+                    <>
+                      <span className="hidden h-1 flex-1 overflow-hidden rounded-full bg-surface-3 md:block">
+                        <span className="block h-full" style={{ width: `${share * 100}%`, background: a.color }} />
+                      </span>
+                      <span className="ml-auto w-12 text-right font-mono text-fg-faint text-xs">{formatShare(share, 1)}</span>
+                    </>
+                  )}
                 </span>
                 <span className="relative text-right whitespace-nowrap">
                   {masked ? (
@@ -87,7 +93,7 @@ export function ConnectionAccountsCard({ group, netWorth, masked, className = ""
                       <Money value={native} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
                     </MoneyHint>
                   ) : (
-                    <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
+                    <Money value={a.value} className={`${Number(a.value) < 0 ? "text-red" : "text-fg"} text-[13px] whitespace-nowrap`} />
                   )}
                   {a.fxMissing && <FxAsterisk />}
                 </span>

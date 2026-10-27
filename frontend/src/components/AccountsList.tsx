@@ -29,13 +29,15 @@ export function AccountsList({ className = "" }: AccountsListProps) {
   // in): the chart above already says so and what to do.
   if (data.length === 0) return null;
 
-  const netWorth = data.reduce((sum, a) => sum + Number(a.value), 0);
+  // Shares are of what the accounts own, as on the dashboard's distribution:
+  // an overdraft is not a slice of anything.
+  const owned = data.reduce((sum, a) => sum + Math.max(0, Number(a.value)), 0);
 
   return (
     <section className={`flex flex-col gap-4 ${className}`}>
       <AccountsSummaryCard accounts={data} privacy={privacy} />
       {groupByConnection(data).map((g) => (
-        <ConnectionAccountsCard key={g.connectionId} group={g} netWorth={netWorth} masked={privacy.masked} />
+        <ConnectionAccountsCard key={g.connectionId} group={g} owned={owned} masked={privacy.masked} />
       ))}
     </section>
   );

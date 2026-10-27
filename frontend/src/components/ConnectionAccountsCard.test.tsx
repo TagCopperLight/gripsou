@@ -28,7 +28,6 @@ function group(overrides: Partial<ConnectionGroup> = {}): ConnectionGroup {
     connectionId: "c1",
     sourceName: "Online Bank",
     sourceLogo: null,
-    lastSyncAt: null,
     total: 400,
     accounts: [ACCOUNT, SAVINGS],
     ...overrides,
@@ -50,30 +49,31 @@ describe("ConnectionAccountsCard", () => {
     ));
   });
 
-  it("shows the bank, its sync time and a row per account", () => {
+  it("shows each account's share of what the accounts own; an overdraft has none and reads red", () => {
+    const overdrawn: Account = { ...ACCOUNT, id: "a3", name: "Overdrawn", value: "-50" };
+    const tiny: Account = { ...ACCOUNT, id: "a4", name: "Tiny", value: "0.2" };
     render(withClient(
-      <ConnectionAccountsCard
-        group={group({ lastSyncAt: Date.now() - 5 * 60_000 })}
-        netWorth={1000}
-        masked={false}
-      />,
+      <ConnectionAccountsCard group={group({ accounts: [ACCOUNT, overdrawn, tiny] })} owned={1000} masked={false} />,
     ));
-    expect(screen.getByText("Online Bank")).toBeInTheDocument();
-    expect(screen.getByText("synced 5 min ago")).toBeInTheDocument();
-    expect(screen.getByText("Compte Courant")).toBeInTheDocument();
-    expect(screen.getByText("Savings")).toBeInTheDocument();
-    // Share of the 1000 net worth, next to each row's bar.
-    expect(screen.getByText(/^30\s?%$/)).toBeInTheDocument();
-    expect(screen.getByText(/^10\s?%$/)).toBeInTheDocument();
+    expect(screen.getByText(/^30([,.]0)?\s?%$/)).toBeInTheDocument();
+    expect(screen.getByText(/^<0[,.]1\s?%$/)).toBeInTheDocument();
+    const row = screen.getByRole("button", { name: /Overdrawn/ });
+    expect(row).not.toHaveTextContent("%");
+    expect(screen.getByText(/-50[,.]00/)).toHaveClass("text-red");
   });
 
-  it("says when the connection never synced", () => {
-    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} masked={false} />));
-    expect(screen.getByText("Never synced")).toBeInTheDocument();
+  it("puts the sync window's dot on the bank's logo when its sync failed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify([{ providerKey: "powens", providerName: "Powens", connections: [
+        { id: "c1", displayName: "Online Bank", status: "error", lastSyncAt: null, lastError: "boom", accounts: [], logo: null },
+      ] }]), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+    render(withClient(<ConnectionAccountsCard group={group()} owned={400} masked={false} />));
+    expect(await screen.findByTestId("connection-error-dot")).toBeInTheDocument();
   });
 
   it("opens the edit modal for the clicked row", () => {
-    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} masked={false} />));
+    render(withClient(<ConnectionAccountsCard group={group()} owned={400} masked={false} />));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Livret A/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();

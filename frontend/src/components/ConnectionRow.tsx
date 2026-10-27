@@ -5,7 +5,8 @@ import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert
 
 import { HoldingBadge } from "./HoldingBadge";
 import { useManageConnection, useSyncConnection } from "../api/hooks";
-import { connectionIssues, healthIssue } from "../lib/connectionHealth";
+import { AlertDot } from "./AlertDot";
+import { connectionAlert, connectionIssues, healthIssue } from "../lib/connectionHealth";
 import { formatDate, formatRelative } from "../lib/date";
 import { formatMoney } from "../lib/money";
 import { accountTypeLabel, type SyncConnection } from "../api/types";
@@ -120,12 +121,7 @@ export function ConnectionRow({
             color={conn.accounts[0]?.color}
             className="size-9 rounded-lg text-[13px]"
           />
-          {(isError || (issues.length > 0 && !isSyncing && !isPending)) && (
-            <span
-              data-testid={isError ? "connection-error-dot" : "connection-warning-dot"}
-              className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-surface-2 group-hover:ring-surface-3 transition-colors duration-140 ${isError ? "bg-red" : "bg-amber"}`}
-            />
-          )}
+          <AlertDot alert={connectionAlert(conn)} className="ring-surface-2 group-hover:ring-surface-3" />
         </span>
         <div className="min-w-0 flex-1">
           <span className="block text-fg font-semibold text-[15px] truncate">
@@ -190,7 +186,7 @@ export function ConnectionRow({
                       className="size-2.5 rounded-sm shrink-0"
                       style={{ background: a.color }}
                     />
-                    <span className="text-sm text-fg-dim truncate">{a.name}</span>
+                    <span className="text-[13px] text-fg truncate">{a.name}</span>
                     <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0">
                       {accountTypeLabel(t, a.typeKey)}
                     </span>

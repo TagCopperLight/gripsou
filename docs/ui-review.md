@@ -158,6 +158,12 @@ Findings:
 | A4 | Order of the accounts in the bar and the list: looked random. | User | the server sends them biggest first (`order by sum(value) desc`); only the mock didn't sort. Mock fixed; biggest first kept. |
 | A5 | Bar tooltip on the first and last segments: centred on the pointer, so it ran off the card and under the sidebar or past the page. | User | fixed: it slides with the pointer, left-aligned at the bar's left end and right-aligned at its right end, so it stays inside the card. |
 | A6 | Private mode left every amount of the list visible: the total, the bar's tooltip, each bank's subtotal and each account. | User | fixed: all masked; one eye, after "All accounts", reveals the whole list (an eye on every bank card would repeat it); shares stay. |
+| A7 | An overdrawn account read "−2,9 %", and the other shares were of the net worth, overdrafts included. | Claude | fixed as on the dashboard (D16): shares are of what the accounts own; an account at or below zero has no share or bar, its amount in red. The summary bar already left out accounts at zero or below. |
+| A8 | A tiny account read "0 %". | Claude | fixed: "<0,1 %" (`formatShare`, D19). |
+| A9 | A bank card looked healthy while its sync failed or its data was outdated: only the sync window showed it. | Claude | fixed: the sync window's red or amber dot on the bank's logo (`AlertDot`, `connectionAlert`, shared with `ConnectionRow`). |
+| A10 | "synced 2 h ago" next to the bank's name: lowercase, masculine in French, unlike the sync window. | Claude | removed: the sync window says it. |
+| A11 | Account type next to the name as plain grey text. | User | the sync window's tag style (rounded, `surface-3`). Hiding it when it repeats the name ("PEA · PEA") was declined. |
+| A12 | Sync window: account names dimmer and bigger than on the Accounts page. | User | fixed: same colour (`text-fg`) and size (13px). |
 
 ### Investments `/investments`
 

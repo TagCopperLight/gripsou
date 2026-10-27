@@ -4,7 +4,6 @@ export type ConnectionGroup = {
   connectionId: string;
   sourceName: string | null;
   sourceLogo: string | null;
-  lastSyncAt: number | null;
   total: number;
   accounts: Account[];
 };
@@ -20,7 +19,6 @@ export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
         connectionId: a.connectionId,
         sourceName: a.sourceName,
         sourceLogo: a.sourceLogo,
-        lastSyncAt: a.lastSyncAt,
         total: 0,
         accounts: [],
       };

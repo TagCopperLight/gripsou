@@ -64,7 +64,6 @@
   },
   "account": {
     "allAccounts": "Tous les comptes",
-    "synced": "synchronisé {{time}}",
     "unknownSource": "Autre",
     "edit": {
       "title": "Modifier le compte",

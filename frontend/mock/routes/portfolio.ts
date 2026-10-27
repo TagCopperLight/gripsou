@@ -7,6 +7,13 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
   r.route("GET", "/accounts", ({ store }) => v.accounts(store));
   r.route("GET", "/accounts/series", ({ store, query }) => v.accountSeries(store, query.get("range") ?? "6mo"));
+  r.route("PATCH", "/accounts/:id", ({ store, params, body }) => {
+    const account = store.accounts.find((a) => a.id === params.id);
+    if (!account) return reply(404);
+    const { name, typeKey, color } = body as { name: string; typeKey: string; color: string };
+    Object.assign(account, { name, typeKey, color });
+    return reply(204);
+  });
   r.route("GET", "/account-types", () => ["checking", "savings", "pea", "brokerage", "life_insurance", "retirement", "multiple"]);
   r.route("GET", "/connections", ({ store }) => v.connections(store));
   r.route("POST", "/sync", ({ store }) => {

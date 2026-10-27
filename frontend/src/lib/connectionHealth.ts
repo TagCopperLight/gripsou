@@ -14,6 +14,14 @@ export function healthIssue(health?: SyncHealth | null, today = zonedDay()): Hea
   return null;
 }
 
+/** The dot on a connection's logo: red for a failed sync, amber for a health
+ *  issue; none while it syncs or waits for its first sync. */
+export function connectionAlert(conn: SyncConnection, today = zonedDay()): "error" | "warning" | null {
+  if (conn.status === "error") return "error";
+  if (conn.status === "syncing" || conn.status === "awaiting" || conn.status === "pending") return null;
+  return connectionIssues(conn, today).length > 0 ? "warning" : null;
+}
+
 export function connectionIssues(conn: SyncConnection, today = zonedDay()): HealthIssue[] {
   const issues: HealthIssue[] = [];
   const add = (health: SyncHealth | null | undefined, account?: string) => {
