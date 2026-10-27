@@ -9,7 +9,7 @@ import { AlertDot } from "./AlertDot";
 import { connectionAlert, connectionIssues, healthIssue } from "../lib/connectionHealth";
 import { formatDate, formatRelative } from "../lib/date";
 import { formatMoney } from "../lib/money";
-import { accountTypeLabel, type SyncConnection } from "../api/types";
+import type { SyncConnection } from "../api/types";
 
 // Shared collapsible connection row used by the settings page and the sync
 // modal. `onDelete` is optional — the delete icon renders only when provided
@@ -171,10 +171,10 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-2.25">
-            {/* A table without a header: the account and its type tag on the
-                left; the bank date and the amount packed together on the right.
-                The amount column has a minimum width, so the dates line up from
-                one bank to the next. */}
+            {/* A table without a header: the account on the left; the bank
+                date and the amount packed together on the right. The amount
+                column has a minimum width, so the dates line up from one bank
+                to the next. */}
             <ul className="grid grid-cols-[minmax(0,1fr)_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
@@ -187,9 +187,6 @@ export function ConnectionRow({
                       style={{ background: a.color }}
                     />
                     <span className="text-[13px] text-fg truncate">{a.name}</span>
-                    <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0">
-                      {accountTypeLabel(t, a.typeKey)}
-                    </span>
                   </div>
                   <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-2 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                     {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}

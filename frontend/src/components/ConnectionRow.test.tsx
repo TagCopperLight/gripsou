@@ -85,7 +85,7 @@ it("keeps the problem's message for the open row, under the accounts", () => {
   expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A:\s403/);
   expect(screen.getByText(/Automatic retry on/)).toBeInTheDocument();
   const date = screen.getAllByTitle("Last update from the bank")[0];
-  expect(date.parentElement?.textContent).toContain("Savings");
+  expect(date.parentElement?.textContent).toContain("LIVRET A");
 });
 
 it("says a failed sync in words with a red dot, and a healthy one's sync time with no dot", () => {

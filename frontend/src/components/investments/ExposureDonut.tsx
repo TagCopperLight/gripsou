@@ -139,15 +139,11 @@ export function ExposureDonut({
 
   const amount = (item: DonutItem) => item.value ?? (item.share ?? 0) * total;
 
-  // Every row gets the same column widths, so the tags, shares and amounts
+  // Every row gets the same column widths, so the shares and amounts
   // line up down the legend: each column is as wide as its longest entry (in
   // `ch` of the mono font they are set in).
   const all = items.flatMap((i) => [i, ...(i.children ?? [])]);
-  const tagCh = Math.max(0, ...all.map((i) => i.tag?.length ?? 0));
   const amountCh = Math.max(...all.map((i) => formatMoney(amount(i), { fractionDigits: 0 }).length));
-  const cols = tagCh > 0
-    ? "grid-cols-[auto_minmax(0,1fr)_auto_auto] md:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]"
-    : "grid-cols-[auto_minmax(0,1fr)_auto_auto]";
 
   const row = (key: string, item: DonutItem, child: boolean) => (
     <div
@@ -155,7 +151,7 @@ export function ExposureDonut({
       onMouseEnter={() => setActive(key)}
       onMouseLeave={() => setActive(null)}
       style={{ opacity: isLit(key) ? 1 : LEGEND_DIM }}
-      className={`grid cursor-pointer ${cols} items-center gap-x-2 rounded-lg px-2 transition-[background-color,opacity] duration-140 ${
+      className={`grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 rounded-lg px-2 transition-[background-color,opacity] duration-140 ${
         child ? "py-1 pl-7" : "py-1.5"
       } ${isHighlighted(key) ? "bg-surface-2" : "bg-transparent"}`}
     >
@@ -166,11 +162,6 @@ export function ExposureDonut({
       <span className={`min-w-0 truncate ${child ? "text-xs text-fg-dim" : "text-sm text-fg"}`} title={item.label}>
         {item.label}
       </span>
-      {tagCh > 0 && (
-        <span className="hidden font-mono text-[11px] md:block" style={{ width: `calc(${tagCh}ch + 0.75rem)` }}>
-          {item.tag && <span className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-faint">{item.tag}</span>}
-        </span>
-      )}
       {/* No share (overdrawn, or nothing owned): the amount alone. */}
       <span className="text-right font-mono text-sm" style={{ width: "6ch" }}>
         {item.share !== null && <span className={`text-fg ${child ? "text-xs" : ""}`}>{formatShare(item.share, 1)}</span>}

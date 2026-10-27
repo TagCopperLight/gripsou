@@ -51,7 +51,8 @@ describe("SyncModal", () => {
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("My bank"));
     expect(screen.getByText("Checking")).toBeInTheDocument();
-    expect(screen.getByText("Savings")).toBeInTheDocument();
+    // No account type: the Accounts page shows it.
+    expect(screen.queryByText("Savings")).not.toBeInTheDocument();
   });
 
   it("syncs one connection and syncs all", () => {

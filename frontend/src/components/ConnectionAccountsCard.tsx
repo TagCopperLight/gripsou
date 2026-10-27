@@ -70,7 +70,7 @@ export function ConnectionAccountsCard({ group, owned, masked, className = "" }:
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
-                  <span className="hidden text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0 sm:inline">
+                  <span className="ml-auto hidden text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0 sm:inline">
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>

@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next";
 
 import { CardState } from "./CardState";
 import { ExposureDonut } from "./investments/ExposureDonut";
-import { accountTypeLabel } from "../api/types";
 import { useAccounts, useHoldings } from "../api/hooks";
 import { ExcludedNote } from "./FxNote";
 import { distribution } from "../lib/distribution";
@@ -28,7 +27,6 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
     share,
     color: a.color,
     value: a.value,
-    tag: accountTypeLabel(t, a.typeKey),
     fxMissing: a.fxMissing,
   }));
   const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)

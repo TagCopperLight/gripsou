@@ -15,8 +15,6 @@ export type DonutItem = {
   other?: boolean;
   /** The exact amount, when the legend shouldn't derive it from the share. */
   value?: number | string;
-  /** A small badge after the label (the account's type). */
-  tag?: string;
   /** Something is missing from this row's amount for want of an exchange
    *  rate: an asterisk after it. */
   fxMissing?: boolean;
