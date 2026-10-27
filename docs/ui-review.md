@@ -27,7 +27,7 @@ Used on many screens; a change here changes them all.
 | `RootLayout`, `Sidebar` | every signed-in page | admin / member label under the name; version line (from `/health`) |
 | `SyncButton` + `SyncModal` | top right of every signed-in page | idle; spinning (a connection `syncing`/`awaiting`); red dot (a connection in `error`); amber dot (a health warning: stale, unknown, provider error) · modal: loading, no connections, per-connection rows (`ConnectionRow`) |
 | `ConnectionRow` | sync modal, Settings · Connections | status tag: connected / syncing / waiting / pending / error (shows `lastError` as the tag text) / stale / partial / needs attention; amber health box per issue; expanded account list; "manage" popup blocked; manage failed |
-| `PageHeader` | Dashboard, Accounts, Investments, Budget | today's date + title |
+| `PageHeader` | Dashboard, Accounts, Investments, Budget | title, centred above the first surface (Budget: with its mode switch) |
 | `CardState` | most cards | loading (spinner + "Loading…"); error ("Can't reach the server" + Retry) |
 | `Dialog` / `Modal` / `ConfirmDialog` | every modal | busy, error line |
 | `PrivateMoney` | net-worth headline | private mode on: masked, eye to reveal |
