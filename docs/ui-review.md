@@ -163,7 +163,7 @@ Findings:
 | A9 | A bank card looked healthy while its sync failed or its data was outdated: only the sync window showed it. | Claude | fixed: the sync window's red or amber dot on the bank's logo (`AlertDot`, `connectionAlert`, shared with `ConnectionRow`). |
 | A10 | "synced 2 h ago" next to the bank's name: lowercase, masculine in French, unlike the sync window. | Claude | removed: the sync window says it. |
 | A11 | Account type next to the name as plain grey text. | User | the sync window's tag style (rounded, `surface-3`). Hiding it when it repeats the name ("PEA · PEA") was declined. |
-| A12 | Sync window: account names dimmer and bigger than on the Accounts page. | User | fixed: same colour (`text-fg`) and size (13px). |
+| A12 | Sync window: account names dimmer and bigger than on the Accounts page. | User | fixed: same colour (`text-fg`) and size (13px); the bar and the lines moved 5px left, so each account's square ends where the bank's logo ends. |
 
 ### Investments `/investments`
 

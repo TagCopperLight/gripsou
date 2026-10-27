@@ -170,7 +170,7 @@ export function ConnectionRow({
       {open && (
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
-          <div className="border-l border-surface-3 pl-4 ml-3.5">
+          <div className="border-l border-surface-3 pl-4 ml-2.25">
             {/* A table without a header: the account and its type tag on the
                 left; the bank date and the amount packed together on the right.
                 The amount column has a minimum width, so the dates line up from
