@@ -61,15 +61,18 @@ describe("ConnectionRow", () => {
   });
 });
 
-it("shows source errors while collapsed and bank dates inline when expanded", () => {
+it("keeps the problem's message for the open row, under the accounts", () => {
   const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
   render(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
   // The problem takes the sync time's place, and the logo carries an amber dot.
   expect(screen.getByText("Partial update")).toBeInTheDocument();
-  expect(screen.getByText(/403 Client Error: Forbidden/)).toBeInTheDocument();
+  expect(screen.queryByText(/403 Client Error: Forbidden/)).toBeNull();
   expect(screen.queryByText(/Synced/)).toBeNull();
   expect(screen.getByTestId("connection-warning-dot")).toBeInTheDocument();
   expand();
+  // Named after the account it concerns, the retry date under it.
+  expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A: 403/);
+  expect(screen.getByText(/scheduled a retry/)).toBeInTheDocument();
   const date = screen.getAllByTitle("Last bank update")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
 });
@@ -78,6 +81,8 @@ it("says a failed sync in words with a red dot, and a healthy one's sync time wi
   const { rerender } = render(<ConnectionRow conn={{ ...conn, status: "error", lastError: "sync took too long" }} />);
   expect(screen.getByText("Sync failed")).toHaveAttribute("title", "sync took too long");
   expect(screen.getByTestId("connection-error-dot")).toBeInTheDocument();
+  expand();
+  expect(screen.getByText("sync took too long")).toBeInTheDocument();
   rerender(<ConnectionRow conn={{ ...conn, lastSyncAt: Date.now() }} />);
   expect(screen.getByText(/Synced/)).toBeInTheDocument();
   expect(screen.queryByTestId(/dot$/)).toBeNull();

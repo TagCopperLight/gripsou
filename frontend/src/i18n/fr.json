@@ -472,6 +472,7 @@
       "noProviders": "Aucun fournisseur de données n'est activé. Demandez à votre administrateur d'en activer un.",
       "connect": "Connecter",
       "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
+      "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
       "synced": "Synchronisée {{date}}",
       "health": {
         "partial": "Mise à jour partielle",

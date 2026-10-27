@@ -472,6 +472,7 @@
       "noProviders": "No data providers are enabled. Ask your administrator to enable one.",
       "connect": "Connect",
       "connectError": "Could not start the connection. Please try again.",
+      "syncFailedMessage": "The last sync failed. Try again in a few minutes.",
       "synced": "Synced {{date}}",
       "health": {
         "partial": "Partial update",

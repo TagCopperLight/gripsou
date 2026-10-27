@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
+import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { HoldingBadge } from "./HoldingBadge";
 import { useManageConnection, useSyncConnection } from "../api/hooks";
@@ -59,6 +59,26 @@ export function ConnectionRow({
   };
   const issues = connectionIssues(conn);
   const partial = conn.accounts.some((a) => !healthIssue(a.health)) && issues.some((i) => i.accounts.length > 0);
+
+  type Problem = { severity: "error" | "warning"; accounts: string[]; text: string; detail?: string; technical?: boolean };
+  const problems: Problem[] = [];
+  if (conn.status === "error") {
+    problems.push({ severity: "error", accounts: [], text: t("settings.connections.syncFailedMessage"), detail: conn.lastError ?? undefined, technical: true });
+  }
+  if (conn.status !== "pending") {
+    for (const issue of issues) {
+      problems.push({
+        severity: "warning",
+        accounts: issue.accounts,
+        text: issue.kind === "error"
+          ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
+          : issue.kind === "stale"
+            ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
+            : t("settings.connections.health.unknownMessage"),
+        detail: issue.health.nextRetryOn ? t("settings.connections.health.retry", { date: formatDate(issue.health.nextRetryOn) }) : undefined,
+      });
+    }
+  }
 
   const isAwaiting = conn.status === "awaiting";
   const isSyncing = conn.status === "syncing" || isAwaiting;
@@ -142,22 +162,6 @@ export function ConnectionRow({
       </div>
 
       {manageError && <p role="alert" className="px-4 pb-3 text-xs text-red">{manageError}</p>}
-      {issues.length > 0 && !isPending && (
-        <div className="mx-4 mb-3 rounded-xl border border-amber/20 bg-amber-soft px-3.5 py-3 text-[13px] leading-relaxed text-amber">
-          {issues.map((issue, index) => (
-            <p key={index}>
-              {issue.accounts.length > 0 && `${issue.accounts.join(", ")}: `}
-              {issue.kind === "error"
-                ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
-                : issue.kind === "stale"
-                  ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
-                  : t("settings.connections.health.unknownMessage")}
-              {issue.health.nextRetryOn && `${issue.kind === "error" && issue.health.errorMessage && !/[.!?]$/.test(issue.health.errorMessage) ? "." : ""} ${t("settings.connections.health.retry", { date: formatDate(issue.health.nextRetryOn) })}`}
-            </p>
-          ))}
-        </div>
-      )}
-
       {open && (
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
@@ -192,6 +196,27 @@ export function ConnectionRow({
               ))}
             </ul>
           </div>
+          )}
+
+          {/* What is wrong, in words: a line per problem under the accounts,
+              the account it concerns named first, details in faint text. */}
+          {problems.length > 0 && (
+            <div className={`flex flex-col gap-2.5 ${conn.accounts.length > 0 ? "mt-3" : ""}`}>
+              {problems.map((p, index) => (
+                <div key={index} className="flex gap-2.5 text-[13px] leading-relaxed text-fg-dim">
+                  {p.severity === "error"
+                    ? <CircleAlert className="mt-[3px] size-3.5 shrink-0 text-red" />
+                    : <TriangleAlert className="mt-[3px] size-3.5 shrink-0 text-amber" />}
+                  <div className="min-w-0">
+                    <p>
+                      {p.accounts.length > 0 && <span className="font-medium text-fg">{p.accounts.join(", ")}: </span>}
+                      {p.text}
+                    </p>
+                    {p.detail && <p className={`text-fg-faint ${p.technical ? "font-mono text-[11px] break-words" : "text-xs"}`}>{p.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Phone: the header has no room for icon buttons, so the actions
