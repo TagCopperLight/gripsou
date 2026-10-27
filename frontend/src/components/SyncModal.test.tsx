@@ -43,13 +43,10 @@ describe("SyncModal", () => {
     syncAll.mutate.mockReset();
   });
 
-  it("renders the provider/connection tree with a summary subtext", () => {
+  it("lists the connections without naming their provider", () => {
     render(<SyncModal onClose={() => {}} />);
-    expect(screen.getByText("Powens")).toBeInTheDocument();
     expect(screen.getByText("My bank")).toBeInTheDocument();
-    expect(
-      screen.getByText((_, el) => el?.textContent === "1 connection·1 provider"),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/powens/i)).not.toBeInTheDocument();
     // Accounts are collapsed until the row is expanded.
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("My bank"));
