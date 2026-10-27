@@ -14,8 +14,12 @@
     },
     "loading": "Loading…",
     "retry": "Retry",
-    "cantReachServer": "Can't reach the server",
-    "apiUnavailable": "The service is temporarily unavailable.",
+    "loadFailed": "Couldn't load this",
+    "loadFailedDetail": "Try again in a moment.",
+    "crashed": "Something broke on this page",
+    "crashedDetail": "Reloading the page usually fixes it.",
+    "reload": "Reload",
+    "dismiss": "Dismiss",
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
@@ -43,7 +47,8 @@
     "syncAll": "Sync all",
     "sync": "Sync",
     "neverSynced": "Never synced",
-    "empty": "No bank connected yet."
+    "empty": "No bank connected yet.",
+    "startFailed": "Couldn't start the sync. Please try again."
   },
   "holdingKind": {
     "cash": "Cash",

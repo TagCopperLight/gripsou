@@ -104,7 +104,7 @@ function addDcam(store: Store): string {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Edit account";
+export const FOCUS = "Errors";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -374,6 +374,31 @@ export const STATES: MockState[] = [
     apply(store) {
       emptyHousehold(store);
       store.connections = [store.connections[0]];
+    },
+  },
+  // ── Errors ──
+  {
+    id: "errors-reads-fail",
+    label: "Nothing loads (every card's error)",
+    pieces: ["Errors"],
+    apply(store) {
+      store.readsFail = true;
+    },
+  },
+  {
+    id: "errors-writes-fail",
+    label: "Every save fails (the error in the corner)",
+    pieces: ["Errors"],
+    apply(store) {
+      store.writesFail = true;
+    },
+  },
+  {
+    id: "errors-page-crash",
+    label: "The pages showing accounts break",
+    pieces: ["Errors"],
+    apply(store) {
+      store.accountsBroken = true;
     },
   },
   // ── Edit account ──

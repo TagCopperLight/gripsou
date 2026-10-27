@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
@@ -257,6 +258,8 @@ export function TransactionsMode() {
     [patchRow, startWrite, onWriteError],
   );
 
+  useErrorToast(writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`));
+
   return (
     <div className="flex min-h-full flex-col gap-4">
       <Surface className="flex flex-col gap-4 p-4">
@@ -299,20 +302,6 @@ export function TransactionsMode() {
           onToggleChecked={onToggleChecked}
         />
 
-        {writeErrorKey && (
-          <p data-testid="write-error" role="alert" className="flex items-center gap-2 text-xs text-red">
-            {t(`budget.transactions.errors.${writeErrorKey}`)}
-            <button
-              type="button"
-              data-testid="write-error-dismiss"
-              onClick={() => setWriteErrorKey(null)}
-              aria-label={t("common.close")}
-              className="cursor-pointer text-red/70 hover:text-red"
-            >
-              ×
-            </button>
-          </p>
-        )}
       </Surface>
 
       {bulkUpdated !== null && (

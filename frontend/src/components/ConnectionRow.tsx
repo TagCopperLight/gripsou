@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { showError, useErrorToast } from "../lib/errorToasts";
 import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { HoldingBadge } from "./HoldingBadge";
@@ -24,6 +25,7 @@ export function ConnectionRow({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const sync = useSyncConnection();
+  useErrorToast(sync.isError && t("sync.startFailed"));
   const manage = useManageConnection();
   const [manageError, setManageError] = useState<string | null>(null);
   const returnListener = useRef<(() => void) | null>(null);
@@ -55,7 +57,7 @@ export function ConnectionRow({
       window.addEventListener("focus", onReturn, { once: true });
     } catch {
       tab.close();
-      if (mounted.current) setManageError(t("settings.connections.manageFailed"));
+      showError(t("settings.connections.manageFailed"));
     }
   };
   const issues = connectionIssues(conn);

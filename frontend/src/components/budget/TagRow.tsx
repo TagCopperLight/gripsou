@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { TagChip } from "./TagChip";
@@ -81,6 +82,8 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
     if (!trimmed) return;
     save({ name: trimmed, color: tag.color }, { onSuccess: () => setEditing(false) });
   };
+
+  useErrorToast(update.isError && budgetErrorKey(update.error) !== "duplicate" && t(`settings.budget.tags.${budgetErrorKey(update.error)}`));
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -214,9 +217,9 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
         </div>
       </div>
 
-      {update.isError && (
+      {update.isError && budgetErrorKey(update.error) === "duplicate" && (
         <p role="alert" className="text-red text-xs">
-          {t(`settings.budget.tags.${budgetErrorKey(update.error)}`)}
+          {t("settings.budget.tags.duplicate")}
         </p>
       )}
     </div>

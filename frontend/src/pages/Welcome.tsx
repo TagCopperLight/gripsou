@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Check, CircleAlert, Landmark, Lock, LoaderCircle } from "lucide-react";
 import { Button } from "../components/Button";
@@ -145,6 +146,8 @@ export function Welcome() {
   const hasBank = readyBanks.length > 0;
   const connectDisabled = connecting || initConnection.isPending || providers === undefined;
 
+  useErrorToast(initConnection.isError && t("welcome.bank.connectError"));
+
   return (
     <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
       <div className="flex w-120 max-w-full flex-col items-center gap-10">
@@ -221,7 +224,6 @@ export function Welcome() {
                   <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
                 </div>
               )}
-              {initConnection.isError && <p className="text-sm text-red">{t("welcome.bank.connectError")}</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 {hasBank ? (
                   <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>

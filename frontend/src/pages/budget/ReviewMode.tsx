@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import { useNavigate } from "@tanstack/react-router";
 import { PartyPopper } from "lucide-react";
 
@@ -180,6 +181,8 @@ export function ReviewMode() {
     );
   };
 
+  useErrorToast(writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`));
+
   if (list.isSuccess && lines.length === 0) {
     return (
       <Surface className="flex flex-col items-center gap-3 p-10 text-center">
@@ -210,20 +213,6 @@ export function ReviewMode() {
             </Button>
           )}
         </div>
-        {writeErrorKey && (
-          <p data-testid="write-error" role="alert" className="mb-3 flex items-center gap-2 text-xs text-red">
-            {t(`budget.transactions.errors.${writeErrorKey}`)}
-            <button
-              type="button"
-              data-testid="write-error-dismiss"
-              onClick={() => setWriteErrorKey(null)}
-              aria-label={t("common.close")}
-              className="cursor-pointer text-red/70 hover:text-red"
-            >
-              ×
-            </button>
-          </p>
-        )}
         <div className="flex flex-col gap-2">
           {lines.map((id) => {
             const r = state.resolved[id];

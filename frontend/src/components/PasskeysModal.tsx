@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 import { Fingerprint, Pencil, Trash2 } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -21,10 +22,8 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [deleting, setDeleting] = useState<Passkey | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const startRename = (p: Passkey) => {
-    setError(null);
     setDraft(p.name);
     setRenaming(p.id);
   };
@@ -36,13 +35,12 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
     try {
       await rename.mutateAsync({ id: p.id, name });
     } catch {
-      setError(t("passkeys.failed"));
+      showError(t("passkeys.failed"));
     }
   };
 
   const confirmDelete = async () => {
     if (!deleting) return;
-    setError(null);
     try {
       await remove.mutateAsync(deleting.id);
       if (passkeys.length <= 1) {
@@ -51,7 +49,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
       }
       setDeleting(null);
     } catch {
-      setError(t("passkeys.failed"));
+      showError(t("passkeys.failed"));
     }
   };
 
@@ -72,9 +70,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
             </Button>
           </>
         }
-      >
-        {error && <p className="text-sm text-red">{error}</p>}
-      </Dialog>
+      />
     );
   }
 
@@ -133,7 +129,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
               <button
                 type="button"
                 onClick={() => {
-                  setError(null);
                   setDeleting(p);
                 }}
                 aria-label={t("passkeys.delete")}
@@ -144,7 +139,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
             </div>
           </div>
         ))}
-        {error && <p className="text-sm text-red">{error}</p>}
       </div>
     </Dialog>
   );

@@ -95,6 +95,6 @@ describe("Investments page", () => {
 
   it("says so when the server can't be reached", async () => {
     renderPage("down");
-    await waitFor(() => expect(screen.getAllByText("Can't reach the server").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Couldn't load this").length).toBeGreaterThan(0));
   });
 });

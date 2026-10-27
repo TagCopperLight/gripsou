@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import { Plus } from "lucide-react";
 
 import { Surface } from "../Surface";
@@ -28,6 +29,8 @@ export function TagsSurface() {
       { onSuccess: () => setDraft("") },
     );
   };
+
+  useErrorToast(create.isError && budgetErrorKey(create.error) !== "duplicate" && t(`settings.budget.tags.${budgetErrorKey(create.error)}`));
 
   return (
     <div>
@@ -87,9 +90,9 @@ export function TagsSurface() {
                 </Button>
               </div>
 
-              {create.isError && (
+              {create.isError && budgetErrorKey(create.error) === "duplicate" && (
                 <p role="alert" className="mt-2 text-xs text-red">
-                  {t(`settings.budget.tags.${budgetErrorKey(create.error)}`)}
+                  {t("settings.budget.tags.duplicate")}
                 </p>
               )}
             </>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { Button } from "./Button";
 import { CardState } from "./CardState";
 import { Dialog } from "./Dialog";
@@ -27,6 +28,8 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
       },
     });
   };
+
+  useErrorToast(initConnection.isError && t("settings.connections.connectError"));
 
   return (
     <Dialog
@@ -64,9 +67,6 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
             onSelect={() => setSelected(p.key)}
           />
         ))}
-        {initConnection.isError && (
-          <p className="text-sm text-red">{t("settings.connections.connectError")}</p>
-        )}
       </div>
     </Dialog>
   );

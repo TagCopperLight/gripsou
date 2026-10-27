@@ -1,5 +1,7 @@
-import { CloudOff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+import { ErrorState } from "./ErrorState";
 
 type CardStateProps = {
   /** "loading" while the query is in flight; "error" once it has failed. */
@@ -25,22 +27,11 @@ export function CardState({ variant, onRetry, className = "" }: CardStateProps) 
           <p className="text-fg-faint text-sm">{t("common.loading")}</p>
         </>
       ) : (
-        <>
-          <CloudOff className="size-6 text-fg-faint" />
-          <div className="flex flex-col gap-0.5">
-            <p className="text-fg text-sm font-medium">{t("common.cantReachServer")}</p>
-            <p className="text-fg-faint text-xs">{t("common.apiUnavailable")}</p>
-          </div>
-          {onRetry && (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="mt-1 rounded-lg bg-surface-2 px-3 py-1 text-xs font-medium text-fg-dim hover:text-fg transition-colors duration-140 cursor-pointer"
-            >
-              {t("common.retry")}
-            </button>
-          )}
-        </>
+        <ErrorState
+          title={t("common.loadFailed")}
+          detail={t("common.loadFailedDetail")}
+          action={onRetry && { label: t("common.retry"), onClick: onRetry }}
+        />
       )}
     </div>
   );

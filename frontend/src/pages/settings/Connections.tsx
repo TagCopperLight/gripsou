@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import { Plus } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
@@ -42,6 +43,8 @@ export function SettingsConnections() {
     }
   };
 
+  useErrorToast(initConnection.isError && t("settings.connections.connectError"));
+
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
@@ -70,12 +73,6 @@ export function SettingsConnections() {
               </Button>
             </div>
           </div>
-
-          {initConnection.isError && (
-            <p role="alert" className="mt-4 text-sm text-red">
-              {t("settings.connections.connectError")}
-            </p>
-          )}
 
           {isLoading ? (
             <CardState variant="loading" className="mt-4 h-64" />

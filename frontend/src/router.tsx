@@ -6,6 +6,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { RootLayout } from "./components/RootLayout";
+import { CrashPage } from "./components/CrashPage";
 import { Dashboard } from "./pages/Dashboard";
 import { Accounts } from "./pages/Accounts";
 import { Investments } from "./pages/Investments";
@@ -243,6 +244,9 @@ export const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { auth: undefined! },
+  // A page that throws while showing: ours, not the library's page with the
+  // code's error in it.
+  defaultErrorComponent: CrashPage,
   ...scrollRestorationOptions,
 });
 

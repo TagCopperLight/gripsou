@@ -1,6 +1,7 @@
 import { calendarDay, formatDate, zonedDay } from "../lib/date";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { Lock, Trash2, X } from "lucide-react";
 
 import { Button } from "./Button";
@@ -308,6 +309,8 @@ export function RecordLotsModal({
   const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
     v != null && currency !== getPrefs().currency ? <Money value={v} signed={signed} /> : null;
 
+  useErrorToast(failed && t("dashboard.holdings.gap.saveError"));
+
   return (
     <Modal
       label={t("dashboard.holdings.gap.title")}
@@ -496,7 +499,6 @@ export function RecordLotsModal({
           </Button>
         </div>
 
-        {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
       </div>
 
       {/* The figures stay in view while the table scrolls above them. */}

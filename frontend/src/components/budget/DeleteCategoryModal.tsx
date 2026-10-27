@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { ConfirmDialog } from "../ConfirmDialog";
 import { useDeleteBudgetCategory, type BudgetCategory } from "../../api/budget";
@@ -13,6 +14,8 @@ export function DeleteCategoryModal({ category, onClose }: DeleteCategoryModalPr
   const { t } = useTranslation();
   const remove = useDeleteBudgetCategory();
 
+  useErrorToast(remove.isError && t("settings.budget.categories.deleteError"));
+
   return (
     <ConfirmDialog
       title={t("settings.budget.categories.deleteTitle")}
@@ -22,7 +25,6 @@ export function DeleteCategoryModal({ category, onClose }: DeleteCategoryModalPr
       })}
       confirmLabel={t("settings.budget.categories.deleteConfirm")}
       busy={remove.isPending}
-      error={remove.isError ? t("settings.budget.categories.deleteError") : null}
       onConfirm={() => remove.mutate(category.id, { onSuccess: onClose })}
       onClose={onClose}
     />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
@@ -13,7 +14,7 @@ import type { User } from "../api/types";
  *  link clears the user's second factors), then the link to share. */
 export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => void }) {
   const { t } = useTranslation();
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(
+  const { password, setPassword, error, checking, check } = useReauthStep(
     t("settings.users.linkError"),
   );
   const [token, setToken] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
     try {
       setToken((await create.mutateAsync({ id: user.id, reauth: proof })).token);
     } catch {
-      setError(t("settings.users.linkError"));
+      showError(t("settings.users.linkError"));
     }
   };
 

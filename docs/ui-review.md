@@ -28,8 +28,9 @@ Used on many screens; a change here changes them all.
 | `SyncButton` + `SyncModal` | top right of every signed-in page (reviewed: D50–D59) | idle; spinning (a connection `syncing`/`awaiting`); red dot (a connection in `error`); amber dot (a health warning: stale, unknown, provider error) · modal: loading, no connections, per-connection rows (`ConnectionRow`). States "Sync · Connections": every status at once, one syncing, one failed, outdated data, none; Sync all and each row's sync spin for 4 s then come back healthy. |
 | `ConnectionRow` | sync modal, Settings · Connections | line under the name: synced x ago / syncing / waiting / connecting / sync failed (red, `lastError` on hover) / outdated / partial / needs attention (amber); red or amber dot on the logo; open: one line per problem under the accounts; expanded account list; "manage" popup blocked; manage failed |
 | `PageHeader` | Dashboard, Accounts, Investments, Budget | title, centred above the first surface (Budget: with its mode switch) |
-| `CardState` | most cards | loading (spinner + "Loading…"); error ("Can't reach the server" + Retry) |
-| `Dialog` / `Modal` / `ConfirmDialog` | every modal | busy, error line |
+| `CardState` | most cards | loading (spinner + "Loading…"); error (`ErrorState`: red icon, "Couldn't load this", Retry; E1) |
+| `ErrorToasts` (`showError`, `useErrorToast`) | bottom-right corner of every page | a failed action, for 5 s or until closed (E1). Mock states "Errors": nothing loads, every save fails, the pages showing accounts break |
+| `Dialog` / `Modal` / `ConfirmDialog` | every modal | busy; an error line for what the user typed (a server failure goes to the corner, E1) |
 | `PrivateMoney` | net-worth headline | private mode on: masked, eye to reveal |
 | `HoldingBadge` | holdings, connections | logo image, or coloured initials |
 
@@ -309,6 +310,14 @@ Three steps: profile, bank (connect, connection status ok / error / connecting /
 
 Success redirect; failure (missing id or provider error).
 
+### Errors (every screen)
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| E1 | Errors looked different everywhere: a grey cloud and "Can't reach the server" in cards, a bare red sentence in windows, a small red line with a "×" on the Budget pages, and the routing library's raw "Something went wrong!" page (with the code's error) when a page broke. | User | one design (option C of three shown in the companion). Something that couldn't be shown (a card that couldn't load, the invite or reset link, a page that broke) shows in its place a red icon on a soft red tile, what went wrong, "Try again in a moment." (no "Your data is safe", user's call) and a small outline button with less rounded corners (Retry; Reload for a broken page, which keeps the sidebar). A failed action (a save, a delete, a category change, a connection that couldn't start) rises into the bottom-right corner of the screen, above any window, and goes after 5 s or when closed; its look (option B of five shown in the companion; E, the same with a red line shrinking over the 5 s, was built then dropped): the app's card colour with a thin outline, the red icon on a soft red tile as in the card error, centred on the lines; trying again closes it, and it outlives the window that failed; the same message twice shows once. What the user typed (wrong password, too many attempts, a name or email already used, passwords that don't match, a blocked pop-up) stays next to the field, in red. The sync window, which showed nothing when the connections couldn't load, shows the card error (and "Sync all" waits for them); a sync that couldn't start (one row or Sync all) used to fail silently and now says so in the corner. Each action's message is the one it had; texts to rework. |
+
 ## Cross-screen fixes
 
 Issues met on one screen and fixed everywhere at once, so later screens reuse them.
@@ -323,4 +332,5 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | Private mode: amounts masked, shares and % kept, one `PrivacyEye` right after the card's title, never next to a figure (D18, D26, D29) | Dashboard net worth, distribution, holdings; Accounts chart. To apply: Accounts list, Investments, Budget figures, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
 | Tables are `GridTable` (CSS grid on fixed tracks, `ROW_CELLS` rows, `HEAD_CELL` headers, `TableEmpty`), D30 | Budget transactions, Dashboard holdings. To move onto it: users, sessions, the asset window's purchases, Accounts list |
+| Errors (E1): `ErrorState` for what couldn't be shown (`CardState`, `CrashPage` as the router's `defaultErrorComponent`), the corner `ErrorToasts` for a failed action (`showError`, `useErrorToast`), red text by the field only for what the user typed | every card, window and page with a server error |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

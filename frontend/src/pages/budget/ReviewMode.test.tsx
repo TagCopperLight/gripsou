@@ -192,7 +192,7 @@ describe("Review mode", () => {
     stubServer({ pending: [GUESS, NO_GUESS], calls: [], fail: "/accept" });
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("review-line-t1")).toBeVisible();
     expect(screen.queryByTestId("resolved-line-t1")).toBeNull();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 2 resolved");
@@ -203,7 +203,7 @@ describe("Review mode", () => {
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
     fireEvent.click(await screen.findByTestId("chooser-option-c2"));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("review-line-t2")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 1 resolved");
   });
@@ -215,7 +215,7 @@ describe("Review mode", () => {
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
     const resolved = await screen.findByTestId("resolved-line-t1");
     fireEvent.click(within(resolved).getByRole("button", { name: "Undo" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("resolved-line-t1")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("1 / 2 resolved");
   });
@@ -225,7 +225,7 @@ describe("Review mode", () => {
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 other" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(screen.queryByTestId("resolved-line-t3")).toBeNull();
   });
 

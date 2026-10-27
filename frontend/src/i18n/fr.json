@@ -14,8 +14,12 @@
     },
     "loading": "Chargement…",
     "retry": "Réessayer",
-    "cantReachServer": "Impossible de joindre le serveur",
-    "apiUnavailable": "Le service est momentanément indisponible.",
+    "loadFailed": "Chargement impossible",
+    "loadFailedDetail": "Réessayez dans un instant.",
+    "crashed": "Un problème est survenu sur cette page",
+    "crashedDetail": "Recharger la page suffit en général.",
+    "reload": "Recharger",
+    "dismiss": "Fermer",
     "close": "Fermer",
     "cancel": "Annuler",
     "save": "Enregistrer",
@@ -43,7 +47,8 @@
     "syncAll": "Tout synchroniser",
     "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
-    "empty": "Aucune banque connectée pour l’instant."
+    "empty": "Aucune banque connectée pour l’instant.",
+    "startFailed": "Impossible de lancer la synchronisation. Veuillez réessayer."
   },
   "holdingKind": {
     "cash": "Liquidités",

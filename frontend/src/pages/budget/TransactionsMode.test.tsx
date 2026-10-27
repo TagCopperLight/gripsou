@@ -387,21 +387,21 @@ describe("TransactionsMode", () => {
     await settle(client);
   });
 
-  it("surfaces a dismissible inline error when a row write fails", async () => {
+  it("surfaces a dismissible error when a row write fails", async () => {
     patchShouldFail = true;
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
-    expect(screen.getByTestId("write-error")).toHaveTextContent(
+    expect(screen.getByTestId("error-toast")).toHaveTextContent(
       "That change could not be saved. Please try again.",
     );
-    fireEvent.click(screen.getByTestId("write-error-dismiss"));
-    expect(screen.queryByTestId("write-error")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
-  it("surfaces a dismissible inline error when a bulk write fails", async () => {
+  it("surfaces a dismissible error when a bulk write fails", async () => {
     bulkShouldFail = true;
     const client = renderMode();
     await screen.findByText("ALDI");
@@ -409,9 +409,9 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
-    expect(screen.getByTestId("write-error")).toBeVisible();
-    fireEvent.click(screen.getByTestId("write-error-dismiss"));
-    expect(screen.queryByTestId("write-error")).toBeNull();
+    expect(screen.getByTestId("error-toast")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
   it("reports how many rows a successful bulk write touched", async () => {
@@ -437,13 +437,13 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
-    expect(screen.getByTestId("write-error")).toBeVisible();
+    expect(screen.getByTestId("error-toast")).toBeVisible();
 
     patchShouldFail = false;
     fireEvent.click(screen.getAllByTestId("tx-add-tag")[1]);
     fireEvent.click(await screen.findByTestId("chooser-option-B"));
     await settle(client);
-    expect(screen.queryByTestId("write-error")).toBeNull();
+    expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
   // -------------------------------------------------------------------------

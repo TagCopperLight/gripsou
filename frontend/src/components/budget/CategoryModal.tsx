@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Dialog } from "../Dialog";
 import { ColorSwatchGrid } from "../ColorSwatchGrid";
@@ -88,6 +89,8 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   // name, colour, icon. Its kind is fixed, and its hint would never be read.
   const locked = Boolean(category?.systemKey);
   const previewColor = safeBudgetColor(color);
+
+  useErrorToast(mutation.isError && budgetErrorKey(mutation.error) !== "duplicate" && t(`settings.budget.categories.${budgetErrorKey(mutation.error)}`));
 
   return (
     <Dialog
@@ -210,9 +213,9 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           />
         </Field>
 
-        {mutation.isError && (
+        {mutation.isError && budgetErrorKey(mutation.error) === "duplicate" && (
           <p role="alert" className="text-red text-sm">
-            {t(`settings.budget.categories.${budgetErrorKey(mutation.error)}`)}
+            {t("settings.budget.categories.duplicate")}
           </p>
         )}
       </div>

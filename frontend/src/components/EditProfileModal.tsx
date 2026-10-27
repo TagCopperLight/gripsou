@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { Pencil } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -56,6 +57,8 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
       },
     );
   };
+
+  useErrorToast(updateProfile.isError && !emailTaken && t("settings.account.profileUpdateFailed"));
 
   return (
     <Dialog
@@ -131,11 +134,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         {pictureError && <p className="text-sm text-red">{t("settings.account.pictureError")}</p>}
-        {updateProfile.isError && (
-          <p className="text-sm text-red">
-            {emailTaken ? t("settings.account.emailInUse") : t("settings.account.profileUpdateFailed")}
-          </p>
-        )}
+        {emailTaken && <p className="text-sm text-red">{t("settings.account.emailInUse")}</p>}
         <button type="submit" hidden />
       </form>
     </Dialog>

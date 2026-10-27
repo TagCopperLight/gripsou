@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Surface } from "../Surface";
 import { CardState } from "../CardState";
@@ -25,6 +26,7 @@ export function AiCostSurface() {
   const save = useSetBudgetAiPrices();
   // Uncommitted edits, keyed "<model>\u0000<side>"; absent = show the server value.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useErrorToast(save.isError && t("settings.server.budgetAiSaveError"));
   if (!usage) {
     return (
       <Surface className="p-6">
@@ -141,11 +143,6 @@ export function AiCostSurface() {
               </tbody>
             </table>
           </div>
-          {save.isError && (
-            <p role="alert" className="mt-3 text-xs text-red">
-              {t("settings.server.budgetAiSaveError")}
-            </p>
-          )}
           <div className="mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4">
             <span className="text-sm font-medium text-fg">{t("settings.server.budgetAiCostTotal")}</span>
             <span data-testid="ai-cost-total" className="text-xl font-semibold tabular-nums text-fg">

@@ -19,6 +19,12 @@ export type Store = BaseData & {
   accountHealth: Record<string, SyncHealth>;
   /** Saving an account fails (the Edit account window's error). */
   accountSaveFails: boolean;
+  /** Every read but the signed-in user's fails: each card shows its error. */
+  readsFail: boolean;
+  /** Every write fails (signing in and out aside): each action's error. */
+  writesFail: boolean;
+  /** The accounts come back malformed, so the pages that show them break. */
+  accountsBroken: boolean;
 };
 
 export function createStore(): Store {
@@ -31,6 +37,9 @@ export function createStore(): Store {
     providerLots: [],
     accountHealth: {},
     accountSaveFails: false,
+    readsFail: false,
+    writesFail: false,
+    accountsBroken: false,
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",

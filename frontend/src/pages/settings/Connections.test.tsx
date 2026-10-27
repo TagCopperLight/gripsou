@@ -66,7 +66,7 @@ describe("SettingsConnections", () => {
       new Response("nope", { status: 500 }),
     ));
     render(withClient(<SettingsConnections />));
-    expect(await screen.findByText("Can't reach the server")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load this")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 

@@ -6,6 +6,9 @@ import { router } from "./routes";
 import type { MockState } from "./states";
 import { createStore } from "./store";
 
+/** Signing in and out keep working when every write fails. */
+const SESSION = new Set(["/auth/login", "/auth/logout"]);
+
 export type OverrideMode = "loading" | "error";
 
 /** The panel's own App settings: kept across state changes, Reset and restarts. */
@@ -83,6 +86,11 @@ export function createControl(
     const mode = overrides.get(path);
     if (mode === "loading") return "hold";
     if (mode === "error") return reply(500, { error: "forced by the review panel" });
+    if (method === "GET" ? store.readsFail && path !== "/auth/me" : store.writesFail && !SESSION.has(path)) {
+      return reply(500, { error: "forced by the review panel" });
+    }
+    // A number where a list belongs: the pages reading it throw.
+    if (store.accountsBroken && method === "GET" && path === "/accounts") return reply(200, 42);
     const out = router.dispatch(store, method, path, query, body);
     if (out.status === 501) unhandled.add(`${method} ${path}`);
     if (method === "PATCH" && path === "/auth/prefs" && out.status === 200) captureApp();

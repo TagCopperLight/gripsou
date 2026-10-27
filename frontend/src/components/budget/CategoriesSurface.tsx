@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import {
   Archive, ArchiveRestore, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2,
 } from "lucide-react";
@@ -181,6 +182,8 @@ export function CategoriesSurface() {
       }),
     );
   }
+
+  useErrorToast(actionError && t("settings.budget.categories.actionError"));
 
   return (
     <div>
@@ -374,12 +377,6 @@ export function CategoriesSurface() {
                   </tbody>
                 </table>
               </div>
-
-              {actionError && (
-                <p role="alert" className="mt-3 text-xs text-red">
-                  {t("settings.budget.categories.actionError")}
-                </p>
-              )}
 
               {archivedCount > 0 && (
                 <div className="mt-3 flex justify-start pl-3">

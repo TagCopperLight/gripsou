@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 import { KeyRound } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -50,7 +51,7 @@ export function ManageTwoFactorModal({
         onClose();
       }
     } catch {
-      setError(t("twoFactor.failed"));
+      showError(t("twoFactor.failed"));
     }
   };
 

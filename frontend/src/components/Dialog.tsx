@@ -12,7 +12,7 @@ type DialogProps = {
   /** A line under the heading. */
   subtitle?: ReactNode;
   onClose: () => void;
-  children: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
   icon?: ReactNode;
   busy?: boolean;

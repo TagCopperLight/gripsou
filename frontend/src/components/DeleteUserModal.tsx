@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useDeleteUser } from "../api/hooks";
 import type { User } from "../api/types";
@@ -16,6 +17,8 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
   const [email, setEmail] = useState("");
   const matches = email.trim().toLowerCase() === user.email.toLowerCase();
 
+  useErrorToast(remove.isError && t("settings.users.removeUser.error"));
+
   return (
     <ConfirmDialog
       title={t("settings.users.removeUser.title", { name: user.name })}
@@ -23,7 +26,6 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
       confirmLabel={remove.isPending ? t("common.loading") : t("settings.users.deleteUser")}
       busy={remove.isPending}
       confirmDisabled={!matches}
-      error={remove.isError ? t("settings.users.removeUser.error") : null}
       onConfirm={() => remove.mutate({ id: user.id, email: email.trim() }, { onSuccess: onDeleted })}
       onClose={onClose}
     >

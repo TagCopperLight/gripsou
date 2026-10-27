@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
@@ -56,6 +57,8 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
     </label>
   );
 
+  useErrorToast(change.isError && minutes === null && !wrongCurrent && t("settings.account.passwordUpdateFailed"));
+
   return (
     <Dialog
       title={t("settings.account.changePasswordTitle")}
@@ -80,13 +83,11 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
         {input(t("settings.account.confirmNewPassword"), confirm, setConfirm, "new-password")}
         {lengthError && <p className="text-sm text-red">{t("auth.passwordLength")}</p>}
         {mismatch && <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>}
-        {change.isError && (
+        {change.isError && (minutes !== null || wrongCurrent) && (
           <p className="text-sm text-red">
             {minutes !== null
               ? t("auth.tooManyAttempts", { count: minutes })
-              : wrongCurrent
-                ? t("settings.account.currentPasswordIncorrect")
-                : t("settings.account.passwordUpdateFailed")}
+              : t("settings.account.currentPasswordIncorrect")}
           </p>
         )}
         <button type="submit" hidden />

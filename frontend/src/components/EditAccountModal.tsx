@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
@@ -44,6 +45,8 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       { onSuccess: onClose },
     );
   };
+
+  useErrorToast(update.isError && t("account.edit.saveError"));
 
   return (
     <Dialog
@@ -116,11 +119,6 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
           />
         </Field>
 
-        {update.isError && (
-          <p role="alert" className="text-red text-sm">
-            {t("account.edit.saveError")}
-          </p>
-        )}
       </div>
     </Dialog>
   );
