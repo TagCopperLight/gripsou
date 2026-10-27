@@ -82,7 +82,9 @@ export function ConnectionRow({
             setOpen((o) => !o);
           }
         }}
-        className="group w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        // The hover is a box drawn behind the header; open, it stops
+        // halfway between the logo and the top of the accounts' vertical bar.
+        className={`group relative isolate w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer before:absolute before:inset-x-0 before:top-0 before:-z-10 before:transition-colors before:duration-140 hover:before:bg-surface-3 ${open ? "before:bottom-2" : "before:bottom-0"}`}
       >
         <span className="relative shrink-0">
           <HoldingBadge
