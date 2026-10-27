@@ -162,12 +162,12 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-3.5">
-            {/* A table without a header: the account on the left, the type
-                and bank date in aligned columns close to the amount. The type
-                and amount columns have fixed widths (the type's fits the
-                longest label, "Épargne retraite") so the columns also line up
-                from one bank to the next. */}
-            <ul className="grid grid-cols-[minmax(0,1fr)_7rem_auto_8.5rem] divide-y divide-surface-3">
+            {/* A table without a header: the account on the left; the type
+                (right-aligned, so it hugs the date), the bank date and the
+                amount packed together on the right. The type column fits the
+                longest label ("Épargne retraite") and the amount column has a
+                minimum width, so the columns line up from one bank to the next. */}
+            <ul className="grid grid-cols-[minmax(0,1fr)_7rem_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
                   key={a.id}
@@ -180,10 +180,10 @@ export function ConnectionRow({
                     />
                     <span className="text-sm text-fg-dim truncate">{a.name}</span>
                   </div>
-                  <span className="justify-self-start text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
+                  <span className="justify-self-end text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
-                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-4 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
+                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                     {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
                   </span>
                   <span className="text-right text-sm text-fg font-mono">
