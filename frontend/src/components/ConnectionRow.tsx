@@ -203,14 +203,17 @@ export function ConnectionRow({
           {problems.length > 0 && (
             <div className={`flex flex-col gap-2.5 ${conn.accounts.length > 0 ? "mt-3" : ""}`}>
               {problems.map((p, index) => (
-                <div key={index} className="flex gap-2.5 text-[13px] leading-relaxed text-fg-dim">
+                <div key={index} className="flex items-center gap-2.5 text-[13px] leading-relaxed text-fg-dim">
                   {p.severity === "error"
-                    ? <CircleAlert className="mt-[3px] size-3.5 shrink-0 text-red" />
-                    : <TriangleAlert className="mt-[3px] size-3.5 shrink-0 text-amber" />}
-                  <div className="min-w-0">
-                    <p>
-                      {p.accounts.length > 0 && <span className="font-medium text-fg">{p.accounts.join(", ")}: </span>}
-                      {p.text}
+                    ? <CircleAlert className="size-3.5 shrink-0 text-red" />
+                    : <TriangleAlert className="size-3.5 shrink-0 text-amber" />}
+                  <div className="min-w-0 flex-1">
+                    {/* Always one line: a long account name is cut, never the message. */}
+                    <p className="flex min-w-0 whitespace-nowrap">
+                      {p.accounts.length > 0 && (
+                        <span className="min-w-0 truncate font-medium text-fg">{p.accounts.join(", ")}:&nbsp;</span>
+                      )}
+                      <span className="shrink-0">{p.text}</span>
                     </p>
                     {p.detail && <p className={`text-fg-faint ${p.technical ? "font-mono text-[11px] break-words" : "text-xs"}`}>{p.detail}</p>}
                   </div>

@@ -71,7 +71,7 @@ it("keeps the problem's message for the open row, under the accounts", () => {
   expect(screen.getByTestId("connection-warning-dot")).toBeInTheDocument();
   expand();
   // Named after the account it concerns, the retry date under it.
-  expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A: 403/);
+  expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A:\s403/);
   expect(screen.getByText(/scheduled a retry/)).toBeInTheDocument();
   const date = screen.getAllByTitle("Last bank update")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
