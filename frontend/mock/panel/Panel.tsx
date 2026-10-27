@@ -173,7 +173,10 @@ export function Panel() {
             ))}
             {elsewhere.length > 0 && (
               <div style={{ ...s.muted, marginTop: 4 }}>
-                Also on: {elsewhere.map((st) => st.label).join(", ")}
+                Also on, from other pieces: {elsewhere.map((st) => st.label).join(", ")}{" "}
+                <Btn onClick={() => void Promise.all(elsewhere.map((st) => control("/state", { id: st.id, on: false }))).then(reload)}>
+                  turn off
+                </Btn>
               </div>
             )}
           </Section>
