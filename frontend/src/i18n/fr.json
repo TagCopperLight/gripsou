@@ -38,7 +38,7 @@
     "syncAll": "Tout synchroniser",
     "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
-    "empty": "Aucune connexion pour le moment."
+    "empty": "Aucune banque connectée pour l’instant."
   },
   "holdingKind": {
     "cash": "Liquidités",
@@ -456,14 +456,13 @@
       "connectionsCount_other": "{{count}} connexions",
       "accountsCount_one": "{{count}} compte",
       "accountsCount_other": "{{count}} comptes",
-      "connectionConnected": "Connectée",
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
       "deleteConnectionTitle": "Supprimer la connexion ?",
       "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
       "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
       "status": {
-        "syncing": "Synchronisation…",
+        "syncing": "Synchronisation en cours…",
         "awaiting": "En attente de la banque…",
         "error": "Échec de la synchronisation",
         "pending": "Connexion en cours…"
@@ -473,27 +472,28 @@
       "connect": "Connecter",
       "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
       "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
+      "neverSynced": "Jamais synchronisée",
       "synced": "Synchronisée {{date}}",
       "health": {
         "partial": "Mise à jour partielle",
-        "stale": "Données non actualisées",
-        "attention": "À vérifier",
-        "bankUpdated": "Dernière mise à jour bancaire",
+        "stale": "Données pas à jour",
+        "attention": "Action requise",
+        "bankUpdated": "Dernière mise à jour par la banque",
         "providerError": "Powens signale un problème ({{state}}).",
-        "staleMessage": "Les données bancaires n’ont pas été mises à jour depuis le {{date}}. Powens ne signale aucune erreur.",
-        "unknownMessage": "Impossible de vérifier la date de mise à jour des données bancaires. Relancez la synchronisation.",
-        "retry": "Powens a prévu une nouvelle tentative le {{date}}.",
+        "staleMessage": "Aucune nouvelle donnée de la banque depuis le {{date}}.",
+        "unknownMessage": "Impossible de savoir quand la banque a mis à jour ces données. Relancez une synchronisation.",
+        "retry": "Nouvel essai automatique le {{date}}.",
         "states": {
-          "bug": "Le fournisseur a rencontré un problème de synchronisation.",
+          "bug": "Powens a rencontré un problème avec cette banque.",
           "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
-          "SCARequired": "La banque demande une authentification. Cliquez sur Gérer pour continuer.",
+          "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer pour continuer.",
           "webauthRequired": "La banque demande une validation. Cliquez sur Gérer pour continuer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
         }
       },
       "manage": "Gérer",
-      "manageBlocked": "Autorisez les fenêtres contextuelles pour gérer la connexion dans Powens.",
-      "manageFailed": "Impossible d’ouvrir Powens. Veuillez réessayer."
+      "manageBlocked": "Votre navigateur a bloqué la fenêtre de Powens : autorisez les pop-ups pour ce site.",
+      "manageFailed": "Impossible d’ouvrir Powens. Réessayez."
     },
     "budget": {
       "title": "Budget",

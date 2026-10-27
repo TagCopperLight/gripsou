@@ -38,7 +38,7 @@
     "syncAll": "Sync all",
     "sync": "Sync",
     "neverSynced": "Never synced",
-    "empty": "No connections yet."
+    "empty": "No bank connected yet."
   },
   "holdingKind": {
     "cash": "Cash",
@@ -456,7 +456,6 @@
       "connectionsCount_other": "{{count}} connections",
       "accountsCount_one": "{{count}} account",
       "accountsCount_other": "{{count}} accounts",
-      "connectionConnected": "Connected",
       "syncConnection": "Sync now",
       "deleteConnection": "Delete connection",
       "deleteConnectionTitle": "Delete connection?",
@@ -473,26 +472,27 @@
       "connect": "Connect",
       "connectError": "Could not start the connection. Please try again.",
       "syncFailedMessage": "The last sync failed. Try again in a few minutes.",
+      "neverSynced": "Never synced",
       "synced": "Synced {{date}}",
       "health": {
         "partial": "Partial update",
         "stale": "Outdated data",
         "attention": "Needs attention",
-        "bankUpdated": "Last bank update",
+        "bankUpdated": "Last update from the bank",
         "providerError": "Powens reports an issue ({{state}}).",
-        "staleMessage": "Bank data has not updated since {{date}}. Powens reports no error.",
-        "unknownMessage": "Unable to verify the bank update status. Try syncing again.",
-        "retry": "Powens has scheduled a retry for {{date}}.",
+        "staleMessage": "No new data from the bank since {{date}}.",
+        "unknownMessage": "Can’t tell when the bank last updated this data. Try syncing again.",
+        "retry": "Automatic retry on {{date}}.",
         "states": {
-          "bug": "The provider encountered a synchronization issue.",
+          "bug": "Powens ran into a problem with this bank.",
           "wrongpass": "The bank rejected your credentials. Select Manage to sign in again.",
-          "SCARequired": "The bank requires authentication. Select Manage to continue.",
+          "SCARequired": "The bank asks you to confirm your identity. Select Manage to continue.",
           "webauthRequired": "The bank requires approval. Select Manage to continue.",
           "decoupled": "Approval is pending in your bank app."
         }
       },
       "manage": "Manage",
-      "manageBlocked": "Allow pop-ups to open Powens connection management.",
+      "manageBlocked": "Your browser blocked the Powens window: allow pop-ups for this site.",
       "manageFailed": "Unable to open Powens. Please try again."
     },
     "budget": {

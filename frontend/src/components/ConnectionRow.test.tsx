@@ -83,8 +83,8 @@ it("keeps the problem's message for the open row, under the accounts", () => {
   expand();
   // Named after the account it concerns, the retry date under it.
   expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A:\s403/);
-  expect(screen.getByText(/scheduled a retry/)).toBeInTheDocument();
-  const date = screen.getAllByTitle("Last bank update")[0];
+  expect(screen.getByText(/Automatic retry on/)).toBeInTheDocument();
+  const date = screen.getAllByTitle("Last update from the bank")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
 });
 
@@ -117,7 +117,7 @@ it("handles blocked tabs and failed Manage requests", async () => {
   vi.spyOn(window,"open").mockReturnValue(null);
   const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
-  expect(screen.getByRole("alert")).toHaveTextContent("Allow pop-ups");
+  expect(screen.getByRole("alert")).toHaveTextContent("allow pop-ups");
   expect(manageSpy).not.toHaveBeenCalled();
   unmount();
   const close=vi.fn();

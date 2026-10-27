@@ -292,7 +292,7 @@ export function ConnectionRow({
     }
     return (
       <p className={`${line} text-fg-faint`}>
-        {conn.lastSyncAt === null ? formatRelative(null) : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
+        {conn.lastSyncAt === null ? t("settings.connections.neverSynced") : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
       </p>
     );
   }
