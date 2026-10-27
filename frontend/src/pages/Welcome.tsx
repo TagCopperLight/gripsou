@@ -59,6 +59,7 @@ export function Welcome() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(false);
+  useErrorToast(finishError && t("welcome.finishError"));
   // Coming back from the provider with its query string (ConnectionCallback
   // hands it over): finish the connection here, once.
   const [connecting, setConnecting] = useState(search.callback !== undefined);
@@ -277,7 +278,6 @@ export function Welcome() {
             )}
           </div>
         </div>
-        {finishError && <p className="-mt-4 text-sm text-red">{t("welcome.finishError")}</p>}
         <button
           type="button"
           onClick={() => void finish()}

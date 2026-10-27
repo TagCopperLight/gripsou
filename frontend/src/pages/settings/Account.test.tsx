@@ -269,7 +269,7 @@ describe("SettingsAccount password", () => {
     set("New password", "newpass12");
     set("Confirm new password", "newpass12");
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
-    expect(await within(dialog).findByText("Current password is incorrect")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Wrong current password.")).toBeInTheDocument();
     expect(screen.queryByText("Password updated")).not.toBeInTheDocument();
   });
 });

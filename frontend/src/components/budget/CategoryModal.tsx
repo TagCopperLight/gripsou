@@ -90,7 +90,11 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   const locked = Boolean(category?.systemKey);
   const previewColor = safeBudgetColor(color);
 
-  useErrorToast(mutation.isError && budgetErrorKey(mutation.error) !== "duplicate" && t(`settings.budget.categories.${budgetErrorKey(mutation.error)}`));
+  const failure = mutation.isError ? budgetErrorKey(mutation.error) : null;
+  useErrorToast(
+    failure !== null && failure !== "duplicate" && t(`settings.budget.categories.${failure}`),
+    failure === "gone" ? t("common.refreshPage") : undefined,
+  );
 
   return (
     <Dialog

@@ -174,7 +174,7 @@ describe("Welcome", () => {
     );
     const auth = renderWelcome();
     fireEvent.click(await screen.findByRole("button", { name: "Skip setup for now" }));
-    expect(await screen.findByText("Could not finish the setup. Please try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't finish the setup")).toBeInTheDocument();
     expect(auth.updateUser).not.toHaveBeenCalled();
   });
 

@@ -15,7 +15,8 @@
     "loading": "Chargement…",
     "retry": "Réessayer",
     "loadFailed": "Chargement impossible",
-    "loadFailedDetail": "Réessayez dans un instant.",
+    "tryAgain": "Réessayez dans un instant.",
+    "refreshPage": "Actualisez la page.",
     "crashed": "Un problème est survenu sur cette page",
     "crashedDetail": "Recharger la page suffit en général.",
     "reload": "Recharger",
@@ -48,7 +49,7 @@
     "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
     "empty": "Aucune banque connectée pour l’instant.",
-    "startFailed": "Impossible de lancer la synchronisation. Veuillez réessayer."
+    "startFailed": "Impossible de lancer la synchronisation"
   },
   "holdingKind": {
     "cash": "Liquidités",
@@ -84,7 +85,7 @@
       "color": "Couleur",
       "colorLabel": "Couleur {{color}}",
       "customColor": "Couleur personnalisée",
-      "saveError": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
+      "saveError": "Impossible d'enregistrer le compte",
       "save": "Enregistrer",
       "saving": "Enregistrement…"
     }
@@ -183,7 +184,8 @@
         "save": "Enregistrer {{count}} opération",
         "save_other": "Enregistrer {{count}} opérations",
         "saveNone": "Enregistrer",
-        "saveError": "Rien n'a été enregistré. Vérifiez les opérations et réessayez."
+        "saveError": "Impossible d'enregistrer l'historique des achats et des ventes",
+        "saveErrorDetail": "Vérifiez les lignes, puis réessayez."
       }
     },
     "assetModal": {
@@ -241,7 +243,7 @@
     "continue": "Continuer",
     "finish": "Terminer",
     "skipAll": "Passer la configuration pour l'instant",
-    "finishError": "Impossible de terminer la configuration. Veuillez réessayer.",
+    "finishError": "Impossible de terminer la configuration",
     "prefs": {
       "title": "Vos préférences",
       "language": "Langue",
@@ -259,7 +261,7 @@
       "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
       "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
       "tryAgain": "Réessayer",
-      "connectError": "Impossible de lancer la connexion. Veuillez réessayer."
+      "connectError": "Impossible d'ouvrir la connexion à la banque"
     },
     "ai": {
       "title": "Catégoriser vos transactions automatiquement",
@@ -287,7 +289,7 @@
       "useApp": "Utiliser l'application",
       "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
       "expired": "Le délai est dépassé. Reconnectez-vous.",
-      "failed": "Une erreur s'est produite. Réessayez."
+      "failed": "Impossible de vous connecter. Réessayez dans un instant."
     },
     "signIn": "Se connecter",
     "welcomeBack": "Heureux de vous retrouver",
@@ -296,7 +298,8 @@
     "inviteOnly2": "<1>Ouvrez votre lien d'invitation</1> pour créer votre compte.",
     "email": "E-mail",
     "password": "Mot de passe",
-    "invalidCredentials": "E-mail ou mot de passe incorrect",
+    "invalidCredentials": "E-mail ou mot de passe incorrect.",
+    "reauthFailed": "Impossible de vérifier votre mot de passe",
     "tooManyAttempts_one": "Trop de tentatives. Réessayez dans {{count}} minute.",
     "tooManyAttempts_other": "Trop de tentatives. Réessayez dans {{count}} minutes.",
     "logOut": "Se déconnecter",
@@ -308,8 +311,8 @@
     "name": "Nom",
     "confirmPassword": "Confirmer le mot de passe",
     "passwordLength": "Le mot de passe doit contenir entre 8 et 128 caractères.",
-    "passwordsDontMatch": "Les mots de passe ne correspondent pas",
-    "emailExists": "Un compte avec cet e-mail existe déjà",
+    "passwordsDontMatch": "Les mots de passe ne correspondent pas.",
+    "emailExists": "Un compte utilise déjà cet e-mail.",
     "createAccountButton": "Créer le compte",
     "resetPassword": "Réinitialiser votre mot de passe",
     "newPassword": "Nouveau mot de passe",
@@ -352,17 +355,17 @@
       "name": "Nom",
       "email": "E-mail",
       "saveChanges": "Enregistrer",
-      "emailInUse": "Cet e-mail est déjà utilisé",
-      "profileUpdateFailed": "Impossible d'enregistrer les modifications",
+      "emailInUse": "Un autre compte utilise déjà cet e-mail.",
+      "profileUpdateFailed": "Impossible d'enregistrer votre profil",
       "password": "Mot de passe",
       "currentPassword": "Mot de passe actuel",
       "newPassword": "Nouveau mot de passe",
       "confirmNewPassword": "Confirmer le nouveau mot de passe",
       "updatePassword": "Mettre à jour le mot de passe",
-      "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+      "passwordsDoNotMatch": "Les mots de passe ne correspondent pas.",
       "passwordUpdated": "Mot de passe mis à jour",
-      "currentPasswordIncorrect": "Mot de passe actuel incorrect",
-      "passwordUpdateFailed": "Impossible de mettre à jour le mot de passe",
+      "currentPasswordIncorrect": "Mot de passe actuel incorrect.",
+      "passwordUpdateFailed": "Impossible de changer votre mot de passe",
       "sessions": "Sessions actives",
       "thisDevice": "Cet appareil",
       "sessionRemembered": "Connexion mémorisée · 30 jours",
@@ -424,10 +427,10 @@
         "body": "L'utilisateur et toutes ses données seront définitivement supprimés.",
         "warning": "Tous ses comptes, ses positions et son historique seront effacés. Cette action est irréversible.",
         "confirm": "Saisissez {{email}} pour confirmer",
-        "error": "Impossible de supprimer l'utilisateur. Veuillez réessayer."
+        "error": "Impossible de supprimer l'utilisateur"
       },
       "copyLink": "Copier le lien",
-      "linkError": "Impossible de générer le lien. Veuillez réessayer.",
+      "linkError": "Impossible de créer le lien",
       "done": "Terminé"
     },
     "server": {
@@ -458,7 +461,8 @@
       "budgetAiCostNoUsage_other": "{{count}} exécutions sans données de consommation (exclues du coût)",
       "budgetAiCostTotal": "Total",
       "budgetAiCostEmpty": "Aucune catégorisation par IA pour l'instant.",
-      "budgetAiSaveError": "Impossible d'enregistrer cette modification. Veuillez réessayer."
+      "budgetAiSaveError": "Impossible d'enregistrer les réglages de l'IA",
+      "budgetAiPriceSaveError": "Impossible d'enregistrer le prix"
     },
     "connections": {
       "title": "Connexions",
@@ -471,7 +475,7 @@
       "deleteConnection": "Supprimer la connexion",
       "deleteConnectionTitle": "Supprimer la connexion ?",
       "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
-      "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
+      "deleteConnectionError": "Impossible de supprimer la connexion",
       "status": {
         "syncing": "Synchronisation en cours…",
         "awaiting": "En attente de la banque…",
@@ -481,7 +485,7 @@
       "pickProvider": "Choisir un fournisseur de données",
       "noProviders": "Aucun fournisseur de données n'est activé. Demandez à votre administrateur d'en activer un.",
       "connect": "Connecter",
-      "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
+      "connectError": "Impossible d'ouvrir la connexion à la banque",
       "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
       "problemSeparator": " : ",
       "neverSynced": "Jamais synchronisée",
@@ -497,7 +501,7 @@
         "retry": "Nouvel essai automatique le {{date}}.",
         "states": {
           "bug": "Powens a rencontré un problème avec cette banque.",
-          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer.",
+          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
           "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer.",
           "webauthRequired": "La banque demande une validation. Cliquez sur Gérer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
@@ -505,7 +509,7 @@
       },
       "manage": "Gérer",
       "manageBlocked": "Votre navigateur a bloqué la fenêtre de Powens : autorisez les pop-ups pour ce site.",
-      "manageFailed": "Impossible d’ouvrir Powens. Réessayez."
+      "manageFailed": "Impossible d'ouvrir Powens"
     },
     "budget": {
       "title": "Budget",
@@ -532,7 +536,7 @@
         "showArchived": "Afficher les catégories archivées ({{count}})",
         "hideArchived": "Masquer les catégories archivées ({{count}})",
         "empty": "Aucune catégorie pour l'instant.",
-        "actionError": "Impossible d'enregistrer cette modification. Veuillez réessayer.",
+        "actionError": "Impossible d'enregistrer la modification",
         "newTitle": "Nouvelle catégorie",
         "editTitle": "Modifier la catégorie",
         "fieldName": "Nom",
@@ -546,12 +550,12 @@
         "colorLabel": "Couleur {{color}}",
         "customColor": "Couleur personnalisée",
         "duplicate": "Une catégorie porte déjà ce nom.",
-        "gone": "Cette catégorie n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette modification. Veuillez réessayer.",
+        "gone": "Cette catégorie n'existe plus",
+        "saveError": "Impossible d'enregistrer la catégorie",
         "deleteTitle": "Supprimer la catégorie",
         "deleteBody": "La catégorie {{name}} sera supprimée. Ses {{count}} transactions seront conservées, sans catégorie.",
         "deleteConfirm": "Supprimer la catégorie",
-        "deleteError": "Impossible de supprimer cette catégorie. Veuillez réessayer."
+        "deleteError": "Impossible de supprimer la catégorie"
       },
       "tags": {
         "title": "Étiquettes",
@@ -568,12 +572,12 @@
         "clearColor": "Aucune couleur",
         "customColor": "Couleur personnalisée",
         "duplicate": "Une étiquette porte déjà ce nom.",
-        "gone": "Cette étiquette n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette étiquette. Veuillez réessayer.",
+        "gone": "Cette étiquette n'existe plus",
+        "saveError": "Impossible d'enregistrer l'étiquette",
         "deleteTitle": "Supprimer l'étiquette",
         "deleteBody": "L'étiquette {{name}} sera retirée de {{count}} transactions. Les transactions elles-mêmes sont conservées.",
         "deleteConfirm": "Supprimer l'étiquette",
-        "deleteError": "Impossible de supprimer cette étiquette. Veuillez réessayer."
+        "deleteError": "Impossible de supprimer l'étiquette"
       },
       "listPrefs": {
         "title": "Affichage de la liste",
@@ -773,9 +777,9 @@
       "bulkUpdated_one": "{{count}} transaction mise à jour.",
       "bulkUpdated_other": "{{count}} transactions mises à jour.",
       "errors": {
-        "duplicate": "Impossible d'enregistrer cette modification.",
-        "gone": "Cette transaction n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette modification. Veuillez réessayer."
+        "duplicate": "Impossible d'enregistrer la modification",
+        "gone": "Cette transaction n'existe plus",
+        "saveError": "Impossible d'enregistrer la modification"
       }
     },
     "overview": {
@@ -935,7 +939,9 @@
     "wrongPassword": "Mot de passe incorrect.",
     "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
     "expired": "La configuration a pris trop de temps et a expiré. Saisissez votre mot de passe pour recommencer.",
-    "failed": "Une erreur s'est produite. Réessayez.",
+    "setupFailed": "Impossible de configurer la double authentification",
+    "newCodesFailed": "Impossible de créer de nouveaux codes de récupération",
+    "removeFailed": "Impossible de désactiver la double authentification",
     "manageTitle": "Double authentification",
     "backupCodes": "Codes de secours",
     "codesLeft_one": "{{count}} sur 10 restant",
@@ -962,6 +968,7 @@
     "delete": "Supprimer",
     "nameLabel": "Nom de la clé d'accès",
     "deleteTitle": "Supprimer {{name}} ?",
-    "failed": "Une erreur s'est produite. Réessayez."
+    "renameFailed": "Impossible de renommer la clé d'accès",
+    "deleteFailed": "Impossible de supprimer la clé d'accès"
   }
 }

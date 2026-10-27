@@ -125,7 +125,7 @@ it("handles blocked tabs and failed Manage requests", async () => {
   manageSpy.mockRejectedValue(new Error("provider failed"));
   render(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
-  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Unable to open Powens"));
+  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Couldn't open Powens"));
   expect(close).toHaveBeenCalled();
   expect(syncSpy).not.toHaveBeenCalled();
 });

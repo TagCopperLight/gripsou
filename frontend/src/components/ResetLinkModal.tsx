@@ -14,9 +14,7 @@ import type { User } from "../api/types";
  *  link clears the user's second factors), then the link to share. */
 export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => void }) {
   const { t } = useTranslation();
-  const { password, setPassword, error, checking, check } = useReauthStep(
-    t("settings.users.linkError"),
-  );
+  const { password, setPassword, error, checking, check } = useReauthStep();
   const [token, setToken] = useState<string | null>(null);
   const create = useCreateResetLink();
   const busy = checking || create.isPending;

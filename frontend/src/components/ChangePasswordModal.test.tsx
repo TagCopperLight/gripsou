@@ -68,7 +68,7 @@ describe("ChangePasswordModal", () => {
     const { onClose, onChanged } = renderModal();
     fill("old", "newpass12");
     fireEvent.click(update());
-    expect(await screen.findByText("Current password is incorrect")).toBeInTheDocument();
+    expect(await screen.findByText("Wrong current password.")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(onChanged).not.toHaveBeenCalled();
   });
@@ -78,8 +78,8 @@ describe("ChangePasswordModal", () => {
     renderModal();
     fill("old", "newpass12");
     fireEvent.click(update());
-    expect(await screen.findByText("Couldn't update password")).toBeInTheDocument();
-    expect(screen.queryByText("Current password is incorrect")).not.toBeInTheDocument();
+    expect(await screen.findByText("Couldn't change your password")).toBeInTheDocument();
+    expect(screen.queryByText("Wrong current password.")).not.toBeInTheDocument();
   });
 
   it("refuses a too-short password on click without calling the server", () => {
@@ -113,10 +113,10 @@ describe("ChangePasswordModal", () => {
     stubFetch(204);
     renderModal();
     fill("old-password", "newpass12", "newpass13");
-    expect(screen.getByText("Passwords don't match")).toBeInTheDocument();
+    expect(screen.getByText("The passwords don't match.")).toBeInTheDocument();
     expect(update()).toBeDisabled();
     set("Confirm new password", "newpass12");
-    expect(screen.queryByText("Passwords don't match")).not.toBeInTheDocument();
+    expect(screen.queryByText("The passwords don't match.")).not.toBeInTheDocument();
   });
 
   it("closes on Cancel without calling the server", () => {

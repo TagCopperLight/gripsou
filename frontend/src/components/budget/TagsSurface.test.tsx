@@ -89,7 +89,7 @@ describe("TagsSurface", () => {
     fireEvent.change(screen.getByLabelText("Tag name"), { target: { value: "Trip" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This tag no longer exists. Refresh the page.",
+      "This tag no longer existsRefresh the page.",
     );
   });
 
@@ -133,7 +133,7 @@ describe("TagsSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
     fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: "Vacation" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("That tag could not be saved.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the tag");
     expect(screen.getByDisplayValue("Vacation")).toBeVisible();
   });
 
@@ -149,7 +149,7 @@ describe("TagsSurface", () => {
     fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: "Vacation" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This tag no longer exists. Refresh the page.",
+      "This tag no longer existsRefresh the page.",
     );
   });
 
@@ -243,7 +243,7 @@ describe("TagsSurface", () => {
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith("/api/budget/tags/t1", expect.objectContaining({ method: "DELETE" })),
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent("That tag could not be deleted.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the tag");
     expect(screen.getByRole("dialog")).toBeVisible();
   });
 

@@ -146,7 +146,7 @@ describe("PasskeysModal rename", () => {
     await user.click(screen.getByRole("button", { name: "Rename" }));
     await user.clear(screen.getByRole("textbox"));
     await user.type(screen.getByRole("textbox"), "Other{Enter}");
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't rename the passkey")).toBeInTheDocument();
     expect(screen.getByText("MacBook")).toBeInTheDocument();
   });
 });
@@ -198,7 +198,7 @@ describe("PasskeysModal delete", () => {
     await askDelete(user, 0);
     const dialog = screen.getByRole("dialog", { name: "Delete MacBook?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't delete the passkey")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Delete MacBook?" })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });

@@ -64,7 +64,7 @@ describe("Login", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
-    expect(screen.queryByText("Invalid email or password")).toBeNull();
+    expect(screen.queryByText("Wrong email or password.")).toBeNull();
   });
 
   it("shows an error on bad credentials", async () => {
@@ -76,7 +76,7 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findByText("Invalid email or password")).toBeInTheDocument();
+    expect(await screen.findByText("Wrong email or password.")).toBeInTheDocument();
   });
 
   it("says how long to wait when throttled", async () => {
@@ -88,7 +88,7 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByText("Too many attempts. Try again in 4 minutes.")).toBeInTheDocument();
-    expect(screen.queryByText("Invalid email or password")).toBeNull();
+    expect(screen.queryByText("Wrong email or password.")).toBeNull();
   });
 
   it("passes remember=true when checked", async () => {
@@ -169,7 +169,7 @@ describe("Login", () => {
       const verifyLogin = vi.fn<AuthValue["verifyLogin"]>().mockRejectedValue(new ApiError("boom", 500));
       await toCodeStep(verifyLogin);
       typeCode("123456");
-      expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
+      expect(await screen.findByText("Couldn't sign you in. Try again in a moment.")).toBeInTheDocument();
       expect(screen.queryByText("That code didn't work. Try again.")).toBeNull();
     });
 
@@ -338,7 +338,7 @@ describe("Login", () => {
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         await waitFor(() => expect(screen.getByLabelText("Email")).toBeInTheDocument());
         expect(screen.queryByText(refused)).toBeNull();
-        expect(screen.queryByText("Something went wrong. Try again.")).toBeNull();
+        expect(screen.queryByText("Couldn't sign you in. Try again in a moment.")).toBeNull();
       });
 
       it("Use your password instead returns to the form", async () => {

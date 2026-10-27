@@ -299,7 +299,7 @@ describe("CategoriesSurface", () => {
     await screen.findByText("Groceries");
     fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "That change could not be saved. Please try again.",
+      "Couldn't save the change",
     );
     expect(screen.getByText("Groceries")).toBeVisible();
   });

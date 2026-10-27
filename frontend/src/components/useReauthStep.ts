@@ -8,8 +8,8 @@ import { throttleMinutes } from "../lib/mfa";
 
 /** The password check before a sensitive change. `check()` trades the password
  *  for a reauth token, or shows why it can't (throttled, wrong password, or
- *  `failed`, as an error in the corner) and returns null. The error line is the modal's to reuse. */
-export function useReauthStep(failed: string) {
+ *  a failure of the check itself, in the corner) and returns null. The error line is the modal's to reuse. */
+export function useReauthStep() {
   const { t } = useTranslation();
   const reauth = useReauth();
   const [password, setPassword] = useState("");
@@ -25,7 +25,7 @@ export function useReauthStep(failed: string) {
       // Anything else failed on the server's side.
       if (minutes !== null) setError(t("auth.tooManyAttempts", { count: minutes }));
       else if (err instanceof ApiError && err.status === 400) setError(t("twoFactor.wrongPassword"));
-      else showError(failed);
+      else showError(t("auth.reauthFailed"));
       return null;
     }
   };

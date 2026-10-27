@@ -26,7 +26,7 @@ export function AiCostSurface() {
   const save = useSetBudgetAiPrices();
   // Uncommitted edits, keyed "<model>\u0000<side>"; absent = show the server value.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  useErrorToast(save.isError && t("settings.server.budgetAiSaveError"));
+  useErrorToast(save.isError && t("settings.server.budgetAiPriceSaveError"));
   if (!usage) {
     return (
       <Surface className="p-6">

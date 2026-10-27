@@ -395,7 +395,7 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
     expect(screen.getByTestId("error-toast")).toHaveTextContent(
-      "That change could not be saved. Please try again.",
+      "Couldn't save the change",
     );
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("error-toast")).toBeNull();

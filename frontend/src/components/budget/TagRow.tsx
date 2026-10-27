@@ -83,7 +83,11 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
     save({ name: trimmed, color: tag.color }, { onSuccess: () => setEditing(false) });
   };
 
-  useErrorToast(update.isError && budgetErrorKey(update.error) !== "duplicate" && t(`settings.budget.tags.${budgetErrorKey(update.error)}`));
+  const failure = update.isError ? budgetErrorKey(update.error) : null;
+  useErrorToast(
+    failure !== null && failure !== "duplicate" && t(`settings.budget.tags.${failure}`),
+    failure === "gone" ? t("common.refreshPage") : undefined,
+  );
 
   return (
     <div className="flex flex-col gap-1.5">

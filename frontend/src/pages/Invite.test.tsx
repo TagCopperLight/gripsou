@@ -99,6 +99,6 @@ describe("Invite", () => {
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
 
-    expect(await screen.findByText("An account with this email already exists")).toBeInTheDocument();
+    expect(await screen.findByText("An account already uses this email.")).toBeInTheDocument();
   });
 });

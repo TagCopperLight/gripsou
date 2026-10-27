@@ -29,7 +29,7 @@ export function CardState({ variant, onRetry, className = "" }: CardStateProps) 
       ) : (
         <ErrorState
           title={t("common.loadFailed")}
-          detail={t("common.loadFailedDetail")}
+          detail={t("common.tryAgain")}
           action={onRetry && { label: t("common.retry"), onClick: onRetry }}
         />
       )}

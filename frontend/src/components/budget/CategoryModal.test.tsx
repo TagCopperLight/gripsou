@@ -209,7 +209,7 @@ describe("CategoryModal — edit", () => {
     renderModal({ category: GROCERIES });
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("This category no longer exists.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("This category no longer exists");
   });
 
   it("cannot be dismissed while the write is in flight", async () => {
@@ -253,7 +253,7 @@ describe("DeleteCategoryModal", () => {
     const onClose = vi.fn();
     render(<DeleteCategoryModal category={GROCERIES} onClose={onClose} />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("That category could not be deleted.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the category");
     expect(onClose).not.toHaveBeenCalled();
   });
 });

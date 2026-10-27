@@ -30,7 +30,11 @@ export function TagsSurface() {
     );
   };
 
-  useErrorToast(create.isError && budgetErrorKey(create.error) !== "duplicate" && t(`settings.budget.tags.${budgetErrorKey(create.error)}`));
+  const failure = create.isError ? budgetErrorKey(create.error) : null;
+  useErrorToast(
+    failure !== null && failure !== "duplicate" && t(`settings.budget.tags.${failure}`),
+    failure === "gone" ? t("common.refreshPage") : undefined,
+  );
 
   return (
     <div>

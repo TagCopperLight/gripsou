@@ -25,7 +25,7 @@ export function ManageTwoFactorModal({
   const { t } = useTranslation();
   const { data: status } = useMfaStatus();
   const [view, setView] = useState<View>(start);
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
+  const { password, setPassword, error, setError, checking, check } = useReauthStep();
   const [codes, setCodes] = useState<string[]>([]);
 
   const regenerate = useRegenerateRecovery();
@@ -51,7 +51,7 @@ export function ManageTwoFactorModal({
         onClose();
       }
     } catch {
-      showError(t("twoFactor.failed"));
+      showError(t(view === "newCodes" ? "twoFactor.newCodesFailed" : "twoFactor.removeFailed"));
     }
   };
 

@@ -151,7 +151,7 @@ describe("SettingsConnections", () => {
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not start the connection");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't open the bank connection");
     expect(goTo).not.toHaveBeenCalled();
     fail = false;
     fireEvent.click(add);

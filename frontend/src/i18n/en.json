@@ -15,7 +15,8 @@
     "loading": "Loading…",
     "retry": "Retry",
     "loadFailed": "Couldn't load this",
-    "loadFailedDetail": "Try again in a moment.",
+    "tryAgain": "Try again in a moment.",
+    "refreshPage": "Refresh the page.",
     "crashed": "Something broke on this page",
     "crashedDetail": "Reloading the page usually fixes it.",
     "reload": "Reload",
@@ -48,7 +49,7 @@
     "sync": "Sync",
     "neverSynced": "Never synced",
     "empty": "No bank connected yet.",
-    "startFailed": "Couldn't start the sync. Please try again."
+    "startFailed": "Couldn't start the sync"
   },
   "holdingKind": {
     "cash": "Cash",
@@ -84,7 +85,7 @@
       "color": "Colour",
       "colorLabel": "Colour {{color}}",
       "customColor": "Custom colour",
-      "saveError": "Could not save changes. Please try again.",
+      "saveError": "Couldn't save the account",
       "save": "Save changes",
       "saving": "Saving…"
     }
@@ -183,7 +184,8 @@
         "save": "Save {{count}} entry",
         "save_other": "Save {{count}} entries",
         "saveNone": "Save",
-        "saveError": "Nothing was saved. Check the entries and try again."
+        "saveError": "Couldn't save the buy/sell history",
+        "saveErrorDetail": "Check the rows, then try again."
       }
     },
     "assetModal": {
@@ -241,7 +243,7 @@
     "continue": "Continue",
     "finish": "Finish",
     "skipAll": "Skip setup for now",
-    "finishError": "Could not finish the setup. Please try again.",
+    "finishError": "Couldn't finish the setup",
     "prefs": {
       "title": "Your preferences",
       "language": "Language",
@@ -259,7 +261,7 @@
       "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
       "failed": "Your bank couldn't be connected. Nothing was saved.",
       "tryAgain": "Try again",
-      "connectError": "Could not start the connection. Please try again."
+      "connectError": "Couldn't open the bank connection"
     },
     "ai": {
       "title": "Categorise your transactions automatically",
@@ -287,7 +289,7 @@
       "useApp": "Use the app instead",
       "wrongCode": "That code didn't work. Try again.",
       "expired": "That took too long. Sign in again.",
-      "failed": "Something went wrong. Try again."
+      "failed": "Couldn't sign you in. Try again in a moment."
     },
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
@@ -296,7 +298,8 @@
     "inviteOnly2": "<1>Open your invite link</1> to set up your account.",
     "email": "Email",
     "password": "Password",
-    "invalidCredentials": "Invalid email or password",
+    "invalidCredentials": "Wrong email or password.",
+    "reauthFailed": "Couldn't check your password",
     "tooManyAttempts_one": "Too many attempts. Try again in {{count}} minute.",
     "tooManyAttempts_other": "Too many attempts. Try again in {{count}} minutes.",
     "logOut": "Log out",
@@ -308,8 +311,8 @@
     "name": "Name",
     "confirmPassword": "Confirm password",
     "passwordLength": "Your password must be 8 to 128 characters long.",
-    "passwordsDontMatch": "Passwords don't match",
-    "emailExists": "An account with this email already exists",
+    "passwordsDontMatch": "The passwords don't match.",
+    "emailExists": "An account already uses this email.",
     "createAccountButton": "Create account",
     "resetPassword": "Reset your password",
     "newPassword": "New password",
@@ -352,17 +355,17 @@
       "name": "Name",
       "email": "Email",
       "saveChanges": "Save changes",
-      "emailInUse": "That email is already in use",
-      "profileUpdateFailed": "Couldn't save changes",
+      "emailInUse": "Another account already uses this email.",
+      "profileUpdateFailed": "Couldn't save your profile",
       "password": "Password",
       "currentPassword": "Current password",
       "newPassword": "New password",
       "confirmNewPassword": "Confirm new password",
       "updatePassword": "Update password",
-      "passwordsDoNotMatch": "Passwords don't match",
+      "passwordsDoNotMatch": "The passwords don't match.",
       "passwordUpdated": "Password updated",
-      "currentPasswordIncorrect": "Current password is incorrect",
-      "passwordUpdateFailed": "Couldn't update password",
+      "currentPasswordIncorrect": "Wrong current password.",
+      "passwordUpdateFailed": "Couldn't change your password",
       "sessions": "Active sessions",
       "thisDevice": "This device",
       "sessionRemembered": "Remembered · 30 days",
@@ -424,10 +427,10 @@
         "body": "This permanently deletes the user and all their data.",
         "warning": "All accounts, holdings and history belonging to this user will be erased. This cannot be undone.",
         "confirm": "Type {{email}} to confirm",
-        "error": "Could not delete the user. Please try again."
+        "error": "Couldn't delete the user"
       },
       "copyLink": "Copy link",
-      "linkError": "Could not generate the link. Please try again.",
+      "linkError": "Couldn't create the link",
       "done": "Done"
     },
     "server": {
@@ -458,7 +461,8 @@
       "budgetAiCostNoUsage_other": "{{count}} runs without usage data (not counted)",
       "budgetAiCostTotal": "Total",
       "budgetAiCostEmpty": "No AI categorisation runs yet.",
-      "budgetAiSaveError": "That change could not be saved. Please try again."
+      "budgetAiSaveError": "Couldn't save the AI settings",
+      "budgetAiPriceSaveError": "Couldn't save the price"
     },
     "connections": {
       "title": "Connections",
@@ -471,7 +475,7 @@
       "deleteConnection": "Delete connection",
       "deleteConnectionTitle": "Delete connection?",
       "deleteConnectionBody": "This permanently removes the connection and all synced accounts, holdings, transactions, and snapshots. This cannot be undone.",
-      "deleteConnectionError": "Could not delete the connection. Please try again.",
+      "deleteConnectionError": "Couldn't delete the connection",
       "status": {
         "syncing": "Syncing…",
         "awaiting": "Waiting for bank sync…",
@@ -481,7 +485,7 @@
       "pickProvider": "Choose a provider",
       "noProviders": "No data providers are enabled. Ask your administrator to enable one.",
       "connect": "Connect",
-      "connectError": "Could not start the connection. Please try again.",
+      "connectError": "Couldn't open the bank connection",
       "syncFailedMessage": "The last sync failed. Try again in a few minutes.",
       "problemSeparator": ": ",
       "neverSynced": "Never synced",
@@ -505,7 +509,7 @@
       },
       "manage": "Manage",
       "manageBlocked": "Your browser blocked the Powens window: allow pop-ups for this site.",
-      "manageFailed": "Unable to open Powens. Please try again."
+      "manageFailed": "Couldn't open Powens"
     },
     "budget": {
       "title": "Budget",
@@ -532,7 +536,7 @@
         "showArchived": "Show archived ({{count}})",
         "hideArchived": "Hide archived ({{count}})",
         "empty": "No categories yet.",
-        "actionError": "That change could not be saved. Please try again.",
+        "actionError": "Couldn't save the change",
         "newTitle": "New category",
         "editTitle": "Edit category",
         "fieldName": "Name",
@@ -546,12 +550,12 @@
         "colorLabel": "Colour {{color}}",
         "customColor": "Custom colour",
         "duplicate": "A category with this name already exists.",
-        "gone": "This category no longer exists. Refresh the page.",
-        "saveError": "That change could not be saved. Please try again.",
+        "gone": "This category no longer exists",
+        "saveError": "Couldn't save the category",
         "deleteTitle": "Delete category",
         "deleteBody": "{{name}} will be removed. Its {{count}} transactions are kept and become uncategorised.",
         "deleteConfirm": "Delete category",
-        "deleteError": "That category could not be deleted. Please try again."
+        "deleteError": "Couldn't delete the category"
       },
       "tags": {
         "title": "Tags",
@@ -568,12 +572,12 @@
         "clearColor": "No colour",
         "customColor": "Custom colour",
         "duplicate": "A tag with this name already exists.",
-        "gone": "This tag no longer exists. Refresh the page.",
-        "saveError": "That tag could not be saved. Please try again.",
+        "gone": "This tag no longer exists",
+        "saveError": "Couldn't save the tag",
         "deleteTitle": "Delete tag",
         "deleteBody": "{{name}} will be removed from {{count}} transactions. The transactions themselves are kept.",
         "deleteConfirm": "Delete tag",
-        "deleteError": "That tag could not be deleted. Please try again."
+        "deleteError": "Couldn't delete the tag"
       },
       "listPrefs": {
         "title": "List preferences",
@@ -768,9 +772,9 @@
       "bulkUpdated_one": "{{count}} row updated.",
       "bulkUpdated_other": "{{count}} rows updated.",
       "errors": {
-        "duplicate": "That change could not be saved.",
-        "gone": "This transaction no longer exists. Refresh the page.",
-        "saveError": "That change could not be saved. Please try again."
+        "duplicate": "Couldn't save the change",
+        "gone": "This transaction no longer exists",
+        "saveError": "Couldn't save the change"
       }
     },
     "overview": {
@@ -926,7 +930,9 @@
     "wrongPassword": "Wrong password.",
     "wrongCode": "That code didn't work. Try again.",
     "expired": "This setup took too long and expired. Enter your password to start again.",
-    "failed": "Something went wrong. Try again.",
+    "setupFailed": "Couldn't set up two-factor authentication",
+    "newCodesFailed": "Couldn't create new recovery codes",
+    "removeFailed": "Couldn't turn off two-factor authentication",
     "manageTitle": "Two-factor authentication",
     "backupCodes": "Backup codes",
     "codesLeft_one": "{{count}} of 10 left",
@@ -953,6 +959,7 @@
     "delete": "Delete",
     "nameLabel": "Passkey name",
     "deleteTitle": "Delete {{name}}?",
-    "failed": "Something went wrong. Try again."
+    "renameFailed": "Couldn't rename the passkey",
+    "deleteFailed": "Couldn't delete the passkey"
   }
 }

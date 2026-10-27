@@ -23,7 +23,9 @@ export function ErrorToasts() {
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <p className="text-[13px] leading-[1.4] font-medium text-fg">{toast.title}</p>
-            {toast.detail && <p className="text-xs text-fg-dim">{toast.detail}</p>}
+            {toast.detail !== null && (
+              <p className="text-xs text-fg-dim">{toast.detail ?? t("common.tryAgain")}</p>
+            )}
           </div>
           <button
             type="button"

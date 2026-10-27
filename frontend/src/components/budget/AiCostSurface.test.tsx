@@ -106,6 +106,6 @@ describe("AiCostSurface", () => {
     const input = await screen.findByLabelText("Input price for alpha:model-1");
     fireEvent.change(input, { target: { value: "0.10" } });
     fireEvent.blur(input);
-    expect(await screen.findByRole("alert")).toHaveTextContent("could not be saved");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the price");
   });
 });

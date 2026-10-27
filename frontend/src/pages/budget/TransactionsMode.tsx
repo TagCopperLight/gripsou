@@ -258,7 +258,10 @@ export function TransactionsMode() {
     [patchRow, startWrite, onWriteError],
   );
 
-  useErrorToast(writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`));
+  useErrorToast(
+    writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`),
+    writeErrorKey === "gone" ? t("common.refreshPage") : undefined,
+  );
 
   return (
     <div className="flex min-h-full flex-col gap-4">

@@ -181,7 +181,10 @@ export function ReviewMode() {
     );
   };
 
-  useErrorToast(writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`));
+  useErrorToast(
+    writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`),
+    writeErrorKey === "gone" ? t("common.refreshPage") : undefined,
+  );
 
   if (list.isSuccess && lines.length === 0) {
     return (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 import { Copy, Check } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -25,7 +26,7 @@ function groups(secret: string) {
 export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("password");
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
+  const { password, setPassword, error, setError, checking, check } = useReauthStep();
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -35,9 +36,13 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const confirm = useTotpConfirm();
   const busy = checking || start.isPending || confirm.isPending;
 
-  const fail = (err: unknown, otherwise: string) => {
+  /** Throttled, or `typed` (what the user typed was wrong), next to the
+   *  field; anything else failed on the server's side. */
+  const fail = (err: unknown, typed: string | null = null) => {
     const minutes = throttleMinutes(err);
-    setError(minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : otherwise);
+    if (minutes !== null) setError(t("auth.tooManyAttempts", { count: minutes }));
+    else if (typed) setError(typed);
+    else showError(t("twoFactor.setupFailed"));
   };
 
   const submitPassword = async () => {
@@ -48,7 +53,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       setSetup(await start.mutateAsync(token));
       setStep("scan");
     } catch (err) {
-      fail(err, t("twoFactor.failed"));
+      fail(err);
     }
   };
 
@@ -70,7 +75,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       }
       // Empty the boxes so the next code can be typed straight away.
       setCode("");
-      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : t("twoFactor.failed"));
+      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : null);
     }
   };
 

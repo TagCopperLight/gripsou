@@ -517,7 +517,7 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[0], "5");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "10");
     await user.click(screen.getByRole("button", { name: /save/i }));
-    await waitFor(() => expect(screen.getByText(/nothing was saved/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Couldn't save the buy/sell history")).toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
   });
 

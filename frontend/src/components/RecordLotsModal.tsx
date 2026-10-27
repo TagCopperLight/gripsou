@@ -309,7 +309,7 @@ export function RecordLotsModal({
   const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
     v != null && currency !== getPrefs().currency ? <Money value={v} signed={signed} /> : null;
 
-  useErrorToast(failed && t("dashboard.holdings.gap.saveError"));
+  useErrorToast(failed && t("dashboard.holdings.gap.saveError"), t("dashboard.holdings.gap.saveErrorDetail"));
 
   return (
     <Modal

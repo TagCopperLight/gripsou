@@ -35,7 +35,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
     try {
       await rename.mutateAsync({ id: p.id, name });
     } catch {
-      showError(t("passkeys.failed"));
+      showError(t("passkeys.renameFailed"));
     }
   };
 
@@ -49,7 +49,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
       }
       setDeleting(null);
     } catch {
-      showError(t("passkeys.failed"));
+      showError(t("passkeys.deleteFailed"));
     }
   };
 
