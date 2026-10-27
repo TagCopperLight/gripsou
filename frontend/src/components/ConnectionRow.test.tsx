@@ -52,7 +52,18 @@ describe("ConnectionRow", () => {
     expect(onDelete).toHaveBeenCalled();
   });
 
-  it("still opens a panel for a connection with no accounts", () => {
+  it("doesn't open on a computer when there is nothing to show", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const { rerender } = render(<ConnectionRow conn={{ ...conn, accounts: [] }} />);
+    expand();
+    expect(screen.getAllByRole("button", { name: /sync now/i })).toHaveLength(1);
+    rerender(<ConnectionRow conn={{ ...conn, status: "pending" }} />);
+    expand();
+    expect(screen.queryByText("LIVRET A")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("still opens a panel for a connection with no accounts on a phone", () => {
     render(<ConnectionRow conn={{ ...conn, accounts: [] }} onDelete={() => {}} />);
     expand();
     expect(

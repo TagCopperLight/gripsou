@@ -81,6 +81,14 @@ export function ConnectionRow({
   }
 
   const isAwaiting = conn.status === "awaiting";
+  // Nothing to show once open (still connecting, or no account and no
+  // problem): the row doesn't open on a computer. A phone still opens it, as
+  // its open panel holds the actions the header has no room for.
+  const expandable = conn.status !== "pending" && (conn.accounts.length > 0 || problems.length > 0);
+  const toggle = () => {
+    if (!expandable && window.matchMedia?.("(min-width: 48rem)").matches) return;
+    setOpen((o) => !o);
+  };
   const isSyncing = conn.status === "syncing" || isAwaiting;
   const isError = conn.status === "error";
   const isPending = conn.status === "pending";
@@ -95,14 +103,15 @@ export function ConnectionRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setOpen((o) => !o)}
+        aria-disabled={!expandable || undefined}
+        onClick={toggle}
         onKeyDown={(e) => {
           if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
-            setOpen((o) => !o);
+            toggle();
           }
         }}
-        className="group w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        className={`group w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140 ${expandable ? "" : "md:cursor-default md:hover:bg-transparent"}`}
       >
         <span className="relative shrink-0">
           <HoldingBadge
@@ -156,7 +165,7 @@ export function ConnectionRow({
           {open ? (
             <ChevronDown className="size-4 text-fg-faint" />
           ) : (
-            <ChevronRight className="size-4 text-fg-faint" />
+            <ChevronRight className={`size-4 text-fg-faint ${expandable ? "" : "md:opacity-30"}`} />
           )}
         </div>
       </div>
