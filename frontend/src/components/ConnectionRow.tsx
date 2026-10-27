@@ -162,16 +162,15 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-3.5">
-            {/* A table without a header: the account on the left; the type
-                (right-aligned, so it hugs the date), the bank date and the
-                amount packed together on the right. The type column fits the
-                longest label ("Épargne retraite") and the amount column has a
-                minimum width, so the columns line up from one bank to the next. */}
-            <ul className="grid grid-cols-[minmax(0,1fr)_7rem_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
+            {/* A table without a header: the account and its type tag on the
+                left; the bank date and the amount packed together on the right.
+                The amount column has a minimum width, so the dates line up from
+                one bank to the next. */}
+            <ul className="grid grid-cols-[minmax(0,1fr)_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
                   key={a.id}
-                  className="col-span-4 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
+                  className="col-span-3 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
                 >
                   <div className="flex items-center gap-2.5 min-w-0 pr-4">
                     <span
@@ -179,11 +178,11 @@ export function ConnectionRow({
                       style={{ background: a.color }}
                     />
                     <span className="text-sm text-fg-dim truncate">{a.name}</span>
+                    <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap shrink-0">
+                      {accountTypeLabel(t, a.typeKey)}
+                    </span>
                   </div>
-                  <span className="justify-self-end text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
-                    {accountTypeLabel(t, a.typeKey)}
-                  </span>
-                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
+                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-2 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                     {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
                   </span>
                   <span className="text-right text-sm text-fg font-mono">
