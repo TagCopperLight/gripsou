@@ -104,14 +104,14 @@ function addDcam(store: Store): string {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Accounts chart";
+export const FOCUS = "Accounts list";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
   {
     id: "distribution-overdraft",
     label: "Checking account overdrawn (negative balance)",
-    pieces: ["Distribution", "Accounts chart"],
+    pieces: ["Distribution", "Accounts chart", "Accounts list"],
     apply(store) {
       const row = store.txns.find((x) => x.accountId === CHECKING && x.source === "cash")!;
       store.txns.unshift({
@@ -132,7 +132,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-empty-account",
     label: "An account at 0 € (emptied savings book)",
-    pieces: ["Distribution"],
+    pieces: ["Distribution", "Accounts list"],
     apply(store) {
       extraAccount(store, 1, "LDDS", "savings", "#f0b952", 0);
     },
@@ -140,7 +140,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-many",
     label: "12 accounts, long names, tiny ones",
-    pieces: ["Distribution", "Accounts chart"],
+    pieces: ["Distribution", "Accounts chart", "Accounts list"],
     apply(store) {
       const more: [string, string, number][] = [
         ["Compte joint Camille et Alex", "checking", 1840],
@@ -161,7 +161,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-all-zero",
     label: "Every account at 0 €",
-    pieces: ["Distribution", "Net worth chart", "Holdings", "Accounts chart"],
+    pieces: ["Distribution", "Net worth chart", "Holdings", "Accounts chart", "Accounts list"],
     group: "Data",
     option: "Zero",
     apply(store) {
@@ -298,7 +298,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-fx-missing",
     label: "Two dollar ETFs have no rate (left out of totals)",
-    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window", "Accounts chart"],
+    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window", "Accounts chart", "Accounts list"],
     apply(store) {
       store.fx.missing = [ESE, CW8];
     },
@@ -338,7 +338,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },

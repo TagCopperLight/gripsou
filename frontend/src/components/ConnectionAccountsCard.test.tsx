@@ -55,6 +55,7 @@ describe("ConnectionAccountsCard", () => {
       <ConnectionAccountsCard
         group={group({ lastSyncAt: Date.now() - 5 * 60_000 })}
         netWorth={1000}
+        masked={false}
       />,
     ));
     expect(screen.getByText("Online Bank")).toBeInTheDocument();
@@ -67,12 +68,12 @@ describe("ConnectionAccountsCard", () => {
   });
 
   it("says when the connection never synced", () => {
-    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} />));
+    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} masked={false} />));
     expect(screen.getByText("Never synced")).toBeInTheDocument();
   });
 
   it("opens the edit modal for the clicked row", () => {
-    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} />));
+    render(withClient(<ConnectionAccountsCard group={group()} netWorth={400} masked={false} />));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Livret A/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();

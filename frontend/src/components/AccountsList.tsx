@@ -2,6 +2,7 @@ import { AccountsSummaryCard } from "./AccountsSummaryCard";
 import { ConnectionAccountsCard } from "./ConnectionAccountsCard";
 import { CardState } from "./CardState";
 import { useAccounts } from "../api/hooks";
+import { usePrivacy } from "../auth/usePrivacy";
 import { groupByConnection } from "../lib/accounts";
 
 type AccountsListProps = {
@@ -11,6 +12,8 @@ type AccountsListProps = {
 /** The all-accounts summary, then one card per connection. */
 export function AccountsList({ className = "" }: AccountsListProps) {
   const { data, isError, refetch } = useAccounts();
+  // One eye, on the summary card, for every amount of the list.
+  const privacy = usePrivacy();
 
   if (data === undefined) {
     return (
@@ -30,9 +33,9 @@ export function AccountsList({ className = "" }: AccountsListProps) {
 
   return (
     <section className={`flex flex-col gap-4 ${className}`}>
-      <AccountsSummaryCard accounts={data} />
+      <AccountsSummaryCard accounts={data} privacy={privacy} />
       {groupByConnection(data).map((g) => (
-        <ConnectionAccountsCard key={g.connectionId} group={g} netWorth={netWorth} />
+        <ConnectionAccountsCard key={g.connectionId} group={g} netWorth={netWorth} masked={privacy.masked} />
       ))}
     </section>
   );

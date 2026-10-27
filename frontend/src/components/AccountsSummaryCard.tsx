@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "./Surface";
-import { Money } from "./Money";
+import { MaskedMoney, PrivacyEye } from "./PrivateMoney";
 import { Percent } from "./Percent";
 import type { Account } from "../api/types";
+import type { Privacy } from "../auth/usePrivacy";
 
 type AccountsSummaryCardProps = {
   accounts: Account[];
+  /** Shared with the bank cards below: this card's eye reveals them all. */
+  privacy: Privacy;
   className?: string;
 };
 
@@ -16,7 +19,7 @@ type Hover = { account: Account; x: number };
 
 /** A bar split by each account's share of the total. Hovering a segment shows
  * a tooltip styled like the charts' (see chartTheme's tooltipRow). */
-export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummaryCardProps) {
+export function AccountsSummaryCard({ accounts, privacy, className = "" }: AccountsSummaryCardProps) {
   const { t } = useTranslation();
   const [hover, setHover] = useState<Hover | null>(null);
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
@@ -25,8 +28,15 @@ export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummar
   return (
     <Surface className={`p-4 md:p-5 ${className}`}>
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-fg font-semibold text-sm">{t("account.allAccounts")}</h2>
-        <Money value={total} className="text-fg font-semibold text-sm whitespace-nowrap" />
+        <h2 className="text-fg font-semibold text-sm">
+          {t("account.allAccounts")}
+          {privacy.enabled && (
+            <span className="ml-3 inline-flex align-middle">
+              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+            </span>
+          )}
+        </h2>
+        <MaskedMoney masked={privacy.masked} value={total} className="text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
       {total > 0 && (
         <div className="relative mt-3" onMouseLeave={() => setHover(null)}>
@@ -64,7 +74,7 @@ export function AccountsSummaryCard({ accounts, className = "" }: AccountsSummar
               <span aria-hidden className="text-fg-faint">·</span>
               <Percent value={Number(hover.account.value) / total} fractionDigits={1} className="text-fg-faint" />
               <span aria-hidden className="text-fg-faint">·</span>
-              <Money value={hover.account.value} className="text-fg font-semibold" />
+              <MaskedMoney masked={privacy.masked} value={hover.account.value} className="text-fg font-semibold" />
             </div>
           )}
         </div>

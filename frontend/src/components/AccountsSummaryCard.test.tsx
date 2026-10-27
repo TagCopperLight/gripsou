@@ -20,18 +20,20 @@ function account(id: string, name: string, value: string): Account {
   };
 }
 
+const PRIVACY_OFF = { enabled: false, masked: false, toggle: () => {} };
+
 const ACCOUNTS = [account("a", "Livret A", "750"), account("b", "PEA", "250"), account("c", "Empty", "0")];
 
 describe("AccountsSummaryCard", () => {
   it("draws one segment per account that holds value", () => {
-    render(<AccountsSummaryCard accounts={ACCOUNTS} />);
+    render(<AccountsSummaryCard accounts={ACCOUNTS} privacy={PRIVACY_OFF} />);
     expect(screen.getByText("All accounts")).toBeInTheDocument();
     expect(screen.getByText(/1[\s\u202f,.]?000[.,]00/)).toBeInTheDocument();
     expect(screen.getAllByTestId("account-share")).toHaveLength(2);
   });
 
   it("shows the hovered account's name, share and value, and hides it on leave", () => {
-    render(<AccountsSummaryCard accounts={ACCOUNTS} />);
+    render(<AccountsSummaryCard accounts={ACCOUNTS} privacy={PRIVACY_OFF} />);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     fireEvent.mouseMove(screen.getAllByTestId("account-share")[1]);

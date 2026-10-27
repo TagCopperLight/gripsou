@@ -5,6 +5,7 @@ import { Surface } from "./Surface";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "./FxNote";
 import { useHoldings } from "../api/hooks";
 import { Money } from "./Money";
+import { MaskedMoney } from "./PrivateMoney";
 import { MoneyHint } from "./MoneyHint";
 import { getPrefs } from "../lib/prefs";
 import { Percent } from "./Percent";
@@ -18,12 +19,14 @@ type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
   /** Net worth across every account, for each row's share bar. */
   netWorth: number;
+  /** Private mode, revealed by the summary card's eye. */
+  masked: boolean;
   className?: string;
 };
 
 /** One bank connection: its sync time and subtotal, then a row per account.
  * Clicking a row opens the account's edit modal. */
-export function ConnectionAccountsCard({ group, netWorth, className = "" }: ConnectionAccountsCardProps) {
+export function ConnectionAccountsCard({ group, netWorth, masked, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
@@ -46,7 +49,7 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
             ? t("sync.neverSynced")
             : t("account.synced", { time: formatRelative(group.lastSyncAt) })}
         </span>
-        <Money value={group.total} className="ml-auto text-fg font-semibold text-sm whitespace-nowrap" />
+        <MaskedMoney masked={masked} value={group.total} className="ml-auto text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
 
       {/* Pulled out by the rows' own padding: the hover fill spans the whole
@@ -54,6 +57,8 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
       <ul className="-mx-2">
         {group.accounts.map((a) => {
           const share = netWorth > 0 ? Number(a.value) / netWorth : 0;
+          // A foreign account reads in its own currency, the converted value on hover.
+          const native = a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
           return (
             <li key={a.id} className="border-t border-surface-2 first:border-t-0">
               <button
@@ -75,9 +80,11 @@ export function ConnectionAccountsCard({ group, netWorth, className = "" }: Conn
                   <Percent value={share} fractionDigits={1} className="w-12 text-right text-fg-faint text-xs" />
                 </span>
                 <span className="relative text-right whitespace-nowrap">
-                  {a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? (
+                  {masked ? (
+                    <MaskedMoney masked value={native ?? a.value} currency={native !== null ? a.currency : undefined} className="text-fg text-[13px] whitespace-nowrap" />
+                  ) : native !== null ? (
                     <MoneyHint hint={<Money value={a.value} />}>
-                      <Money value={a.valueNative} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
+                      <Money value={native} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
                     </MoneyHint>
                   ) : (
                     <Money value={a.value} className="text-fg text-[13px] whitespace-nowrap" />
