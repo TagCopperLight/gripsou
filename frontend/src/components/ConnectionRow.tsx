@@ -162,11 +162,14 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-3.5">
-            <ul className="flex flex-col divide-y divide-surface">
+            {/* One grid for every account, so the bank dates and the amounts
+                line up in two columns on the right; the amount column has a
+                fixed width so the dates also line up from one bank to the next. */}
+            <ul className="grid grid-cols-[minmax(0,1fr)_auto_8.5rem] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-center justify-between gap-3 py-2.5"
+                  className="col-span-3 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
                 >
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
                     <span
@@ -177,13 +180,11 @@ export function ConnectionRow({
                     <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
                       {accountTypeLabel(t, a.typeKey)}
                     </span>
-                    {a.health?.lastUpdatedOn && (
-                      <span title={t("settings.connections.health.bankUpdated")} className={`text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
-                        <span className="mr-3">·</span>{formatDate(a.health.lastUpdatedOn)}
-                      </span>
-                    )}
                   </div>
-                  <span className="text-sm text-fg font-mono shrink-0">
+                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-6 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
+                    {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
+                  </span>
+                  <span className="text-right text-sm text-fg font-mono">
                     {formatMoney(a.value)}
                   </span>
                 </li>

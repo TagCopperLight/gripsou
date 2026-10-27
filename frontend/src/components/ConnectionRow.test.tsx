@@ -72,7 +72,6 @@ it("shows source errors while collapsed and bank dates inline when expanded", ()
   expand();
   const date = screen.getAllByTitle("Last bank update")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
-  expect(date.querySelector("span")).toHaveClass("mr-3");
 });
 
 it("says a failed sync in words with a red dot, and a healthy one's sync time with no dot", () => {
