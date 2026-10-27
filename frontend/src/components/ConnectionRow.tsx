@@ -12,16 +12,13 @@ import { accountTypeLabel, type SyncConnection } from "../api/types";
 
 // Shared collapsible connection row used by the settings page and the sync
 // modal. `onDelete` is optional — the delete icon renders only when provided
-// (the sync modal omits it). `showProvider` hides the provider label in the
-// subtext when rows are already grouped under provider headers (the modal).
+// (the sync modal omits it).
 export function ConnectionRow({
   conn,
   onDelete,
-  showProvider = true,
 }: {
-  conn: SyncConnection & { providerName: string };
+  conn: SyncConnection;
   onDelete?: () => void;
-  showProvider?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -85,32 +82,27 @@ export function ConnectionRow({
             setOpen((o) => !o);
           }
         }}
-        className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        className="group w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
       >
-        <HoldingBadge
-          logo={conn.logo}
-          ticker={conn.displayName}
-          color={conn.accounts[0]?.color}
-          className="size-9 rounded-lg text-[13px]"
-        />
+        <span className="relative shrink-0">
+          <HoldingBadge
+            logo={conn.logo}
+            ticker={conn.displayName}
+            color={conn.accounts[0]?.color}
+            className="size-9 rounded-lg text-[13px]"
+          />
+          {(isError || (issues.length > 0 && !isSyncing && !isPending)) && (
+            <span
+              data-testid={isError ? "connection-error-dot" : "connection-warning-dot"}
+              className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-surface-2 group-hover:ring-surface-3 transition-colors duration-140 ${isError ? "bg-red" : "bg-amber"}`}
+            />
+          )}
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-fg font-semibold text-[15px] truncate">
-              {conn.displayName}
-            </span>
-            <StatusTag conn={conn} />
-          </div>
-          <p className="text-xs text-fg-faint mt-0.5">
-            {showProvider && (
-              <>
-                {conn.providerName}
-                <span className="mx-1.5">·</span>
-              </>
-            )}
-            {t("settings.connections.accountsCount", { count: conn.accounts.length })}
-            <span className="mx-1.5">·</span>
-            {conn.lastSyncAt === null ? formatRelative(null) : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
-          </p>
+          <span className="block text-fg font-semibold text-[15px] truncate">
+            {conn.displayName}
+          </span>
+          <Summary />
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="hidden items-center gap-1.5 md:flex">
@@ -234,39 +226,35 @@ export function ConnectionRow({
     </div>
   );
 
-  function StatusTag({ conn }: { conn: SyncConnection }) {
-    const base = "text-[11px] rounded-md px-2 py-0.5 inline-flex items-center gap-1 shrink-0";
+  // One line under the name: the state in words, in colour when something is
+  // wrong (the dot on the logo says so too); the sync time when all is well.
+  function Summary() {
+    const line = "mt-0.5 text-xs truncate";
     if (isError) {
       return (
-        <span className={`${base} bg-red/15 text-red`} title={conn.lastError ?? ""}>
-          {conn.lastError ?? t("settings.connections.status.error")}
-        </span>
+        <p className={`${line} text-red`} title={conn.lastError ?? undefined}>
+          {t("settings.connections.status.error")}
+        </p>
       );
     }
-    if (isSyncing) {
+    if (isSyncing || isPending) {
       return (
-        <span className={`${base} bg-surface-3 text-fg-dim`}>
-          <RefreshCw className="size-3 animate-spin" />
-          {t(isAwaiting ? "settings.connections.status.awaiting" : "settings.connections.status.syncing")}
-        </span>
-      );
-    }
-    if (isPending) {
-      return (
-        <span className={`${base} bg-surface-3 text-fg-dim`}>
-          {t("settings.connections.status.pending")}
-        </span>
+        <p className={`${line} text-fg-dim`}>
+          {t(isAwaiting ? "settings.connections.status.awaiting" : isPending ? "settings.connections.status.pending" : "settings.connections.status.syncing")}
+        </p>
       );
     }
     if (issues.length > 0) {
-      return <span className={`${base} bg-amber-soft text-amber`}>
-        {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
-      </span>;
+      return (
+        <p className={`${line} text-amber`}>
+          {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
+        </p>
+      );
     }
     return (
-      <span className={`${base} bg-green-soft text-green`}>
-        {t("settings.connections.connectionConnected")}
-      </span>
+      <p className={`${line} text-fg-faint`}>
+        {conn.lastSyncAt === null ? formatRelative(null) : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
+      </p>
     );
   }
 }

@@ -11,10 +11,9 @@ vi.mock("../api/hooks", () => ({
 
 import { ConnectionRow } from "./ConnectionRow";
 
-const conn: SyncConnection & { providerName: string } = {
+const conn: SyncConnection = {
   id: "c1",
   displayName: "Caisse d'Épargne",
-  providerName: "Powens",
   status: "ok",
   lastSyncAt: null,
   lastError: null,
@@ -65,14 +64,24 @@ describe("ConnectionRow", () => {
 it("shows source errors while collapsed and bank dates inline when expanded", () => {
   const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
   render(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
+  // The problem takes the sync time's place, and the logo carries an amber dot.
   expect(screen.getByText("Partial update")).toBeInTheDocument();
   expect(screen.getByText(/403 Client Error: Forbidden/)).toBeInTheDocument();
-  expect(screen.queryByText("Connected")).toBeNull();
-  expect(screen.getByText(/Synced/)).toBeInTheDocument();
+  expect(screen.queryByText(/Synced/)).toBeNull();
+  expect(screen.getByTestId("connection-warning-dot")).toBeInTheDocument();
   expand();
   const date = screen.getAllByTitle("Last bank update")[0];
   expect(date.parentElement?.textContent).toContain("Savings");
   expect(date.querySelector("span")).toHaveClass("mr-3");
+});
+
+it("says a failed sync in words with a red dot, and a healthy one's sync time with no dot", () => {
+  const { rerender } = render(<ConnectionRow conn={{ ...conn, status: "error", lastError: "sync took too long" }} />);
+  expect(screen.getByText("Sync failed")).toHaveAttribute("title", "sync took too long");
+  expect(screen.getByTestId("connection-error-dot")).toBeInTheDocument();
+  rerender(<ConnectionRow conn={{ ...conn, lastSyncAt: Date.now() }} />);
+  expect(screen.getByText(/Synced/)).toBeInTheDocument();
+  expect(screen.queryByTestId(/dot$/)).toBeNull();
 });
 
 it("opens Manage with a temporary link and syncs once when returning", async () => {
