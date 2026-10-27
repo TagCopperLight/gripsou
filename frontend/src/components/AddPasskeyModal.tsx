@@ -84,8 +84,7 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   if (step === "password") {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
-        <PasswordField value={password} onChange={setPassword} autoFocus />
-        {error && <p className="text-sm text-red">{error}</p>}
+        <PasswordField value={password} onChange={setPassword} autoFocus error={error} />
         <button type="submit" hidden />
       </form>
     );

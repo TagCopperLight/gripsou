@@ -19,8 +19,6 @@ type ConfirmDialogProps = {
   children?: ReactNode;
   /** Keeps the action off until `children` is filled in. */
   confirmDisabled?: boolean;
-  /** Shown under the body when the confirmed action failed. */
-  error?: string | null;
   onConfirm: () => void;
   onClose: () => void;
   "data-testid"?: string;
@@ -32,7 +30,7 @@ type ConfirmDialogProps = {
  *  confirming; with a field to fill (`children`), the field takes it. */
 export function ConfirmDialog({
   title, body, confirmLabel, tone = "danger", busy = false, children, confirmDisabled = false,
-  error = null, onConfirm, onClose, confirmTestId, ...rest
+  onConfirm, onClose, confirmTestId, ...rest
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 
@@ -65,11 +63,6 @@ export function ConfirmDialog({
           {body}
         </p>
         {children}
-        {error && (
-          <p role="alert" className="text-red text-sm">
-            {error}
-          </p>
-        )}
       </div>
     </Dialog>
   );

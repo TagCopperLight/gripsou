@@ -79,6 +79,16 @@ describe("Login", () => {
     expect(await screen.findByText("Wrong email or password.")).toBeInTheDocument();
   });
 
+  it("doesn't blame the email or password when the server fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+    render(wrap(<Login />));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Couldn't sign you in. Try again in a moment.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).not.toHaveAttribute("aria-invalid");
+  });
+
   it("says how long to wait when throttled", async () => {
     vi.stubGlobal("fetch", vi.fn(async () =>
       new Response("too many attempts", { status: 429, headers: { "Retry-After": "181" } }),

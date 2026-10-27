@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { FieldError } from "./FieldError";
 import { showError, useErrorToast } from "../lib/errorToasts";
 import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
@@ -168,7 +169,11 @@ export function ConnectionRow({
         </div>
       </div>
 
-      {manageError && <p role="alert" className="px-4 pb-3 text-xs text-red">{manageError}</p>}
+      {manageError && (
+        <div className="px-4 pb-3">
+          <FieldError>{manageError}</FieldError>
+        </div>
+      )}
       {open && (
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (

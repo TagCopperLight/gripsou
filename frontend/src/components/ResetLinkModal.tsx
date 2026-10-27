@@ -59,8 +59,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
     >
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <p className="text-sm text-fg-dim">{t("settings.users.reset.confirm", { name: user.name })}</p>
-        <PasswordField value={password} onChange={setPassword} />
-        {error && <p className="text-sm text-red">{error}</p>}
+        <PasswordField value={password} onChange={setPassword} error={error} />
         <button type="submit" hidden />
       </form>
     </Dialog>

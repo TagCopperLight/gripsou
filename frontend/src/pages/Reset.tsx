@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "../components/Button";
+import { FieldError, LabeledField } from "../components/FieldError";
 import { TextInput } from "../components/TextInput";
 import { useAuth } from "../auth/context";
 import { useTokenGuard } from "../auth/useTokenGuard";
@@ -20,7 +21,8 @@ export function Reset() {
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // What was refused, and which field it's about (none: the form as a whole).
+  const [error, setError] = useState<{ text: string; field: "email" | "password" | "confirm" | null } | null>(null);
   const [pending, setPending] = useState(false);
 
   if (guard.status !== "valid") return null;
@@ -28,11 +30,11 @@ export function Reset() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordLengthOk(password)) {
-      setError(t("auth.passwordLength"));
+      setError({ text: t("auth.passwordLength"), field: "password" });
       return;
     }
     if (password !== confirm) {
-      setError(t("auth.passwordsDontMatch"));
+      setError({ text: t("auth.passwordsDontMatch"), field: "confirm" });
       return;
     }
     setError(null);
@@ -45,7 +47,7 @@ export function Reset() {
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch {
-      setError(t("auth.resetLinkInvalid"));
+      setError({ text: t("auth.resetLinkInvalid"), field: null });
     } finally {
       setPending(false);
     }
@@ -59,6 +61,8 @@ export function Reset() {
         </div>
         <form
           onSubmit={submit}
+          // Typing again: the refused value is being fixed.
+          onInput={() => setError(null)}
           className="flex w-100 max-w-[90vw] flex-col gap-4 rounded-3xl bg-surface p-6"
         >
           <div className="flex flex-col pb-1">
@@ -66,23 +70,31 @@ export function Reset() {
             <div className="text-sm text-fg-faint">{t("auth.setUpToContinue")}</div>
             <div className="mt-1 text-sm font-medium text-fg-dim">{guard.info?.email}</div>
           </div>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-dim">{t("auth.newPassword")}</span>
+          <LabeledField
+            label={t("auth.newPassword")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "password" && error.text}
+          >
             <TextInput
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              invalid={error?.field === "password" || error?.field === "confirm"}
             />
-          </label>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-dim">{t("auth.confirmPassword")}</span>
+          </LabeledField>
+          <LabeledField
+            label={t("auth.confirmPassword")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "confirm" && error.text}
+          >
             <TextInput
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
+              invalid={error?.field === "confirm"}
             />
-          </label>
-          {error && <p className="text-sm text-red">{error}</p>}
+          </LabeledField>
+          {error?.field === null && <FieldError>{error.text}</FieldError>}
           <Button type="submit" disabled={pending} className="mt-1">
             {t("auth.updatePasswordButton")}
           </Button>

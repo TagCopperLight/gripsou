@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FieldError } from "../FieldError";
 import { useErrorToast } from "../../lib/errorToasts";
 import { Plus } from "lucide-react";
 
@@ -74,11 +75,17 @@ export function TagsSurface() {
                   aria-label={t("settings.budget.tags.nameLabel")}
                   placeholder={t("settings.budget.tags.nameLabel")}
                   disabled={create.isPending}
-                  onChange={(e) => setDraft(e.target.value)}
+                  aria-invalid={failure === "duplicate" || undefined}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    if (failure === "duplicate") create.reset();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") submit();
                   }}
-                  className="w-112 max-w-full bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+                  className={`w-112 max-w-full bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none ring-inset disabled:opacity-60 ${
+                    failure === "duplicate" ? "ring-1 ring-red" : "focus:ring-1 focus:ring-green"
+                  }`}
                 />
                 {/* The same primary action as the category table's Add; the
                     padding matches the field beside it, so the two share a
@@ -94,10 +101,10 @@ export function TagsSurface() {
                 </Button>
               </div>
 
-              {create.isError && budgetErrorKey(create.error) === "duplicate" && (
-                <p role="alert" className="mt-2 text-xs text-red">
-                  {t("settings.budget.tags.duplicate")}
-                </p>
+              {failure === "duplicate" && (
+                <div className="mt-1.5">
+                  <FieldError>{t("settings.budget.tags.duplicate")}</FieldError>
+                </div>
               )}
             </>
           )}

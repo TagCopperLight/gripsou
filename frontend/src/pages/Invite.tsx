@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "../components/Button";
+import { LabeledField } from "../components/FieldError";
+import { showError } from "../lib/errorToasts";
 import { TextInput } from "../components/TextInput";
 import { useAuth } from "../auth/context";
 import { useTokenGuard } from "../auth/useTokenGuard";
@@ -22,7 +24,8 @@ export function Invite() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // What was refused, and which field it's about.
+  const [error, setError] = useState<{ text: string; field: "email" | "password" | "confirm" } | null>(null);
   const [pending, setPending] = useState(false);
 
   // Render nothing until the token is confirmed valid (else the guard redirects).
@@ -31,11 +34,11 @@ export function Invite() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordLengthOk(password)) {
-      setError(t("auth.passwordLength"));
+      setError({ text: t("auth.passwordLength"), field: "password" });
       return;
     }
     if (password !== confirm) {
-      setError(t("auth.passwordsDontMatch"));
+      setError({ text: t("auth.passwordsDontMatch"), field: "confirm" });
       return;
     }
     setError(null);
@@ -48,8 +51,8 @@ export function Invite() {
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch (err: unknown) {
-      const exists = err instanceof ApiError && err.status === 409;
-      setError(exists ? t("auth.emailExists") : t("auth.invalidCredentials"));
+      if (err instanceof ApiError && err.status === 409) setError({ text: t("auth.emailExists"), field: "email" });
+      else showError(t("auth.signUpFailed"));
     } finally {
       setPending(false);
     }
@@ -63,20 +66,26 @@ export function Invite() {
         </div>
         <form
           onSubmit={submit}
+          // Typing again: the refused value is being fixed.
+          onInput={() => setError(null)}
           className="flex w-100 max-w-[90vw] flex-col gap-4 rounded-3xl bg-surface p-6"
         >
           <div className="flex flex-col pb-1">
             <div className="text-lg font-semibold text-fg">{t("auth.createAccount")}</div>
             <div className="text-sm text-fg-faint">{t("auth.setUpToContinue")}</div>
           </div>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-dim">{t("auth.email")}</span>
+          <LabeledField
+            label={t("auth.email")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "email" && error.text}
+          >
             <TextInput
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              invalid={error?.field === "email"}
             />
-          </label>
+          </LabeledField>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.name")}</span>
             <TextInput
@@ -85,23 +94,30 @@ export function Invite() {
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-dim">{t("auth.password")}</span>
+          <LabeledField
+            label={t("auth.password")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "password" && error.text}
+          >
             <TextInput
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              invalid={error?.field === "password" || error?.field === "confirm"}
             />
-          </label>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-fg-dim">{t("auth.confirmPassword")}</span>
+          </LabeledField>
+          <LabeledField
+            label={t("auth.confirmPassword")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "confirm" && error.text}
+          >
             <TextInput
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
+              invalid={error?.field === "confirm"}
             />
-          </label>
-          {error && <p className="text-sm text-red">{error}</p>}
+          </LabeledField>
           <Button type="submit" disabled={pending} className="mt-1">
             {t("auth.createAccountButton")}
           </Button>

@@ -30,5 +30,11 @@ export function useReauthStep() {
     }
   };
 
-  return { password, setPassword, error, setError, checking: reauth.isPending, check };
+  // A new attempt being typed: the last one's error no longer applies.
+  const typePassword = (value: string) => {
+    setPassword(value);
+    setError(null);
+  };
+
+  return { password, setPassword: typePassword, error, setError, checking: reauth.isPending, check };
 }

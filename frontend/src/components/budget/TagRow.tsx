@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FieldError } from "../FieldError";
 import { useErrorToast } from "../../lib/errorToasts";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
@@ -97,12 +98,18 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
             autoFocus
             value={draft}
             disabled={pending}
-            onChange={(e) => setDraft(e.target.value)}
+            aria-invalid={failure === "duplicate" || undefined}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (failure === "duplicate") update.reset();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") submitRename();
               if (e.key === "Escape") cancelEdit();
             }}
-            className="bg-surface-2 rounded-lg px-2.5 py-1 text-sm text-fg outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className={`bg-surface-2 rounded-lg px-2.5 py-1 text-sm text-fg outline-none ring-inset disabled:opacity-60 ${
+              failure === "duplicate" ? "ring-1 ring-red" : "focus:ring-1 focus:ring-green"
+            }`}
           />
         ) : (
           <TagChip tag={tag} />
@@ -221,11 +228,7 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
         </div>
       </div>
 
-      {update.isError && budgetErrorKey(update.error) === "duplicate" && (
-        <p role="alert" className="text-red text-xs">
-          {t("settings.budget.tags.duplicate")}
-        </p>
-      )}
+      {failure === "duplicate" && <FieldError>{t("settings.budget.tags.duplicate")}</FieldError>}
     </div>
   );
 }

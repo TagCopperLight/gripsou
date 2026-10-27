@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { CircleAlert } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { SegmentedControl } from "../../components/SegmentedControl";
@@ -54,7 +55,10 @@ export function SettingsGeneral() {
     currency?.state === "fetching" ? (
       t("fx.fetching", { currency: currency.code })
     ) : currency?.state === "refused" ? (
-      <span role="alert" className="text-red">{t("fx.refused", { currency: currency.code })}</span>
+      <span role="alert" className="inline-flex items-center gap-1.5 text-red">
+        <CircleAlert className="size-3.5 shrink-0" />
+        {t("fx.refused", { currency: currency.code })}
+      </span>
     ) : (
       t("settings.general.baseReportingCurrency")
     );

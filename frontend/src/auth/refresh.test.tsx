@@ -101,14 +101,14 @@ it("preserves a newer profile edit when an older preference acknowledgement arri
   } finally { unmount(); }
 });
 
-it("shows the stored prefs again when a save fails", async () => {
+it("shows the stored prefs again when a save fails, and tells the caller nothing", async () => {
   const { result, unmount } = await authenticated();
   try {
     vi.spyOn(api, "patchJson").mockRejectedValue(new Error("request failed"));
     let save!: Promise<void>;
     act(() => { save = result.current.updatePrefs({ numberDecimals: 0 }); });
     expect(result.current.prefs.numberDecimals).toBe(0);
-    await act(async () => { await expect(save).rejects.toThrow("request failed"); });
+    await act(async () => { await save; });
     await waitFor(() => expect(result.current.prefs.numberDecimals).toBe(DEFAULT_PREFS.numberDecimals));
   } finally { unmount(); }
 });

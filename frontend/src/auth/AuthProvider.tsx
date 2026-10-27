@@ -7,6 +7,7 @@ import {
 } from "@simplewebauthn/browser";
 import { AuthContext, type AuthValue, type SecondFactor } from "./context";
 import i18n from "../i18n";
+import { showError } from "../lib/errorToasts";
 import { DEFAULT_PREFS, setPrefs, withPatch, type PrefsPatch } from "../lib/prefs";
 import { afterCategorizeRequested, afterReviewThresholdChange } from "../api/invalidate";
 import { queryClient } from "../queryClient";
@@ -171,9 +172,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await save;
       } catch (err) {
-        // Show what is stored, once the saves queued behind this one are in.
-        prefsSaves.current = prefsSaves.current.then(showStoredPrefs);
-        throw err;
+        // Show what is stored, once the saves queued behind this one are in;
+        // then say so in the corner, in the language shown again. A refused
+        // currency (no rate to be had) is explained next to its field instead.
+        const refused = waits && err instanceof ApiError && err.status === 502;
+        prefsSaves.current = prefsSaves.current.then(showStoredPrefs).then(() => {
+          if (!refused) showError(i18n.t("settings.prefSaveFailed"));
+        });
+        // Only a currency's caller waits on the answer; the others are told above.
+        if (waits) throw err;
+        return;
       }
       if (waits && shown.current) {
         applyUser({ ...shown.current, prefs: withPatch(shown.current.prefs, patch) });

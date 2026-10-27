@@ -11,6 +11,7 @@ import type { TotpSetup } from "../api/types";
 import { throttleMinutes } from "../lib/mfa";
 import { CodeInput } from "./CodeInput";
 import { BackupCodes } from "./BackupCodes";
+import { FieldError } from "./FieldError";
 import { PasswordField } from "./PasswordField";
 import { useReauthStep } from "./useReauthStep";
 
@@ -94,15 +95,12 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     </span>
   );
 
-  const errorLine = error && <p className="text-sm text-red">{error}</p>;
-
   let body;
   let footer;
   if (step === "password") {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
-        <PasswordField value={password} onChange={setPassword} autoFocus />
-        {errorLine}
+        <PasswordField value={password} onChange={setPassword} autoFocus error={error} />
         <button type="submit" hidden />
       </form>
     );
@@ -145,18 +143,21 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitCode(); }}>
         <p className="text-sm text-fg-dim">{t("twoFactor.codeIntro")}</p>
-        <CodeInput
-          ariaLabel={t("twoFactor.codeLabel")}
-          value={code}
-          autoFocus
-          onChange={(digits) => {
-            setCode(digits);
-            setError(null);
-            // The sixth digit sends it; there is no button for it.
-            if (digits.length === 6) void submitCode(digits);
-          }}
-        />
-        {errorLine}
+        <div className="flex flex-col gap-2">
+          <CodeInput
+            ariaLabel={t("twoFactor.codeLabel")}
+            value={code}
+            autoFocus
+            invalid={Boolean(error)}
+            onChange={(digits) => {
+              setCode(digits);
+              setError(null);
+              // The sixth digit sends it; there is no button for it.
+              if (digits.length === 6) void submitCode(digits);
+            }}
+          />
+          {error && <FieldError>{error}</FieldError>}
+        </div>
         <button type="submit" hidden />
       </form>
     );

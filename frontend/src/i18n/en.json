@@ -300,6 +300,7 @@
     "password": "Password",
     "invalidCredentials": "Wrong email or password.",
     "reauthFailed": "Couldn't check your password",
+    "signUpFailed": "Couldn't create your account",
     "tooManyAttempts_one": "Too many attempts. Try again in {{count}} minute.",
     "tooManyAttempts_other": "Too many attempts. Try again in {{count}} minutes.",
     "logOut": "Log out",
@@ -325,6 +326,7 @@
     "member": "Member"
   },
   "settings": {
+    "prefSaveFailed": "Couldn't save the setting",
     "adminBadge": "Admin",
     "general": {
       "title": "General",

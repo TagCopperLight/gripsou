@@ -119,8 +119,7 @@ export function ManageTwoFactorModal({
         }}
       >
         {turningOff && <p className="text-sm text-fg-dim">{t("twoFactor.turnOffBody")}</p>}
-        <PasswordField value={password} onChange={setPassword} />
-        {error && <p className="text-sm text-red">{error}</p>}
+        <PasswordField value={password} onChange={setPassword} error={error} />
         <button type="submit" hidden />
       </form>
     </Dialog>

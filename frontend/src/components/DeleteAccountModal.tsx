@@ -44,7 +44,6 @@ export function DeleteAccountModal({
       }
       busy={remove.isPending}
       confirmDisabled={password === ""}
-      error={remove.isError ? error : null}
       onConfirm={confirm}
       onClose={onClose}
     >
@@ -56,9 +55,13 @@ export function DeleteAccountModal({
       >
         <PasswordField
           value={password}
-          onChange={setPassword}
+          onChange={(value) => {
+            setPassword(value);
+            remove.reset();
+          }}
           label={t("settings.account.deleteAccountConfirmLabel")}
           danger
+          error={error}
         />
         <button type="submit" hidden />
       </form>

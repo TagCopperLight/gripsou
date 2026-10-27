@@ -7,12 +7,14 @@ type CodeInputProps = {
   onChange: (digits: string) => void;
   ariaLabel: string;
   autoFocus?: boolean;
+  /** The code was refused: every box gets a red ring. */
+  invalid?: boolean;
 };
 
 /** A 6-digit code shown one digit per box. It is a single real input laid
  *  invisibly over the boxes, so typing, pasting, autofill (one-time-code) and
  *  screen readers all treat it as one field. */
-export function CodeInput({ value, onChange, ariaLabel, autoFocus }: CodeInputProps) {
+export function CodeInput({ value, onChange, ariaLabel, autoFocus, invalid = false }: CodeInputProps) {
   const [focused, setFocused] = useState(false);
   // The box the next digit goes into; the last one once all six are typed.
   const active = Math.min(value.length, 5);
@@ -24,7 +26,7 @@ export function CodeInput({ value, onChange, ariaLabel, autoFocus }: CodeInputPr
           <span
             key={i}
             className={`flex h-14 flex-1 items-center justify-center rounded-xl bg-surface-2 font-mono text-2xl text-fg transition-shadow duration-140 ${
-              focused && i === active ? "ring-1 ring-green" : ""
+              invalid ? "ring-1 ring-inset ring-red" : focused && i === active ? "ring-1 ring-inset ring-green" : ""
             }`}
           >
             {value[i] ?? ""}
@@ -33,6 +35,7 @@ export function CodeInput({ value, onChange, ariaLabel, autoFocus }: CodeInputPr
       </div>
       <input
         aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
         inputMode="numeric"
         autoComplete="one-time-code"
         autoFocus={autoFocus}

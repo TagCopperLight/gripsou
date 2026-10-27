@@ -300,6 +300,7 @@
     "password": "Mot de passe",
     "invalidCredentials": "E-mail ou mot de passe incorrect.",
     "reauthFailed": "Impossible de vérifier votre mot de passe",
+    "signUpFailed": "Impossible de créer votre compte",
     "tooManyAttempts_one": "Trop de tentatives. Réessayez dans {{count}} minute.",
     "tooManyAttempts_other": "Trop de tentatives. Réessayez dans {{count}} minutes.",
     "logOut": "Se déconnecter",
@@ -325,6 +326,7 @@
     "member": "Membre"
   },
   "settings": {
+    "prefSaveFailed": "Impossible d'enregistrer le réglage",
     "adminBadge": "Admin",
     "general": {
       "title": "Général",

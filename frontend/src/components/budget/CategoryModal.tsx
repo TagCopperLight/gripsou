@@ -134,13 +134,21 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       }
     >
       <div className="flex flex-col gap-5">
-        <Field label={t("settings.budget.categories.fieldName")} htmlFor="category-name">
+        <Field
+          label={t("settings.budget.categories.fieldName")}
+          htmlFor="category-name"
+          error={failure === "duplicate" && t("settings.budget.categories.duplicate")}
+        >
           <TextInput
             id="category-name"
             type="text"
             value={name}
             disabled={busy}
-            onChange={(e) => setName(e.target.value)}
+            invalid={failure === "duplicate"}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (failure === "duplicate") mutation.reset();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
@@ -216,12 +224,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
           />
         </Field>
-
-        {mutation.isError && budgetErrorKey(mutation.error) === "duplicate" && (
-          <p role="alert" className="text-red text-sm">
-            {t("settings.budget.categories.duplicate")}
-          </p>
-        )}
       </div>
     </Dialog>
   );
