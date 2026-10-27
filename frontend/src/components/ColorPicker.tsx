@@ -152,8 +152,8 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
       >
         <canvas ref={canvas} width={WIDTH} height={150} className="size-full rounded-[10px]" />
         <span
-          className="pointer-events-none absolute size-3.5 -translate-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]"
-          style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, background: hsvToHex(hsv) }}
+          className="pointer-events-none absolute size-3 -translate-1/2 rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+          style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%` }}
         />
       </div>
       <div
@@ -169,8 +169,8 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
         style={{ background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)" }}
       >
         <span
-          className="pointer-events-none absolute top-1/2 size-3.5 -translate-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]"
-          style={{ left: `${(hsv.h / 360) * 100}%`, background: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
+          className="pointer-events-none absolute top-1/2 h-4.5 w-1.5 -translate-1/2 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.4)]"
+          style={{ left: `${(hsv.h / 360) * 100}%` }}
         />
       </div>
       <label className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-1.5 font-mono text-[13px] text-fg-dim">

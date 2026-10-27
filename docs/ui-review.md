@@ -170,6 +170,7 @@ Findings:
 | A16 | Clicking a field's name ("Account name", "Type") focused the field or opened the dropdown. | User | fixed: a shared `Field` whose name does nothing on click (it still names the field for screen readers); used by this window and the budget category window, and the AI model's label in Settings. |
 | A17 | Edit account: nothing said which bank the account is at (two "Compte courant" open identical windows). | Claude | fixed: the bank's name under the title. |
 | A18 | Focused text field: the green 1px ring looked jagged in the rounded corners. | User | fixed: the ring is drawn inside the field (`ring-inset`). |
+| A19 | Colour picker: the handles had a hard black outline that looked dirty at the edges. | User | fixed: a smaller hollow white ring with a soft shadow in the colour area, a white pill on the hue slider. |
 
 ### Investments `/investments`
 
