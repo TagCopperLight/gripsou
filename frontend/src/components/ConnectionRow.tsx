@@ -306,8 +306,9 @@ function IconButton({
   return (
     <button
       type="button"
-      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed ${
-        danger ? "hover:text-red" : "hover:text-fg"
+      // Disabled: faded like a row's caret when it can't open, and no hover.
+      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 enabled:hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed ${
+        danger ? "enabled:hover:text-red" : "enabled:hover:text-fg"
       } ${className}`}
       {...props}
     />
