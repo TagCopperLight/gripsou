@@ -77,7 +77,7 @@ export function AiServerSurface() {
         </div>
         {settings.provider && (
           <div className="flex items-center gap-3 text-sm text-fg">
-            <label htmlFor={modelId}>{t("settings.server.budgetAiModel")}</label>
+            <label htmlFor={modelId} onClick={(e) => e.preventDefault()}>{t("settings.server.budgetAiModel")}</label>
             {models.isError || models.data?.length === 0 ? (
               <input
                 id={modelId}

@@ -6,6 +6,8 @@ import { ColorSwatchGrid } from "../ColorSwatchGrid";
 import { FilledDot } from "./FilledDot";
 import { CategoryIcon } from "./CategoryIcon";
 import { Button } from "../Button";
+import { Field } from "../Field";
+import { TextInput } from "../TextInput";
 import { Select } from "../Select";
 import {
   useCreateBudgetCategory,
@@ -126,7 +128,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
     >
       <div className="flex flex-col gap-5">
         <Field label={t("settings.budget.categories.fieldName")} htmlFor="category-name">
-          <input
+          <TextInput
             id="category-name"
             type="text"
             value={name}
@@ -135,7 +137,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className="disabled:opacity-60"
           />
         </Field>
 
@@ -215,24 +217,5 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
         )}
       </div>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={htmlFor} className="text-fg-faint text-sm">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

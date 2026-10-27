@@ -104,7 +104,7 @@ function addDcam(store: Store): string {
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Accounts list";
+export const FOCUS = "Edit account";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -140,7 +140,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-many",
     label: "12 accounts, long names, tiny ones",
-    pieces: ["Distribution", "Accounts chart", "Accounts list"],
+    pieces: ["Distribution", "Accounts chart", "Accounts list", "Edit account"],
     apply(store) {
       const more: [string, string, number][] = [
         ["Compte joint Camille et Alex", "checking", 1840],
@@ -338,7 +338,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list"],
+    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list", "Edit account"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },
@@ -374,6 +374,15 @@ export const STATES: MockState[] = [
     apply(store) {
       emptyHousehold(store);
       store.connections = [store.connections[0]];
+    },
+  },
+  // ── Edit account ──
+  {
+    id: "edit-account-save-fails",
+    label: "Saving an account fails",
+    pieces: ["Edit account"],
+    apply(store) {
+      store.accountSaveFails = true;
     },
   },
   {

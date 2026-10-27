@@ -10,6 +10,7 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("PATCH", "/accounts/:id", ({ store, params, body }) => {
     const account = store.accounts.find((a) => a.id === params.id);
     if (!account) return reply(404);
+    if (store.accountSaveFails) return reply(500, { error: "forced by the review panel" });
     const { name, typeKey, color } = body as { name: string; typeKey: string; color: string };
     Object.assign(account, { name, typeKey, color });
     return reply(204);

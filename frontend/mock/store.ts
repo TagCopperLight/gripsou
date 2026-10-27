@@ -17,6 +17,8 @@ export type Store = BaseData & {
   providerLots: string[];
   /** An account's own bank-update health, when it differs from its connection's. */
   accountHealth: Record<string, SyncHealth>;
+  /** Saving an account fails (the Edit account window's error). */
+  accountSaveFails: boolean;
 };
 
 export function createStore(): Store {
@@ -28,6 +30,7 @@ export function createStore(): Store {
     deletedLots: [],
     providerLots: [],
     accountHealth: {},
+    accountSaveFails: false,
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       currency: "EUR",

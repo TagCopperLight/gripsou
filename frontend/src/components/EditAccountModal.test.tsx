@@ -49,6 +49,24 @@ describe("EditAccountModal", () => {
     );
   });
 
+  it("does nothing when a field's name is clicked", async () => {
+    renderModal();
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(screen.getByText("Type"));
+    fireEvent.click(screen.getByText("Account name"));
+    expect(screen.getByRole("button", { name: "Type" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Account name")).not.toHaveFocus();
+  });
+
+  it("names the account's bank under the title", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EditAccountModal account={{ ...ACCOUNT, sourceName: "Crédit Mutuel" }} onClose={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("heading")).toHaveTextContent(/Compte Courant\s*Crédit Mutuel/);
+  });
+
   it("disables Save until something changes", () => {
     renderModal();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
