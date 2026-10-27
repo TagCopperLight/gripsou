@@ -55,6 +55,8 @@ const s = {
   grid: { display: "grid", gridTemplateColumns: "64px 1fr", alignItems: "center", rowGap: 6, columnGap: 8 },
   label: { color: "#a1a1aa" },
   segmented: { display: "flex", border: "1px solid #3f3f46", borderRadius: 5, overflow: "hidden" },
+  chips: { display: "flex", flexWrap: "wrap", gap: 4 },
+  chip: { flex: "none", border: "1px solid #3f3f46", borderRadius: 5, padding: "3px 8px" },
   segment: { flex: 1, background: "#27272a", color: "#fafafa", border: 0, padding: "3px 0", cursor: "pointer", font: "inherit", whiteSpace: "nowrap" },
 } satisfies Record<string, CSSProperties>;
 
@@ -66,21 +68,25 @@ function Btn({ on, onClick, children }: { on?: boolean; onClick: () => void; chi
   );
 }
 
-function Segmented({ options, value, onChange, titles }: {
+function Segmented({ options, value, onChange, titles, wrap = false }: {
   options: [string, string][];
   value: string;
   onChange: (v: string) => void;
   /** Hover text per option, for labels shortened to fit. */
   titles?: Record<string, string>;
+  /** Separate chips that wrap onto more lines, for a long list of options. */
+  wrap?: boolean;
 }) {
   return (
-    <div style={s.segmented}>
+    <div style={wrap ? s.chips : s.segmented}>
       {options.map(([v, label], i) => (
         <button
           key={v}
           type="button"
           title={titles?.[v]}
-          style={{ ...s.segment, ...(v === value ? s.on : {}), ...(i > 0 ? { borderLeft: "1px solid #3f3f46" } : {}) }}
+          style={wrap
+            ? { ...s.segment, ...s.chip, ...(v === value ? s.on : {}) }
+            : { ...s.segment, ...(v === value ? s.on : {}), ...(i > 0 ? { borderLeft: "1px solid #3f3f46" } : {}) }}
           onClick={() => v !== value && onChange(v)}
         >
           {label}
@@ -160,6 +166,7 @@ export function Panel() {
                         void (v ? control("/state", { id: v, on: true }) : control("/state", { id: on?.id, on: false })).then(reload);
                       }}
                       titles={Object.fromEntries(members.map((st) => [st.id, st.label]))}
+                      wrap
                     />
                   </Fragment>
                 ))}
