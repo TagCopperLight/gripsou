@@ -142,7 +142,9 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
 
   if (isSet && !replacing) {
     return (
-      <Field label={label}>
+      // Keyed apart from the editing field: React would otherwise reuse its
+      // input for the dots, and the focus would stay on it after a save.
+      <Field key="saved" label={label}>
         <div className="flex items-center gap-1">
           <TextInput
             readOnly
@@ -168,7 +170,7 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
   }
 
   return (
-    <Field label={label} htmlFor={id}>
+    <Field key="editing" label={label} htmlFor={id}>
       <div className="relative">
         <TextInput
           id={id}
@@ -181,7 +183,10 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
           className="pr-20"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+              submit();
+            }
             if (e.key === "Escape") close();
           }}
         />
