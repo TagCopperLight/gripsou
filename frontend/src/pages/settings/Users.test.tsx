@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { SettingsUsers } from "./Users";
@@ -26,11 +26,11 @@ describe("SettingsUsers", () => {
     ));
   });
 
-  it("renders a row per user with the member count", async () => {
+  it("renders a row per user", async () => {
     render(withClient(<SettingsUsers />));
     // Phone and desktop layouts are both in the DOM (CSS picks one).
     expect(await screen.findAllByText("Marie Laurent")).not.toHaveLength(0);
-    expect(screen.getByText(/3 members/)).toBeInTheDocument();
+    expect(screen.getAllByText("Thomas Caron")).not.toHaveLength(0);
   });
 
   it("shows reset and delete only for other users, not the self row", async () => {
@@ -48,14 +48,17 @@ describe("SettingsUsers", () => {
     expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
   });
 
-  it("toggles a member's role locally on click", async () => {
+  it("saves a member's new role on the server", async () => {
     render(withClient(<SettingsUsers />));
     await screen.findAllByText("Marie Laurent");
-    const memberTags = screen.getAllByRole("button", { name: "Member" });
-    expect(memberTags).toHaveLength(2);
-    fireEvent.click(memberTags[0]);
-    expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Member" })).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "Member" })[0]);
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        "/api/users/u2",
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ role: "admin" }) }),
+      ),
+    );
   });
+
 
 });

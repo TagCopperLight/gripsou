@@ -401,8 +401,6 @@
     },
     "users": {
       "title": "Utilisateurs",
-      "usersCount_one": "{{count}} membre",
-      "usersCount_other": "{{count}} membres",
       "inviteUser": "Inviter un utilisateur",
       "columns": {
         "member": "MEMBRE",
@@ -413,6 +411,8 @@
       "you": "Vous",
       "resetPassword": "Réinitialiser le mot de passe",
       "deleteUser": "Supprimer l'utilisateur",
+      "changeRole": "Changer le rôle",
+      "roleError": "Impossible de changer le rôle",
       "invite": {
         "title": "Inviter un nouvel utilisateur",
         "heading": "Envoyez ce lien à usage unique",
@@ -427,6 +427,7 @@
       },
       "removeUser": {
         "title": "Supprimer {{name}}",
+        "deleting": "Suppression…",
         "body": "L'utilisateur et toutes ses données seront définitivement supprimés.",
         "warning": "Tous ses comptes, ses positions et son historique seront effacés. Cette action est irréversible.",
         "confirm": "Saisissez {{email}} pour confirmer",

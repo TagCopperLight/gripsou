@@ -391,6 +391,17 @@ Components: `Avatar`, `UserDetailModal`, `LinkModal` (invite), `ResetLinkModal`,
 | Invite link, reset link, delete user | action |
 | Seen as a member (route still reachable?) | panel role "user" |
 
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| US1 | Clicking a member's role badge flipped it on screen only: nothing was saved (no endpoint), and a reload put it back. | Claude | fixed: `PATCH /api/users/{id}` (`admin::set_role`) saves it; it refuses your own role and never leaves no admin (one statement checks and writes, so two admins demoting each other can't both win). The badge waits while saving; a refusal says "Couldn't change the role". |
+| US2 | "Users · 5 members": the header repeats itself (as CO1). | Claude | fixed: just "Users". |
+| US3 | A hand-made `<table>` with an "ACTIONS" title over a column of icons. | Claude | fixed: the shared `GridTable` (D30), the actions column untitled (named for screen readers only). |
+| US4 | Key and bin as grey squares, always filled. | Claude | fixed: plain icons that light up on hover, as on a connection row. |
+| US5 | "YOU" tag, uppercase with a border. | Claude | fixed: a small green "You" tag, like "This device" on the sessions list. |
+| US6 | Delete a member: with a long name and email the title wrapped and the email didn't fit; the button read "Loading…" while deleting. | User | fixed: the large window (`ConfirmDialog large`), "Deleting…" / « Suppression… », and the email field's focus ring drawn inside (AC8). |
+
 ### Settings · Server `/settings/server` (admin)
 
 Components: providers list (`Toggle`), `AiServerSurface`, `AiCostSurface`.
@@ -440,6 +451,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
 | Private mode: amounts masked, shares and % kept, one `PrivacyEye` right after the card's title, never next to a figure (D18, D26, D29) | Dashboard net worth, distribution, holdings; Accounts chart. To apply: Accounts list, Investments, Budget figures, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
-| Tables are `GridTable` (CSS grid on fixed tracks, `ROW_CELLS` rows, `HEAD_CELL` headers, `TableEmpty`), D30 | Budget transactions, Dashboard holdings, Budget categories. To move onto it: users, sessions, the asset window's purchases, Accounts list |
+| Tables are `GridTable` (CSS grid on fixed tracks, `ROW_CELLS` rows, `HEAD_CELL` headers, `TableEmpty`), D30 | Budget transactions, Dashboard holdings, Budget categories. To move onto it: the asset window's purchases, Accounts list (users: done, US3) |
 | Errors (E1): `ErrorState` for what couldn't be shown (`CardState`, `CrashPage` as the router's `defaultErrorComponent`), the corner `ErrorToasts` for a failed action (`showError`, `useErrorToast`), red text by the field only for what the user typed | every card, window and page with a server error |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

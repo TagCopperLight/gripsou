@@ -844,6 +844,27 @@ pub struct DeleteUserReq {
     pub email: String,
 }
 
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Admin,
+    User,
+}
+
+impl Role {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::Admin => "admin",
+            Role::User => "user",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetRoleReq {
+    pub role: Role,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Provider {

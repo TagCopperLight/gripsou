@@ -20,10 +20,12 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
   useErrorToast(remove.isError && t("settings.users.removeUser.error"));
 
   return (
+    // Large: a long name in the title, a long email to type back.
     <ConfirmDialog
+      large
       title={t("settings.users.removeUser.title", { name: user.name })}
       body={t("settings.users.removeUser.body")}
-      confirmLabel={remove.isPending ? t("common.loading") : t("settings.users.deleteUser")}
+      confirmLabel={remove.isPending ? t("settings.users.removeUser.deleting") : t("settings.users.deleteUser")}
       busy={remove.isPending}
       confirmDisabled={!matches}
       onConfirm={() => remove.mutate({ id: user.id, email: email.trim() }, { onSuccess: onDeleted })}
@@ -42,7 +44,7 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="off"
           placeholder={user.email}
-          className="rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono outline-none focus:ring-2 focus:ring-red/40"
+          className="rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono outline-none ring-inset focus:ring-2 focus:ring-red/40"
         />
       </label>
     </ConfirmDialog>

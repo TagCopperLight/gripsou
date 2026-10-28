@@ -401,8 +401,6 @@
     },
     "users": {
       "title": "Users",
-      "usersCount_one": "{{count}} member",
-      "usersCount_other": "{{count}} members",
       "inviteUser": "Invite user",
       "columns": {
         "member": "MEMBER",
@@ -413,6 +411,8 @@
       "you": "You",
       "resetPassword": "Reset password",
       "deleteUser": "Delete user",
+      "changeRole": "Change role",
+      "roleError": "Couldn't change the role",
       "invite": {
         "title": "Invite a new user",
         "heading": "Share this one-time link",
@@ -427,6 +427,7 @@
       },
       "removeUser": {
         "title": "Remove {{name}}",
+        "deleting": "Deleting…",
         "body": "This permanently deletes the user and all their data.",
         "warning": "All accounts, holdings and history belonging to this user will be erased. This cannot be undone.",
         "confirm": "Type {{email}} to confirm",

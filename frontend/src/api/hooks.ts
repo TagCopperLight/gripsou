@@ -503,6 +503,15 @@ export function useCreateResetLink() {
   });
 }
 
+export function useSetUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: "admin" | "user" }) =>
+      patchJson<void>(`/users/${id}`, { role }),
+    onSuccess: () => afterUserChange(qc),
+  });
+}
+
 export function useDeleteUser() {
   const qc = useQueryClient();
   return useMutation({

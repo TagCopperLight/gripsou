@@ -230,6 +230,27 @@ pub async fn create_reset_link(
     ))
 }
 
+pub async fn set_role(
+    State(pool): State<PgPool>,
+    AdminUser { user_id }: AdminUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<dto::SetRoleReq>,
+) -> Result<StatusCode, ApiError> {
+    // An admin demoting themselves would lose this page mid-sentence; another
+    // admin can do it.
+    if id == user_id {
+        return Err(ApiError::Conflict("cannot change your own role"));
+    }
+    gripsou_core::repo::user::profile_by_id(&pool, id)
+        .await?
+        .ok_or(ApiError::NotFound("user not found"))?;
+    if !gripsou_core::repo::user::set_role(&pool, id, body.role.as_str()).await? {
+        return Err(ApiError::Conflict("cannot demote the last admin"));
+    }
+    tracing::info!(by = %user_id, target_user_id = %id, role = body.role.as_str(), "user role changed");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn delete_user(
     State(pool): State<PgPool>,
     AdminUser { user_id }: AdminUser,
@@ -461,6 +482,73 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_role_promotes_and_demotes_another_user(pool: PgPool) {
+        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let target = seed_user_with_password(&pool, "b@t.local", "pw", "user").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let set = |role| {
+            set_role(
+                State(pool.clone()),
+                AdminUser {
+                    user_id: who.user_id,
+                },
+                Path(target),
+                Json(dto::SetRoleReq { role }),
+            )
+        };
+        let role_of = || async {
+            gripsou_core::repo::user::profile_by_id(&pool, target)
+                .await
+                .unwrap()
+                .unwrap()
+                .role
+        };
+
+        assert_eq!(set(dto::Role::Admin).await.unwrap(), StatusCode::NO_CONTENT);
+        assert_eq!(role_of().await, "admin");
+        assert_eq!(set(dto::Role::User).await.unwrap(), StatusCode::NO_CONTENT);
+        assert_eq!(role_of().await, "user");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_role_refuses_your_own(pool: PgPool) {
+        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "b@t.local", "pw", "admin").await;
+        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let err = set_role(
+            State(pool.clone()),
+            AdminUser {
+                user_id: who.user_id,
+            },
+            Path(who.user_id),
+            Json(dto::SetRoleReq {
+                role: dto::Role::User,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.status(), StatusCode::CONFLICT);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_role_never_leaves_no_admin(pool: PgPool) {
+        // Reached when two admins demote each other at once; called directly,
+        // as the handler's own-role rule hides it otherwise.
+        let only = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        assert!(
+            !gripsou_core::repo::user::set_role(&pool, only, "user")
+                .await
+                .unwrap()
+        );
+        let role = gripsou_core::repo::user::profile_by_id(&pool, only)
+            .await
+            .unwrap()
+            .unwrap()
+            .role;
+        assert_eq!(role, "admin");
     }
 
     #[sqlx::test(migrations = "../migrations")]

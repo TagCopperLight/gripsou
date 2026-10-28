@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Settings · Budget";
+export const FOCUS = "Settings · Users";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -747,6 +747,19 @@ export const STATES: MockState[] = [
     pieces: ["Settings · Connections"],
     apply(store) {
       store.providers.push({ key: "bridge", displayName: "Bridge", description: "Banks through Bridge by Bankin'.", enabled: true });
+    },
+  },
+  // ── Settings · Users ──
+  {
+    id: "users-several",
+    label: "Five members, a long name and email",
+    pieces: ["Settings · Users"],
+    apply(store) {
+      store.users.push(
+        { id: id("usr", 3), name: "Jules", email: "jules@example.com", role: "user", joinedAt: daysAgo(30), isSelf: false },
+        { id: id("usr", 4), name: "Marie-Charlotte de La Fontaine-Beaumont", email: "marie-charlotte.delafontaine-beaumont@example.com", role: "admin", joinedAt: daysAgo(400), isSelf: false },
+        { id: id("usr", 5), name: "Sam", email: "sam@example.com", role: "user", joinedAt: daysAgo(2), isSelf: false },
+      );
     },
   },
   // ── Edit account ──
