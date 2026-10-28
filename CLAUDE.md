@@ -110,10 +110,11 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 
 ## Conventions
 
+- **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (Product decisions above are the exception: they exist to stop a removed thing from being rebuilt.)
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
 - **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next. Pure logic lives in `src/lib/`, with tests beside it.
-- **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags.
+- **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags. API key field labels are not translated: each provider declares them in its own words (`ConfigField.label`).
 - **Exports:** a component file exports only components (`react-refresh/only-export-components`). Put shared constants and types in a sibling `.ts`. Only `bun run lint` catches this, not `build`.
 - **Warnings:** to see a passing test's warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
 - **Tests:** adapters against recorded fixtures, integration against a real Postgres, Vitest for the frontend.
