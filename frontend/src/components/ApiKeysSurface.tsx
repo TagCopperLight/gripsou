@@ -6,11 +6,10 @@ import { Surface } from "./Surface";
 import { CardState } from "./CardState";
 import { Button } from "./Button";
 import { Field } from "./Field";
+import { TextInput } from "./TextInput";
 import { useErrorToast } from "../lib/errorToasts";
 import { useApiKeys, useSetApiKey } from "../api/hooks";
 import type { ApiKeyField, ApiKeyProvider } from "../api/types";
-
-const INPUT = "w-full rounded-xl bg-surface-2 px-3.5 py-2 font-mono text-sm text-fg placeholder:text-fg-faint";
 
 type Save = (value: string | null) => void;
 
@@ -73,11 +72,6 @@ function ProviderKeys({
       {secrets.map((f) => (
         <SecretField key={f.key} label={label(f)} isSet={f.set} save={(v) => save(f.key, v)} />
       ))}
-      {provider.redirectUri && (
-        <Field label={t("settings.server.apiKeys.redirectUri")}>
-          <span className="select-all font-mono text-sm text-fg-dim">{provider.redirectUri}</span>
-        </Field>
-      )}
     </div>
   );
 }
@@ -100,9 +94,8 @@ function PlainField({ label, value, save }: { label: string; value: string | nul
 
   return (
     <Field label={label} htmlFor={id}>
-      <input
+      <TextInput
         id={id}
-        className={INPUT}
         value={typed ?? value ?? ""}
         spellCheck={false}
         autoComplete="off"
@@ -144,9 +137,7 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
     return (
       <Field label={label}>
         <div className="flex items-center gap-1">
-          <span className={`${INPUT} select-none tracking-widest text-fg-dim`} aria-label={t("settings.server.apiKeys.saved")}>
-            ••••••••
-          </span>
+          <TextInput readOnly tabIndex={-1} value="••••••••" aria-label={`${label}: ${t("settings.server.apiKeys.saved")}`} className="text-fg-dim" />
           <Button variant="ghost" onClick={() => setReplacing(true)}>
             {t("settings.server.apiKeys.replace")}
           </Button>
@@ -154,7 +145,7 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
             type="button"
             aria-label={t("settings.server.apiKeys.remove", { name: label })}
             onClick={() => save(null)}
-            className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+            className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-red"
           >
             <Trash2 className="size-4.5" />
           </button>
@@ -165,10 +156,9 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
 
   return (
     <Field label={label} htmlFor={id}>
-      <input
+      <TextInput
         id={id}
         type="password"
-        className={INPUT}
         value={text}
         placeholder={replacing ? undefined : t("settings.server.apiKeys.notSet")}
         autoFocus={replacing}

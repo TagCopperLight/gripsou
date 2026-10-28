@@ -448,7 +448,6 @@
         "remove": "Supprimer {{name}}",
         "saved": "Enregistrée",
         "notSet": "Non définie",
-        "redirectUri": "Adresse de retour",
         "saveError": "Impossible d'enregistrer la clé",
         "fields": {
           "powens": { "client_id": "Identifiant client", "domain": "Domaine", "client_secret": "Secret client", "webhook_secret": "Secret du webhook" },

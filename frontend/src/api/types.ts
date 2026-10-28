@@ -246,9 +246,6 @@ export type ApiKeyProvider = {
   key: string;
   displayName: string;
   fields: ApiKeyField[];
-  /** Where the provider sends people back after connecting a bank, built from
-   *  the server's public address; only for providers that need one. */
-  redirectUri?: string;
 };
 
 export type EnabledProvider = {

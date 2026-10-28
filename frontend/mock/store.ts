@@ -56,7 +56,6 @@ export function createStore(): Store {
           { key: "client_secret", secret: true, set: true },
           { key: "webhook_secret", secret: true, set: false },
         ],
-        redirectUri: "https://gripsou.example.com/connections/callback",
       },
       { key: "jev", displayName: "JEV", fields: [{ key: "api_key", secret: true, set: true }] },
       { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", secret: false, value: null }] },
