@@ -22,7 +22,13 @@ async fn main() -> anyhow::Result<()> {
         let public_url = env::var("PUBLIC_URL").ok();
         let passkeys =
             gripsou_api::Passkeys::parse(public_url.as_deref()).map_err(anyhow::Error::msg)?;
-        Some((key, passkeys))
+        // Parse proved it is a bare origin; the jobs build links from it.
+        let public_url = public_url
+            .unwrap_or_default()
+            .trim()
+            .trim_end_matches('/')
+            .to_string();
+        Some((key, passkeys, public_url))
     };
 
     let database_url =
@@ -34,13 +40,20 @@ async fn main() -> anyhow::Result<()> {
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
 
-    let Some((key, passkeys)) = keys else {
+    let Some((key, passkeys, public_url)) = keys else {
         let code = gripsou_api::cli::reset_two_factor(&db, env::args().nth(2)).await;
         log_handle.shutdown().await;
         std::process::exit(code);
     };
 
-    let jobs = std::sync::Arc::new(gripsou_jobs::Deps::new(&db, key).await);
+    // Provider keys: decrypted once here, replaced on each save.
+    let loaded = gripsou_core::repo::provider_config::load(&db, &key).await?;
+    for provider in &loaded.unreadable {
+        tracing::error!(provider = %provider, "provider config unreadable");
+    }
+    gripsou_core::provider_config::replace(loaded.config);
+
+    let jobs = std::sync::Arc::new(gripsou_jobs::Deps::new(&db, key, public_url).await);
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), jobs.clone()));
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());

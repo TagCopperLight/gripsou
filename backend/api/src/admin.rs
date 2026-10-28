@@ -1,4 +1,4 @@
-//! Admin-only settings: account providers, the budget AI and its prices,
+//! Admin-only settings: account providers, provider API keys, the budget AI and its prices,
 //! users, invites and reset links.
 
 use axum::Json;
@@ -24,6 +24,69 @@ pub async fn providers(
             .map(|k| dto::Provider::new(k, enabled.iter().any(|e| e == k.key)))
             .collect(),
     ))
+}
+
+pub async fn api_keys(_: AdminUser) -> Json<Vec<dto::ApiKeyProvider>> {
+    let config = gripsou_core::provider_config::current();
+    Json(
+        gripsou_jobs::CONFIG_PROVIDERS
+            .iter()
+            .map(|k| dto::ApiKeyProvider::new(k, &config))
+            .collect(),
+    )
+}
+
+/// The longest value accepted: real keys are far shorter.
+const MAX_KEY_CHARS: usize = 1000;
+
+/// Validates and stores one field, returning every provider's values. Does not
+/// put them in effect: [`set_api_key`] does, so tests can call this alone.
+async fn save_api_key(
+    pool: &PgPool,
+    key: &gripsou_core::crypto::EncryptionKey,
+    provider: &str,
+    field: &str,
+    value: Option<&str>,
+) -> Result<gripsou_core::provider_config::ProviderConfig, ApiError> {
+    let kind =
+        gripsou_jobs::config_provider(provider).ok_or(ApiError::NotFound("provider not found"))?;
+    if !kind.fields.iter().any(|f| f.key == field) {
+        return Err(ApiError::NotFound("field not found"));
+    }
+    let value = value.map(str::trim).filter(|v| !v.is_empty());
+    if value.is_some_and(|v| v.chars().count() > MAX_KEY_CHARS) {
+        return Err(ApiError::bad_request("value too long"));
+    }
+    Ok(gripsou_core::repo::provider_config::set_field(pool, key, provider, field, value).await?)
+}
+
+pub async fn set_api_key(
+    State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
+    AdminUser { user_id }: AdminUser,
+    Path(provider): Path<String>,
+    Json(body): Json<dto::SetApiKeyReq>,
+) -> Result<Json<dto::ApiKeyProvider>, ApiError> {
+    let config = save_api_key(
+        &pool,
+        &jobs.key,
+        &provider,
+        &body.field,
+        body.value.as_deref(),
+    )
+    .await?;
+    gripsou_core::provider_config::replace(config.clone());
+    jobs.reload_accounts(&config);
+    let removed = config.get(&provider, &body.field).is_none();
+    tracing::info!(
+        by = %user_id,
+        provider = %provider,
+        field = %body.field,
+        action = if removed { "removed" } else { "set" },
+        "provider setting changed"
+    );
+    let kind = gripsou_jobs::config_provider(&provider).expect("checked by save_api_key");
+    Ok(Json(dto::ApiKeyProvider::new(kind, &config)))
 }
 
 pub async fn budget_ai_settings(
@@ -278,6 +341,52 @@ mod tests {
     use super::*;
     use crate::testkit::*;
     use sqlx::PgPool;
+
+    #[test]
+    fn api_key_dto_never_carries_a_secret() {
+        let mut c = gripsou_core::provider_config::ProviderConfig::default();
+        c.set("powens", "client_id", Some("id-1".into()));
+        c.set("powens", "client_secret", Some("hunter2".into()));
+        let dto = dto::ApiKeyProvider::new(gripsou_jobs::config_provider("powens").unwrap(), &c);
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(!json.contains("hunter2"), "{json}");
+        assert!(
+            json.contains(r#"{"key":"client_id","secret":false,"value":"id-1"}"#),
+            "{json}"
+        );
+        assert!(
+            json.contains(r#"{"key":"client_secret","secret":true,"set":true}"#),
+            "{json}"
+        );
+        assert!(
+            json.contains(r#"{"key":"webhook_secret","secret":true,"set":false}"#),
+            "{json}"
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn save_api_key_trims_removes_and_refuses_unknown(pool: PgPool) {
+        let key = gripsou_core::testkit::encryption_key();
+        let c = save_api_key(&pool, &key, "jev", "api_key", Some("  k  "))
+            .await
+            .unwrap();
+        assert_eq!(c.get("jev", "api_key"), Some("k"));
+        let c = save_api_key(&pool, &key, "jev", "api_key", Some("   "))
+            .await
+            .unwrap();
+        assert_eq!(c.get("jev", "api_key"), None, "blank removes");
+        for (p, f) in [("nope", "api_key"), ("jev", "nope")] {
+            let err = save_api_key(&pool, &key, p, f, Some("x"))
+                .await
+                .unwrap_err();
+            assert_eq!(err.status(), StatusCode::NOT_FOUND, "{p}.{f}");
+        }
+        let long = "x".repeat(1001);
+        let err = save_api_key(&pool, &key, "jev", "api_key", Some(&long))
+            .await
+            .unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
