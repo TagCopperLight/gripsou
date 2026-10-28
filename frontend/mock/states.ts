@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "API keys";
+export const FOCUS = "Sign-in pages";
 
 export const STATES: MockState[] = [
   // ── API keys ──
