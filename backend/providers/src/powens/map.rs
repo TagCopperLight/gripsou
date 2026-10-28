@@ -61,6 +61,11 @@ pub fn map_institution(connections: &[Connection]) -> Institution {
         .unwrap_or_default()
 }
 
+/// The date part of a Powens datetime, a Paris day (#38).
+fn day(value: Option<&str>) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(value?.get(..10)?, "%Y-%m-%d").ok()
+}
+
 /// Map a Powens bank account onto a canonical account. The provider-supplied
 /// `original_name` seeds the display name (gripsou later preserves user edits);
 /// `meta` stashes provider specifics for debugging and the escape hatch.
@@ -91,6 +96,10 @@ pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
             "number": acct.number,
             "id_connection": acct.id_connection,
         }),
+        // `last_update` is when Powens last read the account at the bank. It
+        // stops moving while the bank can't be reached, and Powens keeps
+        // returning that day's balances.
+        balance_as_of: day(acct.last_update.as_deref()),
     }
 }
 
@@ -375,9 +384,6 @@ pub fn map_transactions(txns: &[PowensTransaction]) -> Vec<CanonicalTransaction>
 /// Keep account timestamps independent from the parent/source timestamps: a
 /// successful checking update must not make blocked savings appear current.
 pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connections: &[Connection]) {
-    fn day(value: Option<&str>) -> Option<chrono::NaiveDate> {
-        chrono::NaiveDate::parse_from_str(value?.get(..10)?, "%Y-%m-%d").ok()
-    }
     fn health(
         raw: Option<&crate::powens::model::SourceHealth>,
         date: Option<&str>,

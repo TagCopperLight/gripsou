@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -61,12 +62,18 @@ pub async fn ingest(
 
     // Accounts first; map external_id -> account id for later lookups.
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();
+    // The day each account's holdings are true on: when the provider last read
+    // the bank. A provider that can't reach the bank keeps returning old
+    // balances, and dating them today would be a false snapshot (#58).
+    let mut snapshot_day: HashMap<Uuid, NaiveDate> = HashMap::new();
     for acct in &sync.accounts {
         let id = upsert_account(&mut tx, connection_id, acct).await?;
         account_ids.insert(acct.external_id.as_str(), id);
+        let day = acct.balance_as_of.map_or(today, |d| d.min(today));
+        snapshot_day.insert(id, day);
     }
 
-    // Holdings: resolve instrument, upsert holding, stamp today's snapshot.
+    // Holdings: resolve instrument, upsert holding, stamp its account's day.
     let mut snapshots = 0;
     let mut present: HashSet<Uuid> = HashSet::new();
     for holding in &sync.holdings {
@@ -88,20 +95,22 @@ pub async fn ingest(
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
         };
-        stamp_snapshot(&mut tx, holding_id, today, holding.quantity, value).await?;
+        let day = snapshot_day[&account_id];
+        stamp_snapshot(&mut tx, holding_id, day, holding.quantity, value).await?;
         snapshots += 1;
     }
 
     // Close holdings that existed before but are absent from this sync (e.g. a
     // position fully sold, or an invest account's cash residual that went to
-    // zero). Zero the position and stamp a zero snapshot for today so the
-    // "latest snapshot per holding" aggregations (accounts) and
+    // zero). Zero the position and stamp a zero snapshot on its account's day
+    // so the "latest snapshot per holding" aggregations (accounts) and
     // the holdings list stop counting their stale values. History is kept.
     let mut holdings_closed = 0;
-    for existing in ids_for_connection(&mut tx, connection_id).await? {
+    for (existing, account_id) in ids_for_connection(&mut tx, connection_id).await? {
         if !present.contains(&existing) {
+            let day = snapshot_day.get(&account_id).copied().unwrap_or(today);
             zero_holding(&mut tx, existing).await?;
-            stamp_snapshot(&mut tx, existing, today, Decimal::ZERO, Decimal::ZERO).await?;
+            stamp_snapshot(&mut tx, existing, day, Decimal::ZERO, Decimal::ZERO).await?;
             holdings_closed += 1;
         }
     }

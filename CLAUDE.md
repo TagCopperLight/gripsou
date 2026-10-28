@@ -72,6 +72,7 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
 ### History
 
 - **The core writes snapshots, not providers.** Every sync stamps `holding_snapshot` per holding (idempotent per day), so even a balance-only provider builds history.
+- **A snapshot is dated when the provider last read the bank** (`CanonicalAccount.balance_as_of`, else today), not when gripsou synced. A provider that can't reach the bank keeps returning old balances; dated today they would be false anchors hiding the real history. During an outage the chart holds the last real point, and the backfill rebuilds the stretch once the provider catches up (#58).
 - **Days without a snapshot are derived into `holding_backfill`** (`core/src/backfill.rs`). It walks transactions backward from the nearest *later* snapshot, never from today, so drift stays inside one gap.
   - Priority: snapshot > derived > held flat before the first transaction.
   - There is never a backfill row on a snapshot day: stamping deletes it.
@@ -97,6 +98,7 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 
 - **Powens transactions are cash-only.** `/marketorders` is empty, investment rows have no instrument, and `id_category` is always 9998. Lots and categories are gripsou's job.
 - **No aggregator exposes lots.** PSD2 providers can't see a PEA, and Bridge is like Powens and sales-gated. The PEA's history starts at its connection window, so net worth shows a known, unfixable dip before that. Lots recorded at their real dates keep it small.
+- An account's `last_update` field is when Powens last read it at the bank. It stops moving while the bank is unreachable, so it dates the snapshots, whatever error state Powens reports.
 - Powens `last_update` returns *edited* rows, not new ones. Every sync full-fetches and dedups on `external_id`.
 - **Powens datetimes without a timezone are `Europe/Paris` local time, not UTC** (#38). Date-only fields (`date`, `rdate`, `vdate`) are already Paris days: keep them as dates. If a feature needs exact instants, add one shared parser in the Powens adapter using Paris rules, tested across DST changes, including ambiguous and nonexistent times. Never assume UTC or a fixed offset.
 - For investment accounts, Powens `balance` lags. The `XX-liquidity` investment line is the real cash.

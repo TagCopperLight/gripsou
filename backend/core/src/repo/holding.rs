@@ -32,15 +32,16 @@ pub async fn upsert_holding(
     Ok(id)
 }
 
-/// Every holding id under a connection (across all its accounts). Used by the
-/// ingest to detect holdings that vanished from the latest sync.
+/// Every holding under a connection (across all its accounts), as
+/// `(holding id, account id)`. Used by the ingest to detect holdings that
+/// vanished from the latest sync.
 pub async fn ids_for_connection(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
-) -> Result<Vec<Uuid>, CoreError> {
-    let ids = sqlx::query_scalar!(
+) -> Result<Vec<(Uuid, Uuid)>, CoreError> {
+    let ids = sqlx::query!(
         r#"
-        select h.id
+        select h.id, h.account_id
         from holding h
         join account a on a.id = h.account_id
         where a.connection_id = $1
@@ -49,7 +50,7 @@ pub async fn ids_for_connection(
     )
     .fetch_all(&mut *conn)
     .await?;
-    Ok(ids)
+    Ok(ids.into_iter().map(|r| (r.id, r.account_id)).collect())
 }
 
 /// Zero a holding's current position (quantity and cost basis). Called when a

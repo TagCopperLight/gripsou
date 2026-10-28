@@ -12,6 +12,12 @@ pub struct CanonicalAccount {
     pub type_key: String,
     pub currency: String,
     pub meta: Value,
+    /// The day the provider last read this account at the bank, which is the
+    /// day its holdings are true on. `None` means today. A provider that can't
+    /// reach the bank keeps returning old balances: dating them today would
+    /// save a false snapshot and hide the real history behind it.
+    #[serde(default)]
+    pub balance_as_of: Option<NaiveDate>,
 }
 
 /// Reference to an instrument; the core resolves/creates the global row.
