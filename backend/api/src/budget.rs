@@ -861,7 +861,10 @@ pub struct CountsDto {
     pub matching: i64,
     pub total: i64,
     pub uncategorized: i64,
-    /// Decimal as a string, per the project convention.
+    /// The cash rows among `matching`: what "select all shown" selects.
+    pub selectable: i64,
+    /// Decimal as a string, per the project convention. The `selectable`
+    /// rows' sum.
     pub matching_total: String,
     /// At least one matching row's account leg could not be valued, so
     /// `matchingTotal` is understated by whatever that row was worth. Same
@@ -881,6 +884,7 @@ pub async fn transaction_count_summary(
         matching: c.matching,
         total: c.total,
         uncategorized: c.uncategorized,
+        selectable: c.selectable,
         matching_total: c.matching_total.to_string(),
         fx_missing: c.fx_missing,
     }))

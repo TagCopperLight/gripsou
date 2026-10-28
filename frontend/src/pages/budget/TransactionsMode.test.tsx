@@ -10,6 +10,9 @@ import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
 import type { Transaction } from "../../api/types";
 
+const navigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
+
 const CATEGORIES = [
   {
     id: "gro", name: "Groceries", defaultKey: null, color: "#9bb06b", icon: "shopping-cart",
@@ -87,7 +90,7 @@ function stubFetch() {
       if (u.includes("/budget/categories")) return json(CATEGORIES);
       if (u.includes("/budget/tags")) return json(TAGS);
       if (u.includes("/transactions/counts")) {
-        return json({ matching: 2, total: 2, uncategorized: 2, matchingTotal: "-999.00" });
+        return json({ matching: 2, total: 2, uncategorized: 2, selectable: 2, matchingTotal: "-999.00" });
       }
       if (u.includes("/apply-to-description")) {
         applyBodies.push(body);
@@ -175,6 +178,15 @@ describe("TransactionsMode", () => {
     bulkShouldFail = false;
     serverRowsState = ROWS.map((r) => ({ ...r, tags: [...r.tags] }));
     stubFetch();
+  });
+
+  it("in private mode, hides the amounts behind one eye by the title", async () => {
+    const client = renderMode({ ...DEFAULT_PREFS, privateMode: true });
+    await settle(client);
+    const amounts = () => screen.getAllByTestId("tx-amount").map((e) => e.textContent).join(" ");
+    expect(amounts()).not.toMatch(/12[.,]40/);
+    fireEvent.click(screen.getByRole("button", { name: "Show amount" }));
+    expect(amounts()).toMatch(/12[.,]40/);
   });
 
   it("coalesces typing and shows matching rows within 200 ms of the last keystroke", async () => {
@@ -361,6 +373,18 @@ describe("TransactionsMode", () => {
     await settle(client);
   });
 
+  it("marks the selection's total when a selected row has no exchange rate", async () => {
+    serverRowsState[1] = { ...serverRowsState[1], currency: "USD", amountReporting: null };
+    const client = renderMode();
+    await screen.findByText("ALDI");
+    fireEvent.click(screen.getAllByTestId("tx-select")[0]);
+    await waitFor(() => expect(screen.getByTestId("selection-total")).not.toHaveAttribute("title"));
+    fireEvent.click(screen.getAllByTestId("tx-select")[1]);
+    await waitFor(() => expect(screen.getByTestId("selection-total")).toHaveTextContent("12,40"));
+    expect(screen.getByTestId("selection-total")).toHaveAttribute("title", expect.stringMatching(/no exchange rate/));
+    await settle(client);
+  });
+
   it("accumulates every toggle against the live row, not a frozen snapshot", async () => {
     // t1 starts with tag A. Opening the chooser and toggling B then C must
     // each patch against the CURRENT tag set (including whatever the previous
@@ -414,20 +438,14 @@ describe("TransactionsMode", () => {
     expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
-  it("reports how many rows a successful bulk write touched", async () => {
+  it("reports how many rows a successful bulk write touched, in the corner", async () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-select")[0]);
     fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await settle(client);
-    expect(screen.getByTestId("bulk-result")).toHaveTextContent("2");
-
-    // The line describes that write only: the next one, of any kind, clears it.
-    fireEvent.click(screen.getAllByTestId("tx-add-tag")[1]);
-    fireEvent.click(await screen.findByTestId("chooser-option-B"));
-    expect(screen.queryByTestId("bulk-result")).toBeNull();
-    await settle(client);
+    expect(screen.getByTestId("done-toast")).toHaveTextContent("2 rows updated.");
   });
 
   it("drops an old error once a later write goes through", async () => {
@@ -550,7 +568,7 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await screen.findByTestId("break-pair-modal");
 
-    expect(screen.queryByTestId("bulk-result")).toBeNull();
+    expect(screen.queryByTestId("done-toast")).toBeNull();
     await settle(client);
   });
 

@@ -31,8 +31,20 @@ export function tags(store: Store): BudgetTag[] {
   return store.tags.map((t) => ({ ...t, txCount: store.txns.filter((x) => x.tagIds.includes(t.id)).length }));
 }
 
+/** Euros per dollar, for the rows of a dollar account. */
+const EUR_PER_USD = 0.92;
+
+/** A row's value in euros; null for a foreign row when the budget has no rate
+ *  (the "Budget: a transaction has no rate" state). */
+function reporting(store: Store, x: TxnRow): number | null {
+  const currency = store.accounts.find((a) => a.id === x.accountId)?.currency ?? "EUR";
+  if (currency === "EUR") return x.amount;
+  return store.fx.budget ? null : Math.round(x.amount * EUR_PER_USD * 100) / 100;
+}
+
 export function transactionView(store: Store, x: TxnRow): Transaction {
   const a = store.accounts.find((acc) => acc.id === x.accountId)!;
+  const inEuros = reporting(store, x);
   const c = store.categories.find((cat) => cat.id === x.categoryId) ?? null;
   const sec = x.holdingId ? store.securities.find((s) => s.id === x.holdingId) : undefined;
   return {
@@ -41,7 +53,7 @@ export function transactionView(store: Store, x: TxnRow): Transaction {
     type: x.type,
     description: x.description,
     amount: money(x.amount),
-    amountReporting: money(x.amount),
+    amountReporting: inEuros === null ? null : money(inEuros),
     currency: a.currency,
     accountId: a.id,
     accountName: a.name,
@@ -92,7 +104,7 @@ export function matching(store: Store, q: URLSearchParams, opts: { ignoreTransfe
     if (to && x.t > dayOf(to)) return false;
     if (catIds.length && !catIds.includes(x.categoryId ?? "")) return false;
     if (tagIds.length && !tagIds.every((t) => x.tagIds.includes(t))) return false;
-    if (q.get("uncategorized") === "true" && x.categoryId !== null) return false;
+    if (q.get("uncategorized") === "true" && !(x.source === "cash" && x.categoryId === null)) return false;
     if (q.get("needsReview") === "true" && !x.needsReview) return false;
     return true;
   });
@@ -108,13 +120,16 @@ export function transactions(store: Store, q: URLSearchParams): Transaction[] {
 
 export function counts(store: Store, q: URLSearchParams): TransactionCounts {
   const rows = matching(store, q);
+  // What "select all shown" covers, as the server: the cash rows only.
+  const cash = rows.filter((x) => x.source === "cash");
   const visible = store.txns.filter((x) => !x.isTransfer);
   return {
     matching: rows.length,
     total: visible.length,
-    uncategorized: visible.filter((x) => x.categoryId === null).length,
-    matchingTotal: money(rows.reduce((s, x) => s + x.amount, 0)),
-    fxMissing: false,
+    uncategorized: visible.filter((x) => x.source === "cash" && x.categoryId === null).length,
+    selectable: cash.length,
+    matchingTotal: money(cash.reduce((s, x) => s + (reporting(store, x) ?? 0), 0)),
+    fxMissing: cash.some((x) => reporting(store, x) === null),
   };
 }
 
@@ -136,11 +151,12 @@ function ref(c: CategoryRow): CategoryRef {
   return { id: c.id, name: c.name, defaultKey: c.defaultKey, color: c.color, icon: c.icon };
 }
 
-/** Budget rows: cash only (a lot is not spending), no neutral category. */
+/** Budget rows, in euros: cash only (a lot is not spending), no neutral
+ *  category; a row with no rate counts for nothing (the server flags it). */
 function budgetRows(store: Store): (TxnRow & { cat: CategoryRow | null })[] {
   return store.txns
     .filter((x) => x.source === "cash")
-    .map((x) => ({ ...x, cat: store.categories.find((c) => c.id === x.categoryId) ?? null }))
+    .map((x) => ({ ...x, amount: reporting(store, x) ?? 0, cat: store.categories.find((c) => c.id === x.categoryId) ?? null }))
     .filter((x) => x.cat?.kind !== "neutral");
 }
 
@@ -229,7 +245,8 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
   const incomeOf = (r: Row[]) => sum(incomeSide(r));
   const expensesOf = (r: Row[]) => sum(expenseSide(r));
 
-  const remainder = income - expenses;
+  // In cents, so a month that nets to zero reads exactly zero.
+  const remainder = Math.round((income - expenses) * 100) / 100;
   const breakdownEntries = sorted(exp);
   const breakdown: BreakdownRow[] = breakdownEntries.slice(0, 7).map(([k, v]) => {
     const row: BreakdownRow = {

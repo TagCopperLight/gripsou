@@ -3,10 +3,9 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 import { getJson } from "./client";
 import { keys } from "./keys";
-import { transactionFilterParams } from "./filter";
 import type { BudgetCategory } from "./budget";
-import type { Transaction, TransactionCounts, TransactionFilterQuery } from "./types";
-import { addMonths, currentMonth, monthBounds, periodBounds, type Period } from "../lib/period";
+import type { Transaction } from "./types";
+import { currentMonth, periodBounds, type Period } from "../lib/period";
 
 /** The chip fields, and no more — the same shape `/api/transactions` rows carry,
  *  so `CategoryChip` renders one of these unchanged. */
@@ -114,19 +113,3 @@ export function useLatestDataMonth() {
   });
 }
 
-/** Whether any transaction is dated before `month`, which is whether the
- *  Overview can step back from it. An empty month in the middle of the data
- *  is not its edge. Nothing is asked while `month` is undefined. */
-export function useHasDataBefore(month: string | undefined) {
-  const q: TransactionFilterQuery = {
-    to: month === undefined ? undefined : monthBounds(addMonths(month, -1)).to,
-  };
-  return useQuery({
-    // The counts' own key, so it refreshes with every other count.
-    queryKey: keys.transactionCounts(q),
-    queryFn: ({ signal }) => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`, { signal }),
-    enabled: month !== undefined,
-    select: (c) => c.matching > 0,
-    placeholderData: keepPreviousData,
-  });
-}

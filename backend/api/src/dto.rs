@@ -947,7 +947,8 @@ pub struct CompleteConnectionReq {
 }
 
 /// One scope's figures on the Investments page. `annualised` is a ratio per
-/// year ("0.0712"), null when it can't be computed.
+/// year ("0.0712"), null when it can't be computed. Every figure leaves out
+/// the same holdings, counted by reason.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnFigures {
@@ -957,6 +958,10 @@ pub struct ReturnFigures {
     pub value: String,
     pub gl: String,
     pub gl_pct: String,
+    /// Left out: the recorded purchases and sales don't explain what is held.
+    pub excluded_history: usize,
+    /// Left out: no exchange rate to value it today.
+    pub excluded_rate: usize,
 }
 
 impl ReturnFigures {
@@ -974,6 +979,8 @@ impl ReturnFigures {
             value: s.value.to_string(),
             gl: gl.to_string(),
             gl_pct: gl_pct.to_string(),
+            excluded_history: s.missing.len(),
+            excluded_rate: s.unvalued.len(),
         }
     }
 }
@@ -992,7 +999,8 @@ pub struct ReturnAccount {
     pub color: String,
     /// The bank or broker the account comes from; empty when unknown.
     pub source: String,
-    /// Holdings left out of `annualised`: their purchases aren't recorded.
+    /// Holdings left out of the figures: their purchases and sales don't
+    /// explain what is held.
     pub missing: Vec<MissingHolding>,
     #[serde(flatten)]
     pub figures: ReturnFigures,

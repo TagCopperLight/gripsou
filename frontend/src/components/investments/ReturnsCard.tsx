@@ -1,11 +1,14 @@
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../Surface";
-import { Money } from "../Money";
+import { MaskedMoney, PrivacyEye } from "../PrivateMoney";
 import { Percent } from "../Percent";
 import { ReturnSpan } from "./ReturnSpan";
-import { mutedToneClass, toneClass } from "../../lib/returns";
+import { leavesOut, mutedToneClass, toneClass } from "../../lib/returns";
+import { FxAsterisk } from "../FxNote";
+import { ExcludedNotes } from "./ExcludedNotes";
 import type { InvestmentReturns, ReturnAccount } from "../../api/types";
+import { usePrivacy } from "../../auth/usePrivacy";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
 // The figure columns get a wide left gutter so they don't run together.
@@ -21,6 +24,7 @@ type ReturnsCardProps = {
  *  figures it sits on. */
 export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   const { t } = useTranslation();
+  const privacy = usePrivacy();
 
   const head = (key: string, desktopOnly = false, left = false) => (
     <th
@@ -35,7 +39,14 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
-        <p className="text-fg font-semibold text-sm">{t("investments.returns.title")}</p>
+        <p className="text-fg font-semibold text-sm">
+          {t("investments.returns.title")}
+          {privacy.enabled && (
+            <span className="ml-3 inline-flex align-middle">
+              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+            </span>
+          )}
+        </p>
         <table className="mt-4 w-full border-separate border-spacing-0">
           <thead>
             <tr>
@@ -48,20 +59,25 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
           </thead>
           <tbody>
             {data.accounts.map((a) => (
-              <AccountRow key={a.id} account={a} today={data.today} />
+              <AccountRow key={a.id} account={a} today={data.today} masked={privacy.masked} />
             ))}
           </tbody>
         </table>
+        <ExcludedNotes figures={data.total} className="mt-4" />
       </div>
     </Surface>
   );
 }
 
-function AccountRow({ account: a, today }: { account: ReturnAccount; today: string }) {
+function AccountRow({ account: a, today, masked }: { account: ReturnAccount; today: string; masked: boolean }) {
   const { t } = useTranslation();
   const row = "py-3 border-t border-surface-2";
   const cell = `${row} ${PAD_FIGURE}`;
   const missing = a.missing.length;
+  const partial = leavesOut(a);
+  // Every holding left out: the figures cover nothing, rather than read 0.
+  const empty = partial && Number(a.invested) === 0 && Number(a.value) === 0;
+  const none = <span className="text-sm text-fg-faint">—</span>;
 
   return (
     <tr>
@@ -89,18 +105,22 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
       <td className={`${cell} text-right whitespace-nowrap align-top md:align-middle`}>
         {a.annualised === null ? (
           <div className="flex flex-col items-end">
-            <span className="text-sm text-fg-faint">—</span>
-            {a.since === null && (
+            <span className="relative text-sm text-fg-faint">
+              —
+              {partial && <FxAsterisk />}
+            </span>
+            {a.since === null && a.excludedHistory > 0 && (
               <span className="text-xs text-fg-faint">{t("investments.missing.noReturn")}</span>
             )}
           </div>
         ) : (
           <div className="flex flex-col items-end">
-            <span className="flex items-baseline">
+            <span className="relative flex items-baseline">
               <Percent value={a.annualised} signed fractionDigits={1} className={`text-sm ${toneClass(a.annualised)}`} />
               <span className={`ml-0.5 font-mono text-[11px] ${mutedToneClass(a.annualised)}`}>
                 {t("investments.returns.perYearShort")}
               </span>
+              {partial && <FxAsterisk />}
             </span>
             {a.since && <ReturnSpan since={a.since} today={today} className="text-[11px]" />}
           </div>
@@ -108,18 +128,20 @@ function AccountRow({ account: a, today }: { account: ReturnAccount; today: stri
       </td>
       {/* INVESTED */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        <Money value={a.invested} className="text-sm text-fg-dim" />
+        {empty ? none : <MaskedMoney masked={masked} value={a.invested} className="text-sm text-fg-dim" />}
       </td>
       {/* VALUE */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        <Money value={a.value} className="text-sm text-fg" />
+        {empty ? none : <MaskedMoney masked={masked} value={a.value} className="text-sm text-fg" />}
       </td>
       {/* UNREALISED */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        <div className={`flex flex-col items-end ${toneClass(a.gl)}`}>
-          <Money value={a.gl} signed className="text-sm" />
-          <Percent value={a.glPct} signed fractionDigits={1} className="text-xs" />
-        </div>
+        {empty ? none : (
+          <div className={`flex flex-col items-end ${toneClass(a.gl)}`}>
+            <MaskedMoney masked={masked} value={a.gl} signed className="text-sm" />
+            <Percent value={a.glPct} signed fractionDigits={1} className="text-xs" />
+          </div>
+        )}
       </td>
     </tr>
   );

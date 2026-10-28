@@ -203,7 +203,7 @@
       "type": "Type",
       "account": "Account",
       "weightOfNetWorth": "Share of net worth",
-      "purchaseHistory": "Purchase history",
+      "purchaseHistory": "History",
       "noPurchases": "No purchases.",
       "countryDistribution": "Country distribution",
       "sectorDistribution": "Sector distribution",
@@ -715,7 +715,10 @@
       "addTags": "Add tags",
       "checked": "Checked",
       "autoPaired": "Automatically paired internal transfer",
-      "orphanTransfer": "Transfer unpaired: this transaction’s amount is no longer offset in totals",
+      "orphanTransfer": "Unpaired transfer",
+      "orphanTransferHint": "Its other half was filed in another category, so this amount now counts in your totals.",
+      "lotBuy": "Buy",
+      "lotSell": "Sale",
       "breakPair": {
         "title": "Break the transfer pairing?",
         "body_one": "This transaction belongs to an internal transfer whose debit and credit were paired automatically. Assigning a category unlinks the two transactions. The other keeps its Internal transfer category, but its amount will no longer be offset in totals.",
@@ -733,6 +736,7 @@
         "others": "Others"
       },
       "emptyNothing": "No transactions yet. Connect an account and sync to see them here.",
+      "connect": "Connect a bank",
       "emptyNoMatch": "No transaction matches these filters.",
       "clearAll": "Clear all",
       "loadMore": "Load more",
@@ -781,8 +785,6 @@
     },
     "overview": {
       "other": "Other",
-      "transactionCount_one": "{{count}} transaction",
-      "transactionCount_other": "{{count}} transactions",
       "prevMonth": "Previous month",
       "nextMonth": "Next month",
       "range": "Range",
@@ -824,16 +826,13 @@
         "title": "Last 12 months"
       },
       "empty": {
-        "title": "No transactions in this period",
-        "body": "No transactions fall within the selected period.",
-        "earlier": "View earlier periods"
+        "title": "No transactions in this period"
       }
     },
     "modes": { "overview": "Overview", "transactions": "Transactions", "review": "Review" },
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} resolved",
-      "title": "Uncertain category suggestions",
-      "belowThreshold": "below {{threshold}}% confidence",
+      "title": "To review",
       "accept": "Accept",
       "correct": "Correct",
       "undo": "Undo",
@@ -845,19 +844,18 @@
       "applyToOthers_other": "Apply to {{count}} others",
       "appliedToOthers_one": "applied to {{count}} other",
       "appliedToOthers_other": "applied to {{count}} others",
-      "hidesMoney": "excludes the amount from totals",
       "emptyTitle": "All caught up",
-      "emptyBody": "All category suggestions have been reviewed.",
+      "emptyBody": "The AI's unsure guesses will show up here.",
       "backToOverview": "Back to overview"
     },
     "ai": {
       "reviewNeeded_one": "{{count}} transaction needs review",
       "reviewNeeded_other": "{{count}} transactions need review",
       "reviewCta": "Review {{count}}",
-      "failedTitle": "Automatic categorisation failed",
+      "failedTitle": "Couldn't sort your new transactions",
       "retry": "Retry",
-      "running_one": "Categorising your history — {{count}} left",
-      "running_other": "Categorising your history — {{count}} left"
+      "running_one": "AI sorting · {{count}} left",
+      "running_other": "AI sorting · {{count}} left"
     }
   },
   "investments": {
@@ -888,9 +886,11 @@
       "days_other": "{{count}} days"
     },
     "missing": {
-      "dotTitle": "Holdings excluded from the return calculation because purchases are not recorded: {{names}}",
-      "noReturn": "no purchases recorded"
+      "dotTitle": "Left out of the figures, as their recorded purchases and sales don't match what is held: {{names}}",
+      "noReturn": "history incomplete"
     },
+    "excludedHistory_one": "Excludes {{count}} holding: its purchase and sale history is incomplete.",
+    "excludedHistory_other": "Excludes {{count}} holdings: their purchase and sale history is incomplete.",
     "exposure": {
       "title": "Exposure",
       "regions": "By region and country",

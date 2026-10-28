@@ -80,9 +80,12 @@ export function monthBounds(month: string): { from: string; to: string } {
  *  question, so this is the one place the app formats from the i18n language
  *  rather than from the user's separator/pattern preferences. */
 export function monthLabel(month: string, language: string): string {
-  return new Intl.DateTimeFormat(language, { month: "long", year: "numeric" }).format(
+  const label = new Intl.DateTimeFormat(language, { month: "long", year: "numeric" }).format(
     monthStart(month),
   );
+  // French writes months lower-case ("octobre 2026"); standing alone as a
+  // label, it starts with a capital like the English one.
+  return label.charAt(0).toLocaleUpperCase(language) + label.slice(1);
 }
 
 /** Every named date range the app offers, on both Overview and Transactions,

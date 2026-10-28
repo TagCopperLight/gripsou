@@ -30,6 +30,8 @@ type ExposureDonutProps = {
   /** Private mode: the amounts are masked (the shares stay), and an eye by
    *  the title reveals them. */
   privacy?: Privacy;
+  /** False when a heading above several donuts carries their shared eye. */
+  eye?: boolean;
   /** Slices up to this share stay out of the ring (still in the legend). */
   minSlice?: number;
   className?: string;
@@ -56,6 +58,7 @@ export function ExposureDonut({
   placeholder,
   fxFootnote,
   privacy,
+  eye = true,
   minSlice = 0,
   className = "",
 }: ExposureDonutProps) {
@@ -186,7 +189,7 @@ export function ExposureDonut({
       <div className="flex h-full flex-col p-4 md:p-5">
         <p className="text-fg font-semibold text-sm">
           {title}
-          {privacy?.enabled && !placeholder && (
+          {eye && privacy?.enabled && !placeholder && (
             <span className="ml-3 inline-flex align-middle">
               <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />
             </span>

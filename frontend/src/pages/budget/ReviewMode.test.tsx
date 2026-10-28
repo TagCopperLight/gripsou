@@ -81,9 +81,7 @@ function stubServer(server: Server) {
 
 function renderMode() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // The threshold shown is the reader's own preference.
-  const prefs = { ...DEFAULT_PREFS, budgetAiThreshold: 80 };
-  const auth = { prefs, updatePrefs: vi.fn() } as unknown as AuthValue;
+  const auth = { prefs: DEFAULT_PREFS, updatePrefs: vi.fn() } as unknown as AuthValue;
   return render(
     <QueryClientProvider client={qc}>
       <AuthContext.Provider value={auth}>
@@ -96,12 +94,24 @@ function renderMode() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Review mode", () => {
-  it("lists pending guesses with their confidence and the threshold", async () => {
+  it("says the queue couldn't load, and retries", async () => {
+    let fail = true;
+    stubServer({ pending: [GUESS], calls: [] });
+    const ok = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      fail && String(url).includes("/transactions") ? new Response("boom", { status: 500 }) : ok(url, init));
+    renderMode();
+    expect(await screen.findByText("Couldn't load this")).toBeVisible();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("LECLERC 0999")).toBeVisible();
+  });
+
+  it("lists pending guesses with their confidence", async () => {
     stubServer({ pending: [GUESS, NO_GUESS], calls: [] });
     renderMode();
     expect(await screen.findByText("LECLERC 0999")).toBeVisible();
     expect(screen.getByText("42%")).toBeVisible();
-    expect(screen.getByText("below 80% confidence")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 2 resolved");
   });
 

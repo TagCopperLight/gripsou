@@ -319,8 +319,10 @@ export type TransactionCounts = {
   matching: number;
   total: number;
   uncategorized: number;
-  /** Signed sum of `matching`'s rows in the reader's reporting currency, from
-   *  a query that mirrors `matching`'s predicates exactly. */
+  /** The cash rows among `matching`: what "select all shown" selects (a buy
+   *  or sale carries no budget). */
+  selectable: number;
+  /** Signed sum of the `selectable` rows in the reader's reporting currency. */
   matchingTotal: string;
   fxMissing: boolean;
 };
@@ -338,6 +340,11 @@ export type ReturnFigures = {
   value: string;
   gl: string;
   glPct: string;
+  /** Holdings left out of every figure: their purchases and sales don't
+   *  explain what is held. */
+  excludedHistory: number;
+  /** Holdings left out of every figure: no exchange rate to value them. */
+  excludedRate: number;
 };
 
 export type MissingHolding = { id: string; name: string };
@@ -348,7 +355,7 @@ export type ReturnAccount = ReturnFigures & {
   color: string;
   /** The bank or broker; "" when unknown. */
   source: string;
-  /** Holdings left out of the return: purchases not recorded. */
+  /** The holdings `excludedHistory` counts. */
   missing: MissingHolding[];
 };
 

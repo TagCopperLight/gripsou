@@ -1,10 +1,11 @@
-import { CircleAlert, X } from "lucide-react";
+import { Check, CircleAlert, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { dismissError, useErrorToasts } from "../lib/errorToasts";
 
-/** Failed actions, in the bottom-right corner of the screen, above any open
- *  window, newest at the bottom. Each goes after 5 seconds, or when closed. */
+/** Failed actions (and a few finished ones, in green), in the bottom-right
+ *  corner of the screen, above any open window, newest at the bottom. Each
+ *  goes after 5 seconds, or when closed. */
 export function ErrorToasts() {
   const { t } = useTranslation();
   const toasts = useErrorToasts();
@@ -14,13 +15,19 @@ export function ErrorToasts() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          role="alert"
-          data-testid="error-toast"
+          role={toast.done ? "status" : "alert"}
+          data-testid={toast.done ? "done-toast" : "error-toast"}
           className="pointer-events-auto flex w-full animate-toast-in items-center gap-3 rounded-2xl border border-surface-3 bg-surface-2 p-2.5 shadow-[0_16px_40px_rgba(0,0,0,0.55)] motion-reduce:animate-none md:w-82.5"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-red-soft text-red">
-            <CircleAlert className="size-4" />
-          </span>
+          {toast.done ? (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-green-soft text-green">
+              <Check className="size-4" strokeWidth={2.2} />
+            </span>
+          ) : (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-red-soft text-red">
+              <CircleAlert className="size-4" />
+            </span>
+          )}
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <p className="text-[13px] leading-[1.4] font-medium text-fg">{toast.title}</p>
             {toast.detail !== null && (

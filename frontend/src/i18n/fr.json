@@ -203,7 +203,7 @@
       "type": "Type",
       "account": "Compte",
       "weightOfNetWorth": "Part du patrimoine",
-      "purchaseHistory": "Historique des achats",
+      "purchaseHistory": "Historique",
       "noPurchases": "Aucun achat enregistré.",
       "countryDistribution": "Répartition géographique",
       "sectorDistribution": "Répartition sectorielle",
@@ -715,7 +715,10 @@
       "addTags": "Ajouter des étiquettes",
       "checked": "Pointée",
       "autoPaired": "Virement interne rapproché automatiquement",
-      "orphanTransfer": "Virement dissocié : le montant de cette transaction n'est plus compensé dans les totaux",
+      "orphanTransfer": "Virement dissocié",
+      "orphanTransferHint": "Son autre moitié a été classée dans une autre catégorie : ce montant compte désormais dans vos totaux.",
+      "lotBuy": "Achat",
+      "lotSell": "Vente",
       "breakPair": {
         "title": "Dissocier les transactions de ce virement ?",
         "body_one": "Cette transaction fait partie d'un virement interne dont le débit et le crédit ont été rapprochés automatiquement. Lui attribuer une catégorie dissociera les deux transactions. L'autre restera dans la catégorie Virement interne, mais son montant ne sera plus compensé dans les totaux.",
@@ -733,6 +736,7 @@
         "others": "Autres"
       },
       "emptyNothing": "Aucune transaction pour l'instant. Connectez un compte et lancez une synchronisation.",
+      "connect": "Connecter une banque",
       "emptyNoMatch": "Aucune transaction ne correspond à ces filtres.",
       "clearAll": "Réinitialiser les filtres",
       "loadMore": "Afficher plus de transactions",
@@ -786,12 +790,10 @@
     },
     "overview": {
       "other": "Autres",
-      "transactionCount_one": "{{count}} transaction",
-      "transactionCount_other": "{{count}} transactions",
       "prevMonth": "Mois précédent",
       "nextMonth": "Mois suivant",
-      "range": "Période",
-      "customRange": "Période personnalisée",
+      "range": "Choisir des dates",
+      "customRange": "Dates choisies",
       "clearRange": "Revenir à la vue mensuelle",
       "presets": {
         "last3Months": "3 derniers mois",
@@ -811,7 +813,7 @@
       "vsPrevMonth": "par rapport au mois précédent",
       "vsAvg12": "par rapport à la moyenne sur 12 mois",
       "sankey": {
-        "title": "Flux de trésorerie",
+        "title": "Flux",
         "seeTransactions": "Voir les transactions",
         "notSpent": "Non dépensé",
         "drawnFromSavings": "Prélevé sur l'épargne"
@@ -829,9 +831,7 @@
         "title": "12 derniers mois"
       },
       "empty": {
-        "title": "Aucune transaction sur cette période",
-        "body": "Aucune transaction sur la période sélectionnée.",
-        "earlier": "Consulter les périodes précédentes"
+        "title": "Aucune transaction sur cette période"
       }
     },
     "modes": {
@@ -841,8 +841,7 @@
     },
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} traitées",
-      "title": "Suggestions incertaines",
-      "belowThreshold": "niveau de confiance inférieur à {{threshold}} %",
+      "title": "À vérifier",
       "accept": "Accepter",
       "correct": "Corriger",
       "undo": "Annuler",
@@ -854,19 +853,18 @@
       "applyToOthers_other": "Appliquer à {{count}} autres transactions",
       "appliedToOthers_one": "catégorie appliquée à {{count}} autre transaction",
       "appliedToOthers_other": "catégorie appliquée à {{count}} autres transactions",
-      "hidesMoney": "exclut le montant des totaux",
       "emptyTitle": "Vérification terminée",
-      "emptyBody": "Toutes les suggestions ont été vérifiées.",
+      "emptyBody": "Les suggestions dont l'IA n'est pas sûre apparaîtront ici.",
       "backToOverview": "Retour à la vue d'ensemble"
     },
     "ai": {
       "reviewNeeded_one": "{{count}} transaction à vérifier",
       "reviewNeeded_other": "{{count}} transactions à vérifier",
       "reviewCta": "Vérifier ({{count}})",
-      "failedTitle": "La catégorisation automatique a échoué",
+      "failedTitle": "Impossible de classer vos nouvelles transactions",
       "retry": "Réessayer",
-      "running_one": "Catégorisation de l'historique en cours ({{count}} transaction restante)",
-      "running_other": "Catégorisation de l'historique en cours ({{count}} transactions restantes)"
+      "running_one": "Catégorisation IA · encore {{count}}",
+      "running_other": "Catégorisation IA · encore {{count}}"
     }
   },
   "investments": {
@@ -897,9 +895,11 @@
       "days_other": "{{count}} jours"
     },
     "missing": {
-      "dotTitle": "Positions exclues du calcul du rendement, car les achats ne sont pas renseignés : {{names}}",
-      "noReturn": "aucun achat renseigné"
+      "dotTitle": "Non comptés, car les achats et ventes renseignés ne correspondent pas à ce qui est détenu : {{names}}",
+      "noReturn": "historique incomplet"
     },
+    "excludedHistory_one": "{{count}} actif n'est pas compté : son historique d'achats et de ventes est incomplet.",
+    "excludedHistory_other": "{{count}} actifs ne sont pas comptés : leur historique d'achats et de ventes est incomplet.",
     "exposure": {
       "title": "Exposition",
       "regions": "Par région et pays",

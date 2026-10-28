@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Dot } from "lucide-react";
 
-import { Money } from "../../Money";
+import { MaskedMoney } from "../../PrivateMoney";
 import { Percent } from "../../Percent";
 import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 
@@ -20,10 +20,12 @@ type ComparisonProps = {
   goodWhen: "up" | "down";
   /** Completes `cmp-<figure>-<key>` for the test hooks. */
   testId: string;
+  /** Private mode: an amount change is hidden, a percentage one stays. */
+  masked?: boolean;
 };
 
 export function Comparison({
-  label, current, baseline, format, goodWhen, testId,
+  label, current, baseline, format, goodWhen, testId, masked = false,
 }: ComparisonProps) {
   if (baseline === undefined) return null;
 
@@ -43,7 +45,7 @@ export function Comparison({
         {asPercent ? (
           <Percent value={ratio} signed />
         ) : (
-          <Money value={delta} signed />
+          <MaskedMoney masked={masked} value={delta} signed />
         )}
       </span>
       <span className="truncate text-fg-faint">{label}</span>

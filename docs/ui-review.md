@@ -94,6 +94,7 @@ Findings:
 | D18 | Private mode masked the net worth but the distribution showed the same figure in the middle, in clear, with every account's amount. | Claude | fixed: amounts and the middle masked, % kept, one eye right after the title (as on Holdings) (`PrivacyEye`, shared with `PrivateMoney`). Same rule as D12. |
 | D19 | A small account read "0 %". | Claude | fixed: "<0,1 %" below what one decimal shows (`formatShare`, also on the Investments donuts). Accounts at 0 € stay listed (user's choice). |
 | D60 | Distribution ring: accounts of 1 % or less drew slivers too thin to see or hover. | User | fixed: left out of the ring (`MIN_DRAWN_SHARE`, `isDrawn`, `ExposureDonut` `minSlice`); the other slices fill the space by themselves, as the ring draws proportions of what's in it. The legend still lists them with their real share. Same on the Accounts page (A20). |
+| D61 | Asset window: the "Purchase history" title is too long for a list that holds sales too. | Claude | fixed: "History" / "Historique". |
 | D21 | "PEA PEA" when an account is named after its type. | Claude | won't fix: the user keeps the type tag on every row. |
 | D22 | The legend's tags followed each name, so they zigzagged; the share and the amount sat close together. | User | fixed: every row has the same column widths (each as wide as its longest entry), so tags, shares and amounts line up; more room before the amount; long names cut with "…" (full name on hover). Also applies to the Investments donuts. |
 | D23 | A long name hovered in the donut ran over the ring. | User | fixed: the middle text is kept to the hole's width (from the ring's inner radius), wraps, and is cut with "…" after two lines. |
@@ -183,10 +184,21 @@ Components: `PageHeader`, `AnnualisedReturnCard`, `ReturnsCard` (`ReturnSpan`), 
 |---|---|
 | Loading skeleton cards / error | query `/investments/returns`, `/holdings` |
 | No investments (empty) | state |
-| Annualised return unknown (null) | state |
+| Annualised return unknown (null) | state "Every security has purchases missing", or "Two dollar ETFs have no rate" |
 | Account with missing purchases (dot, "no return") | state |
-| Span: days / months / years | base + state |
+| Span: days / months / years | base (years); states Started → Months, Days |
 | Exposure donuts: asterisk on the total, footnote, when a security has no rate | state "Two dollar ETFs have no rate" |
+| Private mode: one eye by each card's title | state "Private mode on" |
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| I1 | Private mode: the return card had an eye on each of its two amounts (invested, value), each revealing only its own, and left the gain in euros visible; the per-account table and the three exposure rings showed every amount. | User | fixed as on the Dashboard: one eye after the return card's title, one after the table's, and one after the "Exposure" heading for its three rings (one eye per ring was too many); each reveals its own amounts, percentages stay. |
+| I2 | The return card and the per-account table mixed two rules: the yearly % left out the holdings it couldn't trust, the euros (invested, value, gain) counted all of them. A holding with no exchange rate was worth 0 € against its full cost, a loss that didn't exist (both mock ETFs: −7 332 €, −100 %); a holding whose purchases and sales don't match what is held moved the euros but not the %. | Claude | fixed (server): every figure covers the same holdings, those whose history is complete and that have a rate; the others are counted by reason (`excludedHistory`, `excludedRate`). An amber asterisk on the % and a note per reason under the card ("Excludes 1 holding: its purchase and sale history is incomplete.", "Excludes 2 holdings: no exchange rate yet."); "—" instead of 0 € when every holding is left out. |
+| I3 | "no purchases recorded" under an account whose purchases are recorded but incomplete; the dot's hover said purchases were missing even for an unrecorded sale. | Claude | fixed: "history incomplete"; the hover says the recorded purchases and sales don't match what is held. |
+| I4 | Under a year the yearly % can look far bigger than it is (10 days at +2.7 % reads +161 %/yr). | Claude | won't fix: kept, with its span in amber. |
+| I5 | Mock: shares no purchase explains added nothing to the invested, so the gain looked larger than it is. | Claude | fixed: the bank's cost stands in, as in `lot_basis`. |
 
 ### Budget · Overview `/budget/overview`
 
@@ -195,13 +207,25 @@ Components: `Budget` (mode switch, review badge), `PeriodLine` (+ `RangeModal`),
 | State | How to reach |
 |---|---|
 | Loading / error (summary, trend) | query `/budget/summary`, `/budget/trend` |
-| Month vs custom range; step back / forward disabled at the ends | action |
-| Comparisons shown / absent (under 3 months of history) | base / state |
-| Empty period, with or without "earlier" | action (step back past the data) |
+| Month vs custom range; step forward disabled on the latest month with data | action |
+| Comparisons shown / absent (under 3 months of history) | base / state "Only 2 months of history" |
+| Empty period | action (step back past the data) |
 | Some rows have no rate: asterisk on income / expenses / net, footnote in the figures card | state "Budget: a transaction has no rate" |
-| Sankey: not spent / drawn from savings / exactly zero | base / state |
-| AI banner: running, review needed, last run failed | base (review); state |
-| Review tab badge (count) | base |
+| Sankey: not spent / drawn from savings / exactly zero | base / states Month → Overspent, Zero |
+| AI banner: none, running, review needed, last run failed | base (none); state "To review"; states AI → Running, Failed |
+| Review tab badge (count) | state "To review" |
+| Private mode: one eye in the period line, every amount masked, shares and % kept | state "Private mode on" |
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| B1 | Private mode: an eye on each of the three figures, each revealing only its own; the net's change against last month, the money flow's and the trend's tooltips and axis, and the breakdown's amounts stayed readable. | User | fixed: the period line's "N transactions" is gone (user) and the eye takes its place, revealing every amount of the page; everything in money is masked (the trend's bars keep their shape), shares and % changes stay. |
+| B2 | AI notice: the failed run had its own look (a triangle, a text button), unlike every other error; the running state was a grey line with a spinner straight on the page, pushing everything down while it lasted. | User | fixed after options on the companion: failed in the error look (red tile, "Couldn't sort your new transactions", the server's error cut with "…", whole on hover, small outlined Retry; F-A); running as a small blue pill at the end of the month line, a pulsing sparkle and "AI sorting · 42 left" (R-C, more room around the sparkle, a thicker one; French « Catégorisation IA · encore 42 »). A failure is no longer shown once a new run is under way. |
+| B3 | An empty month: "View earlier periods" stepped back one month only (the ‹ caret already does), often onto another empty one; the sentence under the title repeated it. | User | fixed: both removed; the card only says "No transactions in this period", the month line's ‹ is the way back. |
+| B4 | The ‹ caret was disabled on the first month of the data. | User | fixed: always enabled; a month before the first transaction is an empty month like any other. The › caret still stops at the latest month with data. |
+| B5 | Categories table: a square, full-width hover and full-width lines, unlike the other tables. | User | fixed: moved onto the shared grid table (`GridTable`, as Holdings and Transactions, D30): rounded hover, separators inset to the text, columns on fixed tracks. |
+| B6 | French: the month line's month started lower-case ("octobre 2026"); "Flux de trésorerie" too long; "Période" on the range button. | User | fixed: "Octobre 2026" (the trend's tooltip too); "Flux"; "Choisir des dates", and "Dates choisies" on the chip of a picked range. |
 
 ### Budget · Transactions `/budget/transactions`
 
@@ -209,17 +233,35 @@ Components: `SearchSurface`, `FilterPanel`, `ActiveFilterChips`, `TransactionsTa
 
 | State | How to reach |
 |---|---|
-| Loading / error | query `/transactions` |
-| Nothing at all / no match (clear filters) | state / action |
-| Paging: load more, loading more | base (271 rows) |
-| Row kinds: cash, lot (buy), auto-paired transfer (dimmed), orphan transfer | base / state |
-| Category chip: user / AI / pair / needs review / none | base |
-| ✓ column on (pref) | Settings · Budget |
-| Selection bar: n selected, bulk category, tags, mark checked | action |
-| Select all shown disabled on the lots bucket | action |
+| Loading (spinner); couldn't load (Retry) | override `/transactions`: hold / fail |
+| Nothing at all | state "No transactions at all" |
+| No match (Clear all) | action (search, filters) |
+| Paging: next page as you scroll | base (277 rows, 200 a page) |
+| Row kinds: cash, buy, sale, paired transfer (dimmed, filter "Internal transfers"), unpaired transfer | base; states "A sale of ESE shares", "A transfer whose other half was filed elsewhere" |
+| Foreign currency: amount in $, € on hover; no rate | states "A dollar account", "Budget: a transaction has no rate" |
+| Long description; tags past the cell's width (+N) | state "A long description and 6 tags on one row" |
+| Category chip: user / AI / pair / to review (dashed) / none | base; state "The AI filed 9 transactions…" |
+| ✓ column on | state "The ✓ column on" |
+| Selection bar: n selected and their total, bulk category, tags, mark checked | action |
+| Select all shown disabled on the Investments type | action |
 | Pair break confirmation | action (recategorise a paired row) |
 | "Apply to all with this description" offer | action |
-| Bulk updated toast | action |
+| Bulk updated line | action |
+| Private mode; reads / saves failing | states "Private mode on", "Nothing loads", "Every save fails" |
+
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| T1 | Private mode left every amount of the list, and the selection's total, readable. | Claude | fixed: masked; one eye after the "Transactions" title reveals them (user). |
+| T2 | Descriptions cut with "…" (83 of the first 200 rows at 1280 px), with no way to read them. | Claude | fixed: the whole text on hover. |
+| T3 | The unpaired transfer's note, "Transfer unpaired: this transaction's amount is no longer offset in totals": jargon, and four lines tall in the narrow column. | Claude | fixed: "Unpaired transfer" / « Virement dissocié » on one line; on hover, "Its other half was filed in another category, so this amount now counts in your totals." |
+| T4 | Buy and sale rows: the ticker twice ("ESE", then "ESE · 5 @ 28.40"), the price unformatted, and a sale kept the rising arrow. | Claude | fixed: "Sale · 5 × 28,40 €" / « Vente · … » (masked in private mode); a sale's icon points down. Mock: lot rows have no category, as on the server. |
+| T5 | "N rows updated" after a bulk change: a small grey line under the whole list, often off-screen. | Claude | fixed: in the corner, as the errors are, in green with a tick (`showDone`). |
+| T6 | The selection's total left out a row with no exchange rate without saying so. | Claude | fixed: the amber asterisk, and on hover "Excludes transactions in a currency with no exchange rate yet." |
+| T7 | An empty ledger said to connect an account, with no way there. | Claude | fixed: a small outlined "Connect a bank" to Settings · Connections. |
+| T8 | Filter labels cut at 1280 px ("Investme…", "Needs rev…"); loading a spinner where Review has placeholder lines; "Personnalisé…" in the period menu. | Claude | won't fix (user): fine as they are. |
 
 ### Budget · Review `/budget/review`
 
@@ -227,10 +269,27 @@ Components: `ReviewProgress`, `ReviewLine`, `ResolvedLine`, `CategoryChooser`, `
 
 | State | How to reach |
 |---|---|
-| Queue with lines; "hides money" warning on a neutral guess | base / state |
-| Resolved line: undo, apply to others, applied to n | action |
-| Empty queue | action (resolve all) / state |
-| Load more | state (many) |
+| Queue with lines | state "To review" |
+| A guess into a neutral category (no warning, R5) | state "A guess into Savings" |
+| A line with no guess (Correct only) | state "Two rows the AI couldn't guess" |
+| Resolved line: undo; apply to others, applied to n | action; state "A guess whose description 5 other rows share" |
+| Correcting a paired transfer asks before breaking the pair | state "A guess on a paired transfer" |
+| Empty queue ("All caught up") | base, or resolve all |
+| Loading (placeholder lines); couldn't load (Retry) | override `/transactions`: hold / fail |
+| Infinite scroll (next page as you scroll) | state "260 rows to review" |
+| Private mode; reads / saves failing | states "Private mode on", "Nothing loads", "Every save fails" |
+
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| R1 | "below 70% confidence" next to the title. | User | fixed: removed; the rest validated as is. |
+| R2 | Nothing to review: a large party popper, a sentence and a big green button, unlike every other empty or error state. | User | fixed after options on the companion (C-A): the error look's shape in green, a tick in a soft green tile, "All caught up", "The AI's unsure guesses will show up here.", a small outlined "Back to overview". |
+| R3 | No loading look: the empty queue frame ("0 / 0 resolved") showed until the rows came; a queue that couldn't load stayed that blank frame. | User | fixed (L-B, E): four pulsing placeholder lines cut like review lines; a queue that can't load says so with Retry, like every card. |
+| R4 | The queue's title, "Uncertain category suggestions" / "Suggestions incertaines". | User | fixed: "To review" / "À vérifier", the Overview banner's words. |
+| R5 | A guess into a neutral category (Savings, Investments, Internal transfer, Ignore) said "excludes the amount from totals" on its line: meaningless, and it looked bad. | User | fixed: removed; four ways to say it (plain words, a tag, an icon, the consequence with the amount) were shown on the companion and none kept: the category's name says where the money goes. |
+| R6 | A long queue ended on a "Load more" button. | User | fixed: the next page loads by itself as you scroll, two screens ahead, as on Transactions (shared `useLoadOnScroll`); no button. |
 
 ### Settings · General `/settings/general`
 
@@ -335,6 +394,6 @@ Issues met on one screen and fixed everywhere at once, so later screens reuse th
 | `Button variant="outline"` for an empty state's action (D11) | Dashboard net worth; to use on other empty states |
 | Private mode: amounts masked, shares and % kept, one `PrivacyEye` right after the card's title, never next to a figure (D18, D26, D29) | Dashboard net worth, distribution, holdings; Accounts chart. To apply: Accounts list, Investments, Budget figures, the asset modal |
 | Shares under one decimal read "<0,1 %", not "0 %" (`formatShare`, D19) | Dashboard distribution, Investments donuts |
-| Tables are `GridTable` (CSS grid on fixed tracks, `ROW_CELLS` rows, `HEAD_CELL` headers, `TableEmpty`), D30 | Budget transactions, Dashboard holdings. To move onto it: users, sessions, the asset window's purchases, Accounts list |
+| Tables are `GridTable` (CSS grid on fixed tracks, `ROW_CELLS` rows, `HEAD_CELL` headers, `TableEmpty`), D30 | Budget transactions, Dashboard holdings, Budget categories. To move onto it: users, sessions, the asset window's purchases, Accounts list |
 | Errors (E1): `ErrorState` for what couldn't be shown (`CardState`, `CrashPage` as the router's `defaultErrorComponent`), the corner `ErrorToasts` for a failed action (`showError`, `useErrorToast`), red text by the field only for what the user typed | every card, window and page with a server error |
 | Missing exchange rate: `FxAsterisk` on the figure + `FxFootnote` in the same card (`ExcludedNote` counts the holdings left out). A currency change fetches its rate or is refused, so "figures in the wrong currency" no longer exists (D13–D15). | Dashboard net worth, distribution, holdings; Accounts; Investments donuts; Budget overview figures; Settings · General |

@@ -1,3 +1,5 @@
+import type { ReturnFigures } from "../api/types";
+
 /** Text colour of a signed figure: green above zero, red below, plain at zero. */
 export function toneClass(value: number | string): string {
   const n = Number(value);
@@ -12,4 +14,9 @@ export function mutedToneClass(value: number | string): string {
   if (n > 0) return "text-green/55";
   if (n < 0) return "text-red/55";
   return "text-fg-faint";
+}
+
+/** Whether the figures leave any holding out (see `ExcludedNotes`). */
+export function leavesOut(f: ReturnFigures): boolean {
+  return f.excludedHistory + f.excludedRate > 0;
 }

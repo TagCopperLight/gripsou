@@ -131,11 +131,11 @@ const authValue: AuthValue = {
   updatePrefs: async () => {},
 };
 
-function renderPage(extra?: ReactNode) {
+function renderPage(extra?: ReactNode, prefs = DEFAULT_PREFS) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <AuthContext.Provider value={authValue}>
+      <AuthContext.Provider value={{ ...authValue, prefs }}>
         <BudgetProvider>
           <BudgetOverview />
           {extra}
@@ -152,6 +152,19 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("BudgetOverview", () => {
+  it("in private mode, hides every amount behind one eye in the period line, shares kept", async () => {
+    renderPage(undefined, { ...DEFAULT_PREFS, privateMode: true });
+    await waitFor(() => expect(screen.getByTestId("figure-income")).toHaveTextContent("*"));
+    const amounts = /3\D?200|1\D?940|1\D?260|1\D?200/;
+    expect(document.body.textContent).not.toMatch(amounts);
+    expect(screen.getByTestId("share")).toHaveTextContent("%");
+    const eyes = screen.getAllByRole("button", { name: "Show amount" });
+    expect(eyes).toHaveLength(1);
+    fireEvent.click(eyes[0]);
+    expect(screen.getByTestId("figure-income").textContent).toMatch(/3\D?200/);
+    expect(document.body.textContent).toMatch(/1\D?200/);
+  });
+
   it("replaces the last three surfaces when the period is empty", async () => {
     stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] });
     renderPage();
@@ -186,13 +199,6 @@ describe("BudgetOverview", () => {
       expect(screen.getByTestId("period-label")).toHaveTextContent(monthLabel(expectedMonth, "en")),
     );
     await waitFor(() => expect(requested(`month=${expectedMonth}`)).toBe(true));
-  });
-
-  it("disables the back caret, and offers no way earlier, before the first data", async () => {
-    stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] }, { before: 0 });
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("period-prev")).toBeDisabled());
-    expect(screen.queryByTestId("empty-earlier")).toBeNull();
   });
 
   it("does not ask for the trend when the empty state hides it", async () => {

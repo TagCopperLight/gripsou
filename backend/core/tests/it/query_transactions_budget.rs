@@ -316,6 +316,22 @@ async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow
         3,
         "bulk-action ids stay lot-free even though the header counts the lot"
     );
+    // ...and so does what the selection bar says "select all shown" covers:
+    // its count and its total are the bulk ids', the purchase left out.
+    let cash_only = transaction_counts(&pool, user_id, &filters()).await?;
+    assert_eq!(cash_only.selectable, bulk_ids.len() as i64);
+    let without_lot = sqlx::query_scalar::<_, Decimal>(
+        "select sum(amount) from transaction t join account a on a.id = t.account_id \
+         join connection c on c.id = a.connection_id where c.user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(cash_only.matching_total, without_lot);
+    assert_eq!(
+        lots_counts.selectable, 0,
+        "nothing to select among purchases"
+    );
     Ok(())
 }
 

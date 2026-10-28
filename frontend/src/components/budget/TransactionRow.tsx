@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpDown, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
+import { ArrowUpDown, TriangleAlert } from "lucide-react";
 
 import { TransactionAvatar } from "./TransactionAvatar";
 import { CategoryChip } from "./CategoryChip";
@@ -8,6 +8,7 @@ import { TagCell } from "./TagCell";
 import { Checkbox } from "../Checkbox";
 import { Money } from "../Money";
 import { MoneyHint } from "../MoneyHint";
+import { MaskedMoney } from "../PrivateMoney";
 import { getPrefs } from "../../lib/prefs";
 import { formatDay } from "../../lib/date";
 import { formatQuantity } from "../../lib/money";
@@ -19,6 +20,8 @@ import type { Transaction } from "../../api/types";
 type TransactionRowProps = {
   tx: Transaction;
   showChecked: boolean;
+  /** Private mode: the amount hidden (the title's eye reveals it). */
+  masked?: boolean;
   selected: boolean;
   /** True while anything at all is selected: every avatar becomes a checkbox. */
   anySelected: boolean;
@@ -34,7 +37,7 @@ type TransactionRowProps = {
  *  each row plain values and stable callbacks, so only a row whose own data or
  *  selection changed renders again. */
 export const TransactionRow = memo(function TransactionRow({
-  tx, showChecked, selected, anySelected,
+  tx, showChecked, masked = false, selected, anySelected,
   onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
 }: TransactionRowProps) {
   const { t } = useTranslation();
@@ -43,7 +46,6 @@ export const TransactionRow = memo(function TransactionRow({
    *  each carries the row's own text, the way the settings tables do. */
   const name = (isLot ? tx.ticker : tx.description) ?? "";
   const named = (label: string) => (name ? `${label}: ${name}` : label);
-  const LotIcon = tx.type === "sell" ? TrendingDown : TrendingUp;
   /** A paired transfer is background noise, so it reads dimmed — but only its
    *  content. Opacity on the `<tr>` or on a `<td>` would drain the row's own
    *  background with it (a child cannot undo an ancestor's opacity), washing
@@ -101,15 +103,16 @@ export const TransactionRow = memo(function TransactionRow({
             </span>
           )}
           <div className={`min-w-0 flex-1 ${dim}`}>
-            <p data-testid="tx-description" className="truncate uppercase text-fg">
-              {isLot ? tx.ticker ?? "" : tx.description ?? ""}
+            {/* Cut to one line; the whole text on hover. */}
+            <p data-testid="tx-description" title={name} className="truncate uppercase text-fg">
+              {name}
             </p>
             {isLot && (
-              <p data-testid="tx-lot-line" className="flex items-center gap-1 text-xs text-fg-faint">
-                <LotIcon className="size-3" />
-                {tx.ticker}
+              <p data-testid="tx-lot-line" className="truncate text-xs text-fg-faint">
+                {t(tx.type === "sell" ? "budget.transactions.lotSell" : "budget.transactions.lotBuy")}
                 {" · "}
-                {formatQuantity(tx.quantity ?? "0")} @ {tx.unitPrice}
+                {formatQuantity(tx.quantity ?? "0")} ×{" "}
+                <MaskedMoney masked={masked} value={tx.unitPrice ?? "0"} currency={tx.currency} className="text-xs" />
               </p>
             )}
             {tx.isTransfer && (
@@ -123,9 +126,13 @@ export const TransactionRow = memo(function TransactionRow({
                 against nothing. Amber, not faint: unlike the note above it
                 asks for a correction rather than explaining a settled state. */}
             {tx.isOrphanTransfer && (
-              <p data-testid="tx-orphan-note" className="flex items-center gap-1 text-xs text-amber">
+              <p
+                data-testid="tx-orphan-note"
+                title={t("budget.transactions.orphanTransferHint")}
+                className="flex items-center gap-1 text-xs text-amber"
+              >
                 <TriangleAlert className="size-3 shrink-0" />
-                {t("budget.transactions.orphanTransfer")}
+                <span className="truncate">{t("budget.transactions.orphanTransfer")}</span>
               </p>
             )}
           </div>
@@ -190,9 +197,9 @@ export const TransactionRow = memo(function TransactionRow({
       <td role="cell" className={`justify-end whitespace-nowrap py-2.25 ${COL_PAD.amount}`}>
         {/* Denominated in the ACCOUNT's own currency, never the reporting one. */}
         <span data-testid="tx-amount" className={dim}>
-          <MoneyHint hint={tx.currency !== getPrefs().currency && tx.amountReporting !== null
+          <MoneyHint hint={!masked && tx.currency !== getPrefs().currency && tx.amountReporting !== null
             ? <Money value={tx.amountReporting} signed /> : null}>
-            <Money value={tx.amount} currency={tx.currency} signed className="text-fg" />
+            <MaskedMoney masked={masked} value={tx.amount} currency={tx.currency} signed className="text-fg" />
           </MoneyHint>
         </span>
       </td>

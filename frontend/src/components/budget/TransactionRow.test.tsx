@@ -83,7 +83,7 @@ describe("TransactionRow", () => {
       source: "lot", type: "buy", description: null, ticker: "CW8",
       quantity: "3", unitPrice: "512.30", amount: "-1536.90",
     });
-    expect(screen.getByTestId("tx-lot-line")).toHaveTextContent("CW8");
+    expect(screen.getByTestId("tx-lot-line")).toHaveTextContent(/Buy · 3 × 512,30/);
     expect(screen.queryByTestId("category-chip")).toBeNull();
     expect(screen.queryByTestId("tx-add-tag")).toBeNull();
   });

@@ -12,6 +12,8 @@ import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
 import { ExcludedNote } from "../components/FxNote";
+import { PrivacyEye } from "../components/PrivateMoney";
+import { usePrivacy } from "../auth/usePrivacy";
 
 /** The securities the page is about: cash never counts here. */
 function securities(holdings: Holding[]): ExposureHolding[] {
@@ -57,6 +59,8 @@ export function Investments() {
 
 function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: number }) {
   const { t, i18n } = useTranslation();
+  // One eye by the section's heading reveals the three donuts.
+  const privacy = usePrivacy();
   const e = exposure(held);
   // Securities with no rate are worth zero here, so every donut leaves them out.
   const fxFootnote = excluded > 0 ? <ExcludedNote count={excluded} /> : undefined;
@@ -67,7 +71,14 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
       <ReturnsCard data={data} className="mb-4" />
 
       <section className="mt-8 mb-4">
-        <h2 className="mb-3 px-1 text-lg font-semibold">{t("investments.exposure.title")}</h2>
+        <h2 className="mb-3 px-1 text-lg font-semibold">
+          {t("investments.exposure.title")}
+          {privacy.enabled && (
+            <span className="ml-3 inline-flex align-middle">
+              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+            </span>
+          )}
+        </h2>
 
         <div className="flex flex-col gap-4">
           <ExposureDonut
@@ -76,6 +87,8 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
             items={regionItems(e.regions, t, i18n.language)}
             total={e.covered}
             fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
           />
           <div className="grid gap-4 md:grid-cols-2">
             <ExposureDonut
@@ -83,12 +96,16 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
               items={sectorItems(e.sectors, t)}
               total={e.covered}
               fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
             />
             <ExposureDonut
               title={t("investments.exposure.indices")}
               items={indexItems(e.indices, t)}
               total={e.total}
               fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
             />
           </div>
         </div>

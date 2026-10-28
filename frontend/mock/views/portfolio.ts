@@ -237,7 +237,10 @@ export function holdings(store: Store): Holding[] {
     const boughtCost = buys.reduce((c, l) => c + Number(l.qty) * Number(l.price) + Number(l.fee), 0);
     const mean = boughtQty === 0 ? 0 : boughtCost / boughtQty;
     const price = s.closes[HISTORY_DAYS - 1];
-    const invested = mean * explained;
+    // As `lot_basis`: when the lots don't explain what is held, the cost is
+    // the bank's, here taken as what is held at the mean price (at 90 % of
+    // today's price with no buy at all).
+    const invested = qty === explained ? mean * explained : qty * (boughtQty === 0 ? price * 0.9 : mean);
     const value = missingFx ? 0 : qty * price;
     out.push({
       ...holdingBase(store, s.accountId),
@@ -278,28 +281,60 @@ export function prices(store: Store, holdingId: string, range: string): PricePoi
   return out;
 }
 
+/** The yearly rate that brings the flows (days from the first, amount) to a
+ *  net value of zero, as the server's `xirr`; null when there is none. */
+function xirr(flows: [number, number][]): number | null {
+  if (flows.length < 2 || flows.every(([d]) => d === flows[0][0])) return null;
+  const npv = (r: number) => flows.reduce((s, [d, a]) => s + a * Math.pow(1 + r, -d / 365), 0);
+  let lo = -0.9999;
+  let hi = 1e9;
+  if (Math.sign(npv(lo)) === Math.sign(npv(hi))) return null;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (Math.sign(npv(mid)) === Math.sign(npv(lo))) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 export function returns(store: Store): InvestmentReturns {
   const hs = holdings(store).filter((h) => h.kind !== "cash");
-  const figures = (rows: Holding[], since: string | null): ReturnFigures => {
-    const invested = rows.reduce((s, h) => s + Number(h.invested), 0);
-    const value = rows.reduce((s, h) => s + Number(h.value), 0);
+  // As the server: the return covers the holdings whose lots explain what is
+  // held and that have a rate, from their first lot.
+  // Every figure covers only those; the others are counted by reason.
+  const figures = (rows: Holding[]): ReturnFigures => {
+    const complete = rows.filter((h) => Number(h.unexplainedQty) === 0 && !h.fxMissing);
+    const invested = complete.reduce((s, h) => s + Number(h.invested), 0);
+    const value = complete.reduce((s, h) => s + Number(h.value), 0);
+    const lots = complete.flatMap((h) => lotsOf(store, h.id));
+    const first = lots.length === 0 ? null : Math.min(...lots.map((l) => l.t));
+    let annualised: number | null = null;
+    if (first !== null) {
+      const day = (t: number) => Math.round((t - first) / DAY_MS);
+      const flows: [number, number][] = lots.map((l) => {
+        const gross = Number(l.qty) * Number(l.price);
+        return [day(l.t), l.side === "buy" ? -(gross + Number(l.fee)) : gross - Number(l.fee)];
+      });
+      flows.push([day(TODAY), value]);
+      annualised = xirr(flows);
+    }
     return {
-      annualised: invested === 0 ? null : "0.0712",
-      since,
+      annualised: annualised === null ? null : annualised.toFixed(4),
+      since: first === null ? null : isoDay(first),
       invested: money(invested),
       value: money(value),
       gl: money(value - invested),
       glPct: invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
+      excludedHistory: rows.filter((h) => Number(h.unexplainedQty) !== 0).length,
+      excludedRate: rows.filter((h) => Number(h.unexplainedQty) === 0 && h.fxMissing).length,
     };
   };
-  const firstLot = Math.min(...store.securities.flatMap((s) => lotsOf(store, s.id).map((l) => l.t)));
-  const since = Number.isFinite(firstLot) ? isoDay(firstLot) : null;
   const investAccounts = store.accounts.filter((a) => hs.some((h) => h.accountId === a.id));
   return {
     today: isoDay(TODAY),
-    total: figures(hs, since),
+    total: figures(hs),
     accounts: investAccounts.map((a) => ({
-      ...figures(hs.filter((h) => h.accountId === a.id), since),
+      ...figures(hs.filter((h) => h.accountId === a.id)),
       id: a.id,
       name: a.name,
       color: a.color,

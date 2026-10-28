@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 
 import { safeBudgetColor } from "../../lib/budget";
 import { tint } from "../../lib/color";
@@ -8,8 +8,9 @@ import type { Transaction } from "../../api/types";
 /** Last resort glyphs, keyed by kind of movement — a static record, indexed
  *  (not called), so the icon resolution stays lint-clean under
  *  `react-hooks/static-components`. */
-const GENERIC_ICONS: Record<"lot" | "transfer" | "out" | "in", LucideIcon> = {
+const GENERIC_ICONS: Record<"lot" | "sale" | "transfer" | "out" | "in", LucideIcon> = {
   lot: TrendingUp,
+  sale: TrendingDown,
   transfer: Repeat,
   out: ArrowUpRight,
   in: ArrowDownLeft,
@@ -17,7 +18,7 @@ const GENERIC_ICONS: Record<"lot" | "transfer" | "out" | "in", LucideIcon> = {
 
 /** Which generic glyph applies, when nothing else is known. */
 function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
-  if (tx.source === "lot") return "lot";
+  if (tx.source === "lot") return tx.type === "sell" ? "sale" : "lot";
   if (tx.isTransfer) return "transfer";
   return tx.amount.trim().startsWith("-") ? "out" : "in";
 }

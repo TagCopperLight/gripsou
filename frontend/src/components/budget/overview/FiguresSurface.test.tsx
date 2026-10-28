@@ -97,9 +97,4 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("cmp-income-avg12")).toHaveTextContent("%");
   });
 
-  it("masks the four figures in private mode", () => {
-    renderSurface(summary(), { ...DEFAULT_PREFS, privateMode: true });
-    expect(screen.getByTestId("figure-income")).toHaveTextContent("*");
-  });
-
 });

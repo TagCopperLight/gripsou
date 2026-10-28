@@ -222,22 +222,17 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
 
   function add(t: number, accountId: string, amount: number, description: string, type: string, categoryKey: string | null, extra: Partial<TxnRow> = {}): TxnRow {
     // The last month is still being worked through: some rows wait for a
-    // category, and the AI has filed some with low confidence.
+    // category. Nothing waits for review here: the "To review" state adds it.
     const recent = TODAY - t < 30 * DAY_MS;
     const roll = r();
     let categoryId = categoryKey ? c(categoryKey) : null;
     let categorySource: TxnRow["categorySource"] = categoryId ? (roll < 0.5 ? "user" : "ai") : null;
     let categoryConfidence = categorySource === "ai" ? money(0.8 + r() * 0.19, 2) : null;
-    let needsReview = false;
     if (recent && categoryKey && !extra.isTransfer) {
       if (roll < 0.15) {
         categoryId = null;
         categorySource = null;
         categoryConfidence = null;
-      } else if (roll < 0.3) {
-        categorySource = "ai";
-        categoryConfidence = money(0.45 + r() * 0.2, 2);
-        needsReview = true;
       }
     }
     const row: TxnRow = {
@@ -255,7 +250,7 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
       categoryId,
       categorySource,
       categoryConfidence,
-      needsReview,
+      needsReview: false,
       checked: !recent && r() < 0.6,
       isTransfer: false,
       isOrphanTransfer: false,
@@ -318,8 +313,9 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
         quantity: qty,
         unitPrice: price,
         fee,
-        categoryId: c("investments"),
-        categorySource: "user",
+        // As the server sends a lot row: no category, it isn't a budget row.
+        categoryId: null,
+        categorySource: null,
         categoryConfidence: null,
         needsReview: false,
         checked: false,

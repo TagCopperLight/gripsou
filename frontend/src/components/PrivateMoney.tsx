@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Money } from "./Money";
 import { usePrivacy, type Privacy } from "../auth/usePrivacy";
-import { formatMoney, type MoneyFormatOptions } from "../lib/money";
+import { formatMoney, maskAmount, type MoneyFormatOptions } from "../lib/money";
 
 type MaskedMoneyProps = MoneyFormatOptions & {
   /** Decimal amount as sent by the API (a string), or a number. */
@@ -18,7 +18,7 @@ type MaskedMoneyProps = MoneyFormatOptions & {
  *  wide as the figure it hides. No eye: a card's figures share one. */
 export function MaskedMoney({ value, masked, className = "", ...options }: MaskedMoneyProps) {
   if (!masked) return <Money value={value} className={className} {...options} />;
-  return <span className={`translate-y-[0.142em] font-mono ${className}`}>{"*".repeat(formatMoney(value, options).length)}</span>;
+  return <span className={`translate-y-[0.142em] font-mono ${className}`}>{maskAmount(formatMoney(value, options))}</span>;
 }
 
 type PrivateMoneyProps = Omit<MaskedMoneyProps, "masked"> & {

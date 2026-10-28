@@ -8,6 +8,7 @@ import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, clos
 import { TODAY, daysAgo, id, isoDay } from "./data/util";
 import type { Store } from "./store";
 import { lotsOf } from "./views/portfolio";
+import { summary } from "./views/budget";
 
 export type MockState = {
   id: string;
@@ -103,8 +104,72 @@ function addDcam(store: Store): string {
   return sec;
 }
 
+/** Every purchase older than `days` forgotten, as if the investing started
+ *  then; what is held follows the lots left. */
+function investedSince(store: Store, days: number) {
+  const from = daysAgo(days);
+  for (const s of store.securities) {
+    store.deletedLots.push(...lotsOf(store, s.id).filter((l) => l.t < from).map((l) => l.id));
+    store.manualLots[s.id] = (store.manualLots[s.id] ?? []).filter((l) => l.t >= from);
+  }
+  store.securities = store.securities.filter((s) => lotsOf(store, s.id).length > 0);
+}
+
+/** This month's net (income − expenses), as the overview shows it. */
+function monthNet(store: Store): number {
+  const month = isoDay(TODAY).slice(0, 7);
+  return Number(summary(store, new URLSearchParams({ month })).figures.net.amount);
+}
+
+/** One more expense today, in the first expense category. */
+function addExpense(store: Store, n: number, description: string, amount: number) {
+  const row = store.txns.find((x) => x.accountId === CHECKING && x.source === "cash")!;
+  const category = store.categories.find((c) => c.kind === "expense")!;
+  store.txns.unshift({
+    ...row,
+    id: id("txn", 900 + n),
+    t: TODAY,
+    description,
+    amount: -amount,
+    categoryId: category.id,
+    categorySource: "user",
+    categoryConfidence: null,
+    needsReview: false,
+    isTransfer: false,
+    tagIds: [],
+  });
+}
+
+/** One more cash row, `days` ago, in category `categoryKey` (filed by the user). */
+function addRow(store: Store, n: number, accountId: string, days: number, description: string, amount: number, categoryKey: string | null, extra: Partial<Store["txns"][number]> = {}) {
+  const category = categoryKey === null ? null : store.categories.find((c) => c.defaultKey === categoryKey)!;
+  const row: Store["txns"][number] = {
+    id: id("txn", 950 + n), t: daysAgo(days), type: amount < 0 ? "card" : "transfer", description, amount, accountId,
+    source: "cash", holdingId: null, quantity: null, unitPrice: null, fee: null,
+    categoryId: category?.id ?? null, categorySource: category ? "user" : null, categoryConfidence: null,
+    needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false, tagIds: [], ...extra,
+  };
+  store.txns.push(row);
+  store.txns.sort((a, b) => b.t - a.t || b.id.localeCompare(a.id));
+  return row;
+}
+
+/** Puts this month's cash rows `pick` selects in the review queue as the AI's
+ *  unsure guesses (`categoryKey` null: it abstained). */
+function queue(store: Store, count: number, categoryKey: string | null, pick: (x: Store["txns"][number]) => boolean = () => true) {
+  const from = daysAgo(30);
+  const category = categoryKey === null ? null : store.categories.find((c) => c.defaultKey === categoryKey || c.name === categoryKey) ?? null;
+  return store.txns
+    .filter((x) => x.source === "cash" && x.t >= from && !x.needsReview && pick(x))
+    .slice(0, count)
+    .map((x, i) => {
+      Object.assign(x, { needsReview: true, categoryId: category?.id ?? null, categorySource: category ? "ai" : null, categoryConfidence: category ? (0.5 + (i % 3) * 0.05).toFixed(2) : null });
+      return x;
+    });
+}
+
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Errors";
+export const FOCUS = "Budget transactions";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -161,7 +226,7 @@ export const STATES: MockState[] = [
   {
     id: "distribution-all-zero",
     label: "Every account at 0 €",
-    pieces: ["Distribution", "Net worth chart", "Holdings", "Accounts chart", "Accounts list"],
+    pieces: ["Investments", "Distribution", "Net worth chart", "Holdings", "Accounts chart", "Accounts list"],
     group: "Data",
     option: "Zero",
     apply(store) {
@@ -183,7 +248,7 @@ export const STATES: MockState[] = [
   {
     id: "record-no-lots",
     label: "DCAM.PA held, no purchase recorded at all",
-    pieces: ["Record purchases", "Holdings"],
+    pieces: ["Investments", "Record purchases", "Holdings"],
     apply(store) {
       const sec = addDcam(store);
       security(store, sec).reportedQty = lotShares(store, sec);
@@ -238,11 +303,227 @@ export const STATES: MockState[] = [
       security(store, ESE).composition = null;
     },
   },
+  // ── Investments ──
+  {
+    id: "investments-months",
+    label: "Investing for 5 months only (the return in amber)",
+    pieces: ["Investments", "Holdings", "Asset window"],
+    group: "Started",
+    option: "Months",
+    apply(store) {
+      investedSince(store, 150);
+    },
+  },
+  {
+    id: "investments-days",
+    label: "First purchase a few days ago",
+    pieces: ["Investments", "Holdings", "Asset window"],
+    group: "Started",
+    option: "Days",
+    apply(store) {
+      investedSince(store, 12);
+    },
+  },
+  {
+    id: "investments-none-complete",
+    label: "Every security has purchases missing (return unknown)",
+    pieces: ["Investments", "Holdings"],
+    apply(store) {
+      for (const s of store.securities) s.reportedQty = lotShares(store, s.id) + 1;
+    },
+  },
+  // ── Budget overview ──
+  {
+    id: "budget-to-review",
+    label: "The AI filed 9 transactions it isn't sure of (to review)",
+    pieces: ["Budget transactions", "Budget overview", "Budget review"],
+    apply(store) {
+      const from = daysAgo(30);
+      store.txns
+        .filter((x) => x.source === "cash" && x.t >= from && x.categorySource === "ai" && !x.isTransfer)
+        .slice(0, 9)
+        .forEach((x, i) => {
+          x.needsReview = true;
+          x.categoryConfidence = (0.45 + (i % 4) * 0.05).toFixed(2);
+        });
+    },
+  },
+  {
+    id: "budget-ai-running",
+    label: "The AI is sorting 42 transactions",
+    pieces: ["Budget overview"],
+    group: "AI",
+    option: "Running",
+    apply(store) {
+      store.aiStatus = { ...store.aiStatus, running: true, remaining: 42 };
+    },
+  },
+  {
+    id: "budget-ai-failed",
+    label: "The AI's last run failed",
+    pieces: ["Budget overview"],
+    group: "AI",
+    option: "Failed",
+    apply(store) {
+      store.aiStatus = {
+        ...store.aiStatus,
+        lastRun: { outcome: "error", error: "The AI server didn't answer in time (timeout after 120 s).", startedAt: new Date(TODAY).toISOString() },
+      };
+    },
+  },
+  {
+    id: "budget-young",
+    label: "Only 2 months of history (no comparisons)",
+    pieces: ["Budget overview"],
+    apply(store) {
+      const from = daysAgo(45);
+      store.txns = store.txns.filter((x) => x.source !== "cash" || x.t >= from);
+    },
+  },
+  {
+    id: "budget-overspent",
+    label: "This month drew from savings",
+    pieces: ["Budget overview"],
+    group: "Month",
+    option: "Overspent",
+    apply(store) {
+      addExpense(store, 1, "FACTURE GARAGE REPARATION", Math.max(0, monthNet(store)) + 850);
+    },
+  },
+  {
+    id: "budget-break-even",
+    label: "This month ended at exactly 0",
+    pieces: ["Budget overview"],
+    group: "Month",
+    option: "Zero",
+    apply(store) {
+      const net = monthNet(store);
+      if (net > 0) addExpense(store, 2, "VIREMENT LOYER", net);
+    },
+  },
+  // ── Budget review ──
+  {
+    id: "review-hides-money",
+    label: "A guess into Savings (hides the amount from the totals)",
+    pieces: ["Budget review"],
+    apply(store) {
+      queue(store, 1, "savings", (x) => x.amount < 0 && !x.isTransfer);
+    },
+  },
+  {
+    id: "review-no-guess",
+    label: "Two rows the AI couldn't guess",
+    pieces: ["Budget review"],
+    apply(store) {
+      queue(store, 2, null, (x) => !x.isTransfer);
+    },
+  },
+  {
+    id: "review-same-description",
+    label: "A guess whose description 5 other rows share",
+    pieces: ["Budget review"],
+    apply(store) {
+      const [row] = queue(store, 1, "groceries", (x) => x.amount < 0 && !x.isTransfer);
+      store.txns.filter((x) => x.source === "cash" && x !== row && x.amount < 0 && !x.isTransfer && !x.needsReview).slice(0, 5)
+        .forEach((x) => { x.description = row.description; });
+    },
+  },
+  {
+    id: "review-paired",
+    label: "A guess on a paired transfer (correcting it breaks the pair)",
+    pieces: ["Budget review"],
+    apply(store) {
+      const [row] = queue(store, 1, "internal", (x) => x.amount < 0);
+      row.isTransfer = true;
+    },
+  },
+  {
+    id: "review-many",
+    label: "260 rows to review (loads as you scroll)",
+    pieces: ["Budget review"],
+    apply(store) {
+      store.txns.filter((x) => x.source === "cash" && !x.isTransfer).slice(0, 260).forEach((x, i) => {
+        Object.assign(x, { needsReview: true, categorySource: x.categoryId ? "ai" : null, categoryConfidence: x.categoryId ? (0.45 + (i % 5) * 0.04).toFixed(2) : null });
+      });
+    },
+  },
+  // ── Budget transactions ──
+  {
+    id: "transactions-none",
+    label: "No transactions at all",
+    pieces: ["Budget transactions"],
+    apply(store) {
+      store.txns = [];
+    },
+  },
+  {
+    id: "transactions-dollar",
+    label: "A dollar account: 4 rows in $, the € value on hover",
+    pieces: ["Budget transactions", "Exchange rates"],
+    apply(store) {
+      const accountId = id("acc", 40);
+      store.accounts.push({ id: accountId, connectionId: BANK, name: "Wise USD", color: "#9da3fa", typeKey: "checking", currency: "USD", sourceName: "Crédit Mutuel", sourceLogo: null });
+      store.openingCash[accountId] = 0;
+      addRow(store, 1, accountId, 2, "CB WHOLE FOODS NYC", -84.37, "groceries");
+      addRow(store, 2, accountId, 3, "CB UBER *TRIP", -23.9, "transport");
+      addRow(store, 3, accountId, 4, "CB STARBUCKS 1234", -6.45, "restaurants");
+      addRow(store, 4, accountId, 5, "VIR WISE CONVERSION EUR USD", 500, "internal");
+    },
+  },
+  {
+    id: "transactions-orphan",
+    label: "A transfer whose other half was filed elsewhere (unpaired)",
+    pieces: ["Budget transactions"],
+    apply(store) {
+      const out = store.txns.find((x) => x.isTransfer && x.description === "VIR VERS LIVRET A")!;
+      const back = store.txns.find((x) => x.isTransfer && x.description === "VIR DEPUIS COMPTE COURANT" && x.t > out.t)!;
+      Object.assign(out, { isTransfer: false, categoryId: store.categories.find((c) => c.defaultKey === "shopping")!.id, categorySource: "user" });
+      Object.assign(back, { isTransfer: false, isOrphanTransfer: true });
+    },
+  },
+  {
+    id: "transactions-long",
+    label: "A long description and 6 tags on one row",
+    pieces: ["Budget transactions"],
+    apply(store) {
+      store.tags.push(
+        { id: id("tag", 4), name: "Work expenses", color: "#cb93e2" },
+        { id: id("tag", 5), name: "Shared with Alex", color: "#5fcf9e" },
+        { id: id("tag", 6), name: "Tax-deductible", color: "#f0b952" },
+      );
+      addRow(store, 5, CHECKING, 1, "PRLV SEPA ASSOCIATION SPORTIVE ET CULTURELLE DU QUARTIER SAINT-AMBROISE COTISATION ANNUELLE 2026", -185, "sport", {
+        tagIds: store.tags.map((t) => t.id),
+      });
+    },
+  },
+  {
+    id: "transactions-sale",
+    label: "A sale of ESE shares",
+    pieces: ["Budget transactions", "Holdings", "Record purchases"],
+    apply(store) {
+      const price = security(store, ESE).closes[HISTORY_DAYS - 3];
+      store.txns.push({
+        id: id("txn", 970), t: daysAgo(2), type: "sell", description: null, amount: 5 * price - 1.99, accountId: PEA,
+        source: "lot", holdingId: ESE, quantity: 5, unitPrice: price, fee: 1.99,
+        categoryId: null, categorySource: null, categoryConfidence: null,
+        needsReview: false, checked: false, isTransfer: false, isOrphanTransfer: false, tagIds: [],
+      });
+      store.txns.sort((a, b) => b.t - a.t || b.id.localeCompare(a.id));
+    },
+  },
+  {
+    id: "transactions-checked",
+    label: "The ✓ column on (Settings · Budget)",
+    pieces: ["Budget transactions"],
+    apply(store) {
+      store.user.prefs.showChecked = true;
+    },
+  },
   // ── Holdings ──
   {
     id: "holdings-many",
     label: "Life insurance with 7 funds: long names, fractions",
-    pieces: ["Holdings"],
+    pieces: ["Investments", "Holdings"],
     apply(store) {
       const account = id("acc", 40);
       store.accounts.push({ id: account, connectionId: BROKER, name: "Assurance vie Linxea Spirit 2", color: "#f0b952", typeKey: "life_insurance", currency: "EUR", sourceName: "Boursorama", sourceLogo: null });
@@ -270,7 +551,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-loss",
     label: "Net worth down: markets fell, a big payment left",
-    pieces: ["Net worth chart", "Accounts chart"],
+    pieces: ["Investments", "Net worth chart", "Accounts chart"],
     group: "Data",
     option: "Loss",
     apply(store) {
@@ -298,7 +579,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-fx-missing",
     label: "Two dollar ETFs have no rate (left out of totals)",
-    pieces: ["Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window", "Accounts chart", "Accounts list"],
+    pieces: ["Investments", "Exchange rates", "Net worth chart", "Distribution", "Holdings", "Asset window", "Accounts chart", "Accounts list"],
     apply(store) {
       store.fx.missing = [ESE, CW8];
     },
@@ -306,7 +587,7 @@ export const STATES: MockState[] = [
   {
     id: "fx-budget",
     label: "Budget: a transaction has no rate",
-    pieces: ["Exchange rates"],
+    pieces: ["Budget transactions", "Budget overview", "Exchange rates"],
     apply(store) {
       store.fx.budget = true;
     },
@@ -322,7 +603,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-short",
     label: "Lots explain 3 shares fewer than CW8 holds",
-    pieces: ["Holdings", "Asset window", "Record purchases"],
+    pieces: ["Investments", "Holdings", "Asset window", "Record purchases"],
     apply(store) {
       security(store, CW8).reportedQty = lotShares(store, CW8) + 3;
     },
@@ -330,7 +611,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-lots-excess",
     label: "Lots explain 2 shares more than ESE holds",
-    pieces: ["Holdings", "Asset window", "Record purchases"],
+    pieces: ["Investments", "Holdings", "Asset window", "Record purchases"],
     apply(store) {
       security(store, ESE).reportedQty = lotShares(store, ESE) - 2;
     },
@@ -338,7 +619,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list", "Edit account"],
+    pieces: ["Budget transactions", "Budget review", "Investments", "Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list", "Edit account"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },
@@ -346,7 +627,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-empty",
     label: "New user: nothing connected yet",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
+    pieces: ["Investments", "Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "New",
     apply(store) {
@@ -357,7 +638,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-first-sync",
     label: "Bank just connected, first sync running",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
+    pieces: ["Investments", "Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "Syncing",
     apply(store) {
@@ -368,7 +649,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-nothing-came-in",
     label: "Bank connected, no account came in",
-    pieces: ["Net worth chart", "Distribution", "Holdings", "Accounts chart"],
+    pieces: ["Investments", "Net worth chart", "Distribution", "Holdings", "Accounts chart"],
     group: "Data",
     option: "Empty",
     apply(store) {
@@ -380,7 +661,7 @@ export const STATES: MockState[] = [
   {
     id: "errors-reads-fail",
     label: "Nothing loads (every card's error)",
-    pieces: ["Errors"],
+    pieces: ["Budget transactions", "Budget review", "Budget overview", "Investments", "Errors"],
     apply(store) {
       store.readsFail = true;
     },
@@ -388,7 +669,7 @@ export const STATES: MockState[] = [
   {
     id: "errors-writes-fail",
     label: "Every save fails (the error in the corner)",
-    pieces: ["Errors"],
+    pieces: ["Budget transactions", "Budget review", "Errors"],
     apply(store) {
       store.writesFail = true;
     },

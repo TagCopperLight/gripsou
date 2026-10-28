@@ -18,7 +18,7 @@ function Line(props: Partial<Parameters<typeof PeriodLine>[0]>) {
   return (
     <PeriodLine
       period={shown}
-      txnCount={412}
+      privacy={{ enabled: false, masked: false, toggle: () => {} }}
       canStepBack
       canStepForward
       onStep={() => {}}
@@ -37,12 +37,6 @@ function renderLine(props: Partial<Parameters<typeof PeriodLine>[0]> = {}) {
 }
 
 describe("PeriodLine", () => {
-  it("names the month and counts its transactions", () => {
-    renderLine();
-    expect(screen.getByTestId("period-label")).toHaveTextContent("August 2026");
-    expect(screen.getByTestId("period-count")).toHaveTextContent("412");
-  });
-
   it("steps through the caller, one month either way", () => {
     const onStep = vi.fn();
     renderLine({ onStep });

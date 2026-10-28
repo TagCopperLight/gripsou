@@ -6,16 +6,22 @@ import { useBudget } from "./budgetContext";
 import { CategoryChooser } from "./CategoryChooser";
 import { TagChooser } from "./TagChooser";
 import { Button } from "../Button";
-import { Money } from "../Money";
+import { MaskedMoney } from "../PrivateMoney";
+import { FxAsterisk } from "../FxNote";
 
 type SelectionBarProps = {
-  /** The server's `matching` count — what "all shown" actually covers. */
+  /** The server's `selectable` count — what "all shown" actually covers:
+   *  the cash rows shown, never a buy or sale. */
   matching: number;
   /** The selection's value in the reporting currency. "all shown" is the
    *  server's `matchingTotal`; an explicit id selection is summed from the
    *  loaded rows, which always contain it. */
   total: string;
+  /** Some selected row has no exchange rate, so `total` leaves it out. */
+  fxMissing?: boolean;
   showChecked: boolean;
+  /** Private mode: the total hidden. */
+  masked?: boolean;
   busy: boolean;
   onAssignCategory: (categoryId: string | null) => void;
   onAddTags: (tagIds: string[]) => void;
@@ -45,7 +51,7 @@ function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
 
 /** The bulk-action bar: floats over the surface, stuck to the bottom of the page column. */
 export function SelectionBar({
-  matching, total, showChecked, busy, onAssignCategory, onAddTags, onMarkChecked,
+  matching, total, fxMissing = false, showChecked, masked = false, busy, onAssignCategory, onAddTags, onMarkChecked,
 }: SelectionBarProps) {
   const { t } = useTranslation();
   const { selection, anySelected, clearSelection } = useBudget();
@@ -86,8 +92,13 @@ export function SelectionBar({
           <span data-testid="selection-count" className="text-sm text-fg pr-1">
             {t("budget.transactions.rowsSelected", { count })}
           </span>
-          <span data-testid="selection-total" className="text-xs text-fg-dim">
-            <Money value={total} signed className="text-xs" />
+          <span
+            data-testid="selection-total"
+            className={`relative text-xs text-fg-dim ${fxMissing ? "mr-1.5" : ""}`}
+            title={fxMissing ? t("fx.budget") : undefined}
+          >
+            <MaskedMoney masked={masked} value={total} signed className="text-xs" />
+            {fxMissing && <FxAsterisk />}
           </span>
         </span>
         <span className="mx-1 h-5 w-px bg-fg/12" />
