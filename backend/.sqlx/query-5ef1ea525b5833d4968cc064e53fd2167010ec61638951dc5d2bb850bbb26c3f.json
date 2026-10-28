@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update app_settings set provider_config = $1 where id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ef1ea525b5833d4968cc064e53fd2167010ec61638951dc5d2bb850bbb26c3f"
+}

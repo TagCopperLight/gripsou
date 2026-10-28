@@ -17,6 +17,7 @@ mod logs;
 mod lot_basis;
 mod lot_suggest;
 mod price_sync;
+mod provider_config;
 mod query;
 mod query_price_eligible;
 mod query_review_rule;
