@@ -294,7 +294,6 @@
     },
     "signIn": "Se connecter",
     "welcomeBack": "Heureux de vous retrouver",
-    "signInToContinue": "Connectez-vous pour continuer.",
     "inviteOnly1": "Première visite ? La création d'un compte gripsou se fait sur invitation.",
     "inviteOnly2": "<1>Ouvrez votre lien d'invitation</1> pour créer votre compte.",
     "email": "E-mail",
@@ -309,7 +308,6 @@
     "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
     "rememberMe": "Se souvenir de moi",
     "createAccount": "Créer votre compte",
-    "setUpToContinue": "Renseignez vos informations pour commencer.",
     "name": "Nom",
     "confirmPassword": "Confirmer le mot de passe",
     "passwordLength": "Le mot de passe doit contenir entre 8 et 128 caractères.",
@@ -320,6 +318,9 @@
     "newPassword": "Nouveau mot de passe",
     "updatePasswordButton": "Mettre à jour le mot de passe",
     "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
+    "enterEmail": "Saisissez votre e-mail.",
+    "enterName": "Saisissez votre nom.",
+    "resetFailed": "Impossible de mettre à jour votre mot de passe",
     "dataNotice": "Vos données sont stockées chiffrées, mais l'administrateur de ce serveur peut y accéder."
   },
   "roles": {

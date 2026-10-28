@@ -17,7 +17,25 @@ export function authRoutes(r: Router<Store>): void {
   r.route("GET", "/auth/me", ({ store }) => store.user);
   r.route("GET", "/auth/sessions", ({ store }) => store.sessions);
   r.route("GET", "/auth/mfa/status", ({ store }) => store.mfa);
-  r.route("GET", "/auth/token/:token", () => ({ type: "invite", email: null }));
+  // A link token: "expired" is refused; one starting with "reset" resets the
+  // store user's password; any other is an invite.
+  r.route("GET", "/auth/token/:token", ({ store, params }) =>
+    params.token === "expired" ? reply(404, { error: "not found" })
+    : params.token.startsWith("reset") ? { type: "reset", email: store.user.email }
+    : { type: "invite", email: null },
+  );
+  // A new account starts at the welcome screen; "@taken.example" is in use.
+  r.route("POST", "/auth/invite/:token/redeem", ({ store, body }) => {
+    const { name, email } = body as { name: string; email: string };
+    if (email.endsWith("@taken.example")) return reply(409, { error: "email in use" });
+    store.user = { ...store.user, name, email, welcomeDone: false };
+    return { token: TOKEN, user: store.user };
+  });
+  r.route("POST", "/auth/reset/:token/redeem", ({ store }) => ({ token: TOKEN, user: store.user }));
+  r.route("POST", "/auth/welcome", ({ store }) => {
+    store.user = { ...store.user, welcomeDone: true };
+    return reply(204);
+  });
 
   r.route("PATCH", "/auth/prefs", ({ store, body }) => {
     const currency = (body as PrefsPatch).currency;
@@ -31,8 +49,16 @@ export function authRoutes(r: Router<Store>): void {
   // Any credentials sign in as the store's user, except the password "wrong",
   // which shows the form's error. Same for every password check below.
   r.route("POST", "/auth/login", ({ store, body }) =>
-    wrong(body, "password") ? reply(401, { error: "invalid email or password" }) : { token: TOKEN, user: store.user },
+    wrong(body, "password") ? reply(401, { error: "invalid email or password" })
+    : store.loginMfa ? { mfaRequired: true, challenge: "mock-challenge" }
+    : { token: TOKEN, user: store.user },
   );
+  // The code 000000 and the backup code "wrong" are refused.
+  r.route("POST", "/auth/login/verify", ({ store, body }) => {
+    const { totp, recoveryCode } = body as { totp?: string; recoveryCode?: string };
+    if (totp === "000000" || recoveryCode === "wrong") return reply(400, { error: "wrong code" });
+    return { token: TOKEN, user: store.user };
+  });
   r.route("POST", "/auth/reauth", ({ body }) =>
     wrong(body, "password") ? reply(400, { error: "wrong password" }) : { reauth: "mock-reauth" },
   );

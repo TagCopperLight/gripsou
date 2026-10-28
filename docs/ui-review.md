@@ -421,21 +421,28 @@ Findings:
 | SV3 | The AI switch read "off \| jev", raw lowercase codes. | Claude | left as is (user's call). |
 | SV4 | A whole "About" card for one line, the version. | Claude | left as is (user's call). |
 
-### Login `/login`
+### Login `/login`, Invite `/invite/:token`, Reset `/reset/:token`, Welcome `/welcome`, Connection callback `/connections/callback`
 
-Steps: password → code (TOTP) / backup code / passwordless (passkey). Errors: invalid credentials, too many attempts, wrong code, challenge expired, passkey refused.
+Steps: password → code (TOTP) / backup code / passwordless (passkey). Invite: form, password too short, passwords differ, email exists, invalid or expired link. Welcome: three steps (profile, bank, AI), back from the bank callback (`?step=bank`), finish error. Callback: success redirect; failure (missing id or provider error).
 
-### Invite `/invite/:token`, Reset `/reset/:token`
+| State | How to reach |
+|---|---|
+| Login, with or without a code step | log out; state "Signing in asks for a code" (000000 and the backup code "wrong" are refused) |
+| Invite / Reset / dead link | `/invite/any`, `/reset/reset1`, `/invite/expired` |
+| Welcome, three or two steps | states "A new account" and "No AI provider" |
+| Callback ok / failed | `/connections/callback?state=x`, add `&error=1` |
 
-Form, password too short, passwords differ, email exists (invite), invalid or expired link.
+Findings:
 
-### Welcome `/welcome`
-
-Three steps: profile, bank (connect, connection status ok / error / connecting / syncing), AI. Back from the bank callback (`?step=bank`). Finish error.
-
-### Connection callback `/connections/callback`
-
-Success redirect; failure (missing id or provider error).
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| SI1 | Invite and Reset placed "gripsou" outside the page's flow: in a 680 px tall window it sat 75 px above the screen, out of reach. The callback page had a third layout. | Claude | fixed (option A of three shown in the companion): one frame for Login, Invite, Reset and the callback (`AuthPage`), the sign-in page's; a short window scrolls. |
+| SI2 | The subtitles ("Sign in to continue.", "Set up your account to get started.", the same on Reset, where the account already exists). | User | removed. Reset shows the account in the grey box of the code step instead. |
+| SI3 | Reset said "This reset link is no longer valid." for any failure, a server error included. | Claude | fixed: only when the server says the link is gone (404); anything else, "Couldn't update your password" in the corner. |
+| SI4 | No field said what it holds, so password managers guessed; an empty email or name on Invite went to the server and came back as "Couldn't create your account". | Claude | fixed: `autocomplete` on every field (username, name, current / new password; Reset carries the email in a hidden field so the right login is updated); a blank email or name is asked for by the field ("Enter your email." / « Saisissez votre e-mail. »). |
+| SI5 | A dead invite or reset link drops you on the sign-in page without a word. | Claude | left as is (user's call). |
+| SI6 | Welcome's summary showed the zone's code ("Europe/Paris"), not the dropdown's label. | Claude | fixed: "Paris (UTC+1)". |
+| SI7 | Signed out, every page was in English: the language came from the user's prefs only. | User | fixed: before sign-in, the browser's language (French if it prefers French); the page's `lang` follows the language shown. |
 
 ### Errors (every screen)
 

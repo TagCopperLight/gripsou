@@ -140,6 +140,9 @@ export function Welcome() {
     else void finish();
   };
 
+  const zones = timeZoneOptions(prefs.timeZone, i18n.language);
+  // As the dropdown reads it ("Paris (UTC+1)"), not the zone's code.
+  const zoneLabel = zones.find((z) => z.value === prefs.timeZone)?.label ?? prefs.timeZone;
   const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
   // A pending row is a connection still being set up (or about to be deleted):
   // listed, but not a bank yet.
@@ -166,7 +169,7 @@ export function Welcome() {
               title={t("welcome.prefs.title")}
               active={step === 1}
               done={done[1]}
-              summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${prefs.timeZone}`}
+              summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${zoneLabel}`}
               onEdit={() => setStep(1)}
             >
               <div className="flex items-center justify-between gap-4">
@@ -193,7 +196,7 @@ export function Welcome() {
                 <Select
                   value={prefs.timeZone}
                   onChange={(timeZone) => save({ timeZone })}
-                  options={timeZoneOptions(prefs.timeZone, i18n.language)}
+                  options={zones}
                 />
               </div>
               <div className="flex justify-end pt-1">

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Fingerprint, LoaderCircle } from "lucide-react";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
+import { AuthPage } from "../components/AuthPage";
 import { Button } from "../components/Button";
 import { CodeInput } from "../components/CodeInput";
 import { FieldError } from "../components/FieldError";
@@ -247,18 +248,15 @@ export function Login() {
   } else {
     card = (
       <form onSubmit={submitPassword} onInput={() => setError(null)} className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
-        <div className="flex flex-col pb-1">
-          <div className="text-lg font-semibold text-fg">{t("auth.welcomeBack")}</div>
-          <div className="text-sm text-fg-faint">{t("auth.signInToContinue")}</div>
-        </div>
+        <div className="pb-1 text-lg font-semibold text-fg">{t("auth.welcomeBack")}</div>
         <label className="flex flex-col gap-2">
           <span className="text-sm text-fg-dim">{t("auth.email")}</span>
-          <TextInput type="email" value={email} invalid={refused} onChange={(e) => setEmail(e.target.value)} />
+          <TextInput type="email" autoComplete="username" value={email} invalid={refused} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <div className="flex flex-col gap-1.5">
           <label className="flex flex-col gap-2">
             <span className="text-sm text-fg-dim">{t("auth.password")}</span>
-            <TextInput type="password" value={password} invalid={refused} onChange={(e) => setPassword(e.target.value)} />
+            <TextInput type="password" autoComplete="current-password" value={password} invalid={refused} onChange={(e) => setPassword(e.target.value)} />
           </label>
           {errorLine}
         </div>
@@ -284,13 +282,9 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-10">
-      <div className="w-100 max-w-full">
-        <div className="mb-8 sm:mb-15 text-center whitespace-nowrap font-wordmark text-[clamp(2.5rem,15vw,75px)] font-semibold tracking-tight text-fg">
-          gripsou
-        </div>
-        {card}
-        <p className="mt-6 text-center text-xs text-fg-faint sm:text-sm">
+    <AuthPage
+      note={
+        <p>
           {t("auth.inviteOnly1")}
           <br />
           <Trans
@@ -298,7 +292,9 @@ export function Login() {
             components={{ 1: <span className="text-fg-dim" /> }}
           />
         </p>
-      </div>
-    </div>
+      }
+    >
+      {card}
+    </AuthPage>
   );
 }

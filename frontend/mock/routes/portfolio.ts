@@ -38,6 +38,10 @@ export function portfolioRoutes(r: Router<Store>): void {
     v.syncConnection(store, connectionId);
     return { connectionId, redirectUrl: null };
   });
+  // Back from the bank's page: an `error` from the provider fails it.
+  r.route("POST", "/connections/complete", ({ body }) =>
+    (body as { params: Record<string, string> }).params.error ? reply(400, { error: "provider error" }) : reply(204),
+  );
   r.route("DELETE", "/connections/:id", ({ store, params }) => {
     const gone = new Set(store.accounts.filter((a) => a.connectionId === params.id).map((a) => a.id));
     store.connections = store.connections.filter((c) => c.id !== params.id);

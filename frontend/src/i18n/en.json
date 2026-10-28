@@ -294,7 +294,6 @@
     },
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
-    "signInToContinue": "Sign in to continue.",
     "inviteOnly1": "New here? gripsou accounts are created by invitation.",
     "inviteOnly2": "<1>Open your invite link</1> to set up your account.",
     "email": "Email",
@@ -309,7 +308,6 @@
     "logOutConfirmBody": "You'll need to sign in again to access your dashboard.",
     "rememberMe": "Remember me",
     "createAccount": "Create your account",
-    "setUpToContinue": "Set up your account to get started.",
     "name": "Name",
     "confirmPassword": "Confirm password",
     "passwordLength": "Your password must be 8 to 128 characters long.",
@@ -320,6 +318,9 @@
     "newPassword": "New password",
     "updatePasswordButton": "Update password",
     "resetLinkInvalid": "This reset link is no longer valid.",
+    "enterEmail": "Enter your email.",
+    "enterName": "Enter your name.",
+    "resetFailed": "Couldn't update your password",
     "dataNotice": "Your data is encrypted at rest, but the owner of this server can view it."
   },
   "roles": {

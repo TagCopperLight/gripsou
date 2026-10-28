@@ -95,7 +95,7 @@ describe("AiServerSurface", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 500 })));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
-    expect(screen.getByText("Budget AI")).toBeVisible();
+    expect(screen.getByText("AI categorisation")).toBeVisible();
     expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
   });
 });

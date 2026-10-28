@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Settings · Server";
+export const FOCUS = "Sign-in pages";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -789,6 +789,35 @@ export const STATES: MockState[] = [
     option: "None",
     apply(store) {
       store.aiUsage = { ...store.aiUsage, models: [], totalCost: "0" };
+    },
+  },
+  // ── Sign-in pages ──
+  // Log out to reach /login; /invite/any, /reset/any, /invite/expired;
+  // /connections/callback?state=x (add &error=1 for a failure).
+  {
+    id: "login-two-factor",
+    label: "Signing in asks for a code (000000 and the backup code \"wrong\" are refused)",
+    pieces: ["Sign-in pages"],
+    apply(store) {
+      store.loginMfa = true;
+    },
+  },
+  {
+    id: "welcome-new",
+    label: "A new account, at the welcome screen",
+    pieces: ["Sign-in pages"],
+    apply(store) {
+      emptyHousehold(store);
+      store.connections = [];
+      store.user = { ...store.user, welcomeDone: false };
+    },
+  },
+  {
+    id: "welcome-no-ai",
+    label: "No AI provider (the welcome screen has two steps)",
+    pieces: ["Sign-in pages"],
+    apply(store) {
+      store.aiStatus = { ...store.aiStatus, configured: false };
     },
   },
   // ── Edit account ──

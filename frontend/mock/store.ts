@@ -19,6 +19,8 @@ export type Store = BaseData & {
   accountHealth: Record<string, SyncHealth>;
   /** Saving an account fails (the Edit account window's error). */
   accountSaveFails: boolean;
+  /** Signing in asks for the second step (a code, or a backup code). */
+  loginMfa: boolean;
   /** Every read but the signed-in user's fails: each card shows its error. */
   readsFail: boolean;
   /** Every write fails (signing in and out aside): each action's error. */
@@ -37,6 +39,7 @@ export function createStore(): Store {
     providerLots: [],
     accountHealth: {},
     accountSaveFails: false,
+    loginMfa: false,
     readsFail: false,
     writesFail: false,
     accountsBroken: false,

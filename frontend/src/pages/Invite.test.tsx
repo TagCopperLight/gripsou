@@ -84,6 +84,22 @@ describe("Invite", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/redeem"))).toBe(false);
   });
 
+  it("asks for a name left blank, without calling the server", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(tokenOk());
+    vi.stubGlobal("fetch", fetchMock);
+    render(wrap(<Invite />));
+
+    await screen.findByLabelText("Name");
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "   " } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter22" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("Enter your name.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/redeem"))).toBe(false);
+  });
+
   it("shows an email-exists error on 409", async () => {
     const fetchMock = vi
       .fn()
