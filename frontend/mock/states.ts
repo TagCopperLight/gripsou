@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Settings general";
+export const FOCUS = "Settings · Account";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -691,6 +691,53 @@ export const STATES: MockState[] = [
     pieces: ["Errors"],
     apply(store) {
       store.accountsBroken = true;
+    },
+  },
+  // ── Settings · Account ──
+  {
+    id: "account-two-factor-on",
+    label: "Two-factor on, 3 recovery codes left",
+    pieces: ["Settings · Account"],
+    apply(store) {
+      store.mfa = { ...store.mfa, totp: true, recoveryRemaining: 3 };
+    },
+  },
+  {
+    id: "account-passkeys",
+    label: "Two passkeys",
+    pieces: ["Settings · Account"],
+    apply(store) {
+      store.mfa = {
+        ...store.mfa,
+        passkeys: [
+          { id: id("pk", 1), name: "MacBook Touch ID", createdAt: daysAgo(90), lastUsedAt: daysAgo(1) },
+          { id: id("pk", 2), name: "YubiKey 5C", createdAt: daysAgo(30), lastUsedAt: null },
+        ],
+      };
+    },
+  },
+  {
+    id: "account-many-sessions",
+    label: "Five sessions, one not remembered, one with no IP",
+    pieces: ["Settings · Account"],
+    group: "Sessions",
+    option: "Five",
+    apply(store) {
+      store.sessions.push(
+        { id: id("ses", 3), device: "Chrome on Windows", ip: "203.0.113.42", createdAt: daysAgo(3), lastActiveAt: daysAgo(3), remembered: false, current: false },
+        { id: id("ses", 4), device: "Firefox on Android", ip: null, createdAt: daysAgo(70), lastActiveAt: daysAgo(25), remembered: true, current: false },
+        { id: id("ses", 5), device: "Microsoft Edge on Windows with a very long device name", ip: "2001:db8:85a3::8a2e:370:7334", createdAt: daysAgo(1), lastActiveAt: Date.now() - 600_000, remembered: true, current: false },
+      );
+    },
+  },
+  {
+    id: "account-only-session",
+    label: "Only this session",
+    pieces: ["Settings · Account"],
+    group: "Sessions",
+    option: "Only this one",
+    apply(store) {
+      store.sessions = store.sessions.filter((s) => s.current);
     },
   },
   // ── Edit account ──

@@ -170,6 +170,25 @@ describe("SettingsAccount two-factor row", () => {
   });
 });
 
+describe("SettingsAccount when two-factor's status can't be loaded", () => {
+  it("says so on both rows, offers a retry, and shows the switch once it loads", async () => {
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/auth/mfa/status") && !fail
+        ? new Response(JSON.stringify({ totp: false, recoveryRemaining: 0, passkeys: [] }), { status: 200 })
+        : new Response(null, { status: String(input).endsWith("/auth/mfa/status") ? 500 : 204 }),
+    ));
+    render(withClient(<SettingsAccount />));
+    expect(await screen.findAllByText("Couldn't load this")).toHaveLength(2);
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    fail = false;
+    fireEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
+    await twoFactorSwitch();
+    expect(screen.queryByText("Couldn't load this")).not.toBeInTheDocument();
+  });
+});
+
 describe("SettingsAccount passkeys row", () => {
   const PASSKEY = { id: "p1", name: "MacBook", createdAt: 1_760_000_000_000, lastUsedAt: null };
   const passkeysIcon = (container: HTMLElement) => container.querySelector(".lucide-fingerprint");
@@ -297,15 +316,6 @@ describe("SettingsAccount sessions card", () => {
     render(withClient(<SettingsAccount />));
     fireEvent.click(screen.getByRole("button", { name: "Log out all other sessions" }));
     expect(revokeOthersSpy).toHaveBeenCalled();
-    await twoFactorSwitch();
-  });
-
-  it("shows whether each session is remembered or single-session", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
-    // The mock has one remembered session and one single-session.
-    expect(screen.getByText(/remembered · 30 days/i)).toBeInTheDocument();
-    expect(screen.getByText(/this session only/i)).toBeInTheDocument();
     await twoFactorSwitch();
   });
 });

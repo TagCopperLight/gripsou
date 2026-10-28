@@ -300,7 +300,7 @@ function WelcomeStep({
 }) {
   const { t } = useTranslation();
   return (
-    <section className={`rounded-2xl ${active ? "bg-surface-2/50 ring-1 ring-surface-3" : ""}`}>
+    <section className={`rounded-2xl ${active ? "bg-surface-2/50 ring-1 ring-inset ring-surface-3" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-3.5">
         {done && !active ? (
           <span className="flex size-7 items-center justify-center rounded-full bg-green-soft text-green">

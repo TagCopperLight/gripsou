@@ -221,7 +221,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             disabled={busy || locked}
             onChange={(e) => setHint(e.target.value)}
             rows={3}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none ring-inset focus:ring-1 focus:ring-green disabled:opacity-60"
           />
         </Field>
       </div>

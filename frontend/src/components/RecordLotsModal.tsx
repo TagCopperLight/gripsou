@@ -393,7 +393,7 @@ export function RecordLotsModal({
                   validateRow("1", normaliseDecimal(r.unitPrice, i18n.language)) !== null;
                 const ring = "ring-1 ring-red";
                 const input =
-                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
+                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none ring-inset focus:ring-1 focus:ring-green";
                 const cell = "py-1.5 pr-2 border-t border-surface-2";
                 // Text cells line their text up with the inputs' text (input padding + cell gap).
                 const lockedCell = "py-1.5 border-t border-surface-2";

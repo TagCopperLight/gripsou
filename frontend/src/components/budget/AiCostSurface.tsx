@@ -87,7 +87,7 @@ export function AiCostSurface() {
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
-        className="w-24 bg-surface-2 rounded-xl px-3 py-1.5 text-fg text-sm text-right tabular-nums outline-none focus:ring-1 focus:ring-green"
+        className="w-24 bg-surface-2 rounded-xl px-3 py-1.5 text-fg text-sm text-right tabular-nums outline-none ring-inset focus:ring-1 focus:ring-green"
       />
     );
   };

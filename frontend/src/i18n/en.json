@@ -376,6 +376,7 @@
       "sessionSignedIn": "Signed in",
       "signedInOn": "Signed in {{date}}",
       "lastActive": "Last active {{time}}",
+      "activeNow": "Active now",
       "revokeSession": "Log out",
       "logOutOtherSessions": "Log out all other sessions",
       "dangerZone": "Danger zone",
@@ -960,6 +961,7 @@
     "delete": "Delete",
     "nameLabel": "Passkey name",
     "deleteTitle": "Delete {{name}}?",
+    "deleteAsk": "Delete?",
     "renameFailed": "Couldn't rename the passkey",
     "deleteFailed": "Couldn't delete the passkey"
   }

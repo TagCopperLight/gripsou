@@ -376,11 +376,12 @@
       "sessionSignedIn": "Connecté le",
       "signedInOn": "Connecté le {{date}}",
       "lastActive": "Dernière activité {{time}}",
+      "activeNow": "Active en ce moment",
       "revokeSession": "Déconnecter",
       "logOutOtherSessions": "Déconnecter toutes les autres sessions",
       "dangerZone": "Actions irréversibles",
       "deleteAccount": "Supprimer le compte",
-      "deleteAccountDescription": "Supprimer définitivement votre compte et toutes ses données. Cette action est irréversible.",
+      "deleteAccountDescription": "Supprime définitivement votre compte et toutes ses données.",
       "deleteAccountTitle": "Supprimer votre compte ?",
       "deleteAccountBody": "Votre compte, vos connexions et toutes les données synchronisées seront définitivement supprimés. Cette action est irréversible.",
       "deleteAccountConfirmLabel": "Saisissez votre mot de passe pour confirmer",
@@ -969,6 +970,7 @@
     "delete": "Supprimer",
     "nameLabel": "Nom de la clé d'accès",
     "deleteTitle": "Supprimer {{name}} ?",
+    "deleteAsk": "Supprimer ?",
     "renameFailed": "Impossible de renommer la clé d'accès",
     "deleteFailed": "Impossible de supprimer la clé d'accès"
   }

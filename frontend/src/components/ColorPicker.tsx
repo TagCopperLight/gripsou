@@ -148,7 +148,7 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
         aria-valuetext={`${Math.round(hsv.s * 100)} %, ${Math.round(hsv.v * 100)} %`}
         onPointerDown={track((x, y) => pick({ ...hsv, s: x, v: 1 - y }))}
         onKeyDown={keys("both", (dx, dy) => pick({ ...hsv, s: clamp(hsv.s + dx), v: clamp(hsv.v - dy) }))}
-        className="relative h-37.5 cursor-crosshair touch-none rounded-[10px] outline-none focus-visible:ring-1 focus-visible:ring-green"
+        className="relative h-37.5 cursor-crosshair touch-none rounded-[10px] outline-none ring-inset focus-visible:ring-1 focus-visible:ring-green"
       >
         <canvas ref={canvas} width={WIDTH} height={150} className="size-full rounded-[10px]" />
         <span
@@ -165,7 +165,7 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
         aria-valuenow={Math.round(hsv.h)}
         onPointerDown={track((x) => pick({ ...hsv, h: x * 359.9 }))}
         onKeyDown={keys("x", (dx) => pick({ ...hsv, h: clamp(hsv.h / 360 + dx) * 359.9 }))}
-        className="relative h-3 cursor-pointer touch-none rounded-full outline-none focus-visible:ring-1 focus-visible:ring-green"
+        className="relative h-3 cursor-pointer touch-none rounded-full outline-none ring-inset focus-visible:ring-1 focus-visible:ring-green"
         style={{ background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)" }}
       >
         <span

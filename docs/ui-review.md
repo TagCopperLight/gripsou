@@ -331,7 +331,14 @@ Findings:
 
 | # | Finding | By | Outcome |
 |---|---|---|---|
-| AC1 | Sessions and two-factor status have no loading or error state: the list is just empty while loading or when the request fails. | Claude (code) | |
+| AC1 | Sessions and two-factor status have no loading or error state: the list is just empty while loading or when the request fails. | Claude (code) | fixed: the sessions card shows the app's loading and error states (with Retry); the two-factor and passkey rows show a spinner, then "Couldn't load this" and a Retry button. |
+| AC2 | The security rows don't say their state (codes left, passkeys saved). | Claude | won't fix (user). |
+| AC3 | Sessions, French: "Firefox on Linux" stays English (the server writes it), "Connecté le" assumes a gender, "Dernière activité 03/10/2026" lacks "le". | Claude | later (user). |
+| AC4 | "Connexion mémorisée · 30 jours" / "non mémorisée" don't say what they mean for the user. | Claude | dropped on a computer with AC7 (not worth showing, user); the phone's detail window keeps the old words, later. |
+| AC5 | French danger zone: "Actions irréversibles", then "Cette action est irréversible." | Claude | fixed: the sentence is dropped, « Supprime définitivement votre compte et toutes ses données. » |
+| AC6 | Passkeys window: one heavy card per passkey, pencil and bin always showing, renaming swapped the name for a box that moved the row, and deleting replaced the whole window by a title-only one. | User | redesigned (option A of three in the companion): one card with a line between passkeys, as in the sync window; pencil and bin on hover or keyboard focus (always on a phone), not on the focus the window gives its first row when it opens; wider window (640px); rename edits over the name without moving anything; delete asks "Delete? Cancel / Delete" in the row (Escape cancels, not the window). |
+| AC7 | Active sessions: one heavy card per session, three tags on the first line ("This device", "Remembered · 30 days"), "Log out" always showing, "Log out all other sessions" alone at the bottom. | User | redesigned (option A of three in the companion): one card with a line between sessions, this device first then the most recently active; a computer or phone icon; the name, then "Last active … · address · Signed in …" (the "remembered" tags dropped: the user doesn't care how long a session lasts); "Log out" on hover; "Log out all other sessions" in the card's header. Phone layout unchanged.  |
+| AC8 | Danger zone: its red outline looked jagged in the rounded corners (same cause as A18). | User | fixed: drawn inside the card; the other rounded outlines still drawn outside (tag and category fields, the purchases window's cells, the AI cost field, the colour picker's focus, the Welcome steps) moved inside too. |
 
 ### Settings · Connections `/settings/connections`
 
