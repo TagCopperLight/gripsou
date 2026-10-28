@@ -25,6 +25,10 @@ fn source_failure_does_not_poison_checking_or_refresh_savings_date() {
     assert_eq!(savings["state"], "bug");
     assert_eq!(savings["nextRetryOn"], "2026-10-11");
     assert_eq!(savings["errorMessage"], "403 Client Error: Forbidden");
+    // The blocked savings account's balances are dated when Powens last read it.
+    let day = |s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok();
+    assert_eq!(result.accounts[0].balance_as_of, day("2026-10-10"));
+    assert_eq!(result.accounts[1].balance_as_of, day("2026-10-08"));
 }
 
 #[test]
@@ -40,6 +44,7 @@ fn failed_lookup_is_unknown_and_disabled_source_errors_are_ignored() {
         result.accounts[0].meta["sync_health"]["lastUpdatedOn"],
         json!(null)
     );
+    assert_eq!(result.accounts[0].balance_as_of, None);
     let connections: Vec<Connection> = serde_json::from_value(json!([
         {"id":6,"sources":[{"id":8,"disabled":"2026-10-01","state":"bug"}]}
     ]))

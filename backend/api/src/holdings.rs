@@ -612,6 +612,7 @@ mod tests {
             type_key: "pea".into(),
             currency: "EUR".into(),
             meta: serde_json::json!({}),
+            balance_as_of: None,
         };
         let account_id = upsert_account(&mut conn, conn_id, &account).await.unwrap();
         let instrument = InstrumentRef {

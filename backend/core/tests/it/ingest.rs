@@ -415,3 +415,158 @@ async fn health_observations_persist_without_replacing_native_ids(
     assert!(accounts[0].provider_meta["sync_health"]["state"].is_null());
     Ok(())
 }
+
+async fn user_today(pool: &PgPool, conn_id: uuid::Uuid) -> chrono::NaiveDate {
+    sqlx::query_scalar("select user_today(user_id) from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// (day, quantity) of the cash holding's snapshots.
+async fn cash_snapshots(pool: &PgPool) -> Vec<(chrono::NaiveDate, Decimal)> {
+    sqlx::query_as(
+        "select hs.as_of, hs.quantity from holding_snapshot hs \
+         join holding h on h.id = hs.holding_id \
+         join instrument i on i.id = h.instrument_id \
+         where i.kind = 'cash' order by hs.as_of",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// A provider that last read the bank days ago returns that day's balances:
+/// they are stamped on that day, and a holding closed by that sync closes then.
+#[sqlx::test(migrations = "../migrations")]
+async fn snapshots_are_dated_when_the_bank_was_last_read(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let today = user_today(&pool, conn_id).await;
+    let read_on = today - chrono::Duration::days(3);
+    let account = gripsou_core::dto::CanonicalAccount {
+        balance_as_of: Some(read_on),
+        ..checking_account("acct-1")
+    };
+    let equity = || {
+        equity_holding(
+            "acct-1",
+            "US0378331005",
+            Decimal::new(3, 0),
+            Decimal::new(450, 0),
+            Some(Decimal::new(600, 0)),
+        )
+    };
+    let sync = SyncResult {
+        accounts: vec![account.clone()],
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0)), equity()],
+        ..Default::default()
+    };
+    ingest(&pool, conn_id, &sync).await?;
+    assert_eq!(
+        cash_snapshots(&pool).await,
+        vec![(read_on, Decimal::new(100, 0))]
+    );
+
+    let sync = SyncResult {
+        accounts: vec![account],
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+        ..Default::default()
+    };
+    ingest(&pool, conn_id, &sync).await?;
+    let equity_days: Vec<(chrono::NaiveDate, Decimal)> = sqlx::query_as(
+        "select hs.as_of, hs.quantity from holding_snapshot hs \
+         join holding h on h.id = hs.holding_id \
+         join instrument i on i.id = h.instrument_id \
+         where i.kind = 'equity' order by hs.as_of",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        equity_days,
+        vec![(read_on, Decimal::ZERO)],
+        "closed on the read day"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn a_read_day_in_the_future_is_today(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let today = user_today(&pool, conn_id).await;
+    let sync = SyncResult {
+        accounts: vec![gripsou_core::dto::CanonicalAccount {
+            balance_as_of: Some(today + chrono::Duration::days(1)),
+            ..checking_account("acct-1")
+        }],
+        holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
+        ..Default::default()
+    };
+    ingest(&pool, conn_id, &sync).await?;
+    assert_eq!(
+        cash_snapshots(&pool).await,
+        vec![(today, Decimal::new(100, 0))]
+    );
+    Ok(())
+}
+
+/// #58: the bank can't be reached for a few days and the provider keeps
+/// returning its last balance. Nothing false is saved, and once it's repaired
+/// the stretch is rebuilt from the transactions it catches up on.
+#[sqlx::test(migrations = "../migrations")]
+async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let today = user_today(&pool, conn_id).await;
+    let day = |n| today - chrono::Duration::days(n);
+    let stale = SyncResult {
+        accounts: vec![gripsou_core::dto::CanonicalAccount {
+            balance_as_of: Some(day(6)),
+            ..checking_account("acct-1")
+        }],
+        holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
+        ..Default::default()
+    };
+    // The last good read, then daily syncs while the bank is unreachable.
+    for _ in 0..3 {
+        ingest(&pool, conn_id, &stale).await?;
+    }
+    assert_eq!(
+        cash_snapshots(&pool).await,
+        vec![(day(6), Decimal::new(10000, 2))]
+    );
+
+    let repaired = SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![cash_holding("acct-1", Decimal::new(40000, 2))],
+        transactions: vec![
+            testkit::txn_on("acct-1", "t1", "deposit", Decimal::new(50000, 2), day(5)),
+            testkit::txn_on("acct-1", "t2", "transfer", Decimal::new(-20000, 2), day(3)),
+        ],
+        ..Default::default()
+    };
+    ingest(&pool, conn_id, &repaired).await?;
+    let points: Vec<(chrono::NaiveDate, Decimal)> = sqlx::query_as(
+        "select as_of, quantity from ( \
+           select hs.as_of, hs.quantity from holding_snapshot hs \
+           union all select hb.as_of, hb.quantity from holding_backfill hb \
+         ) p where as_of between $1 and $2 order by as_of",
+    )
+    .bind(day(6))
+    .bind(today)
+    .fetch_all(&pool)
+    .await?;
+    let q = |cents| Decimal::new(cents, 2);
+    assert_eq!(
+        points,
+        vec![
+            (day(6), q(10000)),
+            (day(5), q(60000)),
+            (day(4), q(60000)),
+            (day(3), q(40000)),
+            (day(2), q(40000)),
+            (day(1), q(40000)),
+            (today, q(40000)),
+        ]
+    );
+    Ok(())
+}

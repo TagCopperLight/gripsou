@@ -99,6 +99,7 @@ pub fn checking_account(external_id: &str) -> CanonicalAccount {
         type_key: "checking".to_string(),
         currency: "EUR".to_string(),
         meta: serde_json::json!({}),
+        balance_as_of: None,
     }
 }
 
