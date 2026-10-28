@@ -4,6 +4,7 @@ pub mod model;
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;
 use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
+use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 
 pub struct PowensProvider {
     pub(crate) client_id: String,
@@ -67,20 +68,41 @@ async fn read_json<T: serde::de::DeserializeOwned>(
         .map_err(|e| ProviderError::Other(crate::json_decode_error(what, &e)))
 }
 
+/// What Settings → Server → API keys asks for Powens. The redirect address is
+/// not one of them: it is always the public address + `/connections/callback`.
+pub const CONFIG_FIELDS: &[ConfigField] = &[
+    ConfigField {
+        key: "client_id",
+        secret: false,
+    },
+    ConfigField {
+        key: "domain",
+        secret: false,
+    },
+    ConfigField {
+        key: "client_secret",
+        secret: true,
+    },
+    ConfigField {
+        key: "webhook_secret",
+        secret: true,
+    },
+];
+
 impl PowensProvider {
-    pub fn from_env() -> Option<Self> {
-        let client_id = std::env::var("POWENS_CLIENT_ID").ok()?;
-        let client_secret = std::env::var("POWENS_CLIENT_SECRET").ok()?;
-        let domain = std::env::var("POWENS_DOMAIN").ok()?;
-        let redirect_uri = std::env::var("POWENS_REDIRECT_URI").ok()?;
+    /// `None` until client id, domain and client secret are all set.
+    /// `public_url` is `PUBLIC_URL`, the address gripsou is opened at.
+    pub fn from_config(config: &ProviderConfig, public_url: &str) -> Option<Self> {
+        let get = |f| config.get("powens", f).map(str::to_string);
+        let domain = get("domain")?;
         Some(Self {
-            client_id,
-            client_secret,
-            redirect_uri,
+            client_id: get("client_id")?,
+            client_secret: get("client_secret")?,
+            redirect_uri: format!("{}/connections/callback", public_url.trim_end_matches('/')),
             origin: format!("https://{domain}"),
             domain,
             http: reqwest::Client::new(),
-            webhook_secret: std::env::var("POWENS_WEBHOOK_SECRET").ok(),
+            webhook_secret: get("webhook_secret"),
         })
     }
 
@@ -490,6 +512,19 @@ impl AccountProvider for PowensProvider {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn from_config_needs_the_three_fields_and_builds_the_redirect() {
+        let mut c = ProviderConfig::default();
+        c.set("powens", "client_id", Some("id".into()));
+        c.set("powens", "domain", Some("x.biapi.pro".into()));
+        assert!(PowensProvider::from_config(&c, "https://g.example").is_none());
+        c.set("powens", "client_secret", Some("s".into()));
+        let p = PowensProvider::from_config(&c, "https://g.example/").unwrap();
+        assert_eq!(p.redirect_uri, "https://g.example/connections/callback");
+        assert_eq!(p.origin, "https://x.biapi.pro");
+        assert!(!p.webhooks_enabled());
+    }
+
     use super::*;
     use base64::{Engine, engine::general_purpose::STANDARD};
     use hmac::{Hmac, Mac};

@@ -14,8 +14,15 @@ use async_trait::async_trait;
 use gripsou_core::categorize::{
     CategorizeError, CategorizeOutput, CategorizeRequest, Categorizer, Usage,
 };
+use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+
+/// What Settings → Server → API keys asks for JEV.
+pub const CONFIG_FIELDS: &[ConfigField] = &[ConfigField {
+    key: "api_key",
+    secret: true,
+}];
 
 const IN_FLIGHT: usize = 8;
 
@@ -46,16 +53,17 @@ impl JevCategorizer {
         self
     }
 
-    /// `JEV_API_KEY`, or `None` when it is absent or blank (the provider is
-    /// then off).
-    pub fn api_key_from_env() -> Option<String> {
-        std::env::var("JEV_API_KEY")
-            .ok()
-            .filter(|k| !k.trim().is_empty())
+    /// The saved key, or `None` when absent or blank (the provider is then off).
+    pub fn api_key(config: &ProviderConfig) -> Option<String> {
+        config
+            .get("jev", "api_key")
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .map(str::to_string)
     }
 
-    pub fn from_env(model: &str) -> Option<Self> {
-        Some(Self::new(Self::api_key_from_env()?, model.to_string()))
+    pub fn from_config(config: &ProviderConfig, model: &str) -> Option<Self> {
+        Some(Self::new(Self::api_key(config)?, model.to_string()))
     }
 }
 

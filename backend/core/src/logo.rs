@@ -1,5 +1,5 @@
 //! Brandfetch logo URLs for institutions (banks/brokers) and instruments,
-//! built at read time so a change of `BRANDFETCH_CLIENT_ID` reaches every logo.
+//! built at read time so a change of the Brandfetch client id reaches every logo.
 
 // To add a bank, find its connector uuid + name with:
 //   select distinct institution_key, institution_name
@@ -46,14 +46,16 @@ const INSTITUTION_DOMAINS: &[(&str, &str)] = &[
     ("5b6a646f-893d-5235-a57d-4b072860363c", "traderepublic.com"),
 ];
 
-/// `BRANDFETCH_CLIENT_ID`, read once: it only changes with a restart.
-static CLIENT_ID: std::sync::LazyLock<Option<String>> =
-    std::sync::LazyLock::new(|| std::env::var("BRANDFETCH_CLIENT_ID").ok());
+pub const CONFIG_FIELDS: &[crate::provider_config::ConfigField] =
+    &[crate::provider_config::ConfigField {
+        key: "client_id",
+        secret: false,
+    }];
 
 /// The Brandfetch parameters every logo uses: `/fallback/404/theme/light` and
-/// `?c={BRANDFETCH_CLIENT_ID}` when set.
+/// `?c={client id}` when one is saved.
 fn brandfetch_decorate(base: &str) -> String {
-    match CLIENT_ID.as_deref() {
+    match crate::provider_config::current().get("brandfetch", "client_id") {
         Some(c) => format!("{base}/fallback/404/theme/light?c={c}"),
         None => format!("{base}/fallback/404/theme/light"),
     }
