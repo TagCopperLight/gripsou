@@ -190,15 +190,7 @@ export function CategoriesSurface() {
       <Surface className="w-full">
         <div className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">
-              {t("settings.budget.categories.title")}
-              {!isLoading && !isError && (
-                <span className="text-fg-faint font-normal ml-2">
-                  <span className="mr-2">·</span>
-                  {t("settings.budget.categories.categoriesCount", { count: rows.length })}
-                </span>
-              )}
-            </h2>
+            <h2 className="text-fg font-semibold text-sm">{t("settings.budget.categories.title")}</h2>
             <Button
               onClick={() => openEditing("new")}
               padded={false}

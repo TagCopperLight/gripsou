@@ -520,8 +520,6 @@
       "title": "Budget",
       "categories": {
         "title": "Catégories",
-        "categoriesCount_one": "{{count}} catégorie",
-        "categoriesCount_other": "{{count}} catégories",
         "add": "Ajouter une catégorie",
         "colCategory": "CATÉGORIE",
         "colKind": "TYPE",
@@ -564,8 +562,6 @@
       },
       "tags": {
         "title": "Étiquettes",
-        "tagsCount_one": "{{count}} étiquette",
-        "tagsCount_other": "{{count}} étiquettes",
         "nameLabel": "Nom de l'étiquette",
         "add": "Ajouter",
         "empty": "Aucune étiquette pour l'instant. Ajoutez des étiquettes pour organiser vos transactions ; elles n'interviennent pas dans le calcul des totaux.",

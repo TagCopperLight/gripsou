@@ -175,30 +175,30 @@ describe("TagsSurface", () => {
     );
   });
 
-  it("saves the custom colour once, when the picker commits, not on every drag tick", async () => {
+  it("saves the custom colour once, when the picker closes, not on every step", async () => {
+    // jsdom draws nothing; the colour area just has no picture.
+    HTMLCanvasElement.prototype.getContext = (() => null) as never;
     renderSurface();
     await screen.findByText("Holiday");
-    const picker = within(screen.getByRole("group", { name: "Colour of Holiday" })).getByLabelText(
-      "Custom colour",
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Colour of Holiday" })).getByRole("button", { name: "Custom colour" }),
     );
     const writes = () =>
       vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === "PATCH");
 
-    // Dragging: one input event per pixel, none of which may reach the server.
-    for (const value of ["#101010", "#202020", "#303030"]) fireEvent.input(picker, { target: { value } });
+    // Moving the hue: one colour per step, none of which may reach the server.
+    const hue = screen.getByRole("slider", { name: "Hue" });
+    for (let n = 0; n < 3; n++) fireEvent.keyDown(hue, { key: "ArrowRight", shiftKey: true });
     expect(writes()).toHaveLength(0);
+    const shown = screen.getByRole("textbox", { name: "Hex code" }) as HTMLInputElement;
+    const last = `#${shown.value}`;
 
-    // The picker closes on the last colour: one write, with that colour.
-    fireEvent.change(picker, { target: { value: "#303030" } });
+    // Closing the picker saves the last colour, once.
+    fireEvent.keyDown(hue, { key: "Escape" });
     await waitFor(() => expect(writes()).toHaveLength(1));
     expect(writes()[0][1]).toEqual(
-      expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: "#303030" }) }),
+      expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: last }) }),
     );
-
-    // Leaving the field afterwards does not send it again.
-    fireEvent.blur(picker);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(writes()).toHaveLength(1);
   });
 
   it("disables one row's controls while that row has a write in flight", async () => {

@@ -92,6 +92,32 @@ export function budgetRoutes(r: Router<Store>): void {
     store.categories.push(row);
     return { ...row, txCount: 0 };
   });
+  r.route("PATCH", "/budget/categories/:id", ({ store, params, body }) => {
+    const b = body as Partial<CategoryBody>;
+    const cat = store.categories.find((c) => c.id === params.id);
+    if (!cat) return reply(404, { error: "no such category" });
+    if (b.name !== undefined && taken(store.categories.filter((c) => c !== cat), b.name)) return reply(409, { error: "duplicate name" });
+    Object.assign(cat, b);
+    return v.categories(store).find((c) => c.id === cat.id);
+  });
+  r.route("PUT", "/budget/categories/order", ({ store, body }) => {
+    (body as { ids: string[] }).ids.forEach((id, i) => {
+      const cat = store.categories.find((c) => c.id === id);
+      if (cat) cat.sortOrder = i;
+    });
+    return reply(204);
+  });
+  // Its rows go back to uncategorised, as on the server.
+  r.route("DELETE", "/budget/categories/:id", ({ store, params }) => {
+    store.categories = store.categories.filter((c) => c.id !== params.id);
+    for (const x of store.txns) if (x.categoryId === params.id) Object.assign(x, { categoryId: null, categorySource: null, categoryConfidence: null });
+    return reply(204);
+  });
+  r.route("DELETE", "/budget/tags/:id", ({ store, params }) => {
+    store.tags = store.tags.filter((t) => t.id !== params.id);
+    for (const x of store.txns) x.tagIds = x.tagIds.filter((t) => t !== params.id);
+    return reply(204);
+  });
   r.route("POST", "/budget/tags", ({ store, body }) => {
     const b = body as TagBody;
     if (taken(store.tags, b.name)) return reply(409, { error: "duplicate name" });

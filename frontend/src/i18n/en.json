@@ -520,8 +520,6 @@
       "title": "Budget",
       "categories": {
         "title": "Categories",
-        "categoriesCount_one": "{{count}} category",
-        "categoriesCount_other": "{{count}} categories",
         "add": "Add category",
         "colCategory": "CATEGORY",
         "colKind": "KIND",
@@ -564,8 +562,6 @@
       },
       "tags": {
         "title": "Tags",
-        "tagsCount_one": "{{count}} tag",
-        "tagsCount_other": "{{count}} tags",
         "nameLabel": "Tag name",
         "add": "Add",
         "empty": "No tags yet. Use tags to organise your transactions; they do not affect totals.",

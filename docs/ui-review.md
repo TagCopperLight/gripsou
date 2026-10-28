@@ -371,6 +371,15 @@ Components: `AiSurface`, `CategoriesSurface` (`CategoryModal`, `DeleteCategoryMo
 | Categories: loading / error / empty; archived; system row locked; reorder | query; base |
 | Tags: loading / error / empty; create error | query; state |
 
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| BS1 | "Categories · 32 categories", "Tags · 3 tags": the headers repeat themselves (as CO1). | Claude | fixed: just the titles. |
+| BS2 | The categories table (about 1,770px) pushed the short cards far down the page. | Claude | fixed (user's order): AI categorisation, List preferences, Categories, Tags. |
+| BS3 | Tags: the custom colour still opened the system's picker (A13 fixed only the swatch grid). | User | fixed: the app's colour picker, the tag's colour previewed while it moves and saved once when it closes. |
+| BS4 | The settings menu scrolled away with a long page (Budget). | User | fixed, every settings page: it stays in view where it starts. |
+
 ### Settings · Users `/settings/users` (admin)
 
 Components: `Avatar`, `UserDetailModal`, `LinkModal` (invite), `ResetLinkModal`, `DeleteUserModal`.
