@@ -689,8 +689,11 @@ mod tests {
         let serde_json::Value::Object(patch) = patch else {
             panic!("a patch is an object")
         };
-        let mut deps =
-            gripsou_jobs::Deps::from_env(gripsou_core::testkit::encryption_key(), "EUR".into());
+        let mut deps = gripsou_jobs::Deps::build(
+            gripsou_core::testkit::encryption_key(),
+            "EUR".into(),
+            "http://localhost:5173".into(),
+        );
         deps.prices = vec![Box::new(gripsou_core::testkit::FixedRateProvider { rate })];
         update_prefs(
             State(pool.clone()),

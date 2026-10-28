@@ -35,6 +35,7 @@ webauthn-rs-proto = "=0.5.5"
 url = "2"
 
 [dev-dependencies]
+async-trait.workspace = true
 gripsou-core = { path = "../core", features = ["test-util"] }
 tower = { version = "0.5.3", features = ["util"] }
 webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }

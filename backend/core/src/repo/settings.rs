@@ -18,7 +18,7 @@ pub async fn base_currency(pool: &sqlx::PgPool) -> Result<String, CoreError> {
 }
 
 /// The server-wide AI choice. `provider: None` means the AI is off for the
-/// instance. The API key is read from the environment by `jobs`, never here.
+/// instance. The API key is saved in `provider_config`, never here.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BudgetAiSettings {
     pub provider: Option<String>,

@@ -67,15 +67,18 @@ impl CompositionProvider for NoComposition {
 }
 
 fn deps(mode: Mode) -> Arc<Deps> {
-    let mut accounts: HashMap<String, Box<dyn AccountProvider>> = HashMap::new();
-    accounts.insert("fake".into(), Box::new(FakeBank { mode }));
-    Arc::new(Deps {
-        key: gripsou_core::testkit::encryption_key(),
-        accounts,
-        prices: Vec::new(),
-        composition: Box::new(NoComposition),
-        time_limit: Duration::from_millis(500),
-    })
+    let mut accounts: HashMap<String, Arc<dyn AccountProvider>> = HashMap::new();
+    accounts.insert("fake".into(), Arc::new(FakeBank { mode }));
+    let mut deps = Deps::build(
+        gripsou_core::testkit::encryption_key(),
+        "EUR".into(),
+        "http://localhost:5173".into(),
+    );
+    deps.set_accounts(accounts);
+    deps.prices = Vec::new();
+    deps.composition = Box::new(NoComposition);
+    deps.time_limit = Duration::from_millis(500);
+    Arc::new(deps)
 }
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
