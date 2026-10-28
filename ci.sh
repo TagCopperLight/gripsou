@@ -3,10 +3,6 @@ set -uo pipefail
 
 [ -f .env ] && set -a && . ./.env && set +a
 
-export POWENS_CLIENT_ID=test-client
-export POWENS_CLIENT_SECRET=test-secret
-export POWENS_DOMAIN=test.biapi.pro
-export POWENS_REDIRECT_URI=https://gripsou.test/connections/callback
 export SQLX_OFFLINE=true
 
 fail=0

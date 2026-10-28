@@ -66,9 +66,9 @@ For real-time sync of Powens connections (instead of polling):
    ```
    Save the returned `config.secret_key` (shown only once).
 4. In the Powens console, associate the auth provider with your webhook.
-5. Set `POWENS_WEBHOOK_SECRET=<secret_key>` in the root `.env` and restart the backend.
+5. Enter `<secret_key>` as the Powens webhook secret in Settings → Server → API keys.
 
-When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.
+When no webhook secret is saved, sync falls back to direct full-fetch and the daily poll schedule.
 
 ## Changelog
 

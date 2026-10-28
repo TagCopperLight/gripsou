@@ -111,7 +111,7 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 ## Conventions
 
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
-- **Config:** secrets and infra in env (`.env.example`), admin-tunable values in `app_settings`, per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`, encrypted with `ENCRYPTION_KEY`), per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next. Pure logic lives in `src/lib/`, with tests beside it.
 - **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags.
 - **Exports:** a component file exports only components (`react-refresh/only-export-components`). Put shared constants and types in a sibling `.ts`. Only `bun run lint` catches this, not `build`.
