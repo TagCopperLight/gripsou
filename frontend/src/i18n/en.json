@@ -443,7 +443,7 @@
       "version": "Version",
       "providers": "Data providers",
       "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",
-      "budgetAi": "Budget AI",
+      "budgetAi": "AI categorisation",
       "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
       "budgetAiProvider": "Provider",
       "budgetAiModel": "Model",

@@ -42,7 +42,8 @@ export function createStore(): Store {
     accountsBroken: false,
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
-      currency: "EUR",
+      // As the server: AI prices and costs are in US dollars.
+      currency: "USD",
       models: [{ model: "jev-small", runs: 14, runsWithoutUsage: 0, tokensIn: 412_300, tokensOut: 38_150, priceIn: "0.10", priceOut: "0.40", cost: "0.06" }],
       totalCost: "0.06",
     },

@@ -412,6 +412,15 @@ Components: providers list (`Toggle`), `AiServerSurface`, `AiCostSurface`.
 | AI provider unset / set; models loading / error / none | base / state / query |
 | Cost: no usage; unpriced model | state |
 
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| SV1 | The same feature had three names: "Budget AI" here, "AI categorisation cost" in the next card, "AI categorisation" in Budget settings. | Claude | fixed: "AI categorisation" / « Catégorisation par IA » everywhere. |
+| SV2 | Each model's cost had 4 decimals and the total 2, so a total under a cent read "$0.00" over models that cost something. | Claude | fixed: 2 decimals, 4 when the amount is under a cent, for both. Costs stay in US dollars, unconverted, as providers price in dollars (the hint says so). |
+| SV3 | The AI switch read "off \| jev", raw lowercase codes. | Claude | left as is (user's call). |
+| SV4 | A whole "About" card for one line, the version. | Claude | left as is (user's call). |
+
 ### Login `/login`
 
 Steps: password → code (TOTP) / backup code / passwordless (passkey). Errors: invalid credentials, too many attempts, wrong code, challenge expired, passkey refused.

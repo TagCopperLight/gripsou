@@ -41,8 +41,12 @@ export function AiCostSurface() {
   }
 
   const tokens = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
-  const money = (v: string, fractionDigits: number) =>
-    formatMoney(v, { currency: usage.currency, fractionDigits });
+  // Cents, unless the amount is under one: then 4 decimals, so a cost that
+  // isn't zero never reads as $0.00.
+  const money = (v: string) => {
+    const n = Math.abs(Number(v));
+    return formatMoney(v, { currency: usage.currency, fractionDigits: n > 0 && n < 0.01 ? 4 : 2 });
+  };
   const draftKey = (model: string, side: Side) => `${model}\u0000${side}`;
 
   const dropDraft = (key: string) =>
@@ -135,7 +139,7 @@ export function AiCostSurface() {
                       {m.cost === null ? (
                         <span className="text-xs text-fg-faint">{t("settings.server.budgetAiCostNoPrice")}</span>
                       ) : (
-                        money(m.cost, 4)
+                        money(m.cost)
                       )}
                     </td>
                   </tr>
@@ -146,7 +150,7 @@ export function AiCostSurface() {
           <div className="mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4">
             <span className="text-sm font-medium text-fg">{t("settings.server.budgetAiCostTotal")}</span>
             <span data-testid="ai-cost-total" className="text-xl font-semibold tabular-nums text-fg">
-              {money(usage.totalCost, 2)}
+              {money(usage.totalCost)}
             </span>
           </div>
         </>

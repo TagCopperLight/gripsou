@@ -443,7 +443,7 @@
       "version": "Version",
       "providers": "Fournisseurs de données",
       "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",
-      "budgetAi": "IA pour le budget",
+      "budgetAi": "Catégorisation par IA",
       "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
       "budgetAiProvider": "Fournisseur",
       "budgetAiModel": "Modèle",

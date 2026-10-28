@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Settings · Users";
+export const FOCUS = "Settings · Server";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -760,6 +760,35 @@ export const STATES: MockState[] = [
         { id: id("usr", 4), name: "Marie-Charlotte de La Fontaine-Beaumont", email: "marie-charlotte.delafontaine-beaumont@example.com", role: "admin", joinedAt: daysAgo(400), isSelf: false },
         { id: id("usr", 5), name: "Sam", email: "sam@example.com", role: "user", joinedAt: daysAgo(2), isSelf: false },
       );
+    },
+  },
+  // ── Settings · Server ──
+  {
+    id: "server-ai-off",
+    label: "No AI provider chosen",
+    pieces: ["Settings · Server"],
+    apply(store) {
+      store.aiSettings = { ...store.aiSettings, provider: null, model: null };
+    },
+  },
+  {
+    id: "server-ai-usage",
+    label: "AI used by two models, one without prices",
+    pieces: ["Settings · Server"],
+    group: "AI usage",
+    option: "Two models",
+    apply(store) {
+      store.aiUsage.models.push({ model: "jev-large", runs: 3, runsWithoutUsage: 1, tokensIn: 96_400, tokensOut: 9_210, priceIn: null, priceOut: null, cost: null });
+    },
+  },
+  {
+    id: "server-ai-unused",
+    label: "AI never used",
+    pieces: ["Settings · Server"],
+    group: "AI usage",
+    option: "None",
+    apply(store) {
+      store.aiUsage = { ...store.aiUsage, models: [], totalCost: "0" };
     },
   },
   // ── Edit account ──
