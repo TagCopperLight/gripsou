@@ -52,7 +52,11 @@ export function ApiKeysSurface() {
             <ProviderKeys
               key={p.key}
               provider={p}
-              save={(field, value, onSaved) => save.mutate({ provider: p.key, field, value }, { onSuccess: onSaved })}
+              // Not mutate's onSuccess: it only fires for the latest call, and two
+              // fields can be saving at once. A failure shows through save.isError.
+              save={(field, value, onSaved) =>
+                void save.mutateAsync({ provider: p.key, field, value }).then(onSaved, () => {})
+              }
             />
           ))}
         </div>

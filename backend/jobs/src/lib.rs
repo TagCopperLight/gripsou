@@ -1285,8 +1285,7 @@ mod categorize_gate_tests {
 
 /// [`open_gate_with`] against a real database: the gate reads the admin's
 /// provider from `app_settings` and the opt-in from the user's own prefs. The
-/// available providers are passed in, never read from the saved keys, so these tests
-/// hold whatever keys the shell exports.
+/// available providers are passed in, never read from the saved keys.
 #[cfg(test)]
 mod open_gate_tests {
     use super::*;
