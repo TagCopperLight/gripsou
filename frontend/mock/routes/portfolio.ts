@@ -1,8 +1,8 @@
-import { reply, type Router } from "../router";
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks";
-import type { Store } from "../store";
-import * as v from "../views/portfolio";
-import { id } from "../data/util";
+import { reply, type Router } from "../router.ts";
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
+import type { Store } from "../store.ts";
+import * as v from "../views/portfolio.ts";
+import { id } from "../data/util.ts";
 
 export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));

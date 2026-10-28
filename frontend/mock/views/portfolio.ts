@@ -1,7 +1,7 @@
 // Valuations computed from the store, so a write (a lot, a transaction) shows
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks";
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
 import type {
   Account,
   BasisPreview,
@@ -13,10 +13,10 @@ import type {
   PricePoint,
   ProviderGroup,
   ReturnFigures,
-} from "../../src/api/types";
-import { HISTORY_DAYS, dayIndex, type SecurityRow } from "../data/base";
-import { DAY_MS, TODAY, isoDay, money, rangeDays } from "../data/util";
-import type { Store } from "../store";
+} from "../../src/api/types.ts";
+import { HISTORY_DAYS, dayIndex, type SecurityRow } from "../data/base.ts";
+import { DAY_MS, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
+import type { Store } from "../store.ts";
 
 /** Every lot of a security: provider lots from the ledger, plus manual ones. */
 export function lotsOf(store: Store, holdingId: string): Lot[] {

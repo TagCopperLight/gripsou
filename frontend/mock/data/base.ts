@@ -3,7 +3,7 @@
 // everyday spending with transfer pairs, the seeded categories, three tags.
 // Everything is generated from a fixed seed, anchored on today.
 
-import type { BudgetCategory, BudgetTag } from "../../src/api/budget";
+import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
 import type {
   Account,
   Composition,
@@ -14,9 +14,9 @@ import type {
   SessionUser,
   SyncConnection,
   User,
-} from "../../src/api/types";
-import { DEFAULT_PREFS } from "../../src/lib/prefs";
-import { DAY_MS, TODAY, daysAgo, id, isoDay, money, rng } from "./util";
+} from "../../src/api/types.ts";
+import { DEFAULT_PREFS } from "../../src/lib/prefs.ts";
+import { DAY_MS, TODAY, daysAgo, id, isoDay, money, rng } from "./util.ts";
 
 /** A ledger or lot row as stored; the API view joins the category and account. */
 export type TxnRow = {

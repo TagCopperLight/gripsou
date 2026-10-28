@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRouter, reply } from "./router";
+import { createRouter, reply } from "./router.ts";
 
 describe("mock router", () => {
   it("extracts path params and answers 200 with a plain return", () => {

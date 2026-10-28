@@ -1,6 +1,6 @@
-import { withPatch, type PrefsPatch } from "../../src/lib/prefs";
-import { reply, type Router } from "../router";
-import type { Store } from "../store";
+import { withPatch, type PrefsPatch } from "../../src/lib/prefs.ts";
+import { reply, type Router } from "../router.ts";
+import type { Store } from "../store.ts";
 
 const TOKEN = "mock";
 

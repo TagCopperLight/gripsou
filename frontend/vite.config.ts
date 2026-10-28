@@ -11,7 +11,7 @@ export default defineConfig(async ({ mode }) => ({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
-    mode === 'mock' && (await import('./mock/plugin')).mockApi(),
+    mode === 'mock' && (await import('./mock/plugin.ts')).mockApi(),
   ],
   server: {
     proxy: mode === 'mock' ? undefined : {

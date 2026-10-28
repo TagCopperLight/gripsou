@@ -2,7 +2,7 @@
 // the app renders exactly as it does in production.
 
 import { createRoot } from "react-dom/client";
-import { Panel } from "./Panel";
+import { Panel } from "./Panel.tsx";
 
 const host = document.createElement("div");
 host.id = "gripsou-review-panel";

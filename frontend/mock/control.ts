@@ -1,10 +1,10 @@
 // What the review panel drives: the live store, the active per-screen states,
 // and per-path overrides that keep a request loading or make it fail.
 
-import { reply, type Reply } from "./router";
-import { router } from "./routes";
-import type { MockState } from "./states";
-import { createStore } from "./store";
+import { reply, type Reply } from "./router.ts";
+import { router } from "./routes/index.ts";
+import type { MockState } from "./states.ts";
+import { createStore } from "./store.ts";
 
 /** Signing in and out keep working when every write fails. */
 const SESSION = new Set(["/auth/login", "/auth/logout"]);

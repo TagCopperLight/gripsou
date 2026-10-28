@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createControl } from "./control";
-import type { MockState } from "./states";
+import { createControl } from "./control.ts";
+import type { MockState } from "./states.ts";
 
 const q = new URLSearchParams();
 
