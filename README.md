@@ -51,6 +51,10 @@ If you lose both your authenticator app and your backup codes, run this on the s
 docker compose -f docker/docker-compose.yml exec backend gripsou reset-2fa you@example.com
 ```
 
+## Powens
+
+Enter the Powens keys in Settings → Server → API keys. In the Powens console, allow `<PUBLIC_URL>/connections/callback` as a redirect address (for example `http://localhost:5173/connections/callback` in development).
+
 ## Powens webhooks (optional)
 
 For real-time sync of Powens connections (instead of polling):

@@ -35,6 +35,14 @@ describe("ApiKeysSurface — secret", () => {
     const input = screen.getByLabelText("Client secret");
     fireEvent.change(input, { target: { value: "new-secret" } });
     fireEvent.blur(input);
+    expect(patches()).toHaveLength(0);
+  });
+
+  it("sends nothing when the new key is typed and Escape is pressed", async () => {
+    renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+    const input = screen.getByLabelText("Client secret");
+    fireEvent.change(input, { target: { value: "new-secret" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(patches()).toHaveLength(0);
   });
