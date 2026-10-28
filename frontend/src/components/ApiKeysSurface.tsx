@@ -14,7 +14,7 @@ import type { ApiKeyField, ApiKeyProvider } from "../api/types";
 // A plain text field drawn as dots, rather than a password field: password
 // managers offer to save anything typed in one, and draw its placeholder in
 // another font.
-const MASKED = "[-webkit-text-security:disc]";
+const MASKED = "[-webkit-text-security:disc] text-base tracking-[0.2em]";
 // Asks the usual password managers to leave a field alone.
 const NO_PASSWORD_MANAGER = {
   autoComplete: "off",
