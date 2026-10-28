@@ -13,11 +13,6 @@ import { browserPrefs } from "../lib/welcome";
 // user sees anything; in a test it can land AFTER the test body finished, which
 // React reports as "an update to <Component> was not wrapped in act(...)".
 // `src/test/setup.ts` awaits this so no test ever starts mid-init.
-// Screen readers and the browser's spell check read the page's language.
-i18n.on("languageChanged", (lng) => {
-  document.documentElement.lang = lng;
-});
-
 export const i18nReady = i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },

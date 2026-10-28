@@ -56,6 +56,16 @@ Never edit an applied migration, comments included: sqlx checksums each file and
 
 Older migrations cite sections of design docs (`TRANSACTIONS.md §6.1`, `ARCHITECTURE.md §3.2`) that have since been deleted (`AUDIT.md` was never tracked and is gone for good). Read them from git history if needed: `git log --diff-filter=D --oneline -- TRANSACTIONS.md`, then `git show <commit>^:TRANSACTIONS.md`.
 
+### Review server (mock mode)
+
+`cd frontend && bun run dev:mock` runs the SPA with no backend: a Vite plugin (`mock/plugin.ts`) answers `/api/*` from an in-memory store of made-up data (public repo: never real data). Use it to look at and review UI. Pass `--port 5180 --strictPort` to keep it off :5173.
+
+- **Data**: `mock/data/` builds the base dataset, `mock/store.ts` holds it, `mock/routes/*.ts` answer the API (`reply(status, body)` for a status or an error), `mock/views/` derive what the server would compute. Writes change the store, so the app behaves; a route missing here is a 404 in the app.
+- **States**: `mock/states.ts` lists named tweaks of the data (an overdrawn account, a failing sync, a new account at the welcome screen…), each tagged with the pieces of UI it shows something on. The panel injected in the page lists the states of the piece named by `FOCUS`, plus the language, currency and role. Add a state when a screen needs one to be seen; don't build a general scenario system. Active states survive restarts (`node_modules/.cache/gripsou-mock-states.json`).
+- **Overrides**: the panel can make any API path fail or hang, for error and loading states (`/__mock/override`).
+- **Conventions in the mock**: any credentials sign in, except the password `wrong`; an email ending in `@taken.example` is in use; `/invite/expired` is a dead link, `/reset/<anything starting with reset>` a reset link.
+- Vite restarts the server when a file under `mock/` changes; if a change to the store's base data doesn't show, restart it.
+
 ## Architecture
 
 ### The database is gripsou-shaped; providers map into it
