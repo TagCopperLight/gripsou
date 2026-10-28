@@ -2,6 +2,7 @@ import { reply, type Router } from "../router";
 import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks";
 import type { Store } from "../store";
 import * as v from "../views/portfolio";
+import { id } from "../data/util";
 
 export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
@@ -24,6 +25,26 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("POST", "/connections/:id/sync", ({ store, params }) => {
     v.syncConnection(store, params.id);
     return reply(202);
+  });
+  // No provider page here: the new bank shows up at once, syncs for a few
+  // seconds, then is healthy with no account.
+  r.route("POST", "/connections/init", ({ store, body }) => {
+    const n = store.connections.length + 1;
+    const connectionId = id("con", 900 + n);
+    store.connections.push({
+      providerKey: (body as { providerKey: string }).providerKey, id: connectionId, displayName: "Banque Populaire",
+      status: "syncing", lastSyncAt: null, lastError: null, logo: null, canManage: true, health: null,
+    });
+    v.syncConnection(store, connectionId);
+    return { connectionId, redirectUrl: null };
+  });
+  r.route("DELETE", "/connections/:id", ({ store, params }) => {
+    const gone = new Set(store.accounts.filter((a) => a.connectionId === params.id).map((a) => a.id));
+    store.connections = store.connections.filter((c) => c.id !== params.id);
+    store.accounts = store.accounts.filter((a) => !gone.has(a.id));
+    store.securities = store.securities.filter((s) => !gone.has(s.accountId));
+    store.txns = store.txns.filter((x) => !gone.has(x.accountId));
+    return reply(204);
   });
   // Powens' management page doesn't exist here: the tab opens on a blank page.
   r.route("POST", "/connections/:id/manage", () => ({ redirectUrl: "about:blank" }));

@@ -220,6 +220,7 @@
   },
   "connectionGuide": {
     "howItWorks": "How does it work?",
+    "gotIt": "Got it",
     "readOnly": {
       "title": "Read-only",
       "bodyOne": "gripsou gets your accounts and transactions through {{provider}}, a licensed provider, and keeps a copy. It can't move money.",
@@ -469,14 +470,16 @@
     "connections": {
       "title": "Connections",
       "addConnection": "Add connection",
-      "connectionsCount_one": "{{count}} connection",
-      "connectionsCount_other": "{{count}} connections",
-      "accountsCount_one": "{{count}} account",
-      "accountsCount_other": "{{count}} accounts",
+      "empty": {
+        "title": "Connect your first bank",
+        "body": "Your accounts, holdings and transactions show up here once it's connected.",
+        "guide": "How it works"
+      },
       "syncConnection": "Sync now",
       "deleteConnection": "Delete connection",
-      "deleteConnectionTitle": "Delete connection?",
-      "deleteConnectionBody": "This permanently removes the connection and all synced accounts, holdings, transactions, and snapshots. This cannot be undone.",
+      "deleteConnectionTitle": "Delete {{name}}?",
+      "deleteConnectionBody": "Its accounts, holdings and transactions, and their history, are deleted too. This can't be undone.",
+      "deletingConnection": "Deleting…",
       "deleteConnectionError": "Couldn't delete the connection",
       "status": {
         "syncing": "Syncing…",

@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Settings · Account";
+export const FOCUS = "Settings · Connections";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -740,6 +740,15 @@ export const STATES: MockState[] = [
       store.sessions = store.sessions.filter((s) => s.current);
     },
   },
+  // ── Settings · Connections ──
+  {
+    id: "connections-two-providers",
+    label: "Two providers enabled (Add shows a picker)",
+    pieces: ["Settings · Connections"],
+    apply(store) {
+      store.providers.push({ key: "bridge", displayName: "Bridge", description: "Banks through Bridge by Bankin'.", enabled: true });
+    },
+  },
   // ── Edit account ──
   {
     id: "edit-account-save-fails",
@@ -752,7 +761,7 @@ export const STATES: MockState[] = [
   {
     id: "sync-every-status",
     label: "A connection in every status",
-    pieces: ["Sync"],
+    pieces: ["Sync", "Settings · Connections"],
     group: "Connections",
     option: "Every status",
     apply(store) {
@@ -771,7 +780,7 @@ export const STATES: MockState[] = [
   {
     id: "sync-one-syncing",
     label: "One connection syncing (the button spins)",
-    pieces: ["Sync"],
+    pieces: ["Sync", "Settings · Connections"],
     group: "Connections",
     option: "Syncing",
     apply(store) {
@@ -781,7 +790,7 @@ export const STATES: MockState[] = [
   {
     id: "sync-one-error",
     label: "One connection failed (red dot)",
-    pieces: ["Sync"],
+    pieces: ["Sync", "Settings · Connections"],
     group: "Connections",
     option: "Error",
     apply(store) {
@@ -791,7 +800,7 @@ export const STATES: MockState[] = [
   {
     id: "sync-one-warning",
     label: "Bank data outdated (amber dot)",
-    pieces: ["Sync"],
+    pieces: ["Sync", "Settings · Connections"],
     group: "Connections",
     option: "Warning",
     apply(store) {
@@ -801,7 +810,7 @@ export const STATES: MockState[] = [
   {
     id: "sync-none",
     label: "No connections",
-    pieces: ["Sync"],
+    pieces: ["Sync", "Settings · Connections"],
     group: "Connections",
     option: "None",
     apply(store) {

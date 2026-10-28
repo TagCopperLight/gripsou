@@ -220,6 +220,7 @@
   },
   "connectionGuide": {
     "howItWorks": "Comment ça marche ?",
+    "gotIt": "Compris",
     "readOnly": {
       "title": "Lecture seule",
       "bodyOne": "gripsou consulte vos comptes et vos transactions par l'intermédiaire de {{provider}}, un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement.",
@@ -469,14 +470,16 @@
     "connections": {
       "title": "Connexions",
       "addConnection": "Ajouter une connexion",
-      "connectionsCount_one": "{{count}} connexion",
-      "connectionsCount_other": "{{count}} connexions",
-      "accountsCount_one": "{{count}} compte",
-      "accountsCount_other": "{{count}} comptes",
+      "empty": {
+        "title": "Connectez votre première banque",
+        "body": "Vos comptes, positions et opérations s'afficheront ici une fois la banque connectée.",
+        "guide": "Comment ça marche"
+      },
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
-      "deleteConnectionTitle": "Supprimer la connexion ?",
-      "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
+      "deleteConnectionTitle": "Supprimer {{name}} ?",
+      "deleteConnectionBody": "Ses comptes, positions et opérations, et leur historique, sont supprimés aussi. Cette action est irréversible.",
+      "deletingConnection": "Suppression…",
       "deleteConnectionError": "Impossible de supprimer la connexion",
       "status": {
         "syncing": "Synchronisation en cours…",

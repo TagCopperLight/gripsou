@@ -351,6 +351,16 @@ Components: `ConnectionRow`, `AddConnectionModal`, `ConnectionGuide`, `DeleteCon
 | Add connection: providers loading, init error | query |
 | Delete connection confirmation | action |
 
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| CO1 | Header: "Connections · 10 connections · 10 accounts", repeating itself (the sync window's counts were dropped as useless). | Claude | fixed: just "Connections". |
+| CO2 | Delete confirmation: "Delete connection?" without the bank's name, and jargon ("synced … snapshots"). | Claude | fixed: "Delete Crédit Mutuel?", "Its accounts, holdings and transactions, and their history, are deleted too. This can't be undone." (« Ses comptes, positions et opérations, et leur historique, sont supprimés aussi. Cette action est irréversible. ») |
+| CO3 | While deleting, the red button read "Loading…". | Claude | fixed: "Deleting…" / « Suppression… ». |
+| CO4 | "How does it work?" window looked off: a narrow column of long lines, tiny grey icons so the points didn't read as separate, no button at the end. | User | redesigned (option B of three in the companion): the large window (640px), each icon in a square as on the Security rows, more space between the points, "Got it" / « Compris » to close. The squares show wherever the guide does (Connections' empty state, Welcome). |
+| CO5 | No connection: a centred "No bank connected yet." over the guide squeezed into a 448px column in the middle of the card. | User | redesigned (option A of three in the companion): an empty state as on the dashboard (bank icon, "Connect your first bank", one line, the Add button, which leaves the header), then "How it works" under a line and the guide at full width. The sync window keeps its "No bank connected yet." |
+
 ### Settings · Budget `/settings/budget`
 
 Components: `AiSurface`, `CategoriesSurface` (`CategoryModal`, `DeleteCategoryModal`, `CategoryIcon`, `ColorSwatchGrid`), `TagsSurface` (`TagRow`, `DeleteTagModal`), `ListPrefsSurface`.

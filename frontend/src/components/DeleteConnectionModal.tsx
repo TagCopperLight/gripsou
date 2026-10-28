@@ -22,9 +22,9 @@ export function DeleteConnectionModal({
 
   return (
     <ConfirmDialog
-      title={t("settings.connections.deleteConnectionTitle")}
+      title={t("settings.connections.deleteConnectionTitle", { name: connection.displayName })}
       body={t("settings.connections.deleteConnectionBody")}
-      confirmLabel={remove.isPending ? t("common.loading") : t("settings.connections.deleteConnection")}
+      confirmLabel={remove.isPending ? t("settings.connections.deletingConnection") : t("settings.connections.deleteConnection")}
       busy={remove.isPending}
       onConfirm={() => remove.mutate(connection.id, { onSuccess: onDeleted })}
       onClose={onClose}
