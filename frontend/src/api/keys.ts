@@ -69,5 +69,6 @@ export const keys = {
   mfaStatus: () => ["mfaStatus"] as const,
   connections: () => ["connections"] as const,
   providers: () => ["providers"] as const,
+  apiKeys: () => ["api-keys"] as const,
   providersEnabled: () => ["providers-enabled"] as const,
 };

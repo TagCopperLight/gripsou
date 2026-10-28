@@ -32,6 +32,7 @@ describe("SettingsServer — data providers", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url.includes("/settings/budget-ai")) return budgetAiRes(url);
+        if (url.includes("/settings/api-keys")) return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
         return new Response(
           JSON.stringify(init?.method === "PATCH" ? { ...PROVIDERS[0], enabled: false } : PROVIDERS),
           { status: 200, headers: { "Content-Type": "application/json" } },

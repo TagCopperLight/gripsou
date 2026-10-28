@@ -442,10 +442,24 @@
       "title": "Server",
       "about": "About",
       "version": "Version",
+      "apiKeys": {
+        "title": "API keys",
+        "replace": "Replace",
+        "remove": "Remove {{name}}",
+        "saved": "Saved",
+        "notSet": "Not set",
+        "redirectUri": "Redirect address",
+        "saveError": "Couldn't save the key",
+        "fields": {
+          "powens": { "client_id": "Client id", "domain": "Domain", "client_secret": "Client secret", "webhook_secret": "Webhook secret" },
+          "jev": { "api_key": "API key" },
+          "brandfetch": { "client_id": "Client id" }
+        }
+      },
       "providers": "Data providers",
       "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",
       "budgetAi": "AI categorisation",
-      "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
+      "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set under API keys.",
       "budgetAiProvider": "Provider",
       "budgetAiModel": "Model",
       "budgetAiModelsError": "The provider's model list could not be loaded; type the model's name.",
