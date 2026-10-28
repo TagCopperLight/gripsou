@@ -20,7 +20,7 @@ import {
 import { useAiStatus } from "../api/budget";
 import { flattenConnections, type SyncConnection } from "../api/types";
 import { CURRENCIES } from "../lib/currency";
-import { TIME_ZONES } from "../lib/timeZoneList";
+import { timeZoneOptions } from "../lib/timeZoneList";
 import { goTo } from "../lib/navigate";
 import { parseCallbackParams } from "../lib/connectionCallback";
 import { prefillFromBrowser } from "../lib/welcome";
@@ -31,7 +31,7 @@ type Step = 1 | 2 | 3;
 /** After an invite: preferences, a first bank, the AI opt-in. Shown until the
  *  user finishes or skips it (`welcomeDone`); the router sends them here. */
 export function Welcome() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, prefs, updatePrefs, updateUser } = useAuth();
   const search = useSearch({ strict: false }) as { step?: "bank"; callback?: string };
   const navigate = useNavigate();
@@ -188,18 +188,14 @@ export function Welcome() {
                   options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
                 />
               </div>
-              <label className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
-                <select
+                <Select
                   value={prefs.timeZone}
-                  onChange={(e) => save({ timeZone: e.target.value })}
-                  className="w-full rounded-xl bg-surface-2 px-3.5 py-2.25 text-sm text-fg"
-                >
-                  {[...new Set([...TIME_ZONES, prefs.timeZone])].map((zone) => (
-                    <option key={zone} value={zone}>{zone}</option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(timeZone) => save({ timeZone })}
+                  options={timeZoneOptions(prefs.timeZone, i18n.language)}
+                />
+              </div>
               <div className="flex justify-end pt-1">
                 <Button onClick={() => complete(1, 2)}>{t("welcome.continue")}</Button>
               </div>

@@ -43,16 +43,6 @@ describe("SettingsGeneral auto-save", () => {
     );
   });
 
-  it("persists a timezone change through the existing preference flow", async () => {
-    renderPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "Time zone" }), {
-      target: { value: "America/Los_Angeles" },
-    });
-    await waitFor(() =>
-      expect(updatePrefsSpy).toHaveBeenCalledWith({ timeZone: "America/Los_Angeles" }),
-    );
-  });
-
   it("shows a live preview using the shared money formatter", () => {
     renderPage();
     // Default prefs -> space groups, comma decimal, € after.

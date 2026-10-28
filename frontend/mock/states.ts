@@ -169,7 +169,7 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 }
 
 /** The piece under review: the panel lists its states. */
-export const FOCUS = "Budget transactions";
+export const FOCUS = "Settings general";
 
 export const STATES: MockState[] = [
   // ── Distribution ──
@@ -519,6 +519,17 @@ export const STATES: MockState[] = [
       store.user.prefs.showChecked = true;
     },
   },
+  // ── Settings · General ──
+  {
+    id: "settings-us-formats",
+    label: "US formats: MM/DD/YYYY, 1,234.56, $ before, New York",
+    pieces: ["Settings general"],
+    apply(store) {
+      Object.assign(store.user.prefs, {
+        dateFormat: "MM/DD/YYYY", numberGroupSep: ",", numberDecimalSep: ".", currencyPosition: "before", currency: "USD", timeZone: "America/New_York",
+      });
+    },
+  },
   // ── Holdings ──
   {
     id: "holdings-many",
@@ -595,7 +606,7 @@ export const STATES: MockState[] = [
   {
     id: "fx-rate-down",
     label: "Currency change can't get its rate (Settings)",
-    pieces: ["Exchange rates"],
+    pieces: ["Settings general", "Exchange rates"],
     apply(store) {
       store.fx.rateDown = true;
     },
@@ -619,7 +630,7 @@ export const STATES: MockState[] = [
   {
     id: "dashboard-private",
     label: "Private mode on",
-    pieces: ["Budget transactions", "Budget review", "Investments", "Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list", "Edit account"],
+    pieces: ["Settings general", "Budget transactions", "Budget review", "Investments", "Net worth chart", "Distribution", "Holdings", "Asset window", "Record purchases", "Accounts chart", "Accounts list", "Edit account"],
     apply(store) {
       store.user.prefs.privateMode = true;
     },
@@ -669,7 +680,7 @@ export const STATES: MockState[] = [
   {
     id: "errors-writes-fail",
     label: "Every save fails (the error in the corner)",
-    pieces: ["Budget transactions", "Budget review", "Errors"],
+    pieces: ["Settings general", "Budget transactions", "Budget review", "Errors"],
     apply(store) {
       store.writesFail = true;
     },

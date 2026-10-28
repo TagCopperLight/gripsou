@@ -293,7 +293,27 @@ Findings:
 
 ### Settings · General `/settings/general`
 
-Language and region, number/date/currency formats, private mode. States: saving, save failure (prefs restored from server). Currency: "Getting the USD rate…" while saving; refused when no rate can be had (red line, old currency kept): state "Currency change can't get its rate".
+Components: `SegmentedControl`, `Select`, the time zone's native `select`, `Toggle`, the numbers preview.
+
+| State | How to reach |
+|---|---|
+| Every setting saves on change, applied app-wide | base |
+| Currency: "Getting the USD rate…" while the server fetches it | query: hold `/auth/prefs`, then pick a currency |
+| Currency refused (no rate to be had): red line, old currency kept | state "Currency change can't get its rate" |
+| A save fails: the setting goes back, "Couldn't save the setting" in the corner | state "Every save fails" |
+| Other formats (dates, separators, symbol before, a US time zone) | state "US formats" |
+| Private mode on | state "Private mode on" |
+
+Findings:
+
+| # | Finding | By | Outcome |
+|---|---|---|---|
+| G1 | Time zone: the browser's own list (another arrow, another height) of 419 raw names ("America/Argentina/La_Rioja"), no search. | Claude | fixed: the app's dropdown, holding the main zones only (the big cities, about one per offset, and France's overseas ones), read "Paris (UTC+1)", by offset; a saved zone not in it stays listed (`timeZoneOptions`). The Welcome screen's field too. |
+| G2 | The same mark can separate thousands and decimals ("1.234.567.89"). | Claude | won't fix (user). |
+| G3 | "Base reporting currency": jargon. | Claude | fixed: "Every amount is shown in this currency" / « Tous les montants sont affichés dans cette devise ». |
+| G4 | "Number format" had a line repeating the three labels just under it. | Claude | fixed: removed. |
+| G5 | Private mode's hint doesn't say the eyes show the amounts. | Claude | won't fix (user). |
+| G6 | French: date formats read "DD/MM/YYYY", city names stayed English (London, Brussels, Moscow, Reunion), "taux USD" without "de change", "Séparateur de milliers / décimal" much longer than the English, a stiff time zone hint. | User | fixed: "JJ/MM/AAAA", French city names (Londres, Bruxelles, Moscou, La Réunion…; in English São Paulo, Réunion, Nouméa get their accents), "taux de change USD", "Milliers" / "Décimales", « Sert à déterminer la date du jour, utilisée par les synchronisations, les rapports et les périodes », « Cache les montants sous des astérisques ». |
 
 ### Settings · Account `/settings/account`
 
