@@ -227,7 +227,32 @@ mod tests {
     use super::*;
     use crate::auth;
     use crate::testkit::seed_user_with_password;
+    use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
     use sqlx::PgPool;
+
+    /// An adapter that sends people to the Powens webview, with no keys.
+    struct FakeBank;
+
+    #[async_trait::async_trait]
+    impl AccountProvider for FakeBank {
+        fn key(&self) -> &str {
+            "powens"
+        }
+        async fn connect(&self) -> Result<ConnectInit, ProviderError> {
+            Ok(ConnectInit {
+                redirect_url: Some("https://webview.powens.com/en/connect?x=1".into()),
+            })
+        }
+        async fn complete_connect(&self, _: &str) -> Result<CompleteConnect, ProviderError> {
+            Err(ProviderError::NotImplemented)
+        }
+        async fn sync(
+            &self,
+            _: &serde_json::Value,
+        ) -> Result<gripsou_core::dto::SyncResult, ProviderError> {
+            Err(ProviderError::NotImplemented)
+        }
+    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
@@ -416,9 +441,17 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn init_connection_returns_redirect_url(pool: PgPool) {
         let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let deps = crate::testkit::deps();
+        deps.set_accounts(
+            [(
+                "powens".to_string(),
+                std::sync::Arc::new(FakeBank) as std::sync::Arc<dyn AccountProvider>,
+            )]
+            .into(),
+        );
         let resp = init_connection(
             State(pool.clone()),
-            State(crate::testkit::deps()),
+            State(deps),
             auth::AuthUser {
                 user_id: user,
                 session_id: Uuid::new_v4(),

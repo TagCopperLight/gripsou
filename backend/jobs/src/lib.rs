@@ -7,6 +7,7 @@ use gripsou_core::categorize::Categorizer;
 use gripsou_core::crypto::EncryptionKey;
 use gripsou_core::db::Db;
 use gripsou_core::provider::{AccountProvider, CompositionProvider, PriceProvider, ProviderError};
+use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
 use gripsou_core::repo::settings::BudgetAiSettings;
@@ -82,11 +83,15 @@ pub fn sync_span(user_id: Uuid, connection_id: Uuid, trigger: Trigger) -> tracin
     )
 }
 
-/// The key and the adapters every job uses: built once at startup and shared
-/// (tests build their own, with fakes).
+/// The key and the adapters every job uses: built at startup and shared
+/// (tests build their own, with fakes). The account adapters are rebuilt when
+/// keys are saved.
 pub struct Deps {
     pub key: EncryptionKey,
-    pub accounts: HashMap<String, Box<dyn AccountProvider>>,
+    /// `PUBLIC_URL`: Powens sends people back under it.
+    pub public_url: String,
+    /// Rebuilt when keys are saved; read through [`Deps::account`].
+    accounts: std::sync::RwLock<HashMap<String, Arc<dyn AccountProvider>>>,
     pub prices: Vec<Box<dyn PriceProvider>>,
     pub composition: Box<dyn CompositionProvider>,
     /// How long a sync may run before it is stopped.
@@ -94,8 +99,8 @@ pub struct Deps {
 }
 
 impl Deps {
-    /// The adapters the environment configures, with the stored pivot.
-    pub async fn new(db: &Db, key: EncryptionKey) -> Deps {
+    /// The adapters the saved keys configure, with the stored pivot.
+    pub async fn new(db: &Db, key: EncryptionKey, public_url: String) -> Deps {
         let pivot = gripsou_core::repo::settings::base_currency(db)
             .await
             .unwrap_or_else(|e| {
@@ -105,28 +110,55 @@ impl Deps {
                 );
                 "EUR".to_string()
             });
-        Deps::from_env(key, pivot)
+        Deps::build(key, pivot, public_url)
     }
 
-    /// The adapters the environment configures. `pivot` is the FX storage
+    /// The adapters the saved keys configure. `pivot` is the FX storage
     /// currency, which Yahoo's FX symbols need.
-    pub fn from_env(key: EncryptionKey, pivot: String) -> Deps {
-        Deps {
+    pub fn build(key: EncryptionKey, pivot: String, public_url: String) -> Deps {
+        let deps = Deps {
             key,
-            accounts: ACCOUNT_PROVIDERS
-                .iter()
-                .filter_map(|k| Some((k.key.to_string(), (k.build)()?)))
-                .collect(),
+            public_url,
+            accounts: Default::default(),
             prices: price_providers(pivot),
             composition: Box::new(composition_provider()),
             time_limit: SYNC_TIME_LIMIT,
-        }
+        };
+        deps.reload_accounts(&gripsou_core::provider_config::current());
+        deps
+    }
+
+    /// The adapter for `key`. A sync keeps the one it started with.
+    pub fn account(&self, key: &str) -> Option<Arc<dyn AccountProvider>> {
+        self.accounts
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .cloned()
+    }
+
+    /// Rebuilds every account adapter from `config`, after keys were saved.
+    pub fn reload_accounts(&self, config: &ProviderConfig) {
+        let built = ACCOUNT_PROVIDERS
+            .iter()
+            .filter_map(|k| {
+                Some((
+                    k.key.to_string(),
+                    Arc::from((k.build)(config, &self.public_url)?),
+                ))
+            })
+            .collect();
+        self.set_accounts(built);
+    }
+
+    /// Tests: replaces the adapters with fakes.
+    pub fn set_accounts(&self, accounts: HashMap<String, Arc<dyn AccountProvider>>) {
+        *self.accounts.write().unwrap_or_else(|e| e.into_inner()) = accounts;
     }
 
     /// Whether the connection's provider can open its management page.
     pub fn supports_manage(&self, provider_key: &str) -> bool {
-        self.accounts
-            .get(provider_key)
+        self.account(provider_key)
             .is_some_and(|p| p.supports_manage())
     }
 }
@@ -327,23 +359,53 @@ pub struct AccountProviderKind {
     pub key: &'static str,
     pub display_name: &'static str,
     pub description: &'static str,
-    /// None when the environment lacks its credentials: the provider is then
-    /// listed but has no adapter, and its connections fail with "no adapter".
-    build: fn() -> Option<Box<dyn AccountProvider>>,
+    /// None when its keys aren't saved: the provider is then listed but has
+    /// no adapter, and its connections fail with "no adapter".
+    build: fn(&ProviderConfig, &str) -> Option<Box<dyn AccountProvider>>,
 }
 
 pub const ACCOUNT_PROVIDERS: &[AccountProviderKind] = &[AccountProviderKind {
     key: "powens",
     display_name: "Powens",
     description: "European bank & brokerage aggregation. Connects checking, savings, PEA and brokerage accounts.",
-    build: || {
-        gripsou_providers::powens::PowensProvider::from_env()
+    build: |config, public_url| {
+        gripsou_providers::powens::PowensProvider::from_config(config, public_url)
             .map(|p| Box::new(p) as Box<dyn AccountProvider>)
     },
 }];
 
 pub fn account_provider(key: &str) -> Option<&'static AccountProviderKind> {
     ACCOUNT_PROVIDERS.iter().find(|k| k.key == key)
+}
+
+/// Every provider with keys in Settings → Server → API keys, in display
+/// order: the only list the API accepts names from.
+pub struct ConfigProviderKind {
+    pub key: &'static str,
+    pub display_name: &'static str,
+    pub fields: &'static [ConfigField],
+}
+
+pub const CONFIG_PROVIDERS: &[ConfigProviderKind] = &[
+    ConfigProviderKind {
+        key: "powens",
+        display_name: "Powens",
+        fields: gripsou_providers::powens::CONFIG_FIELDS,
+    },
+    ConfigProviderKind {
+        key: "jev",
+        display_name: "JEV",
+        fields: gripsou_providers::jev::CONFIG_FIELDS,
+    },
+    ConfigProviderKind {
+        key: "brandfetch",
+        display_name: "Brandfetch",
+        fields: gripsou_core::logo::CONFIG_FIELDS,
+    },
+];
+
+pub fn config_provider(key: &str) -> Option<&'static ConfigProviderKind> {
+    CONFIG_PROVIDERS.iter().find(|k| k.key == key)
 }
 
 /// Price-provider adapters. Yahoo needs no credentials, so it is always
@@ -365,7 +427,7 @@ fn composition_provider() -> gripsou_providers::boursorama::BoursoramaCompositio
     gripsou_providers::boursorama::BoursoramaCompositionProvider::new_default()
 }
 
-/// One categorisation provider this build knows. The adapter owns its env key
+/// One categorisation provider this build knows. The adapter owns its saved key
 /// and the "blank means off" rule; this table is the only list of providers,
 /// so adding one touches no schema.
 struct CategorizerKind {
@@ -378,10 +440,16 @@ struct CategorizerKind {
 const CATEGORIZERS: &[CategorizerKind] = &[CategorizerKind {
     key: "jev",
     default_model: gripsou_providers::jev::JevCategorizer::DEFAULT_MODEL,
-    configured: || gripsou_providers::jev::JevCategorizer::api_key_from_env().is_some(),
+    configured: || {
+        gripsou_providers::jev::JevCategorizer::api_key(&gripsou_core::provider_config::current())
+            .is_some()
+    },
     build: |model| {
-        gripsou_providers::jev::JevCategorizer::from_env(model)
-            .map(|c| Box::new(c) as Box<dyn Categorizer>)
+        gripsou_providers::jev::JevCategorizer::from_config(
+            &gripsou_core::provider_config::current(),
+            model,
+        )
+        .map(|c| Box::new(c) as Box<dyn Categorizer>)
     },
 }];
 
@@ -395,7 +463,7 @@ pub fn categorizer_keys() -> Vec<&'static str> {
     CATEGORIZERS.iter().map(|k| k.key).collect()
 }
 
-/// Providers whose API key is in the environment — the admin dropdown's
+/// Providers whose API key is saved — the admin dropdown's
 /// options. A provider without a key is never offered.
 pub fn available_categorizers() -> Vec<&'static str> {
     CATEGORIZERS
@@ -434,7 +502,7 @@ fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
 }
 
 /// The models a provider offers for categorising, asked of the provider
-/// itself. `None` when the provider is unknown or its key is not set.
+/// itself. `None` when the provider is unknown or its key is not saved.
 pub async fn categorizer_models(
     kind: &str,
 ) -> Option<Result<Vec<String>, gripsou_core::categorize::CategorizeError>> {
@@ -448,7 +516,7 @@ async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
 }
 
 /// [`open_gate`] with the providers whose key is present passed in, so tests
-/// need not touch the process-wide env.
+/// need not touch the process-wide config.
 async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(String, String)> {
     let settings = match gripsou_core::repo::settings::budget_ai(db).await {
         Ok(s) => s,
@@ -757,7 +825,7 @@ async fn run_sync(
         .ok_or_else(|| failure("credentials", "no credentials stored"))?;
     let credentials =
         decrypt_credentials(&deps.key, &encrypted).map_err(|e| failure("credentials", e))?;
-    let adapter = deps.accounts.get(provider_key.as_str()).ok_or_else(|| {
+    let adapter = deps.account(provider_key.as_str()).ok_or_else(|| {
         failure(
             "provider_fetch",
             format!("no adapter for provider '{provider_key}'"),
@@ -853,7 +921,7 @@ pub async fn handle_webhook(
     headers: std::collections::HashMap<String, String>,
     body: Vec<u8>,
 ) -> WebhookOutcome {
-    let Some(adapter) = deps.accounts.get(provider) else {
+    let Some(adapter) = deps.account(provider) else {
         tracing::warn!(provider, reason = "unknown_provider", "webhook rejected");
         return WebhookOutcome::NotFound;
     };
@@ -915,8 +983,7 @@ pub async fn request_sync(
         .and_then(|v| v.as_str())
         .is_some_and(|s| !s.is_empty());
     let webhook = deps
-        .accounts
-        .get(conn.provider_key.as_str())
+        .account(conn.provider_key.as_str())
         .map(|a| a.webhooks_enabled())
         .unwrap_or(false)
         && has_external_id;
@@ -984,7 +1051,7 @@ async fn do_request_refresh(
             return;
         }
     };
-    let Some(adapter) = deps.accounts.get(conn.provider_key.as_str()) else {
+    let Some(adapter) = deps.account(conn.provider_key.as_str()) else {
         refresh_failed(
             &db,
             id,
@@ -1033,8 +1100,7 @@ pub async fn manage_connection(
 ) -> Result<gripsou_core::provider::ConnectInit, gripsou_core::provider::ProviderError> {
     use gripsou_core::provider::ProviderError;
     let adapter = deps
-        .accounts
-        .get(conn.provider_key.as_str())
+        .account(conn.provider_key.as_str())
         .filter(|p| p.supports_manage())
         .ok_or(ProviderError::NotImplemented)?;
     let credentials = decrypt_credentials(&deps.key, &conn.credentials)
@@ -1046,7 +1112,7 @@ pub async fn manage_connection(
 /// create a pending DB row, and append `state=<id>` to the redirect URL.
 ///
 /// Calling `connect()` before inserting the row avoids leaving orphaned
-/// pending rows when the provider refuses (e.g. env vars not set).
+/// pending rows when the provider refuses (e.g. keys not saved).
 pub async fn init_connection(
     db: Db,
     deps: &Deps,
@@ -1058,8 +1124,7 @@ pub async fn init_connection(
     use gripsou_core::provider::ConnectInit;
 
     let adapter = deps
-        .accounts
-        .get(provider_key)
+        .account(provider_key)
         .ok_or_else(|| ProviderError::Other(format!("no adapter for provider '{provider_key}'")))?;
 
     let init = adapter.connect().await?;
@@ -1138,8 +1203,7 @@ async fn finish_connection(
         .ok_or(CompleteError::NotFound)?;
 
     let adapter = deps
-        .accounts
-        .get(provider_key.as_str())
+        .account(provider_key.as_str())
         .ok_or_else(|| CompleteError::Internal(format!("no adapter for '{provider_key}'")))?;
 
     let query: String = params
@@ -1221,8 +1285,7 @@ mod categorize_gate_tests {
 
 /// [`open_gate_with`] against a real database: the gate reads the admin's
 /// provider from `app_settings` and the opt-in from the user's own prefs. The
-/// available providers are passed in, never read from the env, so these tests
-/// hold whatever keys the shell exports.
+/// available providers are passed in, never read from the saved keys.
 #[cfg(test)]
 mod open_gate_tests {
     use super::*;

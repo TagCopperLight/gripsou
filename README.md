@@ -51,6 +51,10 @@ If you lose both your authenticator app and your backup codes, run this on the s
 docker compose -f docker/docker-compose.yml exec backend gripsou reset-2fa you@example.com
 ```
 
+## Powens
+
+Enter the Powens keys in Settings → Server → API keys. In the Powens console, allow `<PUBLIC_URL>/connections/callback` as a redirect address (for example `http://localhost:5173/connections/callback` in development).
+
 ## Powens webhooks (optional)
 
 For real-time sync of Powens connections (instead of polling):
@@ -66,9 +70,9 @@ For real-time sync of Powens connections (instead of polling):
    ```
    Save the returned `config.secret_key` (shown only once).
 4. In the Powens console, associate the auth provider with your webhook.
-5. Set `POWENS_WEBHOOK_SECRET=<secret_key>` in the root `.env` and restart the backend.
+5. Enter `<secret_key>` as the Powens webhook secret in Settings → Server → API keys.
 
-When `POWENS_WEBHOOK_SECRET` is unset, sync falls back to direct full-fetch and the daily poll schedule.
+When no webhook secret is saved, sync falls back to direct full-fetch and the daily poll schedule.
 
 ## Changelog
 

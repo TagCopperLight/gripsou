@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/context";
 import { useAiStatus } from "../../api/budget";
 
 /** Settings → Budget: the per-user half of AI categorisation: opt-in and threshold. The
- *  provider, model and key are the operator's (Settings → Server / .env). */
+ *  provider, model and key are the operator's (Settings → Server). */
 export function AiSurface() {
   const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();

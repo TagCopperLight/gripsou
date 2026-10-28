@@ -199,6 +199,8 @@ pub fn router(
             "/settings/budget-ai/prices",
             put(admin::set_budget_ai_prices),
         )
+        .route("/settings/api-keys", get(admin::api_keys))
+        .route("/settings/api-keys/{provider}", patch(admin::set_api_key))
         .route("/connections/init", post(connections::init_connection))
         .route(
             "/connections/complete",

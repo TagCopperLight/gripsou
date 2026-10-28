@@ -18,11 +18,17 @@ use uuid::Uuid;
 
 /// Deps with the given account adapters only.
 fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
-    let mut deps = Deps::from_env(testkit::encryption_key(), "EUR".into());
-    deps.accounts = accounts
-        .into_iter()
-        .map(|(k, a)| (k.to_string(), a))
-        .collect::<HashMap<_, _>>();
+    let deps = Deps::build(
+        testkit::encryption_key(),
+        "EUR".into(),
+        "http://localhost:5173".into(),
+    );
+    deps.set_accounts(
+        accounts
+            .into_iter()
+            .map(|(k, a)| (k.to_string(), Arc::from(a)))
+            .collect::<HashMap<_, _>>(),
+    );
     Arc::new(deps)
 }
 

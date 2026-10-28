@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "../../components/Surface";
 import { Toggle } from "../../components/Toggle";
 import { CardState } from "../../components/CardState";
+import { ApiKeysSurface } from "../../components/ApiKeysSurface";
 import { AiServerSurface } from "../../components/budget/AiServerSurface";
 import { AiCostSurface } from "../../components/budget/AiCostSurface";
 import { useProviders, useSetProviderEnabled, useHealth } from "../../api/hooks";
@@ -25,6 +26,7 @@ export function SettingsServer() {
           <span className="select-all text-sm text-fg-faint">{version ?? "—"}</span>
         </div>
       </Surface>
+      <ApiKeysSurface />
       <Surface className="p-6">
         <h2 className="mb-1 text-lg font-semibold text-fg">
           {t("settings.server.providers")}

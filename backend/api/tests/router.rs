@@ -4,10 +4,14 @@ use axum::{
 };
 use tower::ServiceExt;
 
-/// The job deps with whatever adapters the environment configures.
+/// The job deps with whatever adapters the saved provider config builds.
 fn test_deps() -> std::sync::Arc<gripsou_jobs::Deps> {
     let key = gripsou_core::testkit::encryption_key();
-    std::sync::Arc::new(gripsou_jobs::Deps::from_env(key, "EUR".into()))
+    std::sync::Arc::new(gripsou_jobs::Deps::build(
+        key,
+        "EUR".into(),
+        "http://localhost:5173".into(),
+    ))
 }
 fn test_passkeys() -> gripsou_api::Passkeys {
     gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap()

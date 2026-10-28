@@ -890,6 +890,71 @@ pub struct SetProviderReq {
     pub enabled: bool,
 }
 
+/// One provider's keys for Settings → Server. A secret's value never leaves
+/// the server: only whether it is set.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeyProvider {
+    pub key: String,
+    pub display_name: String,
+    pub fields: Vec<ApiKeyField>,
+}
+
+/// `secret` tells the frontend which of the two shapes it is.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum ApiKeyField {
+    Plain {
+        key: String,
+        secret: bool,
+        value: Option<String>,
+    },
+    Secret {
+        key: String,
+        secret: bool,
+        set: bool,
+    },
+}
+
+impl ApiKeyProvider {
+    pub fn new(
+        k: &gripsou_jobs::ConfigProviderKind,
+        config: &gripsou_core::provider_config::ProviderConfig,
+    ) -> Self {
+        let fields = k
+            .fields
+            .iter()
+            .map(|f| {
+                let value = config.get(k.key, f.key);
+                if f.secret {
+                    ApiKeyField::Secret {
+                        key: f.key.into(),
+                        secret: true,
+                        set: value.is_some(),
+                    }
+                } else {
+                    ApiKeyField::Plain {
+                        key: f.key.into(),
+                        secret: false,
+                        value: value.map(str::to_string),
+                    }
+                }
+            })
+            .collect();
+        ApiKeyProvider {
+            key: k.key.into(),
+            display_name: k.display_name.into(),
+            fields,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetApiKeyReq {
+    pub field: String,
+    pub value: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnabledProvider {

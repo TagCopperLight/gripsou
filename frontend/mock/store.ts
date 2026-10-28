@@ -2,13 +2,16 @@
 // `createStore`. The control (control.ts) holds the live one.
 
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget";
-import type { LotSuggestion, SyncHealth } from "../src/api/types";
+import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types";
 import { baseData, type BaseData } from "./data/base";
 
 export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
   aiUsage: BudgetAiUsage;
   aiStatus: AiStatus;
+  /** Settings → Server → API keys. Secrets are kept here only to answer
+   *  `set`; like the server, the routes never send them back. */
+  apiKeys: ApiKeyProvider[];
   /** Rows the "record purchases" window pre-fills, per holding (none in the base data). */
   lotSuggestions: Record<string, LotSuggestion[]>;
   /** Ledger buys the user deleted from the "record purchases" window. */
@@ -43,6 +46,20 @@ export function createStore(): Store {
     readsFail: false,
     writesFail: false,
     accountsBroken: false,
+    apiKeys: [
+      {
+        key: "powens",
+        displayName: "Powens",
+        fields: [
+          { key: "client_id", secret: false, value: "48211093" },
+          { key: "domain", secret: false, value: "myapp-sandbox.biapi.pro" },
+          { key: "client_secret", secret: true, set: true },
+          { key: "webhook_secret", secret: true, set: false },
+        ],
+      },
+      { key: "jev", displayName: "JEV", fields: [{ key: "api_key", secret: true, set: true }] },
+      { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", secret: false, value: null }] },
+    ],
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       // As the server: AI prices and costs are in US dollars.

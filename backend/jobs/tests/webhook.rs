@@ -29,13 +29,19 @@ const WEBHOOK_SECRET: &str = "test-webhook-secret";
 /// Deps whose only account adapter is Powens with [`WEBHOOK_SECRET`], its
 /// server unreachable.
 fn deps() -> Arc<Deps> {
-    let mut deps = Deps::from_env(testkit::encryption_key(), "EUR".into());
+    let deps = Deps::build(
+        testkit::encryption_key(),
+        "EUR".into(),
+        "http://localhost:5173".into(),
+    );
     let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
-    deps.accounts = [(
-        "powens".to_string(),
-        Box::new(powens) as Box<dyn AccountProvider>,
-    )]
-    .into();
+    deps.set_accounts(
+        [(
+            "powens".to_string(),
+            Arc::new(powens) as Arc<dyn AccountProvider>,
+        )]
+        .into(),
+    );
     Arc::new(deps)
 }
 

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select provider_config as \"c!: Json<Stored>\" from app_settings where id = 1 for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "c!: Json<Stored>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "app_settings",
+            "name": "provider_config"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0703a8bad824973c69dae377db9f4e41606851cfbe229f5a29373f4492d741ff"
+}

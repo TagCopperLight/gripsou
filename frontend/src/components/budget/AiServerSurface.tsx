@@ -14,7 +14,7 @@ import {
 } from "../../api/budget";
 
 /** Settings → Server: which provider categorises transactions for the whole
- *  instance. Keys live in the server's environment; a provider without one is
+ *  instance. Keys are saved under API keys; a provider without one is
  *  never offered. The model is picked from the provider's own list; when that
  *  list cannot be had, it is typed instead. */
 export function AiServerSurface() {

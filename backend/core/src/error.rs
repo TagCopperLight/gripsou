@@ -8,6 +8,9 @@ pub enum CoreError {
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("encryption error: {0}")]
+    Crypto(#[from] crate::crypto::CryptoError),
+
     /// A non-cash instrument reference carried neither an ISIN nor a symbol,
     /// so it cannot be deduplicated into a global instrument row.
     #[error("instrument '{name}' has no isin or symbol to identify it")]

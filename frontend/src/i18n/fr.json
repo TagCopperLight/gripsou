@@ -442,10 +442,25 @@
       "title": "Serveur",
       "about": "À propos",
       "version": "Version",
+      "apiKeys": {
+        "title": "Clés d'API",
+        "replace": "Remplacer",
+        "remove": "Supprimer {{name}}",
+        "saved": "Enregistrée",
+        "notSet": "Non définie",
+        "savedToast": "Clé enregistrée",
+        "removedToast": "Clé supprimée",
+        "saveError": "Impossible d'enregistrer la clé",
+        "fields": {
+          "powens": { "client_id": "Identifiant client", "domain": "Domaine", "client_secret": "Secret client", "webhook_secret": "Secret du webhook" },
+          "jev": { "api_key": "Clé d'API" },
+          "brandfetch": { "client_id": "Identifiant client" }
+        }
+      },
       "providers": "Fournisseurs de données",
       "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",
       "budgetAi": "Catégorisation par IA",
-      "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
+      "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est renseignée dans les clés d'API.",
       "budgetAiProvider": "Fournisseur",
       "budgetAiModel": "Modèle",
       "budgetAiModelsError": "Impossible de charger la liste des modèles du fournisseur ; saisissez le nom du modèle.",

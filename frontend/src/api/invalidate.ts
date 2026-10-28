@@ -232,3 +232,8 @@ export function afterBudgetAiPricesChange(qc: QueryClient) {
 export function afterProviderChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.providers(), keys.providersEnabled()]);
 }
+
+// A key decides whether its provider works: the AI's provider list reads it.
+export function afterApiKeyChange(qc: QueryClient) {
+  return invalidateAll(qc, [keys.apiKeys(), keys.budgetAiSettings(), keys.budgetAiStatus()]);
+}

@@ -14,6 +14,7 @@ import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import type {
   Account,
   AccountSeries,
+  ApiKeyProvider,
   BasisPreview,
   EnabledProvider,
   Holding,
@@ -43,6 +44,7 @@ import {
   afterConnectionDeleted,
   afterLotsSaved,
   afterProviderChange,
+  afterApiKeyChange,
   afterMfaChange,
   afterSessionChange,
   afterConnectFailed,
@@ -443,6 +445,23 @@ export function useSetProviderEnabled() {
       if (ctx?.prev) qc.setQueryData(keys.providers(), ctx.prev);
     },
     onSettled: () => afterProviderChange(qc),
+  });
+}
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: keys.apiKeys(),
+    queryFn: ({ signal }) => getJson<ApiKeyProvider[]>("/settings/api-keys", { signal }),
+  });
+}
+
+/** Saves one field; `value` null removes it. */
+export function useSetApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, field, value }: { provider: string; field: string; value: string | null }) =>
+      patchJson<ApiKeyProvider>(`/settings/api-keys/${provider}`, { field, value }),
+    onSettled: () => afterApiKeyChange(qc),
   });
 }
 

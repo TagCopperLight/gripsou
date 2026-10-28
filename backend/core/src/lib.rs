@@ -11,6 +11,7 @@ pub mod logo;
 pub mod logs;
 pub mod price_sync;
 pub mod provider;
+pub mod provider_config;
 pub mod repo;
 pub mod returns;
 #[cfg(any(test, feature = "test-util"))]

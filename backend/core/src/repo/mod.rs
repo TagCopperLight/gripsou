@@ -17,6 +17,7 @@ pub mod passkey;
 pub mod prefs;
 pub mod price;
 pub mod provider;
+pub mod provider_config;
 pub mod query;
 pub mod returns;
 pub mod series;

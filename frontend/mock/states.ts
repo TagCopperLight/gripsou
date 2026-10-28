@@ -172,6 +172,22 @@ function queue(store: Store, count: number, categoryKey: string | null, pick: (x
 export const FOCUS = "Sign-in pages";
 
 export const STATES: MockState[] = [
+  // ── API keys ──
+  {
+    id: "api-keys-none",
+    label: "No key saved yet (fresh install)",
+    pieces: ["API keys"],
+    apply(store) {
+      for (const p of store.apiKeys) {
+        for (const f of p.fields) {
+          if (f.secret) f.set = false;
+          else f.value = null;
+        }
+      }
+      store.aiSettings.available = [];
+      store.aiSettings.provider = null;
+    },
+  },
   // ── Distribution ──
   {
     id: "distribution-overdraft",

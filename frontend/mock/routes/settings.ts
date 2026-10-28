@@ -25,6 +25,22 @@ export function settingsRoutes(r: Router<Store>): void {
   r.route("GET", "/providers/enabled", ({ store }) =>
     store.providers.filter((p) => p.enabled).map(({ key, displayName, description }) => ({ key, displayName, description })),
   );
+  r.route("GET", "/settings/api-keys", ({ store }) => store.apiKeys);
+  // As the server: one field at a time, null removes it; the JEV key decides
+  // whether the AI can pick JEV.
+  r.route("PATCH", "/settings/api-keys/:provider", ({ store, params, body }) => {
+    const { field, value } = body as { field: string; value: string | null };
+    const p = store.apiKeys.find((x) => x.key === params.provider);
+    const f = p?.fields.find((x) => x.key === field);
+    if (!p || !f) return reply(404, { error: "no such setting" });
+    if (f.secret) f.set = value !== null;
+    else f.value = value;
+    if (p.key === "jev" && f.secret) {
+      store.aiSettings.available = f.set ? ["jev"] : [];
+      if (!f.set) store.aiSettings.provider = null;
+    }
+    return p;
+  });
   r.route("GET", "/settings/budget-ai", ({ store }) => store.aiSettings);
   r.route("GET", "/settings/budget-ai/usage", ({ store }) => store.aiUsage);
   r.route("GET", "/settings/budget-ai/models/:provider", () => ["jev-small", "jev-large"]);
