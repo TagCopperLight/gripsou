@@ -7,16 +7,17 @@ import { CardState } from "./CardState";
 import { Button } from "./Button";
 import { Field } from "./Field";
 import { TextInput } from "./TextInput";
-import { useErrorToast } from "../lib/errorToasts";
+import { showDone, useErrorToast } from "../lib/errorToasts";
 import { useApiKeys, useSetApiKey } from "../api/hooks";
 import type { ApiKeyField, ApiKeyProvider } from "../api/types";
 
-type Save = (value: string | null) => void;
+/** Saves the field; `onSaved` runs once the server took it. */
+type Save = (value: string | null, onSaved?: () => void) => void;
 
 /** Settings → Server: the values each provider needs (Powens, the AI, logos).
- *  Each field saves on its own, on Enter or when it loses focus. A saved
- *  secret never comes back from the server, so it shows as dots until it is
- *  replaced or removed. */
+ *  Each field saves on its own: a plain one on Enter or when it loses focus,
+ *  a secret only on Enter or its Save button. A saved secret never comes back
+ *  from the server, so it shows as dots until it is replaced or removed. */
 export function ApiKeysSurface() {
   const { t } = useTranslation();
   const query = useApiKeys();
@@ -38,7 +39,7 @@ export function ApiKeysSurface() {
             <ProviderKeys
               key={p.key}
               provider={p}
-              save={(field, value) => save.mutate({ provider: p.key, field, value })}
+              save={(field, value, onSaved) => save.mutate({ provider: p.key, field, value }, { onSuccess: onSaved })}
             />
           ))}
         </div>
@@ -52,7 +53,7 @@ function ProviderKeys({
   save,
 }: {
   provider: ApiKeyProvider;
-  save: (field: string, value: string | null) => void;
+  save: (field: string, value: string | null, onSaved?: () => void) => void;
 }) {
   const { t } = useTranslation();
   const label = (f: ApiKeyField) => t(`settings.server.apiKeys.fields.${provider.key}.${f.key}`, { defaultValue: f.key });
@@ -65,12 +66,12 @@ function ProviderKeys({
       {plain.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {plain.map((f) => (
-            <PlainField key={f.key} label={label(f)} value={f.value} save={(v) => save(f.key, v)} />
+            <PlainField key={f.key} label={label(f)} value={f.value} save={(v, done) => save(f.key, v, done)} />
           ))}
         </div>
       )}
       {secrets.map((f) => (
-        <SecretField key={f.key} label={label(f)} isSet={f.set} save={(v) => save(f.key, v)} />
+        <SecretField key={f.key} label={label(f)} isSet={f.set} save={(v, done) => save(f.key, v, done)} />
       ))}
     </div>
   );
@@ -115,8 +116,8 @@ function PlainField({ label, value, save }: { label: string; value: string | nul
 }
 
 /** A secret: dots once saved, with Replace and a bin. Replacing opens an
- *  empty field; Enter or leaving with something typed saves it, Escape or
- *  leaving it empty keeps the saved one. */
+ *  empty field with a Save button inside; only Save or Enter sends it, and
+ *  Escape gives up. A field with nothing saved is the same empty field. */
 function SecretField({ label, isSet, save }: { label: string; isSet: boolean; save: Save }) {
   const { t } = useTranslation();
   const id = useId();
@@ -127,24 +128,36 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
     setReplacing(false);
     setText("");
   };
-  const commit = () => {
+  const submit = () => {
     const next = text.trim();
-    if (next) save(next);
-    close();
+    if (!next) return;
+    save(next, () => {
+      showDone(t("settings.server.apiKeys.savedToast"));
+      close();
+    });
+    // On failure the error toast shows and the field stays open to try again.
   };
+  const remove = () =>
+    save(null, () => showDone(t("settings.server.apiKeys.removedToast")));
 
   if (isSet && !replacing) {
     return (
       <Field label={label}>
         <div className="flex items-center gap-1">
-          <TextInput readOnly tabIndex={-1} value="••••••••" aria-label={`${label}: ${t("settings.server.apiKeys.saved")}`} className="text-fg-dim" />
+          <TextInput
+            readOnly
+            tabIndex={-1}
+            value="••••••••"
+            aria-label={`${label}: ${t("settings.server.apiKeys.saved")}`}
+            className="pointer-events-none select-none text-fg-dim"
+          />
           <Button variant="ghost" onClick={() => setReplacing(true)}>
             {t("settings.server.apiKeys.replace")}
           </Button>
           <button
             type="button"
             aria-label={t("settings.server.apiKeys.remove", { name: label })}
-            onClick={() => save(null)}
+            onClick={remove}
             className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-red"
           >
             <Trash2 className="size-4.5" />
@@ -156,24 +169,33 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
 
   return (
     <Field label={label} htmlFor={id}>
-      <TextInput
-        id={id}
-        type="password"
-        value={text}
-        placeholder={replacing ? undefined : t("settings.server.apiKeys.notSet")}
-        autoFocus={replacing}
-        autoComplete="new-password"
-        spellCheck={false}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") {
-            setText("");
-            requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
-          }
-        }}
-      />
+      <div className="relative">
+        <TextInput
+          id={id}
+          type="password"
+          value={text}
+          placeholder={replacing ? undefined : t("settings.server.apiKeys.notSet")}
+          autoFocus={replacing}
+          autoComplete="new-password"
+          spellCheck={false}
+          className="pr-20"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") close();
+          }}
+        />
+        {(replacing || text) && (
+          <button
+            type="button"
+            disabled={!text.trim()}
+            onClick={submit}
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded-lg bg-surface-3 px-2.5 py-1 text-xs font-medium text-fg transition-colors duration-140 hover:bg-surface-3/70 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("common.save")}
+          </button>
+        )}
+      </div>
     </Field>
   );
 }

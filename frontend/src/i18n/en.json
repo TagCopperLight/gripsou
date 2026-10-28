@@ -448,6 +448,8 @@
         "remove": "Remove {{name}}",
         "saved": "Saved",
         "notSet": "Not set",
+        "savedToast": "Key saved",
+        "removedToast": "Key removed",
         "saveError": "Couldn't save the key",
         "fields": {
           "powens": { "client_id": "Client id", "domain": "Domain", "client_secret": "Client secret", "webhook_secret": "Webhook secret" },
