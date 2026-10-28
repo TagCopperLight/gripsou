@@ -73,18 +73,22 @@ async fn read_json<T: serde::de::DeserializeOwned>(
 pub const CONFIG_FIELDS: &[ConfigField] = &[
     ConfigField {
         key: "client_id",
+        label: "Client ID",
         secret: false,
     },
     ConfigField {
         key: "domain",
+        label: "Domain",
         secret: false,
     },
     ConfigField {
         key: "client_secret",
+        label: "Client secret",
         secret: true,
     },
     ConfigField {
         key: "webhook_secret",
+        label: "Webhook secret",
         secret: true,
     },
 ];

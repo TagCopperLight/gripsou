@@ -1,9 +1,9 @@
 // The review mode's in-memory database: one base dataset, built fresh by
 // `createStore`. The control (control.ts) holds the live one.
 
-import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget";
-import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types";
-import { baseData, type BaseData } from "./data/base";
+import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget.ts";
+import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
+import { baseData, type BaseData } from "./data/base.ts";
 
 export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
@@ -51,14 +51,14 @@ export function createStore(): Store {
         key: "powens",
         displayName: "Powens",
         fields: [
-          { key: "client_id", secret: false, value: "48211093" },
-          { key: "domain", secret: false, value: "myapp-sandbox.biapi.pro" },
-          { key: "client_secret", secret: true, set: true },
-          { key: "webhook_secret", secret: true, set: false },
+          { key: "client_id", label: "Client ID", secret: false, value: "48211093" },
+          { key: "domain", label: "Domain", secret: false, value: "myapp-sandbox.biapi.pro" },
+          { key: "client_secret", label: "Client secret", secret: true, set: true },
+          { key: "webhook_secret", label: "Webhook secret", secret: true, set: false },
         ],
       },
-      { key: "jev", displayName: "JEV", fields: [{ key: "api_key", secret: true, set: true }] },
-      { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", secret: false, value: null }] },
+      { key: "jev", displayName: "JEV", fields: [{ key: "api_key", label: "API key", secret: true, set: true }] },
+      { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", label: "Client ID", secret: false, value: null }] },
     ],
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {

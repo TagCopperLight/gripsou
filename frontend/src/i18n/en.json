@@ -450,12 +450,7 @@
         "notSet": "Not set",
         "savedToast": "Key saved",
         "removedToast": "Key removed",
-        "saveError": "Couldn't save the key",
-        "fields": {
-          "powens": { "client_id": "Client id", "domain": "Domain", "client_secret": "Client secret", "webhook_secret": "Webhook secret" },
-          "jev": { "api_key": "API key" },
-          "brandfetch": { "client_id": "Client id" }
-        }
+        "saveError": "Couldn't save the key"
       },
       "providers": "Data providers",
       "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",

@@ -351,15 +351,21 @@ mod tests {
         let json = serde_json::to_string(&dto).unwrap();
         assert!(!json.contains("hunter2"), "{json}");
         assert!(
-            json.contains(r#"{"key":"client_id","secret":false,"value":"id-1"}"#),
+            json.contains(
+                r#"{"key":"client_id","label":"Client ID","secret":false,"value":"id-1"}"#
+            ),
             "{json}"
         );
         assert!(
-            json.contains(r#"{"key":"client_secret","secret":true,"set":true}"#),
+            json.contains(
+                r#"{"key":"client_secret","label":"Client secret","secret":true,"set":true}"#
+            ),
             "{json}"
         );
         assert!(
-            json.contains(r#"{"key":"webhook_secret","secret":true,"set":false}"#),
+            json.contains(
+                r#"{"key":"webhook_secret","label":"Webhook secret","secret":true,"set":false}"#
+            ),
             "{json}"
         );
     }

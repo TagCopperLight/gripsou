@@ -239,8 +239,8 @@ export type Provider = {
 /** One value a provider needs (Settings → Server → API keys). A secret's
  *  value never comes back from the server: only whether one is saved. */
 export type ApiKeyField =
-  | { key: string; secret: false; value: string | null }
-  | { key: string; secret: true; set: boolean };
+  | { key: string; label: string; secret: false; value: string | null }
+  | { key: string; label: string; secret: true; set: boolean };
 
 export type ApiKeyProvider = {
   key: string;

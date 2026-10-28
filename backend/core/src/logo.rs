@@ -49,6 +49,7 @@ const INSTITUTION_DOMAINS: &[(&str, &str)] = &[
 pub const CONFIG_FIELDS: &[crate::provider_config::ConfigField] =
     &[crate::provider_config::ConfigField {
         key: "client_id",
+        label: "Client ID",
         secret: false,
     }];
 

@@ -8,10 +8,12 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// One value a provider declares it needs. A secret is never sent back to the
-/// browser, only whether it is set.
+/// browser, only whether it is set. `label` is shown as is, in the provider's
+/// own words, never translated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigField {
     pub key: &'static str,
+    pub label: &'static str,
     pub secret: bool,
 }
 

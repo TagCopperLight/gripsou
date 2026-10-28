@@ -9,7 +9,7 @@ import { Field } from "./Field";
 import { TextInput } from "./TextInput";
 import { showDone, useErrorToast } from "../lib/errorToasts";
 import { useApiKeys, useSetApiKey } from "../api/hooks";
-import type { ApiKeyField, ApiKeyProvider } from "../api/types";
+import type { ApiKeyProvider } from "../api/types";
 
 // A plain text field drawn as dots, rather than a password field: password
 // managers offer to save anything typed in one, and draw its placeholder in
@@ -72,8 +72,6 @@ function ProviderKeys({
   provider: ApiKeyProvider;
   save: (field: string, value: string | null, onSaved?: () => void) => void;
 }) {
-  const { t } = useTranslation();
-  const label = (f: ApiKeyField) => t(`settings.server.apiKeys.fields.${provider.key}.${f.key}`, { defaultValue: f.key });
   const plain = provider.fields.filter((f) => !f.secret);
   const secrets = provider.fields.filter((f) => f.secret);
 
@@ -83,12 +81,12 @@ function ProviderKeys({
       {plain.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {plain.map((f) => (
-            <PlainField key={f.key} label={label(f)} value={f.value} save={(v, done) => save(f.key, v, done)} />
+            <PlainField key={f.key} label={f.label} value={f.value} save={(v, done) => save(f.key, v, done)} />
           ))}
         </div>
       )}
       {secrets.map((f) => (
-        <SecretField key={f.key} label={label(f)} isSet={f.set} save={(v, done) => save(f.key, v, done)} />
+        <SecretField key={f.key} label={f.label} isSet={f.set} save={(v, done) => save(f.key, v, done)} />
       ))}
     </div>
   );

@@ -906,11 +906,13 @@ pub struct ApiKeyProvider {
 pub enum ApiKeyField {
     Plain {
         key: String,
+        label: String,
         secret: bool,
         value: Option<String>,
     },
     Secret {
         key: String,
+        label: String,
         secret: bool,
         set: bool,
     },
@@ -929,12 +931,14 @@ impl ApiKeyProvider {
                 if f.secret {
                     ApiKeyField::Secret {
                         key: f.key.into(),
+                        label: f.label.into(),
                         secret: true,
                         set: value.is_some(),
                     }
                 } else {
                     ApiKeyField::Plain {
                         key: f.key.into(),
+                        label: f.label.into(),
                         secret: false,
                         value: value.map(str::to_string),
                     }
