@@ -11,6 +11,19 @@ import { showDone, useErrorToast } from "../lib/errorToasts";
 import { useApiKeys, useSetApiKey } from "../api/hooks";
 import type { ApiKeyField, ApiKeyProvider } from "../api/types";
 
+// A plain text field drawn as dots, rather than a password field: password
+// managers offer to save anything typed in one, and draw its placeholder in
+// another font.
+const MASKED = "[-webkit-text-security:disc]";
+// Asks the usual password managers to leave a field alone.
+const NO_PASSWORD_MANAGER = {
+  autoComplete: "off",
+  "data-1p-ignore": "",
+  "data-lpignore": "true",
+  "data-bwignore": "",
+  "data-form-type": "other",
+};
+
 /** Saves the field; `onSaved` runs once the server took it. */
 type Save = (value: string | null, onSaved?: () => void) => void;
 
@@ -99,7 +112,7 @@ function PlainField({ label, value, save }: { label: string; value: string | nul
         id={id}
         value={typed ?? value ?? ""}
         spellCheck={false}
-        autoComplete="off"
+        {...NO_PASSWORD_MANAGER}
         onChange={(e) => setDraft({ base: value, text: e.target.value })}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -149,9 +162,10 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
           <TextInput
             readOnly
             tabIndex={-1}
-            value="••••••••"
+            value="saved-key"
             aria-label={`${label}: ${t("settings.server.apiKeys.saved")}`}
-            className="pointer-events-none select-none text-fg-dim"
+            {...NO_PASSWORD_MANAGER}
+            className={`pointer-events-none select-none text-fg-dim ${MASKED}`}
           />
           <Button variant="ghost" onClick={() => setReplacing(true)}>
             {t("settings.server.apiKeys.replace")}
@@ -174,13 +188,13 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
       <div className="relative">
         <TextInput
           id={id}
-          type="password"
           value={text}
           placeholder={replacing ? undefined : t("settings.server.apiKeys.notSet")}
           autoFocus={replacing}
-          autoComplete="new-password"
+          {...NO_PASSWORD_MANAGER}
           spellCheck={false}
-          className="pr-20"
+          // Dots only once something is typed, so the placeholder reads.
+          className={`pr-20 ${text ? MASKED : ""}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
