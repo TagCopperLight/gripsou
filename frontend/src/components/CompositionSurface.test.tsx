@@ -12,15 +12,6 @@ const COMP: Composition = {
 };
 
 describe("CompositionSurface", () => {
-  it("renders both distributions with legends and percentages", () => {
-    render(<CompositionSurface composition={COMP} />);
-    expect(screen.getByText("United States")).toBeInTheDocument();
-    expect(screen.getByText("Japan")).toBeInTheDocument();
-    expect(screen.getByText("Technology")).toBeInTheDocument();
-    // 0.62 formatted as a percentage somewhere in the legend.
-    expect(screen.getByText(/62/)).toBeInTheDocument();
-  });
-
   it("sizes segments from weights", () => {
     const { container } = render(<CompositionSurface composition={COMP} />);
     const seg = container.querySelector('[data-testid="seg-United States"]') as HTMLElement;

@@ -36,12 +36,32 @@ pub async fn finish_welcome(
 
 /// Saves only the settings in the body (see `prefs::patch_prefs`), so two
 /// settings changed at once never overwrite each other.
+///
+/// A new currency is only saved once a rate into it is stored: figures are
+/// converted at read time, so without one they could only be shown in the
+/// pivot. The rate is fetched now rather than at the next sync, and when it
+/// can't be had the change is refused and nothing in the body is saved.
 pub async fn update_prefs(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Json(patch): Json<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<Json<dto::SessionUser>, ApiError> {
-    use gripsou_core::repo::prefs::{PrefsError, patch_prefs};
+    use gripsou_core::repo::prefs::{PrefsError, patch_prefs, valid_currency};
+    if let Some(currency) = patch.get("currency").and_then(|v| v.as_str())
+        && valid_currency(currency)
+    {
+        let current = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+            .await?
+            .ok_or(ApiError::Unauthorized)?
+            .prefs
+            .currency;
+        if currency != current && !reporting_rate_ready(&pool, &jobs, user_id, currency).await? {
+            return Err(ApiError::BadGateway(format!(
+                "no exchange rate into {currency} right now"
+            )));
+        }
+    }
     let was_enabled = match patch_prefs(&pool, user_id, &patch).await {
         Ok(Some(was)) => was,
         Ok(None) => return Err(ApiError::Unauthorized),
@@ -59,6 +79,31 @@ pub async fn update_prefs(
         gripsou_jobs::request_categorize(pool.clone(), user_id);
     }
     Ok(Json(dto::SessionUser::from_profile(&profile)))
+}
+
+/// How long a currency change waits for its rate before giving up.
+const RATE_FETCH_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Fetches the rate into `currency` (see `update_prefs`). A provider failure
+/// or a fetch past `RATE_FETCH_LIMIT` reads as "no rate", logged here.
+async fn reporting_rate_ready(
+    pool: &PgPool,
+    jobs: &gripsou_jobs::Deps,
+    user_id: Uuid,
+    currency: &str,
+) -> Result<bool, ApiError> {
+    let today = chrono::Utc::now().date_naive();
+    let fetch = gripsou_core::price_sync::ensure_fx_rate(pool, &jobs.prices, currency, today);
+    let ready = match tokio::time::timeout(RATE_FETCH_LIMIT, fetch).await {
+        Ok(ready) => ready?,
+        Err(_) => false,
+    };
+    if ready {
+        tracing::info!(user_id = %user_id, currency, "reporting rate ready");
+    } else {
+        tracing::warn!(user_id = %user_id, currency, "currency change refused: no rate");
+    }
+    Ok(ready)
 }
 
 pub async fn update_profile(
@@ -190,6 +235,7 @@ mod tests {
     use crate::auth::throttle::LoginThrottle;
     use crate::dto::ChangePasswordReq;
     use crate::testkit::*;
+    use rust_decimal::Decimal;
     use serde_json::json;
     use sqlx::PgPool;
     use std::sync::Arc;
@@ -630,11 +676,25 @@ mod tests {
         user_id: Uuid,
         patch: serde_json::Value,
     ) -> Result<dto::SessionUser, ApiError> {
+        patch_prefs_with_rate(pool, user_id, patch, Some(Decimal::new(92, 2))).await
+    }
+
+    /// `rate: None` stands for the rate provider failing.
+    async fn patch_prefs_with_rate(
+        pool: &PgPool,
+        user_id: Uuid,
+        patch: serde_json::Value,
+        rate: Option<Decimal>,
+    ) -> Result<dto::SessionUser, ApiError> {
         let serde_json::Value::Object(patch) = patch else {
             panic!("a patch is an object")
         };
+        let mut deps =
+            gripsou_jobs::Deps::from_env(gripsou_core::testkit::encryption_key(), "EUR".into());
+        deps.prices = vec![Box::new(gripsou_core::testkit::FixedRateProvider { rate })];
         update_prefs(
             State(pool.clone()),
+            State(std::sync::Arc::new(deps)),
             auth::AuthUser {
                 user_id,
                 session_id: Uuid::new_v4(),
@@ -667,6 +727,48 @@ mod tests {
             ("fr", "USD")
         );
         assert_eq!(after.time_zone, "America/Los_Angeles");
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_new_currency_fetches_its_rate_before_saving(pool: PgPool) {
+        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        patch_prefs(&pool, user_id, json!({ "currency": "USD" }))
+            .await
+            .unwrap();
+        let rates: i64 = sqlx::query_scalar(
+            "select count(*) from price p join instrument i on i.id = p.instrument_id \
+             where i.kind = 'cash' and i.currency = 'USD'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(rates, 1);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_currency_with_no_rate_is_refused_and_nothing_saved(pool: PgPool) {
+        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        let err = patch_prefs_with_rate(
+            &pool,
+            user_id,
+            json!({ "currency": "USD", "uiLanguage": "fr" }),
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_GATEWAY);
+        let after = prefs_of(&pool, user_id).await;
+        assert_eq!(after.currency, "EUR");
+        assert_ne!(after.display.ui_language, "fr");
+
+        // The pivot needs no rate, so going back to it never depends on one.
+        patch_prefs(&pool, user_id, json!({ "currency": "USD" }))
+            .await
+            .unwrap();
+        patch_prefs_with_rate(&pool, user_id, json!({ "currency": "EUR" }), None)
+            .await
+            .unwrap();
+        assert_eq!(prefs_of(&pool, user_id).await.currency, "EUR");
     }
 
     #[sqlx::test(migrations = "../migrations")]

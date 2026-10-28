@@ -50,6 +50,9 @@ export function aggregateCash(holdings: Holding[], multipleLabel: string): Holdi
       glPct: "0",
       spark: null,
       fxMissing: items.some((h) => h.fxMissing),
+      valueNative: items.every((h) => h.valueNative !== null)
+        ? String(items.reduce((s, h) => s + Number(h.valueNative), 0))
+        : null,
       investedNative: String(items.reduce((s, h) => s + Number(h.investedNative), 0)),
       // Cash has no lots, so `lot_basis` always reports this as "0" for every
       // cash holding (there's no unexplained gap to carry) — summing is safe

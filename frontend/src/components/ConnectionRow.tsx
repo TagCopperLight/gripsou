@@ -1,31 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
+import { FieldError } from "./FieldError";
+import { showError, useErrorToast } from "../lib/errorToasts";
+import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { HoldingBadge } from "./HoldingBadge";
 import { useManageConnection, useSyncConnection } from "../api/hooks";
-import { connectionIssues, healthIssue } from "../lib/connectionHealth";
+import { AlertDot } from "./AlertDot";
+import { connectionAlert, connectionIssues, healthIssue } from "../lib/connectionHealth";
 import { formatDate, formatRelative } from "../lib/date";
 import { formatMoney } from "../lib/money";
-import { accountTypeLabel, type SyncConnection } from "../api/types";
+import type { SyncConnection } from "../api/types";
 
 // Shared collapsible connection row used by the settings page and the sync
 // modal. `onDelete` is optional — the delete icon renders only when provided
-// (the sync modal omits it). `showProvider` hides the provider label in the
-// subtext when rows are already grouped under provider headers (the modal).
+// (the sync modal omits it).
 export function ConnectionRow({
   conn,
   onDelete,
-  showProvider = true,
 }: {
-  conn: SyncConnection & { providerName: string };
+  conn: SyncConnection;
   onDelete?: () => void;
-  showProvider?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const sync = useSyncConnection();
+  useErrorToast(sync.isError && t("sync.startFailed"));
   const manage = useManageConnection();
   const [manageError, setManageError] = useState<string | null>(null);
   const returnListener = useRef<(() => void) | null>(null);
@@ -57,13 +58,41 @@ export function ConnectionRow({
       window.addEventListener("focus", onReturn, { once: true });
     } catch {
       tab.close();
-      if (mounted.current) setManageError(t("settings.connections.manageFailed"));
+      showError(t("settings.connections.manageFailed"));
     }
   };
   const issues = connectionIssues(conn);
   const partial = conn.accounts.some((a) => !healthIssue(a.health)) && issues.some((i) => i.accounts.length > 0);
 
+  type Problem = { severity: "error" | "warning"; accounts: string[]; text: string; detail?: string; technical?: boolean };
+  const problems: Problem[] = [];
+  if (conn.status === "error") {
+    problems.push({ severity: "error", accounts: [], text: t("settings.connections.syncFailedMessage"), detail: conn.lastError ?? undefined, technical: true });
+  }
+  if (conn.status !== "pending") {
+    for (const issue of issues) {
+      problems.push({
+        severity: "warning",
+        accounts: issue.accounts,
+        text: issue.kind === "error"
+          ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
+          : issue.kind === "stale"
+            ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
+            : t("settings.connections.health.unknownMessage"),
+        detail: issue.health.nextRetryOn ? t("settings.connections.health.retry", { date: formatDate(issue.health.nextRetryOn) }) : undefined,
+      });
+    }
+  }
+
   const isAwaiting = conn.status === "awaiting";
+  // Nothing to show once open (still connecting, or no account and no
+  // problem): the row doesn't open on a computer. A phone still opens it, as
+  // its open panel holds the actions the header has no room for.
+  const expandable = conn.status !== "pending" && (conn.accounts.length > 0 || problems.length > 0);
+  const toggle = () => {
+    if (!expandable && window.matchMedia?.("(min-width: 48rem)").matches) return;
+    setOpen((o) => !o);
+  };
   const isSyncing = conn.status === "syncing" || isAwaiting;
   const isError = conn.status === "error";
   const isPending = conn.status === "pending";
@@ -78,39 +107,30 @@ export function ConnectionRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setOpen((o) => !o)}
+        aria-disabled={!expandable || undefined}
+        onClick={toggle}
         onKeyDown={(e) => {
           if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
-            setOpen((o) => !o);
+            toggle();
           }
         }}
-        className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140"
+        className={`group w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer hover:bg-surface-3 transition-colors duration-140 ${expandable ? "" : "md:cursor-default md:hover:bg-transparent"}`}
       >
-        <HoldingBadge
-          logo={conn.logo}
-          ticker={conn.displayName}
-          color={conn.accounts[0]?.color}
-          className="size-9 rounded-lg text-[13px]"
-        />
+        <span className="relative shrink-0">
+          <HoldingBadge
+            logo={conn.logo}
+            ticker={conn.displayName}
+            color={conn.accounts[0]?.color}
+            className="size-9 rounded-lg text-[13px]"
+          />
+          <AlertDot alert={connectionAlert(conn)} className="ring-surface-2 group-hover:ring-surface-3" />
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-fg font-semibold text-[15px] truncate">
-              {conn.displayName}
-            </span>
-            <StatusTag conn={conn} />
-          </div>
-          <p className="text-xs text-fg-faint mt-0.5">
-            {showProvider && (
-              <>
-                {conn.providerName}
-                <span className="mx-1.5">·</span>
-              </>
-            )}
-            {t("settings.connections.accountsCount", { count: conn.accounts.length })}
-            <span className="mx-1.5">·</span>
-            {conn.lastSyncAt === null ? formatRelative(null) : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
-          </p>
+          <span className="block text-fg font-semibold text-[15px] truncate">
+            {conn.displayName}
+          </span>
+          <Summary />
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="hidden items-center gap-1.5 md:flex">
@@ -144,60 +164,81 @@ export function ConnectionRow({
           {open ? (
             <ChevronDown className="size-4 text-fg-faint" />
           ) : (
-            <ChevronRight className="size-4 text-fg-faint" />
+            <ChevronRight className={`size-4 text-fg-faint ${expandable ? "" : "md:opacity-30"}`} />
           )}
         </div>
       </div>
 
-      {manageError && <p role="alert" className="px-4 pb-3 text-xs text-red">{manageError}</p>}
-      {issues.length > 0 && !isPending && (
-        <div className="mx-4 mb-3 rounded-xl border border-amber/20 bg-amber-soft px-3.5 py-3 text-[13px] leading-relaxed text-amber">
-          {issues.map((issue, index) => (
-            <p key={index}>
-              {issue.accounts.length > 0 && `${issue.accounts.join(", ")}: `}
-              {issue.kind === "error"
-                ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
-                : issue.kind === "stale"
-                  ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
-                  : t("settings.connections.health.unknownMessage")}
-              {issue.health.nextRetryOn && `${issue.kind === "error" && issue.health.errorMessage && !/[.!?]$/.test(issue.health.errorMessage) ? "." : ""} ${t("settings.connections.health.retry", { date: formatDate(issue.health.nextRetryOn) })}`}
-            </p>
-          ))}
+      {manageError && (
+        <div className="px-4 pb-3">
+          <FieldError>{manageError}</FieldError>
         </div>
       )}
-
       {open && (
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
-          <div className="border-l border-surface-3 pl-4 ml-3.5">
-            <ul className="flex flex-col divide-y divide-surface">
+          <div className="border-l border-surface-3 pl-4 ml-2.25">
+            {/* A table without a header: the account on the left; the bank
+                date and the amount packed together on the right. The amount
+                column has a minimum width, so the dates line up from one bank
+                to the next. */}
+            <ul className="grid grid-cols-[minmax(0,1fr)_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-center justify-between gap-3 py-2.5"
+                  className="col-span-3 grid grid-cols-subgrid items-center py-2.5 first:pt-1 last:pb-1"
                 >
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 pr-4">
                     <span
                       className="size-2.5 rounded-sm shrink-0"
                       style={{ background: a.color }}
                     />
-                    <span className="text-sm text-fg-dim truncate">{a.name}</span>
-                    <span className="text-[11px] rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint shrink-0">
-                      {accountTypeLabel(t, a.typeKey)}
-                    </span>
-                    {a.health?.lastUpdatedOn && (
-                      <span title={t("settings.connections.health.bankUpdated")} className={`text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
-                        <span className="mr-3">·</span>{formatDate(a.health.lastUpdatedOn)}
-                      </span>
-                    )}
+                    <span className="text-[13px] text-fg truncate">{a.name}</span>
                   </div>
-                  <span className="text-sm text-fg font-mono shrink-0">
+                  <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-2 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
+                    {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
+                  </span>
+                  <span className="text-right text-sm text-fg font-mono">
                     {formatMoney(a.value)}
                   </span>
                 </li>
               ))}
             </ul>
           </div>
+          )}
+
+          {/* What is wrong, in words: a line per problem under the accounts,
+              the account it concerns named first, details in faint text. */}
+          {problems.length > 0 && (
+            <div className={`flex flex-col gap-2.5 ${conn.accounts.length > 0 ? "mt-3" : ""}`}>
+              {problems.map((p, index) => (
+                <div key={index} className="flex items-center gap-3 text-[13px] leading-relaxed text-fg-dim">
+                  {/* The app's usual icon size (16px), between the old 14px and the banners' 20px. */}
+                  {p.severity === "error"
+                    ? <CircleAlert className="size-4 shrink-0 text-red" aria-hidden />
+                    : <TriangleAlert className="size-4 shrink-0 text-amber" aria-hidden />}
+                  <div className="min-w-0 flex-1">
+                    {/* Always one line: a long account name is cut, never the message. */}
+                    <p className="flex min-w-0 whitespace-nowrap">
+                      {p.accounts.length > 0 && (
+                        <>
+                          <span className="min-w-0 truncate font-medium text-fg">{p.accounts.join(", ")}</span>
+                          {/* Outside the cut name, so it survives the cut: ": " in English, " : " in French. */}
+                          <span className="shrink-0 whitespace-pre font-medium text-fg">{t("settings.connections.problemSeparator")}</span>
+                        </>
+                      )}
+                      <span className="shrink-0">{p.text}</span>
+                    </p>
+                    {/* A technical error (in English, often long) stays on one line, whole on hover. */}
+                    {p.detail && (
+                      <p className={`text-fg-faint ${p.technical ? "truncate font-mono text-[11px]" : "text-xs"}`} title={p.technical ? p.detail : undefined}>
+                        {p.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Phone: the header has no room for icon buttons, so the actions
@@ -234,39 +275,35 @@ export function ConnectionRow({
     </div>
   );
 
-  function StatusTag({ conn }: { conn: SyncConnection }) {
-    const base = "text-[11px] rounded-md px-2 py-0.5 inline-flex items-center gap-1 shrink-0";
+  // One line under the name: the state in words, in colour when something is
+  // wrong (the dot on the logo says so too); the sync time when all is well.
+  function Summary() {
+    const line = "mt-0.5 text-xs truncate";
     if (isError) {
       return (
-        <span className={`${base} bg-red/15 text-red`} title={conn.lastError ?? ""}>
-          {conn.lastError ?? t("settings.connections.status.error")}
-        </span>
+        <p className={`${line} text-red`} title={conn.lastError ?? undefined}>
+          {t("settings.connections.status.error")}
+        </p>
       );
     }
-    if (isSyncing) {
+    if (isSyncing || isPending) {
       return (
-        <span className={`${base} bg-surface-3 text-fg-dim`}>
-          <RefreshCw className="size-3 animate-spin" />
-          {t(isAwaiting ? "settings.connections.status.awaiting" : "settings.connections.status.syncing")}
-        </span>
-      );
-    }
-    if (isPending) {
-      return (
-        <span className={`${base} bg-surface-3 text-fg-dim`}>
-          {t("settings.connections.status.pending")}
-        </span>
+        <p className={`${line} text-fg-dim`}>
+          {t(isAwaiting ? "settings.connections.status.awaiting" : isPending ? "settings.connections.status.pending" : "settings.connections.status.syncing")}
+        </p>
       );
     }
     if (issues.length > 0) {
-      return <span className={`${base} bg-amber-soft text-amber`}>
-        {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
-      </span>;
+      return (
+        <p className={`${line} text-amber`}>
+          {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
+        </p>
+      );
     }
     return (
-      <span className={`${base} bg-green-soft text-green`}>
-        {t("settings.connections.connectionConnected")}
-      </span>
+      <p className={`${line} text-fg-faint`}>
+        {conn.lastSyncAt === null ? t("settings.connections.neverSynced") : t("settings.connections.synced", { date: formatRelative(conn.lastSyncAt) })}
+      </p>
     );
   }
 }
@@ -279,8 +316,11 @@ function IconButton({
   return (
     <button
       type="button"
-      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed ${
-        danger ? "hover:text-red" : "hover:text-fg"
+      // Disabled: faded like a row's caret when it can't open, and it lets the
+      // pointer through to the row, so the cursor doesn't change and a click
+      // opens or closes the row like anywhere else on it.
+      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 enabled:hover:bg-surface-2 disabled:opacity-30 disabled:pointer-events-none ${
+        danger ? "enabled:hover:text-red" : "enabled:hover:text-fg"
       } ${className}`}
       {...props}
     />

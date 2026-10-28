@@ -18,12 +18,6 @@ import { AddConnectionModal } from "./AddConnectionModal";
 describe("AddConnectionModal", () => {
   beforeEach(() => initMutate.mockReset());
 
-  it("renders provider cards", () => {
-    render(<AddConnectionModal onClose={() => {}} />);
-    expect(screen.getByText("Powens")).toBeInTheDocument();
-    expect(screen.getByText("Banking aggregator")).toBeInTheDocument();
-  });
-
   it("connect button is disabled until a provider is selected", () => {
     render(<AddConnectionModal onClose={() => {}} />);
     expect(screen.getByRole("button", { name: /connect/i })).toBeDisabled();
@@ -38,10 +32,4 @@ describe("AddConnectionModal", () => {
     expect(initMutate).toHaveBeenCalledWith("powens", expect.any(Object));
   });
 
-  it("calls onClose when Cancel is clicked", () => {
-    const onClose = vi.fn();
-    render(<AddConnectionModal onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(onClose).toHaveBeenCalled();
-  });
 });

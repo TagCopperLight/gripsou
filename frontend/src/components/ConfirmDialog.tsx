@@ -19,8 +19,8 @@ type ConfirmDialogProps = {
   children?: ReactNode;
   /** Keeps the action off until `children` is filled in. */
   confirmDisabled?: boolean;
-  /** Shown under the body when the confirmed action failed. */
-  error?: string | null;
+  /** The large window, for a title or a field with long values in it. */
+  large?: boolean;
   onConfirm: () => void;
   onClose: () => void;
   "data-testid"?: string;
@@ -31,13 +31,14 @@ type ConfirmDialogProps = {
  *  Cancel takes focus on open, so a stray Enter backs out instead of
  *  confirming; with a field to fill (`children`), the field takes it. */
 export function ConfirmDialog({
-  title, body, confirmLabel, tone = "danger", busy = false, children, confirmDisabled = false,
-  error = null, onConfirm, onClose, confirmTestId, ...rest
+  title, body, confirmLabel, tone = "danger", busy = false, children, confirmDisabled = false, large = false,
+  onConfirm, onClose, confirmTestId, ...rest
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 
   return (
     <Dialog
+      large={large}
       busy={busy}
       title={title}
       onClose={onClose}
@@ -65,11 +66,6 @@ export function ConfirmDialog({
           {body}
         </p>
         {children}
-        {error && (
-          <p role="alert" className="text-red text-sm">
-            {error}
-          </p>
-        )}
       </div>
     </Dialog>
   );

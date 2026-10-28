@@ -28,10 +28,6 @@ pub struct DayCategoryRow {
     /// At least one row in this bucket could not be valued, so the bucket is
     /// understated.
     pub fx_missing: bool,
-    /// The reader's reporting currency had no rate on this day, so this
-    /// bucket is in the pivot currency. Unlike `fx_missing`, nothing is
-    /// missing from the sum — the whole sum is in a different currency.
-    pub reporting_fx_missing: bool,
 }
 
 /// Every (day, category) bucket between `from` and `to` inclusive.
@@ -118,15 +114,9 @@ pub async fn day_category_totals(
                coalesce(sum(b.amount * afx.unit_value
                             / coalesce(nullif(rfx.unit_value, 0), 1)), 0) as "amount!",
                count(*) as "txn_count!",
-               -- Keyed on the account leg only: a missing reporting rate
-               -- degrades to the pivot (below) rather than dropping anything
-               -- from the sum, so it must not set this flag.
-               coalesce(bool_or(afx.unit_value is null), false) as "fx_missing!",
-               -- Read off the divisor the sum above just used, so the flag
-               -- is set exactly when that divisor fell back to 1. Same zero
-               -- guard as reporting_fx_asof().
-               coalesce(bool_or(coalesce(rfx.unit_value, 0) = 0), false)
-                   as "reporting_fx_missing!"
+               -- Keyed on the account leg only: a reporting rate is stored
+               -- before a currency can be chosen (`update_prefs`).
+               coalesce(bool_or(afx.unit_value is null), false) as "fx_missing!"
         from base b
         left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency
         left join grid rfx on rfx.as_of = b.day

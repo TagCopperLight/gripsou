@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ComponentPropsWithoutRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Key, Trash2, ChevronRight } from "lucide-react";
 
@@ -6,7 +6,10 @@ import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Avatar } from "../../components/Avatar";
 import { CardState } from "../../components/CardState";
-import { useUsers, useCreateInvite } from "../../api/hooks";
+import { useUsers, useCreateInvite, useSetUserRole } from "../../api/hooks";
+import { useErrorToast } from "../../lib/errorToasts";
+import { GridTable } from "../../components/GridTable";
+import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../components/gridTable";
 import { LinkModal } from "../../components/LinkModal";
 import { ResetLinkModal } from "../../components/ResetLinkModal";
 import { DeleteUserModal } from "../../components/DeleteUserModal";
@@ -15,7 +18,9 @@ import { formatDate } from "../../lib/date";
 import type { User } from "../../api/types";
 
 type Role = "admin" | "user";
-const COLUMNS = ["member", "role", "joined", "actions"] as const;
+// Member, role, joined, then the actions (no title: a column of icons).
+const TRACKS = "minmax(14rem, 1fr) minmax(6.5rem, auto) minmax(7rem, auto) minmax(5.5rem, auto)";
+const MIN_WIDTH = "33rem";
 
 export function SettingsUsers() {
   const { t } = useTranslation();
@@ -36,29 +41,19 @@ export function SettingsUsers() {
   const linkFor = (path: string, token?: string) =>
     token ? `${window.location.origin}${path}/${token}` : null;
 
-  // Local optimistic role overrides; not persisted (no PATCH endpoint yet).
-  const [overrides, setOverrides] = useState<Record<string, Role>>({});
-  const roleOf = (u: User): Role => overrides[u.id] ?? u.role;
-  const toggleRole = (u: User) =>
-    setOverrides((prev) => ({
-      ...prev,
-      [u.id]: roleOf(u) === "admin" ? "user" : "admin",
-    }));
+  // Saved on the server; the list refetches. Never on your own row (the
+  // server refuses it too), and never the last admin.
+  const setRole = useSetUserRole();
+  const roleOf = (u: User): Role => u.role;
+  const toggleRole = (u: User) => setRole.mutate({ id: u.id, role: u.role === "admin" ? "user" : "admin" });
+  useErrorToast(setRole.isError && t("settings.users.roleError"));
 
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
         <div className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">
-              {t("settings.users.title")}
-              {ready && (
-                <span className="text-fg-faint font-normal ml-2">
-                  <span className="mr-2">·</span>
-                  {t("settings.users.usersCount", { count: users.length })}
-                </span>
-              )}
-            </h2>
+            <h2 className="text-fg font-semibold text-sm">{t("settings.users.title")}</h2>
             <Button onClick={openInvite} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
               <Plus className="size-4" />
               {t("settings.users.inviteUser")}
@@ -87,11 +82,7 @@ export function SettingsUsers() {
                     <Avatar name={u.name} src={u.avatar} />
                     <span className="flex min-w-0 flex-1 items-center gap-2">
                       <span className="truncate text-sm text-fg">{u.name}</span>
-                      {u.isSelf && (
-                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-fg-dim border border-surface-3 rounded px-1.5 py-0.5">
-                          {t("settings.users.you")}
-                        </span>
-                      )}
+                      {u.isSelf && <YouTag />}
                     </span>
                     <span
                       className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium ${
@@ -106,88 +97,68 @@ export function SettingsUsers() {
               })}
             </div>
 
-            <table className="hidden w-full mt-4 border-separate border-spacing-0 md:table">
-              <thead>
-                <tr>
-                  {COLUMNS.map((c) => (
-                    <th
-                      key={c}
-                      className={`pb-2 px-3 text-[11px] font-medium tracking-wide font-mono text-fg-faint ${
-                        c === "actions" ? "text-right" : "text-left"
-                      }`}
-                    >
-                      {t(`settings.users.columns.${c}`)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <div className="mt-4 hidden md:block">
+              <GridTable
+                columns={TRACKS}
+                minWidth={MIN_WIDTH}
+                head={
+                  <>
+                    <th role="columnheader" className={`${HEAD_CELL} px-3`}>{t("settings.users.columns.member")}</th>
+                    <th role="columnheader" className={`${HEAD_CELL} px-3`}>{t("settings.users.columns.role")}</th>
+                    <th role="columnheader" className={`${HEAD_CELL} px-3`}>{t("settings.users.columns.joined")}</th>
+                    <th role="columnheader" className={`${HEAD_CELL} px-3`}><span className="sr-only">{t("settings.users.columns.actions")}</span></th>
+                  </>
+                }
+              >
                 {users.map((u) => {
                   const role = roleOf(u);
                   const label = t(role === "admin" ? "roles.admin" : "roles.member");
                   return (
-                    <tr key={u.id} className="hover:bg-hover transition-colors duration-140">
-                      {/* MEMBER */}
-                      <td className="py-3 px-3 border-t border-surface-2">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={u.name} src={u.avatar} />
-                          <div className="flex flex-col">
-                            <span className="text-sm text-fg leading-tight flex items-center gap-2">
-                              {u.name}
-                              {u.isSelf && (
-                                <span className="text-[10px] uppercase tracking-wide text-fg-dim border border-surface-3 rounded px-1.5 py-0.5">
-                                  {t("settings.users.you")}
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-xs text-fg-faint">{u.email}</span>
-                          </div>
+                    <tr key={u.id} role="row" className={`${ROW_CELLS} ${ROW_HOVER}`}>
+                      <td role="cell" className="gap-3 px-3 py-2.5">
+                        <Avatar name={u.name} src={u.avatar} />
+                        <div className="flex min-w-0 flex-col">
+                          <span className="flex min-w-0 items-center gap-2 text-sm leading-tight text-fg">
+                            <span className="truncate">{u.name}</span>
+                            {u.isSelf && <YouTag />}
+                          </span>
+                          <span className="truncate text-xs text-fg-faint">{u.email}</span>
                         </div>
                       </td>
-                      {/* ROLE */}
-                      <td className="py-3 px-3 border-t border-surface-2">
+                      <td role="cell" className="px-3">
                         {u.isSelf ? (
                           <RoleBadge role={role} label={label} />
                         ) : (
-                          <RoleBadge role={role} label={label} as="button" onClick={() => toggleRole(u)} />
+                          <RoleBadge
+                            role={role}
+                            label={label}
+                            as="button"
+                            title={t("settings.users.changeRole")}
+                            disabled={setRole.isPending}
+                            onClick={() => toggleRole(u)}
+                          />
                         )}
                       </td>
-                      {/* JOINED */}
-                      <td className="py-3 px-3 border-t border-surface-2 text-sm text-fg-dim font-mono">
-                        {formatDate(u.joinedAt)}
-                      </td>
-                      {/* ACTIONS */}
-                      <td className="py-3 px-3 border-t border-surface-2">
-                        <div className="flex justify-end gap-1.5">
-                          {/* Own password lives in the Account tab; here we only
-                              offer to reset *other* users' passwords. */}
-                          {!u.isSelf && (
-                            <button
-                              type="button"
-                              onClick={() => setResetTarget(u)}
-                              aria-label={t("settings.users.resetPassword")}
-                              className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-fg flex items-center justify-center cursor-pointer transition-colors duration-140"
-                            >
+                      <td role="cell" className="px-3 font-mono text-sm text-fg-dim">{formatDate(u.joinedAt)}</td>
+                      <td role="cell" className="justify-end gap-0.5 px-3">
+                        {/* Own password lives in the Account tab; here we only
+                            offer to reset *other* users' passwords. */}
+                        {!u.isSelf && (
+                          <>
+                            <IconButton onClick={() => setResetTarget(u)} aria-label={t("settings.users.resetPassword")}>
                               <Key className="size-4" />
-                            </button>
-                          )}
-                          {!u.isSelf && (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(u)}
-                              aria-label={t("settings.users.deleteUser")}
-                              className="size-8 rounded-lg bg-surface-2 text-fg-dim hover:text-red flex items-center justify-center cursor-pointer transition-colors duration-140"
-                            >
+                            </IconButton>
+                            <IconButton danger onClick={() => setDeleteTarget(u)} aria-label={t("settings.users.deleteUser")}>
                               <Trash2 className="size-4" />
-                            </button>
-                          )}
-                        </div>
+                            </IconButton>
+                          </>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </GridTable>
+            </div>
             </>
           )}
         </div>
@@ -245,16 +216,43 @@ export function SettingsUsers() {
   );
 }
 
+/** Marks your own row, like "This device" on the sessions list. */
+function YouTag() {
+  const { t } = useTranslation();
+  return (
+    <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+      {t("settings.users.you")}
+    </span>
+  );
+}
+
+/** A row's action, as on a connection row: the icon alone until hovered. */
+function IconButton({ danger = false, ...props }: ComponentPropsWithoutRef<"button"> & { danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`flex size-8 cursor-pointer items-center justify-center rounded-lg text-fg-faint transition-colors duration-140 hover:bg-surface-2 ${
+        danger ? "hover:text-red" : "hover:text-fg"
+      }`}
+      {...props}
+    />
+  );
+}
+
 function RoleBadge({
   role,
   label,
   as = "span",
   onClick,
+  title,
+  disabled,
 }: {
   role: Role;
   label: string;
   as?: "span" | "button";
   onClick?: () => void;
+  title?: string;
+  disabled?: boolean;
 }) {
   const base = "inline-block rounded-md px-2.5 py-1 text-xs font-medium";
   const color = role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim";
@@ -264,7 +262,9 @@ function RoleBadge({
       <button
         type="button"
         onClick={onClick}
-        className={`${base} ${color} ${hover} cursor-pointer transition-colors duration-140`}
+        title={title}
+        disabled={disabled}
+        className={`${base} ${color} ${hover} cursor-pointer transition-colors duration-140 disabled:cursor-wait disabled:opacity-60`}
       >
         {label}
       </button>

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
+import { LabeledField } from "./FieldError";
 import { TextInput } from "./TextInput";
 import { ApiError } from "../api/client";
 import { useChangePassword } from "../api/hooks";
@@ -44,17 +46,29 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
     });
   };
 
-  const input = (label: string, value: string, onChange: (v: string) => void, autoComplete: string) => (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm text-fg-faint">{label}</span>
+  const currentError =
+    minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : wrongCurrent ? t("settings.account.currentPasswordIncorrect") : null;
+
+  const input = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    autoComplete: string,
+    error: string | null,
+    invalid = error !== null,
+  ) => (
+    <LabeledField label={label} error={error}>
       <TextInput
         type="password"
         autoComplete={autoComplete}
+        invalid={invalid}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </label>
+    </LabeledField>
   );
+
+  useErrorToast(change.isError && minutes === null && !wrongCurrent && t("settings.account.passwordUpdateFailed"));
 
   return (
     <Dialog
@@ -75,19 +89,30 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
           update();
         }}
       >
-        {input(t("settings.account.currentPassword"), current, setCurrent, "current-password")}
-        {input(t("settings.account.newPassword"), next, setNext, "new-password")}
-        {input(t("settings.account.confirmNewPassword"), confirm, setConfirm, "new-password")}
-        {lengthError && <p className="text-sm text-red">{t("auth.passwordLength")}</p>}
-        {mismatch && <p className="text-sm text-red">{t("settings.account.passwordsDoNotMatch")}</p>}
-        {change.isError && (
-          <p className="text-sm text-red">
-            {minutes !== null
-              ? t("auth.tooManyAttempts", { count: minutes })
-              : wrongCurrent
-                ? t("settings.account.currentPasswordIncorrect")
-                : t("settings.account.passwordUpdateFailed")}
-          </p>
+        {input(
+          t("settings.account.currentPassword"),
+          current,
+          (v) => {
+            setCurrent(v);
+            change.reset();
+          },
+          "current-password",
+          currentError,
+        )}
+        {input(
+          t("settings.account.newPassword"),
+          next,
+          setNext,
+          "new-password",
+          lengthError ? t("auth.passwordLength") : null,
+          lengthError || mismatch,
+        )}
+        {input(
+          t("settings.account.confirmNewPassword"),
+          confirm,
+          setConfirm,
+          "new-password",
+          mismatch ? t("settings.account.passwordsDoNotMatch") : null,
         )}
         <button type="submit" hidden />
       </form>

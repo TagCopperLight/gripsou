@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { Select } from "./Select";
 import { Button } from "./Button";
+import { Field } from "./Field";
+import { TextInput } from "./TextInput";
 import { withAlpha } from "../lib/color";
 import { safeBudgetColor } from "../lib/budget";
 import { useAccountTypes, useUpdateAccount } from "../api/hooks";
@@ -43,14 +46,21 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
     );
   };
 
+  useErrorToast(update.isError && t("account.edit.saveError"));
+
   return (
     <Dialog
       large
       busy={busy}
       title={t("account.edit.title")}
       heading={
-        <span data-testid="account-preview" className="truncate">
-          {trimmed || t("account.edit.title")}
+        // The name as typed, and the bank under it: two accounts can share a
+        // name ("Compte courant") at different banks.
+        <span className="flex min-w-0 flex-col">
+          <span data-testid="account-preview" className="truncate">
+            {trimmed || t("account.edit.title")}
+          </span>
+          <span className="truncate text-sm font-medium text-fg-faint">{account.sourceName ?? t("account.unknownSource")}</span>
         </span>
       }
       onClose={onClose}
@@ -76,7 +86,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
     >
       <div className="flex flex-col gap-5">
         <Field label={t("account.edit.accountName")} htmlFor="account-name">
-          <input
+          <TextInput
             id="account-name"
             type="text"
             value={name}
@@ -85,7 +95,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter") save();
             }}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className="disabled:opacity-60"
           />
         </Field>
 
@@ -109,31 +119,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
           />
         </Field>
 
-        {update.isError && (
-          <p role="alert" className="text-red text-sm">
-            {t("account.edit.saveError")}
-          </p>
-        )}
       </div>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={htmlFor} className="text-fg-faint text-sm">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

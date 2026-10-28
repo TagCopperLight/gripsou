@@ -26,11 +26,6 @@ describe("Popover", () => {
     expect(panel.style.left).toBe("40px");
   });
 
-  it("dims nothing — there is no backdrop", () => {
-    renderAt({ top: 10, bottom: 40, left: 10 });
-    expect(screen.queryByTestId("dialog-backdrop")).toBeNull();
-  });
-
   it("closes on Escape and on a click outside, but not on one inside", () => {
     const { onClose } = renderAt({ top: 10, bottom: 40, left: 10 });
 

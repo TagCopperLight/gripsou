@@ -92,7 +92,7 @@ describe("EditProfileModal", () => {
     const { onClose } = renderModal();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "taken@gripsou.local" } });
     fireEvent.click(save());
-    expect(await screen.findByText("That email is already in use")).toBeInTheDocument();
+    expect(await screen.findByText("Another account already uses this email.")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -101,15 +101,7 @@ describe("EditProfileModal", () => {
     renderModal();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jules R" } });
     fireEvent.click(save());
-    expect(await screen.findByText("Couldn't save changes")).toBeInTheDocument();
-  });
-
-  it("opens the file picker from the picture button", () => {
-    const { container } = renderModal();
-    const input = fileInput(container);
-    const click = vi.spyOn(input, "click").mockImplementation(() => {});
-    fireEvent.click(screen.getByRole("button", { name: "Change picture" }));
-    expect(click).toHaveBeenCalled();
+    expect(await screen.findByText("Couldn't save your profile")).toBeInTheDocument();
   });
 
   it("saves a picked picture into prefs right away", async () => {

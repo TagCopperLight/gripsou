@@ -11,6 +11,9 @@ import { indexItems, regionItems, sectorItems } from "../components/investments/
 import { useHoldings, useInvestmentReturns } from "../api/hooks";
 import type { Holding, InvestmentReturns } from "../api/types";
 import { exposure, type ExposureHolding } from "../lib/exposure";
+import { ExcludedNote } from "../components/FxNote";
+import { PrivacyEye } from "../components/PrivateMoney";
+import { usePrivacy } from "../auth/usePrivacy";
 
 /** The securities the page is about: cash never counts here. */
 function securities(holdings: Holding[]): ExposureHolding[] {
@@ -32,6 +35,7 @@ export function Investments() {
   const failed = returns.isError || holdings.isError;
   const ready = returns.data !== undefined && holdings.data !== undefined;
   const held = ready ? securities(holdings.data) : [];
+  const excluded = (holdings.data ?? []).filter((h) => h.kind !== "cash" && h.fxMissing).length;
 
   return (
     <div>
@@ -47,15 +51,19 @@ export function Investments() {
       ) : held.length === 0 && returns.data.accounts.length === 0 ? (
         <InvestmentsEmpty />
       ) : (
-        <InvestmentsBody data={returns.data} held={held} />
+        <InvestmentsBody data={returns.data} held={held} excluded={excluded} />
       )}
     </div>
   );
 }
 
-function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: ExposureHolding[] }) {
+function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: number }) {
   const { t, i18n } = useTranslation();
+  // One eye by the section's heading reveals the three donuts.
+  const privacy = usePrivacy();
   const e = exposure(held);
+  // Securities with no rate are worth zero here, so every donut leaves them out.
+  const fxFootnote = excluded > 0 ? <ExcludedNote count={excluded} /> : undefined;
 
   return (
     <>
@@ -63,7 +71,14 @@ function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: Exposu
       <ReturnsCard data={data} className="mb-4" />
 
       <section className="mt-8 mb-4">
-        <h2 className="mb-3 px-1 text-lg font-semibold">{t("investments.exposure.title")}</h2>
+        <h2 className="mb-3 px-1 text-lg font-semibold">
+          {t("investments.exposure.title")}
+          {privacy.enabled && (
+            <span className="ml-3 inline-flex align-middle">
+              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+            </span>
+          )}
+        </h2>
 
         <div className="flex flex-col gap-4">
           <ExposureDonut
@@ -71,17 +86,26 @@ function InvestmentsBody({ data, held }: { data: InvestmentReturns; held: Exposu
             title={t("investments.exposure.regions")}
             items={regionItems(e.regions, t, i18n.language)}
             total={e.covered}
+            fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
           />
           <div className="grid gap-4 md:grid-cols-2">
             <ExposureDonut
               title={t("investments.exposure.sectors")}
               items={sectorItems(e.sectors, t)}
               total={e.covered}
+              fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
             />
             <ExposureDonut
               title={t("investments.exposure.indices")}
               items={indexItems(e.indices, t)}
               total={e.total}
+              fxFootnote={fxFootnote}
+            privacy={privacy}
+            eye={false}
             />
           </div>
         </div>

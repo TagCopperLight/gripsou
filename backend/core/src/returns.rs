@@ -87,7 +87,7 @@ pub struct CashFlow {
     pub amount: Option<Decimal>,
 }
 
-/// A holding left out of the return because its purchases aren't recorded.
+/// A holding left out of a scope's figures.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Missing {
     pub holding_id: Uuid,
@@ -102,7 +102,10 @@ pub struct ScopeReturn {
     pub since: Option<NaiveDate>,
     pub invested: Decimal,
     pub value: Decimal,
+    /// Left out: the lots don't explain the quantity held.
     pub missing: Vec<Missing>,
+    /// Left out: complete, but couldn't be valued today (no rate).
+    pub unvalued: Vec<Missing>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -120,32 +123,43 @@ pub struct Returns {
 
 /// The figures of one scope (an account, or everything).
 ///
-/// Invested and value cover every position. The return covers the complete
-/// ones only: their lots, the dividends of accounts whose positions in scope
-/// are all complete (from the account's first recorded purchase on), and today
-/// their current value. A missing rate among those flows, or a complete
-/// position that couldn't be valued today, leaves the return unknown rather
-/// than wrong.
+/// Every figure covers the same positions: those whose lots explain what is
+/// held and that could be valued today. The others are left out of all of
+/// them and listed, so the page can say so: counted in the invested and value
+/// but not the return, they made the two disagree, and one valued at zero
+/// against its full cost showed a loss that didn't exist. The return covers
+/// the counted positions' lots, the dividends of accounts whose positions in
+/// scope are all counted (from the account's first recorded purchase on), and
+/// today their current value. A missing rate among those flows leaves the
+/// return unknown rather than wrong.
 pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDate) -> ScopeReturn {
-    let invested = positions.iter().map(|p| p.invested).sum();
-    let value = positions.iter().map(|p| p.value).sum();
-    let mut missing: Vec<Missing> = positions
-        .iter()
-        .filter(|p| !p.complete)
-        .map(|p| Missing {
-            holding_id: p.holding_id,
-            name: p.name.clone(),
-        })
-        .collect();
-    missing.sort_by(|a, b| a.name.cmp(&b.name));
+    let listed = |keep: &dyn Fn(&Position) -> bool| {
+        let mut v: Vec<Missing> = positions
+            .iter()
+            .filter(|p| keep(p))
+            .map(|p| Missing {
+                holding_id: p.holding_id,
+                name: p.name.clone(),
+            })
+            .collect();
+        v.sort_by(|a, b| a.name.cmp(&b.name));
+        v
+    };
+    let missing = listed(&|p| !p.complete);
+    let unvalued = listed(&|p| p.complete && p.fx_missing);
 
-    let complete: Vec<&&Position> = positions.iter().filter(|p| p.complete).collect();
+    let complete: Vec<&&Position> = positions
+        .iter()
+        .filter(|p| p.complete && !p.fx_missing)
+        .collect();
+    let invested = complete.iter().map(|p| p.invested).sum();
+    let value = complete.iter().map(|p| p.value).sum();
     // A dividend belongs to its account, so it counts only when every position
     // of that account in scope is complete (else it may pay for a holding whose
     // purchases we don't know) and from the account's first recorded purchase.
     let dividend_counts = |f: &CashFlow| {
         let mut of_account = positions.iter().filter(|p| p.account_id == f.account_id);
-        if of_account.clone().next().is_none() || !of_account.all(|p| p.complete) {
+        if of_account.clone().next().is_none() || !of_account.all(|p| p.complete && !p.fx_missing) {
             return false;
         }
         flows
@@ -170,8 +184,7 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         .map(|f| f.day)
         .min();
 
-    let unvalued = complete.iter().any(|p| p.fx_missing);
-    let annualised = since.filter(|_| !unvalued).and_then(|_| {
+    let annualised = since.and_then(|_| {
         let mut solved: Vec<Flow> = Vec::with_capacity(included.len() + 1);
         for f in &included {
             solved.push(Flow {
@@ -193,6 +206,7 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         invested,
         value,
         missing,
+        unvalued,
     }
 }
 
@@ -287,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_position_counts_in_figures_not_in_return() {
+    fn incomplete_position_is_left_out_of_every_figure() {
         let p = [
             pos(1, 10, true, "1100", "1000"),
             pos(2, 10, false, "500", "400"),
@@ -298,7 +312,7 @@ mod tests {
         ];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
-        assert_eq!((s.invested, s.value), (dec("1400"), dec("1600")));
+        assert_eq!((s.invested, s.value), (dec("1000"), dec("1100")));
         assert_eq!(
             s.missing,
             vec![Missing {
@@ -360,13 +374,24 @@ mod tests {
     }
 
     #[test]
-    fn an_unvalued_complete_position_leaves_the_return_unknown() {
-        let mut p = [pos(1, 10, true, "1100", "1000")];
-        p[0].fx_missing = true;
-        let fl = [lot(1, 10, "2025-01-01", "-1000")];
+    fn an_unvalued_position_is_left_out_of_every_figure() {
+        // Valued at zero against its full cost, it would show a 100 % loss.
+        let mut p = [
+            pos(1, 10, true, "1100", "1000"),
+            pos(2, 10, true, "0", "700"),
+        ];
+        p[1].fx_missing = true;
+        let fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            lot(2, 10, "2024-01-01", "-700"),
+            dividend(10, "2025-06-01", "999"),
+        ];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
-        assert_eq!(s.annualised, None);
+        assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
         assert_eq!(s.since, Some(d("2025-01-01")));
+        assert_eq!((s.invested, s.value), (dec("1000"), dec("1100")));
+        assert_eq!(s.unvalued.len(), 1);
+        assert!(s.missing.is_empty());
     }
 
     #[test]

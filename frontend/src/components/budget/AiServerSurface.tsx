@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Surface } from "../Surface";
 import { SegmentedControl } from "../SegmentedControl";
@@ -77,7 +78,7 @@ export function AiServerSurface() {
         </div>
         {settings.provider && (
           <div className="flex items-center gap-3 text-sm text-fg">
-            <label htmlFor={modelId}>{t("settings.server.budgetAiModel")}</label>
+            <label htmlFor={modelId} onClick={(e) => e.preventDefault()}>{t("settings.server.budgetAiModel")}</label>
             {models.isError || models.data?.length === 0 ? (
               <input
                 id={modelId}
@@ -115,16 +116,13 @@ export function AiServerSurface() {
     );
   })();
 
+  useErrorToast(save.isError && t("settings.server.budgetAiSaveError"));
+
   return (
     <Surface className="p-6">
       <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.budgetAi")}</h2>
       <p className="mb-5 text-xs text-fg-faint">{t("settings.server.budgetAiHint")}</p>
       {body}
-      {save.isError && (
-        <p role="alert" className="mt-3 text-xs text-red">
-          {t("settings.server.budgetAiSaveError")}
-        </p>
-      )}
     </Surface>
   );
 }

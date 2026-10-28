@@ -2,8 +2,10 @@ import { useTranslation } from "react-i18next";
 
 import { CardState } from "./CardState";
 import { ExposureDonut } from "./investments/ExposureDonut";
-import { accountTypeLabel } from "../api/types";
-import { useAccounts } from "../api/hooks";
+import { useAccounts, useHoldings } from "../api/hooks";
+import { ExcludedNote } from "./FxNote";
+import { MIN_DRAWN_SHARE, distribution } from "../lib/distribution";
+import { usePrivacy } from "../auth/usePrivacy";
 
 type DistributionCardProps = {
   className?: string;
@@ -12,20 +14,24 @@ type DistributionCardProps = {
 export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
+  const holdings = useHoldings();
+  const privacy = usePrivacy();
   const accounts = data ?? [];
+  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
+  // The middle shows the net worth, overdrafts included; the ring shows how
+  // what is owned is spread (`distribution`).
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
-  // Largest proportion first, in both the donut and the legend.
-  const items = [...accounts]
-    .sort((a, b) => Number(b.value) - Number(a.value))
-    .map((a) => ({
-      key: a.id,
-      label: a.name,
-      share: Number(a.value) / total,
-      color: a.color,
-      value: a.value,
-      tag: accountTypeLabel(t, a.typeKey),
-      warning: a.fxMissing ? t("dashboard.fxMissing") : undefined,
-    }));
+  const items = distribution(accounts).map(({ account: a, share }) => ({
+    key: a.id,
+    label: a.name,
+    share,
+    color: a.color,
+    value: a.value,
+    fxMissing: a.fxMissing,
+  }));
+  const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)
+    ? <ExcludedNote count={excluded} />
+    : undefined;
 
   return (
     <ExposureDonut
@@ -34,6 +40,9 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       centerLabel={t("common.total")}
       items={items}
       total={total}
+      fxFootnote={fxFootnote}
+      privacy={privacy}
+      minSlice={MIN_DRAWN_SHARE}
       placeholder={
         data === undefined ? (
           <CardState

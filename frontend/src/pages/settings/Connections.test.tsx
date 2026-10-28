@@ -66,25 +66,8 @@ describe("SettingsConnections", () => {
       new Response("nope", { status: 500 }),
     ));
     render(withClient(<SettingsConnections />));
-    expect(await screen.findByText("Can't reach the server")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load this")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-  });
-
-  it("shows the connection + account counts in the header", async () => {
-    render(withClient(<SettingsConnections />));
-    await screen.findByText("Boursorama");
-    // Scope to the heading: the per-connection row subtitle also says "2 accounts".
-    const heading = screen.getByRole("heading");
-    expect(heading).toHaveTextContent(/2 connections/);
-    expect(heading).toHaveTextContent(/2 accounts/);
-  });
-
-  it("renders a card per connection with status tags", async () => {
-    render(withClient(<SettingsConnections />));
-    await screen.findByText("Boursorama");
-    expect(screen.getByText("Example Broker")).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getByText("Credentials expired")).toBeInTheDocument();
   });
 
   it("expands a connection to reveal its accounts", async () => {
@@ -94,6 +77,13 @@ describe("SettingsConnections", () => {
     fireEvent.click(header);
     expect(screen.getByText("Compte courant")).toBeInTheDocument();
     expect(screen.getByText("Livret A")).toBeInTheDocument();
+  });
+
+  it("names the bank when asking to delete it", async () => {
+    render(withClient(<SettingsConnections />));
+    await screen.findByText("Boursorama");
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete connection" })[0]);
+    expect(screen.getByRole("dialog", { name: "Delete Boursorama?" })).toBeInTheDocument();
   });
 
   it("starts the only provider directly and follows its redirect", async () => {
@@ -159,7 +149,7 @@ describe("SettingsConnections", () => {
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not start the connection");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't open the bank connection");
     expect(goTo).not.toHaveBeenCalled();
     fail = false;
     fireEvent.click(add);
@@ -191,5 +181,13 @@ describe("SettingsConnections", () => {
     expect(await screen.findByText(/No data providers are enabled/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/connections/init")).toBe(false);
+  });
+
+  it("with no bank, offers one Add button, in the empty state, and the guide", async () => {
+    fetchMock.mockImplementation(async (url: string) => (url === "/api/providers/enabled" ? json(providers) : json([])));
+    render(withClient(<SettingsConnections />));
+    expect(await screen.findByText("Connect your first bank")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add connection" })).toHaveLength(1);
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 });

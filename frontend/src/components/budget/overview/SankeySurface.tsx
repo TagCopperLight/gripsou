@@ -5,17 +5,19 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
 import { Surface } from "../../Surface";
-import { formatMoney } from "../../../lib/money";
+import { formatMoney, maskAmount } from "../../../lib/money";
 import { sliceLabel } from "../../../lib/slice";
 import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
 import { GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
 import type { Sankey } from "../../../api/overview";
 
 export function SankeySurface({
-  sankey, onSeeTransactions,
+  sankey, onSeeTransactions, masked = false,
 }: {
   sankey: Sankey;
   onSeeTransactions: () => void;
+  /** Private mode: the tooltip's amounts hidden. */
+  masked?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -60,7 +62,7 @@ export function SankeySurface({
           return tooltipRow(
             node.name === HUB ? "transparent" : node.color,
             node.name === HUB ? t("common.total") : node.label,
-            formatMoney(node.amount),
+            masked ? maskAmount(formatMoney(node.amount)) : formatMoney(node.amount),
             false,
             0,
           );
@@ -109,7 +111,7 @@ export function SankeySurface({
         },
       ],
     };
-  }, [sankey, t]);
+  }, [sankey, t, masked]);
 
   return (
     <Surface className="w-full">

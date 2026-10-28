@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 
 import { CardState } from "../../components/CardState";
@@ -9,15 +8,15 @@ import { SankeySurface } from "../../components/budget/overview/SankeySurface";
 import { BreakdownSurface } from "../../components/budget/overview/BreakdownSurface";
 import { TrendSurface } from "../../components/budget/overview/TrendSurface";
 import { EmptyPeriodSurface } from "../../components/budget/overview/EmptyPeriodSurface";
-import { AiBanner } from "../../components/budget/overview/AiBanner";
+import { AiBanner, AiRunningPill } from "../../components/budget/overview/AiBanner";
 import { useBudget } from "../../components/budget/budgetContext";
 import {
-  useBudgetSummary, useBudgetTrend, useHasDataBefore, useLatestDataMonth,
+  useBudgetSummary, useBudgetTrend, useLatestDataMonth,
 } from "../../api/overview";
 import { addMonths, anchorMonth, currentMonth, periodBounds, type Period } from "../../lib/period";
 import { hasFlow } from "../../lib/sankeyGraph";
-import { getPrefs } from "../../lib/prefs";
 import type { Slice } from "../../api/overview";
+import { usePrivacy } from "../../auth/usePrivacy";
 
 export function BudgetOverview() {
   const { period: picked } = useBudget();
@@ -35,20 +34,20 @@ export function BudgetOverview() {
 }
 
 function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string | null }) {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { setPeriod, patchFilters } = useBudget();
+  // One eye, in the period line, for every amount of the page.
+  const privacy = usePrivacy();
 
   const summary = useBudgetSummary(period);
-  const hasBefore = useHasDataBefore(period.mode === "month" ? period.month : undefined);
 
   const data = summary.data;
   const empty = data !== undefined && data.txnCount === 0;
 
   const month = period.mode === "month" ? period.month : null;
-  // Unknown counts as possible: a caret must not flicker off while the answer
-  // is on its way.
-  const canStepBack = month !== null && hasBefore.data !== false;
+  // Back is always open: a month before the first transaction is an empty
+  // month like any other (user's call).
+  const canStepBack = month !== null;
   const canStepForward = month !== null && lastMonth !== null && month < lastMonth;
   const step = (delta: number) => {
     if (month !== null) setPeriod({ mode: "month", month: addMonths(month, delta) });
@@ -98,25 +97,12 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
     <div className="flex flex-col gap-5">
       <PeriodLine
         period={period}
-        txnCount={data?.txnCount ?? 0}
-        fxMissing={data?.fxMissing ?? false}
+        privacy={privacy}
         canStepBack={canStepBack}
         canStepForward={canStepForward}
         onStep={step}
+        end={<AiRunningPill />}
       />
-
-      {/* Not a tooltip: every figure below is in the app's base currency rather
-          than the reader's, and a reader who does not hover would take them for
-          converted ones. Same treatment as the dashboard's headline. */}
-      {data?.reportingFxMissing && (
-        <p
-          role="status"
-          data-testid="reporting-fx-missing"
-          className="bg-amber-soft text-fg-dim self-start rounded-lg px-2 py-1 text-sm"
-        >
-          {t("dashboard.reportingFxMissing", { currency: getPrefs().currency })}
-        </p>
-      )}
 
       <AiBanner />
 
@@ -127,25 +113,26 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
           className="h-40"
         />
       ) : (
-        <FiguresSurface summary={data} />
+        <FiguresSurface summary={data} masked={privacy.masked} />
       )}
 
       {empty ? (
-        <EmptyPeriodSurface onEarlier={canStepBack ? () => step(-1) : undefined} />
+        <EmptyPeriodSurface />
       ) : (
         data && (
           <>
             {hasFlow(data.sankey) && (
-              <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} />
+              <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} masked={privacy.masked} />
             )}
             {data.breakdown.length > 0 && (
               <BreakdownSurface
                 rows={data.breakdown}
                 expensesTotal={data.figures.expenses.amount}
                 onOpen={openTransactions}
+                masked={privacy.masked}
               />
             )}
-            <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} />
+            <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} masked={privacy.masked} />
           </>
         )
       )}
@@ -156,10 +143,11 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
 /** Its own component, so the trend is only asked for when it is shown, and its
  *  own query, so a failing trend degrades one surface rather than the page. */
 function TrendSection({
-  anchor, onSelectMonth,
+  anchor, onSelectMonth, masked,
 }: {
   anchor: string;
   onSelectMonth: (month: string) => void;
+  masked: boolean;
 }) {
   const trend = useBudgetTrend(anchor);
   return trend.data === undefined ? (
@@ -169,6 +157,6 @@ function TrendSection({
       className="h-60"
     />
   ) : (
-    <TrendSurface trend={trend.data} onSelectMonth={onSelectMonth} />
+    <TrendSurface trend={trend.data} onSelectMonth={onSelectMonth} masked={masked} />
   );
 }

@@ -8,16 +8,16 @@ import { OTHER, STOCKS, type RegionSlice, type Slice } from "../../lib/exposure"
 export type DonutItem = {
   key: string;
   label: string;
-  share: number;
+  /** Null: no slice, no % (an overdrawn account). */
+  share: number | null;
   color: string;
   /** The leftover slice, drawn striped so it never reads as one more category. */
   other?: boolean;
   /** The exact amount, when the legend shouldn't derive it from the share. */
   value?: number | string;
-  /** A small badge after the label (the account's type). */
-  tag?: string;
-  /** Shown as ⚠ before the amount, this text as its title. */
-  warning?: string;
+  /** Something is missing from this row's amount for want of an exchange
+   *  rate: an asterisk after it. */
+  fxMissing?: boolean;
   children?: DonutItem[];
 };
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 import { Copy, Check } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -10,6 +11,7 @@ import type { TotpSetup } from "../api/types";
 import { throttleMinutes } from "../lib/mfa";
 import { CodeInput } from "./CodeInput";
 import { BackupCodes } from "./BackupCodes";
+import { FieldError } from "./FieldError";
 import { PasswordField } from "./PasswordField";
 import { useReauthStep } from "./useReauthStep";
 
@@ -25,7 +27,7 @@ function groups(secret: string) {
 export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("password");
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
+  const { password, setPassword, error, setError, checking, check } = useReauthStep();
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -35,9 +37,13 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const confirm = useTotpConfirm();
   const busy = checking || start.isPending || confirm.isPending;
 
-  const fail = (err: unknown, otherwise: string) => {
+  /** Throttled, or `typed` (what the user typed was wrong), next to the
+   *  field; anything else failed on the server's side. */
+  const fail = (err: unknown, typed: string | null = null) => {
     const minutes = throttleMinutes(err);
-    setError(minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : otherwise);
+    if (minutes !== null) setError(t("auth.tooManyAttempts", { count: minutes }));
+    else if (typed) setError(typed);
+    else showError(t("twoFactor.setupFailed"));
   };
 
   const submitPassword = async () => {
@@ -48,7 +54,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       setSetup(await start.mutateAsync(token));
       setStep("scan");
     } catch (err) {
-      fail(err, t("twoFactor.failed"));
+      fail(err);
     }
   };
 
@@ -70,7 +76,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       }
       // Empty the boxes so the next code can be typed straight away.
       setCode("");
-      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : t("twoFactor.failed"));
+      fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : null);
     }
   };
 
@@ -89,15 +95,12 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     </span>
   );
 
-  const errorLine = error && <p className="text-sm text-red">{error}</p>;
-
   let body;
   let footer;
   if (step === "password") {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
-        <PasswordField value={password} onChange={setPassword} autoFocus />
-        {errorLine}
+        <PasswordField value={password} onChange={setPassword} autoFocus error={error} />
         <button type="submit" hidden />
       </form>
     );
@@ -140,18 +143,21 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitCode(); }}>
         <p className="text-sm text-fg-dim">{t("twoFactor.codeIntro")}</p>
-        <CodeInput
-          ariaLabel={t("twoFactor.codeLabel")}
-          value={code}
-          autoFocus
-          onChange={(digits) => {
-            setCode(digits);
-            setError(null);
-            // The sixth digit sends it; there is no button for it.
-            if (digits.length === 6) void submitCode(digits);
-          }}
-        />
-        {errorLine}
+        <div className="flex flex-col gap-2">
+          <CodeInput
+            ariaLabel={t("twoFactor.codeLabel")}
+            value={code}
+            autoFocus
+            invalid={Boolean(error)}
+            onChange={(digits) => {
+              setCode(digits);
+              setError(null);
+              // The sixth digit sends it; there is no button for it.
+              if (digits.length === 6) void submitCode(digits);
+            }}
+          />
+          {error && <FieldError>{error}</FieldError>}
+        </div>
         <button type="submit" hidden />
       </form>
     );

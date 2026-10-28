@@ -1,25 +1,25 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { RangeModal } from "./RangeModal";
 import { useBudget } from "../budgetContext";
 import { monthLabel, periodLabel, type Period } from "../../../lib/period";
+import { PrivacyEye } from "../../PrivateMoney";
+import type { Privacy } from "../../../auth/usePrivacy";
 
 type PeriodLineProps = {
   /** The period on screen: the one picked, or the default it resolved to. */
   period: Period;
-  /** The summary's own count — deliberately NOT the transactions list's number
-   *  for the same month. It leaves out lot rows; both are correct. */
-  txnCount: number;
-  /** Some row could not be valued, so the figures are understated. */
-  fxMissing: boolean;
-  /** The carets follow the data's own bounds, never whether the month on
-   *  screen happens to be empty: a gap month is not the edge of the data. */
+  /** Private mode: the eye that reveals every amount of the overview. */
+  privacy: Privacy;
+  /** Forward stops at the latest month with data; back is always open. */
   canStepBack: boolean;
   canStepForward: boolean;
   /** Moves a month period by `delta` months. */
   onStep: (delta: number) => void;
+  /** At the line's far end (the AI's running pill). */
+  end?: ReactNode;
 };
 
 function Caret({
@@ -47,7 +47,7 @@ function Caret({
 }
 
 export function PeriodLine({
-  period, txnCount, fxMissing, canStepBack, canStepForward, onStep,
+  period, privacy, canStepBack, canStepForward, onStep, end,
 }: PeriodLineProps) {
   const { t, i18n } = useTranslation();
   const { setPeriod } = useBudget();
@@ -105,22 +105,8 @@ export function PeriodLine({
         {t("budget.overview.range")}
       </button>
 
-      <span data-testid="period-count" className="text-[12.5px] text-fg-faint">
-        {t("budget.overview.transactionCount", { count: txnCount })}
-      </span>
-
-      {/* Same treatment the dashboard gives an unvalued holding: the figures on
-          this page are understated, and the tooltip says why. */}
-      {fxMissing && (
-        <span
-          data-testid="period-fx-missing"
-          title={t("dashboard.fxMissing")}
-          aria-label={t("dashboard.fxMissing")}
-          className="text-sm text-fg-faint"
-        >
-          ⚠
-        </span>
-      )}
+      {privacy.enabled && <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />}
+      {end}
 
       {rangeOpen && (
         <RangeModal

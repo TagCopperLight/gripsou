@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { ACCOUNT_PALETTE } from "../lib/palette";
+import { STRIPE_CSS } from "./investments/exposureColors";
 import { localizeCountry, localizeSector } from "../lib/composition-i18n";
 import type { Allocation, Composition } from "../api/types";
 
 // Boursorama only lists the top holdings, so the listed weights sum to less
-// than 100%. "Other" is the remainder (everything not broken out individually).
-const OTHER_COLOR = "var(--color-fg-faint)";
+// than 100%. "Other" is the remainder (everything not broken out
+// individually), striped like the leftover slice of the Investments donuts.
+const OTHER_COLOR = STRIPE_CSS;
 
 type Slice = { name: string; percent: number; color: string };
 
@@ -13,7 +15,10 @@ type Slice = { name: string; percent: number; color: string };
 /// percents always total exactly 100%. "Other" absorbs both the unlisted holdings
 /// and the leftover from rounding each slice; it is shown only when it is >= 1%.
 function buildSlices(items: Allocation[], otherLabel: string): Slice[] {
-  const slices: Slice[] = items.map((a, i) => ({
+  // Largest first: Boursorama's own order breaks once repeated lines are
+  // merged (a 13 % line after an 8 % one).
+  const sorted = [...items].sort((a, b) => b.weight - a.weight);
+  const slices: Slice[] = sorted.map((a, i) => ({
     name: a.name,
     percent: Math.round(a.weight * 100),
     // Cycle the fixed account palette by position for well-spaced, distinct

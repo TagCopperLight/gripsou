@@ -1,7 +1,8 @@
-import { calendarDay, zonedDay } from "../lib/date";
+import { calendarDay, formatDate, zonedDay } from "../lib/date";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Trash2, X } from "lucide-react";
+import { useErrorToast } from "../lib/errorToasts";
+import { Lock, Trash2, X } from "lucide-react";
 
 import { Button } from "./Button";
 import { CardState } from "./CardState";
@@ -9,11 +10,12 @@ import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "./Modal";
 import { Money } from "./Money";
 import { MoneyHint } from "./MoneyHint";
+import { SegmentedControl } from "./SegmentedControl";
 import { getPrefs } from "../lib/prefs";
 import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../api/hooks";
 import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../lib/money";
-import type { BasisPreview, Holding } from "../api/types";
+import type { BasisPreview, Holding, LotSuggestion } from "../api/types";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
 // quantities, unit prices, and everything the preview endpoint derives from
@@ -28,8 +30,6 @@ import type { BasisPreview, Holding } from "../api/types";
 // This file must never grow a `buyCost / buyQty` of its own: a second copy of
 // the rule is how two figures for the same holding ended up disagreeing.
 
-const ZERO_PREVIEW: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0", reporting: null };
-
 /** How long to wait after the last edit before asking the server for updated
  *  figures — avoids firing a request per keystroke. */
 const PREVIEW_DEBOUNCE_MS = 300;
@@ -41,8 +41,13 @@ const EPS = 1e-8;
 const today = () => zonedDay();
 
 type Row = {
+  /** Stable React key: rows move when they are put back in date order. */
+  key: string;
   /** Present on a row already saved; absent on one the user just added. */
   id?: string;
+  /** A provider's lot: shown and counted, never edited, deleted or sent. The
+   *  preview keeps the provider's lots on its own, as saving does. */
+  locked?: boolean;
   type: "buy" | "sell";
   date: string;
   quantity: string;
@@ -52,14 +57,26 @@ type Row = {
   /** Present only on rows seeded from the server: the values as loaded, so an
    *  edit can be detected later. A saved row is "changed" when its date differs
    *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
-  pristine?: { date: string; quantity: string; unitPrice: string; fee: string };
-  /** True on a row pre-filled from a suggestion, until it is binned. Drives
-   *  the note under the table; editing the row keeps it. */
-  suggested?: boolean;
+  pristine?: { type: "buy" | "sell"; date: string; quantity: string; unitPrice: string; fee: string };
+  /** The suggestion this row was added from: binning the row puts it back in
+   *  the "found in your transactions" panel. */
+  fromSuggestion?: Found;
 };
+
+/** A suggestion waiting in the panel, until the user adds or dismisses it. */
+type Found = LotSuggestion & { key: string };
 
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
+
+/** Column titles stay pinned while the rows scroll under them. */
+const TH = "sticky top-0 z-10 bg-surface pt-4 pb-2 font-medium";
+
+let nextKey = 0;
+const newKey = () => `row-${nextKey++}`;
+
+/** Oldest first; `sort` is stable, so rows on the same day keep their order. */
+const byDate = <T extends { date: string }>(rows: T[]): T[] => [...rows].sort((a, b) => a.date.localeCompare(b.date));
 
 /** True for a saved row whose date/quantity/unitPrice no longer match what it
  *  was seeded with. Always false for a row the user just added (no pristine).
@@ -79,7 +96,8 @@ const sameAmount = (a: string, b: string): boolean =>
 
 const isRowChanged = (r: Row): boolean =>
   r.pristine !== undefined &&
-  (r.date.trim() !== r.pristine.date.trim() ||
+  (r.type !== r.pristine.type ||
+    r.date.trim() !== r.pristine.date.trim() ||
     !sameAmount(r.quantity, r.pristine.quantity) ||
     !sameAmount(r.unitPrice, r.pristine.unitPrice) ||
     !sameAmount(r.fee, r.pristine.fee));
@@ -98,6 +116,9 @@ export function RecordLotsModal({
   const suggestions = useLotSuggestions(holding.id);
 
   const [rows, setRows] = useState<Row[] | null>(null);
+  // Suggestions stay out of the table until the user adds them.
+  const [found, setFound] = useState<Found[]>([]);
+  const [dismissed, setDismissed] = useState(false);
   // Ids the user explicitly binned via the delete button. A changed-but-not-
   // binned saved row is NOT in here — its delete half is derived at save time
   // (see `deletes` below), so a row that is both edited and then binned only
@@ -132,35 +153,27 @@ export function RecordLotsModal({
     !(rows !== null && dirty)
   ) {
     setSeededFrom({ lots: data, suggested: suggestions.data });
-    setRows([
-      ...data
-        .filter((l) => l.manual)
-        .map((l) => {
-          const date = calendarDay(l.t);
-          const quantity = l.qty;
-          const unitPrice = l.price;
-          const fee = l.fee;
-          return {
-            id: l.id,
-            type: l.side,
-            date,
-            quantity,
-            unitPrice,
-            fee,
-            pristine: { date, quantity, unitPrice, fee },
-          };
-        }),
-      // New, unsaved rows: they count on Save and feed the preview and the
-      // bar like any row the user added.
-      ...(suggestions.data ?? []).map((s) => ({
-        type: s.type,
-        date: s.date,
-        quantity: s.quantity,
-        unitPrice: s.unitPrice,
-        fee: s.fee,
-        suggested: true,
-      })),
-    ]);
+    setFound(byDate((suggestions.data ?? []).map((sg) => ({ ...sg, key: newKey() }))));
+    setRows(byDate([
+      ...data.map((l) => {
+        const date = calendarDay(l.t);
+        const quantity = l.qty;
+        const unitPrice = l.price;
+        const fee = l.fee;
+        return {
+          key: l.id,
+          id: l.id,
+          locked: !l.manual,
+          type: l.side,
+          date,
+          quantity,
+          unitPrice,
+          fee,
+          pristine: { type: l.side, date, quantity, unitPrice, fee },
+        };
+      }),
+    ]));
+
   }
 
   const list = rows ?? [];
@@ -169,9 +182,32 @@ export function RecordLotsModal({
     setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
 
+  /** Back in date order once a date is settled, not on every keystroke, so a
+   *  row never jumps away from the field being typed in. */
+  const sortRows = () => setRows((rs) => (rs === null ? rs : byDate(rs)));
+
+  const addRow = () => {
+    setDirty(true);
+    setRows((rs) => byDate([...(rs ?? []), { key: newKey(), type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" }]));
+  };
+
+  const addFound = (adding: Found[]) => {
+    setDirty(true);
+    const keys = new Set(adding.map((f) => f.key));
+    setFound((fs) => fs.filter((f) => !keys.has(f.key)));
+    setRows((rs) => byDate([
+      ...(rs ?? []),
+      ...adding.map((f) => ({
+        key: newKey(), type: f.type, date: f.date, quantity: f.quantity, unitPrice: f.unitPrice, fee: f.fee, fromSuggestion: f,
+      })),
+    ]));
+  };
+
   const remove = (i: number) => {
     setDirty(true);
     const row = list[i];
+    const back = row.fromSuggestion;
+    if (back) setFound((fs) => byDate([...fs, back]));
     if (row.id) setQueuedDeletes((ds) => [...ds, row.id!]);
     setRows((rs) => (rs ?? []).filter((_, j) => j !== i));
   };
@@ -191,17 +227,18 @@ export function RecordLotsModal({
     return { type: r.type, date: r.date, quantity, unitPrice, ...(fee !== undefined ? { fee } : {}) };
   };
 
+  const editable = list.filter((r) => !r.locked);
   const parsed = useMemo(
-    () => list.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
+    () => editable.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [list, i18n.language],
   );
-  const anyInvalid = list.some((r) => toLotEntry(r) === null);
+  const anyInvalid = editable.some((r) => toLotEntry(r) === null);
 
   // Net quantity is a plain count, not a money figure — safe to derive locally
   // (unlike mean price / invested / realised, which only ever come from the
   // preview endpoint).
-  const recorded = parsed.reduce(
+  const recorded = [...parsed, ...list.filter((r) => r.locked).map(toLotEntry).filter((p) => p !== null)].reduce(
     (acc, p) => acc + (p.type === "sell" ? -Number(p.quantity) : Number(p.quantity)),
     0,
   );
@@ -217,7 +254,8 @@ export function RecordLotsModal({
   // the panel to zero on every request, not just the first. So the last
   // successful result is held here explicitly, and THAT is what renders;
   // `preview.data` is read only inside `onSuccess`, never for display.
-  const [lastPreview, setLastPreview] = useState<BasisPreview>(ZERO_PREVIEW);
+  // Null until the first answer: no figure rather than a wrong "0,00 €".
+  const [lastPreview, setLastPreview] = useState<BasisPreview | null>(null);
   useEffect(() => {
     if (rows === null) return;
     let current = true;
@@ -234,13 +272,14 @@ export function RecordLotsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
-  const figures: BasisPreview = lastPreview;
+  // Nothing to compute from: no figure, rather than the server's all-zero answer.
+  const figures = list.some((r) => toLotEntry(r) !== null) ? lastPreview : null;
 
   // A changed saved row is saved as a delete + re-add in the same atomic
   // batch — the backend applies both halves in one DB transaction, so the
   // row picking up a new id is harmless (manual lots aren't referenced by id).
-  const newRows = list.filter((r) => r.id === undefined);
-  const changedSaved = list.filter((r) => r.id !== undefined && isRowChanged(r));
+  const newRows = editable.filter((r) => r.id === undefined);
+  const changedSaved = editable.filter((r) => r.id !== undefined && isRowChanged(r));
 
   const adds: SaveLotAdd[] = [...newRows, ...changedSaved]
     .map(toLotEntry)
@@ -270,6 +309,8 @@ export function RecordLotsModal({
   const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
     v != null && currency !== getPrefs().currency ? <Money value={v} signed={signed} /> : null;
 
+  useErrorToast(failed && t("dashboard.holdings.gap.saveError"), t("dashboard.holdings.gap.saveErrorDetail"));
+
   return (
     <Modal
       label={t("dashboard.holdings.gap.title")}
@@ -289,7 +330,9 @@ export function RecordLotsModal({
         </button>
       </HoldingModalHeader>
 
-      <div data-modal-body className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-4">
+      {/* Fixed above the scrolling table: the shares bar, then the found band
+          when there is one. Its bottom rule, or this one, separates them from the table. */}
+      <div className={`shrink-0 px-6 pb-4 ${found.length > 0 && !dismissed ? "" : "border-b border-surface-2"}`}>
         {/* Accounted bar */}
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           <span className="text-fg-dim text-sm">
@@ -310,27 +353,33 @@ export function RecordLotsModal({
             />
           </div>
         </div>
+      </div>
+      {found.length > 0 && !dismissed && (
+        <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
+      )}
 
+      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
         {/* Table — no surface, deliberately: it is the working area, not a card. */}
         {rows === null ? (
           <CardState
             variant={isError ? "error" : "loading"}
             onRetry={() => refetch()}
-            className="h-32"
+            className="mt-4 h-32"
           />
         ) : list.length === 0 ? (
           <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
         ) : (
-          <table className="w-full border-separate border-spacing-0">
+          <table className="w-full table-fixed border-separate border-spacing-0">
+            <LotColumns />
             <thead>
               <tr className="text-[11px] font-mono text-fg-faint">
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.type")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.date")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.quantity")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.fee")}</th>
-                <th className="text-left font-medium pb-2">{t("dashboard.holdings.gap.columns.total")}</th>
-                <th className="pb-2" />
+                <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.type")}</th>
+                <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.date")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.quantity")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.fee")}</th>
+                <th className={`${TH} text-right pr-2`}>{t("dashboard.holdings.gap.columns.total")}</th>
+                <th className={TH} />
               </tr>
             </thead>
             <tbody>
@@ -344,13 +393,41 @@ export function RecordLotsModal({
                   validateRow("1", normaliseDecimal(r.unitPrice, i18n.language)) !== null;
                 const ring = "ring-1 ring-red";
                 const input =
-                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none focus:ring-1 focus:ring-green";
+                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none ring-inset focus:ring-1 focus:ring-green";
+                const cell = "py-1.5 pr-2 border-t border-surface-2";
+                // Text cells line their text up with the inputs' text (input padding + cell gap).
+                const lockedCell = "py-1.5 border-t border-surface-2";
+                if (r.locked) {
+                  // A provider's lot: the same columns, as text, and a lock where the bin goes.
+                  return (
+                    <tr key={r.key} data-testid="lot-row" className="text-sm text-fg-dim">
+                      <td className={`${lockedCell} pl-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
+                      <td className={`${lockedCell} pl-3 font-mono`}>{formatDate(r.date)}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
+                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
+                      <td className={`${cell} text-right font-mono whitespace-nowrap`}>
+                        {p === null ? "—" : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), { currency })}
+                      </td>
+                      <td className="py-1.5 border-t border-surface-2 text-right">
+                        <span title={t("dashboard.holdings.gap.locked")} aria-label={t("dashboard.holdings.gap.locked")} className="inline-flex p-1.5 text-fg-faint">
+                          <Lock className="size-4" />
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={r.id ?? `new-${i}`} data-testid="lot-row" className="text-sm">
-                    <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <span className={r.type === "sell" ? "text-fg-dim" : "text-fg"}>
-                        {t(`dashboard.holdings.gap.${r.type}`)}
-                      </span>
+                  <tr key={r.key} data-testid="lot-row" className="text-sm">
+                    <td className={cell}>
+                      <SegmentedControl
+                        value={r.type}
+                        onChange={(v) => set(i, { type: v })}
+                        options={[
+                          { value: "buy", label: t("dashboard.holdings.gap.buy") },
+                          { value: "sell", label: t("dashboard.holdings.gap.sell") },
+                        ]}
+                      />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
                       <input
@@ -358,6 +435,7 @@ export function RecordLotsModal({
                         data-testid="lot-date"
                         value={r.date}
                         onChange={(e) => set(i, { date: e.target.value })}
+                        onBlur={sortRows}
                         className={`${input} ${r.date === "" ? ring : ""}`}
                       />
                     </td>
@@ -412,88 +490,55 @@ export function RecordLotsModal({
           </table>
         )}
 
-        {list.some((r) => r.suggested) && (
-          <p className="text-fg-faint text-sm">
-            {t("dashboard.holdings.gap.prefilled", { count: list.filter((r) => r.suggested).length })}
-          </p>
-        )}
 
         <div className="flex items-center gap-2">
-          {/* Bordered, not bare text: these sit under a table of inputs, where
-              an unboxed label reads as a column heading rather than a control. */}
-          <Button
-            variant="ghost"
-            className={ADD_ROW_BUTTON}
-            onClick={() => {
-              setDirty(true);
-              setRows((rs) => [
-                ...(rs ?? []),
-                { type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" },
-              ]);
-            }}
-          >
-            {t("dashboard.holdings.gap.addBuy")}
-          </Button>
-          <Button
-            variant="ghost"
-            className={ADD_ROW_BUTTON}
-            onClick={() => {
-              setDirty(true);
-              setRows((rs) => [
-                ...(rs ?? []),
-                { type: "sell", date: today(), quantity: "", unitPrice: "", fee: "" },
-              ]);
-            }}
-          >
-            {t("dashboard.holdings.gap.addSell")}
+          {/* Bordered, not bare text: it sits under a table of inputs, where an
+              unboxed label reads as a column heading rather than a control. */}
+          <Button variant="ghost" className={ADD_ROW_BUTTON} onClick={addRow}>
+            {t("dashboard.holdings.gap.add")}
           </Button>
         </div>
 
-        {/* Resulting figures */}
+      </div>
+
+      {/* The figures stay in view while the table scrolls above them. */}
+      <div className="shrink-0 border-t border-surface-2 px-6 pt-4">
         <div className="bg-surface-2 rounded-2xl p-5">
           <span className="text-fg text-sm font-semibold">
             {t("dashboard.holdings.gap.figures")}
-            {(short || over) && (
-              <span className="text-fg-faint font-normal">
-                {" · "}
-                {t("dashboard.holdings.gap.figuresProvisional")}
-              </span>
-            )}
           </span>
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
             <Figure
-              hint={reportingHint(figures.reporting?.invested)}
+              hint={reportingHint(figures?.reporting?.invested)}
               testId="figure-invested"
               label={t("dashboard.holdings.gap.capitalInvested")}
-              value={formatMoney(figures.invested, { currency })}
+              value={figures ? formatMoney(figures.invested, { currency }) : "—"}
             />
             <Figure
-              hint={reportingHint(figures.reporting?.meanPrice)}
+              hint={reportingHint(figures?.reporting?.meanPrice)}
               testId="figure-meanPrice"
               label={t("dashboard.holdings.gap.meanPricePerShare")}
-              value={formatMoney(figures.meanPrice, { currency })}
+              value={figures ? formatMoney(figures.meanPrice, { currency }) : "—"}
             />
             <SignedFigure
-              hint={reportingHint(figures.reporting?.realised, true)}
+              hint={reportingHint(figures?.reporting?.realised, true)}
               testId="figure-realised"
               label={t("dashboard.holdings.gap.realisedPnl")}
-              value={Number(figures.realised)}
+              value={figures ? Number(figures.realised) : null}
               currency={currency}
             />
             <SignedFigure
-              hint={reportingHint(figures.reporting?.unrealised, true)}
+              hint={reportingHint(figures?.reporting?.unrealised, true)}
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
-              value={figures.unrealised === null ? null : Number(figures.unrealised)}
+              value={figures?.unrealised == null ? null : Number(figures.unrealised)}
               currency={currency}
             />
           </div>
         </div>
-
-        {failed && <p className="text-red text-sm">{t("dashboard.holdings.gap.saveError")}</p>}
       </div>
 
-      <div data-modal-footer className="flex items-center justify-end gap-2 px-6 pb-6 pt-2">
+      <div data-modal-footer className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
         <Button variant="ghost" onClick={onClose} disabled={saveLots.isPending}>
           {t("dashboard.holdings.gap.cancel")}
         </Button>
@@ -557,5 +602,88 @@ function SignedFigure({
         </MoneyHint>
       </span>
     </div>
+  );
+}
+
+/** One set of column widths for the table and the "found" panel above it, so
+ *  a suggestion sits exactly over the row it will become. */
+function LotColumns() {
+  return (
+    <colgroup>
+      <col className="w-38" />
+      <col className="w-42" />
+      <col />
+      <col />
+      <col />
+      <col className="w-30" />
+      <col className="w-12" />
+    </colgroup>
+  );
+}
+
+/** Purchases and sales found in the user's transactions, offered before they
+ *  touch the table: a row each, in the table's own columns, added one by one
+ *  or all at once, or dismissed for now. */
+function FoundPanel({ found, currency, onAdd, onDismiss }: {
+  found: Found[];
+  currency: string;
+  onAdd: (f: Found[]) => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const buys = found.filter((f) => f.type === "buy").length;
+  const title =
+    buys === found.length ? t("dashboard.holdings.gap.found.buys", { count: buys })
+    : buys === 0 ? t("dashboard.holdings.gap.found.sells", { count: found.length })
+    : t("dashboard.holdings.gap.found.mixed", { count: found.length });
+  // Cells line their text up with the inputs' text below (input padding + cell gap).
+  const cell = "border-t border-blue/20 py-2.5 font-mono text-sm";
+  return (
+    // A band across the whole window, not a card: the blue runs edge to edge
+    // between two rules, and the window's own margin keeps the columns over the table's.
+    // It stays put above the scrolling table.
+    <section aria-label={title} className="shrink-0 border-y border-blue/25 bg-blue-soft px-6 pt-3.5 pb-1.5">
+      <div className="flex items-center justify-between gap-4 pb-2">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={onDismiss} className="cursor-pointer text-[13px] font-medium text-fg-dim transition-colors duration-140 hover:text-fg">
+            {t("dashboard.holdings.gap.found.dismiss")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onAdd(found)}
+            className="cursor-pointer rounded-[10px] bg-blue/20 px-3 py-1.25 text-[13px] font-medium text-blue-light transition-colors duration-140 hover:bg-blue/30"
+          >
+            {t("dashboard.holdings.gap.found.addAll")}
+          </button>
+        </div>
+      </div>
+      <table className="w-full table-fixed border-separate border-spacing-0">
+        <LotColumns />
+        <tbody>
+          {found.map((f) => (
+            <tr key={f.key}>
+              <td className={`${cell} pl-3 font-sans text-fg`}>{t(`dashboard.holdings.gap.${f.type}`)}</td>
+              <td className={`${cell} pl-3 text-fg-dim`}>{formatDate(f.date)}</td>
+              <td className={`${cell} pr-5 text-right text-fg`}>{formatQuantity(f.quantity)}</td>
+              <td className={`${cell} pr-5 text-right text-fg`}>{formatMoney(f.unitPrice, { currency })}</td>
+              <td className={`${cell} pr-5 text-right text-fg-dim`}>{formatMoney(f.fee, { currency })}</td>
+              <td className={`${cell} pr-2 text-right text-fg-dim whitespace-nowrap`}>
+                {formatMoney(lotCashAmount(f.type, f.quantity, f.unitPrice, f.fee), { currency })}
+              </td>
+              <td className={`${cell} text-right`}>
+                <button
+                  type="button"
+                  onClick={() => onAdd([f])}
+                  className="cursor-pointer font-sans text-[13px] font-medium text-blue-light transition-opacity duration-140 hover:opacity-70"
+                >
+                  {t("dashboard.holdings.gap.found.add")}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }

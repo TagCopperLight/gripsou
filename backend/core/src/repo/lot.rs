@@ -144,13 +144,10 @@ pub struct PreviewLot {
 /// rollback means the modal's live preview and the number the user gets after
 /// saving come from the same function over the same rows.
 ///
-/// That equivalence holds only for the rows the two paths actually touch.
-/// This preview deletes and replaces *every* lot on the holding regardless of
-/// `source`, while `save_lots`/`delete_lots` (the real write path) refuse to
-/// touch a non-`manual` row. Today the two agree because nothing but this
-/// flow writes lots, but 0021 explicitly plans for a future provider that
-/// does — once one exists, a holding with provider lots would preview against
-/// a set of rows that saving can never actually produce.
+/// `rows` stand for the user's own (`manual`) lots only: the provider's lots
+/// stay as they are, exactly as `save_lots`/`delete_lots` leave them, so the
+/// preview runs over the set saving would produce. Nothing writes provider lots
+/// today, but 0021 plans for a provider that does.
 ///
 /// `Ok(None)` means the holding is unknown or not the caller's — mirroring
 /// `insert_lot`'s `Option`-for-unowned pattern in this same module, and
@@ -186,9 +183,12 @@ pub async fn basis_preview(
         return Ok(None);
     }
 
-    sqlx::query!("delete from lot where holding_id = $1", holding_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "delete from lot where holding_id = $1 and source = 'manual'",
+        holding_id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     for r in rows {
         sqlx::query!(

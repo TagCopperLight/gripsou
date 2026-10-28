@@ -18,8 +18,7 @@ function Line(props: Partial<Parameters<typeof PeriodLine>[0]>) {
   return (
     <PeriodLine
       period={shown}
-      txnCount={412}
-      fxMissing={false}
+      privacy={{ enabled: false, masked: false, toggle: () => {} }}
       canStepBack
       canStepForward
       onStep={() => {}}
@@ -38,12 +37,6 @@ function renderLine(props: Partial<Parameters<typeof PeriodLine>[0]> = {}) {
 }
 
 describe("PeriodLine", () => {
-  it("names the month and counts its transactions", () => {
-    renderLine();
-    expect(screen.getByTestId("period-label")).toHaveTextContent("August 2026");
-    expect(screen.getByTestId("period-count")).toHaveTextContent("412");
-  });
-
   it("steps through the caller, one month either way", () => {
     const onStep = vi.fn();
     renderLine({ onStep });
@@ -56,13 +49,6 @@ describe("PeriodLine", () => {
     renderLine({ canStepBack: false, canStepForward: false });
     expect(screen.getByTestId("period-prev")).toBeDisabled();
     expect(screen.getByTestId("period-next")).toBeDisabled();
-  });
-
-  it("shows the FX warning only when a row could not be valued", () => {
-    renderLine();
-    expect(screen.queryByTestId("period-fx-missing")).toBeNull();
-    renderLine({ fxMissing: true });
-    expect(screen.getAllByTestId("period-fx-missing")[0]).toBeVisible();
   });
 
   it("replaces the stepper with the range and a clearing cross under a range", () => {

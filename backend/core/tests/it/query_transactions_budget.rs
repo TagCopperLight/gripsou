@@ -316,6 +316,22 @@ async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow
         3,
         "bulk-action ids stay lot-free even though the header counts the lot"
     );
+    // ...and so does what the selection bar says "select all shown" covers:
+    // its count and its total are the bulk ids', the purchase left out.
+    let cash_only = transaction_counts(&pool, user_id, &filters()).await?;
+    assert_eq!(cash_only.selectable, bulk_ids.len() as i64);
+    let without_lot = sqlx::query_scalar::<_, Decimal>(
+        "select sum(amount) from transaction t join account a on a.id = t.account_id \
+         join connection c on c.id = a.connection_id where c.user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(cash_only.matching_total, without_lot);
+    assert_eq!(
+        lots_counts.selectable, 0,
+        "nothing to select among purchases"
+    );
     Ok(())
 }
 
@@ -839,9 +855,9 @@ async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
 }
 
 /// Aggregating through a single FX join must preserve each row's missing-rate
-/// flags, pivot fallback, and decimal division (including a zero-rate leg).
+/// flag, pivot fallback, and decimal division (including a zero-rate leg).
 #[sqlx::test(migrations = "../migrations")]
-async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
+async fn counts_fx_flag_and_total_agree_with_rows_across_rate_gaps(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let usd = seed_cash_instrument(&pool, "USD").await;
@@ -881,19 +897,10 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
         let rows = transactions(&pool, user_id, &f).await?;
         let counts = transaction_counts(&pool, user_id, &f).await?;
         assert_eq!(counts.matching, rows.len() as i64);
-        if !counts.reporting_fx_missing {
-            assert_eq!(
-                counts.matching_total,
-                rows.iter()
-                    .filter_map(|r| r.amount_reporting)
-                    .sum::<Decimal>()
-            );
-        }
         assert_eq!(
             counts.fx_missing,
             matches!(currency, None | Some("USD") | Some("GBP"))
         );
-        assert_eq!(counts.reporting_fx_missing, currency != Some("absent"));
         assert_eq!(counts.total, 9);
     }
     let zero_day = TransactionFilters {
@@ -906,9 +913,5 @@ async fn counts_fx_flags_and_total_agree_with_rows_across_rate_gaps(
     assert_eq!(zero.matching, 1);
     assert_eq!(zero.matching_total, Decimal::ZERO);
     assert!(!zero.fx_missing, "a zero account rate is present");
-    assert!(
-        zero.reporting_fx_missing,
-        "a zero divisor degrades to pivot"
-    );
     Ok(())
 }

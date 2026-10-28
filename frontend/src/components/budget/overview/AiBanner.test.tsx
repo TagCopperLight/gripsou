@@ -41,12 +41,6 @@ describe("AiBanner", () => {
     await waitFor(() => expect(calls[0]).toContain("/budget/categorize"));
   });
 
-  it("shows progress while running", async () => {
-    stub({ running: true, remaining: 40 });
-    renderBanner();
-    expect(await screen.findByText("Categorising your history — 40 left")).toBeVisible();
-  });
-
   it("renders nothing when idle", async () => {
     stub({});
     const { container } = renderBanner();

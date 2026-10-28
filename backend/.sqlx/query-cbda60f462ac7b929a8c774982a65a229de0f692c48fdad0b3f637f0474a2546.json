@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with ins as (\n            insert into instrument (kind, symbol, isin, name, currency)\n            values ('cash', null, null, $1, $1)\n            on conflict (currency) where kind = 'cash' do nothing\n            returning id, kind, symbol, isin, name, currency, meta\n        )\n        select id as \"id!\", kind as \"kind!\", symbol, isin, name as \"name!\",\n               currency as \"currency!\", meta as \"meta!\"\n        from ins\n        union all\n        select id, kind, symbol, isin, name, currency, meta\n        from instrument where kind = 'cash' and currency = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "symbol",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "isin",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "meta!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cbda60f462ac7b929a8c774982a65a229de0f692c48fdad0b3f637f0474a2546"
+}

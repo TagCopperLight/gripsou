@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { Pencil } from "lucide-react";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
 import { Avatar } from "./Avatar";
+import { FieldError, LabeledField } from "./FieldError";
 import { TextInput } from "./TextInput";
 import { useUpdateProfile } from "../api/hooks";
 import { useAuth } from "../auth/context";
@@ -56,6 +58,8 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
       },
     );
   };
+
+  useErrorToast(updateProfile.isError && !emailTaken && t("settings.account.profileUpdateFailed"));
 
   return (
     <Dialog
@@ -120,22 +124,20 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-sm text-fg-faint">{t("settings.account.email")}</span>
+            <LabeledField label={t("settings.account.email")} error={emailTaken && t("settings.account.emailInUse")}>
               <TextInput
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                invalid={emailTaken}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailTaken) updateProfile.reset();
+                }}
               />
-            </label>
+            </LabeledField>
           </div>
         </div>
-        {pictureError && <p className="text-sm text-red">{t("settings.account.pictureError")}</p>}
-        {updateProfile.isError && (
-          <p className="text-sm text-red">
-            {emailTaken ? t("settings.account.emailInUse") : t("settings.account.profileUpdateFailed")}
-          </p>
-        )}
+        {pictureError && <FieldError>{t("settings.account.pictureError")}</FieldError>}
         <button type="submit" hidden />
       </form>
     </Dialog>

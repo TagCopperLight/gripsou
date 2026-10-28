@@ -15,11 +15,6 @@ pub struct NetWorthRow {
     /// At least one holding on this day had no FX rate, so it was valued at
     /// zero or its cost basis was left out of `invested`.
     pub fx_missing: bool,
-    /// The reader's reporting currency had no rate on this day, so the figures
-    /// are still denominated in the pivot rather than converted. Distinct from
-    /// `fx_missing`: nothing is *missing* from the sum, the whole sum is in the
-    /// wrong currency.
-    pub reporting_fx_missing: bool,
 }
 
 pub async fn net_worth_series(
@@ -73,7 +68,6 @@ pub async fn net_worth_series_with_target(
                 net_worth: r.value,
                 invested: r.invested,
                 fx_missing: r.fx_missing,
-                reporting_fx_missing: r.reporting_fx_missing,
             }),
         }
     }
@@ -90,7 +84,6 @@ struct AccountDayRow {
     value: Decimal,
     invested: Decimal,
     fx_missing: bool,
-    reporting_fx_missing: bool,
 }
 
 /// The one per-day valuation, grouped by (day, account), ordered by day.
@@ -134,8 +127,7 @@ async fn account_day_values(
         -- down to roughly CHART_TARGET_POINTS points before this query ever
         -- runs.
         with dates as materialized (
-            select as_of, reporting_fx_degraded($1, as_of) as reporting_fx_missing
-            from (select distinct unnest($2::date[]) as as_of) d
+            select distinct unnest($2::date[]) as as_of
         ),
         -- One valuation per instrument-day instead of one per holding-day, with
         -- the FX lookup folded into the same scan. `materialized` is load-bearing
@@ -187,8 +179,7 @@ async fn account_day_values(
                    -- rate is unknown, in which case the value branch above is
                    -- false and only this one fires.
                    or (lb.basis <> 0 and afx.unit_value is null)
-               ), false) as "fx_missing!",
-               d.reporting_fx_missing as "reporting_fx_missing!"
+               ), false) as "fx_missing!"
         from dates d
         cross join holding h
         join account a    on a.id = h.account_id
@@ -210,7 +201,7 @@ async fn account_day_values(
             limit 1
         ) snap on true
         where c.user_id = $1
-        group by d.as_of, d.reporting_fx_missing, a.id, a.name, a.color, rep.unit_value
+        group by d.as_of, a.id, a.name, a.color, rep.unit_value
         order by d.as_of, a.id
         "#,
         user_id,
@@ -1038,25 +1029,23 @@ pub struct TransactionCounts {
     /// Cash rows with no category, filters ignored — the list header's second
     /// number, and the one that starts out enormous.
     pub uncategorized: i64,
-    /// The selection bar's figure: `matching`'s rows summed in the reader's
-    /// reporting currency, each converted at its own date.
+    /// The cash rows among `matching`: what "select all shown" selects, the
+    /// same rows as `matching_transaction_ids`. Lot rows carry no budget.
+    pub selectable: i64,
+    /// The selection bar's figure: the `selectable` rows summed in the
+    /// reader's reporting currency, each converted at its own date.
     pub matching_total: Decimal,
-    /// At least one matching row's ACCOUNT leg had no rate on its day, so
+    /// At least one selectable row's ACCOUNT leg had no rate on its day, so
     /// `matching_total` is understated by whatever that row was worth.
     /// Mirrors `SummaryDto.fxMissing` — same convention, same meaning.
     pub fx_missing: bool,
-    /// The reader's reporting currency had no rate on at least one matching
-    /// row's day, so that row's contribution to `matching_total` is in the
-    /// pivot currency, not the reporting one — nothing is missing from the
-    /// sum, but part of it may be in a different currency than the rest.
-    /// Mirrors `SummaryDto.reportingFxMissing`.
-    pub reporting_fx_missing: bool,
 }
 
 /// The list header. `matching` reads the same `budget_transaction_matches` as
 /// `transactions()`, so it counts exactly the rows the list pages through —
 /// under `bucket: All` that includes lot rows, unlike
-/// `matching_transaction_ids`, which keeps only the cash ones.
+/// `matching_transaction_ids`, which keeps only the cash ones (`selectable`,
+/// and the total, follow that one).
 pub async fn transaction_counts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -1065,7 +1054,7 @@ pub async fn transaction_counts(
     let row = sqlx::query!(
         r#"
         with matching as (
-            select amount, account_currency, day
+            select source, amount, account_currency, day
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ),
         reporting as (
@@ -1084,16 +1073,14 @@ pub async fn transaction_counts(
         ),
         totals as (
             select count(*) as n,
+                   count(*) filter (where m.source = 'cash') as selectable,
                    coalesce(sum(m.amount * fx.account_rate
-                                / coalesce(nullif(fx.reporting_rate, 0), 1)), 0) as total,
-                   -- Keyed on the account leg only: a missing reporting rate
-                   -- degrades to the pivot rather than dropping anything from
-                   -- the sum, so it must not set this.
-                   coalesce(bool_or(fx.account_rate is null), false) as fx_missing,
-                   -- Read off the same divisor the sum just used, so the flag
-                   -- is set exactly when that divisor fell back to 1.
-                   coalesce(bool_or(coalesce(fx.reporting_rate, 0) = 0), false)
-                       as reporting_fx_missing
+                                / coalesce(nullif(fx.reporting_rate, 0), 1))
+                            filter (where m.source = 'cash'), 0) as total,
+                   -- Keyed on the account leg only: a reporting rate is
+                   -- stored before a currency can be chosen (`update_prefs`).
+                   coalesce(bool_or(fx.account_rate is null)
+                            filter (where m.source = 'cash'), false) as fx_missing
             from matching m
             left join fx on fx.day = m.day and fx.account_currency = m.account_currency
         ),
@@ -1103,9 +1090,8 @@ pub async fn transaction_counts(
                        as uncategorized
             from budget_transaction_rows($1, $2)
         )
-        select t.n as "matching!", t.total as "matching_total!",
+        select t.n as "matching!", t.selectable as "selectable!", t.total as "matching_total!",
                t.fx_missing as "fx_missing!",
-               t.reporting_fx_missing as "reporting_fx_missing!",
                e.n as "total!", e.uncategorized as "uncategorized!"
         from totals t, everything e
         "#,
@@ -1129,9 +1115,9 @@ pub async fn transaction_counts(
         matching: row.matching,
         total: row.total,
         uncategorized: row.uncategorized,
+        selectable: row.selectable,
         matching_total: row.matching_total,
         fx_missing: row.fx_missing,
-        reporting_fx_missing: row.reporting_fx_missing,
     })
 }
 

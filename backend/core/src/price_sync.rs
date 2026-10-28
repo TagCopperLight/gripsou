@@ -11,7 +11,7 @@ use crate::error::CoreError;
 use crate::provider::PriceProvider;
 use crate::repo::instrument::{mark_symbol_unresolved, set_resolved_symbol};
 use crate::repo::price::{insert_prices, latest_price_ts};
-use crate::repo::query::price_eligible_instruments_for_connection;
+use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for_connection};
 
 /// How far back of already-stored history each pass re-requests.
 ///
@@ -94,103 +94,156 @@ pub async fn fetch_prices_for_connection_at(
     }
     let instruments = price_eligible_instruments_for_connection(pool, connection_id).await?;
     let mut conn = pool.acquire().await?;
-
     for row in instruments {
-        let iref = InstrumentRef {
-            kind: row.kind.clone(),
-            symbol: row.symbol.clone(),
-            isin: row.isin.clone(),
-            name: row.name.clone(),
-            currency: row.currency.clone(),
-        };
-
-        let Some(provider) = providers.iter().find(|p| p.supports(&iref)) else {
-            continue;
-        };
-
-        // Freshness guard: already have today's point → nothing to do.
-        let latest = latest_price_ts(&mut conn, row.id).await?;
-        if latest.map(|ts| ts.date_naive()) == Some(today) {
-            summary.skipped_fresh += 1;
-            continue;
-        }
-
-        // Resolve (or reuse cached) symbol.
-        let symbol = match row.meta.get("yahoo_symbol").and_then(|v| v.as_str()) {
-            Some(s) => s.to_string(),
-            None => {
-                if row.meta.get("yahoo_resolution").and_then(|v| v.as_str()) == Some("unresolved") {
-                    continue;
-                }
-                match provider.resolve_symbol(&iref).await {
-                    Ok(Some(s)) => {
-                        set_resolved_symbol(&mut conn, row.id, &s).await?;
-                        summary.resolved += 1;
-                        s
-                    }
-                    Ok(None) => {
-                        mark_symbol_unresolved(&mut conn, row.id).await?;
-                        summary.unresolved += 1;
-                        continue;
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            provider = provider.key(),
-                            instrument_id = %row.id,
-                            error = %crate::logs::error_chain(&e),
-                            "price resolve failed"
-                        );
-                        summary.failed += 1;
-                        continue;
-                    }
-                }
-            }
-        };
-
-        // Re-fetch the trailing window (or full history when no prices yet)
-        // and upsert. `latest` itself is deliberately not the start: see
-        // REFETCH_DAYS.
-        let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
-        match provider.fetch_prices(&symbol, since).await {
-            Ok(points) => {
-                // Store points in whatever currency the listing is quoted in;
-                // unit_value_asof converts at read time from the price row's own
-                // currency. One Yahoo response is one listing, hence one
-                // currency. A point with no currency at all is unconvertible, so
-                // the batch is dropped rather than silently mislabelled.
-                let currency = points
-                    .first()
-                    .map(|p| p.currency.clone())
-                    .unwrap_or_default();
-                if currency.is_empty() {
-                    tracing::warn!(
-                        provider = provider.key(),
-                        instrument_id = %row.id,
-                        symbol = %symbol,
-                        points = points.len() as u64,
-                        "prices dropped: listing has no currency"
-                    );
-                    summary.skipped_unlabelled += points.len();
-                    continue;
-                }
-                let batch: Vec<(chrono::DateTime<chrono::Utc>, rust_decimal::Decimal)> =
-                    points.iter().map(|p| (p.ts, p.unit_price)).collect();
-                // One batched upsert per instrument (a backfill can be hundreds of
-                // bars) instead of a round-trip per point.
-                let written = insert_prices(&mut conn, row.id, &batch, &currency).await?;
-                summary.prices_inserted += written as usize;
-            }
-            Err(e) => {
-                tracing::warn!(
-                    provider = provider.key(),
-                    instrument_id = %row.id,
-                    error = %crate::logs::error_chain(&e),
-                    "price fetch failed"
-                );
-                summary.failed += 1;
-            }
-        }
+        fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
     }
 
     Ok(summary)
+}
+
+/// Makes sure a rate into `currency` is stored, fetching it now rather than at
+/// the next sync. For a reader switching their currency: their figures are
+/// converted at read time, and with no rate they could only be shown in the
+/// pivot. True when a rate is stored afterwards (the pivot needs none); a
+/// provider failure is logged and reads as false, so the caller decides.
+pub async fn ensure_fx_rate(
+    pool: &sqlx::PgPool,
+    providers: &[Box<dyn PriceProvider>],
+    currency: &str,
+    today: chrono::NaiveDate,
+) -> Result<bool, CoreError> {
+    if currency == crate::repo::settings::base_currency(pool).await? {
+        return Ok(true);
+    }
+    let mut conn = pool.acquire().await?;
+    let row = sqlx::query_as!(
+        PriceEligibleInstrument,
+        r#"
+        with ins as (
+            insert into instrument (kind, symbol, isin, name, currency)
+            values ('cash', null, null, $1, $1)
+            on conflict (currency) where kind = 'cash' do nothing
+            returning id, kind, symbol, isin, name, currency, meta
+        )
+        select id as "id!", kind as "kind!", symbol, isin, name as "name!",
+               currency as "currency!", meta as "meta!"
+        from ins
+        union all
+        select id, kind, symbol, isin, name, currency, meta
+        from instrument where kind = 'cash' and currency = $1
+        "#,
+        currency,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    let mut summary = PriceSyncSummary::default();
+    fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
+    Ok(latest_price_ts(&mut conn, row.id).await?.is_some())
+}
+
+/// One instrument's pass: resolve its symbol (cached), then fetch and upsert
+/// its trailing window. Provider failures are logged and counted, never
+/// returned; only database errors are.
+async fn fetch_instrument(
+    conn: &mut sqlx::PgConnection,
+    providers: &[Box<dyn PriceProvider>],
+    row: &PriceEligibleInstrument,
+    today: chrono::NaiveDate,
+    summary: &mut PriceSyncSummary,
+) -> Result<(), CoreError> {
+    let iref = InstrumentRef {
+        kind: row.kind.clone(),
+        symbol: row.symbol.clone(),
+        isin: row.isin.clone(),
+        name: row.name.clone(),
+        currency: row.currency.clone(),
+    };
+
+    let Some(provider) = providers.iter().find(|p| p.supports(&iref)) else {
+        return Ok(());
+    };
+
+    // Freshness guard: already have today's point → nothing to do.
+    let latest = latest_price_ts(conn, row.id).await?;
+    if latest.map(|ts| ts.date_naive()) == Some(today) {
+        summary.skipped_fresh += 1;
+        return Ok(());
+    }
+
+    // Resolve (or reuse cached) symbol.
+    let symbol = match row.meta.get("yahoo_symbol").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            if row.meta.get("yahoo_resolution").and_then(|v| v.as_str()) == Some("unresolved") {
+                return Ok(());
+            }
+            match provider.resolve_symbol(&iref).await {
+                Ok(Some(s)) => {
+                    set_resolved_symbol(conn, row.id, &s).await?;
+                    summary.resolved += 1;
+                    s
+                }
+                Ok(None) => {
+                    mark_symbol_unresolved(conn, row.id).await?;
+                    summary.unresolved += 1;
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        provider = provider.key(),
+                        instrument_id = %row.id,
+                        error = %crate::logs::error_chain(&e),
+                        "price resolve failed"
+                    );
+                    summary.failed += 1;
+                    return Ok(());
+                }
+            }
+        }
+    };
+
+    // Re-fetch the trailing window (or full history when no prices yet)
+    // and upsert. `latest` itself is deliberately not the start: see
+    // REFETCH_DAYS.
+    let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
+    match provider.fetch_prices(&symbol, since).await {
+        Ok(points) => {
+            // Store points in whatever currency the listing is quoted in;
+            // unit_value_asof converts at read time from the price row's own
+            // currency. One Yahoo response is one listing, hence one
+            // currency. A point with no currency at all is unconvertible, so
+            // the batch is dropped rather than silently mislabelled.
+            let currency = points
+                .first()
+                .map(|p| p.currency.clone())
+                .unwrap_or_default();
+            if currency.is_empty() {
+                tracing::warn!(
+                    provider = provider.key(),
+                    instrument_id = %row.id,
+                    symbol = %symbol,
+                    points = points.len() as u64,
+                    "prices dropped: listing has no currency"
+                );
+                summary.skipped_unlabelled += points.len();
+                return Ok(());
+            }
+            let batch: Vec<(chrono::DateTime<chrono::Utc>, rust_decimal::Decimal)> =
+                points.iter().map(|p| (p.ts, p.unit_price)).collect();
+            // One batched upsert per instrument (a backfill can be hundreds of
+            // bars) instead of a round-trip per point.
+            let written = insert_prices(conn, row.id, &batch, &currency).await?;
+            summary.prices_inserted += written as usize;
+        }
+        Err(e) => {
+            tracing::warn!(
+                provider = provider.key(),
+                instrument_id = %row.id,
+                error = %crate::logs::error_chain(&e),
+                "price fetch failed"
+            );
+            summary.failed += 1;
+        }
+    }
+    Ok(())
 }

@@ -14,7 +14,6 @@ use crate::error::ApiError;
 /// Inclusive calendar-day windows, anchored to the caller's saved timezone.
 pub(crate) fn range_window(range: &str, today: NaiveDate) -> (NaiveDate, NaiveDate) {
     let from = match range {
-        "24h" => today - Duration::days(1),
         "7d" => today - Duration::days(7),
         "1mo" => today - Duration::days(30),
         "6mo" => today - Duration::days(182),

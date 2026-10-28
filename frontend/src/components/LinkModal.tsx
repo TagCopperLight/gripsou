@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { ErrorState } from "./ErrorState";
 import { Copy, Check } from "lucide-react";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
@@ -33,7 +35,7 @@ export function LinkModal({ title, subtitle, body, link, error, onClose }: LinkM
     >
       <p className="text-sm text-fg-dim">{body}</p>
       {error ? (
-        <p className="mt-4 text-sm text-red">{t("settings.users.linkError")}</p>
+        <ErrorState title={t("settings.users.linkError")} detail={t("common.tryAgain")} className="mt-4 py-4" />
       ) : (
         <div className="mt-4 flex items-center gap-2">
           <code className="flex-1 truncate rounded-xl bg-surface-2 px-3 py-2.5 text-sm text-fg font-mono">

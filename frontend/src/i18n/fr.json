@@ -7,10 +7,20 @@
     "investments": "Investissements"
   },
   "common": {
+    "colorPicker": {
+      "shade": "Saturation et luminosité",
+      "hue": "Teinte",
+      "hex": "Code hexadécimal"
+    },
     "loading": "Chargement…",
     "retry": "Réessayer",
-    "cantReachServer": "Impossible de joindre le serveur",
-    "apiUnavailable": "Le service est momentanément indisponible.",
+    "loadFailed": "Chargement impossible",
+    "tryAgain": "Réessayez dans un instant.",
+    "refreshPage": "Actualisez la page.",
+    "crashed": "Un problème est survenu sur cette page",
+    "crashedDetail": "Recharger la page suffit en général.",
+    "reload": "Recharger",
+    "dismiss": "Fermer",
     "close": "Fermer",
     "cancel": "Annuler",
     "save": "Enregistrer",
@@ -21,13 +31,25 @@
     "showAmount": "Afficher le montant",
     "hideAmount": "Masquer le montant"
   },
+  "range": {
+    "short": { "7d": "7J", "1mo": "1M", "6mo": "6M", "1y": "1A", "ytd": "YTD", "max": "Max" },
+    "over": {
+      "7d": "sur 7 jours",
+      "1mo": "sur 1 mois",
+      "6mo": "sur 6 mois",
+      "1y": "sur 1 an",
+      "ytd": "depuis le 1er janvier",
+      "max": "depuis le début"
+    }
+  },
   "sync": {
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
     "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
-    "empty": "Aucune connexion pour le moment."
+    "empty": "Aucune banque connectée pour l’instant.",
+    "startFailed": "Impossible de lancer la synchronisation"
   },
   "holdingKind": {
     "cash": "Liquidités",
@@ -52,8 +74,9 @@
     "lastWeek": "la semaine dernière"
   },
   "account": {
+    "legendOthers_one": "+{{count}} autre",
+    "legendOthers_other": "+{{count}} autres",
     "allAccounts": "Tous les comptes",
-    "synced": "synchronisé {{time}}",
     "unknownSource": "Autre",
     "edit": {
       "title": "Modifier le compte",
@@ -62,27 +85,50 @@
       "color": "Couleur",
       "colorLabel": "Couleur {{color}}",
       "customColor": "Couleur personnalisée",
-      "saveError": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
+      "saveError": "Impossible d'enregistrer le compte",
       "save": "Enregistrer",
       "saving": "Enregistrement…"
     }
   },
+  "fx": {
+    "fetching": "Récupération du taux de change {{currency}}…",
+    "refused": "Impossible d'obtenir le taux de change {{currency}}. Réessayez plus tard.",
+    "excludes_one": "{{count}} actif n'est pas compté : son taux de change n'est pas encore disponible.",
+    "excludes_other": "{{count}} actifs ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "excludesSome": "Certains montants ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "budget": "Les opérations dans une devise sans taux de change ne sont pas encore comptées.",
+    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise d'origine, non compté dans les totaux."
+  },
   "dashboard": {
-    "fxMissing": "Le taux de change de cette devise n'est pas encore disponible. Ce montant est exclu des totaux jusqu'à la prochaine synchronisation, qui récupérera le taux.",
-    "reportingFxMissing": "Le taux de change vers {{currency}} n'est pas encore disponible. Les montants ci-dessous sont affichés dans la devise de base de l'application. Le taux sera récupéré à la prochaine synchronisation.",
     "netWorth": {
       "title": "Patrimoine net",
-      "over": "sur {{range}}",
       "netWorth": "Patrimoine net",
-      "capitalInvested": "Capital investi"
+      "capitalInvested": "Capital investi",
+      "empty": {
+        "noConnection": {
+          "title": "Aucun compte pour le moment",
+          "body": "Connectez votre banque pour suivre l'évolution de votre patrimoine.",
+          "action": "Connecter une banque"
+        },
+        "syncing": {
+          "title": "Synchronisation en cours",
+          "body": "Vos comptes s'afficheront ici dans quelques instants."
+        },
+        "nothingCameIn": {
+          "title": "Aucun compte trouvé",
+          "body": "Votre banque n'a renvoyé aucun compte affichable.",
+          "action": "Gérer les connexions"
+        }
+      }
     },
     "distribution": {
       "title": "Répartition des comptes"
     },
     "holdings": {
       "title": "Positions",
-      "assetsCount": "{{count}} actifs",
       "searchPlaceholder": "Rechercher un actif…",
+      "noMatch": "Aucun actif ne correspond à « {{query}} ».",
+      "clearSearch": "Effacer la recherche",
       "all": "Tous",
       "multipleAccounts": "Plusieurs comptes",
       "columns": {
@@ -95,13 +141,15 @@
         "thirtyDays": "30 J"
       },
       "gap": {
-        "open": "Compléter l'historique des achats et des ventes",
+        "open": "Compléter l'historique",
         "tooltipShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus. Complétez-le pour corriger le prix de revient et le graphique.",
         "tooltipExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez. Vérifiez les opérations saisies.",
         "title": "Historique des achats et des ventes",
-        "stripTitle": "Historique des achats et des ventes incomplet",
-        "stripBodyShort": "Il manque des achats ou des ventes dans l'historique pour expliquer {{qty}} titres détenus.",
-        "stripBodyExcess": "L'historique indique {{qty}} titres de plus que vous n'en détenez.",
+        "stripTitle": "Historique incomplet",
+        "stripBodyShort_one": "{{qty}} titre détenu n'a aucun achat enregistré.",
+        "stripBodyShort_other": "{{qty}} titres détenus n'ont aucun achat enregistré.",
+        "stripBodyExcess_one": "L'historique compte {{qty}} titre de trop.",
+        "stripBodyExcess_other": "L'historique compte {{qty}} titres de trop.",
         "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> titres comptabilisés",
         "columns": {
           "type": "TYPE",
@@ -113,14 +161,21 @@
         },
         "buy": "Achat",
         "sell": "Vente",
-        "addBuy": "Ajouter un achat",
-        "addSell": "Ajouter une vente",
+        "add": "Ajouter une opération",
         "delete": "Supprimer l'opération",
+        "locked": "Transmise par votre banque : elle ne peut pas être modifiée ici.",
         "empty": "Aucune opération d'achat ou de vente enregistrée pour l'instant.",
-        "prefilled": "{{count}} ligne préremplie à partir de vos transactions. Vérifiez-la avant d'enregistrer.",
-        "prefilled_other": "{{count}} lignes préremplies à partir de vos transactions. Vérifiez-les avant d'enregistrer.",
+      "found": {
+        "buys_one": "{{count}} achat trouvé dans vos transactions",
+        "buys_other": "{{count}} achats trouvés dans vos transactions",
+        "sells_one": "{{count}} vente trouvée dans vos transactions",
+        "sells_other": "{{count}} ventes trouvées dans vos transactions",
+        "mixed_other": "{{count}} opérations trouvées dans vos transactions",
+        "add": "Ajouter",
+        "addAll": "Tout ajouter",
+        "dismiss": "Ignorer"
+      },
         "figures": "Bilan",
-        "figuresProvisional": "provisoire tant que les quantités ne correspondent pas",
         "capitalInvested": "Capital investi",
         "meanPricePerShare": "Prix de revient unitaire",
         "realisedPnl": "Plus-value / moins-value réalisée",
@@ -129,7 +184,8 @@
         "save": "Enregistrer {{count}} opération",
         "save_other": "Enregistrer {{count}} opérations",
         "saveNone": "Enregistrer",
-        "saveError": "Rien n'a été enregistré. Vérifiez les opérations et réessayez."
+        "saveError": "Impossible d'enregistrer l'historique des achats et des ventes",
+        "saveErrorDetail": "Vérifiez les lignes, puis réessayez."
       }
     },
     "assetModal": {
@@ -147,7 +203,7 @@
       "type": "Type",
       "account": "Compte",
       "weightOfNetWorth": "Part du patrimoine",
-      "purchaseHistory": "Historique des achats",
+      "purchaseHistory": "Historique",
       "noPurchases": "Aucun achat enregistré.",
       "countryDistribution": "Répartition géographique",
       "sectorDistribution": "Répartition sectorielle",
@@ -156,12 +212,15 @@
         "date": "DATE",
         "qty": "QTÉ",
         "price": "PRIX",
-        "invested": "INVESTI"
-      }
+        "amount": "MONTANT"
+      },
+      "buy": "Achat",
+      "sell": "Vente"
     }
   },
   "connectionGuide": {
     "howItWorks": "Comment ça marche ?",
+    "gotIt": "Compris",
     "readOnly": {
       "title": "Lecture seule",
       "bodyOne": "gripsou consulte vos comptes et vos transactions par l'intermédiaire de {{provider}}, un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement.",
@@ -185,7 +244,7 @@
     "continue": "Continuer",
     "finish": "Terminer",
     "skipAll": "Passer la configuration pour l'instant",
-    "finishError": "Impossible de terminer la configuration. Veuillez réessayer.",
+    "finishError": "Impossible de terminer la configuration",
     "prefs": {
       "title": "Vos préférences",
       "language": "Langue",
@@ -203,7 +262,7 @@
       "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
       "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
       "tryAgain": "Réessayer",
-      "connectError": "Impossible de lancer la connexion. Veuillez réessayer."
+      "connectError": "Impossible d'ouvrir la connexion à la banque"
     },
     "ai": {
       "title": "Catégoriser vos transactions automatiquement",
@@ -231,16 +290,17 @@
       "useApp": "Utiliser l'application",
       "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
       "expired": "Le délai est dépassé. Reconnectez-vous.",
-      "failed": "Une erreur s'est produite. Réessayez."
+      "failed": "Impossible de vous connecter. Réessayez dans un instant."
     },
     "signIn": "Se connecter",
     "welcomeBack": "Heureux de vous retrouver",
-    "signInToContinue": "Connectez-vous pour continuer.",
     "inviteOnly1": "Première visite ? La création d'un compte gripsou se fait sur invitation.",
     "inviteOnly2": "<1>Ouvrez votre lien d'invitation</1> pour créer votre compte.",
     "email": "E-mail",
     "password": "Mot de passe",
-    "invalidCredentials": "E-mail ou mot de passe incorrect",
+    "invalidCredentials": "E-mail ou mot de passe incorrect.",
+    "reauthFailed": "Impossible de vérifier votre mot de passe",
+    "signUpFailed": "Impossible de créer votre compte",
     "tooManyAttempts_one": "Trop de tentatives. Réessayez dans {{count}} minute.",
     "tooManyAttempts_other": "Trop de tentatives. Réessayez dans {{count}} minutes.",
     "logOut": "Se déconnecter",
@@ -248,17 +308,19 @@
     "logOutConfirmBody": "Vous devrez vous reconnecter pour accéder à votre tableau de bord.",
     "rememberMe": "Se souvenir de moi",
     "createAccount": "Créer votre compte",
-    "setUpToContinue": "Renseignez vos informations pour commencer.",
     "name": "Nom",
     "confirmPassword": "Confirmer le mot de passe",
     "passwordLength": "Le mot de passe doit contenir entre 8 et 128 caractères.",
-    "passwordsDontMatch": "Les mots de passe ne correspondent pas",
-    "emailExists": "Un compte avec cet e-mail existe déjà",
+    "passwordsDontMatch": "Les mots de passe ne correspondent pas.",
+    "emailExists": "Un compte utilise déjà cet e-mail.",
     "createAccountButton": "Créer le compte",
     "resetPassword": "Réinitialiser votre mot de passe",
     "newPassword": "Nouveau mot de passe",
     "updatePasswordButton": "Mettre à jour le mot de passe",
     "resetLinkInvalid": "Ce lien de réinitialisation n'est plus valide.",
+    "enterEmail": "Saisissez votre e-mail.",
+    "enterName": "Saisissez votre nom.",
+    "resetFailed": "Impossible de mettre à jour votre mot de passe",
     "dataNotice": "Vos données sont stockées chiffrées, mais l'administrateur de ce serveur peut y accéder."
   },
   "roles": {
@@ -266,6 +328,7 @@
     "member": "Membre"
   },
   "settings": {
+    "prefSaveFailed": "Impossible d'enregistrer le réglage",
     "adminBadge": "Admin",
     "general": {
       "title": "Général",
@@ -273,40 +336,39 @@
       "language": "Langue",
       "interfaceLanguage": "Langue de l'interface",
       "timeZone": "Fuseau horaire",
-      "timeZoneHint": "Détermine la date du jour utilisée pour les synchronisations, les rapports et les périodes affichées.",
+      "timeZoneHint": "Sert à déterminer la date du jour, utilisée par les synchronisations, les rapports et les périodes.",
       "dateFormat": "Format de date",
       "today": "Aujourd'hui : {{date}}",
       "numbersCurrency": "Nombres et devise",
       "currency": "Devise",
-      "baseReportingCurrency": "Devise de référence",
+      "baseReportingCurrency": "Tous les montants sont affichés dans cette devise",
       "numberFormat": "Format des nombres",
-      "numberFormatHint": "Séparateurs de milliers et de décimales, position du symbole monétaire",
-      "thousandsSeparator": "Séparateur de milliers",
-      "decimalSeparator": "Séparateur décimal",
+      "thousandsSeparator": "Milliers",
+      "decimalSeparator": "Décimales",
       "symbolPosition": "Position du symbole",
       "symbolBefore": "Avant",
       "symbolAfter": "Après",
       "preview": "Aperçu",
       "privacy": "Confidentialité",
       "privateMode": "Mode privé",
-      "privateModeHint": "Remplace les montants par des astérisques"
+      "privateModeHint": "Cache les montants sous des astérisques"
     },
     "account": {
       "title": "Compte",
       "name": "Nom",
       "email": "E-mail",
       "saveChanges": "Enregistrer",
-      "emailInUse": "Cet e-mail est déjà utilisé",
-      "profileUpdateFailed": "Impossible d'enregistrer les modifications",
+      "emailInUse": "Un autre compte utilise déjà cet e-mail.",
+      "profileUpdateFailed": "Impossible d'enregistrer votre profil",
       "password": "Mot de passe",
       "currentPassword": "Mot de passe actuel",
       "newPassword": "Nouveau mot de passe",
       "confirmNewPassword": "Confirmer le nouveau mot de passe",
       "updatePassword": "Mettre à jour le mot de passe",
-      "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+      "passwordsDoNotMatch": "Les mots de passe ne correspondent pas.",
       "passwordUpdated": "Mot de passe mis à jour",
-      "currentPasswordIncorrect": "Mot de passe actuel incorrect",
-      "passwordUpdateFailed": "Impossible de mettre à jour le mot de passe",
+      "currentPasswordIncorrect": "Mot de passe actuel incorrect.",
+      "passwordUpdateFailed": "Impossible de changer votre mot de passe",
       "sessions": "Sessions actives",
       "thisDevice": "Cet appareil",
       "sessionRemembered": "Connexion mémorisée · 30 jours",
@@ -316,11 +378,12 @@
       "sessionSignedIn": "Connecté le",
       "signedInOn": "Connecté le {{date}}",
       "lastActive": "Dernière activité {{time}}",
+      "activeNow": "Active en ce moment",
       "revokeSession": "Déconnecter",
       "logOutOtherSessions": "Déconnecter toutes les autres sessions",
       "dangerZone": "Actions irréversibles",
       "deleteAccount": "Supprimer le compte",
-      "deleteAccountDescription": "Supprimer définitivement votre compte et toutes ses données. Cette action est irréversible.",
+      "deleteAccountDescription": "Supprime définitivement votre compte et toutes ses données.",
       "deleteAccountTitle": "Supprimer votre compte ?",
       "deleteAccountBody": "Votre compte, vos connexions et toutes les données synchronisées seront définitivement supprimés. Cette action est irréversible.",
       "deleteAccountConfirmLabel": "Saisissez votre mot de passe pour confirmer",
@@ -339,8 +402,6 @@
     },
     "users": {
       "title": "Utilisateurs",
-      "usersCount_one": "{{count}} membre",
-      "usersCount_other": "{{count}} membres",
       "inviteUser": "Inviter un utilisateur",
       "columns": {
         "member": "MEMBRE",
@@ -351,6 +412,8 @@
       "you": "Vous",
       "resetPassword": "Réinitialiser le mot de passe",
       "deleteUser": "Supprimer l'utilisateur",
+      "changeRole": "Changer le rôle",
+      "roleError": "Impossible de changer le rôle",
       "invite": {
         "title": "Inviter un nouvel utilisateur",
         "heading": "Envoyez ce lien à usage unique",
@@ -365,13 +428,14 @@
       },
       "removeUser": {
         "title": "Supprimer {{name}}",
+        "deleting": "Suppression…",
         "body": "L'utilisateur et toutes ses données seront définitivement supprimés.",
         "warning": "Tous ses comptes, ses positions et son historique seront effacés. Cette action est irréversible.",
         "confirm": "Saisissez {{email}} pour confirmer",
-        "error": "Impossible de supprimer l'utilisateur. Veuillez réessayer."
+        "error": "Impossible de supprimer l'utilisateur"
       },
       "copyLink": "Copier le lien",
-      "linkError": "Impossible de générer le lien. Veuillez réessayer.",
+      "linkError": "Impossible de créer le lien",
       "done": "Terminé"
     },
     "server": {
@@ -380,7 +444,7 @@
       "version": "Version",
       "providers": "Fournisseurs de données",
       "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",
-      "budgetAi": "IA pour le budget",
+      "budgetAi": "Catégorisation par IA",
       "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est définie dans l'environnement du serveur.",
       "budgetAiProvider": "Fournisseur",
       "budgetAiModel": "Modèle",
@@ -402,25 +466,25 @@
       "budgetAiCostNoUsage_other": "{{count}} exécutions sans données de consommation (exclues du coût)",
       "budgetAiCostTotal": "Total",
       "budgetAiCostEmpty": "Aucune catégorisation par IA pour l'instant.",
-      "budgetAiSaveError": "Impossible d'enregistrer cette modification. Veuillez réessayer."
+      "budgetAiSaveError": "Impossible d'enregistrer les réglages de l'IA",
+      "budgetAiPriceSaveError": "Impossible d'enregistrer le prix"
     },
     "connections": {
       "title": "Connexions",
       "addConnection": "Ajouter une connexion",
-      "connectionsCount_one": "{{count}} connexion",
-      "connectionsCount_other": "{{count}} connexions",
-      "accountsCount_one": "{{count}} compte",
-      "accountsCount_other": "{{count}} comptes",
-      "providersCount_one": "{{count}} fournisseur",
-      "providersCount_other": "{{count}} fournisseurs",
-      "connectionConnected": "Connectée",
+      "empty": {
+        "title": "Connectez votre première banque",
+        "body": "Vos comptes, positions et opérations s'afficheront ici une fois la banque connectée.",
+        "guide": "Comment ça marche"
+      },
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
-      "deleteConnectionTitle": "Supprimer la connexion ?",
-      "deleteConnectionBody": "La connexion sera définitivement supprimée, ainsi que tous les comptes, positions, transactions et historiques de valeur synchronisés. Cette action est irréversible.",
-      "deleteConnectionError": "Impossible de supprimer la connexion. Veuillez réessayer.",
+      "deleteConnectionTitle": "Supprimer {{name}} ?",
+      "deleteConnectionBody": "Ses comptes, positions et opérations, et leur historique, sont supprimés aussi. Cette action est irréversible.",
+      "deletingConnection": "Suppression…",
+      "deleteConnectionError": "Impossible de supprimer la connexion",
       "status": {
-        "syncing": "Synchronisation…",
+        "syncing": "Synchronisation en cours…",
         "awaiting": "En attente de la banque…",
         "error": "Échec de la synchronisation",
         "pending": "Connexion en cours…"
@@ -428,35 +492,36 @@
       "pickProvider": "Choisir un fournisseur de données",
       "noProviders": "Aucun fournisseur de données n'est activé. Demandez à votre administrateur d'en activer un.",
       "connect": "Connecter",
-      "connectError": "Impossible de lancer la connexion. Veuillez réessayer.",
+      "connectError": "Impossible d'ouvrir la connexion à la banque",
+      "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
+      "problemSeparator": " : ",
+      "neverSynced": "Jamais synchronisée",
       "synced": "Synchronisée {{date}}",
       "health": {
         "partial": "Mise à jour partielle",
-        "stale": "Données non actualisées",
-        "attention": "À vérifier",
-        "bankUpdated": "Dernière mise à jour bancaire",
+        "stale": "Données pas à jour",
+        "attention": "Action requise",
+        "bankUpdated": "Dernière mise à jour par la banque",
         "providerError": "Powens signale un problème ({{state}}).",
-        "staleMessage": "Les données bancaires n’ont pas été mises à jour depuis le {{date}}. Powens ne signale aucune erreur.",
-        "unknownMessage": "Impossible de vérifier la date de mise à jour des données bancaires. Relancez la synchronisation.",
-        "retry": "Powens a prévu une nouvelle tentative le {{date}}.",
+        "staleMessage": "Aucune nouvelle donnée de la banque depuis le {{date}}.",
+        "unknownMessage": "Impossible de savoir quand la banque a mis à jour ces données.",
+        "retry": "Nouvel essai automatique le {{date}}.",
         "states": {
-          "bug": "Le fournisseur a rencontré un problème de synchronisation.",
+          "bug": "Powens a rencontré un problème avec cette banque.",
           "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
-          "SCARequired": "La banque demande une authentification. Cliquez sur Gérer pour continuer.",
-          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer pour continuer.",
+          "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer.",
+          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer.",
           "decoupled": "Une validation est en attente dans votre application bancaire."
         }
       },
       "manage": "Gérer",
-      "manageBlocked": "Autorisez les fenêtres contextuelles pour gérer la connexion dans Powens.",
-      "manageFailed": "Impossible d’ouvrir Powens. Veuillez réessayer."
+      "manageBlocked": "Votre navigateur a bloqué la fenêtre de Powens : autorisez les pop-ups pour ce site.",
+      "manageFailed": "Impossible d'ouvrir Powens"
     },
     "budget": {
       "title": "Budget",
       "categories": {
         "title": "Catégories",
-        "categoriesCount_one": "{{count}} catégorie",
-        "categoriesCount_other": "{{count}} catégories",
         "add": "Ajouter une catégorie",
         "colCategory": "CATÉGORIE",
         "colKind": "TYPE",
@@ -476,7 +541,7 @@
         "showArchived": "Afficher les catégories archivées ({{count}})",
         "hideArchived": "Masquer les catégories archivées ({{count}})",
         "empty": "Aucune catégorie pour l'instant.",
-        "actionError": "Impossible d'enregistrer cette modification. Veuillez réessayer.",
+        "actionError": "Impossible d'enregistrer la modification",
         "newTitle": "Nouvelle catégorie",
         "editTitle": "Modifier la catégorie",
         "fieldName": "Nom",
@@ -490,17 +555,15 @@
         "colorLabel": "Couleur {{color}}",
         "customColor": "Couleur personnalisée",
         "duplicate": "Une catégorie porte déjà ce nom.",
-        "gone": "Cette catégorie n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette modification. Veuillez réessayer.",
+        "gone": "Cette catégorie n'existe plus",
+        "saveError": "Impossible d'enregistrer la catégorie",
         "deleteTitle": "Supprimer la catégorie",
         "deleteBody": "La catégorie {{name}} sera supprimée. Ses {{count}} transactions seront conservées, sans catégorie.",
         "deleteConfirm": "Supprimer la catégorie",
-        "deleteError": "Impossible de supprimer cette catégorie. Veuillez réessayer."
+        "deleteError": "Impossible de supprimer la catégorie"
       },
       "tags": {
         "title": "Étiquettes",
-        "tagsCount_one": "{{count}} étiquette",
-        "tagsCount_other": "{{count}} étiquettes",
         "nameLabel": "Nom de l'étiquette",
         "add": "Ajouter",
         "empty": "Aucune étiquette pour l'instant. Ajoutez des étiquettes pour organiser vos transactions ; elles n'interviennent pas dans le calcul des totaux.",
@@ -512,12 +575,12 @@
         "clearColor": "Aucune couleur",
         "customColor": "Couleur personnalisée",
         "duplicate": "Une étiquette porte déjà ce nom.",
-        "gone": "Cette étiquette n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette étiquette. Veuillez réessayer.",
+        "gone": "Cette étiquette n'existe plus",
+        "saveError": "Impossible d'enregistrer l'étiquette",
         "deleteTitle": "Supprimer l'étiquette",
         "deleteBody": "L'étiquette {{name}} sera retirée de {{count}} transactions. Les transactions elles-mêmes sont conservées.",
         "deleteConfirm": "Supprimer l'étiquette",
-        "deleteError": "Impossible de supprimer cette étiquette. Veuillez réessayer."
+        "deleteError": "Impossible de supprimer l'étiquette"
       },
       "listPrefs": {
         "title": "Affichage de la liste",
@@ -552,7 +615,12 @@
     "Matières premières de base": "Matériaux de base",
     "Énergie": "Énergie",
     "Services financiers": "Services financiers",
-    "Immobilier": "Immobilier"
+    "Immobilier": "Immobilier",
+    "Finance": "Services financiers",
+    "Produits industriels": "Industrie",
+    "Télécommunications": "Services de communication",
+    "Biens de consommation cycliques": "Consommation cyclique",
+    "Matières non énergétiques": "Matériaux de base"
   },
   "budget": {
     "uncategorized": "Non catégorisé",
@@ -648,7 +716,10 @@
       "addTags": "Ajouter des étiquettes",
       "checked": "Pointée",
       "autoPaired": "Virement interne rapproché automatiquement",
-      "orphanTransfer": "Virement dissocié : le montant de cette transaction n'est plus compensé dans les totaux",
+      "orphanTransfer": "Virement dissocié",
+      "orphanTransferHint": "Son autre moitié a été classée dans une autre catégorie : ce montant compte désormais dans vos totaux.",
+      "lotBuy": "Achat",
+      "lotSell": "Vente",
       "breakPair": {
         "title": "Dissocier les transactions de ce virement ?",
         "body_one": "Cette transaction fait partie d'un virement interne dont le débit et le crédit ont été rapprochés automatiquement. Lui attribuer une catégorie dissociera les deux transactions. L'autre restera dans la catégorie Virement interne, mais son montant ne sera plus compensé dans les totaux.",
@@ -666,6 +737,7 @@
         "others": "Autres"
       },
       "emptyNothing": "Aucune transaction pour l'instant. Connectez un compte et lancez une synchronisation.",
+      "connect": "Connecter une banque",
       "emptyNoMatch": "Aucune transaction ne correspond à ces filtres.",
       "clearAll": "Réinitialiser les filtres",
       "loadMore": "Afficher plus de transactions",
@@ -712,19 +784,17 @@
       "bulkUpdated_one": "{{count}} transaction mise à jour.",
       "bulkUpdated_other": "{{count}} transactions mises à jour.",
       "errors": {
-        "duplicate": "Impossible d'enregistrer cette modification.",
-        "gone": "Cette transaction n'existe plus. Actualisez la page.",
-        "saveError": "Impossible d'enregistrer cette modification. Veuillez réessayer."
+        "duplicate": "Impossible d'enregistrer la modification",
+        "gone": "Cette transaction n'existe plus",
+        "saveError": "Impossible d'enregistrer la modification"
       }
     },
     "overview": {
       "other": "Autres",
-      "transactionCount_one": "{{count}} transaction",
-      "transactionCount_other": "{{count}} transactions",
       "prevMonth": "Mois précédent",
       "nextMonth": "Mois suivant",
-      "range": "Période",
-      "customRange": "Période personnalisée",
+      "range": "Choisir des dates",
+      "customRange": "Dates choisies",
       "clearRange": "Revenir à la vue mensuelle",
       "presets": {
         "last3Months": "3 derniers mois",
@@ -744,7 +814,7 @@
       "vsPrevMonth": "par rapport au mois précédent",
       "vsAvg12": "par rapport à la moyenne sur 12 mois",
       "sankey": {
-        "title": "Flux de trésorerie",
+        "title": "Flux",
         "seeTransactions": "Voir les transactions",
         "notSpent": "Non dépensé",
         "drawnFromSavings": "Prélevé sur l'épargne"
@@ -762,9 +832,7 @@
         "title": "12 derniers mois"
       },
       "empty": {
-        "title": "Aucune transaction sur cette période",
-        "body": "Aucune transaction sur la période sélectionnée.",
-        "earlier": "Consulter les périodes précédentes"
+        "title": "Aucune transaction sur cette période"
       }
     },
     "modes": {
@@ -774,8 +842,7 @@
     },
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} traitées",
-      "title": "Suggestions incertaines",
-      "belowThreshold": "niveau de confiance inférieur à {{threshold}} %",
+      "title": "À vérifier",
       "accept": "Accepter",
       "correct": "Corriger",
       "undo": "Annuler",
@@ -787,19 +854,18 @@
       "applyToOthers_other": "Appliquer à {{count}} autres transactions",
       "appliedToOthers_one": "catégorie appliquée à {{count}} autre transaction",
       "appliedToOthers_other": "catégorie appliquée à {{count}} autres transactions",
-      "hidesMoney": "exclut le montant des totaux",
       "emptyTitle": "Vérification terminée",
-      "emptyBody": "Toutes les suggestions ont été vérifiées.",
+      "emptyBody": "Les suggestions dont l'IA n'est pas sûre apparaîtront ici.",
       "backToOverview": "Retour à la vue d'ensemble"
     },
     "ai": {
       "reviewNeeded_one": "{{count}} transaction à vérifier",
       "reviewNeeded_other": "{{count}} transactions à vérifier",
       "reviewCta": "Vérifier ({{count}})",
-      "failedTitle": "La catégorisation automatique a échoué",
+      "failedTitle": "Impossible de classer vos nouvelles transactions",
       "retry": "Réessayer",
-      "running_one": "Catégorisation de l'historique en cours ({{count}} transaction restante)",
-      "running_other": "Catégorisation de l'historique en cours ({{count}} transactions restantes)"
+      "running_one": "Catégorisation IA · encore {{count}}",
+      "running_other": "Catégorisation IA · encore {{count}}"
     }
   },
   "investments": {
@@ -830,9 +896,11 @@
       "days_other": "{{count}} jours"
     },
     "missing": {
-      "dotTitle": "Positions exclues du calcul du rendement, car les achats ne sont pas renseignés : {{names}}",
-      "noReturn": "aucun achat renseigné"
+      "dotTitle": "Non comptés, car les achats et ventes renseignés ne correspondent pas à ce qui est détenu : {{names}}",
+      "noReturn": "historique incomplet"
     },
+    "excludedHistory_one": "{{count}} actif n'est pas compté : son historique d'achats et de ventes est incomplet.",
+    "excludedHistory_other": "{{count}} actifs ne sont pas comptés : leur historique d'achats et de ventes est incomplet.",
     "exposure": {
       "title": "Exposition",
       "regions": "Par région et pays",
@@ -874,7 +942,9 @@
     "wrongPassword": "Mot de passe incorrect.",
     "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
     "expired": "La configuration a pris trop de temps et a expiré. Saisissez votre mot de passe pour recommencer.",
-    "failed": "Une erreur s'est produite. Réessayez.",
+    "setupFailed": "Impossible de configurer la double authentification",
+    "newCodesFailed": "Impossible de créer de nouveaux codes de récupération",
+    "removeFailed": "Impossible de désactiver la double authentification",
     "manageTitle": "Double authentification",
     "backupCodes": "Codes de secours",
     "codesLeft_one": "{{count}} sur 10 restant",
@@ -901,6 +971,8 @@
     "delete": "Supprimer",
     "nameLabel": "Nom de la clé d'accès",
     "deleteTitle": "Supprimer {{name}} ?",
-    "failed": "Une erreur s'est produite. Réessayez."
+    "deleteAsk": "Supprimer ?",
+    "renameFailed": "Impossible de renommer la clé d'accès",
+    "deleteFailed": "Impossible de supprimer la clé d'accès"
   }
 }

@@ -7,10 +7,20 @@
     "investments": "Investments"
   },
   "common": {
+    "colorPicker": {
+      "shade": "Saturation and brightness",
+      "hue": "Hue",
+      "hex": "Hex code"
+    },
     "loading": "Loading…",
     "retry": "Retry",
-    "cantReachServer": "Can't reach the server",
-    "apiUnavailable": "The service is temporarily unavailable.",
+    "loadFailed": "Couldn't load this",
+    "tryAgain": "Try again in a moment.",
+    "refreshPage": "Refresh the page.",
+    "crashed": "Something broke on this page",
+    "crashedDetail": "Reloading the page usually fixes it.",
+    "reload": "Reload",
+    "dismiss": "Dismiss",
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
@@ -21,13 +31,25 @@
     "showAmount": "Show amount",
     "hideAmount": "Hide amount"
   },
+  "range": {
+    "short": { "7d": "7D", "1mo": "1M", "6mo": "6M", "1y": "1Y", "ytd": "YTD", "max": "Max" },
+    "over": {
+      "7d": "over 7 days",
+      "1mo": "over 1 month",
+      "6mo": "over 6 months",
+      "1y": "over 1 year",
+      "ytd": "since January 1",
+      "max": "since the start"
+    }
+  },
   "sync": {
     "title": "Sync",
     "openLabel": "Sync data",
     "syncAll": "Sync all",
     "sync": "Sync",
     "neverSynced": "Never synced",
-    "empty": "No connections yet."
+    "empty": "No bank connected yet.",
+    "startFailed": "Couldn't start the sync"
   },
   "holdingKind": {
     "cash": "Cash",
@@ -52,8 +74,9 @@
     "lastWeek": "last week"
   },
   "account": {
+    "legendOthers_one": "+{{count}} other",
+    "legendOthers_other": "+{{count}} others",
     "allAccounts": "All accounts",
-    "synced": "synced {{time}}",
     "unknownSource": "Other",
     "edit": {
       "title": "Edit account",
@@ -62,27 +85,50 @@
       "color": "Colour",
       "colorLabel": "Colour {{color}}",
       "customColor": "Custom colour",
-      "saveError": "Could not save changes. Please try again.",
+      "saveError": "Couldn't save the account",
       "save": "Save changes",
       "saving": "Saving…"
     }
   },
+  "fx": {
+    "fetching": "Getting the {{currency}} rate…",
+    "refused": "Couldn't get the {{currency}} rate. Try again later.",
+    "excludes_one": "Excludes {{count}} holding: no exchange rate yet.",
+    "excludes_other": "Excludes {{count}} holdings: no exchange rate yet.",
+    "excludesSome": "Some amounts are excluded: no exchange rate yet.",
+    "budget": "Excludes transactions in a currency with no exchange rate yet.",
+    "holdings": "No exchange rate yet: shown in its own currency and not counted in the totals."
+  },
   "dashboard": {
-    "fxMissing": "The exchange rate for this currency is not available yet. This amount is excluded from totals until the rate is fetched on the next sync.",
-    "reportingFxMissing": "The exchange rate to {{currency}} is not available yet. The figures below are shown in the app’s base currency. The rate will be fetched on the next sync.",
     "netWorth": {
       "title": "Net Worth",
-      "over": "over {{range}}",
       "netWorth": "Net worth",
-      "capitalInvested": "Capital invested"
+      "capitalInvested": "Capital invested",
+      "empty": {
+        "noConnection": {
+          "title": "No accounts yet",
+          "body": "Connect your bank to follow how your net worth changes.",
+          "action": "Connect a bank"
+        },
+        "syncing": {
+          "title": "Syncing in progress",
+          "body": "Your accounts will show up here in a moment."
+        },
+        "nothingCameIn": {
+          "title": "No accounts found",
+          "body": "Your bank didn't return any account gripsou can show.",
+          "action": "Manage connections"
+        }
+      }
     },
     "distribution": {
       "title": "Account distribution"
     },
     "holdings": {
       "title": "Holdings",
-      "assetsCount": "{{count}} assets",
       "searchPlaceholder": "Search assets…",
+      "noMatch": "No asset matches “{{query}}”.",
+      "clearSearch": "Clear search",
       "all": "All",
       "multipleAccounts": "Multiple accounts",
       "columns": {
@@ -99,9 +145,11 @@
         "tooltipShort": "The recorded purchases and sales do not account for {{qty}} shares you hold. Complete the history to correct the cost basis and chart.",
         "tooltipExcess": "The history shows {{qty}} more shares than you hold. Check the recorded entries.",
         "title": "Record buy/sell history",
-        "stripTitle": "Incomplete buy/sell history",
-        "stripBodyShort": "The recorded purchases and sales do not account for {{qty}} shares you hold.",
-        "stripBodyExcess": "The history shows {{qty}} more shares than you hold.",
+        "stripTitle": "Incomplete history",
+        "stripBodyShort_one": "{{qty}} share you hold has no recorded purchase.",
+        "stripBodyShort_other": "{{qty}} shares you hold have no recorded purchase.",
+        "stripBodyExcess_one": "The history counts {{qty}} share too many.",
+        "stripBodyExcess_other": "The history counts {{qty}} shares too many.",
         "accounted": "<num>{{recorded}}</num> / <num>{{total}}</num> shares accounted for",
         "columns": {
           "type": "TYPE",
@@ -113,14 +161,21 @@
         },
         "buy": "Purchase",
         "sell": "Sale",
-        "addBuy": "Add purchase",
-        "addSell": "Add sale",
+        "add": "Add entry",
         "delete": "Delete entry",
+        "locked": "Sent by your bank: it can't be changed here.",
         "empty": "No purchases or sales recorded yet.",
-        "prefilled": "{{count}} row pre-filled from your transactions. Check it before saving.",
-        "prefilled_other": "{{count}} rows pre-filled from your transactions. Check them before saving.",
+      "found": {
+        "buys_one": "{{count}} purchase found in your transactions",
+        "buys_other": "{{count}} purchases found in your transactions",
+        "sells_one": "{{count}} sale found in your transactions",
+        "sells_other": "{{count}} sales found in your transactions",
+        "mixed_other": "{{count}} entries found in your transactions",
+        "add": "Add",
+        "addAll": "Add all",
+        "dismiss": "Dismiss"
+      },
         "figures": "Summary",
-        "figuresProvisional": "provisional until quantities match",
         "capitalInvested": "Capital invested",
         "meanPricePerShare": "Cost basis per share",
         "realisedPnl": "Realised P/L",
@@ -129,7 +184,8 @@
         "save": "Save {{count}} entry",
         "save_other": "Save {{count}} entries",
         "saveNone": "Save",
-        "saveError": "Nothing was saved. Check the entries and try again."
+        "saveError": "Couldn't save the buy/sell history",
+        "saveErrorDetail": "Check the rows, then try again."
       }
     },
     "assetModal": {
@@ -147,7 +203,7 @@
       "type": "Type",
       "account": "Account",
       "weightOfNetWorth": "Share of net worth",
-      "purchaseHistory": "Purchase history",
+      "purchaseHistory": "History",
       "noPurchases": "No purchases.",
       "countryDistribution": "Country distribution",
       "sectorDistribution": "Sector distribution",
@@ -156,12 +212,15 @@
         "date": "DATE",
         "qty": "QTY",
         "price": "PRICE",
-        "invested": "INVESTED"
-      }
+        "amount": "AMOUNT"
+      },
+      "buy": "Buy",
+      "sell": "Sell"
     }
   },
   "connectionGuide": {
     "howItWorks": "How does it work?",
+    "gotIt": "Got it",
     "readOnly": {
       "title": "Read-only",
       "bodyOne": "gripsou gets your accounts and transactions through {{provider}}, a licensed provider, and keeps a copy. It can't move money.",
@@ -185,7 +244,7 @@
     "continue": "Continue",
     "finish": "Finish",
     "skipAll": "Skip setup for now",
-    "finishError": "Could not finish the setup. Please try again.",
+    "finishError": "Couldn't finish the setup",
     "prefs": {
       "title": "Your preferences",
       "language": "Language",
@@ -203,7 +262,7 @@
       "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
       "failed": "Your bank couldn't be connected. Nothing was saved.",
       "tryAgain": "Try again",
-      "connectError": "Could not start the connection. Please try again."
+      "connectError": "Couldn't open the bank connection"
     },
     "ai": {
       "title": "Categorise your transactions automatically",
@@ -231,16 +290,17 @@
       "useApp": "Use the app instead",
       "wrongCode": "That code didn't work. Try again.",
       "expired": "That took too long. Sign in again.",
-      "failed": "Something went wrong. Try again."
+      "failed": "Couldn't sign you in. Try again in a moment."
     },
     "signIn": "Sign in",
     "welcomeBack": "Welcome back",
-    "signInToContinue": "Sign in to continue.",
     "inviteOnly1": "New here? gripsou accounts are created by invitation.",
     "inviteOnly2": "<1>Open your invite link</1> to set up your account.",
     "email": "Email",
     "password": "Password",
-    "invalidCredentials": "Invalid email or password",
+    "invalidCredentials": "Wrong email or password.",
+    "reauthFailed": "Couldn't check your password",
+    "signUpFailed": "Couldn't create your account",
     "tooManyAttempts_one": "Too many attempts. Try again in {{count}} minute.",
     "tooManyAttempts_other": "Too many attempts. Try again in {{count}} minutes.",
     "logOut": "Log out",
@@ -248,17 +308,19 @@
     "logOutConfirmBody": "You'll need to sign in again to access your dashboard.",
     "rememberMe": "Remember me",
     "createAccount": "Create your account",
-    "setUpToContinue": "Set up your account to get started.",
     "name": "Name",
     "confirmPassword": "Confirm password",
     "passwordLength": "Your password must be 8 to 128 characters long.",
-    "passwordsDontMatch": "Passwords don't match",
-    "emailExists": "An account with this email already exists",
+    "passwordsDontMatch": "The passwords don't match.",
+    "emailExists": "An account already uses this email.",
     "createAccountButton": "Create account",
     "resetPassword": "Reset your password",
     "newPassword": "New password",
     "updatePasswordButton": "Update password",
     "resetLinkInvalid": "This reset link is no longer valid.",
+    "enterEmail": "Enter your email.",
+    "enterName": "Enter your name.",
+    "resetFailed": "Couldn't update your password",
     "dataNotice": "Your data is encrypted at rest, but the owner of this server can view it."
   },
   "roles": {
@@ -266,6 +328,7 @@
     "member": "Member"
   },
   "settings": {
+    "prefSaveFailed": "Couldn't save the setting",
     "adminBadge": "Admin",
     "general": {
       "title": "General",
@@ -278,9 +341,8 @@
       "today": "Today: {{date}}",
       "numbersCurrency": "Numbers & currency",
       "currency": "Currency",
-      "baseReportingCurrency": "Base reporting currency",
+      "baseReportingCurrency": "Every amount is shown in this currency",
       "numberFormat": "Number format",
-      "numberFormatHint": "Thousands & decimal separators, symbol position",
       "thousandsSeparator": "Thousands",
       "decimalSeparator": "Decimal",
       "symbolPosition": "Symbol position",
@@ -296,17 +358,17 @@
       "name": "Name",
       "email": "Email",
       "saveChanges": "Save changes",
-      "emailInUse": "That email is already in use",
-      "profileUpdateFailed": "Couldn't save changes",
+      "emailInUse": "Another account already uses this email.",
+      "profileUpdateFailed": "Couldn't save your profile",
       "password": "Password",
       "currentPassword": "Current password",
       "newPassword": "New password",
       "confirmNewPassword": "Confirm new password",
       "updatePassword": "Update password",
-      "passwordsDoNotMatch": "Passwords don't match",
+      "passwordsDoNotMatch": "The passwords don't match.",
       "passwordUpdated": "Password updated",
-      "currentPasswordIncorrect": "Current password is incorrect",
-      "passwordUpdateFailed": "Couldn't update password",
+      "currentPasswordIncorrect": "Wrong current password.",
+      "passwordUpdateFailed": "Couldn't change your password",
       "sessions": "Active sessions",
       "thisDevice": "This device",
       "sessionRemembered": "Remembered · 30 days",
@@ -316,6 +378,7 @@
       "sessionSignedIn": "Signed in",
       "signedInOn": "Signed in {{date}}",
       "lastActive": "Last active {{time}}",
+      "activeNow": "Active now",
       "revokeSession": "Log out",
       "logOutOtherSessions": "Log out all other sessions",
       "dangerZone": "Danger zone",
@@ -339,8 +402,6 @@
     },
     "users": {
       "title": "Users",
-      "usersCount_one": "{{count}} member",
-      "usersCount_other": "{{count}} members",
       "inviteUser": "Invite user",
       "columns": {
         "member": "MEMBER",
@@ -351,6 +412,8 @@
       "you": "You",
       "resetPassword": "Reset password",
       "deleteUser": "Delete user",
+      "changeRole": "Change role",
+      "roleError": "Couldn't change the role",
       "invite": {
         "title": "Invite a new user",
         "heading": "Share this one-time link",
@@ -365,13 +428,14 @@
       },
       "removeUser": {
         "title": "Remove {{name}}",
+        "deleting": "Deleting…",
         "body": "This permanently deletes the user and all their data.",
         "warning": "All accounts, holdings and history belonging to this user will be erased. This cannot be undone.",
         "confirm": "Type {{email}} to confirm",
-        "error": "Could not delete the user. Please try again."
+        "error": "Couldn't delete the user"
       },
       "copyLink": "Copy link",
-      "linkError": "Could not generate the link. Please try again.",
+      "linkError": "Couldn't create the link",
       "done": "Done"
     },
     "server": {
@@ -380,7 +444,7 @@
       "version": "Version",
       "providers": "Data providers",
       "providersHint": "Services used to fetch banking and brokerage data. Enable those you have API credentials for.",
-      "budgetAi": "Budget AI",
+      "budgetAi": "AI categorisation",
       "budgetAiHint": "Provider used to categorise transactions. A provider is listed only when its API key is set in the server environment.",
       "budgetAiProvider": "Provider",
       "budgetAiModel": "Model",
@@ -402,23 +466,23 @@
       "budgetAiCostNoUsage_other": "{{count}} runs without usage data (not counted)",
       "budgetAiCostTotal": "Total",
       "budgetAiCostEmpty": "No AI categorisation runs yet.",
-      "budgetAiSaveError": "That change could not be saved. Please try again."
+      "budgetAiSaveError": "Couldn't save the AI settings",
+      "budgetAiPriceSaveError": "Couldn't save the price"
     },
     "connections": {
       "title": "Connections",
       "addConnection": "Add connection",
-      "connectionsCount_one": "{{count}} connection",
-      "connectionsCount_other": "{{count}} connections",
-      "accountsCount_one": "{{count}} account",
-      "accountsCount_other": "{{count}} accounts",
-      "providersCount_one": "{{count}} provider",
-      "providersCount_other": "{{count}} providers",
-      "connectionConnected": "Connected",
+      "empty": {
+        "title": "Connect your first bank",
+        "body": "Your accounts, holdings and transactions show up here once it's connected.",
+        "guide": "How it works"
+      },
       "syncConnection": "Sync now",
       "deleteConnection": "Delete connection",
-      "deleteConnectionTitle": "Delete connection?",
-      "deleteConnectionBody": "This permanently removes the connection and all synced accounts, holdings, transactions, and snapshots. This cannot be undone.",
-      "deleteConnectionError": "Could not delete the connection. Please try again.",
+      "deleteConnectionTitle": "Delete {{name}}?",
+      "deleteConnectionBody": "Its accounts, holdings and transactions, and their history, are deleted too. This can't be undone.",
+      "deletingConnection": "Deleting…",
+      "deleteConnectionError": "Couldn't delete the connection",
       "status": {
         "syncing": "Syncing…",
         "awaiting": "Waiting for bank sync…",
@@ -428,35 +492,36 @@
       "pickProvider": "Choose a provider",
       "noProviders": "No data providers are enabled. Ask your administrator to enable one.",
       "connect": "Connect",
-      "connectError": "Could not start the connection. Please try again.",
+      "connectError": "Couldn't open the bank connection",
+      "syncFailedMessage": "The last sync failed. Try again in a few minutes.",
+      "problemSeparator": ": ",
+      "neverSynced": "Never synced",
       "synced": "Synced {{date}}",
       "health": {
         "partial": "Partial update",
         "stale": "Outdated data",
         "attention": "Needs attention",
-        "bankUpdated": "Last bank update",
+        "bankUpdated": "Last update from the bank",
         "providerError": "Powens reports an issue ({{state}}).",
-        "staleMessage": "Bank data has not updated since {{date}}. Powens reports no error.",
-        "unknownMessage": "Unable to verify the bank update status. Try syncing again.",
-        "retry": "Powens has scheduled a retry for {{date}}.",
+        "staleMessage": "No new data from the bank since {{date}}.",
+        "unknownMessage": "Can’t tell when the bank last updated this data. Try syncing again.",
+        "retry": "Automatic retry on {{date}}.",
         "states": {
-          "bug": "The provider encountered a synchronization issue.",
+          "bug": "Powens ran into a problem with this bank.",
           "wrongpass": "The bank rejected your credentials. Select Manage to sign in again.",
-          "SCARequired": "The bank requires authentication. Select Manage to continue.",
+          "SCARequired": "The bank asks you to confirm your identity. Select Manage to continue.",
           "webauthRequired": "The bank requires approval. Select Manage to continue.",
           "decoupled": "Approval is pending in your bank app."
         }
       },
       "manage": "Manage",
-      "manageBlocked": "Allow pop-ups to open Powens connection management.",
-      "manageFailed": "Unable to open Powens. Please try again."
+      "manageBlocked": "Your browser blocked the Powens window: allow pop-ups for this site.",
+      "manageFailed": "Couldn't open Powens"
     },
     "budget": {
       "title": "Budget",
       "categories": {
         "title": "Categories",
-        "categoriesCount_one": "{{count}} category",
-        "categoriesCount_other": "{{count}} categories",
         "add": "Add category",
         "colCategory": "CATEGORY",
         "colKind": "KIND",
@@ -476,7 +541,7 @@
         "showArchived": "Show archived ({{count}})",
         "hideArchived": "Hide archived ({{count}})",
         "empty": "No categories yet.",
-        "actionError": "That change could not be saved. Please try again.",
+        "actionError": "Couldn't save the change",
         "newTitle": "New category",
         "editTitle": "Edit category",
         "fieldName": "Name",
@@ -490,17 +555,15 @@
         "colorLabel": "Colour {{color}}",
         "customColor": "Custom colour",
         "duplicate": "A category with this name already exists.",
-        "gone": "This category no longer exists. Refresh the page.",
-        "saveError": "That change could not be saved. Please try again.",
+        "gone": "This category no longer exists",
+        "saveError": "Couldn't save the category",
         "deleteTitle": "Delete category",
         "deleteBody": "{{name}} will be removed. Its {{count}} transactions are kept and become uncategorised.",
         "deleteConfirm": "Delete category",
-        "deleteError": "That category could not be deleted. Please try again."
+        "deleteError": "Couldn't delete the category"
       },
       "tags": {
         "title": "Tags",
-        "tagsCount_one": "{{count}} tag",
-        "tagsCount_other": "{{count}} tags",
         "nameLabel": "Tag name",
         "add": "Add",
         "empty": "No tags yet. Use tags to organise your transactions; they do not affect totals.",
@@ -512,12 +575,12 @@
         "clearColor": "No colour",
         "customColor": "Custom colour",
         "duplicate": "A tag with this name already exists.",
-        "gone": "This tag no longer exists. Refresh the page.",
-        "saveError": "That tag could not be saved. Please try again.",
+        "gone": "This tag no longer exists",
+        "saveError": "Couldn't save the tag",
         "deleteTitle": "Delete tag",
         "deleteBody": "{{name}} will be removed from {{count}} transactions. The transactions themselves are kept.",
         "deleteConfirm": "Delete tag",
-        "deleteError": "That tag could not be deleted. Please try again."
+        "deleteError": "Couldn't delete the tag"
       },
       "listPrefs": {
         "title": "List preferences",
@@ -552,7 +615,12 @@
     "Matières premières de base": "Basic Materials",
     "Énergie": "Energy",
     "Services financiers": "Financial Services",
-    "Immobilier": "Real Estate"
+    "Immobilier": "Real Estate",
+    "Finance": "Financial Services",
+    "Produits industriels": "Industrials",
+    "Télécommunications": "Communication Services",
+    "Biens de consommation cycliques": "Consumer Cyclical",
+    "Matières non énergétiques": "Basic Materials"
   },
   "budget": {
     "uncategorized": "Uncategorised",
@@ -648,7 +716,10 @@
       "addTags": "Add tags",
       "checked": "Checked",
       "autoPaired": "Automatically paired internal transfer",
-      "orphanTransfer": "Transfer unpaired: this transaction’s amount is no longer offset in totals",
+      "orphanTransfer": "Unpaired transfer",
+      "orphanTransferHint": "Its other half was filed in another category, so this amount now counts in your totals.",
+      "lotBuy": "Buy",
+      "lotSell": "Sale",
       "breakPair": {
         "title": "Break the transfer pairing?",
         "body_one": "This transaction belongs to an internal transfer whose debit and credit were paired automatically. Assigning a category unlinks the two transactions. The other keeps its Internal transfer category, but its amount will no longer be offset in totals.",
@@ -666,6 +737,7 @@
         "others": "Others"
       },
       "emptyNothing": "No transactions yet. Connect an account and sync to see them here.",
+      "connect": "Connect a bank",
       "emptyNoMatch": "No transaction matches these filters.",
       "clearAll": "Clear all",
       "loadMore": "Load more",
@@ -707,15 +779,13 @@
       "bulkUpdated_one": "{{count}} row updated.",
       "bulkUpdated_other": "{{count}} rows updated.",
       "errors": {
-        "duplicate": "That change could not be saved.",
-        "gone": "This transaction no longer exists. Refresh the page.",
-        "saveError": "That change could not be saved. Please try again."
+        "duplicate": "Couldn't save the change",
+        "gone": "This transaction no longer exists",
+        "saveError": "Couldn't save the change"
       }
     },
     "overview": {
       "other": "Other",
-      "transactionCount_one": "{{count}} transaction",
-      "transactionCount_other": "{{count}} transactions",
       "prevMonth": "Previous month",
       "nextMonth": "Next month",
       "range": "Range",
@@ -757,16 +827,13 @@
         "title": "Last 12 months"
       },
       "empty": {
-        "title": "No transactions in this period",
-        "body": "No transactions fall within the selected period.",
-        "earlier": "View earlier periods"
+        "title": "No transactions in this period"
       }
     },
     "modes": { "overview": "Overview", "transactions": "Transactions", "review": "Review" },
     "review": {
       "progress": "<done>{{resolved}}</done> / {{total}} resolved",
-      "title": "Uncertain category suggestions",
-      "belowThreshold": "below {{threshold}}% confidence",
+      "title": "To review",
       "accept": "Accept",
       "correct": "Correct",
       "undo": "Undo",
@@ -778,19 +845,18 @@
       "applyToOthers_other": "Apply to {{count}} others",
       "appliedToOthers_one": "applied to {{count}} other",
       "appliedToOthers_other": "applied to {{count}} others",
-      "hidesMoney": "excludes the amount from totals",
       "emptyTitle": "All caught up",
-      "emptyBody": "All category suggestions have been reviewed.",
+      "emptyBody": "The AI's unsure guesses will show up here.",
       "backToOverview": "Back to overview"
     },
     "ai": {
       "reviewNeeded_one": "{{count}} transaction needs review",
       "reviewNeeded_other": "{{count}} transactions need review",
       "reviewCta": "Review {{count}}",
-      "failedTitle": "Automatic categorisation failed",
+      "failedTitle": "Couldn't sort your new transactions",
       "retry": "Retry",
-      "running_one": "Categorising your history — {{count}} left",
-      "running_other": "Categorising your history — {{count}} left"
+      "running_one": "AI sorting · {{count}} left",
+      "running_other": "AI sorting · {{count}} left"
     }
   },
   "investments": {
@@ -821,9 +887,11 @@
       "days_other": "{{count}} days"
     },
     "missing": {
-      "dotTitle": "Holdings excluded from the return calculation because purchases are not recorded: {{names}}",
-      "noReturn": "no purchases recorded"
+      "dotTitle": "Left out of the figures, as their recorded purchases and sales don't match what is held: {{names}}",
+      "noReturn": "history incomplete"
     },
+    "excludedHistory_one": "Excludes {{count}} holding: its purchase and sale history is incomplete.",
+    "excludedHistory_other": "Excludes {{count}} holdings: their purchase and sale history is incomplete.",
     "exposure": {
       "title": "Exposure",
       "regions": "By region and country",
@@ -865,7 +933,9 @@
     "wrongPassword": "Wrong password.",
     "wrongCode": "That code didn't work. Try again.",
     "expired": "This setup took too long and expired. Enter your password to start again.",
-    "failed": "Something went wrong. Try again.",
+    "setupFailed": "Couldn't set up two-factor authentication",
+    "newCodesFailed": "Couldn't create new recovery codes",
+    "removeFailed": "Couldn't turn off two-factor authentication",
     "manageTitle": "Two-factor authentication",
     "backupCodes": "Backup codes",
     "codesLeft_one": "{{count}} of 10 left",
@@ -892,6 +962,8 @@
     "delete": "Delete",
     "nameLabel": "Passkey name",
     "deleteTitle": "Delete {{name}}?",
-    "failed": "Something went wrong. Try again."
+    "deleteAsk": "Delete?",
+    "renameFailed": "Couldn't rename the passkey",
+    "deleteFailed": "Couldn't delete the passkey"
   }
 }

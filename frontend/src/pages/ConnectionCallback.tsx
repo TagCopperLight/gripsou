@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 
+import { AuthPage } from "../components/AuthPage";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/context";
 import { useCompleteConnection } from "../api/hooks";
@@ -48,30 +49,27 @@ export function ConnectionCallback() {
   if (inWelcome) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-4 py-16">
-      <div className="flex flex-col items-center gap-12">
-        <div className="font-wordmark text-[75px] font-semibold tracking-tight text-fg">gripsou</div>
-        <div className="flex w-100 max-w-full flex-col items-center gap-4 rounded-3xl bg-surface px-6 py-8 text-center">
-          {failed ? (
-            <>
-              <span className="flex size-11 items-center justify-center rounded-full bg-red-soft text-red">
-                <CircleAlert className="size-5" />
-              </span>
-              <p className="text-lg font-semibold text-fg">{t("connectionCallback.errorTitle")}</p>
-              <p className="text-sm text-fg-faint">{t("connectionCallback.errorBody")}</p>
-              <Button className="mt-1" onClick={() => void navigate({ to: "/settings/connections" })}>
-                {t("connectionCallback.backToConnections")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <LoaderCircle className="size-8 animate-spin text-green" />
-              <p className="text-lg font-semibold text-fg">{t("connectionCallback.connecting")}</p>
-              <p className="text-sm text-fg-faint">{t("connectionCallback.connectingBody")}</p>
-            </>
-          )}
-        </div>
+    <AuthPage>
+      <div className="flex flex-col items-center gap-4 rounded-3xl bg-surface px-6 py-8 text-center">
+        {failed ? (
+          <>
+            <span className="flex size-11 items-center justify-center rounded-full bg-red-soft text-red">
+              <CircleAlert className="size-5" />
+            </span>
+            <p className="text-lg font-semibold text-fg">{t("connectionCallback.errorTitle")}</p>
+            <p className="text-sm text-fg-faint">{t("connectionCallback.errorBody")}</p>
+            <Button className="mt-1" onClick={() => void navigate({ to: "/settings/connections" })}>
+              {t("connectionCallback.backToConnections")}
+            </Button>
+          </>
+        ) : (
+          <>
+            <LoaderCircle className="size-8 animate-spin text-green" />
+            <p className="text-lg font-semibold text-fg">{t("connectionCallback.connecting")}</p>
+            <p className="text-sm text-fg-faint">{t("connectionCallback.connectingBody")}</p>
+          </>
+        )}
       </div>
-    </div>
+    </AuthPage>
   );
 }

@@ -2,23 +2,11 @@ import ReactECharts from "./EChart";
 import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
 import { formatDay } from "../lib/date";
-import { windowReturn } from "../lib/assetSeries";
+import { lineColor, plotSeries, type ChartSeries, type ChartUnit } from "../lib/valueChart";
 import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
 
-export type ChartUnit = "value" | "reporting" | "percent";
+export type { ChartSeries, ChartUnit };
 
-// A line series over a time axis. `area` adds a fading fill (matching
-// NetWorthChart); `dashed` renders the line dashed (e.g. invested capital).
-export type ChartSeries = {
-  name: string;
-  /** [epoch-ms, value] points. */
-  data: [number, number][];
-  color: string;
-  dashed?: boolean;
-  area?: boolean;
-};
-
-const RED = "#f87171"; // color-red
 const SURFACE_2 = "#1c1916"; // default host surface (hollow symbol center)
 
 type TooltipParam = {
@@ -66,31 +54,7 @@ export function ValueChart({
   const fmt = (v: number, opts?: { fractionDigits?: number; signed?: boolean }) =>
     percent ? formatPercent(v, opts) : formatMoney(v, { ...opts, currency });
 
-  // Percent mode. With a dashed baseline series (capital invested) it plots the
-  // ONE thing that means something: return over the displayed window, starting
-  // at 0% — profit since the range's start over the capital at work, so deposits
-  // don't read as growth. Without a baseline (a unit-price chart) it falls back
-  // to change relative to the first point.
-  const baseline = series.find((s) => s.dashed);
-  const plotted: ChartSeries[] = !percent
-    ? series
-    : baseline
-      ? series
-          .filter((s) => !s.dashed)
-          .map((s) => ({
-            ...s,
-            name: percentLabel ?? s.name,
-            data: windowReturn(s.data, baseline.data),
-          }))
-      : series.map((s) => {
-          const base = s.data[0]?.[1] ?? 0;
-          return {
-            ...s,
-            data: s.data.map(
-              ([t, v]) => [t, base ? (v - base) / base : 0] as [number, number],
-            ),
-          };
-        });
+  const plotted = plotSeries(series, unit, percentLabel);
 
   const option: EChartsOption = {
     backgroundColor: "transparent",
@@ -108,7 +72,7 @@ export function ValueChart({
         const items = params as unknown as TooltipParam[];
         // The series itemStyle color is the (hollow) symbol center, i.e. the
         // surface — use the real line color from the series for the marker.
-        const colorByName = new Map(plotted.map((s) => [s.name, s.color]));
+        const colorByName = new Map(plotted.map((s) => [s.name, lineColor(s)]));
         // ponytail: callers pass the dashed invested line first for z-order;
         // the tooltip reads better with the bigger value line on top.
         const rows = [...items]
@@ -156,10 +120,7 @@ export function ValueChart({
       },
     },
     series: plotted.map((s, i) => {
-      // A tracked value line (the area series) reads red when it ended lower than
-      // it started or went negative — a loss is red whatever color the caller gave.
-      const last = s.data.at(-1)?.[1] ?? 0;
-      const color = s.area && (last < 0 || last < (s.data[0]?.[1] ?? 0)) ? RED : s.color;
+      const color = lineColor(s);
       return {
         name: s.name,
         type: "line",

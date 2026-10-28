@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 import { Surface } from "../../Surface";
-import { Money } from "../../Money";
+import { GridTable } from "../../GridTable";
+import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../gridTable";
+import { MaskedMoney } from "../../PrivateMoney";
 import { Percent } from "../../Percent";
 import { CategoryChip } from "../CategoryChip";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
@@ -22,9 +24,11 @@ type BreakdownSurfaceProps = {
   /** A row was clicked: open Transactions filtered to the period AND this
    *  slice. Never called for the `other` row. */
   onOpen: (slice: Slice) => void;
+  /** Private mode: amounts hidden, shares and percentages kept. */
+  masked?: boolean;
 };
 
-export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfaceProps) {
+export function BreakdownSurface({ rows, expensesTotal, onOpen, masked = false }: BreakdownSurfaceProps) {
   const { t } = useTranslation();
   const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: "amount", asc: false });
 
@@ -57,39 +61,37 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
     }
   });
 
-  // CATEGORY is a fixed 40%; the figure columns shrink to their content
-  // (`w-px` grows to fit it); SHARE, the one column left without a width,
-  // takes whatever remains, so its bar grows with the table. `pad` is shared
-  // with the cells below so each head sits over its own column's figures.
-  // SHARE orders exactly like AMOUNT and the 12-month column is a ratio with
-  // gaps, so neither sorts.
-  const columns: { key: ColKey; labelKey: string; right: boolean; cls: string; pad: string; sort?: SortKey }[] = [
-    { key: "category", labelKey: "category", right: false, cls: "w-[40%]", pad: "pr-4", sort: "category" },
-    { key: "amount", labelKey: "amount", right: true, cls: "w-px", pad: "pr-4", sort: "amount" },
-    { key: "share", labelKey: "share", right: false, cls: "", pad: "pr-4" },
-    { key: "txnCount", labelKey: "txnCount", right: true, cls: "w-px", pad: "pr-10", sort: "txnCount" },
-    { key: "avg12", labelKey: "vsAvg12", right: true, cls: "w-px", pad: "" },
+  // On the shared grid table (`gridTable.ts`), like Holdings and Transactions:
+  // CATEGORY and SHARE grow, the figures have floors, so sorting never moves a
+  // column. SHARE orders exactly like AMOUNT and the 12-month column is a ratio
+  // with gaps, so neither sorts. The last track holds the row's caret.
+  const columns: { key: ColKey; labelKey: string; right: boolean; track: string; pad: string; sort?: SortKey }[] = [
+    { key: "category", labelKey: "category", right: false, track: "minmax(180px, 2fr)", pad: "pl-3 pr-4", sort: "category" },
+    { key: "amount", labelKey: "amount", right: true, track: "minmax(7rem, max-content)", pad: "pr-4", sort: "amount" },
+    { key: "share", labelKey: "share", right: false, track: "minmax(140px, 3fr)", pad: "pr-4" },
+    { key: "txnCount", labelKey: "txnCount", right: true, track: "minmax(4rem, max-content)", pad: "pr-10", sort: "txnCount" },
+    { key: "avg12", labelKey: "vsAvg12", right: true, track: "minmax(5rem, max-content)", pad: "pr-2" },
   ];
+  const tracks = [...columns.map((c) => c.track), "2.25rem"].join(" ");
   const pad = Object.fromEntries(columns.map((c) => [c.key, c.pad])) as Record<ColKey, string>;
 
   return (
     <Surface className="w-full">
       <div className="flex flex-col p-5">
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.breakdown.title")}</h2>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[600px] border-collapse">
-            <thead>
-              {/* Same head treatment as every other table in the app: 11px
-               *  uppercase mono, faint, wide-tracked. */}
-              <tr className="font-mono text-[11px] tracking-wide text-fg-faint uppercase">
+        <div className="mt-3">
+          <GridTable
+            columns={tracks}
+            minWidth="37.5rem"
+            head={
+              <>
                 {columns.map((c) => {
                   const active = c.sort !== undefined && sort.key === c.sort;
                   return (
                     <th
                       key={c.key}
-                      className={`pb-2 font-medium whitespace-nowrap ${c.pad} ${c.cls} ${
-                        c.right ? "text-right" : "text-left"
-                      }`}
+                      role="columnheader"
+                      className={`${HEAD_CELL} whitespace-nowrap ${c.pad} ${c.right ? "justify-end" : ""}`}
                     >
                       {c.sort ? (
                         <button
@@ -119,100 +121,96 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen }: BreakdownSurfa
                     </th>
                   );
                 })}
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {[...sorted, ...rollup].map((row) => {
-                const linkable = row.slice.kind !== "other";
-                const share = total === 0 ? 0 : Number(row.amount) / total;
-                // Absent on `other`, whose membership changes month to month.
-                const vsAvg =
-                  row.avg12 === undefined ? undefined : compareToBaseline(row.amount, row.avg12, "down");
-                return (
-                  <tr
-                    key={sliceKey(row.slice)}
-                    data-testid={`breakdown-row-${sliceKey(row.slice)}`}
-                    onClick={() => linkable && onOpen(row.slice)}
-                    className={`border-t border-fg/6 ${
-                      linkable ? "cursor-pointer hover:bg-fg/4" : ""
-                    }`}
-                  >
-                    <td className={`py-2 ${pad.category}`}>
-                      {/* Table cells ignore `min-width`; a block inside one
-                          does not, and holds the column open. */}
-                      <div className="min-w-40">
-                        <CategoryChip category={sliceChip(t, row.slice)} />
-                      </div>
-                    </td>
-                    <td className={`py-2 text-right whitespace-nowrap ${pad.amount}`}>
-                      <Money value={row.amount} className="text-sm text-fg" />
-                    </td>
-                    <td className={`py-2 ${pad.share}`}>
-                      <span className="flex items-center gap-4">
-                        <span className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-fg/10">
-                          <span
-                            className="block h-full rounded-full"
-                            style={{
-                              width: `${Math.min(100, share * 100)}%`,
-                              background: sliceColor(row.slice),
-                            }}
-                          />
-                        </span>
-                        {/* fractionDigits=1, not 0: at 0 decimals, 61.86%
-                         *  rounds to "62%" and the "computes share" test
-                         *  (which checks for "61") fails. One decimal keeps
-                         *  the label compact and independent of the user's
-                         *  percentDecimals pref while matching the brief's
-                         *  own worked example (61,9 %). */}
-                        <span data-testid="share" className="text-xs text-fg-faint">
-                          <Percent value={share} fractionDigits={1} />
-                        </span>
-                      </span>
-                    </td>
-                    <td className={`py-2 text-right ${pad.txnCount}`} data-testid="txnCount">
-                      <span className="text-sm text-fg-dim">{row.txnCount}</span>
-                    </td>
-                    <td className="py-2 text-right whitespace-nowrap" data-testid="avg12">
-                      {vsAvg === undefined ? (
-                        <span className="text-sm text-fg-faint">—</span>
-                      ) : (
-                        <span data-tone={vsAvg.tone} className={`text-sm ${TONE_CLASS[vsAvg.tone]}`}>
-                          {/* Same rule as the figures above: against a zero
-                              average the change is an amount, not a percentage. */}
-                          {vsAvg.ratio === undefined ? (
-                            <Money value={vsAvg.delta} signed />
-                          ) : (
-                            <Percent value={vsAvg.ratio} signed />
-                          )}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      {linkable && (
-                        <button
-                          type="button"
-                          data-testid="row-caret"
-                          aria-label={t("budget.overview.breakdown.open")}
-                          // The row itself is already a click target (keyboard
-                          // users had no way in before this button existed);
-                          // stopping propagation here keeps `onOpen` firing
-                          // exactly once instead of twice per click.
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpen(row.slice);
+                <th role="columnheader" />
+              </>
+            }
+          >
+            {[...sorted, ...rollup].map((row) => {
+              const linkable = row.slice.kind !== "other";
+              const share = total === 0 ? 0 : Number(row.amount) / total;
+              // Absent on `other`, whose membership changes month to month.
+              const vsAvg =
+                row.avg12 === undefined ? undefined : compareToBaseline(row.amount, row.avg12, "down");
+              return (
+                <tr
+                  key={sliceKey(row.slice)}
+                  role="row"
+                  data-testid={`breakdown-row-${sliceKey(row.slice)}`}
+                  onClick={() => linkable && onOpen(row.slice)}
+                  className={`${ROW_CELLS} ${linkable ? `cursor-pointer ${ROW_HOVER}` : ""}`}
+                >
+                  <td role="cell" className={`py-2 ${pad.category}`}>
+                    <div className="min-w-0">
+                      <CategoryChip category={sliceChip(t, row.slice)} />
+                    </div>
+                  </td>
+                  <td role="cell" className={`justify-end whitespace-nowrap ${pad.amount}`}>
+                    <MaskedMoney masked={masked} value={row.amount} className="text-sm text-fg" />
+                  </td>
+                  <td role="cell" className={pad.share}>
+                    <span className="flex w-full items-center gap-4">
+                      <span className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-fg/10">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{
+                            width: `${Math.min(100, share * 100)}%`,
+                            background: sliceColor(row.slice),
                           }}
-                          className="ml-auto flex cursor-pointer items-center justify-end"
-                        >
-                          <ChevronRight className="size-4 text-fg-faint" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        />
+                      </span>
+                      {/* fractionDigits=1, not 0: at 0 decimals, 61.86%
+                       *  rounds to "62%" and the "computes share" test
+                       *  (which checks for "61") fails. One decimal keeps
+                       *  the label compact and independent of the user's
+                       *  percentDecimals pref while matching the brief's
+                       *  own worked example (61,9 %). */}
+                      <span data-testid="share" className="text-xs text-fg-faint">
+                        <Percent value={share} fractionDigits={1} />
+                      </span>
+                    </span>
+                  </td>
+                  <td role="cell" className={`justify-end ${pad.txnCount}`} data-testid="txnCount">
+                    <span className="text-sm text-fg-dim">{row.txnCount}</span>
+                  </td>
+                  <td role="cell" className={`justify-end whitespace-nowrap ${pad.avg12}`} data-testid="avg12">
+                    {vsAvg === undefined ? (
+                      <span className="text-sm text-fg-faint">—</span>
+                    ) : (
+                      <span data-tone={vsAvg.tone} className={`text-sm ${TONE_CLASS[vsAvg.tone]}`}>
+                        {/* Same rule as the figures above: against a zero
+                            average the change is an amount, not a percentage. */}
+                        {vsAvg.ratio === undefined ? (
+                          <MaskedMoney masked={masked} value={vsAvg.delta} signed />
+                        ) : (
+                          <Percent value={vsAvg.ratio} signed />
+                        )}
+                      </span>
+                    )}
+                  </td>
+                  <td role="cell" className="justify-end pr-3">
+                    {linkable && (
+                      <button
+                        type="button"
+                        data-testid="row-caret"
+                        aria-label={t("budget.overview.breakdown.open")}
+                        // The row itself is already a click target (keyboard
+                        // users had no way in before this button existed);
+                        // stopping propagation here keeps `onOpen` firing
+                        // exactly once instead of twice per click.
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpen(row.slice);
+                        }}
+                        className="ml-auto flex cursor-pointer items-center justify-end"
+                      >
+                        <ChevronRight className="size-4 text-fg-faint" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </GridTable>
         </div>
       </div>
     </Surface>

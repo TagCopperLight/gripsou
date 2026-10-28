@@ -84,4 +84,22 @@ describe("Reset", () => {
     expect(await screen.findByText("Your password must be 8 to 128 characters long.")).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/redeem"))).toBe(false);
   });
+
+  it.each([
+    [404, true],
+    [500, false],
+  ])("blames the link only when the server says it's gone (%i)", async (status, blamed) => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(Response.json({ type: "reset", email: "u@t.local" }))
+      .mockResolvedValueOnce(new Response("no", { status })));
+    render(wrap(<Reset />));
+
+    await screen.findByLabelText("New password");
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter22" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "hunter22" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update password" })).toBeEnabled());
+    expect(screen.queryByText("This reset link is no longer valid.") !== null).toBe(blamed);
+  });
 });

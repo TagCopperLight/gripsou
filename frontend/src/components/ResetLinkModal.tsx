@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
@@ -13,9 +14,7 @@ import type { User } from "../api/types";
  *  link clears the user's second factors), then the link to share. */
 export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => void }) {
   const { t } = useTranslation();
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(
-    t("settings.users.linkError"),
-  );
+  const { password, setPassword, error, checking, check } = useReauthStep();
   const [token, setToken] = useState<string | null>(null);
   const create = useCreateResetLink();
   const busy = checking || create.isPending;
@@ -27,7 +26,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
     try {
       setToken((await create.mutateAsync({ id: user.id, reauth: proof })).token);
     } catch {
-      setError(t("settings.users.linkError"));
+      showError(t("settings.users.linkError"));
     }
   };
 
@@ -60,8 +59,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
     >
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <p className="text-sm text-fg-dim">{t("settings.users.reset.confirm", { name: user.name })}</p>
-        <PasswordField value={password} onChange={setPassword} />
-        {error && <p className="text-sm text-red">{error}</p>}
+        <PasswordField value={password} onChange={setPassword} error={error} />
         <button type="submit" hidden />
       </form>
     </Dialog>

@@ -109,6 +109,24 @@ pub async fn count_admins(pool: &sqlx::PgPool) -> Result<i64, CoreError> {
     Ok(n.unwrap_or(0))
 }
 
+/// Set a user's role, unless that would leave no admin: the check and the
+/// write are one statement, so two admins demoting each other at once can't
+/// both succeed. False when refused, or when the user doesn't exist.
+pub async fn set_role(pool: &sqlx::PgPool, user_id: Uuid, role: &str) -> Result<bool, CoreError> {
+    let res = sqlx::query!(
+        r#"
+        update users set role = $2
+        where id = $1
+          and ($2 = 'admin' or exists (select 1 from users where role = 'admin' and id <> $1))
+        "#,
+        user_id,
+        role,
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
 /// Permanently delete a user. FK `on delete cascade` removes their sessions,
 /// connections, accounts, holdings and snapshots. Returns true when a row was
 /// deleted (the user existed).

@@ -81,9 +81,7 @@ function stubServer(server: Server) {
 
 function renderMode() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // The threshold shown is the reader's own preference.
-  const prefs = { ...DEFAULT_PREFS, budgetAiThreshold: 80 };
-  const auth = { prefs, updatePrefs: vi.fn() } as unknown as AuthValue;
+  const auth = { prefs: DEFAULT_PREFS, updatePrefs: vi.fn() } as unknown as AuthValue;
   return render(
     <QueryClientProvider client={qc}>
       <AuthContext.Provider value={auth}>
@@ -96,12 +94,24 @@ function renderMode() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Review mode", () => {
-  it("lists pending guesses with their confidence and the threshold", async () => {
+  it("says the queue couldn't load, and retries", async () => {
+    let fail = true;
+    stubServer({ pending: [GUESS], calls: [] });
+    const ok = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      fail && String(url).includes("/transactions") ? new Response("boom", { status: 500 }) : ok(url, init));
+    renderMode();
+    expect(await screen.findByText("Couldn't load this")).toBeVisible();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("LECLERC 0999")).toBeVisible();
+  });
+
+  it("lists pending guesses with their confidence", async () => {
     stubServer({ pending: [GUESS, NO_GUESS], calls: [] });
     renderMode();
     expect(await screen.findByText("LECLERC 0999")).toBeVisible();
     expect(screen.getByText("42%")).toBeVisible();
-    expect(screen.getByText("below 80% confidence")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 2 resolved");
   });
 
@@ -192,7 +202,7 @@ describe("Review mode", () => {
     stubServer({ pending: [GUESS, NO_GUESS], calls: [], fail: "/accept" });
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("review-line-t1")).toBeVisible();
     expect(screen.queryByTestId("resolved-line-t1")).toBeNull();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 2 resolved");
@@ -203,7 +213,7 @@ describe("Review mode", () => {
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
     fireEvent.click(await screen.findByTestId("chooser-option-c2"));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("review-line-t2")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("0 / 1 resolved");
   });
@@ -215,7 +225,7 @@ describe("Review mode", () => {
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
     const resolved = await screen.findByTestId("resolved-line-t1");
     fireEvent.click(within(resolved).getByRole("button", { name: "Undo" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(await screen.findByTestId("resolved-line-t1")).toBeVisible();
     expect(screen.getByTestId("review-progress")).toHaveTextContent("1 / 2 resolved");
   });
@@ -225,7 +235,7 @@ describe("Review mode", () => {
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 other" }));
-    expect(await screen.findByTestId("write-error")).toBeVisible();
+    expect(await screen.findByTestId("error-toast")).toBeVisible();
     expect(screen.queryByTestId("resolved-line-t3")).toBeNull();
   });
 

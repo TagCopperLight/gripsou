@@ -9,7 +9,7 @@ import type { User } from "../api/types";
 
 type UserDetailModalProps = {
   user: User;
-  /** Current role, including any unsaved local override from the users page. */
+  /** The member's role; `onToggleRole` saves the other one. */
   role: "admin" | "user";
   onToggleRole: () => void;
   /** Both omitted for yourself — you can't reset or delete your own account here. */

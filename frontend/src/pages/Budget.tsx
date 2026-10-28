@@ -50,8 +50,7 @@ export function Budget() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <PageHeader title={t("nav.budget")} />
+      <PageHeader title={t("nav.budget")}>
         {/* The global SyncButton is pinned at the top-right of the page, outside
          *  this row; `clear-sync-button` keeps the control clear of its box
          *  instead of letting the two overlap. */}
@@ -61,7 +60,7 @@ export function Budget() {
           onChange={(next) => navigate({ to: `/budget/${next}` })}
           options={options}
         />
-      </div>
+      </PageHeader>
       <BudgetProvider>
         <Outlet />
       </BudgetProvider>

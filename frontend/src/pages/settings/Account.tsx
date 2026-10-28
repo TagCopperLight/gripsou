@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Fingerprint, KeyRound, Plus, Settings, ShieldCheck, Smartphone } from "lucide-react";
+import { ChevronRight, Fingerprint, KeyRound, Loader2, Monitor, Plus, Settings, ShieldCheck, Smartphone } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Avatar } from "../../components/Avatar";
 import { Toggle } from "../../components/Toggle";
+import { CardState } from "../../components/CardState";
 import { DeleteAccountModal } from "../../components/DeleteAccountModal";
 import { SessionDetailModal } from "../../components/SessionDetailModal";
 import { EditProfileModal } from "../../components/EditProfileModal";
@@ -43,7 +44,8 @@ export function SettingsAccount() {
   // The password window closes on success; the row says it worked.
   const [passwordChanged, setPasswordChanged] = useState(false);
 
-  const { data: sessions = [] } = useSessions();
+  const sessionsQuery = useSessions();
+  const sessions = sessionsQuery.data ?? [];
   const revokeSession = useRevokeSession();
   const revokeOthers = useRevokeOtherSessions();
   const hasOthers = sessions.some((s) => !s.current);
@@ -103,8 +105,11 @@ export function SettingsAccount() {
             }
             iconTone={mfa.data?.totp ? "bg-green-soft text-green" : undefined}
             title={t("settings.account.twoFactor")}
+            hint={mfa.isError && <span className="text-red">{t("common.loadFailed")}</span>}
             action={
-              mfa.data && (
+              !mfa.data ? (
+                <MfaPending failed={mfa.isError} onRetry={() => mfa.refetch()} />
+              ) : (
                 <div className="flex items-center gap-3">
                   {mfa.data.totp && (
                     <button
@@ -130,8 +135,11 @@ export function SettingsAccount() {
             icon={<Fingerprint className="size-4.5" strokeWidth={2} />}
             iconTone={hasPasskeys ? "bg-green-soft text-green" : undefined}
             title={t("passkeys.title")}
+            hint={mfa.isError && <span className="text-red">{t("common.loadFailed")}</span>}
             action={
-              mfa.data && (
+              !mfa.data ? (
+                <MfaPending failed={mfa.isError} onRetry={() => mfa.refetch()} />
+              ) : (
                 <div className="flex items-center gap-3">
                   {hasPasskeys && (
                     <button
@@ -160,7 +168,28 @@ export function SettingsAccount() {
       </Surface>
 
       <Surface className="p-6">
-        <h2 className="mb-5 text-lg font-semibold text-fg">{t("settings.account.sessions")}</h2>
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-fg">{t("settings.account.sessions")}</h2>
+          {hasOthers && (
+            <Button
+              variant="ghost"
+              onClick={() => revokeOthers.mutate()}
+              disabled={revokeOthers.isPending}
+              className="-my-2 text-red hover:bg-red/12 hover:text-red"
+            >
+              {t("settings.account.logOutOtherSessions")}
+            </Button>
+          )}
+        </div>
+        {/* Not an empty list while it loads or when it can't: there is always
+            at least this session. */}
+        {!sessionsQuery.data && (
+          <CardState
+            variant={sessionsQuery.isError ? "error" : "loading"}
+            onRetry={() => sessionsQuery.refetch()}
+            className="h-32"
+          />
+        )}
         {/* Phone: one fixed-height summary row per session, details on tap. */}
         <div className="flex flex-col gap-3 md:hidden">
           {sessions.map((s) => (
@@ -189,58 +218,56 @@ export function SettingsAccount() {
           ))}
         </div>
 
-        <div className="hidden flex-col gap-3 md:flex">
-          {sessions.map((s) => (
-            <div key={s.id} className="flex flex-col gap-2 rounded-xl bg-surface-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] text-fg">{s.device}</span>
-                  {s.current && (
-                    <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
-                      {t("settings.account.thisDevice")}
-                    </span>
-                  )}
-                  <span className="rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-fg-dim">
-                    {s.remembered
-                      ? t("settings.account.sessionRemembered")
-                      : t("settings.account.sessionSingle")}
+        {/* Computer: one card, a line between sessions, this device first then
+            the most recently active, "Log out" on hover — as in the passkeys
+            window. */}
+        {sessionsQuery.data && (
+          <div className="hidden overflow-hidden rounded-2xl bg-surface-2 md:block">
+            {[...sessions].sort((a, b) => Number(b.current) - Number(a.current) || b.lastActiveAt - a.lastActiveAt).map((s) => (
+              <div key={s.id} className="group flex items-center gap-3.5 border-t border-surface-3 px-3.5 py-3 first:border-t-0">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-fg-dim">
+                  {isPhone(s.device) ? <Smartphone className="size-4.5" strokeWidth={2} /> : <Monitor className="size-4.5" strokeWidth={2} />}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[15px] text-fg">{s.device}</span>
+                    {s.current && (
+                      <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                        {t("settings.account.thisDevice")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="truncate text-sm text-fg-faint">
+                    {s.current
+                      ? t("settings.account.activeNow")
+                      : t("settings.account.lastActive", { time: formatRelative(s.lastActiveAt) })}
+                    {s.ip && (
+                      <>
+                        {" · "}
+                        <span className="font-mono text-xs">{s.ip}</span>
+                      </>
+                    )}
+                    {" · "}
+                    {t("settings.account.signedInOn", { date: formatDate(s.createdAt) })}
                   </span>
                 </div>
-                <span className="text-sm text-fg-faint">
-                  {s.ip ? `${s.ip} · ` : ""}
-                  {t("settings.account.lastActive", { time: formatRelative(s.lastActiveAt) })}
-                  {" · "}
-                  {t("settings.account.signedInOn", { date: formatDate(s.createdAt) })}
-                </span>
+                {!s.current && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => revokeSession.mutate(s.id)}
+                    disabled={revokeSession.isPending}
+                    className="shrink-0 text-red opacity-0 transition-opacity duration-140 hover:bg-red/12 hover:text-red focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    {t("settings.account.revokeSession")}
+                  </Button>
+                )}
               </div>
-              {!s.current && (
-                <Button
-                  variant="ghost"
-                  onClick={() => revokeSession.mutate(s.id)}
-                  disabled={revokeSession.isPending}
-                  className="self-end shrink-0 text-red hover:text-red"
-                >
-                  {t("settings.account.revokeSession")}
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-        {hasOthers && (
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="ghost"
-              onClick={() => revokeOthers.mutate()}
-              disabled={revokeOthers.isPending}
-              className="text-red hover:text-red"
-            >
-              {t("settings.account.logOutOtherSessions")}
-            </Button>
+            ))}
           </div>
         )}
       </Surface>
 
-      <Surface className="p-6 ring-1 ring-red/30">
+      <Surface className="p-6 ring-1 ring-inset ring-red/30">
         <h2 className="mb-1 text-lg font-semibold text-red">
           {t("settings.account.dangerZone")}
         </h2>
@@ -292,6 +319,23 @@ export function SettingsAccount() {
         />
       )}
     </div>
+  );
+}
+
+/** A phone or tablet, from the device name the server writes ("Safari on iPhone"). */
+function isPhone(device: string): boolean {
+  return /iPhone|iPad|Android|Mobile/i.test(device);
+}
+
+/** A security row's control while two-factor's status loads, or a retry
+ *  once it failed (the row's hint says so). */
+function MfaPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  const { t } = useTranslation();
+  if (!failed) return <Loader2 aria-label={t("common.loading")} className="size-4.5 animate-spin text-fg-faint" />;
+  return (
+    <Button variant="ghostStrong" onClick={onRetry}>
+      {t("common.retry")}
+    </Button>
   );
 }
 

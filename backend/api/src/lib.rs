@@ -179,7 +179,10 @@ pub fn router(
         .route("/users", get(admin::users))
         .route("/invites", post(admin::create_invite))
         .route("/users/{id}/reset-link", post(admin::create_reset_link))
-        .route("/users/{id}", delete(admin::delete_user))
+        .route(
+            "/users/{id}",
+            delete(admin::delete_user).patch(admin::set_role),
+        )
         .route("/providers", get(admin::providers))
         .route("/providers/{key}", patch(admin::set_provider))
         .route("/providers/enabled", get(connections::enabled_providers))

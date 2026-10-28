@@ -11,10 +11,9 @@ vi.mock("../api/hooks", () => ({
 
 import { ConnectionRow } from "./ConnectionRow";
 
-const conn: SyncConnection & { providerName: string } = {
+const conn: SyncConnection = {
   id: "c1",
   displayName: "Caisse d'Épargne",
-  providerName: "Powens",
   status: "ok",
   lastSyncAt: null,
   lastError: null,
@@ -53,7 +52,18 @@ describe("ConnectionRow", () => {
     expect(onDelete).toHaveBeenCalled();
   });
 
-  it("still opens a panel for a connection with no accounts", () => {
+  it("doesn't open on a computer when there is nothing to show", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const { rerender } = render(<ConnectionRow conn={{ ...conn, accounts: [] }} />);
+    expand();
+    expect(screen.getAllByRole("button", { name: /sync now/i })).toHaveLength(1);
+    rerender(<ConnectionRow conn={{ ...conn, status: "pending" }} />);
+    expand();
+    expect(screen.queryByText("LIVRET A")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("still opens a panel for a connection with no accounts on a phone", () => {
     render(<ConnectionRow conn={{ ...conn, accounts: [] }} onDelete={() => {}} />);
     expand();
     expect(
@@ -62,17 +72,31 @@ describe("ConnectionRow", () => {
   });
 });
 
-it("shows source errors while collapsed and bank dates inline when expanded", () => {
+it("keeps the problem's message for the open row, under the accounts", () => {
   const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
   render(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
+  // The problem takes the sync time's place, and the logo carries an amber dot.
   expect(screen.getByText("Partial update")).toBeInTheDocument();
-  expect(screen.getByText(/403 Client Error: Forbidden/)).toBeInTheDocument();
-  expect(screen.queryByText("Connected")).toBeNull();
-  expect(screen.getByText(/Synced/)).toBeInTheDocument();
+  expect(screen.queryByText(/403 Client Error: Forbidden/)).toBeNull();
+  expect(screen.queryByText(/Synced/)).toBeNull();
+  expect(screen.getByTestId("connection-warning-dot")).toBeInTheDocument();
   expand();
-  const date = screen.getAllByTitle("Last bank update")[0];
-  expect(date.parentElement?.textContent).toContain("Savings");
-  expect(date.querySelector("span")).toHaveClass("mr-3");
+  // Named after the account it concerns, the retry date under it.
+  expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A:\s403/);
+  expect(screen.getByText(/Automatic retry on/)).toBeInTheDocument();
+  const date = screen.getAllByTitle("Last update from the bank")[0];
+  expect(date.parentElement?.textContent).toContain("LIVRET A");
+});
+
+it("says a failed sync in words with a red dot, and a healthy one's sync time with no dot", () => {
+  const { rerender } = render(<ConnectionRow conn={{ ...conn, status: "error", lastError: "sync took too long" }} />);
+  expect(screen.getByText("Sync failed")).toHaveAttribute("title", "sync took too long");
+  expect(screen.getByTestId("connection-error-dot")).toBeInTheDocument();
+  expand();
+  expect(screen.getByText("sync took too long")).toBeInTheDocument();
+  rerender(<ConnectionRow conn={{ ...conn, lastSyncAt: Date.now() }} />);
+  expect(screen.getByText(/Synced/)).toBeInTheDocument();
+  expect(screen.queryByTestId(/dot$/)).toBeNull();
 });
 
 it("opens Manage with a temporary link and syncs once when returning", async () => {
@@ -93,7 +117,7 @@ it("handles blocked tabs and failed Manage requests", async () => {
   vi.spyOn(window,"open").mockReturnValue(null);
   const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
-  expect(screen.getByRole("alert")).toHaveTextContent("Allow pop-ups");
+  expect(screen.getByRole("alert")).toHaveTextContent("allow pop-ups");
   expect(manageSpy).not.toHaveBeenCalled();
   unmount();
   const close=vi.fn();
@@ -101,7 +125,7 @@ it("handles blocked tabs and failed Manage requests", async () => {
   manageSpy.mockRejectedValue(new Error("provider failed"));
   render(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
-  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Unable to open Powens"));
+  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Couldn't open Powens"));
   expect(close).toHaveBeenCalled();
   expect(syncSpy).not.toHaveBeenCalled();
 });

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import {
   Archive, ArchiveRestore, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2,
 } from "lucide-react";
@@ -182,20 +183,14 @@ export function CategoriesSurface() {
     );
   }
 
+  useErrorToast(actionError && t("settings.budget.categories.actionError"));
+
   return (
     <div>
       <Surface className="w-full">
         <div className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">
-              {t("settings.budget.categories.title")}
-              {!isLoading && !isError && (
-                <span className="text-fg-faint font-normal ml-2">
-                  <span className="mr-2">·</span>
-                  {t("settings.budget.categories.categoriesCount", { count: rows.length })}
-                </span>
-              )}
-            </h2>
+            <h2 className="text-fg font-semibold text-sm">{t("settings.budget.categories.title")}</h2>
             <Button
               onClick={() => openEditing("new")}
               padded={false}
@@ -374,12 +369,6 @@ export function CategoriesSurface() {
                   </tbody>
                 </table>
               </div>
-
-              {actionError && (
-                <p role="alert" className="mt-3 text-xs text-red">
-                  {t("settings.budget.categories.actionError")}
-                </p>
-              )}
 
               {archivedCount > 0 && (
                 <div className="mt-3 flex justify-start pl-3">

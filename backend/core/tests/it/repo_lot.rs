@@ -189,6 +189,49 @@ async fn preview_computes_without_writing(pool: PgPool) {
     assert_eq!(remaining, 0, "the preview must have rolled back");
 }
 
+/// A provider's lots are not the user's to replace: the preview keeps them, as
+/// saving does, so the figures while editing are the figures after saving.
+#[sqlx::test(migrations = "../migrations")]
+async fn preview_keeps_the_provider_lots(pool: PgPool) {
+    let conn_id = seed_connection(&pool).await;
+    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
+        .await
+        .unwrap();
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("3")).await;
+    sqlx::query(
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
+         values ($1, 'buy', date '2026-05-01', 2, 100, 'provider')",
+    )
+    .bind(holding_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let figures = basis_preview(
+        &pool,
+        user_id,
+        holding_id,
+        &[PreviewLot {
+            side: "buy".into(),
+            acquired_on: "2026-06-01".parse().unwrap(),
+            quantity: dec("1"),
+            unit_price: dec("130"),
+            fee: dec("0"),
+        }],
+    )
+    .await
+    .unwrap()
+    .expect("holding is owned by user_id");
+    assert_eq!(figures.explained_qty, dec("3"));
+    assert_eq!(figures.basis, dec("330"));
+}
+
 /// The trespass path: a holding that belongs to a different user must read as
 /// "unknown" (`Ok(None)`), the same as `save_lots` treats it, so the endpoint
 /// never confirms the existence of ids the caller cannot see. Must also write

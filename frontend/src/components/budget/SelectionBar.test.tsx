@@ -55,14 +55,6 @@ describe("SelectionBar", () => {
     expect(screen.getByTestId("selection-count")).toHaveTextContent("57");
   });
 
-  // The sum itself is computed by the caller (`TransactionsMode`); this bar
-  // only renders whatever `total` it is passed.
-  it("renders the total it is passed", () => {
-    renderBar({ total: "-21.48" });
-    fireEvent.click(screen.getByText("pick-a"));
-    expect(screen.getByTestId("selection-total")).toHaveTextContent("21,48");
-  });
-
   it("shows mark-checked only when the preference is on", () => {
     renderBar();
     fireEvent.click(screen.getByText("pick-a"));

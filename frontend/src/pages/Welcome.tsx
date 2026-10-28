@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Check, CircleAlert, Landmark, Lock, LoaderCircle } from "lucide-react";
 import { Button } from "../components/Button";
@@ -19,7 +20,7 @@ import {
 import { useAiStatus } from "../api/budget";
 import { flattenConnections, type SyncConnection } from "../api/types";
 import { CURRENCIES } from "../lib/currency";
-import { TIME_ZONES } from "../lib/timeZoneList";
+import { timeZoneOptions } from "../lib/timeZoneList";
 import { goTo } from "../lib/navigate";
 import { parseCallbackParams } from "../lib/connectionCallback";
 import { prefillFromBrowser } from "../lib/welcome";
@@ -30,7 +31,7 @@ type Step = 1 | 2 | 3;
 /** After an invite: preferences, a first bank, the AI opt-in. Shown until the
  *  user finishes or skips it (`welcomeDone`); the router sends them here. */
 export function Welcome() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, prefs, updatePrefs, updateUser } = useAuth();
   const search = useSearch({ strict: false }) as { step?: "bank"; callback?: string };
   const navigate = useNavigate();
@@ -58,6 +59,7 @@ export function Welcome() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(false);
+  useErrorToast(finishError && t("welcome.finishError"));
   // Coming back from the provider with its query string (ConnectionCallback
   // hands it over): finish the connection here, once.
   const [connecting, setConnecting] = useState(search.callback !== undefined);
@@ -138,12 +140,17 @@ export function Welcome() {
     else void finish();
   };
 
+  const zones = timeZoneOptions(prefs.timeZone, i18n.language);
+  // As the dropdown reads it ("Paris (UTC+1)"), not the zone's code.
+  const zoneLabel = zones.find((z) => z.value === prefs.timeZone)?.label ?? prefs.timeZone;
   const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
   // A pending row is a connection still being set up (or about to be deleted):
   // listed, but not a bank yet.
   const readyBanks = connections.filter((c) => c.status !== "pending");
   const hasBank = readyBanks.length > 0;
   const connectDisabled = connecting || initConnection.isPending || providers === undefined;
+
+  useErrorToast(initConnection.isError && t("welcome.bank.connectError"));
 
   return (
     <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
@@ -162,7 +169,7 @@ export function Welcome() {
               title={t("welcome.prefs.title")}
               active={step === 1}
               done={done[1]}
-              summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${prefs.timeZone}`}
+              summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${zoneLabel}`}
               onEdit={() => setStep(1)}
             >
               <div className="flex items-center justify-between gap-4">
@@ -184,18 +191,14 @@ export function Welcome() {
                   options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
                 />
               </div>
-              <label className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
-                <select
+                <Select
                   value={prefs.timeZone}
-                  onChange={(e) => save({ timeZone: e.target.value })}
-                  className="w-full rounded-xl bg-surface-2 px-3.5 py-2.25 text-sm text-fg"
-                >
-                  {[...new Set([...TIME_ZONES, prefs.timeZone])].map((zone) => (
-                    <option key={zone} value={zone}>{zone}</option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(timeZone) => save({ timeZone })}
+                  options={zones}
+                />
+              </div>
               <div className="flex justify-end pt-1">
                 <Button onClick={() => complete(1, 2)}>{t("welcome.continue")}</Button>
               </div>
@@ -221,7 +224,6 @@ export function Welcome() {
                   <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
                 </div>
               )}
-              {initConnection.isError && <p className="text-sm text-red">{t("welcome.bank.connectError")}</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 {hasBank ? (
                   <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
@@ -275,7 +277,6 @@ export function Welcome() {
             )}
           </div>
         </div>
-        {finishError && <p className="-mt-4 text-sm text-red">{t("welcome.finishError")}</p>}
         <button
           type="button"
           onClick={() => void finish()}
@@ -302,7 +303,7 @@ function WelcomeStep({
 }) {
   const { t } = useTranslation();
   return (
-    <section className={`rounded-2xl ${active ? "bg-surface-2/50 ring-1 ring-surface-3" : ""}`}>
+    <section className={`rounded-2xl ${active ? "bg-surface-2/50 ring-1 ring-inset ring-surface-3" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-3.5">
         {done && !active ? (
           <span className="flex size-7 items-center justify-center rounded-full bg-green-soft text-green">

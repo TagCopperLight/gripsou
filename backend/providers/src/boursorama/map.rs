@@ -84,6 +84,30 @@ pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Result<Vec<Allocation>
         .collect())
 }
 
+/// Folds lines that share a name into the first one, adding their weights,
+/// and returns the names that were repeated. Boursorama's sector chart has
+/// sent two different sectors under one label (since its 2026 relabelling:
+/// "Biens de consommation cycliques" twice, "Finance" twice), with nothing on
+/// the page to tell them apart. A merged line keeps the total right; two lines
+/// with one name would show twice in a fund and be summed by name across
+/// funds anyway.
+pub(crate) fn merge_same_names(items: Vec<Allocation>) -> (Vec<Allocation>, Vec<String>) {
+    let mut merged: Vec<Allocation> = Vec::with_capacity(items.len());
+    let mut repeated: Vec<String> = Vec::new();
+    for item in items {
+        match merged.iter_mut().find(|m| m.name == item.name) {
+            Some(m) => {
+                m.weight += item.weight;
+                if !repeated.contains(&item.name) {
+                    repeated.push(item.name);
+                }
+            }
+            None => merged.push(item),
+        }
+    }
+    (merged, repeated)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +157,20 @@ mod tests {
         assert!((a[0].weight - 0.5853).abs() < 1e-9);
         // é decoded to é by serde.
         assert_eq!(a[1].name, "Biens de consommation défensive");
+    }
+
+    #[test]
+    fn merge_same_names_adds_up_a_repeated_sector_once() {
+        // Boursorama's PUST page, October 2026: two sectors under one name.
+        let html = r#""valueField":"value","id":"sector"},"amChartData":[{"name":"Technologie","value":60.23},{"name":"Biens de consommation cycliques","value":10.05},{"name":"Biens de consommation cycliques","value":5.55},{"name":"Finance","value":0.19}]"#;
+        let (merged, repeated) = merge_same_names(parse_amchart_data(html, "sector").unwrap());
+        let names: Vec<&str> = merged.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Technologie", "Biens de consommation cycliques", "Finance"]
+        );
+        assert!((merged[1].weight - 0.156).abs() < 1e-9);
+        assert_eq!(repeated, ["Biens de consommation cycliques"]);
     }
 
     #[test]

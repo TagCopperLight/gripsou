@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../lib/errorToasts";
 
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PasswordField } from "./PasswordField";
@@ -27,12 +28,10 @@ export function DeleteAccountModal({
   };
 
   const minutes = throttleMinutes(remove.error);
+  const wrongPassword = remove.error instanceof ApiError && remove.error.status === 400;
   const error =
-    minutes !== null
-      ? t("auth.tooManyAttempts", { count: minutes })
-      : remove.error instanceof ApiError && remove.error.status === 400
-        ? t("twoFactor.wrongPassword")
-        : t("settings.account.deleteAccountError");
+    minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : wrongPassword ? t("twoFactor.wrongPassword") : null;
+  useErrorToast(remove.isError && error === null && t("settings.account.deleteAccountError"));
 
   return (
     <ConfirmDialog
@@ -45,7 +44,6 @@ export function DeleteAccountModal({
       }
       busy={remove.isPending}
       confirmDisabled={password === ""}
-      error={remove.isError ? error : null}
       onConfirm={confirm}
       onClose={onClose}
     >
@@ -57,9 +55,13 @@ export function DeleteAccountModal({
       >
         <PasswordField
           value={password}
-          onChange={setPassword}
+          onChange={(value) => {
+            setPassword(value);
+            remove.reset();
+          }}
           label={t("settings.account.deleteAccountConfirmLabel")}
           danger
+          error={error}
         />
         <button type="submit" hidden />
       </form>

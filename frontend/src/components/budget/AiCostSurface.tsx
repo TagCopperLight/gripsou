@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Surface } from "../Surface";
 import { CardState } from "../CardState";
@@ -25,6 +26,7 @@ export function AiCostSurface() {
   const save = useSetBudgetAiPrices();
   // Uncommitted edits, keyed "<model>\u0000<side>"; absent = show the server value.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useErrorToast(save.isError && t("settings.server.budgetAiPriceSaveError"));
   if (!usage) {
     return (
       <Surface className="p-6">
@@ -39,8 +41,12 @@ export function AiCostSurface() {
   }
 
   const tokens = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
-  const money = (v: string, fractionDigits: number) =>
-    formatMoney(v, { currency: usage.currency, fractionDigits });
+  // Cents, unless the amount is under one: then 4 decimals, so a cost that
+  // isn't zero never reads as $0.00.
+  const money = (v: string) => {
+    const n = Math.abs(Number(v));
+    return formatMoney(v, { currency: usage.currency, fractionDigits: n > 0 && n < 0.01 ? 4 : 2 });
+  };
   const draftKey = (model: string, side: Side) => `${model}\u0000${side}`;
 
   const dropDraft = (key: string) =>
@@ -85,7 +91,7 @@ export function AiCostSurface() {
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
-        className="w-24 bg-surface-2 rounded-xl px-3 py-1.5 text-fg text-sm text-right tabular-nums outline-none focus:ring-1 focus:ring-green"
+        className="w-24 bg-surface-2 rounded-xl px-3 py-1.5 text-fg text-sm text-right tabular-nums outline-none ring-inset focus:ring-1 focus:ring-green"
       />
     );
   };
@@ -133,7 +139,7 @@ export function AiCostSurface() {
                       {m.cost === null ? (
                         <span className="text-xs text-fg-faint">{t("settings.server.budgetAiCostNoPrice")}</span>
                       ) : (
-                        money(m.cost, 4)
+                        money(m.cost)
                       )}
                     </td>
                   </tr>
@@ -141,15 +147,10 @@ export function AiCostSurface() {
               </tbody>
             </table>
           </div>
-          {save.isError && (
-            <p role="alert" className="mt-3 text-xs text-red">
-              {t("settings.server.budgetAiSaveError")}
-            </p>
-          )}
           <div className="mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4">
             <span className="text-sm font-medium text-fg">{t("settings.server.budgetAiCostTotal")}</span>
             <span data-testid="ai-cost-total" className="text-xl font-semibold tabular-nums text-fg">
-              {money(usage.totalCost, 2)}
+              {money(usage.totalCost)}
             </span>
           </div>
         </>

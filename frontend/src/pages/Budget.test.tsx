@@ -40,13 +40,6 @@ afterEach(() => {
 });
 
 describe("Budget shell", () => {
-  it("names the page and renders the active mode", () => {
-    status(0);
-    renderShell();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Budget");
-    expect(screen.getByTestId("outlet")).toBeVisible();
-  });
-
   it("reads a bare /budget as Overview, where the router sends it", async () => {
     pathname = "/budget";
     status(0);

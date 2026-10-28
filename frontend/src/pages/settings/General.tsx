@@ -1,5 +1,6 @@
-import { type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { CircleAlert } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { SegmentedControl } from "../../components/SegmentedControl";
@@ -10,7 +11,8 @@ import type { UserPrefs } from "../../lib/prefs";
 import { formatMoney } from "../../lib/money";
 import { formatDate } from "../../lib/date";
 import { CURRENCIES } from "../../lib/currency";
-import { TIME_ZONES } from "../../lib/timeZoneList";
+import { timeZoneOptions } from "../../lib/timeZoneList";
+import { ApiError } from "../../api/client";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
@@ -26,13 +28,45 @@ const DECIMAL_OPTIONS = [
   { value: ",", label: "0,00" },
 ];
 
+/** A date pattern as the reader writes it: JJ/MM/AAAA in French. */
+function patternLabel(pattern: string, language: string): string {
+  return language === "fr" ? pattern.replaceAll("D", "J").replaceAll("Y", "A") : pattern;
+}
+
 export function SettingsGeneral() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
 
   // Auto-save: every change persists that one setting and applies app-wide.
   const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
     void updatePrefs({ [key]: value });
+
+  // The server fetches the new currency's rate before saving it, and refuses
+  // it when the rate can't be had: the select shows the pick meanwhile.
+  const [currency, setCurrency] = useState<{ code: string; state: "fetching" | "refused" } | null>(null);
+  const latest = useRef<string | null>(null);
+  const changeCurrency = (code: string) => {
+    // Only the last pick speaks: an earlier one answering late must not clear it.
+    latest.current = code;
+    setCurrency({ code, state: "fetching" });
+    updatePrefs({ currency: code }).then(
+      () => latest.current === code && setCurrency(null),
+      (err: unknown) =>
+        latest.current === code &&
+        setCurrency(err instanceof ApiError && err.status === 502 ? { code, state: "refused" } : null),
+    );
+  };
+  const currencyHint =
+    currency?.state === "fetching" ? (
+      t("fx.fetching", { currency: currency.code })
+    ) : currency?.state === "refused" ? (
+      <span role="alert" className="inline-flex items-center gap-1.5 text-red">
+        <CircleAlert className="size-3.5 shrink-0" />
+        {t("fx.refused", { currency: currency.code })}
+      </span>
+    ) : (
+      t("settings.general.baseReportingCurrency")
+    );
 
   // Drive the preview from the reactive context prefs, not the module singleton
   // that formatMoney reads by default — the singleton isn't a React-tracked
@@ -68,16 +102,12 @@ export function SettingsGeneral() {
           <Divider />
 
           <Setting label={t("settings.general.timeZone")} hint={t("settings.general.timeZoneHint")}>
-            <select
-              aria-label={t("settings.general.timeZone")}
+            <Select
               value={prefs.timeZone}
-              onChange={(event) => set("timeZone", event.target.value)}
-              className="w-36 md:w-60 rounded-xl bg-surface-2 px-3.5 py-2.25 text-sm text-fg"
-            >
-              {[...new Set([...TIME_ZONES, prefs.timeZone])].map((zone) => (
-                <option key={zone} value={zone}>{zone}</option>
-              ))}
-            </select>
+              onChange={(v) => set("timeZone", v)}
+              options={timeZoneOptions(prefs.timeZone, i18n.language)}
+              className="w-36 md:w-60"
+            />
           </Setting>
 
           <Divider />
@@ -91,7 +121,7 @@ export function SettingsGeneral() {
             <Select
               value={prefs.dateFormat}
               onChange={(v) => set("dateFormat", v)}
-              options={DATE_FORMATS.map((f) => ({ value: f, label: f }))}
+              options={DATE_FORMATS.map((f) => ({ value: f, label: patternLabel(f, i18n.language) }))}
               className="w-36 md:w-60"
             />
           </Setting>
@@ -105,11 +135,11 @@ export function SettingsGeneral() {
         <div className="flex flex-col gap-5">
           <Setting
             label={t("settings.general.currency")}
-            hint={t("settings.general.baseReportingCurrency")}
+            hint={currencyHint}
           >
             <Select
-              value={prefs.currency}
-              onChange={(v) => set("currency", v)}
+              value={currency?.state === "fetching" ? currency.code : prefs.currency}
+              onChange={changeCurrency}
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               className="w-36 md:w-60"
             />
@@ -118,14 +148,9 @@ export function SettingsGeneral() {
           <Divider />
 
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-fg">
-                {t("settings.general.numberFormat")}
-              </span>
-              <span className="text-xs text-fg-faint">
-                {t("settings.general.numberFormatHint")}
-              </span>
-            </div>
+            <span className="text-sm font-medium text-fg">
+              {t("settings.general.numberFormat")}
+            </span>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-0 md:divide-x md:divide-surface-2">
               <FieldCol label={t("settings.general.thousandsSeparator")} first>
@@ -196,7 +221,7 @@ function Setting({
   children,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   return (

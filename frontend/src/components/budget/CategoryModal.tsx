@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 
 import { Dialog } from "../Dialog";
 import { ColorSwatchGrid } from "../ColorSwatchGrid";
 import { FilledDot } from "./FilledDot";
 import { CategoryIcon } from "./CategoryIcon";
 import { Button } from "../Button";
+import { Field } from "../Field";
+import { TextInput } from "../TextInput";
 import { Select } from "../Select";
 import {
   useCreateBudgetCategory,
@@ -87,6 +90,12 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   const locked = Boolean(category?.systemKey);
   const previewColor = safeBudgetColor(color);
 
+  const failure = mutation.isError ? budgetErrorKey(mutation.error) : null;
+  useErrorToast(
+    failure !== null && failure !== "duplicate" && t(`settings.budget.categories.${failure}`),
+    failure === "gone" ? t("common.refreshPage") : undefined,
+  );
+
   return (
     <Dialog
       large
@@ -125,17 +134,25 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       }
     >
       <div className="flex flex-col gap-5">
-        <Field label={t("settings.budget.categories.fieldName")} htmlFor="category-name">
-          <input
+        <Field
+          label={t("settings.budget.categories.fieldName")}
+          htmlFor="category-name"
+          error={failure === "duplicate" && t("settings.budget.categories.duplicate")}
+        >
+          <TextInput
             id="category-name"
             type="text"
             value={name}
             disabled={busy}
-            onChange={(e) => setName(e.target.value)}
+            invalid={failure === "duplicate"}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (failure === "duplicate") mutation.reset();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className="disabled:opacity-60"
           />
         </Field>
 
@@ -204,35 +221,10 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             disabled={busy || locked}
             onChange={(e) => setHint(e.target.value)}
             rows={3}
-            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none focus:ring-1 focus:ring-green disabled:opacity-60"
+            className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none ring-inset focus:ring-1 focus:ring-green disabled:opacity-60"
           />
         </Field>
-
-        {mutation.isError && (
-          <p role="alert" className="text-red text-sm">
-            {t(`settings.budget.categories.${budgetErrorKey(mutation.error)}`)}
-          </p>
-        )}
       </div>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={htmlFor} className="text-fg-faint text-sm">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

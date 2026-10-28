@@ -57,6 +57,19 @@ describe("AiCostSurface", () => {
     expect(screen.getByText("1 run without usage data (not counted)")).toBeInTheDocument();
   });
 
+  it("keeps a cost under a cent from reading as zero", async () => {
+    stub({
+      currency: "USD",
+      models: [{ model: "jev:jev-latest", runs: 1, runsWithoutUsage: 0, tokensIn: 100000, tokensOut: 100,
+        priceIn: "0.042", priceOut: "0", cost: "0.0042" }],
+      totalCost: "0.0042",
+    });
+    renderSurface();
+    expect(await screen.findByTestId("ai-cost-total")).toHaveTextContent(
+      formatMoney("0.0042", { currency: "USD", fractionDigits: 4 }),
+    );
+  });
+
   it("shows an empty state when there are no runs", async () => {
     stub({ currency: "USD", models: [], totalCost: "0" });
     renderSurface();
@@ -106,6 +119,6 @@ describe("AiCostSurface", () => {
     const input = await screen.findByLabelText("Input price for alpha:model-1");
     fireEvent.change(input, { target: { value: "0.10" } });
     fireEvent.blur(input);
-    expect(await screen.findByRole("alert")).toHaveTextContent("could not be saved");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the price");
   });
 });

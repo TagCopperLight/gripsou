@@ -16,7 +16,7 @@ export function SettingsLayout() {
   const items = settingsNavItems.filter((item) => isAdmin || !item.adminOnly);
 
   return (
-    <div className="flex h-full flex-col md:flex-row">
+    <div className="flex min-h-full flex-col md:flex-row">
       <div className="md:hidden">
         <h1 className="pb-3 text-2xl font-bold text-fg">{t("nav.settings")}</h1>
         <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-4">
@@ -32,7 +32,9 @@ export function SettingsLayout() {
         </div>
       </div>
 
-      <div className="hidden md:block">
+      {/* Stays in view while the page scrolls, where it starts (under the
+          main area's top padding). */}
+      <div className="hidden md:sticky md:top-6 md:block md:self-start">
         <SettingsSidebar />
       </div>
       <div className="min-w-0 flex-1">

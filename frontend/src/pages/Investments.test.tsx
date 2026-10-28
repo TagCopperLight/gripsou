@@ -16,12 +16,12 @@ const AUTH = {
 
 const RETURNS = {
   today: "2026-10-08",
-  total: { annualised: "0.071", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1" },
+  total: { annualised: "0.071", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1", excludedHistory: 1, excludedRate: 0 },
   accounts: [
     {
       id: "a1", name: "Example PEA", color: "#5b9bf0", source: "Example Bank",
       missing: [{ id: "h9", name: "Example Corp" }],
-      annualised: "0.084", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1",
+      annualised: "0.084", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1", excludedHistory: 1, excludedRate: 0,
     },
   ],
 };
@@ -71,18 +71,18 @@ describe("Investments page", () => {
     expect(screen.queryByText("Euro")).not.toBeInTheDocument();
   });
 
-  it("says no purchases are recorded when the account has no return and no first purchase", async () => {
+  it("says the history is incomplete when every holding of the account is left out for it", async () => {
     const account = { ...RETURNS.accounts[0], annualised: null, since: null };
     renderPage({ "/investments/returns": { ...RETURNS, accounts: [account] }, "/holdings": [FUND, CASH] });
     await waitFor(() => expect(screen.getByText("Example PEA")).toBeInTheDocument());
-    expect(screen.getByText("no purchases recorded")).toBeInTheDocument();
+    expect(screen.getByText("history incomplete")).toBeInTheDocument();
   });
 
   it("leaves the label out when purchases exist but the return can't be computed", async () => {
     const account = { ...RETURNS.accounts[0], annualised: null };
     renderPage({ "/investments/returns": { ...RETURNS, accounts: [account] }, "/holdings": [FUND, CASH] });
     await waitFor(() => expect(screen.getByText("Example PEA")).toBeInTheDocument());
-    expect(screen.queryByText("no purchases recorded")).not.toBeInTheDocument();
+    expect(screen.queryByText("history incomplete")).not.toBeInTheDocument();
   });
 
   it("shows the empty state when nothing but cash is held", async () => {
@@ -95,6 +95,6 @@ describe("Investments page", () => {
 
   it("says so when the server can't be reached", async () => {
     renderPage("down");
-    await waitFor(() => expect(screen.getAllByText("Can't reach the server").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Couldn't load this").length).toBeGreaterThan(0));
   });
 });

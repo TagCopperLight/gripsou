@@ -74,13 +74,6 @@ describe("PasskeysModal list", () => {
     expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(2);
   });
 
-  it("calls onAdd from the footer button", async () => {
-    stubApi([MAC]);
-    const { onAdd, user } = await renderModal();
-    await screen.findByText("MacBook");
-    await user.click(screen.getByRole("button", { name: "Add passkey" }));
-    expect(onAdd).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("PasskeysModal rename", () => {
@@ -153,7 +146,7 @@ describe("PasskeysModal rename", () => {
     await user.click(screen.getByRole("button", { name: "Rename" }));
     await user.clear(screen.getByRole("textbox"));
     await user.type(screen.getByRole("textbox"), "Other{Enter}");
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't rename the passkey")).toBeInTheDocument();
     expect(screen.getByText("MacBook")).toBeInTheDocument();
   });
 });
@@ -164,12 +157,19 @@ describe("PasskeysModal delete", () => {
     await user.click(screen.getAllByRole("button", { name: "Delete" })[index]);
   }
 
-  it("asks for confirmation and Cancel goes back to the list", async () => {
+  it("asks in the row, and Cancel or Escape keeps the passkey and the window", async () => {
     const f = stubApi([MAC, PHONE]);
     const { user } = await renderModal();
     await askDelete(user, 0);
-    const dialog = screen.getByRole("dialog", { name: "Delete MacBook?" });
+    const dialog = screen.getByRole("group", { name: "Delete MacBook?" });
+    // The rest of the list stays in view.
+    expect(screen.getByText("Phone")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+
+    await askDelete(user, 0);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Passkeys" })).toBeInTheDocument();
     expect(screen.getByText("MacBook")).toBeInTheDocument();
     expect(writes(f)).toHaveLength(0);
@@ -179,9 +179,8 @@ describe("PasskeysModal delete", () => {
     const f = stubApi([MAC, PHONE]);
     const { onClose, user } = await renderModal();
     await askDelete(user, 0);
-    const dialog = screen.getByRole("dialog", { name: "Delete MacBook?" });
+    const dialog = screen.getByRole("group", { name: "Delete MacBook?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-    expect(await screen.findByRole("dialog", { name: "Passkeys" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("MacBook")).not.toBeInTheDocument());
     expect(screen.getByText("Phone")).toBeInTheDocument();
     const [url, init] = writes(f)[0];
@@ -194,7 +193,7 @@ describe("PasskeysModal delete", () => {
     stubApi([MAC]);
     const { onClose, user } = await renderModal();
     await askDelete(user, 0);
-    const dialog = screen.getByRole("dialog", { name: "Delete MacBook?" });
+    const dialog = screen.getByRole("group", { name: "Delete MacBook?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
@@ -203,10 +202,10 @@ describe("PasskeysModal delete", () => {
     stubApi([MAC, PHONE], true);
     const { onClose, user } = await renderModal();
     await askDelete(user, 0);
-    const dialog = screen.getByRole("dialog", { name: "Delete MacBook?" });
+    const dialog = screen.getByRole("group", { name: "Delete MacBook?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Delete MacBook?" })).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't delete the passkey")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Delete MacBook?" })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 });

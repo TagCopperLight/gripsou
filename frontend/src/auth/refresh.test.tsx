@@ -101,14 +101,14 @@ it("preserves a newer profile edit when an older preference acknowledgement arri
   } finally { unmount(); }
 });
 
-it("shows the stored prefs again when a save fails", async () => {
+it("shows the stored prefs again when a save fails, and tells the caller nothing", async () => {
   const { result, unmount } = await authenticated();
   try {
     vi.spyOn(api, "patchJson").mockRejectedValue(new Error("request failed"));
     let save!: Promise<void>;
     act(() => { save = result.current.updatePrefs({ numberDecimals: 0 }); });
     expect(result.current.prefs.numberDecimals).toBe(0);
-    await act(async () => { await expect(save).rejects.toThrow("request failed"); });
+    await act(async () => { await save; });
     await waitFor(() => expect(result.current.prefs.numberDecimals).toBe(DEFAULT_PREFS.numberDecimals));
   } finally { unmount(); }
 });
@@ -122,7 +122,7 @@ it("sends only the changed setting", async () => {
   } finally { unmount(); }
 });
 
-it("serializes preference autosaves and keeps the latest optimistic choices visible", async () => {
+it("serializes preference autosaves, and shows a new currency only once the server took it", async () => {
   const { result, unmount } = await authenticated();
   let release!: () => void;
   const first = new Promise<void>((resolve) => { release = resolve; });
@@ -140,7 +140,8 @@ it("serializes preference autosaves and keeps the latest optimistic choices visi
     act(() => { usd = result.current.updatePrefs({ currency: "USD" }); });
     await waitFor(() => expect(requests).toBe(1));
     act(() => { gbp = result.current.updatePrefs({ currency: "GBP" }); });
-    expect(result.current.prefs.currency).toBe("GBP");
+    // The server may still refuse it for want of a rate.
+    expect(result.current.prefs.currency).toBe("EUR");
     expect(requests).toBe(1);
     await act(async () => { release(); await usd; await gbp; });
     expect(serverCurrency).toBe("GBP");

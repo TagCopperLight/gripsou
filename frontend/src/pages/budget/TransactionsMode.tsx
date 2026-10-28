@@ -1,8 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showDone, useErrorToast } from "../../lib/errorToasts";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
+import { PrivacyEye } from "../../components/PrivateMoney";
+import { usePrivacy } from "../../auth/usePrivacy";
 import { BreakPairModal } from "../../components/budget/BreakPairModal";
 import { Dialog } from "../../components/Dialog";
 import { SearchSurface } from "../../components/budget/SearchSurface";
@@ -61,7 +65,10 @@ type AnswerOf<H extends () => { mutateAsync: (...args: never[]) => Promise<unkno
 
 export function TransactionsMode() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { prefs } = useAuth();
+  // One eye, by the title, for every amount of the list and the selection.
+  const privacy = usePrivacy();
   const { filters, setFilters, selection, isSelected, toggleRow, selectAllShown, anySelected, clearSelection } =
     useBudget();
 
@@ -95,11 +102,8 @@ export function TransactionsMode() {
   // A write held back until the user agrees to dissolve the internal-transfer
   // pairs it would break; `run` re-sends it confirmed.
   const [breakPair, setBreakPair] = useState<{ count: number; run: () => void } | null>(null);
-  // A failed row or bulk write surfaces a recoverable inline message, and a
-  // successful bulk write reports how many rows it touched. Both describe the
-  // last write only, so every new write clears them.
+  // A failed write shows in the corner until the next write starts.
   const [writeErrorKey, setWriteErrorKey] = useState<string | null>(null);
-  const [bulkUpdated, setBulkUpdated] = useState<number | null>(null);
 
   const rows = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
 
@@ -114,13 +118,15 @@ export function TransactionsMode() {
             .filter((r) => selection.ids.has(r.id) && r.amountReporting !== null)
             .map((r) => r.amountReporting!),
         );
+  // A row with no exchange rate is left out of that total: it says so.
+  const selectionFxMissing =
+    selection.mode === "allShown"
+      ? Boolean(counts.data?.fxMissing)
+      : rows.some((r) => selection.ids.has(r.id) && r.amountReporting === null);
   const categoryFor = categoryForId ? (rows.find((r) => r.id === categoryForId) ?? null) : null;
   const tagsFor = tagsForId ? (rows.find((r) => r.id === tagsForId) ?? null) : null;
 
-  const startWrite = useCallback(() => {
-    setWriteErrorKey(null);
-    setBulkUpdated(null);
-  }, []);
+  const startWrite = useCallback(() => setWriteErrorKey(null), []);
   const onWriteError = useCallback((err: unknown) => setWriteErrorKey(budgetErrorKey(err)), []);
 
   /** Every write that can dissolve internal-transfer pairs speaks one
@@ -198,8 +204,8 @@ export function TransactionsMode() {
   const bulkTarget = () =>
     selection.mode === "allShown" ? { filter: query } : { ids: [...selection.ids] };
 
-  // `matching_transaction_ids` returns nothing for the lots bucket even though
-  // `counts.matching` still counts lot rows — a lot row carries no budget, so
+  // `matching_transaction_ids` returns nothing for the lots bucket (and
+  // `counts.selectable` is 0 there) — a lot row carries no budget, so
   // "select all shown" cannot mean anything in that bucket and must not be
   // offered as if it did.
   const lotsBucketSelected = filters.bucket === "lots";
@@ -222,11 +228,11 @@ export function TransactionsMode() {
     pairBreakAware<AnswerOf<typeof useBulkTransactions>>(
       (confirm, callbacks) =>
         bulk.mutate({ ...target, ...body, ...(confirm ? { confirmBreakPairs: true } : {}) }, callbacks),
-      // Only an applied write clears the selection and claims "N rows
-      // updated"; a refused one leaves both as they were.
+      // Only an applied write clears the selection and says "N rows
+      // updated" in the corner; a refused one leaves both as they were.
       (res) => {
         clearSelection();
-        setBulkUpdated(res.updated);
+        showDone(t("budget.transactions.bulkUpdated", { count: res.updated }));
       },
     )(false);
   };
@@ -234,6 +240,7 @@ export function TransactionsMode() {
   const onRetry = useCallback(() => void refetch(), [refetch]);
   const onLoadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
   const onClearFilters = useCallback(() => setFilters({ ...EMPTY_FILTERS }), [setFilters]);
+  const onConnect = useCallback(() => void navigate({ to: "/settings/connections" }), [navigate]);
   // Clicking the same control again puts its chooser away: `Popover` exempts
   // its anchor from the outside-click close.
   const onOpenCategory = useCallback((tx: Transaction, el: HTMLElement) => {
@@ -257,11 +264,23 @@ export function TransactionsMode() {
     [patchRow, startWrite, onWriteError],
   );
 
+  useErrorToast(
+    writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`),
+    writeErrorKey === "gone" ? t("common.refreshPage") : undefined,
+  );
+
   return (
     <div className="flex min-h-full flex-col gap-4">
       <Surface className="flex flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-fg">{t("budget.transactions.title")}</h2>
+          <h2 className="text-lg font-semibold text-fg">
+            {t("budget.transactions.title")}
+            {privacy.enabled && (
+              <span className="ml-3 inline-flex align-middle">
+                <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
+              </span>
+            )}
+          </h2>
           <Button
             variant="ghostStrong"
             data-testid="select-all-shown"
@@ -282,6 +301,7 @@ export function TransactionsMode() {
         <TransactionsTable
           rows={rows}
           showChecked={prefs.showChecked}
+          masked={privacy.masked}
           counts={counts.data}
           filtered={isFiltered(filters)}
           loading={list.isPending}
@@ -291,6 +311,7 @@ export function TransactionsMode() {
           fetchingNextPage={list.isFetchingNextPage}
           onLoadMore={onLoadMore}
           onClearFilters={onClearFilters}
+          onConnect={onConnect}
           isSelected={isSelected}
           anySelected={anySelected}
           onToggleSelect={toggleRow}
@@ -299,32 +320,14 @@ export function TransactionsMode() {
           onToggleChecked={onToggleChecked}
         />
 
-        {writeErrorKey && (
-          <p data-testid="write-error" role="alert" className="flex items-center gap-2 text-xs text-red">
-            {t(`budget.transactions.errors.${writeErrorKey}`)}
-            <button
-              type="button"
-              data-testid="write-error-dismiss"
-              onClick={() => setWriteErrorKey(null)}
-              aria-label={t("common.close")}
-              className="cursor-pointer text-red/70 hover:text-red"
-            >
-              ×
-            </button>
-          </p>
-        )}
       </Surface>
 
-      {bulkUpdated !== null && (
-        <p data-testid="bulk-result" className="text-xs text-fg-faint">
-          {t("budget.transactions.bulkUpdated", { count: bulkUpdated })}
-        </p>
-      )}
-
       <SelectionBar
-        matching={counts.data?.matching ?? 0}
+        matching={counts.data?.selectable ?? 0}
         total={selectionTotal}
+        fxMissing={selectionFxMissing}
         showChecked={prefs.showChecked}
+        masked={privacy.masked}
         busy={bulk.isPending}
         onAssignCategory={(categoryId) => runBulk({ categoryId })}
         onAddTags={(addTagIds) => runBulk({ addTagIds })}

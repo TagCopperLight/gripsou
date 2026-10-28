@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "../../Surface";
 import { CategoryChip } from "../CategoryChip";
 import { desaturate } from "../../../lib/color";
-import { formatMoney, sumDecimals } from "../../../lib/money";
+import { formatMoney, maskAmount, sumDecimals } from "../../../lib/money";
 import { monthLabel, monthStart } from "../../../lib/period";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
 import { FAINT, GRID, MONO, SURFACE, tooltipRow } from "../../../lib/chartTheme";
@@ -15,12 +15,17 @@ import type { BudgetTrend } from "../../../api/overview";
 type TooltipParam = { dataIndex: number };
 
 export function TrendSurface({
-  trend, onSelectMonth,
+  trend, onSelectMonth, masked = false,
 }: {
   trend: BudgetTrend;
   onSelectMonth: (month: string) => void;
+  /** Private mode: the tooltip's amounts and the axis hidden; the bars keep
+   *  their shape. */
+  masked?: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const money = (v: string, opts?: Parameters<typeof formatMoney>[1]) =>
+    masked ? maskAmount(formatMoney(v, opts)) : formatMoney(v, opts);
 
   const language = i18n.language;
   // Each month has its own order. Series represent stack positions rather
@@ -66,14 +71,14 @@ export function TrendSurface({
               tooltipRow(
                 sliceColor(s.slice),
                 sliceLabel(t, s.slice),
-                formatMoney(s.amount),
+                money(s.amount),
               ),
             )
             .join("");
           const totalRow = tooltipRow(
             "transparent",
             t("common.total"),
-            formatMoney(total),
+            money(total),
             true,
           );
           return `
@@ -104,7 +109,7 @@ export function TrendSurface({
           color: FAINT,
           fontFamily: MONO,
           fontSize: 11,
-          formatter: (v: number) => formatMoney(String(v), { fractionDigits: 0 }),
+          formatter: (v: number) => money(String(v), { fractionDigits: 0 }),
         },
       },
       series: trend.series.map((_, rank) => ({
@@ -124,7 +129,8 @@ export function TrendSurface({
         barMaxWidth: 28,
       })),
     };
-  }, [trend, columns, language, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `money` follows `masked`
+  }, [trend, columns, language, t, masked]);
 
   const onEvents = useMemo(() => {
     // Update only the colours: rebuilding the React option on every hover

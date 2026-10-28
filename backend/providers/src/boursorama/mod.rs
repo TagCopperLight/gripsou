@@ -1,10 +1,10 @@
 pub(crate) mod map;
 
 use async_trait::async_trait;
-use gripsou_core::dto::{Composition, InstrumentRef};
+use gripsou_core::dto::{Allocation, Composition, InstrumentRef};
 use gripsou_core::provider::{CompositionProvider, ProviderError};
 
-use self::map::{bare_ticker, parse_amchart_data, symbol_from_location};
+use self::map::{bare_ticker, merge_same_names, parse_amchart_data, symbol_from_location};
 
 const LIVE_BASE: &str = "https://www.boursorama.com";
 // Boursorama serves 403 to the default reqwest UA.
@@ -108,9 +108,23 @@ impl CompositionProvider for BoursoramaCompositionProvider {
             .await
             .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
+        let chart = |id: &str| -> Result<Vec<Allocation>, ProviderError> {
+            let (items, repeated) =
+                merge_same_names(parse_amchart_data(&html, id).map_err(ProviderError::Other)?);
+            if !repeated.is_empty() {
+                tracing::warn!(
+                    provider = "boursorama",
+                    symbol,
+                    chart = id,
+                    names = %repeated.join(", "),
+                    "composition names repeated"
+                );
+            }
+            Ok(items)
+        };
         Ok(Composition {
-            countries: parse_amchart_data(&html, "regional").map_err(ProviderError::Other)?,
-            sectors: parse_amchart_data(&html, "sector").map_err(ProviderError::Other)?,
+            countries: chart("regional")?,
+            sectors: chart("sector")?,
         })
     }
 }

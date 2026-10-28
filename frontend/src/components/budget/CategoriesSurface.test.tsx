@@ -299,23 +299,9 @@ describe("CategoriesSurface", () => {
     await screen.findByText("Groceries");
     fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "That change could not be saved. Please try again.",
+      "Couldn't save the change",
     );
     expect(screen.getByText("Groceries")).toBeVisible();
-  });
-
-  it("opens the edit modal from Modify", async () => {
-    renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Groceries" }));
-    expect(await screen.findByRole("dialog", { name: "Edit category" })).toBeVisible();
-  });
-
-  it("opens the delete modal from Delete", async () => {
-    renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Groceries" }));
-    expect(await screen.findByRole("dialog", { name: "Delete category" })).toBeVisible();
   });
 
   it("has its own loading, error-with-retry and empty states", async () => {

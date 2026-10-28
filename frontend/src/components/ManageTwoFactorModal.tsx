@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { showError } from "../lib/errorToasts";
 import { KeyRound } from "lucide-react";
 
 import { Dialog } from "./Dialog";
@@ -24,7 +25,7 @@ export function ManageTwoFactorModal({
   const { t } = useTranslation();
   const { data: status } = useMfaStatus();
   const [view, setView] = useState<View>(start);
-  const { password, setPassword, error, setError, checking, check } = useReauthStep(t("twoFactor.failed"));
+  const { password, setPassword, error, setError, checking, check } = useReauthStep();
   const [codes, setCodes] = useState<string[]>([]);
 
   const regenerate = useRegenerateRecovery();
@@ -50,7 +51,7 @@ export function ManageTwoFactorModal({
         onClose();
       }
     } catch {
-      setError(t("twoFactor.failed"));
+      showError(t(view === "newCodes" ? "twoFactor.newCodesFailed" : "twoFactor.removeFailed"));
     }
   };
 
@@ -118,8 +119,7 @@ export function ManageTwoFactorModal({
         }}
       >
         {turningOff && <p className="text-sm text-fg-dim">{t("twoFactor.turnOffBody")}</p>}
-        <PasswordField value={password} onChange={setPassword} />
-        {error && <p className="text-sm text-red">{error}</p>}
+        <PasswordField value={password} onChange={setPassword} error={error} />
         <button type="submit" hidden />
       </form>
     </Dialog>

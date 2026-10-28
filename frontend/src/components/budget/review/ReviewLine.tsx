@@ -19,12 +19,12 @@ type Props = {
 
 /** One pending guess in the review queue. A "no guess" row (the model abstained) can only
  *  be corrected. A confident guess into a neutral category is here because it
- *  hides money from every total, and says so. */
+ *  hides money from every total; the category's name says where the money
+ *  goes, so the line adds no warning (user's call). */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
   const { t } = useTranslation();
   const category = categoryOfTransaction(tx);
   const confidence = tx.categoryConfidence === null ? null : Math.round(Number(tx.categoryConfidence) * 100);
-  const byKind = category !== null && tx.categoryKind === "neutral";
 
   return (
     <div data-testid={`review-line-${tx.id}`} className="flex items-center gap-4 rounded-xl bg-surface-2 px-4 py-3">
@@ -35,12 +35,6 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
           <span>{formatDay(tx.t)}</span>
           <span aria-hidden>·</span>
           <span className="truncate">{tx.accountName}</span>
-          {byKind && (
-            <>
-              <span aria-hidden>·</span>
-              <span className="text-amber">{t("budget.review.hidesMoney")}</span>
-            </>
-          )}
         </p>
       </div>
       {/* Fixed-width columns, so amounts, chips and buttons line up down the

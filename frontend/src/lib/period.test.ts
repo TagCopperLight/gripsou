@@ -65,9 +65,8 @@ describe("monthLabel", () => {
     expect(monthLabel("2026-09", "en")).toBe("September 2026");
   });
 
-  it("names the month in French", () => {
-    // French month names are lower-case; that is correct French, not a bug.
-    expect(monthLabel("2026-09", "fr")).toBe("septembre 2026");
+  it("capitalises the French month, which stands alone as a label", () => {
+    expect(monthLabel("2026-09", "fr")).toBe("Septembre 2026");
   });
 });
 

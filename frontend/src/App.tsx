@@ -3,6 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { router } from "./router";
 import { useAuth } from "./auth/context";
 import { setUnauthorizedHandler } from "./api/client";
+import { ErrorToasts } from "./components/ErrorToasts";
 
 function InnerApp() {
   const auth = useAuth();
@@ -35,5 +36,10 @@ export function App() {
     return <div className="h-screen bg-bg" />;
   }
 
-  return <InnerApp />;
+  return (
+    <>
+      <InnerApp />
+      <ErrorToasts />
+    </>
+  );
 }

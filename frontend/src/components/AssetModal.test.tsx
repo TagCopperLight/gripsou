@@ -5,9 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AssetModal } from "./AssetModal";
 import type { Holding } from "../api/types";
+import { AuthContext, type AuthValue } from "../auth/context";
+import { DEFAULT_PREFS } from "../lib/prefs";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
-// the chart mid-test — stub it out, as FxMissingWarning.test.tsx does.
+// the chart mid-test — stub it out, as FxNote.test.tsx does.
 vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
@@ -16,7 +18,7 @@ const BASE: Holding = {
   accountType: "pea", qty: "10", price: "100", currency: "EUR",
   priceCurrency: "EUR", accountCurrency: "EUR",
   invested: "800", investedNative: "800", value: "1000", gl: "200", glPct: "0.25",
-  fxMissing: false, spark: null,
+  valueNative: "1000", fxMissing: false, spark: null,
   composition: { countries: [{ name: "United States", weight: 0.62 }], sectors: [] },
   unexplainedQty: "0",
   meanPrice: "80", unexplainedCost: "0",
@@ -24,7 +26,11 @@ const BASE: Holding = {
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <AuthContext.Provider value={{ prefs: DEFAULT_PREFS } as unknown as AuthValue}>{children}</AuthContext.Provider>
+    </QueryClientProvider>
+  );
 }
 
 describe("AssetModal composition surface", () => {
@@ -121,6 +127,28 @@ describe("AssetModal purchases chart", () => {
   });
 });
 
+describe("AssetModal purchases gain", () => {
+  // Five shares on day 1, five more on day 2, the price flat at 100: the
+  // position doubles in value, but only because money went in.
+  it("does not count a purchase as a gain", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      new Response(JSON.stringify(
+        url.includes("/prices")
+          ? [{ t: 1, price: "100", accountPrice: "100" }, { t: 2, price: "100", accountPrice: "100" }]
+          : url.includes("/lots")
+            ? [1, 2].map((t) => ({ id: `l${t}`, t, side: "buy", qty: "5", price: "100", fee: "0", manual: true }))
+            : [],
+      ), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+    const user = userEvent.setup();
+    render(withClient(<AssetModal holding={{ ...BASE, meanPrice: "100" }} netWorth={5000} onClose={() => {}} />));
+    await user.click(screen.getByRole("radio", { name: /purchases/i }));
+    // Position value 1 000 €, gain zero: before the fix the pill said +500 €.
+    expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^\+500,00.€$/)).not.toBeInTheDocument();
+  });
+});
+
 describe("incomplete-history strip", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async () =>
@@ -141,9 +169,9 @@ describe("incomplete-history strip", () => {
         onRecordLots={onRecordLots}
       />,
     ));
-    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
-    expect(screen.getByText(/incomplete buy\/sell history/i)).toBeInTheDocument();
+    expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /record buy\/sell history/i }));
     expect(onRecordLots).toHaveBeenCalled();
   });
@@ -157,6 +185,6 @@ describe("incomplete-history strip", () => {
         onRecordLots={vi.fn()}
       />,
     ));
-    expect(screen.queryByText(/incomplete buy\/sell history/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^incomplete history$/i)).not.toBeInTheDocument();
   });
 });

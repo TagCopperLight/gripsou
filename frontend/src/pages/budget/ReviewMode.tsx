@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useErrorToast } from "../../lib/errorToasts";
 import { useNavigate } from "@tanstack/react-router";
-import { PartyPopper } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { Surface } from "../../components/Surface";
 import { Button } from "../../components/Button";
@@ -9,13 +10,15 @@ import { CategoryChooser } from "../../components/budget/CategoryChooser";
 import { ReviewLine } from "../../components/budget/review/ReviewLine";
 import { ResolvedLine } from "../../components/budget/review/ResolvedLine";
 import { ReviewProgress } from "../../components/budget/review/ReviewProgress";
+import { ReviewSkeleton } from "../../components/budget/review/ReviewSkeleton";
+import { useLoadOnScroll } from "../../lib/useLoadOnScroll";
+import { CardState } from "../../components/CardState";
 import { BreakPairModal } from "../../components/budget/BreakPairModal";
 import { useTransactions } from "../../api/hooks";
 import {
   useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction,
   useUndoReview,
 } from "../../api/budget";
-import { useAuth } from "../../auth/context";
 import { budgetErrorKey, categoryLabel, categoryOfTransaction } from "../../lib/budget";
 import {
   applyToSame, clearResolved, initialReview, offerSame, resolve, syncPending, unresolve,
@@ -30,9 +33,10 @@ const QUEUE: TransactionFilterQuery = { needsReview: true, includeTransfers: tru
 export function ReviewMode() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { prefs } = useAuth();
   const status = useAiStatus().data;
   const list = useTransactions(QUEUE);
+  // The next page loads by itself as the queue scrolls, as on Transactions.
+  const loadMore = useLoadOnScroll(list.hasNextPage, list.isFetchingNextPage, () => void list.fetchNextPage());
   const categories = useBudgetCategories().data ?? [];
   const accept = useAcceptReview();
   const undo = useUndoReview();
@@ -180,13 +184,39 @@ export function ReviewMode() {
     );
   };
 
-  if (list.isSuccess && lines.length === 0) {
+  useErrorToast(
+    writeErrorKey && t(`budget.transactions.errors.${writeErrorKey}`),
+    writeErrorKey === "gone" ? t("common.refreshPage") : undefined,
+  );
+
+  if (list.isPending) return <ReviewSkeleton title={t("budget.review.title")} />;
+
+  if (list.isError && lines.length === 0) {
     return (
-      <Surface className="flex flex-col items-center gap-3 p-10 text-center">
-        <PartyPopper className="size-8 text-green" aria-hidden />
-        <h2 className="text-lg font-semibold text-fg">{t("budget.review.emptyTitle")}</h2>
-        <p className="text-sm text-fg-faint">{t("budget.review.emptyBody")}</p>
-        <Button variant="primary" onClick={() => navigate({ to: "/budget/overview" })}>
+      <Surface className="p-6">
+        <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
+        <CardState variant="error" onRetry={() => void list.refetch()} className="mt-4 h-40" />
+      </Surface>
+    );
+  }
+
+  if (lines.length === 0) {
+    // The error look's shape, in green.
+    return (
+      <Surface className="flex h-55 flex-col items-center justify-center gap-2.5 text-center">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-green-soft text-green">
+          <Check className="size-4" strokeWidth={2.2} aria-hidden />
+        </span>
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-sm font-medium text-fg">{t("budget.review.emptyTitle")}</h2>
+          <p className="text-xs text-fg-faint">{t("budget.review.emptyBody")}</p>
+        </div>
+        <Button
+          variant="outline"
+          padded={false}
+          className="mt-1 rounded-lg! px-2.75 py-1.5 text-xs"
+          onClick={() => navigate({ to: "/budget/overview" })}
+        >
           {t("budget.review.backToOverview")}
         </Button>
       </Surface>
@@ -198,32 +228,13 @@ export function ReviewMode() {
       <ReviewProgress resolved={resolvedCount} total={total} />
       <Surface className="p-6">
         <div className="mb-4 flex items-baseline justify-between gap-3">
-          <h2 className="text-lg font-semibold text-fg">
-            {t("budget.review.title")}
-            <span className="ml-3 text-sm font-normal text-fg-faint">
-              {t("budget.review.belowThreshold", { threshold: prefs.budgetAiThreshold })}
-            </span>
-          </h2>
+          <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
           {resolvedCount > 0 && (
             <Button variant="ghost" onClick={() => setState(clearResolved)}>
               {t("budget.review.clearResolved")}
             </Button>
           )}
         </div>
-        {writeErrorKey && (
-          <p data-testid="write-error" role="alert" className="mb-3 flex items-center gap-2 text-xs text-red">
-            {t(`budget.transactions.errors.${writeErrorKey}`)}
-            <button
-              type="button"
-              data-testid="write-error-dismiss"
-              onClick={() => setWriteErrorKey(null)}
-              aria-label={t("common.close")}
-              className="cursor-pointer text-red/70 hover:text-red"
-            >
-              ×
-            </button>
-          </p>
-        )}
         <div className="flex flex-col gap-2">
           {lines.map((id) => {
             const r = state.resolved[id];
@@ -254,11 +265,7 @@ export function ReviewMode() {
             );
           })}
         </div>
-        {list.hasNextPage && (
-          <Button variant="ghost" className="mt-3" onClick={() => void list.fetchNextPage()}>
-            {t("budget.transactions.loadMore")}
-          </Button>
-        )}
+        <div ref={loadMore} className="h-px" />
       </Surface>
       {correcting && (
         <CategoryChooser
