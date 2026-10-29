@@ -21,7 +21,7 @@ type ReturnsCardProps = {
 };
 
 /** One row per account holding securities: its annualised return and the
- *  figures it sits on. */
+ *  money it annualises (put in, received, held, gained). */
 export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   const { t } = useTranslation();
   const privacy = usePrivacy();
@@ -53,8 +53,9 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
               {head("investments.returns.account", false, true)}
               {head("investments.returns.annualised")}
               {head("investments.returns.invested", true)}
+              {head("investments.returns.received", true)}
               {head("investments.returns.value", true)}
-              {head("investments.returns.unrealised", true)}
+              {head("investments.returns.gain", true)}
             </tr>
           </thead>
           <tbody>
@@ -77,6 +78,9 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
   const partial = leavesOut(a);
   // Every holding left out: the figures cover nothing, rather than read 0.
   const empty = partial && Number(a.invested) === 0 && Number(a.value) === 0;
+  // A dash, not a guess, when the figure is unknown (a rate is missing).
+  const money = (value: string | null, className: string) =>
+    empty || value === null ? none : <MaskedMoney masked={masked} value={value} className={className} />;
   const none = <span className="text-sm text-fg-faint">—</span>;
 
   return (
@@ -128,18 +132,22 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
       </td>
       {/* INVESTED */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        {empty ? none : <MaskedMoney masked={masked} value={a.invested} className="text-sm text-fg-dim" />}
+        {money(a.invested, "text-sm text-fg-dim")}
+      </td>
+      {/* RECEIVED */}
+      <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
+        {money(a.received, "text-sm text-fg-dim")}
       </td>
       {/* VALUE */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        {empty ? none : <MaskedMoney masked={masked} value={a.value} className="text-sm text-fg" />}
+        {money(a.value, "text-sm text-fg")}
       </td>
-      {/* UNREALISED */}
+      {/* GAIN */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
-        {empty ? none : (
-          <div className={`flex flex-col items-end ${toneClass(a.gl)}`}>
-            <MaskedMoney masked={masked} value={a.gl} signed className="text-sm" />
-            <Percent value={a.glPct} signed fractionDigits={1} className="text-xs" />
+        {empty || a.gain === null || a.gainPct === null ? none : (
+          <div className={`flex flex-col items-end ${toneClass(a.gain)}`}>
+            <MaskedMoney masked={masked} value={a.gain} signed className="text-sm" />
+            <Percent value={a.gainPct} signed fractionDigits={1} className="text-xs" />
           </div>
         )}
       </td>

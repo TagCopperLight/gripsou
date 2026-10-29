@@ -348,10 +348,15 @@ export type TransactionFilterQuery = Omit<TransactionQuery, "limit" | "offset">;
 export type ReturnFigures = {
   annualised: string | null;
   since: string | null;
-  invested: string;
+  /** Every purchase, fees included. Null when a rate is missing for one. */
+  invested: string | null;
+  /** Every sale (after fees) and dividend. Null when a rate is missing for one. */
+  received: string | null;
   value: string;
-  gl: string;
-  glPct: string;
+  /** value + received − invested: the money the return annualises. */
+  gain: string | null;
+  /** `gain` over `invested`. */
+  gainPct: string | null;
   /** Holdings left out of every figure: their purchases and sales don't
    *  explain what is held. */
   excludedHistory: number;

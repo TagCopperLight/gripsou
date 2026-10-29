@@ -60,8 +60,8 @@ pub fn xirr(flows: &[Flow]) -> Option<f64> {
     Some(lo + (hi - lo) / 2.0)
 }
 
-/// One non-cash holding in scope. `value`/`invested` are the Holdings table's
-/// figures (reporting currency); a sold-out holding has both at zero.
+/// One non-cash holding in scope. `value` is the Holdings table's figure
+/// (reporting currency); a sold-out holding is worth zero.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Position {
     pub holding_id: Uuid,
@@ -70,7 +70,6 @@ pub struct Position {
     /// The recorded lots explain the quantity held (buys − sells = quantity).
     pub complete: bool,
     pub value: Decimal,
-    pub invested: Decimal,
     /// The holding couldn't be valued today (no rate); its `value` is 0.
     pub fx_missing: bool,
 }
@@ -85,6 +84,8 @@ pub struct CashFlow {
     pub account_id: Uuid,
     pub day: NaiveDate,
     pub amount: Option<Decimal>,
+    /// A purchase; otherwise a sale or a dividend.
+    pub buy: bool,
 }
 
 /// A holding left out of a scope's figures.
@@ -100,7 +101,12 @@ pub struct ScopeReturn {
     pub annualised: Option<f64>,
     /// First purchase the return covers.
     pub since: Option<NaiveDate>,
-    pub invested: Decimal,
+    /// Every purchase the return counts, fees included. `None` when a rate is
+    /// missing for one of them.
+    pub invested: Option<Decimal>,
+    /// Every sale (after fees) and dividend the return counts. `None` when a
+    /// rate is missing for one of them.
+    pub received: Option<Decimal>,
     pub value: Decimal,
     /// Left out: the lots don't explain the quantity held.
     pub missing: Vec<Missing>,
@@ -152,8 +158,7 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         .iter()
         .filter(|p| p.complete && !p.fx_missing)
         .collect();
-    let invested = complete.iter().map(|p| p.invested).sum();
-    let value = complete.iter().map(|p| p.value).sum();
+    let value: Decimal = complete.iter().map(|p| p.value).sum();
     // A dividend belongs to its account, so it counts only when every position
     // of that account in scope is complete (else it may pay for a holding whose
     // purchases we don't know) and from the account's first recorded purchase.
@@ -178,6 +183,17 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         None => dividend_counts(f),
     };
     let included: Vec<&&CashFlow> = flows.iter().filter(|f| counts(f)).collect();
+    // Value + received − invested is the gain the return annualises: the same
+    // flows, so the two can't tell different stories about one account.
+    let total = |buy: bool| -> Option<Decimal> {
+        included
+            .iter()
+            .filter(|f| f.buy == buy)
+            .map(|f| f.amount)
+            .sum::<Option<Decimal>>()
+    };
+    let invested = total(true).map(|a| -a);
+    let received = total(false);
     let since = included
         .iter()
         .filter(|f| f.holding_id.is_some())
@@ -192,10 +208,9 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
                 amount: f.amount?.to_f64()?,
             });
         }
-        let held: Decimal = complete.iter().map(|p| p.value).sum();
         solved.push(Flow {
             day: today,
-            amount: held.to_f64()?,
+            amount: value.to_f64()?,
         });
         xirr(&solved)
     });
@@ -204,6 +219,7 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         annualised,
         since,
         invested,
+        received,
         value,
         missing,
         unvalued,
@@ -257,14 +273,13 @@ mod tests {
         s.parse().unwrap()
     }
 
-    fn pos(holding: u128, account: u128, complete: bool, value: &str, invested: &str) -> Position {
+    fn pos(holding: u128, account: u128, complete: bool, value: &str) -> Position {
         Position {
             holding_id: Uuid::from_u128(holding),
             account_id: Uuid::from_u128(account),
             name: format!("H{holding}"),
             complete,
             value: dec(value),
-            invested: dec(invested),
             fx_missing: false,
         }
     }
@@ -275,12 +290,14 @@ mod tests {
             account_id: Uuid::from_u128(account),
             day: d(day),
             amount: Some(dec(amount)),
+            buy: amount.starts_with('-'),
         }
     }
 
     fn dividend(account: u128, day: &str, amount: &str) -> CashFlow {
         CashFlow {
             holding_id: None,
+            buy: false,
             ..lot(0, account, day, amount)
         }
     }
@@ -291,28 +308,25 @@ mod tests {
 
     #[test]
     fn complete_position_gives_its_return() {
-        let p = [pos(1, 10, true, "1100", "1000")];
+        let p = [pos(1, 10, true, "1100")];
         let fl = [lot(1, 10, "2025-01-01", "-1000")];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
         assert_eq!(s.since, Some(d("2025-01-01")));
-        assert_eq!((s.invested, s.value), (dec("1000"), dec("1100")));
+        assert_eq!((s.invested, s.value), (Some(dec("1000")), dec("1100")));
         assert!(s.missing.is_empty());
     }
 
     #[test]
     fn incomplete_position_is_left_out_of_every_figure() {
-        let p = [
-            pos(1, 10, true, "1100", "1000"),
-            pos(2, 10, false, "500", "400"),
-        ];
+        let p = [pos(1, 10, true, "1100"), pos(2, 10, false, "500")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             lot(2, 10, "2025-06-01", "-100"),
         ];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
-        assert_eq!((s.invested, s.value), (dec("1000"), dec("1100")));
+        assert_eq!((s.invested, s.value), (Some(dec("1000")), dec("1100")));
         assert_eq!(
             s.missing,
             vec![Missing {
@@ -325,7 +339,7 @@ mod tests {
     #[test]
     fn dividends_count_at_account_level() {
         // 1000 in; 50 paid out and 1050 held after a year: 1100 back, 10 %.
-        let p = [pos(1, 10, true, "1050", "1000")];
+        let p = [pos(1, 10, true, "1050")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             dividend(10, "2026-01-01", "50"),
@@ -336,10 +350,7 @@ mod tests {
 
     #[test]
     fn dividends_of_an_account_with_nothing_complete_are_ignored() {
-        let p = [
-            pos(1, 10, true, "1100", "1000"),
-            pos(2, 20, false, "500", "500"),
-        ];
+        let p = [pos(1, 10, true, "1100"), pos(2, 20, false, "500")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             dividend(20, "2025-06-01", "999"),
@@ -350,10 +361,7 @@ mod tests {
 
     #[test]
     fn dividends_of_a_partly_recorded_account_are_ignored() {
-        let p = [
-            pos(1, 10, true, "1100", "1000"),
-            pos(2, 10, false, "500", "500"),
-        ];
+        let p = [pos(1, 10, true, "1100"), pos(2, 10, false, "500")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             dividend(10, "2025-06-01", "999"),
@@ -364,7 +372,7 @@ mod tests {
 
     #[test]
     fn dividends_before_the_first_lot_are_ignored() {
-        let p = [pos(1, 10, true, "1100", "1000")];
+        let p = [pos(1, 10, true, "1100")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             dividend(10, "2024-06-01", "999"),
@@ -376,10 +384,7 @@ mod tests {
     #[test]
     fn an_unvalued_position_is_left_out_of_every_figure() {
         // Valued at zero against its full cost, it would show a 100 % loss.
-        let mut p = [
-            pos(1, 10, true, "1100", "1000"),
-            pos(2, 10, true, "0", "700"),
-        ];
+        let mut p = [pos(1, 10, true, "1100"), pos(2, 10, true, "0")];
         p[1].fx_missing = true;
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
@@ -389,14 +394,14 @@ mod tests {
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
         assert_eq!(s.since, Some(d("2025-01-01")));
-        assert_eq!((s.invested, s.value), (dec("1000"), dec("1100")));
+        assert_eq!((s.invested, s.value), (Some(dec("1000")), dec("1100")));
         assert_eq!(s.unvalued.len(), 1);
         assert!(s.missing.is_empty());
     }
 
     #[test]
     fn a_missing_rate_leaves_the_return_unknown() {
-        let p = [pos(1, 10, true, "1100", "1000")];
+        let p = [pos(1, 10, true, "1100")];
         let mut fl = [lot(1, 10, "2025-01-01", "-1000")];
         fl[0].amount = None;
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
@@ -406,7 +411,7 @@ mod tests {
 
     #[test]
     fn nothing_complete_means_no_return() {
-        let p = [pos(1, 10, false, "500", "500")];
+        let p = [pos(1, 10, false, "500")];
         let fl = [lot(1, 10, "2025-01-01", "-500")];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert_eq!((s.annualised, s.since), (None, None));
@@ -415,21 +420,68 @@ mod tests {
     #[test]
     fn sold_out_position_contributes_its_flows() {
         // Bought 1000, sold 1100 a year later, nothing held: 10 %.
-        let p = [pos(1, 10, true, "0", "0")];
+        let p = [pos(1, 10, true, "0")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
             lot(1, 10, "2026-01-01", "1100"),
         ];
         let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
         assert!((s.annualised.unwrap() - 0.10).abs() < 1e-6);
+        assert_eq!(
+            (s.invested, s.received, s.value),
+            (Some(dec("1000")), Some(dec("1100")), dec("0"))
+        );
+    }
+
+    #[test]
+    fn a_partial_sale_counts_in_what_was_invested_and_received() {
+        // #74: 1000 in, half sold for 750, the rest now worth 450. The cost of
+        // the shares still held (500) would show a loss next to a gain; every
+        // purchase and every euro back show the 200 the return annualises.
+        let p = [pos(1, 10, true, "450")];
+        let fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            lot(1, 10, "2025-07-01", "750"),
+            dividend(10, "2025-09-01", "20"),
+        ];
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert_eq!(
+            (s.invested, s.received, s.value),
+            (Some(dec("1000")), Some(dec("770")), dec("450"))
+        );
+        assert!(s.annualised.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn left_out_flows_are_neither_invested_nor_received() {
+        let p = [pos(1, 10, true, "1100"), pos(2, 20, false, "500")];
+        let fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            lot(2, 20, "2025-01-01", "-400"),
+            dividend(20, "2025-06-01", "30"),
+        ];
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert_eq!(
+            (s.invested, s.received),
+            (Some(dec("1000")), Some(dec("0")))
+        );
+    }
+
+    #[test]
+    fn a_missing_rate_leaves_only_its_side_unknown() {
+        let p = [pos(1, 10, true, "450")];
+        let mut fl = [
+            lot(1, 10, "2025-01-01", "-1000"),
+            lot(1, 10, "2025-07-01", "750"),
+        ];
+        fl[1].amount = None;
+        let s = scope_return(&all(&p), &all(&fl), d("2026-01-01"));
+        assert_eq!((s.invested, s.received), (Some(dec("1000")), None));
     }
 
     #[test]
     fn returns_splits_by_account_largest_first() {
-        let p = [
-            pos(1, 10, true, "100", "90"),
-            pos(2, 20, true, "1100", "1000"),
-        ];
+        let p = [pos(1, 10, true, "100"), pos(2, 20, true, "1100")];
         let fl = [
             lot(1, 10, "2025-01-01", "-90"),
             lot(2, 20, "2025-01-01", "-1000"),

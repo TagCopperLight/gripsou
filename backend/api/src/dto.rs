@@ -1033,17 +1033,21 @@ pub struct CompleteConnectionReq {
 }
 
 /// One scope's figures on the Investments page. `annualised` is a ratio per
-/// year ("0.0712"), null when it can't be computed. Every figure leaves out
-/// the same holdings, counted by reason.
+/// year ("0.0712"), null when it can't be computed. `invested` is every
+/// purchase, `received` every sale and dividend, `gain` value + received −
+/// invested and `gain_pct` its ratio to `invested`: the money the return
+/// annualises. Each is null when a rate is missing for a flow it needs. Every
+/// figure leaves out the same holdings, counted by reason.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnFigures {
     pub annualised: Option<String>,
     pub since: Option<String>,
-    pub invested: String,
+    pub invested: Option<String>,
+    pub received: Option<String>,
     pub value: String,
-    pub gl: String,
-    pub gl_pct: String,
+    pub gain: Option<String>,
+    pub gain_pct: Option<String>,
     /// Left out: the recorded purchases and sales don't explain what is held.
     pub excluded_history: usize,
     /// Left out: no exchange rate to value it today.
@@ -1052,19 +1056,26 @@ pub struct ReturnFigures {
 
 impl ReturnFigures {
     pub fn from_scope(s: &gripsou_core::returns::ScopeReturn) -> Self {
-        let gl = s.value - s.invested;
-        let gl_pct = if s.invested.is_zero() {
-            Decimal::ZERO
-        } else {
-            (gl / s.invested).round_dp(4)
-        };
+        let invested = s.invested.map(|d| d.round_dp(2));
+        let received = s.received.map(|d| d.round_dp(2));
+        let gain = invested
+            .zip(received)
+            .map(|(i, r)| s.value.round_dp(2) + r - i);
+        let gain_pct = invested.zip(gain).map(|(i, g)| {
+            if i.is_zero() {
+                Decimal::ZERO
+            } else {
+                (g / i).round_dp(4)
+            }
+        });
         ReturnFigures {
             annualised: s.annualised.map(|r| format!("{r:.4}")),
             since: s.since.map(|d| d.to_string()),
-            invested: s.invested.to_string(),
+            invested: invested.map(|d| d.to_string()),
+            received: received.map(|d| d.to_string()),
             value: s.value.to_string(),
-            gl: gl.to_string(),
-            gl_pct: gl_pct.to_string(),
+            gain: gain.map(|d| d.to_string()),
+            gain_pct: gain_pct.map(|d| d.to_string()),
             excluded_history: s.missing.len(),
             excluded_rate: s.unvalued.len(),
         }
