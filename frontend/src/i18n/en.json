@@ -879,18 +879,20 @@
       "title": "Annualised return"
     },
     "figures": {
-      "invested": "Invested",
+      "invested": "Total invested",
+      "received": "Received",
       "value": "Current value",
-      "unrealised": "Unrealised P/L"
+      "gain": "Total gain"
     },
     "returns": {
       "title": "Returns",
       "account": "ACCOUNT",
       "annualised": "ANNUALISED RETURN",
       "perYearShort": "/yr",
-      "invested": "INVESTED",
+      "invested": "TOTAL INVESTED",
+      "received": "RECEIVED",
       "value": "CURRENT VALUE",
-      "unrealised": "UNREALISED P/L"
+      "gain": "TOTAL GAIN"
     },
     "span": {
       "over": "over {{span}}",

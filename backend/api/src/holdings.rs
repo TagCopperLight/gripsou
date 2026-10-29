@@ -431,10 +431,9 @@ mod tests {
         assert_eq!(a.name, "PEA");
         assert!(a.missing.is_empty());
         // Compared as numbers: numeric division can widen the string's scale.
-        assert_eq!(
-            a.figures.invested.parse::<Decimal>().unwrap(),
-            Decimal::from(200)
-        );
+        let figure = |f: &Option<String>| f.as_deref().map(|s| s.parse::<Decimal>().unwrap());
+        assert_eq!(figure(&a.figures.invested), Some(Decimal::from(200)));
+        assert_eq!(figure(&a.figures.received), Some(Decimal::ZERO));
         assert!(a.figures.since.is_some());
     }
 

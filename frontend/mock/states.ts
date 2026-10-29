@@ -300,7 +300,7 @@ export const STATES: MockState[] = [
   {
     id: "asset-sold",
     label: "CW8: 2 shares sold last month",
-    pieces: ["Asset window", "Record purchases"],
+    pieces: ["Asset window", "Record purchases", "Investments"],
     apply(store) {
       const c = security(store, CW8).closes;
       store.manualLots[CW8] = [

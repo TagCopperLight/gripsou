@@ -21,8 +21,8 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         .fetch_one(pool)
         .await?;
 
-    // Held positions: the Holdings table's own rows, so value and invested are
-    // the figures the user already sees there (one valuation path, lot_basis).
+    // Held positions: the Holdings table's own rows, so the value is the figure
+    // the user already sees there (one valuation path).
     let mut positions: Vec<Position> = crate::repo::query::holdings(pool, user_id)
         .await?
         .into_iter()
@@ -33,7 +33,6 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
             name: h.instrument_name,
             complete: h.unexplained_quantity.is_zero(),
             value: h.value,
-            invested: h.invested,
             fx_missing: h.fx_missing,
         })
         .collect();
@@ -63,7 +62,6 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         name: r.name,
         complete: r.explained.is_zero(),
         value: Decimal::ZERO,
-        invested: Decimal::ZERO,
         fx_missing: false,
     }));
 
@@ -74,7 +72,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",
-               l.acquired_on as "day!",
+               l.acquired_on as "day!", l.side = 'buy' as "buy!",
                (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
                      else l.quantity * l.unit_price - l.fee end)
                  * fx_asof(a.currency, l.acquired_on)
@@ -87,7 +85,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         where c.user_id = $1 and i.kind <> 'cash'
         union all
         select null::uuid, t.account_id,
-               coalesce(t.booked_on, t.spent_on),
+               coalesce(t.booked_on, t.spent_on), false,
                t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.spent_on))
                  / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, t.spent_on)), 0)
         from transaction t
@@ -106,6 +104,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
             account_id: r.account_id,
             day: r.day,
             amount: r.amount,
+            buy: r.buy,
         })
         .collect();
 

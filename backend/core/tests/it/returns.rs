@@ -79,7 +79,7 @@ async fn lots_become_signed_flows_with_fees(pool: PgPool) {
     let mut flows: Vec<_> = inputs
         .flows
         .iter()
-        .map(|f| (f.holding_id, f.account_id, f.day, f.amount))
+        .map(|f| (f.holding_id, f.account_id, f.day, f.amount, f.buy))
         .collect();
     flows.sort_by_key(|f| f.2);
     assert_eq!(
@@ -89,13 +89,15 @@ async fn lots_become_signed_flows_with_fees(pool: PgPool) {
                 Some(holding_id),
                 account_id,
                 day("2025-01-10"),
-                Some(dec("-201"))
+                Some(dec("-201")),
+                true
             ),
             (
                 Some(holding_id),
                 account_id,
                 day("2025-06-10"),
-                Some(dec("119"))
+                Some(dec("119")),
+                false
             ),
         ]
     );
@@ -117,7 +119,8 @@ async fn dividends_are_account_flows(pool: PgPool) {
     assert!(inputs.flows.iter().any(|f| f.holding_id.is_none()
         && f.account_id == account_id
         && f.day == day("2025-05-02")
-        && f.amount == Some(dec("3.5"))));
+        && f.amount == Some(dec("3.5"))
+        && !f.buy));
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -146,7 +149,7 @@ async fn sold_out_holdings_still_count(pool: PgPool) {
     assert_eq!(inputs.positions.len(), 1);
     let p = &inputs.positions[0];
     assert!(p.complete);
-    assert_eq!((p.value, p.invested), (Decimal::ZERO, Decimal::ZERO));
+    assert_eq!(p.value, Decimal::ZERO);
     assert_eq!(inputs.flows.len(), 2);
 }
 

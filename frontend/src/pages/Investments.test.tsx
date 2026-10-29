@@ -16,12 +16,12 @@ const AUTH = {
 
 const RETURNS = {
   today: "2026-10-08",
-  total: { annualised: "0.071", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1", excludedHistory: 1, excludedRate: 0 },
+  total: { annualised: "0.071", since: "2024-12-08", invested: "100", received: "0", value: "110", gain: "10", gainPct: "0.1", excludedHistory: 1, excludedRate: 0 },
   accounts: [
     {
       id: "a1", name: "Example PEA", color: "#5b9bf0", source: "Example Bank",
       missing: [{ id: "h9", name: "Example Corp" }],
-      annualised: "0.084", since: "2024-12-08", invested: "100", value: "110", gl: "10", glPct: "0.1", excludedHistory: 1, excludedRate: 0,
+      annualised: "0.084", since: "2024-12-08", invested: "100", received: "0", value: "110", gain: "10", gainPct: "0.1", excludedHistory: 1, excludedRate: 0,
     },
   ],
 };

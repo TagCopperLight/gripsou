@@ -16,7 +16,7 @@ type AnnualisedReturnCardProps = {
 };
 
 /** The page's headline: the money-weighted return of everything invested,
- *  per year, with the plain figures it sits on to its right. */
+ *  per year, with the money it annualises to its right. */
 export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnCardProps) {
   const { t } = useTranslation();
   const { total, today } = data;
@@ -63,24 +63,28 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
             )}
           </div>
 
-          <dl className="grid grid-cols-3 gap-4 md:flex md:gap-10">
+          <dl className="grid grid-cols-2 gap-4 md:flex md:gap-10">
+            {(["invested", "received", "value"] as const).map((key) => (
+              <div key={key} className="flex flex-col gap-1 md:items-end">
+                <dt className="text-fg-faint text-xs">{t(`investments.figures.${key}`)}</dt>
+                <dd>
+                  {empty || total[key] === null ? (
+                    <None />
+                  ) : (
+                    <MaskedMoney masked={privacy.masked} value={total[key]} fractionDigits={0} className="text-fg text-base md:text-lg" />
+                  )}
+                </dd>
+              </div>
+            ))}
             <div className="flex flex-col gap-1 md:items-end">
-              <dt className="text-fg-faint text-xs">{t("investments.figures.invested")}</dt>
-              <dd>{empty ? <None /> : <MaskedMoney masked={privacy.masked} value={total.invested} fractionDigits={0} className="text-fg text-base md:text-lg" />}</dd>
-            </div>
-            <div className="flex flex-col gap-1 md:items-end">
-              <dt className="text-fg-faint text-xs">{t("investments.figures.value")}</dt>
-              <dd>{empty ? <None /> : <MaskedMoney masked={privacy.masked} value={total.value} fractionDigits={0} className="text-fg text-base md:text-lg" />}</dd>
-            </div>
-            <div className="flex flex-col gap-1 md:items-end">
-              <dt className="text-fg-faint text-xs">{t("investments.figures.unrealised")}</dt>
-              {empty ? (
+              <dt className="text-fg-faint text-xs">{t("investments.figures.gain")}</dt>
+              {empty || total.gain === null || total.gainPct === null ? (
                 <dd><None /></dd>
               ) : (
-                <dd className={`flex flex-wrap items-baseline gap-x-2 md:justify-end ${toneClass(total.gl)}`}>
-                  <MaskedMoney masked={privacy.masked} value={total.gl} signed fractionDigits={0} className="text-base md:text-lg" />
+                <dd className={`flex flex-wrap items-baseline gap-x-2 md:justify-end ${toneClass(total.gain)}`}>
+                  <MaskedMoney masked={privacy.masked} value={total.gain} signed fractionDigits={0} className="text-base md:text-lg" />
                   <span className="font-mono text-xs md:text-sm">
-                    (<Percent value={total.glPct} signed fractionDigits={1} />)
+                    (<Percent value={total.gainPct} signed fractionDigits={1} />)
                   </span>
                 </dd>
               )}

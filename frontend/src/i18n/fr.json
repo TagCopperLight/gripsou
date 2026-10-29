@@ -888,18 +888,20 @@
       "title": "Rendement annualisé"
     },
     "figures": {
-      "invested": "Investi",
+      "invested": "Total investi",
+      "received": "Encaissé",
       "value": "Valeur actuelle",
-      "unrealised": "Plus-value / moins-value latente"
+      "gain": "Gain total"
     },
     "returns": {
       "title": "Rendements",
       "account": "COMPTE",
       "annualised": "RENDEMENT ANNUALISÉ",
       "perYearShort": "/an",
-      "invested": "INVESTI",
+      "invested": "TOTAL INVESTI",
+      "received": "ENCAISSÉ",
       "value": "VALEUR ACTUELLE",
-      "unrealised": "GAIN/PERTE LATENTE"
+      "gain": "GAIN TOTAL"
     },
     "span": {
       "over": "sur {{span}}",

@@ -300,21 +300,21 @@ function xirr(flows: [number, number][]): number | null {
 export function returns(store: Store): InvestmentReturns {
   const hs = holdings(store).filter((h) => h.kind !== "cash");
   // As the server: the return covers the holdings whose lots explain what is
-  // held and that have a rate, from their first lot.
+  // held and that have a rate, from their first lot. The mock has no dividends.
   // Every figure covers only those; the others are counted by reason.
   const figures = (rows: Holding[]): ReturnFigures => {
     const complete = rows.filter((h) => Number(h.unexplainedQty) === 0 && !h.fxMissing);
-    const invested = complete.reduce((s, h) => s + Number(h.invested), 0);
     const value = complete.reduce((s, h) => s + Number(h.value), 0);
     const lots = complete.flatMap((h) => lotsOf(store, h.id));
+    const amount = (l: Lot) => Number(l.qty) * Number(l.price) + (l.side === "buy" ? 1 : -1) * Number(l.fee);
+    const invested = lots.filter((l) => l.side === "buy").reduce((s, l) => s + amount(l), 0);
+    const received = lots.filter((l) => l.side === "sell").reduce((s, l) => s + amount(l), 0);
+    const gain = value + received - invested;
     const first = lots.length === 0 ? null : Math.min(...lots.map((l) => l.t));
     let annualised: number | null = null;
     if (first !== null) {
       const day = (t: number) => Math.round((t - first) / DAY_MS);
-      const flows: [number, number][] = lots.map((l) => {
-        const gross = Number(l.qty) * Number(l.price);
-        return [day(l.t), l.side === "buy" ? -(gross + Number(l.fee)) : gross - Number(l.fee)];
-      });
+      const flows: [number, number][] = lots.map((l) => [day(l.t), (l.side === "buy" ? -1 : 1) * amount(l)]);
       flows.push([day(TODAY), value]);
       annualised = xirr(flows);
     }
@@ -322,9 +322,10 @@ export function returns(store: Store): InvestmentReturns {
       annualised: annualised === null ? null : annualised.toFixed(4),
       since: first === null ? null : isoDay(first),
       invested: money(invested),
+      received: money(received),
       value: money(value),
-      gl: money(value - invested),
-      glPct: invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
+      gain: money(gain),
+      gainPct: invested === 0 ? "0" : (gain / invested).toFixed(4),
       excludedHistory: rows.filter((h) => Number(h.unexplainedQty) !== 0).length,
       excludedRate: rows.filter((h) => Number(h.unexplainedQty) === 0 && h.fxMissing).length,
     };
