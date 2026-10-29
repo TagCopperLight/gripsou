@@ -11,14 +11,14 @@ RUN bun run build
 
 # --- Stage 2: build the Rust binary ---
 FROM rust:1-bookworm AS backend
-# Empty by default: build.rs then reads .git itself. Set it only when building
-# without git history (a tarball, a shallow CI checkout).
+# The version shown in the UI. The image has no .git (a partial copy of the
+# tree would always look dirty), so the host passes it in: scripts/build-image.sh
+# sets it from `git describe`. Left empty, the version is "dev".
 ARG VERSION=
 ENV GRIPSOU_VERSION=$VERSION
 WORKDIR /app/backend
 COPY backend/ ./
 COPY shared/ ../shared/
-COPY .git ../.git
 RUN cargo build --release --bin gripsou
 
 # --- Stage 3: runtime ---

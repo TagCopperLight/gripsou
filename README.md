@@ -38,10 +38,11 @@ Backend checks: `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`.
 ## Run the whole stack
 
 ```sh
-docker compose -f docker/docker-compose.yml up --build
+scripts/build-image.sh
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-One command self-hosts the app: the backend binary serves both the built SPA and the JSON API, with Postgres alongside.
+The backend binary serves both the built SPA and the JSON API, with Postgres alongside. `scripts/build-image.sh` stamps the image with `git describe` of your checkout, the version shown in the app; a plain `docker compose build` labels it `dev`.
 
 ## Locked out of two-factor
 

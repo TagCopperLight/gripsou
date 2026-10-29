@@ -1,5 +1,5 @@
-// The version shown in the UI. Docker has no .git in the build context, so it
-// passes GRIPSOU_VERSION in; a local build asks git directly.
+// The version shown in the UI. A Docker build has no .git, so the host passes
+// GRIPSOU_VERSION in (scripts/build-image.sh); a local build asks git directly.
 fn main() {
     let version = std::env::var("GRIPSOU_VERSION")
         .ok()
