@@ -4,13 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
-  workflow_call:
 
 # A newer push to the same PR makes the older run pointless: cancel it. Every
-# other run (main, the tags the release workflow calls this one for) gets a
-# group of its own, because GitHub drops a *queued* run when a newer one joins
-# its group even without cancel-in-progress, and each commit on main needs its
-# result.
+# run on main gets a group of its own, because GitHub drops a *queued* run when
+# a newer one joins its group even without cancel-in-progress, and each commit
+# on main needs its result.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true

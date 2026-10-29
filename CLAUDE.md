@@ -14,7 +14,7 @@ Work comes from GitHub issues on `TagCopperLight/gripsou`. The repo is public, s
 4. `gh pr create`: the body has `Closes #<n>`, what changed and why in plain words, and how it was verified. Then stop. Never merge, never push to `main`. Review feedback goes in as new commits.
 5. Merged branches and their worktrees are pruned by `scripts/prune-merged.sh` (SessionStart hook).
 
-Never create tags or releases: a `v*` tag builds the Docker image and goes with a manual production update.
+Never create tags or releases: a release goes with a manual production update.
 
 ## Commands
 
