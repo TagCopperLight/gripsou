@@ -46,11 +46,10 @@ vi.mock("../api/hooks", async () => {
       suggestionsFailed
         ? { data: undefined, isPending: false, isError: true }
         : { data: suggestions, isPending: false, isError: false },
-    // Mirrors the one behaviour that mattered for fix round 1's flicker bug:
-    // TanStack Query's real `useMutation` resets `data` to `undefined` the
-    // instant a mutation goes pending, and only `onSuccess` carries the next
-    // value. A mock that kept the previous `data` around (as fix round 1's
-    // did) could not have caught the regression.
+    // Mirrors the behaviour the preview's flicker depends on: TanStack
+    // Query's real `useMutation` resets `data` to `undefined` the instant a
+    // mutation goes pending, and only `onSuccess` carries the next value. A
+    // mock that kept the previous `data` around could not catch a flicker.
     useLotsPreview: () => {
       const [data, setData] = useState<BasisPreview | undefined>(undefined);
       return {

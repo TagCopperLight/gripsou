@@ -56,7 +56,7 @@ pub struct Suggestion {
 /// which no other jump of the account also claims. Closed jumps (already
 /// covered or explained) get no suggestion but still count as claimants, so
 /// their transaction is never handed to another holding. Anything else is left
-/// to the user, exactly as before this feature existed.
+/// to the user.
 pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
     // How many jumps each transaction could explain, across the account.
     let mut claims: HashMap<Uuid, usize> = HashMap::new();

@@ -1,8 +1,7 @@
 # Calendar dates and timezones
 
 Each user chooses an IANA timezone in Settings → General. It defaults to
-`Europe/Paris`, including for existing users whose preferences have no
-`timeZone`. It stays fixed when the user travels or uses another browser.
+`Europe/Paris` when the preferences have no `timeZone`. It stays fixed when the user travels or uses another browser.
 PostgreSQL and the browser apply the zone's daylight-saving rules.
 
 The current calendar day comes from `user_today(user_id)` on the server and
@@ -26,20 +25,20 @@ saving preferences; changing the setting refreshes cached reports.
 - `frontend/src/lib/date.ts`: real timestamps (sessions, syncs, account creation)
   display in the saved timezone. Relative elapsed times remain elapsed times.
 
-Global market data keeps its existing day convention: Yahoo daily bars are
+Global market data uses UTC days: Yahoo daily bars are
 normalized to UTC midnight, price-sync freshness uses the UTC day, and
 composition metadata records a UTC day. These are shared across users and do
 not acquire the timezone of whichever user triggered the fetch. Valuation SQL
-continues seeking prices by the requested calendar day's UTC encoding. The
+seeks prices by the requested calendar day's UTC encoding. The
 30-day holding sparkline and composition refresh checks are elapsed-time
 freshness windows. Session expiry, sync throttles, locks and job schedules
-continue operating on instants and durations.
+work on instants and durations.
 
 ## Provider dates and historical data
 
 Powens supplies date-only values. The adapter uses `rdate` for the spend date
 (falling back to `date`) and `date` for the booking date (falling back to
-`rdate`). They retain the provider's calendar date. Spend dates are encoded as
+`rdate`). They keep the provider's calendar date. Spend dates are encoded as
 UTC midnight in the canonical timestamp column; booking dates are SQL dates.
 Budget filtering and backfill extract those calendar dates without shifting
 into the user's timezone. Manual lots likewise have SQL calendar dates.
@@ -49,10 +48,8 @@ milliseconds. The frontend uses `calendarDay()` / `formatDay()` for these
 labels, so midnight does not appear as the previous day west of UTC. Actual
 session and sync timestamps use `formatDate()` instead.
 
-Existing snapshots retain their stored dates. They have no original capture
-instant, so reassigning UTC-stamped history would require guessing and could
-collapse distinct rows. New syncs use the chosen timezone, and derived
-backfill rebuilds through the existing sync/lot-save flow. Changing timezone
-does not reinterpret past snapshots, provider transaction dates or global
-prices. Applied migrations remain unchanged; migration 0034 adds only the
-current-day function.
+A snapshot is dated in the timezone in force when it was taken, and keeps
+that date: snapshots store no capture instant, so they can't be redated.
+Changing timezone leaves past snapshots, provider transaction dates and global
+prices as they are. The derived backfill is rebuilt by the next sync or lot
+save.

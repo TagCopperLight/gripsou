@@ -6,8 +6,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { createControl, type OverrideMode, type Saved } from "./control";
-import { FOCUS, STATES } from "./states";
+import { createControl, type OverrideMode, type Saved } from "./control.ts";
+import { FOCUS, STATES } from "./states.ts";
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];

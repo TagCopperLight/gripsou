@@ -450,12 +450,7 @@
         "notSet": "Non définie",
         "savedToast": "Clé enregistrée",
         "removedToast": "Clé supprimée",
-        "saveError": "Impossible d'enregistrer la clé",
-        "fields": {
-          "powens": { "client_id": "Identifiant client", "domain": "Domaine", "client_secret": "Secret client", "webhook_secret": "Secret du webhook" },
-          "jev": { "api_key": "Clé d'API" },
-          "brandfetch": { "client_id": "Identifiant client" }
-        }
+        "saveError": "Impossible d'enregistrer la clé"
       },
       "providers": "Fournisseurs de données",
       "providersHint": "Services utilisés pour récupérer les données bancaires et boursières. Activez ceux pour lesquels vous disposez d'identifiants d'API.",

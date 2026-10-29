@@ -3,12 +3,12 @@
 // simplified copy of the server's rules (core/src/budget/overview.rs), close
 // enough to review the screens with.
 
-import type { BudgetCategory, BudgetTag } from "../../src/api/budget";
-import type { BreakdownRow, BudgetSummary, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount } from "../../src/api/overview";
-import type { Transaction, TransactionCounts } from "../../src/api/types";
-import type { CategoryRow, TxnRow } from "../data/base";
-import { dayOf, isoDay, money } from "../data/util";
-import type { Store } from "../store";
+import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
+import type { BreakdownRow, BudgetSummary, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount } from "../../src/api/overview.ts";
+import type { Transaction, TransactionCounts } from "../../src/api/types.ts";
+import type { CategoryRow, TxnRow } from "../data/base.ts";
+import { dayOf, isoDay, money } from "../data/util.ts";
+import type { Store } from "../store.ts";
 
 export function categories(store: Store): BudgetCategory[] {
   return [...store.categories]

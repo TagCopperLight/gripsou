@@ -143,7 +143,7 @@ describe("AssetModal purchases gain", () => {
     const user = userEvent.setup();
     render(withClient(<AssetModal holding={{ ...BASE, meanPrice: "100" }} netWorth={5000} onClose={() => {}} />));
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
-    // Position value 1 000 €, gain zero: before the fix the pill said +500 €.
+    // Position value 1 000 €, gain zero, not +500 €.
     expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();
     expect(screen.queryByText(/^\+500,00.€$/)).not.toBeInTheDocument();
   });

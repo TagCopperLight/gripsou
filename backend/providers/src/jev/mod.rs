@@ -21,6 +21,7 @@ use tokio::task::JoinSet;
 /// What Settings → Server → API keys asks for JEV.
 pub const CONFIG_FIELDS: &[ConfigField] = &[ConfigField {
     key: "api_key",
+    label: "API key",
     secret: true,
 }];
 

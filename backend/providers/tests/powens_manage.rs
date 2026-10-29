@@ -45,7 +45,7 @@ async fn manages_existing_connection_with_single_use_code_and_no_connect_callbac
 }
 
 #[tokio::test]
-async fn legacy_ids_resolve_only_for_a_single_connection() {
+async fn a_missing_stored_id_resolves_only_for_a_single_connection() {
     for ids in [vec![6], vec![6, 13], vec![]] {
         let server = MockServer::start().await;
         Mock::given(method("GET"))

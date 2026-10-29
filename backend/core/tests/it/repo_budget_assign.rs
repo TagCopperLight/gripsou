@@ -381,12 +381,10 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     Ok(())
 }
 
-/// Regression: a blank (null) anchor with a digit-only sibling
-/// present. Before this fix, `count_same_description`'s anchor subquery had
-/// no normalised-value guard, so it would report the digit-only sibling as
-/// "the same description" (both normalise to `''`) while
-/// `apply_to_description` correctly refused to touch anything.
-/// The preview and the apply must show the same number: zero.
+/// A blank (null) anchor with a digit-only sibling present. Both normalise to
+/// `''`, but they are not "the same description": `count_same_description`
+/// must not count the sibling, since `apply_to_description` refuses to touch
+/// it. The preview and the apply must show the same number: zero.
 #[sqlx::test(migrations = "../migrations")]
 async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     pool: PgPool,

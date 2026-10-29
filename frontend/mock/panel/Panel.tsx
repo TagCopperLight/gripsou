@@ -2,7 +2,7 @@
 // styled on its own (inline styles), apart from the app's design.
 
 import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import type { ControlInfo, OverrideMode } from "../control";
+import type { ControlInfo, OverrideMode } from "../control.ts";
 
 const TOKEN_KEY = "gripsou.token";
 const OPEN_KEY = "gripsou.mock.open";

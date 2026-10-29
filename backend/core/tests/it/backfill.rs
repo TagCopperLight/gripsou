@@ -1130,8 +1130,7 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
 ///
 /// Uses a security holding (`is_cash` false), because for cash the final
 /// select never reads `uv` at all (`case when w.is_cash then w.quantity +
-/// w.lift`) — the previous version of this test seeded cash and its 0/0
-/// assertion held under either ordering.
+/// w.lift`): a cash case would pass under either ordering.
 ///
 /// Two non-zero snapshots at different per-unit values (10, then 15), plus
 /// the sale itself so the walk can reconstruct the pre-sale quantity: 40
@@ -1155,7 +1154,7 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     stamp_on(&pool, holding_id, d(2026, 8, 20), dec("0"), dec("0")).await;
     // The sale itself, so the walk reconstructs the pre-sale quantity for the
     // held window instead of anchoring on the zero snapshot. Securities move
-    // by `lot` now, not by `transaction`.
+    // by `lot`, not by `transaction`.
     sqlx::query(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
          values ($1, 'buy', $2, 40, 10, 'manual'), \

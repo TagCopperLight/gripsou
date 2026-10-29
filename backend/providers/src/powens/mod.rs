@@ -73,18 +73,22 @@ async fn read_json<T: serde::de::DeserializeOwned>(
 pub const CONFIG_FIELDS: &[ConfigField] = &[
     ConfigField {
         key: "client_id",
+        label: "Client ID",
         secret: false,
     },
     ConfigField {
         key: "domain",
+        label: "Domain",
         secret: false,
     },
     ConfigField {
         key: "client_secret",
+        label: "Client secret",
         secret: true,
     },
     ConfigField {
         key: "webhook_secret",
+        label: "Webhook secret",
         secret: true,
     },
 ];
@@ -380,8 +384,8 @@ impl AccountProvider for PowensProvider {
             ));
         }
         let connections: model::ConnectionsResponse = read_json(response, "connections").await?;
-        // Older connections have no stored external id. Resolve only when the
-        // token contains exactly one connection; never choose an arbitrary bank.
+        // A connection with no stored external id resolves only when the token
+        // holds exactly one connection; never choose an arbitrary bank.
         let stored_id = provider_meta["external_connection_id"].as_str();
         let connection = match stored_id {
             Some(id) => connections

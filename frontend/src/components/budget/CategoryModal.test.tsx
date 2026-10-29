@@ -142,13 +142,12 @@ describe("CategoryModal — edit", () => {
   });
 
   it("a language switch mid-draft, then manually retyping the now-current translated label, is still not a rename", async () => {
-    // Regression for the frozen-`initialDisplayName` bug: the modal opened in
-    // English (initialDisplayName = "Groceries"), then the app language flips
-    // to French. If the user now types exactly what the French label reads
-    // ("Courses") — believing they're just confirming the shown name — the
-    // old check (`trimmed === initialDisplayName`) would treat that as a real
-    // rename and send the literal "Courses", un-seeding the row. The fix also
-    // accepts a match against the *current* categoryLabel(t, category).
+    // The modal opens in English (initialDisplayName = "Groceries"), then the
+    // app language flips to French. If the user now types exactly what the
+    // French label reads ("Courses"), believing they're just confirming the
+    // shown name, a check against `initialDisplayName` alone would treat that
+    // as a real rename and send the literal "Courses", un-seeding the row. A
+    // match against the *current* categoryLabel(t, category) is no rename.
     vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
     renderModal({ category: GROCERIES });
     expect(screen.getByLabelText("Name")).toHaveValue("Groceries");

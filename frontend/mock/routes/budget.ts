@@ -1,8 +1,8 @@
-import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/budget";
-import type { TxnRow } from "../data/base";
-import { reply, type Router } from "../router";
-import type { Store } from "../store";
-import * as v from "../views/budget";
+import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/budget.ts";
+import type { TxnRow } from "../data/base.ts";
+import { reply, type Router } from "../router.ts";
+import type { Store } from "../store.ts";
+import * as v from "../views/budget.ts";
 
 const taken = (rows: { name: string }[], name: string) =>
   rows.some((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());

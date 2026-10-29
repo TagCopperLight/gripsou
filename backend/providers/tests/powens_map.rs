@@ -413,7 +413,7 @@ fn carries_the_raw_payload_in_provider_meta() {
 
 #[test]
 fn maps_the_remaining_powens_type_labels() {
-    // The type-mapping table, the rows the earlier fixture never exercised.
+    // The type-mapping table, the rows the other tests don't cover.
     let txns = mapped_txns();
     assert_eq!(by_id(&txns, "1013").kind, "transfer", "order -> transfer");
     assert_eq!(by_id(&txns, "1014").kind, "fee", "bank -> fee");

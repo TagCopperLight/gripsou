@@ -9,8 +9,8 @@ const KEYS: ApiKeyProvider[] = [
     key: "powens",
     displayName: "Powens",
     fields: [
-      { key: "client_id", secret: false, value: "id-1" },
-      { key: "client_secret", secret: true, set: true },
+      { key: "client_id", label: "Client ID", secret: false, value: "id-1" },
+      { key: "client_secret", label: "Client secret", secret: true, set: true },
     ],
   },
 ];
@@ -62,7 +62,7 @@ describe("ApiKeysSurface — secret", () => {
 describe("ApiKeysSurface — plain field", () => {
   it("removes the value when emptied and left, and sends nothing on Escape", async () => {
     renderCard();
-    const input = await screen.findByLabelText("Client id");
+    const input = await screen.findByLabelText("Client ID");
     fireEvent.change(input, { target: { value: "changed" } });
     fireEvent.keyDown(input, { key: "Escape" });
     await new Promise((r) => requestAnimationFrame(r));

@@ -24,7 +24,7 @@ export const RED = "#f87171"; // color-red
  * window, starting at 0% — profit since the range's start over the capital at
  * work, so deposits don't read as growth. Without a baseline (a unit-price
  * chart) it falls back to change relative to the first point. Either way the
- * line is a return now, and is named `percentLabel` in the legend and tooltip.
+ * line is a return, named `percentLabel` in the legend and tooltip.
  */
 export function plotSeries(series: ChartSeries[], unit: ChartUnit, percentLabel?: string): ChartSeries[] {
   if (unit !== "percent") return series;

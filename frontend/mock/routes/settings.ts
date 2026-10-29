@@ -1,5 +1,5 @@
-import { reply, type Router } from "../router";
-import type { Store } from "../store";
+import { reply, type Router } from "../router.ts";
+import type { Store } from "../store.ts";
 
 export function settingsRoutes(r: Router<Store>): void {
   r.route("GET", "/health", () => ({ status: "ok", version: "0.0.0-mock" }));

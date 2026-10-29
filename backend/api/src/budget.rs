@@ -1017,8 +1017,7 @@ mod parse_tests {
         assert_eq!(parse_ids(None).unwrap(), Vec::<Uuid>::new());
     }
 
-    /// The property the earlier ruling established must survive: a
-    /// non-empty, malformed component is still a 400, never a silently
+    /// A non-empty, malformed component is still a 400, never a silently
     /// dropped id.
     #[test]
     fn malformed_id_is_still_a_400() {

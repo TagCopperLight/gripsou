@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CW8 } from "./data/base";
-import { router } from "./routes";
-import { createStore } from "./store";
+import { CW8 } from "./data/base.ts";
+import { router } from "./routes/index.ts";
+import { createStore } from "./store.ts";
 
 // One concrete request per GET the app makes (`grep getJson src`).
 const GETS = [

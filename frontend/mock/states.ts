@@ -4,11 +4,11 @@
 // fresh data. The panel lists the
 // states of the piece under review (`FOCUS`).
 
-import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, closes } from "./data/base";
-import { TODAY, daysAgo, id, isoDay } from "./data/util";
-import type { Store } from "./store";
-import { lotsOf } from "./views/portfolio";
-import { summary } from "./views/budget";
+import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, closes } from "./data/base.ts";
+import { TODAY, daysAgo, id, isoDay } from "./data/util.ts";
+import type { Store } from "./store.ts";
+import { lotsOf } from "./views/portfolio.ts";
+import { summary } from "./views/budget.ts";
 
 export type MockState = {
   id: string;

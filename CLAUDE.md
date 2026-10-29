@@ -37,7 +37,6 @@ Only `cargo run` loads `.env` (it searches parent directories; never create `bac
 
 - CI builds offline from `backend/.sqlx/`. After touching any `query!`/`query_as!`/`query_scalar!` (in `src` or `tests`, comments inside the query included), run `cd backend && cargo sqlx prepare --workspace -- --all-targets`. Without `--all-targets`, test queries are skipped.
 - **Never edit an applied migration**, comments included: the app refuses to start on a checksum mismatch. Write a new one.
-- Old migrations cite deleted docs (`TRANSACTIONS.md §6.1`, `ARCHITECTURE.md §3.2`). Find them with `git log --diff-filter=D --oneline -- <file>`, then `git show <commit>^:<file>`.
 
 ### Review server (mock mode)
 
@@ -78,7 +77,7 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
   - There is never a backfill row on a snapshot day: stamping deletes it.
   - Each sync rebuilds the connection's whole backfill.
 - **`transaction` is the cash ledger only.** Purchases and sales are `lot` rows (`source` is `manual` or `provider`; users can delete only `manual` ones).
-- **Cost basis comes only from the `lot_basis` SQL function** (fee-inclusive weighted average, plus the part of the position no lot explains). Never reimplement it: four disagreeing copies once existed.
+- **Cost basis comes only from the `lot_basis` SQL function** (fee-inclusive weighted average, plus the part of the position no lot explains). Never reimplement it: a second copy drifts apart and the screens disagree.
 - A holding whose lots don't explain its quantity gets a badge and a modal to record the missing lots. For securities this is the main path (see Provider facts).
 
 ### Budget
@@ -110,10 +109,11 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 
 ## Conventions
 
+- **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (Product decisions above are the exception: they exist to stop a removed thing from being rebuilt.)
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
 - **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next. Pure logic lives in `src/lib/`, with tests beside it.
-- **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags.
+- **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags. API key field labels are not translated: each provider declares them in its own words (`ConfigField.label`).
 - **Exports:** a component file exports only components (`react-refresh/only-export-components`). Put shared constants and types in a sibling `.ts`. Only `bun run lint` catches this, not `build`.
 - **Warnings:** to see a passing test's warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
 - **Tests:** adapters against recorded fixtures, integration against a real Postgres, Vitest for the frontend.

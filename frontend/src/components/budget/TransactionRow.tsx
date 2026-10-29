@@ -78,7 +78,7 @@ export const TransactionRow = memo(function TransactionRow({
             // Both layers stay in the DOM and are switched with opacity, not
             // `display`/`hidden` — a keyboard-only user can still Tab to and
             // focus the checkbox even on the very first row, before anything
-            // is selected (it was previously display:none and unreachable).
+            // is selected.
             // The focus condition is `:focus-visible`, not plain focus: a
             // mouse click leaves the checkbox focused, and plain focus kept
             // the row stuck showing an empty checkbox after the pointer moved

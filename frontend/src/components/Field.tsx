@@ -4,7 +4,7 @@ import { FieldError } from "./FieldError";
 
 /** A form field's name above its control. It still names the control for
  *  screen readers, but clicking it does nothing: it is a heading, not a
- *  button (it used to focus the field and open a dropdown). `error`, what's
+ *  button. `error`, what's
  *  wrong with what was typed, goes under the control. */
 export function Field({
   label,
