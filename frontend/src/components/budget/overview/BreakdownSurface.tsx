@@ -193,9 +193,8 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen, masked = false }
                         type="button"
                         data-testid="row-caret"
                         aria-label={t("budget.overview.breakdown.open")}
-                        // The row itself is already a click target (keyboard
-                        // users had no way in before this button existed);
-                        // stopping propagation here keeps `onOpen` firing
+                        // The row itself is a click target but not focusable:
+                        // this button is the keyboard way in. Stopping propagation here keeps `onOpen` firing
                         // exactly once instead of twice per click.
                         onClick={(e) => {
                           e.stopPropagation();

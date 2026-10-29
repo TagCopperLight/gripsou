@@ -369,7 +369,7 @@ async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-/// The bug this rule change fixed: a paired checking -> PEA transfer must net
+/// A paired checking -> PEA transfer must net
 /// to zero, not leave the checking half standing as an internal-transfer
 /// outflow.
 #[sqlx::test(migrations = "../migrations")]
@@ -598,7 +598,7 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     // by sign: a mixed-sign uncategorised day is two buckets, not
     // one netted one, because `figures()` reads an uncategorised row's own
     // sign to decide income vs expense and a pre-netted row has
-    // already lost that distinction. This also pins the older "bucket is
+    // already lost that distinction. This also pins the "bucket is
     // understated" contract for a partly-unvalued bucket: the unvalued leg's
     // own bucket sums to zero and flags `fx_missing`, rather than dropping
     // out of some other bucket's sum silently.

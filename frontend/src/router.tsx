@@ -118,8 +118,8 @@ const budgetReviewRoute = createRoute({
   component: ReviewMode,
 });
 
-// The page moved; bookmarks and old links must not 404.
-const legacyTransactionsRoute = createRoute({
+// Bookmarks of /transactions land on the budget's transactions page.
+const transactionsRedirectRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/transactions",
   beforeLoad: () => {
@@ -236,7 +236,7 @@ export const routeTree = rootRoute.addChildren([
     accountsRoute,
     investmentsRoute,
     budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
-    legacyTransactionsRoute,
+    transactionsRedirectRoute,
     settingsRouteWithChildren,
   ]),
 ]);

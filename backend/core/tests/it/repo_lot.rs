@@ -117,8 +117,7 @@ async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
 }
 
 /// The delete path's whole security model. A provider-owned lot must survive a
-/// delete request naming its id — under the old `external_id is null` scheme a
-/// provider row without a stable id would have been deletable.
+/// delete request naming its id, even one without a stable `external_id`.
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_refuses_a_provider_lot(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -274,8 +273,7 @@ async fn preview_refuses_a_foreign_holding(pool: PgPool) {
     assert_eq!(remaining, 0, "the refusal path must not write anything");
 }
 
-/// Fix 1 (carried over from the old `transaction`-backed manual lots): the
-/// insert path must enforce ownership itself, not merely trust a caller's
+/// The insert path must enforce ownership itself, not merely trust a caller's
 /// prior check — a non-owning `user_id` must write nothing and report
 /// not-found, not just return a value the caller happens to ignore.
 #[sqlx::test(migrations = "../migrations")]

@@ -3,10 +3,8 @@ import type { Period } from "../lib/period";
 
 // The one definition of every react-query key.
 //
-// Keys used to be bare string literals written at 20 read sites and re-typed at
-// 22 invalidation sites, which is how screens went stale after edits: the set
-// of things a mutation must refresh was knowledge that lived only in a comment
-// next to each mutation.
+// Every read and every invalidation goes through it: a key re-typed by hand
+// drifts, and a mutation then leaves a screen stale.
 //
 // Parameterised keys take their parameter as OPTIONAL, and omitting it yields
 // the family prefix:

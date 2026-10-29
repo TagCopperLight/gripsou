@@ -1006,9 +1006,8 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
 /// A holding with neither a usable price nor a convertible snapshot value is
 /// zeroed AND flagged — and the flag keys on that failure, not on the
 /// instrument's quote currency. Here the instrument is labelled EUR (a rate that
-/// trivially exists) while its only price row is quoted in GBP (no rate), which
-/// is exactly the case the old `fx_asof(i.currency)` flag missed: value 0, no
-/// warning.
+/// trivially exists) while its only price row is quoted in GBP (no rate): a flag
+/// keyed on `fx_asof(i.currency)` would show value 0 with no warning.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1409,8 +1408,7 @@ async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
 }
 
 /// No snapshot anywhere carries a non-zero quantity, so no per-unit valuation
-/// exists at all. 0023 retired backfill's own cost-basis WALK (mean_buy/lots),
-/// but the derived `value` fallback still needs a number when nothing else is
+/// exists at all. The derived `value` fallback still needs a number when nothing else is
 /// known: it falls back to `holding.cost_basis`, read flat (not a basis walk),
 /// because valuing an owned asset at zero is worse than valuing it at book —
 /// and a bare 0 here would also spuriously raise fx_missing on the read side.
@@ -1608,8 +1606,8 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
 
 /// An over-explained position (recorded buys exceeding the current quantity —
 /// realistic after a partial sale that was never recorded) reports a NEGATIVE
-/// shortfall. The old `greatest(…, 0)` floor hid this state entirely: the user
-/// could never be told, and could never open the modal to fix it.
+/// shortfall. A `greatest(…, 0)` floor would hide this state: the user could
+/// never be told, and could never open the modal to fix it.
 #[sqlx::test(migrations = "../migrations")]
 async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1998,10 +1996,9 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
     Ok(())
 }
 
-/// Pinned regression. A holding whose lots explain its position exactly must
-/// report the SAME invested figure through holdings() as through the chart.
-/// Before this change the table said 1 000,00 and the chart said 1 005,49 on
-/// the same screen.
+/// A holding whose lots explain its position exactly must report the SAME
+/// invested figure through holdings() as through the chart, or the table and
+/// the chart disagree on the same screen.
 #[sqlx::test(migrations = "../migrations")]
 async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -2047,9 +2044,8 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     );
 }
 
-/// The other half of the same regression. The chart's invested line and the holdings
-/// table's Invested column must agree at today's date, because they are now the
-/// same function.
+/// The other half: the chart's invested line and the holdings table's Invested
+/// column must agree at today's date, because they are the same function.
 #[sqlx::test(migrations = "../migrations")]
 async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -2129,10 +2125,8 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
 }
 
 /// The cash half of the chart's "Capital invested" line must move with the
-/// balance actually held on each day. Before 0025 `lot_basis` answered
-/// `holding.cost_basis` — today's balance — for every day asked, so a past
-/// point carried the CURRENT cash position: on the live tree that put the
-/// dashed invested line far *above* net worth on past days. Cash is
+/// balance actually held on each day. Answering today's balance for every day
+/// would put the dashed invested line far *above* net worth on past days. Cash is
 /// valued at book on both sides, so the two must cancel exactly, every day.
 #[sqlx::test(migrations = "../migrations")]
 async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow::Result<()> {

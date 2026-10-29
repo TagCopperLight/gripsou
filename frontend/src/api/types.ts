@@ -310,7 +310,6 @@ export type TypeBucket = "all" | "in" | "out" | "lots";
 export type TransactionQuery = {
   search?: string;
   accountId?: string;
-  /** Replaces the retired per-kind `type` parameter. */
   bucket?: TypeBucket;
   from?: string;
   to?: string;

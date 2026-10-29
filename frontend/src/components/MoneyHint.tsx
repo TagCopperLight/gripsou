@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** An amount with a second figure that shows only while the amount itself is
  *  hovered, in a small bubble beside it; the hand cursor says there is one. CSS-only (no state), so a long list
- *  of rows re-renders no more than before. No hint, no bubble. */
+ *  of rows pays no re-render for it. No hint, no bubble. */
 export function MoneyHint({ hint, side = "left", children }: {
   hint: ReactNode | null;
   side?: "left" | "right";

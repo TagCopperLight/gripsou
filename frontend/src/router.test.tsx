@@ -94,7 +94,7 @@ describe("settings budget route", () => {
   });
 });
 
-describe("legacy transactions route", () => {
+describe("/transactions redirect", () => {
   it("redirects /transactions to /budget/transactions", async () => {
     const router = renderAt("/transactions", authedUser);
     await waitFor(() =>

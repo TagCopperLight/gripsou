@@ -18,10 +18,9 @@ const sell = (t: number, qty: string, price: string): Lot => ({
 });
 
 describe("positionSeries", () => {
-  // The headline regression. The old implementation subtracted a sale's
-  // PROCEEDS from invested, folding realised profit into the cost basis: buy 10
-  // at 100 then sell 5 at 200 reported invested = 0 while the backend said 500,
-  // on the same screen.
+  // Subtracting a sale's PROCEEDS from invested would fold realised profit
+  // into the cost basis: buy 10 at 100 then sell 5 at 200 would report
+  // invested = 0 while the backend says 500, on the same screen.
   it("a sale removes cost, not proceeds", () => {
     const pts = positionSeries(
       [

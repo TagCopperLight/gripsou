@@ -4,7 +4,7 @@ import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 
 // `--mode mock` (bun run dev:mock) runs the app on the in-memory fake API of
-// mock/ instead of the Rust server: the review mode of #61. Imported only in
+// mock/ instead of the Rust server, to review the UI. Imported only in
 // that mode, so nothing under mock/ can break the normal dev server or a build.
 export default defineConfig(async ({ mode }) => ({
   plugins: [

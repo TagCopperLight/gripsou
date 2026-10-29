@@ -92,8 +92,8 @@ pub async fn day_category_totals(
               and (r.is_orphan_transfer or coalesce(r.category_kind, '') <> 'neutral')
         ),
         -- The distinct days actually present, not every day in the window.
-        -- 0019 dropped valuation_grid's (uuid, date, date) overload precisely
-        -- so the caller and the grid unnest the same list: the join is on
+        -- valuation_grid takes this list rather than a range, so the caller
+        -- and the grid unnest the same days: the join is on
         -- equality of as_of, and a self-generated series that disagreed would
         -- read zero rather than fail.
         days as (select distinct day from base),

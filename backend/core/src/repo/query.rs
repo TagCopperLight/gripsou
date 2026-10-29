@@ -364,12 +364,11 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                -- Shares no recorded lot explains. Scoped to THIS holding's
                -- (account, instrument) via the `lot` lateral — never the
                -- instrument alone, or another user's buy of the same ETF would
-               -- reduce this figure (the exact cross-user bug already found and
-               -- fixed in the backfill engine).
+               -- reduce this figure.
                --
                -- SIGNED, deliberately: negative means more is recorded than is
-               -- held. Flooring it at zero made that state invisible, so the
-               -- user was never told and could never open the modal to fix it.
+               -- held. Flooring it at zero would hide that state, and the user
+               -- could never open the modal to fix it.
                case when i.kind = 'cash' then 0
                     else h.quantity - coalesce(lot.explained_qty, 0)
                end as "unexplained_quantity!"
@@ -393,14 +392,13 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             limit 1
         ) snap on true
         left join lateral (
-            -- THE basis rule, called not reimplemented. The rule once written
-            -- inline here now lives in lot_basis (0022), so the holdings table,
-            -- the chart and the modal preview cannot drift apart again.
+            -- THE basis rule, called not reimplemented, so the holdings table,
+            -- the chart and the modal preview cannot drift apart.
             --
             -- `unexplained_cost` is exported so the asset modal can draw its
             -- invested line as mean_price x qty(t) + unexplained_cost — a
-            -- multiplication, not a rule. That is what lets the frontend stop
-            -- implementing the formula.
+            -- multiplication, not a rule, so the frontend never implements the
+            -- formula.
             select coalesce(b.mean_price, 0) as mean_price,
                    b.explained_qty,
                    b.basis,
@@ -980,7 +978,7 @@ pub struct TagRef {
 ///
 /// Ordered exactly like the catalog `list_tags` returns (oldest tag first),
 /// not by name: the row and the tag chooser then read in the same order, and
-/// assigning a tag no longer makes an existing one jump. Where a row's tags
+/// assigning a tag never makes an existing one jump. Where a row's tags
 /// overflow its cell the frontend drops the tail, so "oldest first" also
 /// decides which ones survive.
 pub async fn tags_for_transactions(

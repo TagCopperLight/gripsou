@@ -52,7 +52,7 @@ describe("HoldingsCard", () => {
     // Two cash holdings collapse into one: 1 equity + 1 cash row.
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
     expect(screen.getByText("Multiple accounts")).toBeInTheDocument();
-    // The individual cash account names are no longer shown as separate rows.
+    // The individual cash account names are not shown as separate rows.
     const table = within(screen.getByRole("table"));
     expect(table.queryByText("Main Checking")).not.toBeInTheDocument();
     expect(table.queryByText("PEA")).not.toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("HoldingsCard", () => {
     expect(screen.getByTestId("gap-dot")).toBeInTheDocument();
   });
 
-  // The clamp used to hide this state entirely — the dot exists to surface it.
+  // A clamp at zero would hide this state; the dot exists to surface it.
   it("shows the dot when MORE is recorded than held", async () => {
     renderCard([{ ...HOLDING, unexplainedQty: "-5" }]);
     await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());

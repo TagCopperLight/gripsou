@@ -170,8 +170,8 @@ async fn mean_price_is_order_independent(pool: PgPool) {
 
 /// A cash holding has no lots, so its basis is simply what it held — but *on
 /// the day asked*, read from `holding_point` the same way the net-worth query
-/// reads it. Answering `holding.cost_basis` flat (0022's behaviour, fixed in
-/// 0025) back-dated today's balance across all of history.
+/// reads it. Answering `holding.cost_basis` flat would back-date today's
+/// balance across all of history.
 #[sqlx::test(migrations = "../migrations")]
 async fn cash_basis_is_the_balance_on_that_day(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;

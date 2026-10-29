@@ -144,7 +144,7 @@ async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
     // equity_holding's instrument is labelled USD; a provider returning
     // EUR-quoted points must still store them, tagged EUR. unit_value_asof
     // converts from the price row's currency at read time, so a provider
-    // mislabelling an instrument no longer costs it its whole price series.
+    // mislabelling an instrument doesn't cost it its whole price series.
     let conn_id = seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
