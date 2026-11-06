@@ -7,7 +7,7 @@ use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{
     checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
-    txn_on_day,
+    txn,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -51,7 +51,9 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day("acct-1", ext, "withdrawal", eur(-20), d, "LECLERC"),
+            &txn("acct-1", ext, "withdrawal", eur(-20))
+                .on(d)
+                .described("LECLERC"),
         )
         .await?;
     }
@@ -86,14 +88,9 @@ async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyh
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-15),
-            day(2026, 3, 4),
-            "UNKNOWN",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-15))
+            .on(day(2026, 3, 4))
+            .described("UNKNOWN"),
     )
     .await?;
     drop(conn);
@@ -121,14 +118,9 @@ async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyho
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-usd",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "US SPEND",
-        ),
+        &txn("acct-usd", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("US SPEND"),
     )
     .await?;
     drop(conn);
@@ -154,14 +146,9 @@ async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> 
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-cny",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "CN SPEND",
-        ),
+        &txn("acct-cny", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("CN SPEND"),
     )
     .await?;
     drop(conn);
@@ -181,14 +168,9 @@ async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-30),
-            day(2026, 3, 4),
-            "DUPLICATE",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-30))
+            .on(day(2026, 3, 4))
+            .described("DUPLICATE"),
     )
     .await?;
     drop(conn);
@@ -212,14 +194,9 @@ async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "transfer",
-            eur(-500),
-            day(2026, 3, 4),
-            "VIR PEA",
-        ),
+        &txn("acct-1", "t1", "transfer", eur(-500))
+            .on(day(2026, 3, 4))
+            .described("VIR PEA"),
     )
     .await?;
     drop(conn);
@@ -250,14 +227,9 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "transfer",
-            eur(-500),
-            day(2026, 3, 4),
-            "VIR EPARGNE",
-        ),
+        &txn("acct-1", "t1", "transfer", eur(-500))
+            .on(day(2026, 3, 4))
+            .described("VIR EPARGNE"),
     )
     .await?;
     drop(conn);
@@ -352,7 +324,7 @@ async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Resu
         upsert_transaction(
             &mut conn,
             account,
-            &txn_on_day(ext_acct, ext, kind, amount, d, desc),
+            &txn(ext_acct, ext, kind, amount).on(d).described(desc),
         )
         .await?;
     }
@@ -385,20 +357,17 @@ async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Re
     upsert_transaction(
         &mut conn,
         checking,
-        &txn_on_day("acct-1", "c1", "transfer", eur(-50), day(2026, 9, 2), "VIR"),
+        &txn("acct-1", "c1", "transfer", eur(-50))
+            .on(day(2026, 9, 2))
+            .described("VIR"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         pea_id,
-        &txn_on_day(
-            "acct-pea",
-            "p1",
-            "transfer",
-            eur(50),
-            day(2026, 9, 2),
-            "VIR",
-        ),
+        &txn("acct-pea", "p1", "transfer", eur(50))
+            .on(day(2026, 9, 2))
+            .described("VIR"),
     )
     .await?;
     pair_internal_transfers(&mut conn, user_id).await?;
@@ -427,20 +396,17 @@ async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
     upsert_transaction(
         &mut conn,
         a,
-        &txn_on_day(
-            "acct-a",
-            "o1",
-            "transfer",
-            eur(-200),
-            day(2026, 5, 31),
-            "VIR",
-        ),
+        &txn("acct-a", "o1", "transfer", eur(-200))
+            .on(day(2026, 5, 31))
+            .described("VIR"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         b,
-        &txn_on_day("acct-b", "i1", "transfer", eur(200), day(2026, 6, 1), "VIR"),
+        &txn("acct-b", "i1", "transfer", eur(200))
+            .on(day(2026, 6, 1))
+            .described("VIR"),
     )
     .await?;
     pair_internal_transfers(&mut conn, user_id).await?;
@@ -470,7 +436,9 @@ async fn the_window_bounds_are_inclusive(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day("acct-1", ext, "withdrawal", eur(-10), d, "X"),
+            &txn("acct-1", ext, "withdrawal", eur(-10))
+                .on(d)
+                .described("X"),
         )
         .await?;
     }
@@ -491,7 +459,9 @@ async fn another_users_rows_are_invisible(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day(ext, ext, "withdrawal", eur(-10), day(2026, 3, 4), "X"),
+            &txn(ext, ext, "withdrawal", eur(-10))
+                .on(day(2026, 3, 4))
+                .described("X"),
         )
         .await?;
     }
@@ -519,27 +489,17 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "MARCH",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("MARCH"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 4, 4),
-            "APRIL",
-        ),
+        &txn("acct-1", "t2", "withdrawal", eur(-100))
+            .on(day(2026, 4, 4))
+            .described("APRIL"),
     )
     .await?;
     drop(conn);
@@ -570,7 +530,9 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day("acct-1", "t1", "withdrawal", eur(-30), day(2026, 3, 4), "X"),
+        &txn("acct-1", "t1", "withdrawal", eur(-30))
+            .on(day(2026, 3, 4))
+            .described("X"),
     )
     .await?;
     drop(conn);
@@ -611,27 +573,17 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     upsert_transaction(
         &mut conn,
         eur_account,
-        &txn_on_day(
-            "acct-eur",
-            "t1",
-            "deposit",
-            eur(20),
-            day(2026, 3, 4),
-            "VALUED",
-        ),
+        &txn("acct-eur", "t1", "deposit", eur(20))
+            .on(day(2026, 3, 4))
+            .described("VALUED"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         jpy_account,
-        &txn_on_day(
-            "acct-jpy",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "UNVALUED",
-        ),
+        &txn("acct-jpy", "t2", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("UNVALUED"),
     )
     .await?;
     drop(conn);
@@ -677,27 +629,17 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "salary",
-            "deposit",
-            eur(3000),
-            day(2026, 3, 4),
-            "SALARY",
-        ),
+        &txn("acct-1", "salary", "deposit", eur(3000))
+            .on(day(2026, 3, 4))
+            .described("SALARY"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "coffee",
-            "withdrawal",
-            eur(-4),
-            day(2026, 3, 4),
-            "COFFEE",
-        ),
+        &txn("acct-1", "coffee", "withdrawal", eur(-4))
+            .on(day(2026, 3, 4))
+            .described("COFFEE"),
     )
     .await?;
     drop(conn);

@@ -8,8 +8,8 @@ use gripsou_core::repo::query::{
 };
 use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::{
-    self, checking_account, checking_account_in, rate_on, seed_cash_instrument,
-    seed_user_and_connection, txn, txn_on_day,
+    self, Lot, checking_account, checking_account_in, rate_on, seed_cash_instrument,
+    seed_user_and_connection, txn,
 };
 use gripsou_core::testkit::{set_category, set_tags};
 use rust_decimal::Decimal;
@@ -47,7 +47,7 @@ async fn fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Vec<Uuid>)> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn("acct-1", ext, kind, amount, Some(desc)),
+            &txn("acct-1", ext, kind, amount).described(desc),
         )
         .await?;
     }
@@ -277,13 +277,17 @@ async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow
         .await?;
     let holding_id =
         testkit::seed_equity_holding(&pool, account_id, "PUST", Decimal::new(2, 0)).await;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(2),
+            Decimal::new(9837, 2),
+        )
+        .fee(Decimal::new(105, 2)),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let all_rows = transactions(&pool, user_id, &filters()).await?;
     assert_eq!(all_rows.len(), 4, "3 cash rows plus the 1 lot row");
@@ -361,7 +365,7 @@ async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<
         upsert_transaction(
             &mut conn,
             pea_id,
-            &txn("pea-1", id, kind, amount.parse().unwrap(), Some(desc)),
+            &txn("pea-1", id, kind, amount.parse().unwrap()).described(desc),
         )
         .await?;
     }
@@ -372,13 +376,7 @@ async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<
     upsert_transaction(
         &mut conn,
         checking_id,
-        &txn(
-            "acct-1",
-            "c-buy",
-            "buy",
-            "-50.00".parse().unwrap(),
-            Some("SpaceX Ordre d'achat"),
-        ),
+        &txn("acct-1", "c-buy", "buy", "-50.00".parse().unwrap()).described("SpaceX Ordre d'achat"),
     )
     .await?;
 
@@ -583,27 +581,17 @@ async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> a
     upsert_transaction(
         &mut conn,
         eur_acct,
-        &txn_on_day(
-            "acct-eur",
-            "t1",
-            "withdrawal",
-            eur(-10),
-            day(2026, 3, 4),
-            "EUR SPEND",
-        ),
+        &txn("acct-eur", "t1", "withdrawal", eur(-10))
+            .on(day(2026, 3, 4))
+            .described("EUR SPEND"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         usd_acct,
-        &txn_on_day(
-            "acct-usd",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 5),
-            "US SPEND",
-        ),
+        &txn("acct-usd", "t2", "withdrawal", eur(-100))
+            .on(day(2026, 3, 5))
+            .described("US SPEND"),
     )
     .await?;
     drop(conn);
@@ -629,14 +617,9 @@ async fn list_rows_carry_both_their_own_and_the_reporting_amount(
     upsert_transaction(
         &mut conn,
         usd_acct,
-        &txn_on_day(
-            "acct-usd",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "US SPEND",
-        ),
+        &txn("acct-usd", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("US SPEND"),
     )
     .await?;
     drop(conn);
@@ -660,14 +643,9 @@ async fn a_row_without_a_rate_has_no_reporting_amount(pool: PgPool) -> anyhow::R
     upsert_transaction(
         &mut conn,
         usd_acct,
-        &txn_on_day(
-            "acct-usd",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "US SPEND",
-        ),
+        &txn("acct-usd", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("US SPEND"),
     )
     .await?;
     drop(conn);
@@ -691,14 +669,9 @@ async fn no_reporting_amount_when_the_readers_currency_has_no_rate(
     upsert_transaction(
         &mut conn,
         acct,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-10),
-            day(2026, 3, 4),
-            "SPEND",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-10))
+            .on(day(2026, 3, 4))
+            .described("SPEND"),
     )
     .await?;
     drop(conn);
@@ -719,27 +692,17 @@ async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow:
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-10),
-            day(2026, 3, 4),
-            "KEEP",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-10))
+            .on(day(2026, 3, 4))
+            .described("KEEP"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t2",
-            "withdrawal",
-            eur(-99),
-            day(2026, 3, 5),
-            "DROP",
-        ),
+        &txn("acct-1", "t2", "withdrawal", eur(-99))
+            .on(day(2026, 3, 5))
+            .described("DROP"),
     )
     .await?;
     drop(conn);
@@ -829,7 +792,7 @@ async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
         ("last", day(2026, 3, 31)),
         ("after", day(2026, 4, 1)),
     ] {
-        let mut t = txn("acct-1", ext, "withdrawal", eur(-1), Some(ext));
+        let mut t = txn("acct-1", ext, "withdrawal", eur(-1)).described(ext);
         t.spent_on = spent_on;
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
@@ -876,14 +839,9 @@ async fn counts_fx_flag_and_total_agree_with_rows_across_rate_gaps(
             upsert_transaction(
                 &mut conn,
                 account_id,
-                &txn_on_day(
-                    currency,
-                    &format!("{currency}-{d}"),
-                    "withdrawal",
-                    eur(-1),
-                    day(2026, 3, d),
-                    currency,
-                ),
+                &txn(currency, &format!("{currency}-{d}"), "withdrawal", eur(-1))
+                    .on(day(2026, 3, d))
+                    .described(currency),
             )
             .await?;
         }

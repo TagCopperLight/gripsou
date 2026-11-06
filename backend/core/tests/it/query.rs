@@ -7,8 +7,8 @@ use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::query;
 use gripsou_core::testkit::{
-    cash_holding, checking_account, equity_holding, holding_ids, insert_price_on, seed_connection,
-    seed_equity_holding, stamp_on,
+    self, Lot, cash_holding, checking_account, equity_holding, holding_ids, insert_price_on,
+    seed_connection, seed_equity_holding, stamp_on,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -68,9 +68,7 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     )
     .await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::net_worth_series(&pool, user_id, d1, d2).await?;
 
     assert_eq!(rows.len(), 2);
@@ -144,9 +142,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     insert_price_on(&pool, instrument_id, at(d0), Decimal::new(210, 0)).await;
     insert_price_on(&pool, instrument_id, at(d1), Decimal::new(210, 0)).await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::net_worth_series(&pool, user_id, d0, d1).await?;
 
     assert_eq!(rows.len(), 2);
@@ -204,9 +200,7 @@ async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Resul
     )
     .await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::accounts(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
@@ -259,9 +253,7 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
     )
     .await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::holdings(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
@@ -317,9 +309,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
     )
     .await?;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::holdings(&pool, user_id).await?;
     assert_eq!(
         rows.len(),
@@ -370,9 +360,7 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
     )
     .await; // inside
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let from = base - chrono::Duration::days(3);
     let prices = query::holding_prices(&pool, user_id, holding_id, from, base).await?;
     assert_eq!(prices.len(), 1);
@@ -407,9 +395,7 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
     let instrument_id: Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'")
         .fetch_one(&pool)
         .await?;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let d = |n: u32| NaiveDate::from_ymd_opt(2026, 3, n).unwrap();
     let at = |n: u32, h: u32| d(n).and_hms_opt(h, 0, 0).unwrap().and_utc();
 
@@ -489,9 +475,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
     )
     .await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::accounts(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
@@ -541,9 +525,7 @@ async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
     )
     .await;
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let accts = query::accounts(&pool, user_id).await?;
     assert_eq!(accts.len(), 1);
@@ -584,9 +566,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
         stamp_on(&pool, *hid, day, Decimal::new(v, 0), Decimal::new(v, 0)).await;
     }
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::account_series(&pool, user_id, day, day).await?;
 
     assert_eq!(rows.len(), 2, "one row per (account, day)");
@@ -633,9 +613,7 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
     .await
     .unwrap();
 
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::holdings(&pool, user_id).await?;
     let etf = rows.iter().find(|r| r.kind == "etf").unwrap();
     let comp = etf.composition.as_ref().unwrap();
@@ -681,7 +659,8 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     let today = chrono::Utc::now().date_naive();
 
     // No rate yet: the holding is worth zero and the day is flagged.
-    let rows = query::net_worth_series(&pool, user_of(&pool, conn_id).await?, today, today).await?;
+    let rows =
+        query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
     assert_eq!(rows[0].net_worth, Decimal::ZERO, "no rate → not counted");
     assert!(rows[0].fx_missing, "and the UI must be told");
 
@@ -692,7 +671,8 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
             .await?;
     insert_price_on(&pool, cny_id, chrono::Utc::now(), "0.12".parse()?).await;
 
-    let rows = query::net_worth_series(&pool, user_of(&pool, conn_id).await?, today, today).await?;
+    let rows =
+        query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
     assert_eq!(rows[0].net_worth, "120.00".parse()?);
     assert!(!rows[0].fx_missing);
     Ok(())
@@ -701,7 +681,7 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     ingest(
         &pool,
         conn_id,
@@ -731,20 +711,10 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// The user owning a connection.
-async fn user_of(pool: &PgPool, conn_id: uuid::Uuid) -> anyhow::Result<uuid::Uuid> {
-    Ok(
-        sqlx::query_scalar("select user_id from connection where id = $1")
-            .bind(conn_id)
-            .fetch_one(pool)
-            .await?,
-    )
-}
-
 #[sqlx::test(migrations = "../migrations")]
 async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut equity = equity_holding(
         "acct-1",
         "US0378331005",
@@ -813,7 +783,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
 #[sqlx::test(migrations = "../migrations")]
 async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     // The account must be CNY too: `holding_snapshot.value` is denominated in the
     // account's currency, so a CNY cash position inside a EUR account would mean
     // the provider valued it in EUR — convertible, and rightly not flagged.
@@ -854,7 +824,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
 #[sqlx::test(migrations = "../migrations")]
 async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut cny_cash = cash_holding("acct-1", Decimal::new(1000, 0));
     cny_cash.instrument.currency = "CNY".to_string();
@@ -1011,7 +981,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut equity = equity_holding(
         "acct-1",
         "US0378331005",
@@ -1171,10 +1141,7 @@ async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> a
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1239,10 +1206,7 @@ async fn seed_backfilled_equity(
     valuation: Decimal,
 ) -> anyhow::Result<(Uuid, Uuid)> {
     let conn_id = seed_connection(pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(pool)
-        .await?;
+    let user_id = testkit::owner(pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1334,10 +1298,7 @@ async fn seed_sold_equity(
     cost_basis: Decimal,
 ) -> anyhow::Result<Uuid> {
     let conn_id = seed_connection(pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(pool)
-        .await?;
+    let user_id = testkit::owner(pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1356,14 +1317,12 @@ async fn seed_sold_equity(
     }
     // Securities move by `lot`, not by `transaction`, so the sell that the
     // backfill's quantity walk needs to see must be recorded there.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'sell', $2, 10, 120, 'manual')",
+    testkit::seed_lot(
+        pool,
+        holding_id,
+        Lot::sell(sell_day, Decimal::from(10), Decimal::from(120)),
     )
-    .bind(holding_id)
-    .bind(sell_day)
-    .execute(pool)
-    .await?;
+    .await;
     stamp_on(pool, holding_id, anchor, Decimal::ZERO, Decimal::ZERO).await;
 
     backfill_connection(&mut conn, conn_id).await?;
@@ -1445,10 +1404,7 @@ async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1516,10 +1472,7 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
 #[sqlx::test(migrations = "../migrations")]
 async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1542,13 +1495,16 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
     .await;
 
     // 30 of the 100 shares are explained by a lot.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 30, 10, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(30),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -1563,10 +1519,7 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
 #[sqlx::test(migrations = "../migrations")]
 async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1587,13 +1540,16 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
         Decimal::new(300, 0),
     )
     .await;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 30, 10, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(30),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -1611,10 +1567,7 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
 #[sqlx::test(migrations = "../migrations")]
 async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1637,13 +1590,16 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
     .await;
     // 50 recorded buys against a 30-share holding — a sale must have gone
     // unrecorded.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 50, 10, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(50),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -1664,10 +1620,7 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
 #[sqlx::test(migrations = "../migrations")]
 async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1689,20 +1642,26 @@ async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Resu
     )
     .await;
     // Bought 80, sold 20: 100 − 80 + 20 = 40 unexplained.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 80, 10, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(80),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'sell', (now() at time zone 'utc')::date, 20, 10, 0, 'manual')",
+    .await;
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::sell(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(20),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -1721,10 +1680,7 @@ async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Resu
 #[sqlx::test(migrations = "../migrations")]
 async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1773,10 +1729,7 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_a = seed_connection(&pool).await;
-    let user_a: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_a)
-        .fetch_one(&pool)
-        .await?;
+    let user_a = testkit::owner(&pool, conn_a).await;
     let conn_b = seed_connection(&pool).await;
 
     let mut conn = pool.acquire().await?;
@@ -1820,13 +1773,16 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
 
     // User B buys 100 of the same instrument in their own account — must not
     // explain user A's holding.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 100, 10, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_b,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(100),
+            Decimal::from(10),
+        ),
     )
-    .bind(holding_b)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_a).await?;
     let row = rows
@@ -1850,10 +1806,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await?;
 
     // Two EUR accounts, each holding the same cash instrument: 40 + 60 = 100.
@@ -1894,10 +1847,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
 #[sqlx::test(migrations = "../migrations")]
 async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1919,14 +1869,26 @@ async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow
         Decimal::new(1200, 0),
     )
     .await;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 10, 20, 0, 'manual'), \
-                ($1, 'buy', (now() at time zone 'utc')::date, 10, 30, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(10),
+            Decimal::from(20),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(10),
+            Decimal::from(30),
+        ),
+    )
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -1952,10 +1914,7 @@ async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow
 #[sqlx::test(migrations = "../migrations")]
 async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -1977,13 +1936,16 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
     )
     .await;
     // Only 10 of the 20 shares explained.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', (now() at time zone 'utc')::date, 10, 20, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::Utc::now().date_naive(),
+            Decimal::from(10),
+            Decimal::from(20),
+        ),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await?;
+    .await;
 
     let rows = query::holdings(&pool, user_id).await?;
     let row = rows
@@ -2002,11 +1964,7 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
 #[sqlx::test(migrations = "../migrations")]
 async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
@@ -2017,14 +1975,17 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(2),
+            dec("98.37"),
+        )
+        .fee(dec("1.05")),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let rows = query::holdings(&pool, user_id).await.unwrap();
     let h = rows
@@ -2049,11 +2010,7 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
@@ -2064,14 +2021,17 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(2),
+            dec("98.37"),
+        )
+        .fee(dec("1.05")),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let instrument_id: Uuid = sqlx::query_scalar("select instrument_id from holding where id = $1")
         .bind(holding_id)
@@ -2101,13 +2061,16 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source)          values ($1, 'buy', date '2026-06-01', 100, 999, 0, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_b,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(100),
+            Decimal::from(999),
+        ),
     )
-    .bind(holding_b)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let series = query::net_worth_series(&pool, user_id, today, today)
         .await
@@ -2147,9 +2110,7 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     stamp_on(&pool, ids[0], yesterday, dec("100"), dec("100")).await;
     stamp_on(&pool, ids[0], today, dec("120"), dec("120")).await;
 
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let series = query::net_worth_series(&pool, user_id, yesterday, today).await?;
 
     assert_eq!(series.len(), 2);
@@ -2176,7 +2137,7 @@ async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     ingest(
         &pool,
         conn_id,
@@ -2216,7 +2177,7 @@ async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
 #[sqlx::test(migrations = "../migrations")]
 async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id = user_of(&pool, conn_id).await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut cny_account = checking_account("acct-cny");
     cny_account.currency = "CNY".to_string();
     // Priced in the pivot (insert_price_on stamps EUR), so the VALUE branch
@@ -2291,9 +2252,7 @@ async fn cny_account(pool: &PgPool) -> anyhow::Result<Uuid> {
         },
     )
     .await?;
-    Ok(sqlx::query_scalar("select user_id from connection")
-        .fetch_one(pool)
-        .await?)
+    Ok(testkit::owner(pool, conn_id).await)
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -2338,9 +2297,7 @@ async fn accounts_in_the_readers_currency_have_native_equal_value(
         },
     )
     .await?;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection")
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let rows = query::accounts(&pool, user_id).await?;
     assert_eq!(rows[0].currency, "EUR");
     assert_eq!(rows[0].value_native, Some(rows[0].value));

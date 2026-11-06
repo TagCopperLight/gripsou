@@ -124,13 +124,8 @@ async fn ledger(pool: &PgPool, rows: &[(&str, i64)]) -> anyhow::Result<(Uuid, Ve
     let acct = upsert_account(&mut conn, conn_id, &checking_account("a")).await?;
     let mut ids = vec![];
     for (i, (desc, cents)) in rows.iter().enumerate() {
-        let mut t = txn(
-            "a",
-            &format!("t{i}"),
-            "withdrawal",
-            Decimal::new(*cents, 2),
-            Some(desc),
-        );
+        let mut t =
+            txn("a", &format!("t{i}"), "withdrawal", Decimal::new(*cents, 2)).described(desc);
         t.spent_on = Utc::now().date_naive() - Duration::days(i as i64);
         upsert_transaction(&mut conn, acct, &t).await?;
         ids.push(
@@ -516,7 +511,7 @@ async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
         gripsou_core::repo::transaction::upsert_transaction(
             &mut conn,
             acct,
-            &testkit::txn("acct-1", ext, kind, amount.parse().unwrap(), Some(desc)),
+            &testkit::txn("acct-1", ext, kind, amount.parse().unwrap()).described(desc),
         )
         .await?;
     }

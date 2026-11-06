@@ -20,7 +20,7 @@ async fn ai_row(
     upsert_transaction(
         &mut conn,
         acct,
-        &txn("a", "t0", "withdrawal", Decimal::new(-1000, 2), Some("X")),
+        &txn("a", "t0", "withdrawal", Decimal::new(-1000, 2)).described("X"),
     )
     .await?;
     let id: Uuid = sqlx::query_scalar("select id from transaction where external_id = 't0'")
@@ -172,7 +172,7 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
         upsert_transaction(
             &mut conn,
             acct,
-            &txn("a", ext, "withdrawal", Decimal::new(-500, 2), Some("Y")),
+            &txn("a", ext, "withdrawal", Decimal::new(-500, 2)).described("Y"),
         )
         .await?;
         sqlx::query(

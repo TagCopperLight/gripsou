@@ -49,7 +49,7 @@ async fn tx_at_kind(
     day: NaiveDate,
 ) -> anyhow::Result<Uuid> {
     let mut conn = pool.acquire().await?;
-    let mut t = txn(account_ext, ext, kind, amount, Some("VIREMENT"));
+    let mut t = txn(account_ext, ext, kind, amount).described("VIREMENT");
     t.spent_on = day;
     upsert_transaction(&mut conn, account_id, &t).await?;
     let id: Uuid = sqlx::query_scalar("select id from transaction where external_id = $1")

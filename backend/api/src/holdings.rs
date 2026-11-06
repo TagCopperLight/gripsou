@@ -397,14 +397,13 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        sqlx::query(
-            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-             values ($1, 'buy', current_date - 365, 2, 100, 0, 'manual')",
+        let year_ago = chrono::Utc::now().date_naive() - Duration::days(365);
+        gripsou_core::testkit::seed_lot(
+            &pool,
+            holding_id,
+            gripsou_core::testkit::Lot::buy(year_ago, Decimal::from(2), Decimal::from(100)),
         )
-        .bind(holding_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+        .await;
 
         // `accounts` values from snapshots, as after any real sync.
         sqlx::query(

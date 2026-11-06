@@ -20,7 +20,7 @@ use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::snapshot::stamp_snapshot;
 use gripsou_core::testkit::insert_price;
-use gripsou_core::testkit::{checking_account, seed_user_and_connection};
+use gripsou_core::testkit::{self, Lot, checking_account, seed_user_and_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -222,15 +222,12 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
         .unwrap();
         // Securities move by `lot`, not by `transaction`, so the backfill's
         // quantity walk needs its own record of this buy.
-        sqlx::query(
-            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-             values ($1, 'buy', $2, 40, 10, 'manual')",
+        testkit::seed_lot(
+            &mut *conn,
+            holding_id,
+            Lot::buy(day(100), Decimal::from(40), Decimal::from(10)),
         )
-        .bind(holding_id)
-        .bind(day(100))
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        .await;
     }
 
     // Sell the second security to zero, so the nearest-non-zero snapshot search
@@ -250,15 +247,12 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .unwrap();
     // Same reason as the buy above: the sale must exist as a `lot` for the
     // quantity walk to see it.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'sell', $2, 40, 15, 'manual')",
+    testkit::seed_lot(
+        &mut *conn,
+        sold_holding,
+        Lot::sell(day(20), Decimal::from(40), Decimal::from(15)),
     )
-    .bind(sold_holding)
-    .bind(day(20))
-    .execute(&mut *conn)
-    .await
-    .unwrap();
+    .await;
 
     // Cash movements, including one large withdrawal that drives a stretch
     // below zero so the lift branch is exercised.

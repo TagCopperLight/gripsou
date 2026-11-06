@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use gripsou_core::dto::CanonicalTransaction;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
     BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
@@ -27,8 +28,8 @@ async fn fixture(pool: &PgPool, descriptions: &[&str]) -> anyhow::Result<(Uuid, 
                 &format!("t{i}"),
                 "withdrawal",
                 Decimal::new(-1200, 2),
-                Some(d),
-            ),
+            )
+            .described(d),
         )
         .await?;
     }
@@ -317,13 +318,15 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn(
-                "acct-1",
-                &format!("t{i}"),
-                "withdrawal",
-                Decimal::new(-1200, 2),
-                d,
-            ),
+            &CanonicalTransaction {
+                description: d.map(str::to_string),
+                ..txn(
+                    "acct-1",
+                    &format!("t{i}"),
+                    "withdrawal",
+                    Decimal::new(-1200, 2),
+                )
+            },
         )
         .await?;
     }
@@ -399,13 +402,15 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn(
-                "acct-1",
-                &format!("t{i}"),
-                "withdrawal",
-                Decimal::new(-1200, 2),
-                d,
-            ),
+            &CanonicalTransaction {
+                description: d.map(str::to_string),
+                ..txn(
+                    "acct-1",
+                    &format!("t{i}"),
+                    "withdrawal",
+                    Decimal::new(-1200, 2),
+                )
+            },
         )
         .await?;
     }

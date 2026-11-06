@@ -1,4 +1,4 @@
-use gripsou_core::testkit;
+use gripsou_core::testkit::{self, Lot};
 
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
@@ -60,24 +60,18 @@ async fn txn(pool: &PgPool, account: Uuid, id: &str, kind: &str, amount: &str, d
     upsert_transaction(
         &mut conn,
         account,
-        &testkit::txn_on("acct-1", id, kind, dec(amount), oct(d)),
+        &testkit::txn("acct-1", id, kind, dec(amount)).on(oct(d)),
     )
     .await
     .unwrap();
 }
 
-async fn lot(pool: &PgPool, holding: Uuid, side: &str, on: NaiveDate, qty: &str) {
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, $2, $3, $4, 5, 'manual')",
-    )
-    .bind(holding)
-    .bind(side)
-    .bind(on)
-    .bind(dec(qty))
-    .execute(pool)
-    .await
-    .unwrap();
+async fn lot(pool: &PgPool, holding: Uuid, side: &'static str, on: NaiveDate, qty: &str) {
+    let lot = Lot {
+        side,
+        ..Lot::buy(on, dec(qty), Decimal::from(5))
+    };
+    testkit::seed_lot(pool, holding, lot).await;
 }
 
 /// 60 shares explained by an old lot, 83 held since Oct 8.

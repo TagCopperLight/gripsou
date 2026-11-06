@@ -6,7 +6,7 @@ use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::{
-    self, cash_holding, checking_account, equity_holding, seed_connection, stamp_on, txn_on,
+    self, Lot, cash_holding, checking_account, equity_holding, seed_connection, stamp_on, txn,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -106,8 +106,8 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
     for t in [
-        txn_on("acct-1", "t1", "deposit", dec("30"), d(2026, 1, 5)),
-        txn_on("acct-1", "t2", "fee", dec("-10"), d(2026, 1, 8)),
+        txn("acct-1", "t1", "deposit", dec("30")).on(d(2026, 1, 5)),
+        txn("acct-1", "t2", "fee", dec("-10")).on(d(2026, 1, 8)),
     ] {
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
@@ -159,10 +159,10 @@ async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<(
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
     for t in [
-        txn_on("pea-1", "t1", "transfer", dec("500"), d(2026, 1, 5)),
-        txn_on("pea-1", "t2", "buy", dec("-480"), d(2026, 1, 6)),
-        txn_on("pea-1", "t3", "sell", dec("100"), d(2026, 1, 7)),
-        txn_on("pea-1", "t4", "dividend", dec("12"), d(2026, 1, 8)),
+        txn("pea-1", "t1", "transfer", dec("500")).on(d(2026, 1, 5)),
+        txn("pea-1", "t2", "buy", dec("-480")).on(d(2026, 1, 6)),
+        txn("pea-1", "t3", "sell", dec("100")).on(d(2026, 1, 7)),
+        txn("pea-1", "t4", "dividend", dec("12")).on(d(2026, 1, 8)),
     ] {
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
@@ -194,18 +194,12 @@ async fn seed_lot(
     let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h)
         .await
         .unwrap();
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', $2, $3, $4, $5, 'manual')",
+    testkit::seed_lot(
+        pool,
+        holding_id,
+        Lot::buy(day, dec(quantity), dec(unit_price)).fee(dec(fee)),
     )
-    .bind(holding_id)
-    .bind(day)
-    .bind(dec(quantity))
-    .bind(dec(unit_price))
-    .bind(dec(fee))
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
 }
 
 /// A cash row entered by hand: no `external_id`.
@@ -237,8 +231,8 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
 
     let mut conn = pool.acquire().await?;
     for t in [
-        txn_on("pea-1", "t1", "transfer", dec("50"), d(2026, 1, 14)),
-        txn_on("pea-1", "t2", "buy", dec("-108.25"), d(2026, 1, 16)),
+        txn("pea-1", "t1", "transfer", dec("50")).on(d(2026, 1, 14)),
+        txn("pea-1", "t2", "buy", dec("-108.25")).on(d(2026, 1, 16)),
     ] {
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
@@ -295,7 +289,7 @@ async fn lots_alone_do_not_move_cash_before_the_provider_history(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("pea-1", "t1", "transfer", dec("50"), d(2026, 1, 14)),
+        &txn("pea-1", "t1", "transfer", dec("50")).on(d(2026, 1, 14)),
     )
     .await?;
     seed_lot(
@@ -328,7 +322,7 @@ async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "t1", "transfer", dec("-500"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "transfer", dec("-500")).on(d(2026, 1, 5)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -382,7 +376,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "t1", "deposit", dec("30"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "deposit", dec("30")).on(d(2026, 1, 5)),
     )
     .await?;
 
@@ -405,7 +399,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "t1", "deposit", dec("50"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "deposit", dec("50")).on(d(2026, 1, 5)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -483,7 +477,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "t1", "deposit", dec("30"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "deposit", dec("30")).on(d(2026, 1, 5)),
     )
     .await?;
 
@@ -522,13 +516,13 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     upsert_transaction(
         &mut conn,
         account1,
-        &txn_on("acct-1", "t1", "deposit", dec("30"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "deposit", dec("30")).on(d(2026, 1, 5)),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account2,
-        &txn_on("acct-2", "t2", "withdrawal", dec("-40"), d(2026, 1, 5)),
+        &txn("acct-2", "t2", "withdrawal", dec("-40")).on(d(2026, 1, 5)),
     )
     .await?;
 
@@ -541,7 +535,7 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     upsert_transaction(
         &mut conn,
         other_account,
-        &txn_on("other-acct", "t3", "deposit", dec("5"), d(2026, 1, 5)),
+        &txn("other-acct", "t3", "deposit", dec("5")).on(d(2026, 1, 5)),
     )
     .await?;
     backfill_connection(&mut conn, other_conn).await?;
@@ -601,13 +595,13 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
     upsert_transaction(
         &mut conn,
         shallow_account_id,
-        &txn_on("shallow-1", "s1", "deposit", dec("30"), d(2026, 1, 5)),
+        &txn("shallow-1", "s1", "deposit", dec("30")).on(d(2026, 1, 5)),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         deep_account_id,
-        &txn_on("deep-1", "d1", "deposit", dec("5"), d(2025, 6, 1)),
+        &txn("deep-1", "d1", "deposit", dec("5")).on(d(2025, 6, 1)),
     )
     .await?;
 
@@ -653,13 +647,13 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("mine-1", "m1", "deposit", dec("30"), d(2026, 1, 5)),
+        &txn("mine-1", "m1", "deposit", dec("30")).on(d(2026, 1, 5)),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         other_account_id,
-        &txn_on("theirs-1", "o1", "deposit", dec("5"), d(2020, 1, 1)),
+        &txn("theirs-1", "o1", "deposit", dec("5")).on(d(2020, 1, 1)),
     )
     .await?;
 
@@ -692,14 +686,9 @@ async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::R
     upsert_transaction(
         &mut conn,
         account_id,
-        &testkit::txn_booked(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            dec("-30"),
-            d(2026, 1, 5),
-            d(2026, 1, 8),
-        ),
+        &testkit::txn("acct-1", "t1", "withdrawal", dec("-30"))
+            .on(d(2026, 1, 5))
+            .booked_on(d(2026, 1, 8)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -749,7 +738,9 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
         upsert_transaction(
             &mut conn,
             account_id,
-            &testkit::txn_booked("acct-1", id, "withdrawal", dec(amount), spent, booked),
+            &testkit::txn("acct-1", id, "withdrawal", dec(amount))
+                .on(spent)
+                .booked_on(booked),
         )
         .await?;
     }
@@ -807,7 +798,9 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
         upsert_transaction(
             &mut conn,
             account_id,
-            &testkit::txn_booked("acct-1", id, "transfer", dec(amount), spent, booked),
+            &testkit::txn("acct-1", id, "transfer", dec(amount))
+                .on(spent)
+                .booked_on(booked),
         )
         .await?;
     }
@@ -858,7 +851,7 @@ async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow:
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "t1", "deposit", dec("50"), d(2026, 1, 5)),
+        &txn("acct-1", "t1", "deposit", dec("50")).on(d(2026, 1, 5)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -902,7 +895,7 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on("acct-1", id, "deposit", dec(amount), day),
+            &txn("acct-1", id, "deposit", dec(amount)).on(day),
         )
         .await?;
     }
@@ -940,13 +933,7 @@ async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on(
-            "acct-1",
-            "past-1",
-            "deposit",
-            dec("100"),
-            today - chrono::Duration::days(3),
-        ),
+        &txn("acct-1", "past-1", "deposit", dec("100")).on(today - chrono::Duration::days(3)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -986,25 +973,14 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on(
-            "acct-1",
-            "past-deposit",
-            "deposit",
-            dec("50"),
-            today - chrono::Duration::days(10),
-        ),
+        &txn("acct-1", "past-deposit", "deposit", dec("50")).on(today - chrono::Duration::days(10)),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on(
-            "acct-1",
-            "future-deposit",
-            "deposit",
-            dec("200"),
-            today + chrono::Duration::days(2),
-        ),
+        &txn("acct-1", "future-deposit", "deposit", dec("200"))
+            .on(today + chrono::Duration::days(2)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -1043,13 +1019,13 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on(
+            &txn(
                 &format!("acct-{tag}"),
                 &format!("shared-{tag}"),
                 "deposit",
                 dec("100"),
-                today - chrono::Duration::days(10),
-            ),
+            )
+            .on(today - chrono::Duration::days(10)),
         )
         .await?;
     }
@@ -1057,13 +1033,7 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
     upsert_transaction(
         &mut conn,
         account_b,
-        &txn_on(
-            "acct-b",
-            "future-b",
-            "deposit",
-            dec("500"),
-            today + chrono::Duration::days(7),
-        ),
+        &txn("acct-b", "future-b", "deposit", dec("500")).on(today + chrono::Duration::days(7)),
     )
     .await?;
     backfill_connection(&mut conn, conn_a).await?;
@@ -1101,14 +1071,14 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "on-anchor", "deposit", dec("100"), d(2026, 8, 20)),
+        &txn("acct-1", "on-anchor", "deposit", dec("100")).on(d(2026, 8, 20)),
     )
     .await?;
     // On the day being asked about: outside the window, so it is not.
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "on-day", "deposit", dec("7"), d(2026, 8, 15)),
+        &txn("acct-1", "on-day", "deposit", dec("7")).on(d(2026, 8, 15)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;
@@ -1155,16 +1125,18 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     // The sale itself, so the walk reconstructs the pre-sale quantity for the
     // held window instead of anchoring on the zero snapshot. Securities move
     // by `lot`, not by `transaction`.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'buy', $2, 40, 10, 'manual'), \
-                ($1, 'sell', $3, 40, 15, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(d(2026, 7, 20), Decimal::from(40), Decimal::from(10)),
     )
-    .bind(holding_id)
-    .bind(d(2026, 7, 20))
-    .bind(d(2026, 8, 20))
-    .execute(&pool)
-    .await?;
+    .await;
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::sell(d(2026, 8, 20), Decimal::from(40), Decimal::from(15)),
+    )
+    .await;
 
     backfill_connection(&mut conn, conn_id).await?;
     drop(conn);
@@ -1249,7 +1221,7 @@ async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on("acct-1", "first", "deposit", dec("50"), d(2026, 8, 10)),
+        &txn("acct-1", "first", "deposit", dec("50")).on(d(2026, 8, 10)),
     )
     .await?;
     backfill_connection(&mut conn, conn_id).await?;

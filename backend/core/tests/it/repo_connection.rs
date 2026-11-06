@@ -7,10 +7,7 @@ use sqlx::PgPool;
 #[sqlx::test(migrations = "../migrations")]
 async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
-        .bind(conn)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn).await;
 
     // First claim succeeds and flips to 'syncing'.
     match begin_sync(&pool, user_id, conn).await? {
@@ -149,10 +146,7 @@ async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()>
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
     let conn = testkit::seed_connection(&pool).await;
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
-        .bind(conn)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn).await;
 
     // Wrong user — returns false, row still exists
     let not_deleted =

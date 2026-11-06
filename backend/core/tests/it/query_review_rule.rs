@@ -47,13 +47,7 @@ async fn seed(pool: &PgPool) -> anyhow::Result<(Uuid, Vec<(&'static str, Uuid)>)
         upsert_transaction(
             &mut conn,
             acct,
-            &txn(
-                "a",
-                &format!("t{i}"),
-                "withdrawal",
-                Decimal::new(-1000, 2),
-                Some(label),
-            ),
+            &txn("a", &format!("t{i}"), "withdrawal", Decimal::new(-1000, 2)).described(label),
         )
         .await?;
         let id: Uuid = sqlx::query_scalar("select id from transaction where external_id = $1")

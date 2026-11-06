@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::query::{TransactionFilters, transactions};
 use gripsou_core::repo::transaction::upsert_transaction;
-use gripsou_core::testkit::{self, checking_account, seed_connection, txn, txn_on};
+use gripsou_core::testkit::{self, Lot, checking_account, seed_connection, txn};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -21,25 +21,15 @@ fn all() -> TransactionFilters {
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
     let conn_id = seed_connection(pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
         .unwrap();
     for t in [
-        txn("acct-1", "t1", "withdrawal", dec("-42.50"), Some("LECLERC")),
-        txn("acct-1", "t2", "deposit", dec("1800"), Some("SALAIRE MARS")),
-        txn_on(
-            "acct-1",
-            "t3",
-            "fee",
-            dec("-2"),
-            NaiveDate::from_ymd_opt(2025, 6, 1).unwrap(),
-        ),
+        txn("acct-1", "t1", "withdrawal", dec("-42.50")).described("LECLERC"),
+        txn("acct-1", "t2", "deposit", dec("1800")).described("SALAIRE MARS"),
+        txn("acct-1", "t3", "fee", dec("-2")).on(NaiveDate::from_ymd_opt(2025, 6, 1).unwrap()),
     ] {
         upsert_transaction(&mut conn, account_id, &t).await.unwrap();
     }
@@ -105,11 +95,7 @@ async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
 
     // A second, unrelated user with their own connection/account/transactions.
     let other_conn_id = seed_connection(&pool).await;
-    let other_user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(other_conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let other_user_id = testkit::owner(&pool, other_conn_id).await;
     assert_ne!(user_id, other_user_id);
     let mut conn = pool.acquire().await.unwrap();
     let other_account_id = upsert_account(&mut conn, other_conn_id, &checking_account("acct-2"))
@@ -118,13 +104,7 @@ async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         other_account_id,
-        &txn(
-            "acct-2",
-            "other-t1",
-            "withdrawal",
-            dec("-99.00"),
-            Some("OTHER USER PURCHASE"),
-        ),
+        &txn("acct-2", "other-t1", "withdrawal", dec("-99.00")).described("OTHER USER PURCHASE"),
     )
     .await
     .unwrap();
@@ -164,10 +144,7 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await?;
     let checking_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     let pea_id = upsert_account(&mut conn, conn_id, &pea_account("pea-1")).await?;
@@ -180,7 +157,7 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
         upsert_transaction(
             &mut conn,
             checking_id,
-            &txn("acct-1", id, kind, dec(amount), Some(desc)),
+            &txn("acct-1", id, kind, dec(amount)).described(desc),
         )
         .await?;
     }
@@ -194,7 +171,7 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
         upsert_transaction(
             &mut conn,
             pea_id,
-            &txn("pea-1", id, kind, dec(amount), Some(desc)),
+            &txn("pea-1", id, kind, dec(amount)).described(desc),
         )
         .await?;
     }
@@ -227,22 +204,13 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
 #[sqlx::test(migrations = "../migrations")]
 async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await?;
     let checking_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     upsert_transaction(
         &mut conn,
         checking_id,
-        &txn(
-            "acct-1",
-            "c1",
-            "buy",
-            dec("-50.00"),
-            Some("SpaceX Ordre d'achat"),
-        ),
+        &txn("acct-1", "c1", "buy", dec("-50.00")).described("SpaceX Ordre d'achat"),
     )
     .await?;
 
@@ -269,24 +237,23 @@ async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1"))
         .await
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(2),
+            dec("98.37"),
+        )
+        .fee(dec("1.05")),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let rows = transactions(&pool, user_id, &all()).await.unwrap();
     let lot = rows

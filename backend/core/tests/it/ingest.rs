@@ -2,7 +2,7 @@ use gripsou_core::dto::SyncResult;
 use gripsou_core::error::CoreError;
 use gripsou_core::ingest::ingest;
 use gripsou_core::testkit::{
-    self, cash_holding, checking_account, deposit_txn, equity_holding, seed_connection,
+    self, cash_holding, checking_account, equity_holding, seed_connection, txn,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -20,7 +20,7 @@ fn sample_sync() -> SyncResult {
                 Some(Decimal::new(600, 0)),
             ),
         ],
-        transactions: vec![deposit_txn("acct-1", "txn-1", Decimal::new(100, 0))],
+        transactions: vec![txn("acct-1", "txn-1", "deposit", Decimal::new(100, 0))],
         ..Default::default()
     }
 }
@@ -285,8 +285,8 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
         transactions: vec![
-            deposit_txn("acct-1", "txn-1", Decimal::new(100, 0)),
-            deposit_txn("ghost", "txn-2", Decimal::new(50, 0)), // unknown account
+            txn("acct-1", "txn-1", "deposit", Decimal::new(100, 0)),
+            txn("ghost", "txn-2", "deposit", Decimal::new(50, 0)), // unknown account
         ],
         ..Default::default()
     };
@@ -345,13 +345,7 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
     let sync = SyncResult {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
-        transactions: vec![testkit::txn_on(
-            "acct-1",
-            "t1",
-            "deposit",
-            Decimal::new(2500, 2),
-            day,
-        )],
+        transactions: vec![testkit::txn("acct-1", "t1", "deposit", Decimal::new(2500, 2)).on(day)],
         ..Default::default()
     };
     let summary = gripsou_core::ingest::ingest(&pool, conn_id, &sync).await?;
@@ -386,20 +380,14 @@ async fn health_observations_persist_without_replacing_native_ids(
     sync.accounts[0].meta["sync_health"] =
         serde_json::json!({"verified":true,"state":"bug","lastUpdatedOn":"2026-10-08"});
     ingest(&pool, id, &sync).await?;
-    let conns = gripsou_core::repo::connection::list_connections(
-        &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
-    )
-    .await?;
+    let conns =
+        gripsou_core::repo::connection::list_connections(&pool, testkit::owner(&pool, id).await)
+            .await?;
     assert_eq!(conns[0].provider_meta["external_connection_id"], "6");
     assert_eq!(conns[0].provider_meta["sync_health"]["verified"], true);
     let accounts = gripsou_core::repo::connection::list_connection_accounts(
         &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
+        testkit::owner(&pool, id).await,
     )
     .await?;
     assert_eq!(accounts[0].provider_meta["sync_health"]["state"], "bug");
@@ -407,9 +395,7 @@ async fn health_observations_persist_without_replacing_native_ids(
     ingest(&pool, id, &sync).await?;
     let accounts = gripsou_core::repo::connection::list_connection_accounts(
         &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
+        testkit::owner(&pool, id).await,
     )
     .await?;
     assert!(accounts[0].provider_meta["sync_health"]["state"].is_null());
@@ -539,8 +525,8 @@ async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> a
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(40000, 2))],
         transactions: vec![
-            testkit::txn_on("acct-1", "t1", "deposit", Decimal::new(50000, 2), day(5)),
-            testkit::txn_on("acct-1", "t2", "transfer", Decimal::new(-20000, 2), day(3)),
+            testkit::txn("acct-1", "t1", "deposit", Decimal::new(50000, 2)).on(day(5)),
+            testkit::txn("acct-1", "t2", "transfer", Decimal::new(-20000, 2)).on(day(3)),
         ],
         ..Default::default()
     };

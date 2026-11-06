@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::testkit::{self, checking_account, seed_user_and_connection};
+use gripsou_core::testkit::{self, Lot, checking_account, seed_user_and_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -16,25 +16,17 @@ fn day(s: &str) -> NaiveDate {
 async fn add_lot(
     pool: &PgPool,
     holding_id: Uuid,
-    side: &str,
+    side: &'static str,
     on: &str,
     qty: &str,
     price: &str,
     fee: &str,
 ) {
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, $2, $3, $4, $5, $6, 'manual')",
-    )
-    .bind(holding_id)
-    .bind(side)
-    .bind(day(on))
-    .bind(dec(qty))
-    .bind(dec(price))
-    .bind(dec(fee))
-    .execute(pool)
-    .await
-    .unwrap();
+    let lot = Lot {
+        side,
+        ..Lot::buy(day(on), dec(qty), dec(price)).fee(dec(fee))
+    };
+    testkit::seed_lot(pool, holding_id, lot).await;
 }
 
 async fn add_dividend(pool: &PgPool, account_id: Uuid, on: &str, amount: &str) {

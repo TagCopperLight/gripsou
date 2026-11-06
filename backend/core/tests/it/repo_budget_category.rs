@@ -32,13 +32,7 @@ async fn counts_transactions_per_category(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            Decimal::new(-1200, 2),
-            Some("LECLERC"),
-        ),
+        &txn("acct-1", "t1", "withdrawal", Decimal::new(-1200, 2)).described("LECLERC"),
     )
     .await?;
 
@@ -198,13 +192,7 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            Decimal::new(-1200, 2),
-            Some("LECLERC"),
-        ),
+        &txn("acct-1", "t1", "withdrawal", Decimal::new(-1200, 2)).described("LECLERC"),
     )
     .await?;
     let created = create_category(

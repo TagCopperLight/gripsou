@@ -197,11 +197,7 @@ pub(crate) async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
     use gripsou_core::repo::instrument::resolve_instrument;
 
     let conn_id = seed_connection(pool, email).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let user_id = gripsou_core::testkit::owner(pool, conn_id).await;
 
     let mut conn = pool.acquire().await.unwrap();
     let account = CanonicalAccount {

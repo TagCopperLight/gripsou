@@ -1,6 +1,6 @@
 use gripsou_core::repo::account::update_account;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::testkit::{checking_account, seed_connection};
+use gripsou_core::testkit::{self, checking_account, seed_connection};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -105,10 +105,7 @@ async fn upsert_preserves_user_chosen_type_key(pool: PgPool) -> anyhow::Result<(
 #[sqlx::test(migrations = "../migrations")]
 async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await?;
     let acct_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
 

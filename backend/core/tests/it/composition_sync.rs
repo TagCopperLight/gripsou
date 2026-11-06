@@ -1,10 +1,8 @@
 use async_trait::async_trait;
 use gripsou_core::composition_sync::fetch_composition_for_connection;
-use gripsou_core::dto::{Allocation, Composition, InstrumentRef, SyncResult};
-use gripsou_core::ingest::ingest;
+use gripsou_core::dto::{Allocation, Composition, InstrumentRef};
 use gripsou_core::provider::{CompositionProvider, ProviderError};
-use gripsou_core::testkit::{checking_account, equity_holding, seed_connection};
-use rust_decimal::Decimal;
+use gripsou_core::testkit;
 use sqlx::PgPool;
 
 struct MockComp {
@@ -38,26 +36,9 @@ impl CompositionProvider for MockComp {
     }
 }
 
-async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
-    let conn_id = seed_connection(pool).await;
-    let sync = SyncResult {
-        accounts: vec![checking_account("acct-1")],
-        holdings: vec![equity_holding(
-            "acct-1",
-            "US0378331005",
-            Decimal::new(3, 0),
-            Decimal::new(450, 0),
-            Some(Decimal::new(600, 0)),
-        )],
-        ..Default::default()
-    };
-    ingest(pool, conn_id, &sync).await.unwrap();
-    conn_id
-}
-
 #[sqlx::test(migrations = "../migrations")]
 async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
 
     let provider = MockComp {
         symbol: Some("1rTX".into()),
@@ -92,7 +73,7 @@ async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn marks_none_when_no_tracker(pool: PgPool) {
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
 
     let provider = MockComp {
         symbol: None,
@@ -117,7 +98,7 @@ async fn marks_none_when_no_tracker(pool: PgPool) {
 async fn marks_none_when_composition_empty(pool: PgPool) {
     // Symbol resolves, but the page has no breakdown (e.g. an equity, or a
     // tracker that reports none) — must NOT be stamped `etf`.
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
 
     let provider = MockComp {
         symbol: Some("1rTX".into()),
@@ -158,7 +139,7 @@ impl CompositionProvider for FailingResolve {
 // eligible for the next sync.
 #[sqlx::test(migrations = "../migrations")]
 async fn an_unavailable_source_is_a_failure_not_a_none_mark(pool: PgPool) {
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
 
     let summary = fetch_composition_for_connection(&pool, conn_id, &FailingResolve)
         .await

@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use gripsou_core::testkit;
 use gripsou_core::testkit::seed_connection;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -176,10 +177,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_falls_back_to_one(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     // The default currency is the pivot: divisor 1.
     let d: Option<Decimal> = sqlx::query_scalar("select reporting_fx_asof($1, $2)")
@@ -240,10 +238,7 @@ async fn reporting_fx_degraded_is_false_when_the_conversion_really_happened(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
 
     // The pivot itself is never a degradation: fx_asof answers 1 by definition
     // and an all-pivot install has no FX data at all.

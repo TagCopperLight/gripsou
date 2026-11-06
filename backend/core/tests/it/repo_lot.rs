@@ -1,8 +1,8 @@
+use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::testkit::{self, seed_connection};
+use gripsou_core::testkit::{self, Lot, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
-use uuid::Uuid;
 
 fn dec(s: &str) -> Decimal {
     s.parse().unwrap()
@@ -17,14 +17,17 @@ async fn lot_table_accepts_a_manual_buy(pool: PgPool) {
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 1.05, 'manual')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            Decimal::from(2),
+            dec("98.37"),
+        )
+        .fee(dec("1.05")),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let (qty, fee): (Decimal, Decimal) =
         sqlx::query_as("select quantity, fee from lot where holding_id = $1")
@@ -85,11 +88,7 @@ use gripsou_core::repo::lot::{PreviewLot, basis_preview, delete_lots, insert_lot
 #[sqlx::test(migrations = "../migrations")]
 async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
@@ -121,25 +120,24 @@ async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_refuses_a_provider_lot(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    let lot_id: Uuid = sqlx::query_scalar(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'buy', date '2026-06-01', 2, 98.37, 'provider') returning id",
+    let lot_id = testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            dec("2"),
+            dec("98.37"),
+        )
+        .from_provider(),
     )
-    .bind(holding_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let deleted = delete_lots(&mut conn, holding_id, user_id, &[lot_id])
         .await
@@ -152,11 +150,7 @@ async fn delete_refuses_a_provider_lot(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn preview_computes_without_writing(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
@@ -193,24 +187,23 @@ async fn preview_computes_without_writing(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn preview_keeps_the_provider_lots(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("3")).await;
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'buy', date '2026-05-01', 2, 100, 'provider')",
+    testkit::seed_lot(
+        &pool,
+        holding_id,
+        Lot::buy(
+            NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            Decimal::from(2),
+            Decimal::from(100),
+        )
+        .from_provider(),
     )
-    .bind(holding_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
 
     let figures = basis_preview(
         &pool,
