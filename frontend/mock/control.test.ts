@@ -1,21 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { createControl } from "./control.ts";
-import type { MockState } from "./states.ts";
+import type { MockState } from "./states/pieces.ts";
 
 const q = new URLSearchParams();
 
 describe("review control", () => {
   it("fails an overridden request with a 500", () => {
     const c = createControl([]);
-    c.setOverride("/accounts", "error");
+    c.setOverride("GET /accounts", "error");
     expect(c.handle("GET", "/accounts", q, undefined)).toMatchObject({ status: 500 });
-    c.setOverride("/accounts", null);
+    c.setOverride("GET /accounts", null);
     expect(c.handle("GET", "/accounts", q, undefined)).toMatchObject({ status: 200 });
+  });
+
+  it("lists a write the app made and fails it alone, not the read of the same path", () => {
+    const c = createControl([]);
+    c.handle("POST", "/budget/tags", q, { name: "Trip", color: null });
+    expect(c.info().seen).toContain("POST /budget/tags");
+    c.setOverride("POST /budget/tags", "error");
+    expect(c.handle("POST", "/budget/tags", q, { name: "Other", color: null })).toMatchObject({ status: 500 });
+    expect(c.handle("GET", "/budget/tags", q, undefined)).toMatchObject({ status: 200 });
   });
 
   it("holds a request kept loading until the override is cleared", () => {
     const c = createControl([]);
-    c.setOverride("/accounts", "loading");
+    c.setOverride("GET /accounts", "loading");
     expect(c.handle("GET", "/accounts", q, undefined)).toBe("hold");
   });
 

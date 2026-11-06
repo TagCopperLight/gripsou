@@ -3,68 +3,28 @@
 // everyday spending with transfer pairs, the seeded categories, three tags.
 // Everything is generated from a fixed seed, anchored on today.
 
-import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
-import type {
-  Account,
-  Composition,
-  Lot,
-  MfaStatus,
-  Provider,
-  Session,
-  SessionUser,
-  SyncConnection,
-  User,
-} from "../../src/api/types.ts";
+import type { BudgetCategory } from "../../src/api/budget.ts";
+import type { Composition, Lot, MfaStatus, Provider, Session, SessionUser, User } from "../../src/api/types.ts";
 import { DEFAULT_PREFS } from "../../src/lib/prefs.ts";
-import { DAY_MS, TODAY, daysAgo, id, isoDay, money, rng } from "./util.ts";
-
-/** A ledger or lot row as stored; the API view joins the category and account. */
-export type TxnRow = {
-  id: string;
-  t: number;
-  type: string;
-  description: string | null;
-  amount: number;
-  accountId: string;
-  source: "cash" | "lot";
-  holdingId: string | null;
-  quantity: number | null;
-  unitPrice: number | null;
-  fee: number | null;
-  categoryId: string | null;
-  categorySource: "user" | "ai" | "pair" | null;
-  categoryConfidence: string | null;
-  needsReview: boolean;
-  checked: boolean;
-  isTransfer: boolean;
-  isOrphanTransfer: boolean;
-  tagIds: string[];
-};
-
-export type CategoryRow = Omit<BudgetCategory, "txCount"> & { sortOrder: number };
-export type TagRow = Omit<BudgetTag, "txCount">;
-
-export type AccountRow = Omit<Account, "value" | "lastSyncAt" | "fxMissing" | "valueNative">;
-
-/** A security; cash holdings are derived from the account balances. */
-export type SecurityRow = {
-  id: string;
-  accountId: string;
-  ticker: string;
-  name: string;
-  /** Daily closes, oldest first, one per day of `HISTORY_DAYS` ending today. */
-  closes: number[];
-  composition: Composition | null;
-  /** The quantity the provider reports, when the lots don't explain it. */
-  reportedQty?: number;
-  /** Day index of the first price (a fund launched inside the history):
-   *  no price is served before it, as Yahoo has none. */
-  listedFrom?: number;
-};
-
-export type ConnectionRow = Omit<SyncConnection, "accounts"> & { providerKey: string };
+import { createIds, named, type Ids } from "./ids.ts";
+import {
+  accountRow,
+  cashRow,
+  connectionRow,
+  lotRow,
+  newestFirst,
+  type AccountRow,
+  type CategoryRow,
+  type ConnectionRow,
+  type SecurityRow,
+  type TagRow,
+  type TxnRow,
+} from "./rows.ts";
+import { DAY_MS, TODAY, daysAgo, money, rng } from "./util.ts";
 
 export type BaseData = {
+  /** Hands out the id of every row added after the named ones. */
+  ids: Ids;
   user: SessionUser;
   users: User[];
   sessions: Session[];
@@ -80,8 +40,6 @@ export type BaseData = {
   txns: TxnRow[];
   categories: CategoryRow[];
   tags: TagRow[];
-  /** Exchange-rate gaps: securities with no rate today (left out of every
-   *  sum, flagged ⚠), and no rate at all into the reader's currency. */
   /** `missing`: securities quoted in dollars with no dollar rate. `budget`:
    *  some transaction has no rate. `rateDown`: a currency change can't get
    *  its rate, so the server refuses it. */
@@ -91,14 +49,14 @@ export type BaseData = {
 /** Days of price and balance history, today included. */
 export const HISTORY_DAYS = 800;
 
-export const USER_ID = id("usr", 1);
-export const CHECKING = id("acc", 1);
-export const SAVINGS = id("acc", 2);
-export const PEA = id("acc", 3);
-export const BANK = id("con", 1);
-export const BROKER = id("con", 2);
-export const CW8 = id("hol", 1);
-export const ESE = id("hol", 2);
+export const USER_ID = named("user", 1);
+export const CHECKING = named("account", 1);
+export const SAVINGS = named("account", 2);
+export const PEA = named("account", 3);
+export const BANK = named("connection", 1);
+export const BROKER = named("connection", 2);
+export const CW8 = named("security", 1);
+export const ESE = named("security", 2);
 
 const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kind"], string | null, string][] = [
   ["Housing", "housing", "#f18c80", "house", "expense", null, "Rent, mortgage payments, service charges and property tax."],
@@ -135,12 +93,12 @@ const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kind"], st
   ["Ignore", "ignore", "#777471", "eye-off", "neutral", null, "Rows to leave out of every total: duplicates, corrections and anything that should not count."],
 ];
 
-function categories(): CategoryRow[] {
+function categories(ids: Ids): CategoryRow[] {
   const order: Record<string, number> = {};
-  return CATEGORY_SEED.map(([name, key, color, icon, kind, systemKey, hint], i) => {
+  return CATEGORY_SEED.map(([name, key, color, icon, kind, systemKey, hint]) => {
     order[kind] = (order[kind] ?? 0) + 1;
     return {
-      id: id("cat", i + 1),
+      id: ids.next("category"),
       name,
       defaultKey: key,
       color,
@@ -212,11 +170,11 @@ export function dayIndex(t: number): number {
   return HISTORY_DAYS - 1 - Math.round((TODAY - t) / DAY_MS);
 }
 
-function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityRow[], openingPeaCash: number): TxnRow[] {
+type BaseTags = Record<"holidays" | "refundable" | "renovation", string>;
+
+function transactions(ids: Ids, cats: CategoryRow[], tags: BaseTags, securities: SecurityRow[], openingPeaCash: number): TxnRow[] {
   const r = rng(61);
   const rows: TxnRow[] = [];
-  let n = 0;
-  const c = (key: string) => cat(cats, key);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
   const amt = (lo: number, hi: number) => Math.round((lo + r() * (hi - lo)) * 100) / 100;
 
@@ -225,7 +183,7 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
     // category. Nothing waits for review here: the "To review" state adds it.
     const recent = TODAY - t < 30 * DAY_MS;
     const roll = r();
-    let categoryId = categoryKey ? c(categoryKey) : null;
+    let categoryId = categoryKey ? cat(cats, categoryKey) : null;
     let categorySource: TxnRow["categorySource"] = categoryId ? (roll < 0.5 ? "user" : "ai") : null;
     let categoryConfidence = categorySource === "ai" ? money(0.8 + r() * 0.19, 2) : null;
     if (recent && categoryKey && !extra.isTransfer) {
@@ -235,36 +193,16 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
         categoryConfidence = null;
       }
     }
-    const row: TxnRow = {
-      id: id("txn", ++n),
-      t,
-      type,
-      description,
-      amount,
-      accountId,
-      source: "cash",
-      holdingId: null,
-      quantity: null,
-      unitPrice: null,
-      fee: null,
-      categoryId,
-      categorySource,
-      categoryConfidence,
-      needsReview: false,
-      checked: !recent && r() < 0.6,
-      isTransfer: false,
-      isOrphanTransfer: false,
-      tagIds: [],
-      ...extra,
-    };
+    const checked = !recent && r() < 0.6;
+    const row = cashRow(ids.next("txn"), { t, type, description, amount, accountId, categoryId, categorySource, categoryConfidence, checked, ...extra });
     rows.push(row);
     return row;
   }
 
   function transfer(t: number, from: string, to: string, amount: number, outText: string, inText: string) {
-    const pair = { categoryKey: "internal", extra: { isTransfer: true, categorySource: "pair" as const } };
-    add(t, from, -amount, outText, "transfer", pair.categoryKey, pair.extra);
-    add(t + DAY_MS, to, amount, inText, "transfer", pair.categoryKey, pair.extra);
+    const pair = { isTransfer: true, categorySource: "pair" as const };
+    add(t, from, -amount, outText, "transfer", "internal", pair);
+    add(t + DAY_MS, to, amount, inText, "transfer", "internal", pair);
   }
 
   const peaCash = { value: openingPeaCash };
@@ -301,28 +239,7 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
       const qty = Math.floor((Math.min(peaCash.value, 600) - fee) / price);
       if (qty <= 0) return;
       peaCash.value -= qty * price + fee;
-      rows.push({
-        id: id("txn", ++n),
-        t: buyT,
-        type: "buy",
-        description: null,
-        amount: -(qty * price + fee),
-        accountId: PEA,
-        source: "lot",
-        holdingId: sec.id,
-        quantity: qty,
-        unitPrice: price,
-        fee,
-        // As the server sends a lot row: no category, it isn't a budget row.
-        categoryId: null,
-        categorySource: null,
-        categoryConfidence: null,
-        needsReview: false,
-        checked: false,
-        isTransfer: false,
-        isOrphanTransfer: false,
-        tagIds: [],
-      });
+      rows.push(lotRow(ids.next("txn"), { side: "buy", t: buyT, accountId: PEA, holdingId: sec.id, quantity: qty, unitPrice: price, fee }));
     });
 
     for (const d of [2, 9, 16, 23, 29]) {
@@ -335,34 +252,37 @@ function transactions(cats: CategoryRow[], tags: TagRow[], securities: SecurityR
     at(22, (t) => add(t, CHECKING, -amt(25, 60), "CB PHARMACIE DU MARCHE", "card", "health"));
     at(26, (t) => add(t, CHECKING, -60, "RETRAIT DAB 26/", "withdrawal", "cash_withdrawals"));
     if (m === 4) {
-      at(6, (t) => add(t, CHECKING, -642.3, "CB AIR FRANCE", "card", "travel", { tagIds: [tags[0].id] }));
-      at(19, (t) => add(t, CHECKING, -418, "CB AIRBNB * HMXYZ", "card", "travel", { tagIds: [tags[0].id] }));
+      at(6, (t) => add(t, CHECKING, -642.3, "CB AIR FRANCE", "card", "travel", { tagIds: [tags.holidays] }));
+      at(19, (t) => add(t, CHECKING, -418, "CB AIRBNB * HMXYZ", "card", "travel", { tagIds: [tags.holidays] }));
     }
     if (m === 2) {
-      at(13, (t) => add(t, CHECKING, -89.9, "CB LEROY MERLIN", "card", "home_furniture", { tagIds: [tags[2].id] }));
-      at(21, (t) => add(t, CHECKING, 45, "VIR CPAM REMBOURSEMENT", "transfer", "reimbursements", { tagIds: [tags[1].id] }));
+      at(13, (t) => add(t, CHECKING, -89.9, "CB LEROY MERLIN", "card", "home_furniture", { tagIds: [tags.renovation] }));
+      at(21, (t) => add(t, CHECKING, 45, "VIR CPAM REMBOURSEMENT", "transfer", "reimbursements", { tagIds: [tags.refundable] }));
     }
     if (m === 9) at(28, (t) => add(t, SAVINGS, 156.12, "INTERETS CREDITEURS", "deposit", "interest"));
   }
-  return rows.sort((a, b) => b.t - a.t || b.id.localeCompare(a.id));
+  return rows.sort(newestFirst);
 }
 
 export function baseData(): BaseData {
-  const cats = categories();
+  const ids = createIds();
+  const cats = categories(ids);
   const tags: TagRow[] = [
-    { id: id("tag", 1), name: "Holidays", color: "#60b4f5" },
-    { id: id("tag", 2), name: "Refundable", color: "#ea945e" },
-    { id: id("tag", 3), name: "Renovation", color: null },
+    { id: ids.next("tag"), name: "Holidays", color: "#60b4f5" },
+    { id: ids.next("tag"), name: "Refundable", color: "#ea945e" },
+    { id: ids.next("tag"), name: "Renovation", color: null },
   ];
+  const [holidays, refundable, renovation] = tags.map((t) => t.id);
   const securities: SecurityRow[] = [
     { id: CW8, accountId: PEA, ticker: "CW8", name: "Amundi MSCI World UCITS ETF", closes: closes(1, 541.32, 0.0003, 0.012), composition: WORLD },
     { id: ESE, accountId: PEA, ticker: "ESE", name: "BNP Paribas Easy S&P 500 UCITS ETF", closes: closes(2, 28.47, 0.0004, 0.014), composition: SP500 },
   ];
   const openingCash = { [CHECKING]: 2400, [SAVINGS]: 6200, [PEA]: 150 };
-  const lastSync = Date.now() - 2 * 3_600_000;
-  const health = { verified: true, lastUpdatedOn: isoDay(TODAY), state: null, errorMessage: null, nextRetryOn: null };
+  const bank = connectionRow(BANK, "Crédit Mutuel");
+  const broker = connectionRow(BROKER, "Boursorama");
 
   return {
+    ids,
     user: {
       id: USER_ID,
       name: "Camille Martin",
@@ -373,27 +293,24 @@ export function baseData(): BaseData {
     },
     users: [
       { id: USER_ID, name: "Camille Martin", email: "camille@example.com", role: "admin", joinedAt: daysAgo(420), isSelf: true },
-      { id: id("usr", 2), name: "Alex Durand", email: "alex@example.com", role: "user", joinedAt: daysAgo(130), isSelf: false },
+      { id: ids.next("user"), name: "Alex Durand", email: "alex@example.com", role: "user", joinedAt: daysAgo(130), isSelf: false },
     ],
     sessions: [
-      { id: id("ses", 1), device: "Firefox on Linux", ip: "192.0.2.14", createdAt: daysAgo(12), lastActiveAt: Date.now(), remembered: true, current: true },
-      { id: id("ses", 2), device: "Safari on iPhone", ip: "198.51.100.7", createdAt: daysAgo(40), lastActiveAt: daysAgo(2), remembered: true, current: false },
+      { id: ids.next("session"), device: "Firefox on Linux", ip: "192.0.2.14", createdAt: daysAgo(12), lastActiveAt: Date.now(), remembered: true, current: true },
+      { id: ids.next("session"), device: "Safari on iPhone", ip: "198.51.100.7", createdAt: daysAgo(40), lastActiveAt: daysAgo(2), remembered: true, current: false },
     ],
     mfa: { totp: false, recoveryRemaining: 0, passkeys: [] },
     providers: [{ key: "powens", displayName: "Powens", description: "French and European banks and brokers.", enabled: true }],
-    connections: [
-      { providerKey: "powens", id: BANK, displayName: "Crédit Mutuel", status: "ok", lastSyncAt: lastSync, lastError: null, logo: null, canManage: true, health },
-      { providerKey: "powens", id: BROKER, displayName: "Boursorama", status: "ok", lastSyncAt: lastSync, lastError: null, logo: null, canManage: true, health },
-    ],
+    connections: [bank, broker],
     accounts: [
-      { id: CHECKING, connectionId: BANK, name: "Compte courant", color: "#60b4f5", typeKey: "checking", currency: "EUR", sourceName: "Crédit Mutuel", sourceLogo: null },
-      { id: SAVINGS, connectionId: BANK, name: "Livret A", color: "#34d399", typeKey: "savings", currency: "EUR", sourceName: "Crédit Mutuel", sourceLogo: null },
-      { id: PEA, connectionId: BROKER, name: "PEA", color: "#cb93e2", typeKey: "pea", currency: "EUR", sourceName: "Boursorama", sourceLogo: null },
+      accountRow(CHECKING, bank, { name: "Compte courant", color: "#60b4f5", typeKey: "checking" }),
+      accountRow(SAVINGS, bank, { name: "Livret A", color: "#34d399", typeKey: "savings" }),
+      accountRow(PEA, broker, { name: "PEA", color: "#cb93e2", typeKey: "pea" }),
     ],
     openingCash,
     securities,
     manualLots: {},
-    txns: transactions(cats, tags, securities, openingCash[PEA]),
+    txns: transactions(ids, cats, { holidays, refundable, renovation }, securities, openingCash[PEA]),
     categories: cats,
     tags,
     fx: { missing: [], budget: false, rateDown: false },

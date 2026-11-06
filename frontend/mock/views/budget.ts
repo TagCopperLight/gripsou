@@ -6,9 +6,14 @@
 import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
 import type { BreakdownRow, BudgetSummary, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount } from "../../src/api/overview.ts";
 import type { Transaction, TransactionCounts } from "../../src/api/types.ts";
-import type { CategoryRow, TxnRow } from "../data/base.ts";
+import type { CategoryRow, TxnRow } from "../data/rows.ts";
 import { dayOf, isoDay, money } from "../data/util.ts";
 import type { Store } from "../store.ts";
+
+/** The AI's guess waiting for review (`categoryId` null: it abstained). */
+export function queueForReview(row: TxnRow, categoryId: string | null, confidence: string | null): TxnRow {
+  return Object.assign(row, { categoryId, categorySource: categoryId ? "ai" : null, categoryConfidence: confidence, needsReview: true });
+}
 
 export function categories(store: Store): BudgetCategory[] {
   return [...store.categories]

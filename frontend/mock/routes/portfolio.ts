@@ -2,7 +2,7 @@ import { reply, type Router } from "../router.ts";
 import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
-import { id } from "../data/util.ts";
+import { connectionRow } from "../data/rows.ts";
 
 export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
@@ -11,7 +11,6 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("PATCH", "/accounts/:id", ({ store, params, body }) => {
     const account = store.accounts.find((a) => a.id === params.id);
     if (!account) return reply(404);
-    if (store.accountSaveFails) return reply(500, { error: "forced by the review panel" });
     const { name, typeKey, color } = body as { name: string; typeKey: string; color: string };
     Object.assign(account, { name, typeKey, color });
     return reply(204);
@@ -29,12 +28,10 @@ export function portfolioRoutes(r: Router<Store>): void {
   // No provider page here: the new bank shows up at once, syncs for a few
   // seconds, then is healthy with no account.
   r.route("POST", "/connections/init", ({ store, body }) => {
-    const n = store.connections.length + 1;
-    const connectionId = id("con", 900 + n);
-    store.connections.push({
-      providerKey: (body as { providerKey: string }).providerKey, id: connectionId, displayName: "Banque Populaire",
-      status: "syncing", lastSyncAt: null, lastError: null, logo: null, canManage: true, health: null,
-    });
+    const connectionId = store.ids.next("connection");
+    store.connections.push(connectionRow(connectionId, "Banque Populaire", {
+      providerKey: (body as { providerKey: string }).providerKey, status: "syncing", lastSyncAt: null, health: null,
+    }));
     v.syncConnection(store, connectionId);
     return { connectionId, redirectUrl: null };
   });

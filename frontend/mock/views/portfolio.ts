@@ -14,7 +14,8 @@ import type {
   ProviderGroup,
   ReturnFigures,
 } from "../../src/api/types.ts";
-import { HISTORY_DAYS, dayIndex, type SecurityRow } from "../data/base.ts";
+import { HISTORY_DAYS, dayIndex } from "../data/base.ts";
+import { healthy, type SecurityRow } from "../data/rows.ts";
 import { DAY_MS, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
 import type { Store } from "../store.ts";
 
@@ -167,7 +168,7 @@ export function syncConnection(store: Store, connectionId: string): void {
   c.status = "syncing";
   setTimeout(() => {
     Object.assign(c, { status: "ok", lastSyncAt: Date.now(), lastError: null });
-    c.health = { verified: true, lastUpdatedOn: isoDay(TODAY), state: null, errorMessage: null, nextRetryOn: null };
+    c.health = healthy();
     for (const a of store.accounts) if (a.connectionId === connectionId) delete store.accountHealth[a.id];
   }, 4000);
 }
@@ -382,8 +383,8 @@ export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[])
 export function saveLots(store: Store, holdingId: string, batch: SaveLotsInput): void {
   store.deletedLots.push(...batch.deletes);
   const kept = (store.manualLots[holdingId] ?? []).filter((l) => !batch.deletes.includes(l.id));
-  const added = batch.adds.map((r, i) => ({
-    id: `manual-${holdingId}-${Date.now()}-${i}`,
+  const added = batch.adds.map((r) => ({
+    id: store.ids.next("lot"),
     t: Date.parse(`${r.date}T00:00:00Z`),
     side: r.type,
     qty: r.quantity,

@@ -4,6 +4,7 @@
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget.ts";
 import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
 import { baseData, type BaseData } from "./data/base.ts";
+import type { Fault } from "./faults.ts";
 
 export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
@@ -20,16 +21,10 @@ export type Store = BaseData & {
   providerLots: string[];
   /** An account's own bank-update health, when it differs from its connection's. */
   accountHealth: Record<string, SyncHealth>;
-  /** Saving an account fails (the Edit account window's error). */
-  accountSaveFails: boolean;
   /** Signing in asks for the second step (a code, or a backup code). */
   loginMfa: boolean;
-  /** Every read but the signed-in user's fails: each card shows its error. */
-  readsFail: boolean;
-  /** Every write fails (signing in and out aside): each action's error. */
-  writesFail: boolean;
-  /** The accounts come back malformed, so the pages that show them break. */
-  accountsBroken: boolean;
+  /** Requests the active states make fail. */
+  faults: Fault[];
 };
 
 export function createStore(): Store {
@@ -41,11 +36,8 @@ export function createStore(): Store {
     deletedLots: [],
     providerLots: [],
     accountHealth: {},
-    accountSaveFails: false,
     loginMfa: false,
-    readsFail: false,
-    writesFail: false,
-    accountsBroken: false,
+    faults: [],
     apiKeys: [
       {
         key: "powens",

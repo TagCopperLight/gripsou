@@ -1,5 +1,5 @@
 import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/budget.ts";
-import type { TxnRow } from "../data/base.ts";
+import type { TxnRow } from "../data/rows.ts";
 import { reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/budget.ts";
@@ -79,7 +79,7 @@ export function budgetRoutes(r: Router<Store>): void {
     const b = body as { categoryId: string | null; confidence: string | null };
     const row = store.txns.find((x) => x.id === params.id);
     if (!row) return reply(404, { error: "no such transaction" });
-    Object.assign(row, { categoryId: b.categoryId, categorySource: b.categoryId ? "ai" : null, categoryConfidence: b.confidence, needsReview: true });
+    v.queueForReview(row, b.categoryId, b.confidence);
     return reply(204);
   });
   r.route("GET", "/budget/categories", ({ store }) => v.categories(store));
@@ -88,7 +88,7 @@ export function budgetRoutes(r: Router<Store>): void {
   r.route("POST", "/budget/categories", ({ store, body }) => {
     const b = body as CategoryBody;
     if (taken(store.categories, b.name)) return reply(409, { error: "duplicate name" });
-    const row = { ...b, id: crypto.randomUUID(), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
+    const row = { ...b, id: store.ids.next("category"), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
     store.categories.push(row);
     return { ...row, txCount: 0 };
   });
@@ -121,7 +121,7 @@ export function budgetRoutes(r: Router<Store>): void {
   r.route("POST", "/budget/tags", ({ store, body }) => {
     const b = body as TagBody;
     if (taken(store.tags, b.name)) return reply(409, { error: "duplicate name" });
-    const row = { ...b, id: crypto.randomUUID() };
+    const row = { ...b, id: store.ids.next("tag") };
     store.tags.push(row);
     return { ...row, txCount: 0 };
   });

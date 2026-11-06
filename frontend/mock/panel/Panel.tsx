@@ -2,7 +2,8 @@
 // styled on its own (inline styles), apart from the app's design.
 
 import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import type { ControlInfo, OverrideMode } from "../control.ts";
+import type { ControlInfo } from "../control.ts";
+import type { OverrideMode } from "../faults.ts";
 
 const TOKEN_KEY = "gripsou.token";
 const OPEN_KEY = "gripsou.mock.open";
@@ -125,8 +126,9 @@ export function Panel() {
     setOpen(!open);
   };
 
-  const focus = info?.focus ?? "";
-  const here = info?.states.filter((st) => st.pieces.includes(focus)) ?? [];
+  const focus = info?.focus ?? null;
+  const shown = (st: ControlInfo["states"][number]) => focus !== null && st.pieces.includes(focus);
+  const here = info?.states.filter(shown) ?? [];
   // States sharing a group can't be on together: one segmented control each.
   const groups: [string, typeof here][] = [];
   for (const st of here) {
@@ -135,7 +137,7 @@ export function Panel() {
     if (g) g[1].push(st);
     else groups.push([st.group, [st]]);
   }
-  const elsewhere = info?.states.filter((st) => !st.pieces.includes(focus) && st.active) ?? [];
+  const elsewhere = info?.states.filter((st) => !shown(st) && st.active) ?? [];
   const overridden = Object.entries(info?.overrides ?? {});
   const unhandled = info?.unhandled ?? [];
   const user = info?.user;
@@ -229,7 +231,7 @@ export function Panel() {
               <div key={p} style={s.row}>
                 <span style={{ flex: 1, overflowWrap: "anywhere" }}>{p}</span>
                 <span style={s.warn}>{mode}</span>
-                <Btn onClick={() => void control("/override", { path: p, mode: null }).then(reload)}>clear</Btn>
+                <Btn onClick={() => void control("/override", { request: p, mode: null }).then(reload)}>clear</Btn>
               </div>
             ))}
             <details>
@@ -238,7 +240,7 @@ export function Panel() {
                 <div key={p} style={{ ...s.row, marginTop: 2 }}>
                   <span style={{ flex: 1, overflowWrap: "anywhere" }}>{p}</span>
                   {(["loading", "error"] as OverrideMode[]).map((mode) => (
-                    <Btn key={mode} onClick={() => void control("/override", { path: p, mode }).then(reload)}>
+                    <Btn key={mode} onClick={() => void control("/override", { request: p, mode }).then(reload)}>
                       {mode}
                     </Btn>
                   ))}

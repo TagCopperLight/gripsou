@@ -6,8 +6,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { createControl, type OverrideMode, type Saved } from "./control.ts";
-import { FOCUS, STATES } from "./states.ts";
+import { createControl, type Saved } from "./control.ts";
+import { requestKey, type OverrideMode } from "./faults.ts";
+import { FOCUS, STATES } from "./states/index.ts";
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -26,7 +27,7 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-type Held = { path: string; release: () => void };
+type Held = { request: string; release: () => void };
 
 // Vite restarts the server whenever a file under mock/ changes; the active
 // states and the App settings are kept here so a restart doesn't drop them.
@@ -65,7 +66,7 @@ export function mockApi(): Plugin {
     const body = await readBody(req);
     const answer = () => {
       const out = control.handle(method, url.pathname, url.searchParams, body);
-      if (out === "hold") held.push({ path: url.pathname, release: answer });
+      if (out === "hold") held.push({ request: requestKey(method, url.pathname), release: answer });
       else send(res, out.status, out.body);
     };
     answer();
@@ -84,10 +85,10 @@ export function mockApi(): Plugin {
         control.setState(String(body?.id), Boolean(body?.on));
         break;
       case "/override": {
-        const target = String(body?.path);
+        const target = String(body?.request);
         control.setOverride(target, (body?.mode as OverrideMode | null) ?? null);
-        const release = held.filter((h) => h.path === target);
-        held = held.filter((h) => h.path !== target);
+        const release = held.filter((h) => h.request === target);
+        held = held.filter((h) => h.request !== target);
         release.forEach((h) => h.release());
         break;
       }

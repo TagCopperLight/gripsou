@@ -35,12 +35,6 @@ export function money(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
-/** Stable fake UUIDs: `id("acc", 1)` → `00000000-0000-4000-8acc-000000000001`. */
-export function id(tag: string, n: number): string {
-  const hex = [...tag].map((c) => c.charCodeAt(0).toString(16)).join("").slice(0, 3).padEnd(3, "0");
-  return `00000000-0000-4000-8${hex}-${String(n).padStart(12, "0")}`;
-}
-
 /** Days back from `RANGE` keys, as the backend's `range_window`. */
 export function rangeDays(range: string): number {
   switch (range) {
