@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select provider_key from connection where id = $1 and user_id = $2 and status = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "586725247be62ee2b8ab96e371cf885541cc753f83625fadc1ce3dd1ff9b0d01"
+}

@@ -2,6 +2,8 @@
 // The bearer token is persisted in localStorage (remembered) or sessionStorage
 // (not remembered) so the user stays logged in across page refreshes.
 
+import type { Body, Key, Params, Query, Res } from "./route";
+
 const TOKEN_KEY = "gripsou.token";
 
 function loadToken(): string | null {
@@ -47,7 +49,7 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 }
 
 /** An HTTP failure with its status attached, so callers can branch on 409/404
- *  instead of parsing the message. Thrown by every helper in this module. */
+ *  instead of parsing the message. Thrown by `api`. */
 export class ApiError extends Error {
   readonly status: number;
   /** Seconds from a `Retry-After` header (429 throttling), else null. */
@@ -83,22 +85,45 @@ async function bodyOf<T>(res: Response): Promise<T> {
   return (text === "" ? undefined : JSON.parse(text)) as T;
 }
 
-export type GetJsonOptions = { signal?: AbortSignal };
+type Options<K extends Key> = ([keyof Params<K>] extends [never] ? unknown : { params: Params<K> }) &
+  (Body<K> extends undefined ? unknown : { body: Body<K> }) &
+  (Query<K> extends undefined ? unknown : { query: Query<K> }) & { signal?: AbortSignal };
 
-async function request<T>(method: string, path: string, body: unknown, opts?: GetJsonOptions): Promise<T> {
+/** The route's path with its `:name` segments filled in, and its query. */
+function pathOf(key: Key, params?: Record<string, string>, query?: object): string {
+  const path = key
+    .slice(key.indexOf(" ") + 1)
+    .replace(/:(\w+)/g, (_, name: string) => encodeURIComponent(params?.[name] ?? ""));
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(query ?? {})) {
+    if (v !== undefined && v !== null) search.set(k, String(v));
+  }
+  const qs = search.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
+/** Calls one route of the server, typed by what it takes and answers. */
+export async function api<K extends Key>(
+  key: K,
+  ...[opts]: object extends Options<K> ? [opts?: Options<K>] : [opts: Options<K>]
+): Promise<Res<K>> {
+  const { params, query, signal, ...rest } = (opts ?? {}) as {
+    params?: Record<string, string>;
+    body?: unknown;
+    query?: object;
+    signal?: AbortSignal;
+  };
+  const method = key.slice(0, key.indexOf(" "));
+  // A POST always carries a JSON body, `{}` when its route takes none.
+  const body = rest.body ?? (method === "POST" ? {} : undefined);
+  const path = pathOf(key, params, query);
   const requestToken = authToken;
   const res = await fetch(`/api${path}`, {
     method,
     headers: body === undefined ? authHeaders() : authHeaders({ "Content-Type": "application/json" }),
     body: body === undefined ? undefined : JSON.stringify(body),
-    ...(opts?.signal ? { signal: opts.signal } : {}),
+    ...(signal ? { signal } : {}),
   });
   handle(res, path, method, requestToken);
-  return bodyOf<T>(res);
+  return bodyOf<Res<K>>(res);
 }
-
-export const getJson = <T>(path: string, opts?: GetJsonOptions) => request<T>("GET", path, undefined, opts);
-export const postJson = <T>(path: string, body: unknown) => request<T>("POST", path, body);
-export const putJson = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
-export const patchJson = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
-export const deleteJson = <T>(path: string, body?: unknown) => request<T>("DELETE", path, body);

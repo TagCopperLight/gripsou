@@ -13,28 +13,10 @@ concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
+# The checks themselves live in ci.sh, so a local run is the same as this one.
 jobs:
   backend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: gripsou
-          POSTGRES_PASSWORD: gripsou
-          POSTGRES_DB: gripsou
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U gripsou"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://gripsou:gripsou@localhost:5432/gripsou
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -43,52 +25,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - name: Format check
-        run: cargo fmt --all --check
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-        env:
-          SQLX_OFFLINE: "true"
-      # Every #[sqlx::test] creates its own database and migrates it, and that
-      # setup, not the tests themselves, is most of the test step. Two fixes,
-      # both safe only because this Postgres is thrown away after the job:
-      # - stop it waiting on the disk (a crash would lose data; there is none
-      #   worth keeping here);
-      # - migrate template1, which every new database is copied from, so each
-      #   test's migrator finds everything already applied.
-      # ./ci.sh does the same on a container of its own; never on a dev server,
-      # where a migrated template1 goes stale when you edit an unmerged migration.
-      - name: Prepare test database
-        run: |
-          for setting in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
-            docker exec ${{ job.services.postgres.id }} psql -U gripsou -d gripsou -c "alter system set $setting"
-          done
-          docker exec ${{ job.services.postgres.id }} psql -U gripsou -d gripsou -c "select pg_reload_conf()"
-          DATABASE_URL=postgres://gripsou:gripsou@localhost:5432/template1 \
-            cargo run --example migrate
-        env:
-          SQLX_OFFLINE: "true"
-      - name: Test
-        run: cargo test
-        env:
-          SQLX_OFFLINE: "true"
+      - run: ./ci.sh backend
 
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.3"
-      - name: Install
-        run: bun install --frozen-lockfile
-      - name: Lint
-        run: bun run lint
-      - name: Test
-        run: bun run test
-      - name: Build
-        run: bun run build
-
+          bun-version-file: frontend/package.json
+      - run: ./ci.sh frontend

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select outcome as \"outcome: AiRunOutcome\", error, started_at\n        from budget_ai_run\n        where user_id = $1 and outcome <> $2\n        order by started_at desc\n        limit 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "outcome: AiRunOutcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_ai_run",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_ai_run",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "budget_ai_run",
+            "name": "started_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f875919b28b4fe6e42ae817c78cdc5831f004d5899d096aa90bb549f768ce1dc"
+}

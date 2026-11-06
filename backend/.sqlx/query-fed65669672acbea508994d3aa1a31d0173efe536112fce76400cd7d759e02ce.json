@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with items as (\n            select t.id, t.description_norm as norm\n            from budget_transactions($1) t\n            where t.id = any($2) and t.description_norm <> ''\n        ),\n        confirmed as not materialized (\n            select c.id, c.description, c.description_norm, c.amount, a.currency, a.type_key,\n                   c.spent_on, c.budget_category_id\n            from budget_transactions($1) c\n            join account a on a.id = c.account_id\n            where c.budget_category_id is not null\n              and budget_user_chose(c.category_source, c.category_reviewed_at)\n        )\n        select i.id as \"item_id!\", e.description, e.amount as \"amount!\", e.currency as \"currency!\",\n               e.type_key as \"account_type!\", e.day as \"day!\", e.category_id as \"category_id!\"\n        from items i\n        cross join lateral (\n            (select c.description, c.amount, c.currency, c.type_key,\n                    c.spent_on as day, c.budget_category_id as category_id\n               from confirmed c\n              where c.description_norm = i.norm\n                and c.id <> i.id\n              order by c.spent_on desc, c.id\n              limit $3)\n            union all\n            (select c.description, c.amount, c.currency, c.type_key,\n                    c.spent_on as day, c.budget_category_id as category_id\n               from confirmed c\n              where c.description_norm % i.norm\n                and similarity(c.description_norm, i.norm) > 0.3\n                and c.description_norm <> i.norm\n              order by similarity(c.description_norm, i.norm) desc, c.spent_on desc, c.id\n              limit $4)\n        ) e\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "description",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "account_type!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "category_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "fed65669672acbea508994d3aa1a31d0173efe536112fce76400cd7d759e02ce"
+}

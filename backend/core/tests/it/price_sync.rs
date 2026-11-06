@@ -1,11 +1,10 @@
-use gripsou_core::testkit::{checking_account, equity_holding, seed_connection};
+use gripsou_core::testkit;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use gripsou_core::dto::{InstrumentRef, PricePoint, SyncResult};
-use gripsou_core::ingest::ingest;
+use gripsou_core::dto::{InstrumentRef, PricePoint};
 use gripsou_core::price_sync::fetch_prices_for_connection;
 use gripsou_core::provider::{PriceProvider, ProviderError};
 use rust_decimal::Decimal;
@@ -43,23 +42,6 @@ impl PriceProvider for MockProvider {
     }
 }
 
-async fn seed_one_equity(pool: &PgPool) -> uuid::Uuid {
-    let conn_id = seed_connection(pool).await;
-    let sync = SyncResult {
-        accounts: vec![checking_account("acct-1")],
-        holdings: vec![equity_holding(
-            "acct-1",
-            "US0378331005",
-            Decimal::new(3, 0),
-            Decimal::new(450, 0),
-            Some(Decimal::new(600, 0)),
-        )],
-        ..Default::default()
-    };
-    ingest(pool, conn_id, &sync).await.unwrap();
-    conn_id
-}
-
 fn price_count(
     pool: &PgPool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = i64> + Send + '_>> {
@@ -73,7 +55,7 @@ fn price_count(
 
 #[sqlx::test(migrations = "../migrations")]
 async fn resolves_inserts_then_guard_skips(pool: PgPool) {
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),
@@ -96,7 +78,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(meta["yahoo_symbol"].as_str(), Some("MC.PA"));
+    assert_eq!(meta["mock_symbol"].as_str(), Some("MC.PA"));
     assert_eq!(symbol, None, "ISIN path keeps symbol null");
     assert_eq!(kind, "equity");
 
@@ -115,7 +97,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: None,
@@ -136,7 +118,7 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(meta["yahoo_resolution"].as_str(), Some("unresolved"));
+    assert_eq!(meta["mock_resolution"].as_str(), Some("unresolved"));
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -145,7 +127,7 @@ async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
     // EUR-quoted points must still store them, tagged EUR. unit_value_asof
     // converts from the price row's currency at read time, so a provider
     // mislabelling an instrument doesn't cost it its whole price series.
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),
@@ -174,7 +156,7 @@ async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
 #[sqlx::test(migrations = "../migrations")]
 async fn drops_points_with_no_currency_at_all(pool: PgPool) {
     // An unlabelled point cannot be converted, so storing it would be a guess.
-    let conn_id = seed_one_equity(&pool).await;
+    let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),

@@ -7,7 +7,7 @@
 //! `"sector"`. We extract those arrays directly — far more stable than scraping
 //! the visible markup.
 //!
-//! ponytail: the `id` anchors ("regional"/"sector") and the search→`/cours/<sym>/`
+//! The `id` anchors ("regional"/"sector") and the search→`/cours/<sym>/`
 //! redirect shape are what to recheck if Boursorama changes its pages.
 
 use gripsou_core::dto::Allocation;

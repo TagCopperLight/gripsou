@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { QueryObserver } from "@tanstack/react-query";
 
-import {
-  useAccounts, useAccountSeries, useConnections, useHoldings,
-  useInvestmentReturns, useNetWorth, useSyncConnection, useTransactions,
-} from "./hooks";
-import { useAiStatus, type AiStatus } from "./budget";
+import { useAccounts, useAccountSeries, useNetWorth } from "./accounts";
+import { useConnections, useSyncConnection } from "./connections";
+import { useHoldings, useInvestmentReturns } from "./holdings";
+import { useTransactions } from "./transactions";
+import { useAiStatus } from "./budget";
 import { setAuthToken } from "./client";
 import {
   afterAccountEdit, afterAiRunFinished, afterBudgetCategoryChange,
   afterReviewChange, afterSyncFinished, afterTransactionChange,
 } from "./invalidate";
 import { keys } from "./keys";
-import type { ProviderGroup, SyncStatus } from "./types";
+import type { AiStatus, ConnectionStatus, ProviderGroup } from "./wire";
+import { testQueryClient, appWrapper, stubFetch } from "../test/kit";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -23,15 +23,12 @@ afterEach(() => {
 });
 
 function setup() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  const { client: qc, wrapper } = appWrapper();
   return { qc, wrapper };
 }
 
-function connection(id: string, status: SyncStatus, lastSyncAt: number | null) {
-  return { id, status, lastSyncAt, displayName: id, lastError: null, accounts: [], logo: null };
+function connection(id: string, status: ConnectionStatus, lastSyncAt: number | null) {
+  return { id, status, lastSyncAt, displayName: id, canManage: false, health: null, lastError: null, accounts: [], logo: null };
 }
 
 function groups(...connections: ProviderGroup["connections"]): ProviderGroup[] {
@@ -54,7 +51,7 @@ describe("portfolio navigation cache", () => {
   it.each(cases)("reuses fresh %s on navigation and refreshes after sync", async (_name, query, body) => {
     const { qc, wrapper } = setup();
     let reads = 0;
-    vi.stubGlobal("fetch", vi.fn(async () => { reads++; return Response.json(body); }));
+    stubFetch(async () => { reads++; return Response.json(body); });
     const first = renderHook(() => query(), { wrapper });
     await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
     first.unmount();
@@ -72,7 +69,7 @@ describe("portfolio navigation cache", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const { qc, wrapper } = setup();
     let reads = 0;
-    vi.stubGlobal("fetch", vi.fn(async () => { reads++; return Response.json(body); }));
+    stubFetch(async () => { reads++; return Response.json(body); });
     const first = renderHook(() => query(), { wrapper });
     await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
     first.unmount();
@@ -89,11 +86,11 @@ describe("sync completion", () => {
   it("refreshes a requested sync that finished before the first connection snapshot arrived", async () => {
     const { qc, wrapper } = setup();
     let reads = 0;
-    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+    stubFetch(async (_url: string, init?: RequestInit) => {
       if (init?.method === "POST") return Response.json({ status: "syncing" }, { status: 202 });
       if (++reads === 1) return new Promise<Response>(() => {});
       return Response.json(groups(connection("a", "ok", 2000)));
-    }));
+    });
     const { result, unmount } = renderHook(() => ({ connections: useConnections(), sync: useSyncConnection() }), { wrapper });
     try {
       await waitFor(() => expect(reads).toBe(1));
@@ -111,7 +108,7 @@ describe("sync completion", () => {
   ])("refreshes transactions after %s", async (_name, before, after) => {
     const { qc, wrapper } = setup();
     let connections = before;
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(connections)));
+    stubFetch(async () => Response.json(connections));
     qc.setQueryData(keys.transactions({}), { pages: [[]], pageParams: [0] });
     const { result, unmount } = renderHook(() => useConnections(), { wrapper });
     try {
@@ -124,7 +121,7 @@ describe("sync completion", () => {
 
   it("does not refresh again for an unchanged completed connection", async () => {
     const { qc, wrapper } = setup();
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(groups(connection("a", "ok", 1000)))));
+    stubFetch(async () => Response.json(groups(connection("a", "ok", 1000))));
     const { result, unmount } = renderHook(() => useConnections(), { wrapper });
     try {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -138,7 +135,7 @@ describe("sync completion", () => {
     vi.useFakeTimers();
     const { qc, wrapper } = setup();
     let connections = groups(connection("a", "ok", 1000));
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(connections)));
+    stubFetch(async () => Response.json(connections));
     const { result, unmount } = renderHook(() => useConnections(), { wrapper });
     try {
       await act(() => vi.advanceTimersByTimeAsync(100));
@@ -158,7 +155,7 @@ describe("AI completion", () => {
     vi.useFakeTimers();
     const { qc, wrapper } = setup();
     let status = idle;
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(status)));
+    stubFetch(async () => Response.json(status));
     const { result, unmount } = renderHook(() => useAiStatus(), { wrapper });
     try {
       await act(() => vi.advanceTimersByTimeAsync(100));
@@ -176,12 +173,12 @@ describe("AI completion", () => {
     let requests = 0;
     let release!: (response: Response) => void;
     const slow = new Promise<Response>((resolve) => { release = resolve; });
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    stubFetch(async (url: string) => {
       if (url.includes("/budget/categorize/status")) return Response.json(status);
       requests++;
       if (requests === 2) return slow;
       return Response.json([{ id: "t1", categoryId: requests > 2 ? "groceries" : null }]);
-    }));
+    });
     const { result, unmount } = renderHook(() => ({ ai: useAiStatus(), list: useTransactions({}) }), { wrapper });
     try {
       await waitFor(() => {
@@ -204,13 +201,13 @@ describe("mutation dependencies", () => {
     const { qc, wrapper } = setup();
     let signal: AbortSignal | null | undefined;
     let started = false;
-    vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => {
+    stubFetch((_url: string, init?: RequestInit) => {
       signal = init?.signal;
       started = true;
       return new Promise<Response>((_resolve, reject) => {
         signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
       });
-    }));
+    });
     const { unmount } = renderHook(() => useHoldings(), { wrapper });
     try {
       await waitFor(() => expect(started).toBe(true));
@@ -225,7 +222,7 @@ describe("mutation dependencies", () => {
     ["review undo", afterReviewChange, [keys.budgetCategories()]],
     ["AI completion", afterAiRunFinished, [keys.budgetCategories()]],
   ])("marks cached dependants stale after %s", async (_name, event, dependants) => {
-    const qc = new QueryClient();
+    const qc = testQueryClient();
     try {
       for (const key of dependants) qc.setQueryData(key, []);
       await event(qc);
@@ -234,7 +231,7 @@ describe("mutation dependencies", () => {
   });
 
   it("restarts an initial read that began before a transaction write", async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = testQueryClient();
     let release!: (value: string) => void;
     const old = new Promise<string>((resolve) => { release = resolve; });
     let reads = 0;

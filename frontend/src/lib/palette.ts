@@ -1,10 +1,35 @@
-// Fixed account-color palette shown as swatches in the edit-account modal and
-// used by the backend to assign a random color on import. Single source of
-// truth: shared/account-palette.json at the repo root. `account.color` stores
-// the chosen hex verbatim.
+// The account palette is shared with the backend, which gives an imported
+// account a random colour from it. `account.color` stores the chosen hex
+// verbatim.
 import ACCOUNT_PALETTE from "../../../shared/account-palette.json";
 
 export { ACCOUNT_PALETTE };
+
+const [blue, teal, purple, gold, pink, olive, orange, steel, lavender, mint] = ACCOUNT_PALETTE;
+
+export { mint as MINT, orange as ORANGE };
+
+/** The category and tag swatches: the account palette's hues plus enough
+ *  others to fill one row, ordered around the colour wheel. */
+export const BUDGET_PALETTE: readonly string[] = [
+  "#e0605f",
+  orange,
+  gold,
+  "#c9a26b",
+  "#8fd05f",
+  olive,
+  mint,
+  teal,
+  "#55c2d8",
+  blue,
+  steel,
+  "#7f8cf0",
+  lavender,
+  purple,
+  "#d97ec4",
+  pink,
+  "#9aa4b2",
+];
 
 function hslToHex(h: number, s: number, l: number): string {
   l /= 100;
@@ -20,7 +45,6 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 export function colorForString(str: string): string {
-  if (str === "EUR") return ACCOUNT_PALETTE[0];
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);

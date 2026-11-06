@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update connection\n           set credentials = $3, provider_meta = $4, status = $5\n         where id = $1 and user_id = $2 and status = $6\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Jsonb",
+        "Jsonb",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "894bf58f236ded0bb0da4e5baf45848f4868ae7c86f2fae01a84123a9e3441db"
+}

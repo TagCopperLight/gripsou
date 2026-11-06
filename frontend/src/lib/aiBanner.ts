@@ -1,4 +1,4 @@
-import type { AiStatus } from "../api/budget";
+import type { AiStatus } from "../api/wire";
 
 /** Which banner the Overview shows, in priority order. A run under way shows
  *  as a pill in the month line instead (`AiRunningPill`), and hides the last

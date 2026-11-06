@@ -1,17 +1,30 @@
 //! Invite / password-reset tokens. The raw token is never stored — only its
-//! SHA-256 hash (base64url) — mirroring session tokens. Rows expire (24h) and
-//! are single-use (`used_at`).
+//! SHA-256 hash (base64url) — mirroring session tokens. Rows expire
+//! ([`TTL_HOURS`]) and are single-use (`used_at`).
 
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::repo::mfa::{self, Cleared};
+use crate::repo::user::Role;
 
 use crate::error::CoreError;
+use crate::text_enum::text_enum;
+
+text_enum! {
+    /// `invite_token.type`.
+    pub enum TokenKind {
+        Invite = "invite",
+        /// A password reset for an existing user's email.
+        Reset = "reset",
+    }
+}
+
+/// How long a link stays redeemable after it is created.
+pub const TTL_HOURS: i32 = 24;
 
 /// A token that is currently redeemable: row exists, unused, unexpired.
 pub struct ValidToken {
-    pub token_type: String,
+    pub token_type: TokenKind,
     pub email: Option<String>,
 }
 
@@ -23,7 +36,7 @@ pub async fn find_valid(
 ) -> Result<Option<ValidToken>, CoreError> {
     let row = sqlx::query_as!(
         ValidToken,
-        r#"select type as "token_type!", email
+        r#"select type as "token_type!: TokenKind", email
              from invite_token
             where token = $1 and used_at is null and expires_at > now()"#,
         token_hash,
@@ -49,10 +62,11 @@ pub async fn redeem_invite(
     // FOR UPDATE locks the row so two concurrent redeems can't both succeed.
     let valid = sqlx::query_scalar!(
         r#"select 1 from invite_token
-            where token = $1 and type = 'invite'
+            where token = $1 and type = $2
               and used_at is null and expires_at > now()
             for update"#,
         token_hash,
+        TokenKind::Invite as TokenKind,
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -61,10 +75,11 @@ pub async fn redeem_invite(
     }
     let user_id = sqlx::query_scalar!(
         r#"insert into users (email, name, password_hash, role)
-           values ($1, $2, $3, 'user') returning id"#,
+           values ($1, $2, $3, $4) returning id"#,
         email,
         name,
         password_hash,
+        Role::User as Role,
     )
     .fetch_one(&mut *tx)
     .await?; // unique-email violation propagates → rollback, token untouched.
@@ -90,10 +105,11 @@ pub async fn redeem_reset(
     let mut tx = pool.begin().await?;
     let email = sqlx::query_scalar!(
         r#"select email from invite_token
-            where token = $1 and type = 'reset'
+            where token = $1 and type = $2
               and used_at is null and expires_at > now()
             for update"#,
         token_hash,
+        TokenKind::Reset as TokenKind,
     )
     .fetch_optional(&mut *tx)
     .await?
@@ -117,9 +133,7 @@ pub async fn redeem_reset(
     )
     .execute(&mut *tx)
     .await?;
-    sqlx::query!("delete from session where user_id = $1", user_id)
-        .execute(&mut *tx)
-        .await?;
+    crate::repo::session::delete_all(&mut *tx, user_id, None).await?;
     // Whoever holds a reset link has proven control the second factor was
     // meant to guard (an admin vouched for them), so the reset turns it off.
     let cleared = mfa::clear_all(&mut tx, user_id).await?;
@@ -127,24 +141,23 @@ pub async fn redeem_reset(
     Ok(Some((user_id, cleared)))
 }
 
-/// Insert a one-time token. `kind` is `"invite"` or `"reset"`; `email` is the
+/// Insert a one-time token, redeemable for [`TTL_HOURS`]. `email` is the
 /// target user's email for resets, `None` for invites (the invitee chooses it).
 pub async fn create(
     pool: &sqlx::PgPool,
-    kind: &str,
+    kind: TokenKind,
     email: Option<&str>,
     created_by: Uuid,
     token: &str,
-    expires_at: DateTime<Utc>,
 ) -> Result<(), CoreError> {
     sqlx::query!(
         r#"insert into invite_token (token, type, email, created_by, expires_at)
-           values ($1, $2, $3, $4, $5)"#,
+           values ($1, $2, $3, $4, now() + make_interval(hours => $5))"#,
         token,
-        kind,
+        kind as TokenKind,
         email,
         created_by,
-        expires_at,
+        TTL_HOURS,
     )
     .execute(pool)
     .await?;
@@ -154,42 +167,32 @@ pub async fn create(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
     use sqlx::PgPool;
 
+    async fn expire_token(pool: &PgPool, token: &str) {
+        crate::testkit::expire(pool, "invite_token", "token = $1", token.to_string()).await;
+    }
+
     async fn seed_admin(pool: &PgPool) -> Uuid {
-        crate::testkit::seed_user_as(pool, "a@t.local", "admin", "x").await
+        crate::testkit::seed_user_as(pool, "a@t.local", Role::Admin, "x").await
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn find_valid_returns_unused_unexpired(pool: PgPool) {
         let admin = seed_admin(&pool).await;
-        create(
-            &pool,
-            "reset",
-            Some("u@t.local"),
-            admin,
-            "tok-ok",
-            Utc::now() + Duration::hours(1),
-        )
-        .await
-        .unwrap();
+        create(&pool, TokenKind::Reset, Some("u@t.local"), admin, "tok-ok")
+            .await
+            .unwrap();
         let found = find_valid(&pool, "tok-ok").await.unwrap().unwrap();
-        assert_eq!(found.token_type, "reset");
+        assert_eq!(found.token_type, TokenKind::Reset);
         assert_eq!(found.email.as_deref(), Some("u@t.local"));
 
         // Unknown, expired, and used tokens all read as None.
         assert!(find_valid(&pool, "nope").await.unwrap().is_none());
-        create(
-            &pool,
-            "invite",
-            None,
-            admin,
-            "tok-exp",
-            Utc::now() - Duration::hours(1),
-        )
-        .await
-        .unwrap();
+        create(&pool, TokenKind::Invite, None, admin, "tok-exp")
+            .await
+            .unwrap();
+        expire_token(&pool, "tok-exp").await;
         assert!(find_valid(&pool, "tok-exp").await.unwrap().is_none());
         sqlx::query("update invite_token set used_at = now() where token = 'tok-ok'")
             .execute(&pool)
@@ -201,16 +204,10 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_invite_expired_token_is_none(pool: PgPool) {
         let admin = seed_admin(&pool).await;
-        create(
-            &pool,
-            "invite",
-            None,
-            admin,
-            "inv-3",
-            Utc::now() - Duration::hours(1),
-        )
-        .await
-        .unwrap();
+        create(&pool, TokenKind::Invite, None, admin, "inv-3")
+            .await
+            .unwrap();
+        expire_token(&pool, "inv-3").await;
         assert!(
             redeem_invite(&pool, "inv-3", "x@t.local", "X", "pw")
                 .await
@@ -240,16 +237,9 @@ mod tests {
             .await
             .unwrap();
         }
-        create(
-            &pool,
-            "reset",
-            Some("a@t.local"),
-            admin,
-            "rst-2",
-            Utc::now() + Duration::hours(1),
-        )
-        .await
-        .unwrap();
+        create(&pool, TokenKind::Reset, Some("a@t.local"), admin, "rst-2")
+            .await
+            .unwrap();
 
         let (_, cleared) = redeem_reset(&pool, "rst-2", "new-hash")
             .await

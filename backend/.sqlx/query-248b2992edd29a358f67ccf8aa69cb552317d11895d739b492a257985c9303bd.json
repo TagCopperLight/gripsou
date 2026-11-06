@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select fx_asof($1, $2) is not null as \"ready!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ready!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Date"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "248b2992edd29a358f67ccf8aa69cb552317d11895d739b492a257985c9303bd"
+}

@@ -1,16 +1,4 @@
 //! Integration tests for `gripsou_jobs::handle_webhook`.
-//!
-//! Determinism note: `handle_webhook` awaits `begin_sync` *before* spawning
-//! `sync_connection`, so the 'syncing' status transition is committed
-//! synchronously. The test queries the DB immediately after `handle_webhook`
-//! returns. The spawned `sync_connection` will eventually overwrite the status
-//! to 'error' (missing credentials), but at the point the assertion runs the
-//! row is guaranteed to be 'syncing' because the spawn has not yet been
-//! polled. To avoid the race entirely the valid-signature test instead queries
-//! a field that `mark_synced_error` never touches (the status may become
-//! 'error', but begin_sync was called — we assert Accepted outcome plus that
-//! the connection exists, and rely on the synchronous begin_sync for the
-//! status check right after handle_webhook returns).
 
 use std::sync::Arc;
 
@@ -29,11 +17,7 @@ const WEBHOOK_SECRET: &str = "test-webhook-secret";
 /// Deps whose only account adapter is Powens with [`WEBHOOK_SECRET`], its
 /// server unreachable.
 fn deps() -> Arc<Deps> {
-    let deps = Deps::build(
-        testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-    );
+    let deps = gripsou_jobs::testing::deps();
     let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
     deps.set_accounts(
         [(
@@ -57,9 +41,11 @@ fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
 async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uuid {
     let conn_id = Uuid::new_v4();
     let meta = serde_json::json!({ "external_connection_id": ext_conn_id });
-    let plaintext = serde_json::to_vec(&serde_json::json!({ "auth_token": "test" })).unwrap();
-    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
-    let credentials = serde_json::json!({ "v": 1, "ct": ct });
+    let credentials = gripsou_jobs::credentials::seal(
+        &testkit::encryption_key(),
+        &serde_json::json!({ "auth_token": "test" }),
+    )
+    .unwrap();
     sqlx::query(
         "insert into connection \
          (id, user_id, provider_key, display_name, status, credentials, provider_meta) \
@@ -75,16 +61,8 @@ async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uui
     conn_id
 }
 
-// ── valid signature + known connection ───────────────────────────────────────
-
 /// A correctly-signed webhook with a known connection id claims the connection
-/// (status 'syncing') and returns Accepted.
-///
-/// The 'syncing' assertion is safe: `handle_webhook` awaits `begin_sync`
-/// synchronously before spawning `sync_connection`. The spawn is not polled
-/// until after this function returns, so the status is guaranteed 'syncing' at
-/// the assertion point. (The spawn will later flip it to 'error', since the
-/// fake Powens domain is unreachable, but that races after our check.)
+/// and returns Accepted.
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -114,9 +92,8 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
         "expected Accepted for valid webhook"
     );
 
-    // begin_sync runs synchronously inside handle_webhook before the spawn. The
-    // spawned sync_connection may race and set status to 'error' before this query
-    // runs. Either way, the connection was claimed (status changed from 'ok').
+    // The spawned sync may already have failed against the unreachable server:
+    // either way the connection was claimed.
     let status: String = sqlx::query_scalar("select status from connection where id=$1")
         .bind(conn_id)
         .fetch_one(&pool)
@@ -128,8 +105,6 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
 
     Ok(())
 }
-
-// ── bad signature → Unauthorized ─────────────────────────────────────────────
 
 /// A webhook with a wrong signature is rejected with Unauthorized; the
 /// connection status is not touched.
@@ -195,8 +170,6 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-// ── valid signature, unknown connection → Accepted (no panic) ────────────────
-
 /// A valid signature whose connection.id matches no row returns Accepted
 /// (the provider should stop retrying) and does not panic.
 #[sqlx::test(migrations = "../migrations")]
@@ -225,5 +198,41 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
         "expected Accepted even when connection is unknown"
     );
 
+    Ok(())
+}
+
+/// A provider the admin turned off accepts no webhook, even correctly signed:
+/// its connections must not sync behind the admin's back.
+#[sqlx::test(migrations = "../migrations")]
+async fn handle_webhook_refuses_a_disabled_provider(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+    let conn_id = seed_connection(&pool, user_id, "55").await;
+    gripsou_core::repo::settings::set_provider_enabled(&pool, "powens", false).await?;
+
+    let path = "/api/webhooks/powens";
+    let date = "2024-01-15T10:00:00.000Z";
+    let body = r#"{"connection":{"id":55}}"#;
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("bi-signature-date".to_string(), date.to_string());
+    headers.insert(
+        "bi-signature".to_string(),
+        sign(WEBHOOK_SECRET, path, date, body),
+    );
+
+    let outcome = gripsou_jobs::handle_webhook(
+        pool.clone(),
+        &deps(),
+        "powens",
+        path,
+        headers,
+        body.as_bytes().to_vec(),
+    )
+    .await;
+    assert!(matches!(outcome, gripsou_jobs::WebhookOutcome::NotFound));
+    let status: String = sqlx::query_scalar("select status from connection where id=$1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(status, "ok");
     Ok(())
 }

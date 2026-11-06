@@ -20,12 +20,12 @@ Never create tags or releases: a release goes with a manual production update.
 
 - **Backend** (`cd backend`, the binary is `gripsou` in `api`): `cargo run --bin gripsou` serves the SPA and API on :8080, runs migrations, and loads the root `.env`. Also `cargo test [-p gripsou-core <name>]`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --all`.
 - **Frontend** (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `build`, `lint`, `test [pattern]`.
-- **`./ci.sh`** runs exactly what CI runs. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[sqlx::test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
+- **`./ci.sh`** is CI: the workflow only runs `./ci.sh backend` and `./ci.sh frontend`, so a new check goes in `ci.sh`. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[sqlx::test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
 - **Local stack:** `docker compose -f docker/docker-compose.yml up -d postgres` (or `scripts/build-image.sh` then `up -d`). Always pass `-f`: the host has an unrelated compose project `docker` whose `docker_pgdata` volume must never be touched.
 
 ### Database from the host
 
-The compose postgres publishes no port, so `.env`'s `localhost:5432` only works inside containers. Use:
+The compose postgres publishes no port, so from the host `DATABASE_URL` names the container's address (as in `.env.example`). Use:
 
 ```sh
 export DATABASE_URL=postgres://gripsou:gripsou@$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gripsou-postgres-1):5432/gripsou
@@ -42,8 +42,9 @@ Only `cargo run` loads `.env` (it searches parent directories; never create `bac
 
 `cd frontend && bun run dev:mock --port 5180 --strictPort` runs the SPA with no backend, for looking at and reviewing UI. A Vite plugin (`mock/plugin.ts`) answers `/api/*` from an in-memory store of made-up data. Never put real data in it.
 
-- `mock/data/` builds the dataset, `mock/store.ts` holds it, `mock/routes/*.ts` answer the API (`reply(status, body)` for errors), `mock/views/` compute what the server would. Writes change the store. A missing route is a 404 in the app.
-- `mock/states.ts` lists named tweaks of the data, each tagged with the UI pieces it affects. The panel in the page shows the states of the piece named by `FOCUS`, plus language, currency and role, and can make any path fail or hang (`/__mock/override`). Add a state when a screen needs one; don't build a general scenario system. Active states persist in `node_modules/.cache/gripsou-mock-states.json`.
+- `mock/data/` builds the dataset, `mock/store.ts` holds it, `mock/routes/*.ts` answer the API, `mock/views/` compute what the server would. Writes change the store. A missing route is a 404 in the app.
+- `mock/router.ts` types each route's query, body and answer from the generated `Api` (`src/api/routes.ts`, through `src/api/route.ts`), and `mock/query.ts` reads each query as the server does (a value that doesn't fit is a 400); a handler returns its answer, `reply(status, body?)` for another status, or `fail(status, message)` for an error (plain text, as the server sends it). `mock/routes.test.ts` fails when a server route (`src/api/routes.ts`) has no handler and isn't in `NOT_MOCKED`.
+- `mock/states/` lists named tweaks of the data, each tagged with the UI pieces it affects (`PIECES`). The panel in the page shows the states of the piece named by `FOCUS`, plus language, currency and role, and can make any request the app made fail or hang (`/__mock/override`). Ids come from `mock/data/ids.ts`: `named` for the base entities states refer to, `store.ids.next(kind)` for every other row. Add a state when a screen needs one; don't build a general scenario system. Active states persist in `node_modules/.cache/gripsou-mock-states.json`.
 - Conventions: any credentials sign in except the password `wrong`; `@taken.example` emails are taken; `/invite/expired` is a dead link; `/reset/reset…` is a reset link.
 - Vite restarts on changes under `mock/`. If a change to the base data doesn't show, restart it yourself.
 
@@ -54,8 +55,8 @@ Only `cargo run` loads `.env` (it searches parent directories; never create `bac
 Adding a provider must never need a migration. The crates enforce it:
 
 - `core`: canonical DTOs (`dto.rs`), provider ports (`provider.rs`, `categorize.rs`), repositories, ingest, backfill, price/composition sync, budget (`budget/`).
-- `providers`: adapters from native payloads to canonical DTOs: `powens` (accounts), `yahoo` (prices, FX), `boursorama` (ETF composition), `jev` (categorisation). They depend on `core`, never the reverse.
-- `jobs`: the in-process tokio scheduler and sync orchestration (one task and one lock per connection; the `CATEGORIZERS` registry).
+- `providers`: adapters from native payloads to canonical DTOs: `powens` (accounts), `yahoo` (prices, FX), `boursorama` (ETF composition), `jev` (categorisation), `brandfetch` (logos). They depend on `core`, never the reverse. Each adapter declares its key, name and config fields once; `registry` lists them and builds the adapters from a saved config.
+- `jobs`: the in-process tokio scheduler and sync orchestration (one task and one lock per connection). `Deps` holds the adapters in effect; `Deps::apply_config` is the one place saved keys take effect.
 - `api`: axum handlers, auth, routing, static files.
 
 Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_id` (idempotent upserts), never in new columns. A new account type is a row in `account_type`.
@@ -64,8 +65,9 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
 
 - Everything owned is a `holding` of an `instrument`. A checking account holds the `EUR` cash instrument (quantity = balance, price = 1). Cash is never special-cased.
 - An FX rate is a `price` of a cash instrument. Prices are stored in the listing's currency and converted at read time from the price row's currency (`unit_value_asof` / `fx_asof`).
-- Sums are computed in the pivot `app_settings.base_currency`, then divided once into the reader's `prefs.currency` (`reporting_fx_asof`).
-- A currency change fetches that rate before saving, and is refused if no rate can be had (`update_prefs`, `price_sync::ensure_fx_rate`). So readers assume the rate exists. Never show an unconverted figure under the chosen currency's symbol. `reporting_fx_degraded` is unused.
+- Sums are computed in the pivot `app_settings.base_currency`, then divided once into the reader's `users.currency`.
+- One SQL surface: `holding_valuation` is the valuation rule, `holding_day_values` values every holding over a day grid, `fx_convert` is every conversion, `fx_grid`/`fx_asof` look rates up. Readers call them, never restate them. The one exception is `valuation::holdings`, which feeds `holding_valuation` today's inputs itself (from `holding.quantity` and the latest snapshot) instead of calling `holding_day_values`, kept apart for speed: a change to those inputs is made in both.
+- A figure with no rate on its day (either leg) is left out and flagged (`fx_missing`), never shown in the pivot under the chosen currency's symbol. A currency change fetches that rate before saving, and is refused if no rate can be had (`update_prefs`, `price_sync::ensure_fx_rate`).
 - `instrument` and `price` are global. Everything else belongs to a user through `connection.user_id`.
 
 ### History
@@ -79,6 +81,12 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
 - **`transaction` is the cash ledger only.** Purchases and sales are `lot` rows (`source` is `manual` or `provider`; users can delete only `manual` ones).
 - **Cost basis comes only from the `lot_basis` SQL function** (fee-inclusive weighted average, plus the part of the position no lot explains). Never reimplement it: a second copy drifts apart and the screens disagree.
 - A holding whose lots don't explain its quantity gets a badge and a modal to record the missing lots. For securities this is the main path (see Provider facts).
+
+### Days and timezones
+
+- **A user's day is in their saved timezone** (`user_today` in SQL, `repo::prefs::today`, `zonedDay()` in the browser), wherever they are. **Market data uses the UTC day** (`repo::price::market_today`): prices, rates and compositions are shared by every user, so they never take the timezone of whoever triggered the fetch.
+- **Calendar dates travel as UTC-midnight epoch milliseconds** (transaction, lot and chart-point days). They are labels, not instants: the frontend reads them with `calendarDay()`/`formatDay()`, never `formatDate()`, which would show them a day early west of UTC. Only real timestamps (sessions, syncs) go through `formatDate()`.
+- **A timezone change rewrites nothing.** Snapshots keep the day they were stamped with (they store no instant to redate from), provider dates and prices stay as they are, and the backfill follows at the next sync or lot save.
 
 ### Budget
 
@@ -111,7 +119,8 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 
 - **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (Product decisions above are the exception: they exist to stop a removed thing from being rebuilt.)
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
-- **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices on `users` (columns for what the server reads, `prefs` for display-only ones). Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Wire types are generated.** Every type a handler sends or accepts derives `ts_rs::TS` (closed value sets through `text_enum!`). Every route is added through `api/src/routes.rs`, which reads each handler's JSON body (its last argument), query (its `Query<Q>` argument) and answer (its return type) off its signature: a new extractor or return shape needs an `Arg` or `Reply` impl there. `cd backend && cargo run -p gripsou-api --example wire-types` writes those types and everything they use to `frontend/src/api/wire.ts` (with the limits and defaults the frontend shares, listed in `api/src/wire_ts.rs`), and the route list with each route's body, query and answer (`Api`) to `frontend/src/api/routes.ts`. Both are checked in and never edited by hand; `./ci.sh backend` fails when they are stale. The frontend imports API shapes from them and keeps only its own view types.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next. Pure logic lives in `src/lib/`, with tests beside it.
 - **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags. API key field labels are not translated: each provider declares them in its own words (`ConfigField.label`).
 - **Exports:** a component file exports only components (`react-refresh/only-export-components`). Put shared constants and types in a sibling `.ts`. Only `bun run lint` catches this, not `build`.

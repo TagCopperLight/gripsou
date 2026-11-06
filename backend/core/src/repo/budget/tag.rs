@@ -81,7 +81,7 @@ pub async fn update_tag(
 }
 
 /// Deleting a tag removes it from every transaction (the join table cascades)
-/// and nothing else: no aggregate has ever counted it.
+/// and nothing else: no aggregate counts it.
 pub async fn delete_tag(pool: &sqlx::PgPool, user_id: Uuid, id: Uuid) -> Result<bool, CoreError> {
     let done = sqlx::query!(
         "delete from budget_tag where id = $1 and user_id = $2",

@@ -1,5 +1,5 @@
 //! Inputs of the annualised return: every non-cash position of a user (held
-//! ones valued by `query::holdings`, sold-out ones at zero) and the cash flows
+//! ones valued by `valuation::holdings`, sold-out ones at zero) and the cash flows
 //! that built them, each converted to the reporting currency on its own day.
 
 use chrono::NaiveDate;
@@ -17,13 +17,11 @@ pub struct ReturnInputs {
 }
 
 pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, CoreError> {
-    let today = sqlx::query_scalar!(r#"select user_today($1) as "d!""#, user_id)
-        .fetch_one(pool)
-        .await?;
+    let today = crate::repo::prefs::today(pool, user_id).await?;
 
     // Held positions: the Holdings table's own rows, so the value is the figure
     // the user already sees there (one valuation path).
-    let mut positions: Vec<Position> = crate::repo::query::holdings(pool, user_id)
+    let mut positions: Vec<Position> = crate::repo::valuation::holdings(pool, user_id)
         .await?
         .into_iter()
         .filter(|h| h.kind != "cash")
@@ -43,14 +41,14 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
     let sold_out = sqlx::query!(
         r#"
         select h.id as "holding_id!", h.account_id as "account_id!", i.name as "name!",
-               sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as "explained!"
+               b.explained_qty as "explained!"
         from holding h
         join account a    on a.id = h.account_id
         join connection c on c.id = a.connection_id
         join instrument i on i.id = h.instrument_id
-        join lot l        on l.holding_id = h.id
+        cross join lateral lot_basis(array[h.id], array[user_today($1)]) b
         where c.user_id = $1 and h.quantity = 0 and i.kind <> 'cash'
-        group by h.id, h.account_id, i.name
+          and exists (select 1 from lot l where l.holding_id = h.id)
         "#,
         user_id,
     )
@@ -65,18 +63,17 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         fx_missing: false,
     }));
 
-    // Lots (fee-inclusive, buys negative) and dividends, each converted on its
-    // own day from the account's currency into the reporting currency (picked as
-    // `reporting_fx_asof` does, minus its fallback to 1). A NULL amount means a
-    // rate is missing for that day.
+    // Lots and dividends, each converted on its own day from the account's
+    // currency into the reporting currency. A NULL amount means a rate is
+    // missing for that day. A dividend's day is the day it reached the
+    // balance, as the backfill dates every cash move.
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",
                l.acquired_on as "day!", l.side = 'buy' as "buy!",
-               (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
-                     else l.quantity * l.unit_price - l.fee end)
-                 * fx_asof(a.currency, l.acquired_on)
-                 / nullif(fx_asof((select currency from users where id = $1), l.acquired_on), 0) as "amount?"
+               fx_convert(lot_cash_amount(l.side, l.quantity, l.unit_price, l.fee),
+                          fx_asof(a.currency, l.acquired_on),
+                          reporting_fx_asof($1, l.acquired_on)) as "amount?"
         from lot l
         join holding h    on h.id = l.holding_id
         join account a    on a.id = h.account_id
@@ -84,13 +81,14 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         join instrument i on i.id = h.instrument_id
         where c.user_id = $1 and i.kind <> 'cash'
         union all
-        select null::uuid, t.account_id,
-               coalesce(t.booked_on, t.spent_on), false,
-               t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.spent_on))
-                 / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, t.spent_on)), 0)
+        select null::uuid, t.account_id, d.day, false,
+               fx_convert(t.amount, fx_asof(a.currency, d.day), reporting_fx_asof($1, d.day))
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id
+        cross join lateral (
+            select txn_day(account_trusts_booked_on(t.account_id), t.booked_on, t.spent_on) as day
+        ) d
         where c.user_id = $1 and t.type = 'dividend'
         "#,
         user_id,

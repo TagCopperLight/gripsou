@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select count(*) as \"n!\"\n        from budget_transactions($1) t\n        where budget_ai_pending(t.category_source, t.budget_category_id, t.amount)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "1de5828778da71ee14159c551e4a1de19f88ce1e8b573940d333816fd95f6ea8"
+}

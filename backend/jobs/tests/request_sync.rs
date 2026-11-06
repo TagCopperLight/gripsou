@@ -1,11 +1,8 @@
-//! Integration tests for `gripsou_jobs::request_sync`.
-//!
-//! `request_sync_webhook_path_marks_awaiting` asserts the *synchronous* status
-//! transition (`begin_await` commits before the spawn fires). The spawned
-//! `do_request_refresh` will fail (the adapter's server is unreachable) and may
-//! race to call `mark_synced_error`; in practice the status check runs before
-//! the HTTP call resolves, but this is not guaranteed.
+//! Integration tests for `gripsou_jobs::request_sync`. They check the state
+//! the claim returned, taken before the spawned refresh or sync runs (and
+//! fails against an unreachable server).
 
+use gripsou_core::repo::connection::ConnectionStatus;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -18,11 +15,7 @@ use uuid::Uuid;
 
 /// Deps with the given account adapters only.
 fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
-    let deps = Deps::build(
-        testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-    );
+    let deps = gripsou_jobs::testing::deps();
     deps.set_accounts(
         accounts
             .into_iter()
@@ -43,11 +36,8 @@ fn powens_with_webhooks() -> Arc<Deps> {
     )])
 }
 
-/// Encrypt `creds` with the test key and return the blob stored in the DB.
 fn make_encrypted_creds(creds: serde_json::Value) -> serde_json::Value {
-    let plaintext = serde_json::to_vec(&creds).unwrap();
-    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
-    serde_json::json!({ "v": 1, "ct": ct })
+    gripsou_jobs::credentials::seal(&testkit::encryption_key(), &creds).unwrap()
 }
 
 /// Insert a connection in 'ok' status with encrypted credentials and provider_meta.
@@ -75,11 +65,8 @@ async fn seed_connection(
     conn_id
 }
 
-// ── direct path ──────────────────────────────────────────────────────────────
-
 /// When the connection's provider has no registered adapter, request_sync takes
-/// the direct path (webhook=false): status becomes 'syncing' synchronously.
-///
+/// the direct path: status becomes 'syncing'.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -96,10 +83,10 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     )
     .await
     .unwrap();
-    // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "syncing",
+            state.status,
+            ConnectionStatus::Syncing,
             "direct path: status should be 'syncing'"
         );
     } else {
@@ -109,14 +96,8 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-// ── webhook path ─────────────────────────────────────────────────────────────
-
 /// When a Powens adapter is configured with a webhook secret, request_sync takes
 /// the webhook path: status becomes 'awaiting' and sync_requested_at is stamped.
-///
-/// The spawned `do_request_refresh` will fail (the adapter's server is
-/// unreachable). The status assertion runs synchronously before the HTTP call
-/// resolves; see module doc for the documented race window.
 #[sqlx::test(migrations = "../migrations")]
 async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -133,10 +114,10 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     )
     .await
     .unwrap();
-    // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "awaiting",
+            state.status,
+            ConnectionStatus::Awaiting,
             "webhook path: status should be 'awaiting'"
         );
     } else {
@@ -156,8 +137,6 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
 
     Ok(())
 }
-
-// ── webhook-enabled adapter but no external_connection_id ────────────────────
 
 /// When a Powens adapter is configured (webhook-enabled) but the connection's
 /// provider_meta lacks `external_connection_id`, request_sync must fall back to
@@ -185,7 +164,8 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     // Must take the DIRECT path → status 'syncing', not 'awaiting'.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "syncing",
+            state.status,
+            ConnectionStatus::Syncing,
             "no external_connection_id: must fall back to direct path (status 'syncing')"
         );
     } else {
@@ -194,8 +174,6 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
 
     Ok(())
 }
-
-// ── database failure ─────────────────────────────────────────────────────────
 
 /// A database that cannot answer is an Err (the handler turns it into a 500),
 /// never a silent "not found".

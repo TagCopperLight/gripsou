@@ -1,26 +1,24 @@
 //! Seeders the api's tests share on top of `gripsou_core::testkit`: the ones
 //! that need the api's own password and session hashing.
 
+use crate::auth::client::Client;
+use crate::auth::dto::{self, LoginReq};
 use crate::auth::login::login;
-use crate::auth::throttle::LoginThrottle;
-use crate::auth::{self, AuthUser};
-use crate::dto::{self, LoginReq};
-use axum::Json;
+use crate::auth::throttle::Throttles;
+use crate::auth::{self, AuthUser, factors};
+use crate::error::ApiError;
+use crate::error::Json;
 use axum::extract::State;
 use gripsou_core::repo::session;
+pub(crate) use gripsou_core::repo::user::Role;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// The job deps with whatever adapters the saved keys configure.
-pub(crate) fn deps() -> std::sync::Arc<gripsou_jobs::Deps> {
-    let key = gripsou_core::testkit::encryption_key();
-    std::sync::Arc::new(gripsou_jobs::Deps::build(
-        key,
-        "EUR".into(),
-        "http://localhost:5173".into(),
-    ))
+/// The shared test [`gripsou_jobs::Deps`], ready for a handler's state.
+pub(crate) fn deps() -> Arc<gripsou_jobs::Deps> {
+    Arc::new(gripsou_jobs::testing::deps())
 }
 
 /// The password `seed_user` gives its users.
@@ -28,7 +26,7 @@ pub(crate) const PASSWORD: &str = "hunter22";
 
 /// A user who can log in with `PASSWORD`.
 pub(crate) async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-    seed_user_with_password(pool, email, PASSWORD, "user").await
+    seed_user_with_password(pool, email, PASSWORD, Role::User).await
 }
 
 /// A user who can log in with `password`.
@@ -36,9 +34,9 @@ pub(crate) async fn seed_user_with_password(
     pool: &PgPool,
     email: &str,
     password: &str,
-    role: &str,
+    role: Role,
 ) -> Uuid {
-    let hash = auth::hash_password(password).unwrap();
+    let hash = auth::password::hash(password).unwrap();
     gripsou_core::testkit::seed_user_as(pool, email, role, &hash).await
 }
 
@@ -50,20 +48,12 @@ pub(crate) async fn seed_session(pool: &PgPool, user_id: Uuid) -> AuthUser {
         None,
         None,
         false,
-        chrono::Utc::now() + chrono::Duration::days(1),
     )
     .await
     .unwrap();
     AuthUser {
         user_id,
         session_id: s.id,
-    }
-}
-
-pub(crate) fn who(a: &AuthUser) -> AuthUser {
-    AuthUser {
-        user_id: a.user_id,
-        session_id: a.session_id,
     }
 }
 
@@ -79,7 +69,7 @@ pub(crate) async fn sessions(pool: &PgPool, user_id: Uuid) -> i64 {
 /// ten recovery codes; returns the secret and the plain recovery codes.
 pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
     use gripsou_core::repo::mfa;
-    let secret = crate::auth::factors::new_totp_secret();
+    let secret = factors::new_totp_secret();
     let enc = gripsou_core::testkit::encryption_key()
         .encrypt(&secret)
         .unwrap();
@@ -88,38 +78,55 @@ pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<S
             .await
             .unwrap()
     );
-    let codes = crate::auth::factors::new_recovery_codes();
-    let hashes: Vec<Vec<u8>> = codes
-        .iter()
-        .map(|c| crate::auth::factors::hash_recovery_code(c))
-        .collect();
+    let codes = factors::new_recovery_codes();
     assert!(
-        mfa::confirm_totp(pool, user_id, &enc, 0, &hashes)
+        mfa::confirm_totp(pool, user_id, &enc, 0, &codes.hashes)
             .await
             .unwrap()
     );
-    (secret, codes)
+    (secret, codes.plain)
 }
 
-/// The two limiters a login goes through, shared across a test's calls.
-#[derive(Default)]
-pub(crate) struct Throttles {
-    pub(crate) pw: Arc<LoginThrottle>,
-    pub(crate) sf: Arc<crate::auth::throttle::SecondFactorThrottle>,
+/// The authenticator code for `secret` right now.
+pub(crate) fn totp_now(secret: &[u8]) -> String {
+    let now = chrono::Utc::now().timestamp() as u64;
+    factors::totp_code(secret, factors::current_step(now))
 }
 
-pub(crate) async fn login_outcome(
+/// A well-formed code that isn't [`totp_now`].
+pub(crate) fn wrong_totp(secret: &[u8]) -> String {
+    if totp_now(secret) == "000000" {
+        "000001".into()
+    } else {
+        "000000".into()
+    }
+}
+
+/// Limiters with nothing counted yet.
+pub(crate) fn throttles() -> Arc<Throttles> {
+    Arc::new(Throttles::default())
+}
+
+/// A caller on localhost whose browser sent no User-Agent.
+pub(crate) fn local() -> Client {
+    Client {
+        ip: "127.0.0.1".into(),
+        user_agent: String::new(),
+    }
+}
+
+pub(crate) async fn login_as(
     pool: &PgPool,
-    throttle: &Throttles,
+    throttles: &Arc<Throttles>,
+    client: Client,
     email: &str,
     pw: &str,
     remember: bool,
-) -> dto::LoginOutcome {
+) -> Result<Json<dto::LoginOutcome>, ApiError> {
     login(
         State(pool.clone()),
-        State(throttle.pw.clone()),
-        axum::http::HeaderMap::new(),
-        axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+        State(throttles.clone()),
+        client,
         Json(LoginReq {
             email: email.into(),
             password: pw.into(),
@@ -127,35 +134,48 @@ pub(crate) async fn login_outcome(
         }),
     )
     .await
-    .expect("login ok")
-    .0
 }
 
-/// Seed an admin user and return their id — mirrors what `seed_user` does for
-/// the existing tests (role "admin", email "a@t.local").
-pub(crate) async fn seed_admin_user(pool: &PgPool) -> Uuid {
-    seed_admin(pool, "a@t.local", "hunter2").await
+pub(crate) async fn login_outcome(
+    pool: &PgPool,
+    throttles: &Arc<Throttles>,
+    email: &str,
+    pw: &str,
+    remember: bool,
+) -> dto::LoginOutcome {
+    login_as(pool, throttles, local(), email, pw, remember)
+        .await
+        .expect("login ok")
+        .0
 }
 
-pub(crate) async fn seed_admin(pool: &PgPool, email: &str, password: &str) -> Uuid {
-    seed_user_with_password(pool, email, password, "admin").await
-}
-
-pub(crate) async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
-    let outcome = login(
+/// A fresh reauth token for `a`, bought with `password`.
+pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) -> String {
+    crate::auth::mfa::reauth(
         State(pool.clone()),
-        no_throttle(),
-        axum::http::HeaderMap::new(),
-        axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
-        Json(LoginReq {
-            email: email.into(),
-            password: pw.into(),
-            remember: false,
+        State(throttles()),
+        local(),
+        a.clone(),
+        Json(dto::ReauthReq {
+            password: password.into(),
         }),
     )
     .await
-    .expect("login ok");
-    session_of(outcome).token
+    .unwrap()
+    .0
+    .reauth
+}
+
+/// An admin who can log in with `PASSWORD`.
+pub(crate) async fn seed_admin(pool: &PgPool, email: &str) -> Uuid {
+    seed_user_with_password(pool, email, PASSWORD, Role::Admin).await
+}
+
+pub(crate) async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
+    match login_outcome(pool, &throttles(), email, pw, false).await {
+        dto::LoginOutcome::Session(r) => r.token,
+        other => panic!("expected a session, got {other:?}"),
+    }
 }
 
 pub(crate) async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth::AuthUser {
@@ -170,11 +190,9 @@ pub(crate) async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth:
     }
 }
 
-/// Insert a user + connection, returning the connection id (mirrors
-/// core's `common::seed_connection`, but this crate can't import that
-/// test-only module across crates).
-pub(crate) async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
-    let user_id = seed_user_with_password(pool, email, "hunter2", "user").await;
+/// A user with one connection; returns the connection id.
+async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
+    let user_id = seed_user(pool, email).await;
     let conn_id = Uuid::new_v4();
     sqlx::query(
         "insert into connection (id, user_id, provider_key, display_name) \
@@ -197,11 +215,7 @@ pub(crate) async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
     use gripsou_core::repo::instrument::resolve_instrument;
 
     let conn_id = seed_connection(pool, email).await;
-    let user_id: Uuid = sqlx::query_scalar("select user_id from connection where id = $1")
-        .bind(conn_id)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let user_id = gripsou_core::testkit::owner(pool, conn_id).await;
 
     let mut conn = pool.acquire().await.unwrap();
     let account = CanonicalAccount {
@@ -210,6 +224,7 @@ pub(crate) async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
         type_key: "pea".into(),
         currency: "EUR".into(),
         meta: serde_json::json!({}),
+        health: None,
         balance_as_of: None,
     };
     let account_id = upsert_account(&mut conn, conn_id, &account).await.unwrap();
@@ -280,31 +295,10 @@ pub(crate) async fn seed_owned(pool: &PgPool, email: &str, label: &str) -> Owned
     }
 }
 
-pub(crate) fn no_throttle() -> State<Arc<LoginThrottle>> {
-    State(Arc::new(LoginThrottle::default()))
-}
-
-pub(crate) fn session_of(outcome: Json<dto::LoginOutcome>) -> dto::LoginResponse {
-    match outcome.0 {
-        dto::LoginOutcome::Session(r) => r,
-        other => panic!("expected a session, got {other:?}"),
-    }
-}
-
 pub(crate) async fn can_login(pool: &PgPool, email: &str, pw: &str) -> bool {
-    login(
-        State(pool.clone()),
-        no_throttle(),
-        axum::http::HeaderMap::new(),
-        axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
-        Json(LoginReq {
-            email: email.into(),
-            password: pw.into(),
-            remember: false,
-        }),
-    )
-    .await
-    .is_ok()
+    login_as(pool, &throttles(), local(), email, pw, false)
+        .await
+        .is_ok()
 }
 
 pub(crate) async fn session_alive(pool: &PgPool, id: Uuid) -> bool {

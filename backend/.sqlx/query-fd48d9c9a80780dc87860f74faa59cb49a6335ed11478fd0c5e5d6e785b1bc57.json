@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update budget_ai_run\n           set outcome = $2, error = 'the run stopped before finishing'\n         where outcome = $3\n           and ($1::uuid is null or user_id = $1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fd48d9c9a80780dc87860f74faa59cb49a6335ed11478fd0c5e5d6e785b1bc57"
+}

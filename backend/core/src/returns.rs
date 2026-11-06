@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 /// One dated amount, negative when money goes in (a buy), positive when it
 /// comes out (a sale, a dividend, today's value). In the reporting currency.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Flow {
     pub day: NaiveDate,
     pub amount: f64,
@@ -62,7 +62,7 @@ pub fn xirr(flows: &[Flow]) -> Option<f64> {
 
 /// One non-cash holding in scope. `value` is the Holdings table's figure
 /// (reporting currency); a sold-out holding is worth zero.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Position {
     pub holding_id: Uuid,
     pub account_id: Uuid,
@@ -78,7 +78,7 @@ pub struct Position {
 /// carry no instrument, so dividends belong to the account), signed like
 /// `Flow`, converted to the reporting currency on its own day. `amount` is
 /// `None` when that day's rate is missing.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CashFlow {
     pub holding_id: Option<Uuid>,
     pub account_id: Uuid,
@@ -89,13 +89,13 @@ pub struct CashFlow {
 }
 
 /// A holding left out of a scope's figures.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Missing {
     pub holding_id: Uuid,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScopeReturn {
     /// Per year, as a ratio (0.071 = +7.1 %/yr).
     pub annualised: Option<f64>,
@@ -114,13 +114,32 @@ pub struct ScopeReturn {
     pub unvalued: Vec<Missing>,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+impl ScopeReturn {
+    /// `invested` and `received` to the cent.
+    pub fn invested_cents(&self) -> Option<Decimal> {
+        self.invested.map(|d| d.round_dp(2))
+    }
+
+    pub fn received_cents(&self) -> Option<Decimal> {
+        self.received.map(|d| d.round_dp(2))
+    }
+
+    /// value + received − invested, to the cent: the money the return
+    /// annualises. `None` when a rate is missing for a flow it needs.
+    pub fn gain(&self) -> Option<Decimal> {
+        self.invested_cents()
+            .zip(self.received_cents())
+            .map(|(i, r)| self.value.round_dp(2) + r - i)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccountReturn {
     pub account_id: Uuid,
     pub figures: ScopeReturn,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Returns {
     pub total: ScopeReturn,
     /// Accounts with at least one position, largest value first.
@@ -132,8 +151,8 @@ pub struct Returns {
 /// Every figure covers the same positions: those whose lots explain what is
 /// held and that could be valued today. The others are left out of all of
 /// them and listed, so the page can say so: counted in the invested and value
-/// but not the return, they made the two disagree, and one valued at zero
-/// against its full cost showed a loss that didn't exist. The return covers
+/// but not the return, they would make the two disagree, and one valued at
+/// zero against its full cost would show a loss that doesn't exist. The return covers
 /// the counted positions' lots, the dividends of accounts whose positions in
 /// scope are all counted (from the account's first recorded purchase on), and
 /// today their current value. A missing rate among those flows leaves the

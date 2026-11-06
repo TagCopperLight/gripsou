@@ -1,5 +1,7 @@
 // Deterministic helpers for the fake dataset: the same data on every reset.
 
+import { RANGE_DAYS_BACK, type Range } from "../../src/api/wire.ts";
+
 const DAY_MS = 86_400_000;
 
 /** Today at UTC midnight, the anchor every generated date counts back from. */
@@ -35,23 +37,11 @@ export function money(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
-/** Stable fake UUIDs: `id("acc", 1)` → `00000000-0000-4000-8acc-000000000001`. */
-export function id(tag: string, n: number): string {
-  const hex = [...tag].map((c) => c.charCodeAt(0).toString(16)).join("").slice(0, 3).padEnd(3, "0");
-  return `00000000-0000-4000-8${hex}-${String(n).padStart(12, "0")}`;
-}
+/** Euros per dollar, the dataset's one exchange rate. */
+export const EUR_PER_USD = 0.92;
 
-/** Days back from `RANGE` keys, as the backend's `range_window`. */
-export function rangeDays(range: string): number {
-  switch (range) {
-    case "7d": return 7;
-    case "1mo": return 30;
-    case "6mo": return 182;
-    case "1y": return 365;
-    case "ytd": {
-      const now = new Date(TODAY);
-      return Math.round((TODAY - Date.UTC(now.getUTCFullYear(), 0, 1)) / DAY_MS);
-    }
-    default: return 4000;
-  }
+/** Days back of a chart range, as the backend's `Range::window`. */
+export function rangeDays(range: Range): number {
+  return RANGE_DAYS_BACK[range]
+    ?? Math.round((TODAY - Date.UTC(new Date(TODAY).getUTCFullYear(), 0, 1)) / DAY_MS);
 }

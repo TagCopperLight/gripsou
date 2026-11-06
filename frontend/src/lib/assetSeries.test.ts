@@ -1,100 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { positionSeries, windowReturn } from "./assetSeries";
-import type { Lot, PricePoint } from "../api/types";
+import { positionChart, windowReturn } from "./assetSeries";
+import type { PricePoint } from "../api/wire";
 
-// A same-currency listing: the account price equals the quoted one.
-const px = (t: number, price: string): PricePoint => ({ t, price, accountPrice: price, reportingPrice: price });
-
-const prices: PricePoint[] = [
-  px(100, "10"),
-  px(300, "12"),
-];
-
-const buy = (t: number, qty: string, price: string): Lot => ({
-  id: String(t), t, side: "buy", qty, price, fee: "0", manual: true,
-});
-const sell = (t: number, qty: string, price: string): Lot => ({
-  id: String(t), t, side: "sell", qty, price, fee: "0", manual: true,
+const pt = (t: number, over: Partial<PricePoint>): PricePoint => ({
+  t, price: "10", accountPrice: "10", reportingPrice: "10", qty: "2", invested: "15", reportingInvested: "15", ...over,
 });
 
-describe("positionSeries", () => {
-  // Subtracting a sale's PROCEEDS from invested would fold realised profit
-  // into the cost basis: buy 10 at 100 then sell 5 at 200 would report
-  // invested = 0 while the backend says 500, on the same screen.
-  it("a sale removes cost, not proceeds", () => {
-    const pts = positionSeries(
-      [
-        px(100, "150"),
-        px(300, "150"),
-      ],
-      [buy(50, "10", "100"), sell(200, "5", "200")],
-      100,
-      0,
-      5,
-      500,
+describe("positionChart", () => {
+  it("drops a day before the first lot or without a rate instead of charting zero", () => {
+    const chart = positionChart(
+      [pt(1, { qty: null, invested: null }), pt(2, { accountPrice: null }), pt(3, {})],
+      false,
     );
-    expect(pts[0].invested).toBe(1000);
-    expect(pts[1].invested).toBe(500);
-  });
-
-  it("carries the unexplained basis on every point", () => {
-    const pts = positionSeries([px(100, "150")], [buy(50, "4", "100")], 100, 800, 10, 1200);
-    expect(pts[0].invested).toBe(1200);
-  });
-
-  it("reduces the position on a sale instead of inflating it", () => {
-    // Buy 10 before the first point, sell 4 between the two points.
-    const pts = positionSeries(prices, [buy(50, "10", "100"), sell(200, "4", "12")], 10, 0, 6, 60);
-    expect(pts[0].value).toBe(10 * 10);
-    expect(pts[1].value).toBe(6 * 12);
-  });
-
-  it("starts at the first purchase instead of charting a position before it", () => {
-    // Buy between the two points: the earlier point is not part of the series.
-    const pts = positionSeries(prices, [buy(200, "10", "10")], 10, 0, 10, 100);
-    expect(pts).toHaveLength(1);
-    expect(pts[0].t).toBe(300);
-    expect(pts[0].value).toBe(10 * 12);
-  });
-
-  it("charts a sold-out position as zero, not as the current holding", () => {
-    const pts = positionSeries(prices, [buy(50, "10", "10"), sell(200, "10", "12")], 10, 0, 0, 0);
-    expect(pts[1].value).toBe(0);
-  });
-
-  it("keeps the flat current position when no lots are known", () => {
-    const pts = positionSeries(prices, [], 10, 0, 7, 70);
-    expect(pts[0].value).toBe(7 * 10);
-    expect(pts[0].invested).toBe(70);
-  });
-});
-
-describe("positionSeries on a foreign listing", () => {
-  // 10 shares quoted 115 USD, account in EUR, 1 USD = 0.87 EUR: the value line
-  // must be in euros like the invested line, or the exchange rate reads as gain.
-  it("values the position at the account-currency price", () => {
-    const pts = positionSeries(
-      [{ t: 100, price: "115", accountPrice: "100.05", reportingPrice: "100.05" }],
-      [buy(50, "10", "100")],
-      100,
-      0,
-      10,
-      1000,
-    );
-    expect(pts[0].value).toBeCloseTo(1000.5);
-    expect(pts[0].invested).toBe(1000);
-  });
-
-  it("drops a day whose rate is missing instead of charting zero", () => {
-    const pts = positionSeries(
-      [{ t: 100, price: "115", accountPrice: null, reportingPrice: null }, { t: 300, price: "115", accountPrice: "100", reportingPrice: "100" }],
-      [],
-      0,
-      0,
-      10,
-      1000,
-    );
-    expect(pts.map((p) => p.t)).toEqual([300]);
+    expect(chart.value).toEqual([[3, 20]]);
+    expect(chart.invested).toEqual([[3, 15]]);
   });
 });
 
@@ -111,10 +30,10 @@ describe("windowReturn", () => {
     expect(r[1][1]).toBe(0);
   });
 
-  it("values the position and its invested line in the reader's currency at each day's rate", () => {
-    const prices = [{ t: 1, price: "10", accountPrice: "20", reportingPrice: "10" }]; // 1 account unit = 0.5 reader
-    const [pt] = positionSeries(prices, [buy(0, "2", "1")], 15, 4, 2, 34, "reporting");
-    expect(pt.value).toBe(20);
-    expect(pt.invested).toBe((15 * 2 + 4) * 0.5);
+  it("keeps a day without a rate a gap and starts the window at the first valued day", () => {
+    const r = windowReturn([[1, null], [2, 100], [3, 110]], [[1, null], [2, 50], [3, 50]]);
+    expect(r[0][1]).toBeNull();
+    expect(r[1][1]).toBe(0);
+    expect(r[2][1]).toBeCloseTo(0.1, 10);
   });
 });

@@ -20,7 +20,7 @@ use super::LogLine;
 /// Saved: gripsou's own lines at info and above. Library chatter (sqlx,
 /// hyper, reqwest) stays terminal-only; so does the writer, which never logs
 /// through tracing, so saving can't loop.
-pub fn is_saved(meta: &Metadata<'_>) -> bool {
+fn is_saved(meta: &Metadata<'_>) -> bool {
     meta.target().starts_with("gripsou") && *meta.level() <= Level::INFO
 }
 

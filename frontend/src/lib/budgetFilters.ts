@@ -1,4 +1,5 @@
-import type { TransactionFilterQuery, TypeBucket } from "../api/types";
+import type { TypeBucket } from "../api/wire";
+import type { TransactionFilterQuery } from "../api/filter";
 import { presetRange, type Period } from "./period";
 
 /** The presets the time-frame select offers. `custom` keeps whatever dates the

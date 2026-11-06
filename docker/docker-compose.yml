@@ -27,8 +27,6 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgres://gripsou:gripsou@postgres:5432/gripsou
-      BIND_ADDR: 0.0.0.0:8080
-      STATIC_DIR: /app/static
     depends_on:
       postgres:
         condition: service_healthy

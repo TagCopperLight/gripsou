@@ -12,34 +12,52 @@ use crate::crypto::EncryptionKey;
 use crate::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
 use crate::error::CoreError;
 use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transaction};
+use crate::repo::lot::{LotSide, LotSource};
+use crate::repo::user::Role;
 
 /// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
     EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()
 }
 
-/// Insert a user with a unique email, role `user` and a password hash that
+/// Insert a user with a unique email, the user role and a password hash that
 /// matches nothing. Every other column keeps its default.
 pub async fn seed_user(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
-    seed_user_with_id(pool, id, &format!("u-{id}@test.local"), "user", "x").await
+    seed_user_with_id(pool, id, &format!("u-{id}@test.local"), Role::User, "x").await
 }
 
 /// Same, with a chosen email.
 pub async fn seed_user_email(pool: &PgPool, email: &str) -> Uuid {
-    seed_user_as(pool, email, "user", "x").await
+    seed_user_as(pool, email, Role::User, "x").await
 }
 
 /// Insert a user with a chosen email, role and password hash.
-pub async fn seed_user_as(pool: &PgPool, email: &str, role: &str, password_hash: &str) -> Uuid {
+pub async fn seed_user_as(pool: &PgPool, email: &str, role: Role, password_hash: &str) -> Uuid {
     seed_user_with_id(pool, Uuid::new_v4(), email, role, password_hash).await
+}
+
+/// Push the expiry of a session, challenge or invite/reset link (matched by
+/// `table`'s `where_sql`, binding `$1` to `key`) an hour into the past.
+pub async fn expire<K>(pool: &PgPool, table: &str, where_sql: &str, key: K)
+where
+    K: for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send,
+{
+    let res = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "update {table} set expires_at = now() - interval '1 hour' where {where_sql}"
+    )))
+    .bind(key)
+    .execute(pool)
+    .await
+    .unwrap();
+    assert_eq!(res.rows_affected(), 1, "expired nothing in {table}");
 }
 
 async fn seed_user_with_id(
     pool: &PgPool,
     id: Uuid,
     email: &str,
-    role: &str,
+    role: Role,
     password_hash: &str,
 ) -> Uuid {
     sqlx::query(
@@ -99,6 +117,7 @@ pub fn checking_account(external_id: &str) -> CanonicalAccount {
         type_key: "checking".to_string(),
         currency: "EUR".to_string(),
         meta: serde_json::json!({}),
+        health: None,
         balance_as_of: None,
     }
 }
@@ -141,15 +160,20 @@ pub fn equity_holding(
     }
 }
 
-pub fn deposit_txn(
+/// A transaction of a given type, spent today, with no description and no
+/// separate booking day. Chain [`CanonicalTransaction::on`],
+/// [`CanonicalTransaction::booked_on`] and [`CanonicalTransaction::described`]
+/// for the rest.
+pub fn txn(
     account_external_id: &str,
     external_id: &str,
+    kind: &str,
     amount: Decimal,
 ) -> CanonicalTransaction {
     CanonicalTransaction {
         account_external_id: account_external_id.to_string(),
         external_id: external_id.to_string(),
-        kind: "deposit".to_string(),
+        kind: kind.to_string(),
         spent_on: Utc::now().date_naive(),
         amount,
         description: None,
@@ -158,37 +182,25 @@ pub fn deposit_txn(
     }
 }
 
-/// A transaction of an arbitrary type, for ingest/backfill tests.
-pub fn txn(
-    account_external_id: &str,
-    external_id: &str,
-    kind: &str,
-    amount: Decimal,
-    description: Option<&str>,
-) -> CanonicalTransaction {
-    CanonicalTransaction {
-        account_external_id: account_external_id.to_string(),
-        external_id: external_id.to_string(),
-        kind: kind.to_string(),
-        spent_on: Utc::now().date_naive(),
-        amount,
-        description: description.map(str::to_string),
-        provider_meta: serde_json::json!({}),
-        booked_on: None,
+impl CanonicalTransaction {
+    pub fn on(self, spent_on: NaiveDate) -> Self {
+        Self { spent_on, ..self }
     }
-}
 
-/// Same, on a specific day.
-pub fn txn_on(
-    account_external_id: &str,
-    external_id: &str,
-    kind: &str,
-    amount: Decimal,
-    day: NaiveDate,
-) -> CanonicalTransaction {
-    CanonicalTransaction {
-        spent_on: day,
-        ..txn(account_external_id, external_id, kind, amount, None)
+    /// The day the balance moved, when it differs from the spend day: the real
+    /// shape of most Powens rows.
+    pub fn booked_on(self, day: NaiveDate) -> Self {
+        Self {
+            booked_on: Some(day),
+            ..self
+        }
+    }
+
+    pub fn described(self, description: &str) -> Self {
+        Self {
+            description: Some(description.to_string()),
+            ..self
+        }
     }
 }
 
@@ -198,29 +210,6 @@ pub fn checking_account_in(external_id: &str, currency: &str) -> CanonicalAccoun
     CanonicalAccount {
         currency: currency.to_string(),
         ..checking_account(external_id)
-    }
-}
-
-/// A transaction on a specific day with a description, for the budget
-/// aggregates. `txn_on` drops the description and `txn` drops the day; the
-/// summary tests need both.
-pub fn txn_on_day(
-    account_external_id: &str,
-    external_id: &str,
-    kind: &str,
-    amount: Decimal,
-    day: NaiveDate,
-    description: &str,
-) -> CanonicalTransaction {
-    CanonicalTransaction {
-        spent_on: day,
-        ..txn(
-            account_external_id,
-            external_id,
-            kind,
-            amount,
-            Some(description),
-        )
     }
 }
 
@@ -273,24 +262,6 @@ pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
     .unwrap()
 }
 
-/// A transaction whose spend date and booking date differ — the real shape of
-/// 70% of Powens rows, and the case the backward walk gets wrong when it keys
-/// on `spent_on`.
-pub fn txn_booked(
-    account_external_id: &str,
-    external_id: &str,
-    kind: &str,
-    amount: Decimal,
-    spent_on: NaiveDate,
-    booked_on: NaiveDate,
-) -> CanonicalTransaction {
-    CanonicalTransaction {
-        spent_on,
-        booked_on: Some(booked_on),
-        ..txn(account_external_id, external_id, kind, amount, None)
-    }
-}
-
 /// Upsert one equity holding and hand back its id. Wraps the
 /// resolve-instrument-then-upsert-holding dance every lot test needs.
 ///
@@ -312,15 +283,111 @@ pub async fn seed_equity_holding(
         .unwrap()
 }
 
-/// Insert a cash instrument for a currency and return its id.
-pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
+/// A purchase or sale as a test records it: entered by hand, no fee.
+#[derive(Debug, Clone, Copy)]
+pub struct Lot {
+    pub side: LotSide,
+    pub on: NaiveDate,
+    pub quantity: Decimal,
+    pub unit_price: Decimal,
+    pub fee: Decimal,
+    pub source: LotSource,
+}
+
+impl Lot {
+    pub fn buy(on: NaiveDate, quantity: Decimal, unit_price: Decimal) -> Self {
+        Self {
+            side: LotSide::Buy,
+            on,
+            quantity,
+            unit_price,
+            fee: Decimal::ZERO,
+            source: LotSource::Manual,
+        }
+    }
+
+    pub fn sell(on: NaiveDate, quantity: Decimal, unit_price: Decimal) -> Self {
+        Self {
+            side: LotSide::Sell,
+            ..Self::buy(on, quantity, unit_price)
+        }
+    }
+
+    pub fn fee(self, fee: Decimal) -> Self {
+        Self { fee, ..self }
+    }
+
+    /// A lot the provider reported, which the user may not delete.
+    pub fn from_provider(self) -> Self {
+        Self {
+            source: LotSource::Provider,
+            ..self
+        }
+    }
+}
+
+/// Insert a lot on a holding, whoever owns it, and return its id.
+pub async fn seed_lot(db: impl sqlx::PgExecutor<'_>, holding_id: Uuid, lot: Lot) -> Uuid {
     sqlx::query_scalar(
-        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
+        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
+         values ($1, $2, $3, $4, $5, $6, $7) returning id",
     )
-    .bind(currency)
-    .fetch_one(pool)
+    .bind(holding_id)
+    .bind(lot.side)
+    .bind(lot.on)
+    .bind(lot.quantity)
+    .bind(lot.unit_price)
+    .bind(lot.fee)
+    .bind(lot.source)
+    .fetch_one(db)
     .await
     .unwrap()
+}
+
+/// The user who owns a connection.
+pub async fn owner(pool: &PgPool, connection_id: Uuid) -> Uuid {
+    crate::repo::connection::user_id(pool, connection_id)
+        .await
+        .unwrap()
+        .expect("the connection exists")
+}
+
+/// Rebuilds the derived history of the user owning `connection_id`, under
+/// their write lock, as a sync does. Returns the number of rows written.
+pub async fn backfill(pool: &PgPool, connection_id: Uuid) -> Result<u64, CoreError> {
+    let mut tx = crate::db::begin_user_writes(pool, owner(pool, connection_id).await).await?;
+    let written = crate::backfill::backfill_user(&mut tx).await?;
+    tx.commit().await?;
+    Ok(written)
+}
+
+/// A synced connection holding one equity: three USD-quoted shares (bought
+/// for 450, valued at 600 by the provider) in an EUR checking account.
+/// Returns the connection id.
+pub async fn seed_one_equity(pool: &PgPool) -> Uuid {
+    let conn_id = seed_connection(pool).await;
+    let sync = crate::dto::SyncResult {
+        accounts: vec![checking_account("acct-1")],
+        holdings: vec![equity_holding(
+            "acct-1",
+            "US0378331005",
+            Decimal::new(3, 0),
+            Decimal::new(450, 0),
+            Some(Decimal::new(600, 0)),
+        )],
+        ..Default::default()
+    };
+    crate::ingest::ingest(pool, conn_id, &sync).await.unwrap();
+    conn_id
+}
+
+/// The cash instrument of a currency.
+pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
+    let mut conn = pool.acquire().await.unwrap();
+    crate::repo::instrument::ensure_cash(&mut conn, currency)
+        .await
+        .unwrap()
+        .id
 }
 
 /// One rate for one currency on one day.

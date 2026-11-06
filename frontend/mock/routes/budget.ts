@@ -1,6 +1,6 @@
-import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/budget.ts";
-import type { TxnRow } from "../data/base.ts";
-import { reply, type Router } from "../router.ts";
+import { TREND_MONTHS_DEFAULT, TREND_MONTHS_MAX, type SameDescriptionScope } from "../../src/api/wire.ts";
+import type { TxnRow } from "../data/rows.ts";
+import { fail, reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/budget.ts";
 
@@ -15,127 +15,160 @@ function sameDescription(store: Store, row: TxnRow, categoryId: string | null, s
   );
 }
 
-/** A user's category write, as the server makes it: final, out of review. */
-function file(row: TxnRow, categoryId: string | null) {
+/** `"2026-09"`, as the server's `Month::parse` reads it. */
+const isMonth = (s: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+
+const isNeutral = (store: Store, categoryId: string | null) =>
+  store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
+
+/** A user's category write, as the server makes it: final, out of review, and
+ *  outside a neutral category it unlinks both halves of the row's pair. A
+ *  partner pairing filed is left an orphan. */
+function file(store: Store, row: TxnRow, categoryId: string | null) {
   Object.assign(row, { categoryId, categorySource: categoryId ? "user" : null, categoryConfidence: null, needsReview: false });
+  if (row.pairId === null || isNeutral(store, categoryId)) return;
+  const partner = store.txns.find((x) => x.id === row.pairId);
+  if (partner) partner.pairId = null;
+  row.pairId = null;
 }
 
 /** Filing a paired transfer outside a neutral category breaks its pair, so the
  *  server asks first: how many pairs it would break, nothing written. */
 function pairBreaks(store: Store, rows: TxnRow[], categoryId: string | null | undefined, confirmed?: boolean): number {
   if (categoryId === undefined || confirmed) return 0;
-  const neutral = store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
-  return neutral ? 0 : rows.filter((x) => x.isTransfer).length;
+  return isNeutral(store, categoryId) ? 0 : rows.filter((x) => x.pairId !== null).length;
 }
 
 export function budgetRoutes(r: Router<Store>): void {
-  r.route("GET", "/transactions", ({ store, query }) => v.transactions(store, query));
-  r.route("GET", "/transactions/counts", ({ store, query }) => v.counts(store, query));
-  r.route("PATCH", "/transactions/:id", ({ store, params, body }) => {
-    const b = body as { categoryId?: string | null; tagIds?: string[]; checked?: boolean; confirmBreakPairs?: boolean; offerScope?: SameDescriptionScope };
-    const row = store.txns.find((x) => x.id === params.id);
-    if (!row) return reply(404, { error: "no such transaction" });
-    const breaks = pairBreaks(store, [row], b.categoryId, b.confirmBreakPairs);
-    if (breaks) return { sameDescriptionCount: 0, pendingPairBreaks: breaks };
-    if (b.categoryId !== undefined) {
-      file(row, b.categoryId);
-      if (store.categories.find((c) => c.id === b.categoryId)?.kind !== "neutral") row.isTransfer = false;
-    }
-    if (b.tagIds) row.tagIds = b.tagIds;
-    if (b.checked !== undefined) row.checked = b.checked;
-    return { sameDescriptionCount: b.categoryId === undefined ? 0 : sameDescription(store, row, row.categoryId, b.offerScope).length };
+  r.route("GET /transactions", ({ store, query }) => {
+    const f = v.parseTransactionFilter(query);
+    return typeof f === "string" ? fail(400, f) : v.transactions(store, query, f);
   });
-  r.route("POST", "/transactions/:id/apply-to-description", ({ store, params, body }) => {
-    const b = body as { categoryId: string | null; scope?: SameDescriptionScope; confirmBreakPairs?: boolean };
+  r.route("GET /transactions/counts", ({ store, query }) => {
+    const f = v.parseTransactionFilter(query);
+    return typeof f === "string" ? fail(400, f) : v.counts(store, f);
+  });
+  r.route("PATCH /transactions/:id", ({ store, params, body: b }) => {
     const row = store.txns.find((x) => x.id === params.id);
-    if (!row) return reply(404, { error: "no such transaction" });
-    const rows = sameDescription(store, row, b.categoryId, b.scope);
-    const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
+    if (!row) return fail(404, "no such transaction");
+    const breaks = pairBreaks(store, [row], b.categoryId, b.confirmBreakPairs);
+    if (breaks) return { pendingPairBreaks: breaks };
+    if (b.categoryId !== undefined) file(store, row, b.categoryId);
+    if (b.tagIds) row.tagIds = b.tagIds;
+    if (b.checked != null) row.checked = b.checked;
+    if (b.categoryId === undefined) return {};
+    return { sameDescriptionCount: sameDescription(store, row, row.categoryId, b.offerScope).length };
+  });
+  r.route("POST /transactions/:id/apply-to-description", ({ store, params, body: b }) => {
+    const row = store.txns.find((x) => x.id === params.id);
+    if (!row) return fail(404, "no such transaction");
+    const categoryId = b.categoryId ?? null;
+    const rows = sameDescription(store, row, categoryId, b.scope);
+    const breaks = pairBreaks(store, rows, categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
-    rows.forEach((x) => file(x, b.categoryId));
+    rows.forEach((x) => file(store, x, categoryId));
     return { updated: rows.length, ids: rows.map((x) => x.id) };
   });
-  r.route("POST", "/transactions/bulk", ({ store, body }) => {
-    const b = body as Omit<BulkBody, "filter"> & { filter?: Record<string, string | boolean> };
-    const rows = b.ids
-      ? store.txns.filter((x) => b.ids!.includes(x.id))
-      : v.matching(store, new URLSearchParams(Object.entries(b.filter ?? {}).map(([k, val]): [string, string] => [k, String(val)])));
+  r.route("POST /transactions/bulk", ({ store, body: b }) => {
+    const ids = b.ids;
+    if (ids && b.filter) return fail(400, "send ids or filter, not both");
+    if (!ids && !b.filter) return fail(400, "ids or filter required");
+    const f = ids ? null : v.parseTransactionFilter(b.filter!);
+    if (typeof f === "string") return fail(400, f);
+    // A filter selects what "select all shown" covers: the cash rows only.
+    const rows = ids
+      ? store.txns.filter((x) => ids.includes(x.id))
+      : v.matching(store, f!).filter((x) => x.source === "cash");
     const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
     for (const x of rows) {
-      if (b.categoryId !== undefined) file(x, b.categoryId);
+      if (b.categoryId !== undefined) file(store, x, b.categoryId);
       if (b.addTagIds) x.tagIds = [...new Set([...x.tagIds, ...b.addTagIds])];
-      if (b.checked !== undefined) x.checked = b.checked;
+      if (b.checked != null) x.checked = b.checked;
     }
     return { updated: rows.length };
   });
-  r.route("POST", "/budget/review/:id/accept", ({ store, params }) => {
+  r.route("POST /budget/review/:id/accept", ({ store, params }) => {
     const row = store.txns.find((x) => x.id === params.id);
-    if (!row) return reply(404, { error: "no such transaction" });
+    if (!row) return fail(404, "no such transaction");
     Object.assign(row, { needsReview: false, categorySource: "user" });
     return { sameDescriptionCount: sameDescription(store, row, row.categoryId, "review").length };
   });
-  r.route("POST", "/budget/review/:id/undo", ({ store, params, body }) => {
-    const b = body as { categoryId: string | null; confidence: string | null };
+  r.route("POST /budget/review/:id/undo", ({ store, params, body }) => {
     const row = store.txns.find((x) => x.id === params.id);
-    if (!row) return reply(404, { error: "no such transaction" });
-    Object.assign(row, { categoryId: b.categoryId, categorySource: b.categoryId ? "ai" : null, categoryConfidence: b.confidence, needsReview: true });
+    if (!row) return fail(404, "no such transaction");
+    v.queueForReview(row, body.categoryId ?? null, body.confidence ?? null);
     return reply(204);
   });
-  r.route("GET", "/budget/categories", ({ store }) => v.categories(store));
-  r.route("GET", "/budget/tags", ({ store }) => v.tags(store));
+  r.route("GET /budget/categories", ({ store }) => v.categories(store));
+  r.route("GET /budget/tags", ({ store }) => v.tags(store));
   // A name already used (any case) is refused, as the server does.
-  r.route("POST", "/budget/categories", ({ store, body }) => {
-    const b = body as CategoryBody;
-    if (taken(store.categories, b.name)) return reply(409, { error: "duplicate name" });
-    const row = { ...b, id: crypto.randomUUID(), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
+  r.route("POST /budget/categories", ({ store, body: b }) => {
+    if (taken(store.categories, b.name)) return fail(409, "duplicate name");
+    const row = { ...b, archived: b.archived ?? false, id: store.ids.next("category"), defaultKey: null, seedKey: null, systemKey: null, sortOrder: store.categories.length };
     store.categories.push(row);
-    return { ...row, txCount: 0 };
+    return reply(201, v.categories(store).find((c) => c.id === row.id)!);
   });
-  r.route("PATCH", "/budget/categories/:id", ({ store, params, body }) => {
-    const b = body as Partial<CategoryBody>;
+  r.route("PATCH /budget/categories/:id", ({ store, params, body: b }) => {
     const cat = store.categories.find((c) => c.id === params.id);
-    if (!cat) return reply(404, { error: "no such category" });
-    if (b.name !== undefined && taken(store.categories.filter((c) => c !== cat), b.name)) return reply(409, { error: "duplicate name" });
-    Object.assign(cat, b);
-    return v.categories(store).find((c) => c.id === cat.id);
+    if (!cat) return fail(404, "no such category");
+    if (taken(store.categories.filter((c) => c !== cat), b.name)) return fail(409, "duplicate name");
+    // A rename clears the default key (the server's update_category).
+    const defaultKey = b.name === cat.name ? cat.defaultKey : null;
+    Object.assign(cat, { ...b, defaultKey, archived: b.archived ?? cat.archived });
+    return v.categories(store).find((c) => c.id === cat.id)!;
   });
-  r.route("PUT", "/budget/categories/order", ({ store, body }) => {
-    (body as { ids: string[] }).ids.forEach((id, i) => {
+  r.route("PUT /budget/categories/order", ({ store, body }) => {
+    body.ids.forEach((id, i) => {
       const cat = store.categories.find((c) => c.id === id);
       if (cat) cat.sortOrder = i;
     });
     return reply(204);
   });
   // Its rows go back to uncategorised, as on the server.
-  r.route("DELETE", "/budget/categories/:id", ({ store, params }) => {
+  r.route("DELETE /budget/categories/:id", ({ store, params }) => {
     store.categories = store.categories.filter((c) => c.id !== params.id);
     for (const x of store.txns) if (x.categoryId === params.id) Object.assign(x, { categoryId: null, categorySource: null, categoryConfidence: null });
     return reply(204);
   });
-  r.route("DELETE", "/budget/tags/:id", ({ store, params }) => {
+  r.route("DELETE /budget/tags/:id", ({ store, params }) => {
     store.tags = store.tags.filter((t) => t.id !== params.id);
     for (const x of store.txns) x.tagIds = x.tagIds.filter((t) => t !== params.id);
     return reply(204);
   });
-  r.route("POST", "/budget/tags", ({ store, body }) => {
-    const b = body as TagBody;
-    if (taken(store.tags, b.name)) return reply(409, { error: "duplicate name" });
-    const row = { ...b, id: crypto.randomUUID() };
+  r.route("POST /budget/tags", ({ store, body: b }) => {
+    if (taken(store.tags, b.name)) return fail(409, "duplicate name");
+    const row = { ...b, id: store.ids.next("tag") };
     store.tags.push(row);
-    return { ...row, txCount: 0 };
+    return reply(201, { ...row, txCount: 0 });
   });
-  r.route("PATCH", "/budget/tags/:id", ({ store, params, body }) => {
-    const b = body as Partial<TagBody>;
+  r.route("PATCH /budget/tags/:id", ({ store, params, body: b }) => {
     const tag = store.tags.find((t) => t.id === params.id);
-    if (!tag) return reply(404, { error: "no such tag" });
-    if (b.name !== undefined && taken(store.tags.filter((t) => t !== tag), b.name)) return reply(409, { error: "duplicate name" });
+    if (!tag) return fail(404, "no such tag");
+    if (taken(store.tags.filter((t) => t !== tag), b.name)) return fail(409, "duplicate name");
     Object.assign(tag, b);
-    return { ...tag, txCount: 0 };
+    return v.tags(store).find((t) => t.id === tag.id)!;
   });
-  r.route("GET", "/budget/summary", ({ store, query }) => v.summary(store, query));
-  r.route("GET", "/budget/trend", ({ store, query }) => v.trend(store, query));
-  r.route("GET", "/budget/categorize/status", ({ store }) => ({
+  r.route("GET /budget/summary", ({ store, query: { month, from, to } }) => {
+    if (month != null && from == null && to == null) {
+      return isMonth(month) ? v.summary(store, { month }) : fail(400, `invalid month: ${month}`);
+    }
+    if (month == null && from != null && to != null) {
+      return from <= to ? v.summary(store, { from, to }) : fail(400, `from ${from} is after to ${to}`);
+    }
+    return fail(400, "pass either month, or both from and to");
+  });
+  r.route("GET /budget/trend", ({ store, query: { anchor, months } }) => {
+    if (!isMonth(anchor)) return fail(400, `invalid anchor: ${anchor}`);
+    const n = months ?? TREND_MONTHS_DEFAULT;
+    if (n < 1 || n > TREND_MONTHS_MAX) return fail(400, `months must be 1..=${TREND_MONTHS_MAX}`);
+    return v.trend(store, anchor, n);
+  });
+  // As the server: refused unless the admin set up an AI and the user opted in.
+  r.route("POST /budget/categorize", ({ store }) =>
+    store.aiStatus.configured && store.user.prefs.budgetAiEnabled ? reply(202) : fail(409, "no AI categorisation for this user"),
+  );
+  r.route("GET /budget/categorize/status", ({ store }) => ({
     ...store.aiStatus,
     reviewCount: store.txns.filter((x) => x.needsReview).length,
   }));

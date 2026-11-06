@@ -13,7 +13,7 @@ use crate::powens::model::{BankAccount, Connection, Investment, PowensTransactio
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
 /// `account_type` keys. `None` marks a liability (loan, card):
-/// gripsou tracks assets only for now, and mapping these onto an asset type
+/// gripsou tracks assets only, and mapping these onto an asset type
 /// would add their balance to net worth with the wrong sign.
 pub fn map_type_key(name: &str) -> Option<&'static str> {
     Some(match name {
@@ -47,10 +47,9 @@ pub fn is_liquidity(inv: &Investment) -> bool {
 }
 
 /// Extract the institution from the connections endpoint. With one connection
-/// per token the first connector is correct.
-// ponytail: takes the first connector; match by accounts' id_connection if a
-// single token ever carries multiple connections.
-pub fn map_institution(connections: &[Connection]) -> Institution {
+/// per token the first connector is correct; a token carrying several would
+/// need matching by the accounts' `id_connection`.
+fn map_institution(connections: &[Connection]) -> Institution {
     connections
         .iter()
         .find_map(|c| c.connector.as_ref())
@@ -100,6 +99,7 @@ pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
         // stops moving while the bank can't be reached, and Powens keeps
         // returning that day's balances.
         balance_as_of: day(acct.last_update.as_deref()),
+        health: None,
     }
 }
 
@@ -217,8 +217,9 @@ fn cash_holding(
     })
 }
 
-/// Top-level mapping: Powens accounts + investments + transactions -> a
-/// canonical `SyncResult`.
+/// Top-level mapping: Powens accounts + investments + transactions, with the
+/// token's connections for the institution and the health, -> a canonical
+/// `SyncResult`.
 ///
 /// Deleted accounts (and their holdings) are skipped; each surviving account
 /// contributes its security holdings and a cash holding per `cash_holding`.
@@ -233,15 +234,11 @@ pub fn map_sync(
     accounts: &[BankAccount],
     investments: &[Investment],
     transactions: &[PowensTransaction],
+    connections: &[Connection],
 ) -> SyncResult {
-    // institution is filled by sync() after fetching connections; placeholder here.
     let mut result = SyncResult {
-        provider_meta: Default::default(),
-        skipped: Default::default(),
-        institution: Institution::default(),
-        accounts: Vec::new(),
-        holdings: Vec::new(),
-        transactions: Vec::new(),
+        institution: map_institution(connections),
+        ..Default::default()
     };
     let mut by_account: HashMap<i64, Vec<&Investment>> = HashMap::new();
     for inv in investments {
@@ -306,6 +303,7 @@ pub fn map_sync(
     // Pending, deleted, incomplete, or on an account skipped above.
     result.skipped.transactions = transactions.len().saturating_sub(result.transactions.len());
 
+    apply_health(&mut result, accounts, connections);
     result
 }
 
@@ -383,7 +381,7 @@ pub fn map_transactions(txns: &[PowensTransaction]) -> Vec<CanonicalTransaction>
 
 /// Keep account timestamps independent from the parent/source timestamps: a
 /// successful checking update must not make blocked savings appear current.
-pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connections: &[Connection]) {
+fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connections: &[Connection]) {
     fn health(
         raw: Option<&crate::powens::model::SourceHealth>,
         date: Option<&str>,
@@ -429,7 +427,7 @@ pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connectio
                 .next_retry_on
                 .or_else(|| day(c.health.next_try.as_deref()));
         }
-        mapped.meta["sync_health"] = json!(observed);
+        mapped.health = Some(observed);
         mapped.meta["id_source"] = json!(account.id_source);
     }
     // Only single-connection tokens can safely supply connection-wide metadata.
@@ -453,5 +451,5 @@ pub fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connectio
     } else {
         None
     };
-    result.provider_meta = json!({"sync_health": observed});
+    result.health = observed;
 }

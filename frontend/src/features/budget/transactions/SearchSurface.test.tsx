@@ -1,0 +1,108 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { screen, fireEvent, within } from "@testing-library/react";
+
+import { SearchSurface } from "./SearchSurface";
+import { BudgetProvider } from "../BudgetProvider";
+import { useBudget } from "../budgetContext";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
+
+const ACCOUNTS = [{ id: "acc-1", name: "Current", color: "#5b9bf0" }];
+const CATEGORIES = [
+  {
+    id: "gro", name: "Groceries", defaultKey: null, color: "#9bb06b", icon: "shopping-cart",
+    hint: null, kind: "expense", systemKey: null, archived: false, txCount: 3,
+  },
+];
+const TAGS = [{ id: "t1", name: "holiday", color: "#f0b952", txCount: 2 }];
+
+/** Surfaces the context so assertions can read what the controls wrote. */
+function Probe() {
+  const { filters } = useBudget();
+  return <pre data-testid="filters">{JSON.stringify(filters)}</pre>;
+}
+
+function renderSurface() {
+  renderWithApp(
+    <BudgetProvider>
+      <SearchSurface counts={{ matching: 12, total: 400, uncategorized: 300, selectable: 12, matchingTotal: "0", fxMissing: false }} />
+      <Probe />
+    </BudgetProvider>,
+  );
+}
+
+function filters(): Record<string, unknown> {
+  return JSON.parse(screen.getByTestId("filters").textContent ?? "{}");
+}
+
+/** `Select` is a custom dropdown (trigger button + option buttons), not a
+ *  native <select> — click the trigger, then click the option by its label. */
+function pickTimeFrame(label: string) {
+  const control = within(screen.getByTestId("time-frame"));
+  fireEvent.click(control.getByRole("button"));
+  // The menu is portalled to the body, outside the control.
+  fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
+describe("SearchSurface", () => {
+  beforeEach(() => {
+    stubFetch(async (url: string) => {
+        if (String(url).includes("/budget/categories")) return jsonResponse(CATEGORIES);
+        if (String(url).includes("/budget/tags")) return jsonResponse(TAGS);
+        return jsonResponse(ACCOUNTS);
+      });
+  });
+
+  it("shows part 1 only, until a filter exists", () => {
+    renderSurface();
+    expect(screen.getByRole("searchbox")).toBeVisible();
+    expect(screen.queryByTestId("filter-panel")).toBeNull();
+    expect(screen.queryByTestId("active-filters")).toBeNull();
+  });
+
+  it("keeps exactly one type bucket active", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    fireEvent.click(screen.getByTestId("bucket-out"));
+    expect(filters().bucket).toBe("out");
+    fireEvent.click(screen.getByTestId("bucket-lots"));
+    expect(filters().bucket).toBe("lots");
+  });
+
+  it("writes the two other toggles", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    fireEvent.click(screen.getByTestId("toggle-uncategorized"));
+    fireEvent.click(screen.getByTestId("toggle-needs-review"));
+    expect(filters().uncategorized).toBe(true);
+    expect(filters().needsReview).toBe(true);
+  });
+
+  it("turns a time-frame preset into concrete dates", () => {
+    renderSurface();
+    pickTimeFrame("This year");
+    expect(String(filters().from)).toMatch(/^\d{4}-01-01$/);
+  });
+
+  it("shows part 3 with one chip per filter and the matching/total readout", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    fireEvent.click(screen.getByTestId("toggle-uncategorized"));
+    const active = screen.getByTestId("active-filters");
+    expect(active).toBeVisible();
+    expect(screen.getByTestId("counts-readout")).toHaveTextContent("12");
+    expect(screen.getByTestId("counts-readout")).toHaveTextContent("400");
+    fireEvent.click(screen.getByTestId("chip-clear-uncategorized"));
+    expect(filters().uncategorized).toBe(false);
+  });
+
+  it("clears every filter at once", () => {
+    renderSurface();
+    fireEvent.click(screen.getByTestId("filters-toggle"));
+    fireEvent.click(screen.getByTestId("toggle-uncategorized"));
+    fireEvent.click(screen.getByTestId("toggle-needs-review"));
+    fireEvent.click(screen.getByTestId("clear-all"));
+    expect(filters().uncategorized).toBe(false);
+    expect(filters().needsReview).toBe(false);
+    expect(screen.queryByTestId("active-filters")).toBeNull();
+  });
+});

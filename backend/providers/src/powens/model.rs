@@ -141,7 +141,8 @@ pub struct WebhookEnvelope {
 pub struct PowensTransaction {
     pub id: i64,
     pub id_account: i64,
-    /// Bank-side value date. 100% filled; preferred over `date`.
+    /// The day the operation happened (the card was used). 100% filled;
+    /// preferred over `date`, the day the balance moved.
     pub rdate: Option<NaiveDate>,
     pub date: Option<NaiveDate>,
     /// Signed cash impact on the account.

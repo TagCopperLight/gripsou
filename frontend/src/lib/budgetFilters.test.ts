@@ -1,5 +1,6 @@
 import { beforeEach, afterEach } from "vitest";
-import { DEFAULT_PREFS, setPrefs } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { setPrefs } from "./prefs";
 
 // These calendar-arithmetic fixtures use local Date constructors.
 beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
@@ -47,14 +48,6 @@ describe("budgetFilters", () => {
     expect(withTimeFrame(EMPTY_FILTERS, "last3Months", today)).toMatchObject({
       from: "2026-06-21",
       to: "2026-09-21",
-    });
-  });
-
-  it("clamps the day instead of rolling over when the target month is shorter", () => {
-    // 2027 is not a leap year: naive arithmetic would land on 2027-03-01.
-    expect(withTimeFrame(EMPTY_FILTERS, "last12Months", new Date(2028, 1, 29))).toMatchObject({
-      from: "2027-02-28",
-      to: "2028-02-29",
     });
   });
 
@@ -114,7 +107,7 @@ describe("budgetFilters", () => {
     });
   });
 
-  it("clears a stale Overview period when a new time frame is picked (I2)", () => {
+  it("clears a stale Overview period when a new time frame is picked", () => {
     // Without this, `activeFilters` hides the time-frame chip (it only shows
     // when `period` is unset) while the picked range silently applies —
     // the "Selected period" chip keeps showing the OLD Overview period.

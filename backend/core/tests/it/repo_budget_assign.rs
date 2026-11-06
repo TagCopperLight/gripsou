@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
+use gripsou_core::dto::CanonicalTransaction;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
-    count_same_description, patch_transaction,
+    BulkChanges, Refusal, SameDescription, TransactionPatch, WriteOutcome, apply_to_description,
+    bulk_apply, count_same_description, patch_transaction,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -27,8 +28,8 @@ async fn fixture(pool: &PgPool, descriptions: &[&str]) -> anyhow::Result<(Uuid, 
                 &format!("t{i}"),
                 "withdrawal",
                 Decimal::new(-1200, 2),
-                Some(d),
-            ),
+            )
+            .described(d),
         )
         .await?;
     }
@@ -317,13 +318,15 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn(
-                "acct-1",
-                &format!("t{i}"),
-                "withdrawal",
-                Decimal::new(-1200, 2),
-                d,
-            ),
+            &CanonicalTransaction {
+                description: d.map(str::to_string),
+                ..txn(
+                    "acct-1",
+                    &format!("t{i}"),
+                    "withdrawal",
+                    Decimal::new(-1200, 2),
+                )
+            },
         )
         .await?;
     }
@@ -399,13 +402,15 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn(
-                "acct-1",
-                &format!("t{i}"),
-                "withdrawal",
-                Decimal::new(-1200, 2),
-                d,
-            ),
+            &CanonicalTransaction {
+                description: d.map(str::to_string),
+                ..txn(
+                    "acct-1",
+                    &format!("t{i}"),
+                    "withdrawal",
+                    Decimal::new(-1200, 2),
+                )
+            },
         )
         .await?;
     }
@@ -431,15 +436,6 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     assert_eq!(applied, 0, "and the apply must agree: nothing was touched");
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Bulk writes and the pair-break guard
-//
-// A category write dissolves any internal-transfer pair it touches, and "select
-// all shown" can sweep up pairs the client has never loaded and so cannot
-// count. The caller therefore confirms: an unconfirmed call that would break
-// pairs writes *nothing* and reports the count instead.
-// ---------------------------------------------------------------------------
 
 /// Seeds a paired internal transfer across two accounts and returns
 /// `(user_id, groceries, outgoing, incoming)`.
@@ -582,10 +578,6 @@ async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// The checked writes the API calls: all or nothing, and pairs confirmed.
-// ---------------------------------------------------------------------------
-
 async fn row_state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64, Option<Uuid>) {
     sqlx::query_as(
         "select t.budget_category_id, t.checked_at is not null,
@@ -620,7 +612,7 @@ async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow:
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownCategory);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownCategory));
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
 }
@@ -644,7 +636,7 @@ async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resu
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownTag));
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
 }
@@ -693,7 +685,7 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
             },
         )
         .await?,
-        WriteOutcome::NotFound
+        WriteOutcome::Refused(Refusal::NotFound)
     );
     assert_eq!(
         bulk_apply(
@@ -720,7 +712,7 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
             true
         )
         .await?,
-        WriteOutcome::NotFound
+        WriteOutcome::Refused(Refusal::NotFound)
     );
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
@@ -795,7 +787,7 @@ async fn a_bulk_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resul
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownTag));
     for id in &ids {
         assert_eq!(row_state(&pool, *id).await, (None, false, 0, None));
     }
@@ -823,7 +815,7 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
             true
         )
         .await?,
-        WriteOutcome::UnknownCategory
+        WriteOutcome::Refused(Refusal::UnknownCategory)
     );
     assert_eq!(
         apply_to_description(
@@ -939,14 +931,6 @@ async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// A neutral category keeps the pair
-//
-// Savings or Investments instead of Internal transfer is a finer label for
-// the same movement: it counts toward nothing, as the pair does, so no total
-// changes and nothing needs confirming.
-// ---------------------------------------------------------------------------
-
 async fn savings(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
     Ok(list_categories(pool, user_id)
         .await?
@@ -1051,11 +1035,7 @@ async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
 async fn bulk_apply_waits_for_a_sync_in_progress(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _, ids) = fixture(&pool, &["LECLERC", "LIDL"]).await?;
 
-    let mut sync = pool.begin().await?;
-    sqlx::query("select pg_advisory_xact_lock(hashtext($1))")
-        .bind(user_id.to_string())
-        .execute(&mut *sync)
-        .await?;
+    let sync = gripsou_core::db::begin_user_writes(&pool, user_id).await?;
 
     let write_pool = pool.clone();
     let write_ids = ids.clone();

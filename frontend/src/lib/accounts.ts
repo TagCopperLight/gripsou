@@ -1,8 +1,15 @@
-import type { Account, AccountSeries } from "../api/types";
+import type { TFunction } from "i18next";
+import type { Account, AccountSeries } from "../api/wire";
+
+// Account types are data-driven: the backend sends a stable key. A type added
+// to the database but not yet to the locale files shows its key.
+export function accountTypeLabel(t: TFunction, key: string): string {
+  return t(`accountTypes.${key}`, { defaultValue: key });
+}
 
 export type ConnectionGroup = {
   connectionId: string;
-  sourceName: string | null;
+  sourceName: string;
   sourceLogo: string | null;
   total: number;
   accounts: Account[];
@@ -31,7 +38,7 @@ export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
 }
 
 /** How many accounts the chart's legend names before "+N others". */
-export const LEGEND_MAX = 5;
+const LEGEND_MAX = 5;
 
 /** The chart's accounts, biggest first at the range's end: the stack's
  *  bottom band, the tooltip's first line, the legend's first name. One at

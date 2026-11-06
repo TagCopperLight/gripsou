@@ -1,8 +1,8 @@
-use gripsou_core::dto::SyncResult;
+use gripsou_core::dto::{SyncHealth, SyncResult};
 use gripsou_core::error::CoreError;
 use gripsou_core::ingest::ingest;
 use gripsou_core::testkit::{
-    self, cash_holding, checking_account, deposit_txn, equity_holding, seed_connection,
+    self, cash_holding, checking_account, equity_holding, seed_connection, txn,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -20,7 +20,7 @@ fn sample_sync() -> SyncResult {
                 Some(Decimal::new(600, 0)),
             ),
         ],
-        transactions: vec![deposit_txn("acct-1", "txn-1", Decimal::new(100, 0))],
+        transactions: vec![txn("acct-1", "txn-1", "deposit", Decimal::new(100, 0))],
         ..Default::default()
     }
 }
@@ -285,8 +285,8 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
         transactions: vec![
-            deposit_txn("acct-1", "txn-1", Decimal::new(100, 0)),
-            deposit_txn("ghost", "txn-2", Decimal::new(50, 0)), // unknown account
+            txn("acct-1", "txn-1", "deposit", Decimal::new(100, 0)),
+            txn("ghost", "txn-2", "deposit", Decimal::new(50, 0)), // unknown account
         ],
         ..Default::default()
     };
@@ -345,13 +345,7 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
     let sync = SyncResult {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
-        transactions: vec![testkit::txn_on(
-            "acct-1",
-            "t1",
-            "deposit",
-            Decimal::new(2500, 2),
-            day,
-        )],
+        transactions: vec![testkit::txn("acct-1", "t1", "deposit", Decimal::new(2500, 2)).on(day)],
         ..Default::default()
     };
     let summary = gripsou_core::ingest::ingest(&pool, conn_id, &sync).await?;
@@ -381,38 +375,35 @@ async fn health_observations_persist_without_replacing_native_ids(
         .bind(serde_json::json!({"external_connection_id":"6"}))
         .execute(&pool)
         .await?;
+    let day = |s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok();
     let mut sync = sample_sync();
-    sync.provider_meta = serde_json::json!({"sync_health":{"verified":true,"state":null}});
-    sync.accounts[0].meta["sync_health"] =
-        serde_json::json!({"verified":true,"state":"bug","lastUpdatedOn":"2026-10-08"});
+    sync.health = Some(SyncHealth {
+        verified: true,
+        ..Default::default()
+    });
+    sync.accounts[0].health = Some(SyncHealth {
+        verified: true,
+        state: Some("bug".into()),
+        last_updated_on: day("2026-10-08"),
+        ..Default::default()
+    });
     ingest(&pool, id, &sync).await?;
-    let conns = gripsou_core::repo::connection::list_connections(
-        &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
+    let owner = testkit::owner(&pool, id).await;
+    let conns = gripsou_core::repo::connection::list_connections(&pool, owner).await?;
+    let native: Option<String> = sqlx::query_scalar(
+        "select provider_meta->>'external_connection_id' from connection where id = $1",
     )
+    .bind(id)
+    .fetch_one(&pool)
     .await?;
-    assert_eq!(conns[0].provider_meta["external_connection_id"], "6");
-    assert_eq!(conns[0].provider_meta["sync_health"]["verified"], true);
-    let accounts = gripsou_core::repo::connection::list_connection_accounts(
-        &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
-    )
-    .await?;
-    assert_eq!(accounts[0].provider_meta["sync_health"]["state"], "bug");
-    sync.accounts[0].meta["sync_health"]["state"] = serde_json::Value::Null;
+    assert_eq!(native.as_deref(), Some("6"));
+    assert_eq!(conns[0].health, sync.health);
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, owner).await?;
+    assert_eq!(accounts[0].health, sync.accounts[0].health);
+    sync.accounts[0].health.as_mut().unwrap().state = None;
     ingest(&pool, id, &sync).await?;
-    let accounts = gripsou_core::repo::connection::list_connection_accounts(
-        &pool,
-        gripsou_core::repo::connection::user_id(&pool, id)
-            .await?
-            .unwrap(),
-    )
-    .await?;
-    assert!(accounts[0].provider_meta["sync_health"]["state"].is_null());
+    let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, owner).await?;
+    assert_eq!(accounts[0].health.as_ref().unwrap().state, None);
     Ok(())
 }
 
@@ -539,8 +530,8 @@ async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> a
         accounts: vec![checking_account("acct-1")],
         holdings: vec![cash_holding("acct-1", Decimal::new(40000, 2))],
         transactions: vec![
-            testkit::txn_on("acct-1", "t1", "deposit", Decimal::new(50000, 2), day(5)),
-            testkit::txn_on("acct-1", "t2", "transfer", Decimal::new(-20000, 2), day(3)),
+            testkit::txn("acct-1", "t1", "deposit", Decimal::new(50000, 2)).on(day(5)),
+            testkit::txn("acct-1", "t2", "transfer", Decimal::new(-20000, 2)).on(day(3)),
         ],
         ..Default::default()
     };

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into connection (user_id, provider_key, display_name, status)\n        values ($1, $2, $3, $4)\n        returning id as \"id!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8e5f92bc148ad3edcb8d086468680624db667942f87a5841e5774a582aaee902"
+}

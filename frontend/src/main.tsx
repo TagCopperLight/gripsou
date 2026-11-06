@@ -1,7 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./queryClient";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth/AuthProvider";
 import { App } from "./App";
 import i18n from "./i18n";
@@ -12,6 +11,8 @@ document.documentElement.lang = i18n.language;
 i18n.on("languageChanged", (lng) => {
   document.documentElement.lang = lng;
 });
+
+const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

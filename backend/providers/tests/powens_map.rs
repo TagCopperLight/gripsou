@@ -1,6 +1,8 @@
 use gripsou_core::dto::CanonicalHolding;
-use gripsou_providers::powens::map;
-use gripsou_providers::powens::model::{BankAccount, Connection, Investment, PowensTransaction};
+use gripsou_providers::powens::testing::map;
+use gripsou_providers::powens::testing::model::{
+    BankAccount, Connection, Investment, PowensTransaction,
+};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
@@ -178,7 +180,12 @@ fn skips_powens_liquidity_pseudo_instrument() {
 #[test]
 fn liquidity_line_is_the_invest_account_cash() {
     let fx = load("sync_liquidity.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     // One real security + one cash holding; no separate "Liquidités" line.
     assert_eq!(result.holdings.len(), 2);
     assert!(
@@ -203,14 +210,14 @@ fn cash_for<'a>(holdings: &'a [CanonicalHolding], account: &str) -> Option<&'a C
 #[test]
 fn map_institution_reads_first_connector() {
     let fx = load("connections.json");
-    let inst = map::map_institution(&fx.connections);
+    let inst = map::map_sync(&[], &[], &[], &fx.connections).institution;
     assert_eq!(inst.key, "abc-uuid-bnp");
     assert_eq!(inst.name, "BNP Paribas");
 }
 
 #[test]
 fn map_institution_empty_when_no_connector() {
-    let inst = map::map_institution(&[]);
+    let inst = map::map_sync(&[], &[], &[], &[]).institution;
     assert_eq!(inst.key, "");
     assert_eq!(inst.name, "");
 }
@@ -218,7 +225,12 @@ fn map_institution_empty_when_no_connector() {
 #[test]
 fn non_invest_account_yields_full_balance_cash() {
     let fx = load("accounts.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     let cash = cash_for(&result.holdings, "1001").expect("cash holding");
     assert_eq!(cash.quantity, dec("1234.56"));
     assert_eq!(cash.instrument.currency, "EUR");
@@ -229,7 +241,12 @@ fn non_invest_account_yields_full_balance_cash() {
 #[test]
 fn invest_account_emits_positive_residual_cash() {
     let fx = load("sync_pea_residual.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     // 2 securities + 1 residual cash holding.
     assert_eq!(result.holdings.len(), 3);
     let cash = cash_for(&result.holdings, "3001").expect("residual cash");
@@ -239,7 +256,12 @@ fn invest_account_emits_positive_residual_cash() {
 #[test]
 fn fully_invested_account_has_no_cash() {
     let fx = load("sync_fully_invested.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     assert_eq!(result.holdings.len(), 2); // securities only
     assert!(cash_for(&result.holdings, "3002").is_none());
 }
@@ -247,7 +269,12 @@ fn fully_invested_account_has_no_cash() {
 #[test]
 fn zero_and_overdraft_balances_still_emit_cash() {
     let fx = load("sync_cash_variants.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     // Deleted account 4003 is skipped entirely.
     assert_eq!(result.accounts.len(), 2);
     assert!(!result.accounts.iter().any(|a| a.external_id == "4003"));
@@ -264,7 +291,12 @@ fn zero_and_overdraft_balances_still_emit_cash() {
 #[test]
 fn map_sync_links_holdings_to_their_accounts() {
     let fx = load("sync_multi.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     assert_eq!(result.accounts.len(), 2);
     // checking cash (2000) + security (5000) + residual cash (1000) = 3 holdings.
     assert_eq!(result.holdings.len(), 3);
@@ -310,7 +342,12 @@ fn map_sync_skips_liability_account_and_its_holdings() {
     // (id 5102, id_account 5003) attached. Skipping the account must also
     // skip that holding, not just omit the account row.
     let fx = load("sync_multi.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
     assert!(
         !result.accounts.iter().any(|a| a.external_id == "5003"),
         "liability account must not be mapped"
@@ -437,7 +474,12 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
     // them would hand the core a dangling account reference and abort the
     // whole ingest transaction.
     let fx = load("sync_multi.json");
-    let result = map::map_sync(&fx.accounts, &fx.investments, &fx.transactions);
+    let result = map::map_sync(
+        &fx.accounts,
+        &fx.investments,
+        &fx.transactions,
+        &fx.connections,
+    );
 
     let emitted: Vec<&str> = result
         .accounts
@@ -468,10 +510,10 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
     }
 }
 
-/// The mapping keys `ts` on `rdate` because it is 100% filled — but the *balance*
-/// follows the booking date, and the two disagree on 70% of real rows by up to
-/// five days. `ts` stays the day the card was tapped (what the user recognises
-/// on the list); `booked_on` carries the day the money actually moved, which is
+/// `spent_on` is `rdate`, 100% filled — but the *balance* follows the booking
+/// date, and the two disagree on 70% of real rows by up to five days.
+/// `spent_on` stays the day the card was tapped (what the user recognises on
+/// the list); `booked_on` carries the day the money actually moved, which is
 /// the only date the backward walk can honestly use.
 #[test]
 fn carries_both_the_spend_date_and_the_booking_date() {
@@ -527,7 +569,7 @@ fn map_sync_counts_what_it_skips() {
         txn(12, 1, false, Some("2024-01-01 00:00:00")),
         txn(13, 3, false, None),
     ];
-    let r = map::map_sync(&accounts, &[], &txns);
+    let r = map::map_sync(&accounts, &[], &txns, &[]);
     assert_eq!(r.accounts.len(), 1);
     assert_eq!(r.skipped.accounts, 2);
     assert_eq!(r.transactions.len(), 1);
@@ -545,7 +587,7 @@ fn map_sync_counts_skipped_holdings() {
         {"id": 4, "id_account": 1, "code": "XX-liquidity", "valuation": "5"}
     ]))
     .unwrap();
-    let r = map::map_sync(&accounts, &invs, &[]);
+    let r = map::map_sync(&accounts, &invs, &[], &[]);
     assert_eq!(
         r.skipped.holdings, 2,
         "deleted + unidentifiable, not liquidity"

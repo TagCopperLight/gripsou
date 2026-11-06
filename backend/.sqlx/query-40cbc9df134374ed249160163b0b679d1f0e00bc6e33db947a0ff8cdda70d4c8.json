@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select cur as \"cur!\" from connection_fx_currencies($1) cur",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cur!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "40cbc9df134374ed249160163b0b679d1f0e00bc6e33db947a0ff8cdda70d4c8"
+}

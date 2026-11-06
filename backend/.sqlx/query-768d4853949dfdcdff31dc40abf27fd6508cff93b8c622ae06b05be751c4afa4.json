@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id as \"id!\"\n        from user_transactions($2) t\n        where t.description_norm <> ''\n          and t.description_norm = (\n              select a.description_norm\n              from user_transactions($2) a\n              where a.id = $1 and a.description_norm <> ''\n          )\n          and ($3::numeric is null\n               or (t.id <> $1\n                   and t.id in (select r.id from budget_transaction_rows($2, $3) r\n                                where r.needs_review)))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "768d4853949dfdcdff31dc40abf27fd6508cff93b8c622ae06b05be751c4afa4"
+}

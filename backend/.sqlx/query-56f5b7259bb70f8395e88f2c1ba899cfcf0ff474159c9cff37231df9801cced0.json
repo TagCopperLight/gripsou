@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id from budget_category where id = any($1) and user_id = $2 for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "56f5b7259bb70f8395e88f2c1ba899cfcf0ff474159c9cff37231df9801cced0"
+}

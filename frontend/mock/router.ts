@@ -1,61 +1,96 @@
-// Tiny method + path router for the review mode's fake API. A handler returns
-// either `reply(status, body?)` or a plain value, sent as 200 JSON.
+// Method + path router for the review mode's fake API, typed by the generated
+// `Api` (src/api/route.ts): a handler gets its route's query and request body
+// and must answer its response type. It returns the body (sent as 200 JSON),
+// `reply(status, body?)` for another status, or `fail(status, message)` for an
+// error. A query the server couldn't read is refused before the handler.
 
-export type Reply = { status: number; body?: unknown };
+import type { Body, Key, Query, Res } from "../src/api/route.ts";
+import { BadQuery, readQuery } from "./query.ts";
 
-export type Ctx<S> = {
-  store: S;
-  params: Record<string, string>;
-  query: URLSearchParams;
-  body: unknown;
-};
-
-type Handler<S> = (ctx: Ctx<S>) => unknown;
-type Route<S> = { method: string; parts: string[]; handler: Handler<S> };
+/** What the plugin sends: JSON (or nothing), or an error as plain text, as the server does. */
+export type Sent = { status: number; body?: unknown } | { status: number; text: string };
 
 const REPLY = Symbol("reply");
 
+export type Reply<T> = { status: number; body?: T; [REPLY]: true };
+export type Failure = { status: number; text: string; [REPLY]: true };
+
 /** Wraps a status (and body) so the router doesn't mistake it for a 200 body. */
-export function reply(status: number, body?: unknown): Reply {
-  const r = body === undefined ? { status } : { status, body };
-  return Object.defineProperty(r, REPLY, { value: true });
+export function reply(status: number): Reply<void>;
+export function reply<T>(status: number, body: T): Reply<T>;
+export function reply<T>(status: number, body?: T): Reply<T | void> {
+  return body === undefined ? { status, [REPLY]: true } : { status, body, [REPLY]: true };
 }
 
-function isReply(v: unknown): v is Reply {
+/** An error answer: the server's errors are a plain-text message. */
+export function fail(status: number, text: string): Failure {
+  return { status, text, [REPLY]: true };
+}
+
+function isReply(v: unknown): v is Reply<unknown> | Failure {
   return typeof v === "object" && v !== null && REPLY in v;
 }
+
+export type Ctx<S, K extends Key> = {
+  store: S;
+  params: Record<string, string>;
+  query: Query<K>;
+  body: Body<K>;
+};
+
+/** A route with no response body answers with a status only (`reply(204)`). */
+export type Answer<R> = ([R] extends [void] ? never : R) | Reply<R> | Failure;
+
+/** The path parameters when `path` fits `pattern` (`:id` matches any one
+ *  segment), else null. */
+export function matchPath(pattern: string, path: string): Record<string, string> | null {
+  const want = pattern.split("/").filter(Boolean);
+  const parts = path.split("/").filter(Boolean);
+  if (want.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < parts.length; i++) {
+    const p = want[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Route<S> = { key: Key; method: string; pattern: string; handler: (ctx: Ctx<S, Key>) => unknown };
 
 export function createRouter<S>() {
   const routes: Route<S>[] = [];
 
-  function route(method: string, pattern: string, handler: Handler<S>): void {
-    routes.push({ method, parts: pattern.split("/").filter(Boolean), handler });
+  function route<K extends Key>(key: K, handler: (ctx: Ctx<S, K>) => Answer<Res<K>>): void {
+    const [method, pattern] = key.split(" ");
+    routes.push({ key, method, pattern, handler: handler as Route<S>["handler"] });
   }
 
-  function match(r: Route<S>, parts: string[]): Record<string, string> | null {
-    if (r.parts.length !== parts.length) return null;
-    const params: Record<string, string> = {};
-    for (let i = 0; i < parts.length; i++) {
-      const p = r.parts[i];
-      if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
-      else if (p !== parts[i]) return null;
-    }
-    return params;
-  }
-
-  function dispatch(store: S, method: string, path: string, query: URLSearchParams, body: unknown): Reply {
-    const parts = path.split("/").filter(Boolean);
+  /** The answer, or null when no route matches. */
+  function dispatch(store: S, method: string, path: string, query: URLSearchParams, body: unknown): Sent | null {
     for (const r of routes) {
       if (r.method !== method) continue;
-      const params = match(r, parts);
+      const params = matchPath(r.pattern, path);
       if (!params) continue;
-      const out = r.handler({ store, params, query, body });
-      return isReply(out) ? { ...out } : { status: 200, body: out };
+      let typed: Query<Key>;
+      try {
+        typed = readQuery(r.key, query);
+      } catch (e) {
+        if (e instanceof BadQuery) return { status: 400, text: e.message };
+        throw e;
+      }
+      const out = r.handler({ store, params, query: typed, body: body as Body<Key> });
+      if (!isReply(out)) return { status: 200, body: out };
+      if ("text" in out) return { status: out.status, text: out.text };
+      return out.body === undefined ? { status: out.status } : { status: out.status, body: out.body };
     }
-    return { status: 501, body: { unhandled: `${method} ${path}` } };
+    return null;
   }
 
-  return { route, dispatch };
+  /** Every route registered, as `Api` names it. */
+  const keys = (): Key[] => routes.map((r) => r.key);
+
+  return { route, dispatch, keys };
 }
 
 export type Router<S> = ReturnType<typeof createRouter<S>>;

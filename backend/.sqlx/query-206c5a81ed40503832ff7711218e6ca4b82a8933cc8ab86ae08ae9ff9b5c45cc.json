@@ -1,0 +1,157 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select a.id    as \"account_id!\",\n               c.id    as \"connection_id!\",\n               a.name  as \"name!\",\n               a.color,\n               a.type_key as \"type_key!\",\n               coalesce(v.value, 0) as \"value!\",\n               a.currency as \"currency!\",\n               v.value_native as \"value_native?\",\n               coalesce(v.fx_missing, false) as \"fx_missing!\",\n               c.last_sync_at,\n               c.institution_key,\n               c.institution_name,\n               c.provider_key\n        from account_values_today($1) v\n        join account a    on a.id = v.account_id\n        join connection c on c.id = a.connection_id\n        order by v.value_pivot desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "connection_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "type_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "type_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "value!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "value_native?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_sync_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "last_sync_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "institution_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "institution_key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "institution_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "institution_name"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "provider_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "provider_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      null,
+      null,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "206c5a81ed40503832ff7711218e6ca4b82a8933cc8ab86ae08ae9ff9b5c45cc"
+}

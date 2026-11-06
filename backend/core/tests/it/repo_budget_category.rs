@@ -1,4 +1,6 @@
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::repo::budget::ai;
 use gripsou_core::repo::budget::category::{
     CategoryPatch, DeleteCategory, NewCategory, category_refs, create_category, delete_category,
     list_categories, reorder_categories, update_category,
@@ -32,13 +34,7 @@ async fn counts_transactions_per_category(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            Decimal::new(-1200, 2),
-            Some("LECLERC"),
-        ),
+        &txn("acct-1", "t1", "withdrawal", Decimal::new(-1200, 2)).described("LECLERC"),
     )
     .await?;
 
@@ -70,7 +66,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
             color: "#5b9bf0",
             icon: Some("cat"),
             hint: Some("kibble"),
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
@@ -90,7 +86,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
             color: "#4dd0b1",
             icon: Some("cat"),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: true,
         },
     )
@@ -124,7 +120,7 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
             color: "#f0b952",
             icon: groceries.icon.as_deref(),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: false,
         },
     )
@@ -141,7 +137,7 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
             color: "#f0b952",
             icon: groceries.icon.as_deref(),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: false,
         },
     )
@@ -171,14 +167,18 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
             color: "#5b9bf0",
             icon: Some("arrow-left-right"),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: true,
         },
     )
     .await?
     .unwrap();
     assert_eq!(renamed.name, "Virement interne");
-    assert_eq!(renamed.kind, "neutral", "kind is locked on a system row");
+    assert_eq!(
+        renamed.kind,
+        CategoryKind::Neutral,
+        "kind is locked on a system row"
+    );
     assert!(!renamed.archived, "a system row cannot be archived either");
 
     assert_eq!(
@@ -189,24 +189,21 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     Ok(())
 }
 
-/// Deleting returns the transactions to uncategorised rather than deleting them.
+/// Deleting returns the transactions to uncategorised rather than deleting
+/// them, and to nobody's choice: the AI has them to look at again.
 #[sqlx::test(migrations = "../migrations")]
 async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
-    upsert_transaction(
-        &mut conn,
-        account_id,
-        &txn(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            Decimal::new(-1200, 2),
-            Some("LECLERC"),
-        ),
-    )
-    .await?;
+    for (ext, description) in [("t1", "LECLERC"), ("t2", "LIDL")] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", Decimal::new(-1200, 2)).described(description),
+        )
+        .await?;
+    }
     let created = create_category(
         &pool,
         user_id,
@@ -215,26 +212,41 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
             color: "#5b9bf0",
             icon: None,
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
-    sqlx::query("update transaction set budget_category_id = $1, category_source = 'user'")
-        .bind(created.id)
-        .execute(&pool)
-        .await?;
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = 'user', \
+         category_reviewed_at = now() where external_id = 't1'",
+    )
+    .bind(created.id)
+    .execute(&pool)
+    .await?;
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = 'ai', \
+         category_confidence = 0.9, category_reviewed_at = now() where external_id = 't2'",
+    )
+    .bind(created.id)
+    .execute(&pool)
+    .await?;
+    assert_eq!(ai::remaining(&pool, user_id).await?, 0);
 
     assert_eq!(
         delete_category(&pool, user_id, created.id).await?,
         DeleteCategory::Deleted
     );
 
-    let (left, categorised): (i64, i64) =
-        sqlx::query_as("select count(*), count(budget_category_id) from transaction")
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(left, 1, "the transaction survives");
-    assert_eq!(categorised, 0, "it is uncategorised again");
+    let (left, settled): (i64, i64) = sqlx::query_as(
+        "select count(*), count(*) filter (where budget_category_id is not null \
+         or category_source is not null or category_confidence is not null \
+         or category_reviewed_at is not null) from transaction",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(left, 2, "the transactions survive");
+    assert_eq!(settled, 0, "uncategorised and nobody's choice");
+    assert_eq!(ai::remaining(&pool, user_id).await?, 2);
     Ok(())
 }
 
@@ -251,7 +263,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
             color: "#5b9bf0",
             icon: None,
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
@@ -266,7 +278,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
                 color: "#000000",
                 icon: None,
                 hint: None,
-                kind: "expense",
+                kind: CategoryKind::Expense,
                 archived: false
             },
         )
@@ -294,39 +306,49 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
     let rows = list_categories(&pool, user_id).await?;
     let expenses: Vec<Uuid> = rows
         .iter()
-        .filter(|r| r.kind == "expense")
+        .filter(|r| r.kind == CategoryKind::Expense)
         .map(|r| r.id)
         .collect();
     let incomes: Vec<Uuid> = rows
         .iter()
-        .filter(|r| r.kind == "income")
+        .filter(|r| r.kind == CategoryKind::Income)
         .map(|r| r.id)
         .collect();
 
     // Last expense first, kinds interleaved.
     let mut order = vec![*expenses.last().unwrap(), incomes[1], incomes[0]];
     order.extend(&expenses[..expenses.len() - 1]);
-    assert_eq!(
-        reorder_categories(&pool, user_id, &order).await?,
-        order.len() as u64
-    );
+    assert!(reorder_categories(&pool, user_id, &order).await?);
 
     let after = list_categories(&pool, user_id).await?;
     assert_eq!(after[0].id, *expenses.last().unwrap(), "moved to the top");
     let income_order: Vec<Uuid> = after
         .iter()
-        .filter(|r| r.kind == "income")
+        .filter(|r| r.kind == CategoryKind::Income)
         .map(|r| r.id)
         .take(2)
         .collect();
     assert_eq!(income_order, vec![incomes[1], incomes[0]]);
 
+    // A list naming a row that is not the user's is refused whole: their own
+    // rows keep the order they had.
     let (stranger, _c) = seed_user_and_connection(&pool).await;
     let theirs = list_categories(&pool, stranger).await?[0].id;
+    let before = list_categories(&pool, user_id).await?;
+    let reversed: Vec<Uuid> = before.iter().rev().map(|r| r.id).chain([theirs]).collect();
+    assert!(!reorder_categories(&pool, user_id, &reversed).await?);
+    let ids = |rows: &[gripsou_core::repo::budget::category::BudgetCategoryRow]| {
+        rows.iter().map(|r| r.id).collect::<Vec<_>>()
+    };
     assert_eq!(
-        reorder_categories(&pool, user_id, &[expenses[0], theirs]).await?,
-        1,
-        "the stranger's row is not touched, and the count says so"
+        ids(&list_categories(&pool, user_id).await?),
+        ids(&before),
+        "nothing was written"
+    );
+    assert_eq!(
+        list_categories(&pool, stranger).await?[0].id,
+        theirs,
+        "the stranger's row is not touched"
     );
     Ok(())
 }
@@ -347,7 +369,7 @@ async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Resu
                     color: "#000000",
                     icon: None,
                     hint: None,
-                    kind: "expense",
+                    kind: CategoryKind::Expense,
                 },
             )
             .await

@@ -13,7 +13,6 @@ use gripsou_core::provider::{
 use gripsou_jobs::{Deps, Trigger};
 use serde_json::Value;
 use sqlx::PgPool;
-use tracing::Instrument;
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
@@ -30,13 +29,13 @@ struct FakeBank {
 
 #[async_trait]
 impl AccountProvider for FakeBank {
-    fn key(&self) -> &str {
-        "fake"
-    }
     async fn connect(&self) -> Result<ConnectInit, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
-    async fn complete_connect(&self, _: &str) -> Result<CompleteConnect, ProviderError> {
+    async fn complete_connect(
+        &self,
+        _: &HashMap<String, String>,
+    ) -> Result<CompleteConnect, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
     async fn sync(&self, _: &Value) -> Result<SyncResult, ProviderError> {
@@ -69,11 +68,7 @@ impl CompositionProvider for NoComposition {
 fn deps(mode: Mode) -> Arc<Deps> {
     let mut accounts: HashMap<String, Arc<dyn AccountProvider>> = HashMap::new();
     accounts.insert("fake".into(), Arc::new(FakeBank { mode }));
-    let mut deps = Deps::build(
-        gripsou_core::testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-    );
+    let mut deps = gripsou_jobs::testing::deps();
     deps.set_accounts(accounts);
     deps.prices = Vec::new();
     deps.composition = Box::new(NoComposition);
@@ -83,13 +78,15 @@ fn deps(mode: Mode) -> Arc<Deps> {
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
     let user = gripsou_core::testkit::seed_user(pool).await;
-    let ct = gripsou_core::testkit::encryption_key()
-        .encrypt(br#"{"auth_token":"tok"}"#)
-        .unwrap();
+    let credentials = gripsou_jobs::credentials::seal(
+        &gripsou_core::testkit::encryption_key(),
+        &serde_json::json!({ "auth_token": "tok" }),
+    )
+    .unwrap();
     let conn: Uuid = sqlx::query_scalar(
         "insert into connection (user_id, provider_key, display_name, status, credentials, provider_meta) \
          values ($1, 'fake', 'Test bank', 'ok', $2, '{}') returning id",
-    ).bind(user).bind(serde_json::json!({ "v": 1, "ct": ct }))
+    ).bind(user).bind(credentials)
     .fetch_one(pool).await.unwrap();
     (user, conn)
 }
@@ -105,13 +102,9 @@ async fn finished_lines(pool: &PgPool) -> Vec<(String, Value)> {
 async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
-    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
+    let ok = gripsou_jobs::testing::sync(pool.clone(), deps(Mode::Ok), user, conn, Trigger::Manual)
         .await
-        .unwrap();
-
-    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Ok), conn)
-        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
-        .await;
+        .expect("claimed");
     assert!(ok);
     writer.flush(&pool).await;
 
@@ -150,13 +143,10 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
 async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
-    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
-        .await
-        .unwrap();
-
-    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Fail), conn)
-        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Daily))
-        .await;
+    let ok =
+        gripsou_jobs::testing::sync(pool.clone(), deps(Mode::Fail), user, conn, Trigger::Daily)
+            .await
+            .expect("claimed");
     assert!(!ok);
     writer.flush(&pool).await;
 
@@ -181,13 +171,10 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
 async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
-    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
-        .await
-        .unwrap();
-
-    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Panic), conn)
-        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
-        .await;
+    let ok =
+        gripsou_jobs::testing::sync(pool.clone(), deps(Mode::Panic), user, conn, Trigger::Manual)
+            .await
+            .expect("claimed");
     assert!(!ok);
     writer.flush(&pool).await;
 
@@ -216,13 +203,10 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
 async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
-    gripsou_core::repo::connection::begin_sync(&pool, user, conn)
-        .await
-        .unwrap();
-
-    let ok = gripsou_jobs::sync_connection_data(pool.clone(), deps(Mode::Hang), conn)
-        .instrument(gripsou_jobs::sync_span(user, conn, Trigger::Manual))
-        .await;
+    let ok =
+        gripsou_jobs::testing::sync(pool.clone(), deps(Mode::Hang), user, conn, Trigger::Manual)
+            .await
+            .expect("claimed");
     assert!(!ok);
     writer.flush(&pool).await;
 

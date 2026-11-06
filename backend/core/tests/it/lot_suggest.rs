@@ -1,4 +1,5 @@
-use gripsou_core::testkit;
+use gripsou_core::repo::lot::LotSide;
+use gripsou_core::testkit::{self, Lot};
 
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
@@ -60,24 +61,18 @@ async fn txn(pool: &PgPool, account: Uuid, id: &str, kind: &str, amount: &str, d
     upsert_transaction(
         &mut conn,
         account,
-        &testkit::txn_on("acct-1", id, kind, dec(amount), oct(d)),
+        &testkit::txn("acct-1", id, kind, dec(amount)).on(oct(d)),
     )
     .await
     .unwrap();
 }
 
-async fn lot(pool: &PgPool, holding: Uuid, side: &str, on: NaiveDate, qty: &str) {
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, $2, $3, $4, 5, 'manual')",
-    )
-    .bind(holding)
-    .bind(side)
-    .bind(on)
-    .bind(dec(qty))
-    .execute(pool)
-    .await
-    .unwrap();
+async fn lot(pool: &PgPool, holding: Uuid, side: &'static str, on: NaiveDate, qty: &str) {
+    let lot = Lot {
+        side: LotSide::parse(side).unwrap(),
+        ..Lot::buy(on, dec(qty), Decimal::from(5))
+    };
+    testkit::seed_lot(pool, holding, lot).await;
 }
 
 /// 60 shares explained by an old lot, 83 held since Oct 8.
@@ -101,12 +96,9 @@ async fn a_rise_with_one_matching_buy_is_suggested(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
 
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "buy");
+    assert_eq!(got[0].side, LotSide::Buy);
     assert_eq!(got[0].date, oct(8));
     assert_eq!(got[0].quantity, dec("23"));
     assert_eq!(got[0].unit_price, dec("6.35521739"));
@@ -118,10 +110,7 @@ async fn an_amount_six_percent_off_is_not_a_candidate(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // 23 × 6.36 = 146.28; +6 % ≈ 155.06.
     txn(&pool, fx.account, "t1", "buy", "-155.10", 8).await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -130,10 +119,7 @@ async fn a_transaction_outside_the_window_is_not_a_candidate(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // Window is [Oct 5, Oct 11].
     txn(&pool, fx.account, "t1", "buy", "-146.17", 12).await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -142,12 +128,9 @@ async fn the_wording_and_the_sign_do_not_matter(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // A mirrored portfolio-account row: positive, typed as a sale.
     txn(&pool, fx.account, "t1", "sell", "146.17", 7).await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "buy");
+    assert_eq!(got[0].side, LotSide::Buy);
     assert_eq!(got[0].date, oct(7));
 }
 
@@ -156,10 +139,7 @@ async fn two_matching_transactions_suggest_nothing(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
     txn(&pool, fx.account, "t2", "buy", "-146.00", 9).await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -169,10 +149,7 @@ async fn a_lot_of_the_same_side_in_the_window_covers_the_jump(pool: PgPool) {
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
     // The user already recorded it, with a corrected quantity.
     lot(&pool, fx.holding, "buy", oct(7), "22").await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -185,10 +162,7 @@ async fn a_new_holding_on_a_watched_account_rises_from_zero(pool: PgPool) {
     snap(&pool, fx.holding, 8, "23").await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
 
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].quantity, dec("23"));
 }
@@ -198,10 +172,7 @@ async fn a_holding_on_a_freshly_connected_account_gets_nothing(pool: PgPool) {
     let fx = fixture(&pool, "23").await;
     snap(&pool, fx.holding, 8, "23").await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -220,12 +191,9 @@ async fn a_sale_down_to_zero_is_suggested(pool: PgPool) {
     snap(&pool, fx.holding, 8, "0").await;
     txn(&pool, fx.account, "t1", "sell", "63.60", 8).await;
 
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "sell");
+    assert_eq!(got[0].side, LotSide::Sell);
     assert_eq!(got[0].quantity, dec("10"));
     assert_eq!(got[0].unit_price, dec("6.36"));
 }
@@ -243,23 +211,18 @@ async fn a_fully_explained_holding_gets_nothing(pool: PgPool) {
         "23",
     )
     .await;
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn another_users_holding_is_none(pool: PgPool) {
+async fn another_users_holding_is_not_found(pool: PgPool) {
     let fx = bought_23(&pool).await;
     let (stranger, _) = testkit::seed_user_and_connection(&pool).await;
-    assert!(
-        suggest_lots(&pool, stranger, fx.holding)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(matches!(
+        suggest_lots(&pool, stranger, fx.holding).await,
+        Err(gripsou_core::error::CoreError::NotFound(_))
+    ));
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -296,7 +259,7 @@ async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
     // The only transaction belongs to ETF1.
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
 
-    let got = suggest_lots(&pool, fx.user, other).await.unwrap().unwrap();
+    let got = suggest_lots(&pool, fx.user, other).await.unwrap();
     assert!(got.is_empty());
 }
 
@@ -316,10 +279,7 @@ async fn a_long_sync_gap_widens_the_window_backwards(pool: PgPool) {
     // Window is [Oct 2, Oct 13]: Oct 3 is outside [Oct 7, Oct 13].
     txn(&pool, fx.account, "t1", "buy", "-146.17", 3).await;
 
-    let got = suggest_lots(&pool, fx.user, fx.holding)
-        .await
-        .unwrap()
-        .unwrap();
+    let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].date, oct(3));
     assert_eq!(got[0].quantity, dec("23"));

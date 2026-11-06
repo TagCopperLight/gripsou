@@ -1,4 +1,4 @@
-import type { Account } from "../api/types";
+import type { Account } from "../api/wire";
 import { formatPercent } from "./money";
 
 export type DistributionRow = {
@@ -20,6 +20,11 @@ export function distribution(accounts: Account[]): DistributionRow[] {
       const value = Number(account.value);
       return { account, share: value > 0 ? value / owned : null };
     });
+}
+
+/** Each account's share (see `distribution`), by account id. */
+export function sharesById(accounts: Account[]): Map<string, number | null> {
+  return new Map(distribution(accounts).map((r) => [r.account.id, r.share]));
 }
 
 /** Shares up to this one are too thin to draw: the ring and the bar leave

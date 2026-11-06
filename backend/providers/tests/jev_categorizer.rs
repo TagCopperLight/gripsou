@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::categorize::{
     CategorizeError, CategorizeItem, CategorizeRequest, Categorizer, CategoryOption, Example, Usage,
 };
@@ -19,13 +20,13 @@ fn request(descs: &[&str]) -> CategorizeRequest {
             CategoryOption {
                 id: groceries,
                 name: "Groceries".into(),
-                kind: "expense".into(),
+                kind: CategoryKind::Expense,
                 hint: Some("supermarkets".into()),
             },
             CategoryOption {
                 id: ignore,
                 name: "Ignore".into(),
-                kind: "neutral".into(),
+                kind: CategoryKind::Neutral,
                 hint: None,
             },
         ],

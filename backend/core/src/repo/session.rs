@@ -7,6 +7,12 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
+/// A remembered session lasts this long after its last use: each touch
+/// pushes the expiry out again.
+pub const REMEMBERED_DAYS: i32 = 30;
+/// Any other session ends this long after sign-in, used or not.
+pub const UNREMEMBERED_DAYS: i32 = 1;
+
 pub struct Session {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -25,13 +31,17 @@ pub async fn create(
     user_agent: Option<&str>,
     ip: Option<&str>,
     remembered: bool,
-    expires_at: DateTime<Utc>,
 ) -> Result<Session, CoreError> {
+    let days = if remembered {
+        REMEMBERED_DAYS
+    } else {
+        UNREMEMBERED_DAYS
+    };
     let row = sqlx::query_as!(
         Session,
         r#"insert into session
              (user_id, token_hash, user_agent, ip, remembered, expires_at)
-           values ($1, $2, $3, $4, $5, $6)
+           values ($1, $2, $3, $4, $5, now() + make_interval(days => $6))
            returning id, user_id, user_agent, ip, remembered,
                      created_at, last_active_at, expires_at"#,
         user_id,
@@ -39,7 +49,7 @@ pub async fn create(
         user_agent,
         ip,
         remembered,
-        expires_at,
+        days,
     )
     .fetch_one(pool)
     .await?;
@@ -65,9 +75,7 @@ pub async fn find_valid_by_hash(
     Ok(row)
 }
 
-/// Sliding-window bump applied on authenticated requests. Always advances
-/// `last_active_at`; for remembered sessions it also pushes `expires_at` to
-/// now + 30 days. Throttled by the caller (see `auth::TOUCH_THROTTLE_SECS`).
+/// Mark the session used; a remembered one gets [`REMEMBERED_DAYS`] more.
 pub async fn touch(
     pool: &sqlx::PgPool,
     session_id: Uuid,
@@ -76,9 +84,10 @@ pub async fn touch(
     if remembered {
         sqlx::query!(
             r#"update session
-               set last_active_at = now(), expires_at = now() + interval '30 days'
+               set last_active_at = now(), expires_at = now() + make_interval(days => $2)
                where id = $1"#,
             session_id,
+            REMEMBERED_DAYS,
         )
         .execute(pool)
         .await?;
@@ -121,19 +130,20 @@ pub async fn list_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Ses
     Ok(rows)
 }
 
-/// Revoke every session of this user except `keep_id` (log out everywhere else;
-/// also used after a password change). Returns the number removed.
-pub async fn delete_others(
-    pool: &sqlx::PgPool,
+/// Sign the user out everywhere, except on `keep` (the session asking, when
+/// it stays signed in). Runs on a pool or in a caller's transaction. Returns
+/// the number removed.
+pub async fn delete_all(
+    db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
-    keep_id: Uuid,
+    keep: Option<Uuid>,
 ) -> Result<u64, CoreError> {
     let res = sqlx::query!(
-        r#"delete from session where user_id = $1 and id <> $2"#,
+        r#"delete from session where user_id = $1 and id is distinct from $2"#,
         user_id,
-        keep_id,
+        keep,
     )
-    .execute(pool)
+    .execute(db)
     .await?;
     Ok(res.rows_affected())
 }
@@ -153,27 +163,23 @@ mod tests {
     use chrono::Duration;
     use sqlx::PgPool;
 
-    use crate::testkit::seed_user;
+    use crate::testkit::{expire, seed_user};
+
+    async fn expire_session(pool: &PgPool, id: Uuid) {
+        expire(pool, "session", "id = $1", id).await;
+    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_then_find_by_hash(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let hash = vec![1u8, 2, 3, 4];
-        let exp = Utc::now() + Duration::days(1);
 
-        let created = create(
-            &pool,
-            user_id,
-            &hash,
-            Some("UA"),
-            Some("1.2.3.4"),
-            true,
-            exp,
-        )
-        .await
-        .unwrap();
+        let created = create(&pool, user_id, &hash, Some("UA"), Some("1.2.3.4"), true)
+            .await
+            .unwrap();
         assert_eq!(created.user_id, user_id);
         assert!(created.remembered);
+        assert!(created.expires_at > Utc::now() + Duration::days(29));
 
         let found = find_valid_by_hash(&pool, &hash).await.unwrap().unwrap();
         assert_eq!(found.id, created.id);
@@ -191,35 +197,42 @@ mod tests {
     async fn expired_session_is_not_found(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let hash = vec![5u8, 6];
-        let past = Utc::now() - Duration::hours(1);
-        create(&pool, user_id, &hash, None, None, false, past)
+        let s = create(&pool, user_id, &hash, None, None, false)
             .await
             .unwrap();
+        assert!(s.expires_at < Utc::now() + Duration::days(1));
+        expire_session(&pool, s.id).await;
         assert!(find_valid_by_hash(&pool, &hash).await.unwrap().is_none());
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn touch_extends_remembered_only(pool: PgPool) {
         let user_id = seed_user(&pool).await;
-        let near = Utc::now() + Duration::minutes(5);
+        let soon = |id: Uuid| {
+            sqlx::query(
+                "update session set expires_at = now() + interval '5 minutes' where id = $1",
+            )
+            .bind(id)
+            .execute(&pool)
+        };
 
         // remembered → expiry slides out to ~30d
         let h1 = vec![1u8];
-        let s1 = create(&pool, user_id, &h1, None, None, true, near)
-            .await
-            .unwrap();
+        let s1 = create(&pool, user_id, &h1, None, None, true).await.unwrap();
+        soon(s1.id).await.unwrap();
         touch(&pool, s1.id, true).await.unwrap();
         let after = find_valid_by_hash(&pool, &h1).await.unwrap().unwrap();
         assert!(after.expires_at > Utc::now() + Duration::days(29));
 
         // not remembered → expiry unchanged
         let h2 = vec![2u8];
-        let s2 = create(&pool, user_id, &h2, None, None, false, near)
+        let s2 = create(&pool, user_id, &h2, None, None, false)
             .await
             .unwrap();
+        soon(s2.id).await.unwrap();
         touch(&pool, s2.id, false).await.unwrap();
         let after2 = find_valid_by_hash(&pool, &h2).await.unwrap().unwrap();
-        assert!(after2.expires_at < Utc::now() + Duration::days(1));
+        assert!(after2.expires_at < Utc::now() + Duration::minutes(6));
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -227,8 +240,7 @@ mod tests {
         let user_id = seed_user(&pool).await;
         let other = seed_user(&pool).await;
 
-        let exp = Utc::now() + Duration::days(1);
-        let s = create(&pool, user_id, &[1u8], None, None, false, exp)
+        let s = create(&pool, user_id, &[1u8], None, None, false)
             .await
             .unwrap();
 
@@ -243,28 +255,13 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_expired_removes_only_expired(pool: PgPool) {
         let user_id = seed_user(&pool).await;
-        create(
-            &pool,
-            user_id,
-            &[1u8],
-            None,
-            None,
-            false,
-            Utc::now() - Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        create(
-            &pool,
-            user_id,
-            &[2u8],
-            None,
-            None,
-            false,
-            Utc::now() + Duration::days(1),
-        )
-        .await
-        .unwrap();
+        let old = create(&pool, user_id, &[1u8], None, None, false)
+            .await
+            .unwrap();
+        expire_session(&pool, old.id).await;
+        create(&pool, user_id, &[2u8], None, None, false)
+            .await
+            .unwrap();
 
         assert_eq!(delete_expired(&pool).await.unwrap(), 1);
         assert_eq!(list_for_user(&pool, user_id).await.unwrap().len(), 1);

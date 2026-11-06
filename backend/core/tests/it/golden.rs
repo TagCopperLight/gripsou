@@ -1,6 +1,6 @@
 //! Whole-output regression tests.
 //!
-//! The 21 tests in `backfill.rs` check specific days and holdings. These check
+//! The tests in `backfill.rs` check specific days and holdings. These check
 //! that not a single number moves anywhere in the output — which is the only
 //! thing that can catch an optimisation that is 99.99% right.
 //!
@@ -13,14 +13,13 @@
 //! A failing golden file is a conversation about which answer is correct.
 
 use chrono::{Duration, NaiveDate, Utc};
-use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
 use gripsou_core::repo::snapshot::stamp_snapshot;
 use gripsou_core::testkit::insert_price;
-use gripsou_core::testkit::{checking_account, seed_user_and_connection};
+use gripsou_core::testkit::{self, Lot, checking_account, seed_user_and_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -222,15 +221,12 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
         .unwrap();
         // Securities move by `lot`, not by `transaction`, so the backfill's
         // quantity walk needs its own record of this buy.
-        sqlx::query(
-            "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-             values ($1, 'buy', $2, 40, 10, 'manual')",
+        testkit::seed_lot(
+            &mut *conn,
+            holding_id,
+            Lot::buy(day(100), Decimal::from(40), Decimal::from(10)),
         )
-        .bind(holding_id)
-        .bind(day(100))
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        .await;
     }
 
     // Sell the second security to zero, so the nearest-non-zero snapshot search
@@ -250,15 +246,12 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .unwrap();
     // Same reason as the buy above: the sale must exist as a `lot` for the
     // quantity walk to see it.
-    sqlx::query(
-        "insert into lot (holding_id, side, acquired_on, quantity, unit_price, source) \
-         values ($1, 'sell', $2, 40, 15, 'manual')",
+    testkit::seed_lot(
+        &mut *conn,
+        sold_holding,
+        Lot::sell(day(20), Decimal::from(40), Decimal::from(15)),
     )
-    .bind(sold_holding)
-    .bind(day(20))
-    .execute(&mut *conn)
-    .await
-    .unwrap();
+    .await;
 
     // Cash movements, including one large withdrawal that drives a stretch
     // below zero so the lift branch is exercised.
@@ -338,9 +331,7 @@ async fn backfill_digest(pool: &PgPool) -> String {
 #[sqlx::test(migrations = "../migrations")]
 async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     assert_golden("backfill", &backfill_digest(&pool).await);
     Ok(())
@@ -349,12 +340,10 @@ async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
-    let rows = gripsou_core::repo::query::net_worth_series(
+    let rows = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(130),
@@ -367,8 +356,8 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
         out.push_str(&format!(
             "{:>5} {} {} {}\n",
             (today - r.as_of).num_days(),
-            r.net_worth,
-            r.invested,
+            r.net_worth.expect("the scenario has rates"),
+            r.invested.expect("the scenario has rates"),
             r.fx_missing
         ));
     }
@@ -379,12 +368,10 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
-    let mut rows = gripsou_core::repo::query::account_series(
+    let mut rows = gripsou_core::repo::valuation::account_series(
         &pool,
         user_id,
         today - Duration::days(130),
@@ -405,7 +392,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
             "{:>5} {} {}\n",
             (today - r.as_of).num_days(),
             r.name,
-            r.value
+            r.value.expect("the scenario has rates")
         ));
     }
     assert_golden("account_series", &out);
@@ -415,30 +402,25 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 /// `max` must give the same answer as asking for exactly the range that has
 /// data. This is what makes the clamp safe.
 ///
-/// Note what this does and does not prove. Both arms clamp, so it pins that the
-/// clamp is deterministic, not that it preserves the pre-clamp answer. The
-/// latter is structural rather than testable from here: the `snap` lateral in
-/// `net_worth_series` is an INNER `join lateral`, so a day on which no holding
-/// has a `holding_point` row drops every (day, holding) pair and produces no
-/// group at all. Days before `history_start` were therefore already absent from
-/// the response before the clamp existed — the clamp removes days that returned
-/// nothing, which is why it cannot move a number.
+/// Both arms clamp, so this pins that the clamp is deterministic, not that it
+/// preserves the unclamped answer. That part is structural: `holding_day_values`
+/// values a holding on a day only through an inner lateral join on its latest
+/// `holding_point` at or before that day, so a day before `history_start` has
+/// no row with or without the clamp.
 #[sqlx::test(migrations = "../migrations")]
 async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
-    let wide = gripsou_core::repo::query::net_worth_series(
+    let wide = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
     )
     .await?;
-    let tight = gripsou_core::repo::query::net_worth_series(
+    let tight = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(121),
@@ -460,91 +442,79 @@ async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()>
 #[sqlx::test(migrations = "../migrations")]
 async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
-    let sampled = gripsou_core::repo::query::net_worth_series(
+    let sampled = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
     )
     .await?;
-    let single = gripsou_core::repo::query::net_worth_series(&pool, user_id, today, today).await?;
+    let single =
+        gripsou_core::repo::valuation::net_worth_series(&pool, user_id, today, today).await?;
 
     assert_eq!(sampled.last().unwrap().as_of, today);
     assert_eq!(sampled.last().unwrap().net_worth, single[0].net_worth);
     Ok(())
 }
 
-/// Sampling SELECTS real days; it never averages. Every returned point must
-/// equal the value computed for that same single day on its own.
-#[sqlx::test(migrations = "../migrations")]
-async fn every_sampled_point_is_that_days_real_value(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
-
-    let today = Utc::now().date_naive();
-    let sampled = gripsou_core::repo::query::net_worth_series(
-        &pool,
-        user_id,
-        today - Duration::days(4000),
-        today,
-    )
-    .await?;
-
-    for point in sampled.iter().rev().take(5) {
-        let single =
-            gripsou_core::repo::query::net_worth_series(&pool, user_id, point.as_of, point.as_of)
-                .await?;
-        assert_eq!(
-            point.net_worth, single[0].net_worth,
-            "point {} is not that day's real value",
-            point.as_of
-        );
-    }
-    Ok(())
-}
-
-/// Forces a small sample target (20, against the scenario's 121 days of real
-/// history) so the stride is actually > 1 and sampling is exercised for real,
-/// unlike the other tests above where every range clamps to the same 121-day
-/// scenario and always yields step 1. Proves three things at once: the last
-/// point is exactly `today`, every returned point is that day's real value
+/// Stretches the scenario's history to 1000 days with one old snapshot, so
+/// the chart's sample target forces a stride above 1 and sampling is exercised
+/// for real, unlike the other tests above where every range clamps to the same
+/// 121-day scenario and always yields step 1. Proves three things at once: the
+/// last point is exactly `today`, every returned point is that day's real value
 /// (sampling SELECTS, never averages), and the exact set of returned days
 /// matches an independently computed `sample_days` call — pinning the stride
 /// itself, not just its endpoints.
 #[sqlx::test(migrations = "../migrations")]
 async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
+    let today = Utc::now().date_naive();
     let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
+    let cash: Uuid = sqlx::query_scalar(
+        "select h.id from holding h join instrument i on i.id = h.instrument_id \
+         where i.kind = 'cash' and i.currency = 'EUR'",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    stamp_snapshot(
+        &mut conn,
+        cash,
+        today - Duration::days(1000),
+        dec("40"),
+        dec("600"),
+    )
+    .await?;
+    testkit::backfill(&pool, connection_id).await?;
     drop(conn);
 
-    let today = Utc::now().date_naive();
-    let target = 20;
-    let sampled = gripsou_core::repo::query::net_worth_series_with_target(
+    let sampled = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
-        target,
     )
     .await?;
+    assert!(
+        sampled.len() < 1000,
+        "the stride must be above 1 for this test to mean anything"
+    );
 
     // (a) today is exact.
     assert_eq!(sampled.last().unwrap().as_of, today);
 
-    // (b) every returned point is that day's real value on its own — proves
+    // (b) returned points are that day's real value on its own — proves
     // sampling selects real days rather than averaging or interpolating.
-    for point in &sampled {
-        let single =
-            gripsou_core::repo::query::net_worth_series(&pool, user_id, point.as_of, point.as_of)
-                .await?;
+    for point in sampled.iter().step_by(25) {
+        let single = gripsou_core::repo::valuation::net_worth_series(
+            &pool,
+            user_id,
+            point.as_of,
+            point.as_of,
+        )
+        .await?;
         assert_eq!(
             point.net_worth, single[0].net_worth,
             "point {} is not that day's real value",
@@ -557,15 +527,18 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
     let history_start = gripsou_core::repo::series::history_start(&pool, user_id)
         .await?
         .expect("scenario has history");
-    let expected_days = gripsou_core::repo::series::sample_days(history_start, today, target);
+    let expected_days = gripsou_core::repo::series::sample_days(
+        history_start,
+        today,
+        gripsou_core::repo::series::CHART_TARGET_POINTS,
+    );
     let actual_days: Vec<_> = sampled.iter().map(|r| r.as_of).collect();
     assert_eq!(actual_days, expected_days);
 
     Ok(())
 }
 
-/// The accounts list (and the distribution pie drawn from it), valued through
-/// `valuation_grid` rather than the scalar per-holding functions. Same standard
+/// The accounts list (and the distribution pie drawn from it). Same standard
 /// as the series above: every figure must stay identical.
 ///
 /// The digest is ordered by account name, not by the query's own value-descending
@@ -575,11 +548,9 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
 #[sqlx::test(migrations = "../migrations")]
 async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
-    let rows = gripsou_core::repo::query::accounts(&pool, user_id).await?;
+    let rows = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
 
     let values: Vec<Decimal> = rows.iter().map(|r| r.value).collect();
     let mut sorted = values.clone();

@@ -1,7 +1,7 @@
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::review::{ReviewWrite, accept, review_count, undo};
-use gripsou_core::repo::query::{TransactionFilters, transaction_counts};
+use gripsou_core::repo::budget::transactions::{TransactionFilters, transaction_counts};
 use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{checking_account, seed_user_and_connection, txn};
@@ -20,7 +20,7 @@ async fn ai_row(
     upsert_transaction(
         &mut conn,
         acct,
-        &txn("a", "t0", "withdrawal", Decimal::new(-1000, 2), Some("X")),
+        &txn("a", "t0", "withdrawal", Decimal::new(-1000, 2)).described("X"),
     )
     .await?;
     let id: Uuid = sqlx::query_scalar("select id from transaction where external_id = 't0'")
@@ -172,7 +172,7 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
         upsert_transaction(
             &mut conn,
             acct,
-            &txn("a", ext, "withdrawal", Decimal::new(-500, 2), Some("Y")),
+            &txn("a", ext, "withdrawal", Decimal::new(-500, 2)).described("Y"),
         )
         .await?;
         sqlx::query(

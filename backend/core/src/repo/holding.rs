@@ -1,4 +1,4 @@
-//! Upsert a holding (current position) for an (account, instrument) pair.
+//! Holdings: the current position for an (account, instrument) pair.
 
 use uuid::Uuid;
 
@@ -67,4 +67,34 @@ pub async fn zero_holding(
     .execute(&mut *conn)
     .await?;
     Ok(())
+}
+
+/// A holding the caller owns.
+pub struct OwnedHolding {
+    pub id: Uuid,
+    pub account_id: Uuid,
+    pub account_currency: String,
+}
+
+/// The holding, if `user_id` owns it; otherwise `CoreError::NotFound`.
+pub async fn owned_holding(
+    conn: impl sqlx::PgExecutor<'_>,
+    user_id: Uuid,
+    holding_id: Uuid,
+) -> Result<OwnedHolding, CoreError> {
+    sqlx::query_as!(
+        OwnedHolding,
+        r#"
+        select h.id as "id!", h.account_id as "account_id!", a.currency as "account_currency!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join connection c on c.id = a.connection_id
+        where h.id = $1 and c.user_id = $2
+        "#,
+        holding_id,
+        user_id,
+    )
+    .fetch_optional(conn)
+    .await?
+    .ok_or(CoreError::NotFound("unknown holding"))
 }

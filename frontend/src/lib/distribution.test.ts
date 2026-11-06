@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { distribution, formatShare } from "./distribution";
-import type { Account } from "../api/types";
+import type { Account } from "../api/wire";
 
 function account(id: string, value: string): Account {
   return {
@@ -13,7 +13,7 @@ function account(id: string, value: string): Account {
     currency: "EUR",
     valueNative: null,
     lastSyncAt: null,
-    sourceName: null,
+    sourceName: "Bank",
     sourceLogo: null,
     fxMissing: false,
   };

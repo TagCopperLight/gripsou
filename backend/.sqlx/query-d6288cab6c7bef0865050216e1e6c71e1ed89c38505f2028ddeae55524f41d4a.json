@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t\n           set budget_category_id = $3,\n               category_source = $5,\n               category_confidence = $4,\n               category_reviewed_at = null\n         where t.id = $1\n           and t.id in (select id from user_transactions($2))\n           and t.category_reviewed_at is not null\n           and t.category_source in ($5, $6)\n           and t.transfer_pair_id is null\n           and ($3::uuid is null\n                or exists (select 1 from budget_category c\n                            where c.id = $3 and c.user_id = $2))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Numeric",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6288cab6c7bef0865050216e1e6c71e1ed89c38505f2028ddeae55524f41d4a"
+}

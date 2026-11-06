@@ -1,0 +1,250 @@
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
+import { Check } from "lucide-react";
+
+import { Surface } from "../../../ui/Surface";
+import { Button } from "../../../ui/Button";
+import { CategoryChooser } from "../CategoryChooser";
+import { ReviewLine } from "./ReviewLine";
+import { ResolvedLine } from "./ResolvedLine";
+import { ReviewProgress } from "./ReviewProgress";
+import { ReviewSkeleton } from "./ReviewSkeleton";
+import { usePopover } from "../../../ui/usePopover";
+import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
+import { CardState } from "../../../ui/CardState";
+import { BreakPairModal } from "../BreakPairModal";
+import { useTransactions } from "../../../api/transactions";
+import { useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction, useUndoReview } from "../../../api/budget";
+import { categoryLabel, categoryOfTransaction } from "../../../lib/budget";
+import { breaksKnownPair, useBudgetWrites } from "../useBudgetWrites";
+import {
+  applyToSame, clearResolved, initialReview, offerSame, resolve, syncPending, unresolve,
+  type Resolution, type ReviewState,
+} from "../../../lib/review";
+import type { PatchResult, Transaction, WriteResult } from "../../../api/wire";
+import type { TransactionFilterQuery } from "../../../api/filter";
+
+/** The queue is all-time and includes internal transfers, which a guess can
+ *  land in — the list hides them by default. */
+const QUEUE: TransactionFilterQuery = { needsReview: true, includeTransfers: true };
+
+export function ReviewMode() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const status = useAiStatus().data;
+  const list = useTransactions(QUEUE);
+  // The next page loads by itself as the queue scrolls, as on Transactions.
+  const loadMore = useLoadOnScroll(list.hasNextPage, list.isFetchingNextPage, () => void list.fetchNextPage());
+  const categories = useBudgetCategories().data ?? [];
+  const accept = useAcceptReview();
+  const undo = useUndoReview();
+  const patch = usePatchTransaction();
+  const applyToDescription = useApplyToDescription();
+
+  const pending: Transaction[] = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
+  const [state, setState] = useState<ReviewState>(initialReview);
+  const [snapshots, setSnapshots] = useState<Record<string, Transaction>>({});
+  // The line whose Correct opened the chooser, by id.
+  const chooser = usePopover<string>();
+  // A failed write puts its line back the way it was and says so, as the
+  // transactions list does.
+  const writes = useBudgetWrites();
+
+  // Remember every row as first seen: a resolved row leaves the server list,
+  // but its line — and the guess Undo restores — must stay. Adjusted during
+  // render when the server page changes (React's "adjust state on prop
+  // change" pattern), not in an effect.
+  const pendingKey = pending.map((p) => p.id).join(",");
+  const [seenKey, setSeenKey] = useState("");
+  if (pendingKey !== seenKey) {
+    setSeenKey(pendingKey);
+    setSnapshots((s) => {
+      const next = { ...s };
+      for (const tx of pending) if (!next[tx.id]) next[tx.id] = tx;
+      return next;
+    });
+    setState((s) => syncPending(s, pending));
+  }
+
+  const lineTx = (id: string) => pending.find((p) => p.id === id) ?? snapshots[id];
+  const correcting = chooser.key === null ? null : lineTx(chooser.key);
+
+  const busy = accept.isPending || undo.isPending || patch.isPending || applyToDescription.isPending;
+  const resolvedCount = Object.keys(state.resolved).length;
+  const pendingIds = new Set(pending.map((p) => p.id));
+  const lines = state.order.filter((id) => state.resolved[id] || pendingIds.has(id));
+  // The list is paged, so `state.total` only knows the rows loaded so far. The
+  // server's queue size covers the rest: whatever it counts beyond the loaded
+  // rows is still to come. Both refetch together after every write.
+  const unloaded = Math.max(0, (status?.reviewCount ?? 0) - pending.length);
+  const total = state.total + unloaded;
+
+  /** Takes back a line resolved ahead of its write, unless something has
+   *  replaced that resolution since (an Undo, say). */
+  const rollBack = (r: Resolution) =>
+    setState((s) => (s.resolved[r.tx.id] === r ? unresolve(s, r.tx.id) : s));
+
+  const onAccept = (tx: Transaction) => {
+    const cat = categoryOfTransaction(tx);
+    const categoryId = tx.categoryId;
+    if (!categoryId) return;
+    const r: Resolution = { tx, outcome: "kept", categoryId, categoryName: cat ? categoryLabel(t, cat) : "" };
+    writes.start();
+    setState((s) => resolve(s, r));
+    accept.mutate(tx.id, {
+      onSuccess: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount ?? 0)),
+      onError: (err) => {
+        rollBack(r);
+        writes.fail(err);
+      },
+    });
+  };
+
+  const correct = (tx: Transaction, categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    const r: Resolution = {
+      tx, outcome: "corrected", categoryId, categoryName: cat ? categoryLabel(t, cat) : "",
+    };
+    writes.write<PatchResult>(
+      (confirm, callbacks) =>
+        patch.mutate({ id: tx.id, body: { categoryId, offerScope: "review", confirmBreakPairs: confirm } }, callbacks),
+      {
+        askFirst: breaksKnownPair(tx, cat) ? 1 : 0,
+        onSend: () => setState((s) => resolve(s, r)),
+        onUnwritten: () => rollBack(r),
+        onDone: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount ?? 0)),
+      },
+    );
+  };
+
+  const onPick = (id: string | null) => {
+    if (!correcting || !id) return;
+    correct(correcting, id);
+    chooser.close();
+  };
+
+  /** Widens a resolved line's category to the rows sharing its description
+   *  that are still in review — never one the user already settled. Nothing
+   *  on screen changes until it lands. */
+  const runApplyToOthers = (anchorId: string, categoryId: string) => {
+    writes.write<WriteResult>(
+      (confirm, callbacks) =>
+        applyToDescription.mutate({ id: anchorId, categoryId, scope: "review", confirmBreakPairs: confirm }, callbacks),
+      { onDone: (res) => setState((s) => applyToSame(s, anchorId, res.ids ?? [], (id) => snapshots[id])) },
+    );
+  };
+
+  const onUndo = (id: string) => {
+    const r = state.resolved[id];
+    const tx = r?.tx ?? snapshots[id];
+    if (!tx) return;
+    writes.start();
+    setState((s) => unresolve(s, id));
+    undo.mutate(
+      { id, categoryId: tx.categoryId, confidence: tx.categoryConfidence },
+      {
+        onError: (err) => {
+          // The row still holds what the line said; put the line back.
+          if (r) setState((s) => (s.resolved[id] ? s : resolve(s, r)));
+          writes.fail(err);
+        },
+      },
+    );
+  };
+
+  if (list.isPending) return <ReviewSkeleton title={t("budget.review.title")} />;
+
+  if (list.isError && lines.length === 0) {
+    return (
+      <Surface className="p-6">
+        <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
+        <CardState variant="error" onRetry={() => void list.refetch()} className="mt-4 h-40" />
+      </Surface>
+    );
+  }
+
+  if (lines.length === 0) {
+    // The error look's shape, in green.
+    return (
+      <Surface className="flex h-55 flex-col items-center justify-center gap-2.5 text-center">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-green-soft text-green">
+          <Check className="size-4" strokeWidth={2.2} aria-hidden />
+        </span>
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-sm font-medium text-fg">{t("budget.review.emptyTitle")}</h2>
+          <p className="text-xs text-fg-faint">{t("budget.review.emptyBody")}</p>
+        </div>
+        <Button
+          variant="outline"
+          padded={false}
+          className="mt-1 rounded-lg! px-2.75 py-1.5 text-xs"
+          onClick={() => navigate({ to: "/budget/overview" })}
+        >
+          {t("budget.review.backToOverview")}
+        </Button>
+      </Surface>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <ReviewProgress resolved={resolvedCount} total={total} />
+      <Surface className="p-6">
+        <div className="mb-4 flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
+          {resolvedCount > 0 && (
+            <Button variant="ghost" onClick={() => setState(clearResolved)}>
+              {t("budget.review.clearResolved")}
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          {lines.map((id) => {
+            const r = state.resolved[id];
+            if (r) {
+              return (
+                <ResolvedLine
+                  key={id}
+                  r={r}
+                  busy={busy}
+                  onUndo={() => onUndo(id)}
+                  onApplyToOthers={() => runApplyToOthers(id, r.categoryId)}
+                />
+              );
+            }
+            const tx = lineTx(id);
+            return (
+              <ReviewLine
+                key={id}
+                tx={tx}
+                busy={busy}
+                onAccept={() => onAccept(tx)}
+                onCorrect={(anchor) => chooser.toggle(id, anchor)}
+              />
+            );
+          })}
+        </div>
+        <div ref={loadMore} className="h-px" />
+      </Surface>
+      {correcting && (
+        <CategoryChooser
+          mode="pick"
+          allowNone={false}
+          selectedIds={correcting.categoryId ? [correcting.categoryId] : []}
+          onPick={onPick}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
+        />
+      )}
+      {writes.breakPair && (
+        <BreakPairModal
+          count={writes.breakPair.count}
+          busy={applyToDescription.isPending || patch.isPending}
+          onConfirm={writes.breakPair.confirm}
+          onClose={writes.dismissBreakPair}
+        />
+      )}
+    </div>
+  );
+}

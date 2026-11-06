@@ -1,13 +1,14 @@
-//! Upsert a canonical account under a connection. On conflict, only
-//! provider-derived fields are updated; user-editable `name`/`color`/
-//! `type_key` are left untouched so a re-sync never clobbers a rename,
-//! recolor, or a user's chosen account type.
+//! Accounts: the sync's upsert, the user's edits, and the account-type keys.
+//!
+//! On an upsert conflict only provider-derived fields are updated;
+//! user-editable `name`/`color`/`type_key` are left untouched so a re-sync
+//! never clobbers a rename, recolor, or a user's chosen account type.
 
 use std::sync::OnceLock;
 
 use uuid::Uuid;
 
-use crate::dto::CanonicalAccount;
+use crate::dto::{CanonicalAccount, SyncHealth};
 use crate::error::CoreError;
 
 /// Single source of truth shared with the frontend (`shared/account-palette.json`).
@@ -25,6 +26,10 @@ pub async fn upsert_account(
     connection_id: Uuid,
     acct: &CanonicalAccount,
 ) -> Result<Uuid, CoreError> {
+    let meta = match &acct.health {
+        Some(h) => SyncHealth::into_meta(Some(h), acct.meta.clone()),
+        None => acct.meta.clone(),
+    };
     let id = sqlx::query_scalar!(
         r#"
         insert into account (connection_id, name, currency, type_key, provider_meta, external_id, color)
@@ -40,7 +45,7 @@ pub async fn upsert_account(
         acct.name,
         acct.currency,
         acct.type_key,
-        acct.meta,
+        meta,
         acct.external_id,
         account_palette(),
     )
@@ -61,10 +66,6 @@ pub struct UpdatedAccount {
 /// connection) so a user can only edit their own accounts. Returns `None` when
 /// the `(account_id, user_id)` pair matches no account (wrong owner / unknown
 /// id) or `type_key` is not a known account type — the join then yields no row.
-///
-/// Takes the pool (not a `&mut PgConnection` like the ingest helpers): this is a
-/// standalone, interactive mutation from the API, never part of a sync
-/// transaction.
 pub async fn update_account(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -95,4 +96,13 @@ pub async fn update_account(
     .fetch_optional(pool)
     .await?;
     Ok(row)
+}
+
+/// Every account-type key, for the edit-account dropdown. A new type is a row
+/// in `account_type`.
+pub async fn type_keys(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
+    let keys = sqlx::query_scalar!("select key from account_type order by key")
+        .fetch_all(pool)
+        .await?;
+    Ok(keys)
 }

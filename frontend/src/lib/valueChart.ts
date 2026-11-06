@@ -2,6 +2,7 @@
 // tooltip can't disagree with the lines: the same series, the same colours.
 
 import { windowReturn } from "./assetSeries";
+import { RED } from "./theme";
 
 export type ChartUnit = "value" | "reporting" | "percent";
 
@@ -9,14 +10,18 @@ export type ChartUnit = "value" | "reporting" | "percent";
 // the line dashed (e.g. invested capital).
 export type ChartSeries = {
   name: string;
-  /** [epoch-ms, value] points. */
-  data: [number, number][];
+  /** [epoch-ms, value] points. A `null` value is a day with no figure (no
+   *  rate): ECharts draws a gap there. */
+  data: [number, number | null][];
   color: string;
   dashed?: boolean;
   area?: boolean;
 };
 
-export const RED = "#f87171"; // color-red
+/** A wire decimal as a chart value; `null` (no rate that day) stays a gap. */
+export function numberOrNull(v: string | null): number | null {
+  return v === null ? null : Number(v);
+}
 
 /**
  * The series as plotted. Percent mode with a dashed baseline series (capital
@@ -35,16 +40,28 @@ export function plotSeries(series: ChartSeries[], unit: ChartUnit, percentLabel?
       .map((s) => ({ ...s, name: percentLabel ?? s.name, data: windowReturn(s.data, baseline.data) }));
   }
   return series.map((s) => {
-    const base = s.data[0]?.[1] ?? 0;
-    return { ...s, name: percentLabel ?? s.name, data: s.data.map(([t, v]) => [t, base ? (v - base) / base : 0] as [number, number]) };
+    const base = firstValue(s) ?? 0;
+    return {
+      ...s,
+      name: percentLabel ?? s.name,
+      data: s.data.map(([t, v]) => [t, v === null ? null : base ? (v - base) / base : 0] as [number, number | null]),
+    };
   });
+}
+
+function firstValue(s: ChartSeries): number | null {
+  return s.data.find(([, v]) => v !== null)?.[1] ?? null;
+}
+
+function lastValue(s: ChartSeries): number | null {
+  return s.data.findLast(([, v]) => v !== null)?.[1] ?? null;
 }
 
 /** A tracked value line (the area series) reads red when it ended lower than it
  *  started or went negative: a loss is red whatever colour the caller gave. */
 export function lineColor(s: ChartSeries): string {
-  const last = s.data.at(-1)?.[1] ?? 0;
-  return s.area && (last < 0 || last < (s.data[0]?.[1] ?? 0)) ? RED : s.color;
+  const last = lastValue(s) ?? 0;
+  return s.area && (last < 0 || last < (firstValue(s) ?? 0)) ? RED : s.color;
 }
 
 /** Legend entries for plotted series: the main (last drawn) line first. */

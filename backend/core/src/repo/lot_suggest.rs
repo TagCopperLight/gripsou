@@ -18,6 +18,8 @@ use rust_decimal::{Decimal, RoundingStrategy};
 use uuid::Uuid;
 
 use crate::error::CoreError;
+use crate::repo::holding::{OwnedHolding, owned_holding};
+use crate::repo::lot::{LOT_DECIMAL_PLACES, LotSide};
 
 /// A buy/sell transaction whose day and amount fit a jump.
 #[derive(Debug, Clone)]
@@ -45,7 +47,7 @@ pub struct Jump {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
     pub holding_id: Uuid,
-    pub side: &'static str,
+    pub side: LotSide,
     pub date: NaiveDate,
     pub quantity: Decimal,
     pub unit_price: Decimal,
@@ -58,7 +60,6 @@ pub struct Suggestion {
 /// their transaction is never handed to another holding. Anything else is left
 /// to the user.
 pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
-    // How many jumps each transaction could explain, across the account.
     let mut claims: HashMap<Uuid, usize> = HashMap::new();
     for j in jumps {
         for c in &j.candidates {
@@ -77,11 +78,15 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
             }
             let quantity = j.dq.abs();
             let unit_price = (c.amount.abs() / quantity)
-                .round_dp_with_strategy(8, RoundingStrategy::MidpointAwayFromZero)
+                .round_dp_with_strategy(LOT_DECIMAL_PLACES, RoundingStrategy::MidpointAwayFromZero)
                 .normalize();
             Some(Suggestion {
                 holding_id: j.holding_id,
-                side: if j.dq > Decimal::ZERO { "buy" } else { "sell" },
+                side: if j.dq > Decimal::ZERO {
+                    LotSide::Buy
+                } else {
+                    LotSide::Sell
+                },
                 date: c.day,
                 quantity: quantity.normalize(),
                 unit_price,
@@ -91,14 +96,8 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
         .collect()
 }
 
-/// The account a holding lives in, and its currency, if the caller owns it.
-struct AccountRef {
-    id: Uuid,
-    currency: String,
-}
-
 /// Every quantity jump of the account's non-cash holdings, with its
-/// candidate transactions. See the spec for each rule; in short:
+/// candidate transactions:
 /// - a jump is a snapshot whose quantity differs from the holding's previous
 ///   one, or a holding's first snapshot when the account already had an
 ///   earlier snapshot (a rise from 0);
@@ -111,7 +110,7 @@ struct AccountRef {
 async fn account_jumps(
     pool: &sqlx::PgPool,
     user_id: Uuid,
-    account: &AccountRef,
+    holding: &OwnedHolding,
 ) -> Result<Vec<Jump>, CoreError> {
     let rows = sqlx::query!(
         r#"
@@ -161,22 +160,25 @@ async fn account_jumps(
         select oj.holding_id as "holding_id!", oj.day as "day!", oj.dq as "dq!", oj."open" as "open!",
                c.id as "txn_id?", c.day as "txn_day?", c.amount as "amount?"
         from open_jumps oj
+        -- A trade is matched on the day it was executed (`spent_on`), not the
+        -- day its cash settled (`txn_day`): that is the day its lot is dated
+        -- and the day whose price its amount reflects.
         left join lateral (
             select t.id, t.spent_on as day, t.amount
             from transaction t
             cross join lateral (
-                select abs(oj.dq) * unit_value_asof(oj.instrument_id, t.spent_on)
-                       / nullif(fx_asof($2, t.spent_on), 0) as expected
+                select fx_convert(abs(oj.dq), unit_value_asof(oj.instrument_id, t.spent_on),
+                                  fx_asof($2, t.spent_on)) as expected
             ) e
             where t.account_id = $1
-              and t.type in ('buy', 'sell')
+              and budget_investment_leg(t.type)
               and t.spent_on between oj.win_from and oj.win_to
               and abs(t.amount) between 0.95 * e.expected and 1.05 * e.expected
         ) c on true
         order by oj.holding_id, oj.day, c.day, c.id
         "#,
-        account.id,
-        account.currency,
+        holding.account_id,
+        holding.account_currency,
         user_id,
     )
     .fetch_all(pool)
@@ -211,40 +213,20 @@ async fn account_jumps(
     Ok(jumps)
 }
 
-/// This holding's suggested lots. `Ok(None)` when the holding is unknown or
-/// not the caller's, which the API must render as 404, like the sibling lot
-/// endpoints. Uniqueness is decided across the whole account (two holdings
-/// may compete for one transaction), then filtered to the holding asked for.
+/// This holding's suggested lots. Uniqueness is decided across the whole
+/// account (two holdings may compete for one transaction), then filtered to
+/// the holding asked for.
 pub async fn suggest_lots(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     holding_id: Uuid,
-) -> Result<Option<Vec<Suggestion>>, CoreError> {
-    let account = sqlx::query_as!(
-        AccountRef,
-        r#"
-        select a.id as "id!", a.currency as "currency!"
-        from holding h
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where h.id = $1 and c.user_id = $2
-        "#,
-        holding_id,
-        user_id,
-    )
-    .fetch_optional(pool)
-    .await?;
-    let Some(account) = account else {
-        return Ok(None);
-    };
-
-    let jumps = account_jumps(pool, user_id, &account).await?;
-    Ok(Some(
-        pick(&jumps)
-            .into_iter()
-            .filter(|s| s.holding_id == holding_id)
-            .collect(),
-    ))
+) -> Result<Vec<Suggestion>, CoreError> {
+    let holding = owned_holding(pool, user_id, holding_id).await?;
+    let jumps = account_jumps(pool, user_id, &holding).await?;
+    Ok(pick(&jumps)
+        .into_iter()
+        .filter(|s| s.holding_id == holding_id)
+        .collect())
 }
 
 #[cfg(test)]
@@ -285,7 +267,7 @@ mod tests {
             got,
             vec![Suggestion {
                 holding_id: Uuid::from_u128(1),
-                side: "buy",
+                side: LotSide::Buy,
                 date: day(8),
                 quantity: dec("23"),
                 unit_price: dec("6.35521739"),
@@ -298,14 +280,14 @@ mod tests {
     fn the_sign_of_the_amount_is_ignored() {
         // A mirrored row: positive amount for a purchase.
         let got = pick(&[jump(1, "2", vec![cand(10, 8, "100")])]);
-        assert_eq!(got[0].side, "buy");
+        assert_eq!(got[0].side, LotSide::Buy);
         assert_eq!(got[0].unit_price, dec("50"));
     }
 
     #[test]
     fn a_sale_has_a_positive_quantity_and_price() {
         let got = pick(&[jump(1, "-10", vec![cand(10, 8, "63.60")])]);
-        assert_eq!(got[0].side, "sell");
+        assert_eq!(got[0].side, LotSide::Sell);
         assert_eq!(got[0].quantity, dec("10"));
         assert_eq!(got[0].unit_price, dec("6.36"));
     }

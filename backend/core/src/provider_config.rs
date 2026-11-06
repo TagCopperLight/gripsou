@@ -1,11 +1,9 @@
 //! The keys providers need (Powens, the AI, logos), as the admin entered them
 //! in Settings → Server → API keys. Stored encrypted in
 //! `app_settings.provider_config` (`repo::provider_config`); this is the
-//! decrypted copy every reader uses, loaded at startup and replaced on each
-//! save, so a change applies without a restart.
+//! decrypted copy the adapters are built from.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, LazyLock, RwLock};
 
 /// One value a provider declares it needs. A secret is never sent back to the
 /// browser, only whether it is set. `label` is shown as is, in the provider's
@@ -68,18 +66,6 @@ impl ProviderConfig {
             self.0.insert(provider, fields);
         }
     }
-}
-
-static CURRENT: LazyLock<RwLock<Arc<ProviderConfig>>> = LazyLock::new(Default::default);
-
-/// The values in effect. Empty until the server loaded them.
-pub fn current() -> Arc<ProviderConfig> {
-    CURRENT.read().unwrap_or_else(|e| e.into_inner()).clone()
-}
-
-/// Puts `config` in effect for every later reader.
-pub fn replace(config: ProviderConfig) {
-    *CURRENT.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(config);
 }
 
 #[cfg(test)]

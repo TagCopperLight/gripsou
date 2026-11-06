@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select status as \"status!: ConnectionStatus\", sync_requested_at from connection where id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status!: ConnectionStatus",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sync_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "sync_requested_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "98d02c9a52768b6d53592d5e13820d26ed7a34256dbe6bb1d2615eb4ea2373c1"
+}

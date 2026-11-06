@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { RED, legendItems, plotSeries, type ChartSeries } from "./valueChart";
+import { legendItems, plotSeries, type ChartSeries } from "./valueChart";
+import { RED } from "./theme";
 
 const GREEN = "#34d399";
 const GRAY = "#777471";
@@ -12,7 +13,19 @@ function netWorth(values: number[], invested: number[]): ChartSeries[] {
   ];
 }
 
+describe("plotSeries", () => {
+  it("leaves a day without a rate a gap in percent mode, measured from the first valued day", () => {
+    const [line] = plotSeries([{ name: "Price", data: [[1, null], [2, 50], [3, 75]], color: GREEN }], "percent");
+    expect(line.data).toEqual([[1, null], [2, 0], [3, 0.5]]);
+  });
+});
+
 describe("legendItems", () => {
+  it("reads the line's colour off its valued days, not a trailing gap", () => {
+    const series: ChartSeries[] = [{ name: "Net worth", data: [[1, 100], [2, 120], [3, null]], color: GREEN, area: true }];
+    expect(legendItems(series)[0].color).toBe(GREEN);
+  });
+
   it("lists the main line first, in the colour the chart draws it", () => {
     const items = legendItems(plotSeries(netWorth([100, 80], [100, 100]), "value"));
     expect(items).toEqual([

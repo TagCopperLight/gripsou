@@ -15,10 +15,10 @@ thiserror.workspace = true
 uuid.workspace = true
 aes-gcm.workspace = true
 base64.workspace = true
-rand.workspace = true
-tracing = { workspace = true }
+tracing.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
+ts-rs.workspace = true
 
 [features]
 # Seeders and fixtures for the tests of every crate (`testkit`).
@@ -27,4 +27,3 @@ test-util = []
 [dev-dependencies]
 gripsou-core = { path = ".", features = ["test-util"] }
 anyhow.workspace = true
-tokio.workspace = true

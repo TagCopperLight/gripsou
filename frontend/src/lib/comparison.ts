@@ -1,4 +1,4 @@
-import { subtractDecimals } from "./money";
+import { subtractDecimals } from "./decimal";
 
 /** How a figure moved against a baseline, by the one rule set every "vs …"
  *  cell on the Overview uses. */

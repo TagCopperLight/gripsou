@@ -1,3 +1,4 @@
+use gripsou_core::budget::vocab::AiRunOutcome;
 use gripsou_core::testkit::seed_user_and_connection;
 use std::collections::BTreeMap;
 
@@ -34,7 +35,7 @@ async fn insert_run(pool: &PgPool, user_id: Uuid, r: &Run) -> anyhow::Result<()>
         complete: r.tokens_in.is_some() && r.tokens_out.is_some(),
     };
     record_usage(pool, id, usage).await?;
-    finish_run(pool, id, "ok", None).await?;
+    finish_run(pool, id, AiRunOutcome::Ok, None).await?;
     Ok(())
 }
 
@@ -179,7 +180,7 @@ async fn a_run_with_one_unreported_call_counts_as_without_usage(
     record_usage(&pool, id, Usage::known(300, 30)).await?;
     record_usage(&pool, id, Usage::default()).await?;
     record_usage(&pool, id, Usage::known(200, 20)).await?;
-    finish_run(&pool, id, "ok", None).await?;
+    finish_run(&pool, id, AiRunOutcome::Ok, None).await?;
 
     let rows = usage_by_model(&pool).await?;
     assert_eq!(rows[0].runs_without_usage, 1, "a floor, not the bill");

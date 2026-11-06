@@ -1,15 +1,7 @@
-//! Applies the migrations to `DATABASE_URL` and exits.
-//!
-//! CI points it at the throwaway Postgres's `template1`: every
-//! `#[sqlx::test]` database is copied from there, so each one then starts
-//! migrated and its own migrator finds nothing left to apply. Running every
-//! migration once instead of once per test saves most of the test step's time.
+//! Applies the migrations to `DATABASE_URL` and exits. `ci.sh` runs it on its
+//! throwaway Postgres's `template1` (the reason is there).
 //!
 //!     DATABASE_URL=postgres://.../template1 cargo run --example migrate
-//!
-//! Don't aim it at a local server you also use for tests while iterating on a
-//! new migration: the template would keep the old version's checksum, and every
-//! test database copied from it would then refuse the edited file.
 
 use sqlx::PgPool;
 

@@ -15,10 +15,9 @@ use rust_decimal::Decimal;
 /// A daily bar arrives stamped at the exchange's open — 07:00 UTC for Paris —
 /// but while the market is open Yahoo also emits the in-progress candle stamped
 /// at the moment of the request. Stored verbatim those are two rows for one
-/// day, and the second one drags `max(ts)` into the middle of the afternoon,
-/// which is precisely where a resume-from-the-newest-point fetch must never
-/// start. A day is the real resolution of this data, so it is also the right
-/// key for it.
+/// day, and the second one drags `max(ts)` into the middle of the afternoon.
+/// A day is the real resolution of this data, so it is also the right key
+/// for it.
 pub(crate) fn map_points(rows: &[(i64, f64)], currency: &str) -> Vec<PricePoint> {
     let mut out: Vec<PricePoint> = Vec::with_capacity(rows.len());
     for &(ts, close) in rows {

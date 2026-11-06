@@ -13,13 +13,7 @@ async fn inserts_once_then_updates_in_place(pool: PgPool) -> anyhow::Result<()> 
     let first = upsert_transaction(
         &mut conn,
         account_id,
-        &txn(
-            "acct-1",
-            "txn-1",
-            "deposit",
-            Decimal::new(5000, 2),
-            Some("SALAIRE"),
-        ),
+        &txn("acct-1", "txn-1", "deposit", Decimal::new(5000, 2)).described("SALAIRE"),
     )
     .await?;
     assert_eq!(first, TxnWrite::Inserted);
@@ -28,13 +22,7 @@ async fn inserts_once_then_updates_in_place(pool: PgPool) -> anyhow::Result<()> 
     let second = upsert_transaction(
         &mut conn,
         account_id,
-        &txn(
-            "acct-1",
-            "txn-1",
-            "deposit",
-            Decimal::new(7500, 2),
-            Some("SALAIRE MARS"),
-        ),
+        &txn("acct-1", "txn-1", "deposit", Decimal::new(7500, 2)).described("SALAIRE MARS"),
     )
     .await?;
     assert_eq!(

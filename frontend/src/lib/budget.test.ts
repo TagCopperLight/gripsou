@@ -4,14 +4,11 @@ import i18n from "i18next";
 import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 import {
-  BUDGET_ICON_NAMES,
-  BUDGET_ICONS,
-  BUDGET_KINDS,
   categoryLabel,
   safeBudgetColor,
   sortCategories,
 } from "./budget";
-import type { BudgetCategory } from "../api/budget";
+import type { BudgetCategory } from "../api/wire";
 
 // A private i18next instance: the app singleton's language must not leak
 // between test files.
@@ -54,21 +51,6 @@ describe("safeBudgetColor", () => {
   });
 });
 
-describe("BUDGET_ICONS", () => {
-  it("resolves every seeded icon name", () => {
-    expect(BUDGET_ICON_NAMES).toHaveLength(35);
-    for (const name of BUDGET_ICON_NAMES) expect(BUDGET_ICONS[name]).toBeTruthy();
-    expect(Object.keys(BUDGET_ICONS).sort()).toEqual([...BUDGET_ICON_NAMES].sort());
-  });
-
-  it("has a label for every icon in both locales", () => {
-    for (const name of BUDGET_ICON_NAMES) {
-      expect(en.budget.icons[name as keyof typeof en.budget.icons]).toBeTruthy();
-      expect(fr.budget.icons[name as keyof typeof fr.budget.icons]).toBeTruthy();
-    }
-  });
-});
-
 describe("sortCategories", () => {
   it("orders by kind and keeps the backend's order inside a kind", () => {
     const rows = [
@@ -81,6 +63,5 @@ describe("sortCategories", () => {
     // e2 before e1: the list arrives in the order the user arranged, and only
     // the kind grouping is re-applied here.
     expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "x", "i2"]);
-    expect(BUDGET_KINDS).toEqual(["expense", "income", "neutral"]);
   });
 });

@@ -1,9 +1,10 @@
 import { createContext, useContext } from "react";
-import type { MfaRequired, SessionUser } from "../api/types";
-
-import type { PrefsPatch, UserPrefs } from "../lib/prefs";
-
-export type SecondFactor = { totp: string } | { recoveryCode: string };
+import { ApiError } from "../api/client";
+import type { MfaRequired, SessionUser } from "../api/wire";
+import type { SecondFactor } from "../api/auth";
+import { getPrefs } from "../lib/prefs";
+import type { PrefsPatch } from "../lib/prefsPatch";
+import type { UserPrefs } from "../api/wire";
 
 export type AuthValue = {
   isAuthenticated: boolean;
@@ -29,7 +30,9 @@ export type AuthValue = {
   /** Replace the cached profile after the user edits their own account. */
   updateUser: (user: SessionUser) => void;
   /** Show the changed settings at once and save them (PATCH /auth/prefs).
-   *  Rejects when the save fails; the stored prefs are then shown again. */
+   *  A new currency is shown only once saved, and only its save rejects
+   *  (`isCurrencyRefused` tells a refusal apart); any failed save shows the
+   *  stored prefs again. */
   updatePrefs: (patch: PrefsPatch) => Promise<void>;
 };
 
@@ -39,4 +42,16 @@ export function useAuth(): AuthValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
   return ctx;
+}
+
+/** The shown user's prefs, re-rendering the component when they change.
+ *  A component rendered outside an AuthProvider gets the formatters' default. */
+export function usePrefs(): UserPrefs {
+  return useContext(AuthContext)?.prefs ?? getPrefs();
+}
+
+/** The server refuses a new currency when it can't get that currency's rate:
+ *  every figure would otherwise show under its symbol unconverted. */
+export function isCurrencyRefused(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 502;
 }

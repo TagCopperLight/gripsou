@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update instrument\n        set meta = coalesce(meta, '{}'::jsonb)\n                   || jsonb_build_object($2::text || '_resolution', 'unresolved')\n        where id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7877963be16791f3d35a941a8ef1e761662c5b0c44ea382e0282c82e2461e197"
+}

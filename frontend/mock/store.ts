@@ -1,9 +1,10 @@
 // The review mode's in-memory database: one base dataset, built fresh by
 // `createStore`. The control (control.ts) holds the live one.
 
-import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget.ts";
-import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
+import type { AiStatus, ApiKeyField, ApiKeyProvider, BudgetAiSettings, BudgetAiUsage, LotSuggestion, SyncHealth } from "../src/api/wire.ts";
 import { baseData, type BaseData } from "./data/base.ts";
+import { CONFIG_PROVIDERS } from "./data/backend.ts";
+import type { Fault } from "./faults.ts";
 
 export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
@@ -20,17 +21,27 @@ export type Store = BaseData & {
   providerLots: string[];
   /** An account's own bank-update health, when it differs from its connection's. */
   accountHealth: Record<string, SyncHealth>;
-  /** Saving an account fails (the Edit account window's error). */
-  accountSaveFails: boolean;
   /** Signing in asks for the second step (a code, or a backup code). */
   loginMfa: boolean;
-  /** Every read but the signed-in user's fails: each card shows its error. */
-  readsFail: boolean;
-  /** Every write fails (signing in and out aside): each action's error. */
-  writesFail: boolean;
-  /** The accounts come back malformed, so the pages that show them break. */
-  accountsBroken: boolean;
+  /** Requests the active states make fail. */
+  faults: Fault[];
 };
+
+/** Saved values: a public field's text, whether a secret is set; absent is unset. */
+const SAVED_KEYS: Record<string, Record<string, string | boolean>> = {
+  powens: { client_id: "48211093", domain: "myapp-sandbox.biapi.pro", client_secret: true },
+  jev: { api_key: true },
+};
+
+function apiKeys(): ApiKeyProvider[] {
+  return CONFIG_PROVIDERS.map((p) => ({
+    ...p,
+    fields: p.fields.map(({ key, label, secret }): ApiKeyField => {
+      const saved = SAVED_KEYS[p.key]?.[key];
+      return secret ? { key, label, secret, set: saved === true } : { key, label, secret, value: typeof saved === "string" ? saved : null };
+    }),
+  }));
+}
 
 export function createStore(): Store {
   const data = baseData();
@@ -41,25 +52,9 @@ export function createStore(): Store {
     deletedLots: [],
     providerLots: [],
     accountHealth: {},
-    accountSaveFails: false,
     loginMfa: false,
-    readsFail: false,
-    writesFail: false,
-    accountsBroken: false,
-    apiKeys: [
-      {
-        key: "powens",
-        displayName: "Powens",
-        fields: [
-          { key: "client_id", label: "Client ID", secret: false, value: "48211093" },
-          { key: "domain", label: "Domain", secret: false, value: "myapp-sandbox.biapi.pro" },
-          { key: "client_secret", label: "Client secret", secret: true, set: true },
-          { key: "webhook_secret", label: "Webhook secret", secret: true, set: false },
-        ],
-      },
-      { key: "jev", displayName: "JEV", fields: [{ key: "api_key", label: "API key", secret: true, set: true }] },
-      { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", label: "Client ID", secret: false, value: null }] },
-    ],
+    faults: [],
+    apiKeys: apiKeys(),
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       // As the server: AI prices and costs are in US dollars.

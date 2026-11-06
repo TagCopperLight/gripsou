@@ -1,4 +1,4 @@
-import type { ReturnFigures } from "../api/types";
+import type { ReturnFigures } from "../api/wire";
 
 /** Text colour of a signed figure: green above zero, red below, plain at zero. */
 export function toneClass(value: number | string): string {

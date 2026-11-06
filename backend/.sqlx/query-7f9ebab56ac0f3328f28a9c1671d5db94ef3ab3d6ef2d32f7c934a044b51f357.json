@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select a.connection_id         as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               a.color                 as \"color\",\n               a.type_key              as \"type_key!\",\n               case when v.account_id is null then 0 else v.value end as \"value?\",\n               c.last_sync_at,\n               a.provider_meta as \"provider_meta!\"\n        from account a\n        join connection c on c.id = a.connection_id\n        left join account_values_today($1) v on v.account_id = a.id\n        where c.user_id = $1\n        order by a.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connection_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "connection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "type_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "type_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "value?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_sync_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "connection",
+            "name": "last_sync_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "provider_meta!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "provider_meta"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "7f9ebab56ac0f3328f28a9c1671d5db94ef3ab3d6ef2d32f7c934a044b51f357"
+}

@@ -1,4 +1,4 @@
-import type { PricePoint } from "../api/types";
+import type { PricePoint } from "../api/wire";
 
 /** The chart switch offers the reader's currency only when the chart is in
  *  another one and at least one day could be converted. */

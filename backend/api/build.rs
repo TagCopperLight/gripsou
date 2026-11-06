@@ -9,20 +9,23 @@ fn main() {
 
     println!("cargo:rustc-env=GRIPSOU_VERSION={version}");
     println!("cargo:rerun-if-env-changed=GRIPSOU_VERSION");
-    // Best-effort freshness: the reflog catches new commits, HEAD pointer catches
-    // branch switches. A new tag on the current commit will not retrigger, and
-    // neither will dirtying or cleaning the working tree without committing
-    // (same root cause: no tracked input changed); touch this file after tagging
-    // or after such changes if you need the version to reflect them immediately.
-    println!("cargo:rerun-if-changed=../../.git/logs/HEAD");
-    println!("cargo:rerun-if-changed=../../.git/HEAD");
+    // Best-effort freshness: the reflog catches new commits, HEAD catches
+    // branch switches. Asked of git, as a worktree keeps both outside `.git/`.
+    // A new tag on the current commit, or dirtying the tree without
+    // committing, changes neither: touch this file to refresh the version.
+    for path in ["HEAD", "logs/HEAD"] {
+        if let Some(file) = git(&["rev-parse", "--path-format=absolute", "--git-path", path]) {
+            println!("cargo:rerun-if-changed={file}");
+        }
+    }
 }
 
 fn git_describe() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["describe", "--tags", "--always", "--dirty"])
-        .output()
-        .ok()?;
+    git(&["describe", "--tags", "--always", "--dirty"])
+}
+
+fn git(args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git").args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }

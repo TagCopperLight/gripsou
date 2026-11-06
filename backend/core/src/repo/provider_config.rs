@@ -59,21 +59,18 @@ pub async fn set_field(
     .fetch_one(&mut *tx)
     .await?
     .0;
-    let mut fields = stored
-        .get(provider)
-        .and_then(|b| decode(key, b))
-        .unwrap_or_default();
-    match value {
-        Some(v) => fields.insert(field.to_string(), v.to_string()),
-        None => fields.remove(field),
-    };
-    if fields.is_empty() {
-        stored.remove(provider);
-    } else {
-        stored.insert(
-            provider.to_string(),
-            key.encrypt(&serde_json::to_vec(&fields)?)?,
-        );
+    let mut config = decode_all(key, &stored).config;
+    config.set(provider, field, value.map(str::to_string));
+    match config.provider(provider) {
+        Some(fields) => {
+            stored.insert(
+                provider.to_string(),
+                key.encrypt(&serde_json::to_vec(fields)?)?,
+            );
+        }
+        None => {
+            stored.remove(provider);
+        }
     }
     sqlx::query!(
         "update app_settings set provider_config = $1 where id = 1",
@@ -82,5 +79,5 @@ pub async fn set_field(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(decode_all(key, &stored).config)
+    Ok(config)
 }

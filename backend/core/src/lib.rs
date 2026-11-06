@@ -7,7 +7,6 @@ pub mod db;
 pub mod dto;
 pub mod error;
 pub mod ingest;
-pub mod logo;
 pub mod logs;
 pub mod price_sync;
 pub mod provider;
@@ -16,3 +15,4 @@ pub mod repo;
 pub mod returns;
 #[cfg(any(test, feature = "test-util"))]
 pub mod testkit;
+pub mod text_enum;

@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with f as (\n            select coalesce(b.mean_price, 0) as mean_price,\n                   b.explained_qty, b.basis, b.realised,\n                   fx_convert(b.explained_qty, unit_value_asof(h.instrument_id, t.d),\n                              fx_asof(a.currency, t.d)) - b.basis as unrealised,\n                   fx_asof(a.currency, t.d) as account_rate,\n                   reporting_fx_asof($2, t.d) as reporting_rate\n            from holding h\n            join account a on a.id = h.account_id\n            cross join (select user_today($2) as d) t\n            cross join lateral lot_basis(array[h.id], array[t.d]) b\n            where h.id = $1\n        )\n        select mean_price as \"mean_price!\", explained_qty as \"explained_qty!\",\n               basis as \"basis!\", realised as \"realised!\", unrealised as \"unrealised?\",\n               fx_convert(mean_price, account_rate, reporting_rate) as \"rep_mean_price?\",\n               fx_convert(basis, account_rate, reporting_rate) as \"rep_basis?\",\n               fx_convert(realised, account_rate, reporting_rate) as \"rep_realised?\",\n               fx_convert(unrealised, account_rate, reporting_rate) as \"rep_unrealised?\"\n        from f\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mean_price!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "explained_qty!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "basis!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "realised!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "unrealised?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "rep_mean_price?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "rep_basis?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "rep_realised?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "rep_unrealised?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f3e495e08d586df1c746b713c8647ed0c1e3a3f81a7973bc8c258d6fc6fd920a"
+}

@@ -7,35 +7,27 @@ use std::collections::HashMap;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{AiRunOutcome, CategoryKind};
 use crate::categorize::{CategorizeError, CategorizeItem, CategorizeRequest, Categorizer};
 use crate::categorize::{CategoryOption, Guess};
 use crate::error::CoreError;
 use crate::repo::budget::ai as repo;
-
-/// What gets written for one answered transaction. `category_id: None` is an
-/// abstention, which lands in the review queue as "no guess" and
-/// is never sent again.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Decision {
-    pub txn_id: Uuid,
-    pub category_id: Option<Uuid>,
-    pub confidence: Option<Decimal>,
-}
+use crate::repo::budget::ai::Decision;
 
 /// The ids an item may be given, by the sign of its amount: money out may
 /// be an expense, money in an income, and either may be neutral.
 /// `categories` is already the non-archived list. A zero amount gets none.
 pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uuid> {
     let side = if amount < Decimal::ZERO {
-        "expense"
+        CategoryKind::Expense
     } else if amount > Decimal::ZERO {
-        "income"
+        CategoryKind::Income
     } else {
         return vec![];
     };
     categories
         .iter()
-        .filter(|c| c.kind == side || c.kind == "neutral")
+        .filter(|c| c.kind == side || c.kind == CategoryKind::Neutral)
         .map(|c| c.id)
         .collect()
 }
@@ -87,32 +79,22 @@ const SHARED_EXAMPLES: i64 = 10;
 pub enum RunOutcome {
     /// Nothing was uncategorised; no run row written.
     Nothing,
-    /// `outcome` is `ok` | `partial` | `error`, as written to `budget_ai_run`.
+    /// Never [`AiRunOutcome::Running`].
     Finished {
-        outcome: String,
+        outcome: AiRunOutcome,
         items: i32,
         batches: i32,
     },
 }
 
-/// Categorise everything the user still has uncategorised, chunk by chunk,
-/// until the work set is empty or the model stops answering. Resumable by
-/// construction: the work set is re-read every chunk, so a quota or a crash
-/// only leaves rows for the next run.
-///
-/// The run row is written before the first call and updated after each one,
-/// so the spend survives a run that fails half-way; a database error closes
-/// it as `error` with the message before being returned.
-///
-/// The caller runs one at a time per user (`gripsou_jobs` keeps them in
-/// memory), so a run row still `running` here is a dead one and is closed.
-pub async fn run_for_user(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    categorizer: &dyn Categorizer,
-) -> Result<RunOutcome, CoreError> {
-    repo::close_abandoned_runs(pool, Some(user_id)).await?;
-    run(pool, user_id, categorizer).await
+/// The `ai_run` span a run's lines are logged in.
+pub fn run_span(user_id: Uuid) -> tracing::Span {
+    tracing::info_span!(
+        "ai_run",
+        user_id = %user_id,
+        run_id = tracing::field::Empty,
+        model = tracing::field::Empty,
+    )
 }
 
 /// What the run has done so far.
@@ -122,7 +104,19 @@ struct Tally {
     items: i32,
 }
 
-async fn run(
+/// Categorise everything the user still has uncategorised, chunk by chunk,
+/// until the work set is empty or the model stops answering. Resumable by
+/// construction: the work set is re-read every chunk, so a quota or a crash
+/// only leaves rows for the next run.
+///
+/// The run row is written before the first call and updated after each one,
+/// so the spend survives a run that fails half-way; a database error closes
+/// it as `error` with the message before being returned. A row left
+/// `running` (the task panicked or the process stopped) is the caller's to
+/// close, with [`repo::close_abandoned_runs`].
+///
+/// Run it inside [`run_span`]: it records the run's id and model there.
+pub async fn run_for_user(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     categorizer: &dyn Categorizer,
@@ -144,10 +138,12 @@ async fn run(
     tracing::info!("ai run started");
     let result = run_chunks(pool, user_id, categorizer, first, batch, &mut tally).await;
     let (outcome, error) = match &result {
-        Ok(None) => ("ok", None),
-        Ok(Some(CategorizeError::RateLimited)) => ("partial", Some("rate limited".to_string())),
-        Ok(Some(CategorizeError::Other(msg))) => ("error", Some(msg.clone())),
-        Err(e) => ("error", Some(e.to_string())),
+        Ok(None) => (AiRunOutcome::Ok, None),
+        Ok(Some(CategorizeError::RateLimited)) => {
+            (AiRunOutcome::Partial, Some("rate limited".to_string()))
+        }
+        Ok(Some(CategorizeError::Other(msg))) => (AiRunOutcome::Error, Some(msg.clone())),
+        Err(e) => (AiRunOutcome::Error, Some(e.to_string())),
     };
     let closed = repo::finish_run(pool, tally.run_id, outcome, error.as_deref()).await;
     match (result, closed) {
@@ -162,7 +158,7 @@ async fn run(
             Err(e)
         }
         (Ok(_), Ok(())) => Ok(RunOutcome::Finished {
-            outcome: outcome.to_string(),
+            outcome,
             items: tally.items,
             batches: tally.batches,
         }),
@@ -236,11 +232,11 @@ mod tests {
     use rust_decimal::Decimal;
     use uuid::Uuid;
 
-    fn cat(kind: &str) -> CategoryOption {
+    fn cat(kind: CategoryKind) -> CategoryOption {
         CategoryOption {
             id: Uuid::new_v4(),
-            name: kind.into(),
-            kind: kind.into(),
+            name: kind.to_string(),
+            kind,
             hint: None,
         }
     }
@@ -268,21 +264,29 @@ mod tests {
 
     #[test]
     fn money_out_sees_expense_and_neutral() {
-        let cats = [cat("expense"), cat("income"), cat("neutral")];
+        let cats = [
+            cat(CategoryKind::Expense),
+            cat(CategoryKind::Income),
+            cat(CategoryKind::Neutral),
+        ];
         let ids = candidates_for(Decimal::new(-500, 2), &cats);
         assert_eq!(ids, vec![cats[0].id, cats[2].id]);
     }
 
     #[test]
     fn money_in_sees_income_and_neutral() {
-        let cats = [cat("expense"), cat("income"), cat("neutral")];
+        let cats = [
+            cat(CategoryKind::Expense),
+            cat(CategoryKind::Income),
+            cat(CategoryKind::Neutral),
+        ];
         let ids = candidates_for(Decimal::new(500, 2), &cats);
         assert_eq!(ids, vec![cats[1].id, cats[2].id]);
     }
 
     #[test]
     fn zero_amount_has_no_candidates() {
-        let cats = [cat("expense"), cat("income")];
+        let cats = [cat(CategoryKind::Expense), cat(CategoryKind::Income)];
         assert!(candidates_for(Decimal::ZERO, &cats).is_empty());
     }
 

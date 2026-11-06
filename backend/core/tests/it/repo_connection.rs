@@ -1,3 +1,4 @@
+use gripsou_core::repo::connection::ConnectionStatus;
 use gripsou_core::repo::connection::{
     BeginSync, begin_sync, clear_syncing, insert_pending, mark_synced_error, mark_synced_ok,
 };
@@ -7,14 +8,11 @@ use sqlx::PgPool;
 #[sqlx::test(migrations = "../migrations")]
 async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
-        .bind(conn)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn).await;
 
     // First claim succeeds and flips to 'syncing'.
     match begin_sync(&pool, user_id, conn).await? {
-        BeginSync::Started(s) => assert_eq!(s.status, "syncing"),
+        BeginSync::Started(s) => assert_eq!(s.status, ConnectionStatus::Syncing),
         _ => panic!("expected Started"),
     }
     // Second claim while syncing → AlreadySyncing.
@@ -118,6 +116,46 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn finish_connect_refuses_an_active_connection(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id = testkit::owner(&pool, conn).await;
+    sqlx::query(
+        "update connection set credentials = '{\"token\": \"live\"}', \
+         provider_meta = '{\"external_connection_id\": \"1\"}' where id = $1",
+    )
+    .bind(conn)
+    .execute(&pool)
+    .await?;
+    let before: (String, serde_json::Value, serde_json::Value) =
+        sqlx::query_as("select status, credentials, provider_meta from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+
+    let BeginSync::Started(_) = begin_sync(&pool, user_id, conn).await? else {
+        panic!("expected Started");
+    };
+    let updated = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        conn,
+        user_id,
+        serde_json::json!({"token": "replayed"}),
+        serde_json::json!({"external_connection_id": "replayed"}),
+    )
+    .await?;
+    assert!(!updated);
+
+    let after: (String, serde_json::Value, serde_json::Value) =
+        sqlx::query_as("select status, credentials, provider_meta from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(after.0, "syncing");
+    assert_eq!((&after.1, &after.2), (&before.1, &before.2));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -149,10 +187,7 @@ async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()>
 #[sqlx::test(migrations = "../migrations")]
 async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
     let conn = testkit::seed_connection(&pool).await;
-    let user_id: uuid::Uuid = sqlx::query_scalar("select user_id from connection where id=$1")
-        .bind(conn)
-        .fetch_one(&pool)
-        .await?;
+    let user_id = testkit::owner(&pool, conn).await;
 
     // Wrong user — returns false, row still exists
     let not_deleted =
@@ -187,13 +222,13 @@ async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> 
     .await?;
 
     let row = sqlx::query!(
-        r#"select status as "status!", sync_requested_at from connection where id=$1"#,
+        r#"select status as "status!: ConnectionStatus", sync_requested_at from connection where id=$1"#,
         id
     )
     .fetch_one(&pool)
     .await?;
 
-    assert_eq!(row.status, "awaiting");
+    assert_eq!(row.status, ConnectionStatus::Awaiting);
     assert!(row.sync_requested_at.is_some());
     Ok(())
 }

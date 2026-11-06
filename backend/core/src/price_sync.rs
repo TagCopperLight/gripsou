@@ -6,21 +6,18 @@
 use chrono::Duration;
 use uuid::Uuid;
 
-use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 use crate::provider::PriceProvider;
-use crate::repo::instrument::{mark_symbol_unresolved, set_resolved_symbol};
-use crate::repo::price::{insert_prices, latest_price_ts};
-use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for_connection};
+use crate::repo::instrument::{InstrumentRow, ensure_cash, mark_unresolved, set_symbol};
+use crate::repo::price::{has_fx_rate, insert_prices, latest_price_ts, market_today};
 
 /// How far back of already-stored history each pass re-requests.
 ///
-/// Asking Yahoo for strictly-newer-than-`max(ts)` looked like the obvious
-/// saving and was the bug behind permanently missing days: the tail of Yahoo's
-/// daily series is its least stable part, and a bar absent from the one
-/// response whose window covered it could never be asked for again — the next
-/// request already began after it. Two instances polling at the same instant
-/// got different responses and forked, permanently.
+/// Asking Yahoo only for bars newer than `max(ts)` loses days for good: the
+/// tail of Yahoo's daily series is its least stable part, and a bar absent
+/// from the one response whose window covered it would never be asked for
+/// again, since the next request begins after it. Two instances polling at the
+/// same instant get different responses and fork.
 ///
 /// Re-asking for a trailing window makes a dropped bar self-heal on the next
 /// pass, and `insert_prices` is an upsert, so a bar we already have costs
@@ -31,7 +28,7 @@ use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for
 /// holiday, or a laptop that was closed.
 const REFETCH_DAYS: i64 = 30;
 
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct PriceSyncSummary {
     pub resolved: usize,
     pub prices_inserted: usize,
@@ -52,17 +49,15 @@ async fn ensure_cash_instruments_for_held_currencies(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
 ) -> Result<(), CoreError> {
-    sqlx::query!(
-        r#"
-        insert into instrument (kind, symbol, isin, name, currency)
-        select 'cash', null, null, cur, cur
-        from connection_fx_currencies($1) cur
-        on conflict (currency) where kind = 'cash' do nothing
-        "#,
+    let currencies = sqlx::query_scalar!(
+        r#"select cur as "cur!" from connection_fx_currencies($1) cur"#,
         connection_id,
     )
-    .execute(&mut *conn)
+    .fetch_all(&mut *conn)
     .await?;
+    for currency in currencies {
+        ensure_cash(conn, &currency).await?;
+    }
     Ok(())
 }
 
@@ -70,22 +65,6 @@ pub async fn fetch_prices_for_connection(
     pool: &sqlx::PgPool,
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
-) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_at(
-        pool,
-        connection_id,
-        providers,
-        chrono::Utc::now().date_naive(),
-    )
-    .await
-}
-
-/// Runs the routine pass for an explicit business date. Production callers use UTC today.
-pub async fn fetch_prices_for_connection_at(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-    today: chrono::NaiveDate,
 ) -> Result<PriceSyncSummary, CoreError> {
     let mut summary = PriceSyncSummary::default();
     {
@@ -95,50 +74,83 @@ pub async fn fetch_prices_for_connection_at(
     let instruments = price_eligible_instruments_for_connection(pool, connection_id).await?;
     let mut conn = pool.acquire().await?;
     for row in instruments {
-        fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
+        fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
     }
 
     Ok(summary)
 }
 
+/// Distinct non-cash instruments held (nonzero quantity) under a connection,
+/// plus the cash instrument (the FX rate) for every currency this connection
+/// needs a rate for, excluding the pivot (`connection_fx_currencies`, which
+/// says why each one is needed).
+///
+/// Drives the per-connection price-fetch pass.
+pub async fn price_eligible_instruments_for_connection(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+) -> Result<Vec<InstrumentRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        InstrumentRow,
+        r#"
+        select distinct
+               i.id       as "id!",
+               i.kind     as "kind!",
+               i.symbol,
+               i.isin,
+               i.name     as "name!",
+               i.currency as "currency!",
+               i.meta     as "meta!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join instrument i on i.id = h.instrument_id
+        where a.connection_id = $1
+          and i.kind <> 'cash'
+          and h.quantity <> 0
+
+        union
+
+        -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
+        -- pivot is 1 by definition and has no Yahoo pair.
+        select fx.id       as "id!",
+               fx.kind     as "kind!",
+               fx.symbol,
+               fx.isin,
+               fx.name     as "name!",
+               fx.currency as "currency!",
+               fx.meta     as "meta!"
+        from connection_fx_currencies($1) cur
+        join instrument fx on fx.kind = 'cash' and fx.currency = cur
+
+        order by 5
+        "#,
+        connection_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Makes sure a rate into `currency` is stored, fetching it now rather than at
 /// the next sync. For a reader switching their currency: their figures are
-/// converted at read time, and with no rate they could only be shown in the
-/// pivot. True when a rate is stored afterwards (the pivot needs none); a
-/// provider failure is logged and reads as false, so the caller decides.
+/// converted at read time, and with no rate they are left out. True when a
+/// rate is stored afterwards (`pivot`, the currency rates are stored in,
+/// needs none); a provider failure is logged and reads as false, so the
+/// caller decides.
 pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,
     providers: &[Box<dyn PriceProvider>],
+    pivot: &str,
     currency: &str,
-    today: chrono::NaiveDate,
 ) -> Result<bool, CoreError> {
-    if currency == crate::repo::settings::base_currency(pool).await? {
+    if currency == pivot {
         return Ok(true);
     }
     let mut conn = pool.acquire().await?;
-    let row = sqlx::query_as!(
-        PriceEligibleInstrument,
-        r#"
-        with ins as (
-            insert into instrument (kind, symbol, isin, name, currency)
-            values ('cash', null, null, $1, $1)
-            on conflict (currency) where kind = 'cash' do nothing
-            returning id, kind, symbol, isin, name, currency, meta
-        )
-        select id as "id!", kind as "kind!", symbol, isin, name as "name!",
-               currency as "currency!", meta as "meta!"
-        from ins
-        union all
-        select id, kind, symbol, isin, name, currency, meta
-        from instrument where kind = 'cash' and currency = $1
-        "#,
-        currency,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
+    let row = ensure_cash(&mut conn, currency).await?;
     let mut summary = PriceSyncSummary::default();
-    fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
-    Ok(latest_price_ts(&mut conn, row.id).await?.is_some())
+    fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
+    has_fx_rate(&mut *conn, currency).await
 }
 
 /// One instrument's pass: resolve its symbol (cached), then fetch and upsert
@@ -147,44 +159,35 @@ pub async fn ensure_fx_rate(
 async fn fetch_instrument(
     conn: &mut sqlx::PgConnection,
     providers: &[Box<dyn PriceProvider>],
-    row: &PriceEligibleInstrument,
-    today: chrono::NaiveDate,
+    row: &InstrumentRow,
     summary: &mut PriceSyncSummary,
 ) -> Result<(), CoreError> {
-    let iref = InstrumentRef {
-        kind: row.kind.clone(),
-        symbol: row.symbol.clone(),
-        isin: row.isin.clone(),
-        name: row.name.clone(),
-        currency: row.currency.clone(),
-    };
+    let iref = row.instrument_ref();
 
     let Some(provider) = providers.iter().find(|p| p.supports(&iref)) else {
         return Ok(());
     };
 
-    // Freshness guard: already have today's point → nothing to do.
     let latest = latest_price_ts(conn, row.id).await?;
-    if latest.map(|ts| ts.date_naive()) == Some(today) {
+    if latest.map(|ts| ts.date_naive()) == Some(market_today()) {
         summary.skipped_fresh += 1;
         return Ok(());
     }
 
-    // Resolve (or reuse cached) symbol.
-    let symbol = match row.meta.get("yahoo_symbol").and_then(|v| v.as_str()) {
+    let symbol = match row.provider_symbol(provider.key()) {
         Some(s) => s.to_string(),
         None => {
-            if row.meta.get("yahoo_resolution").and_then(|v| v.as_str()) == Some("unresolved") {
+            if row.unresolved_by(provider.key()) {
                 return Ok(());
             }
             match provider.resolve_symbol(&iref).await {
                 Ok(Some(s)) => {
-                    set_resolved_symbol(conn, row.id, &s).await?;
+                    set_symbol(conn, row.id, provider.key(), &s).await?;
                     summary.resolved += 1;
                     s
                 }
                 Ok(None) => {
-                    mark_symbol_unresolved(conn, row.id).await?;
+                    mark_unresolved(conn, row.id, provider.key()).await?;
                     summary.unresolved += 1;
                     return Ok(());
                 }
@@ -202,9 +205,7 @@ async fn fetch_instrument(
         }
     };
 
-    // Re-fetch the trailing window (or full history when no prices yet)
-    // and upsert. `latest` itself is deliberately not the start: see
-    // REFETCH_DAYS.
+    // `latest` itself is deliberately not the start: see REFETCH_DAYS.
     let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
     match provider.fetch_prices(&symbol, since).await {
         Ok(points) => {
@@ -230,8 +231,6 @@ async fn fetch_instrument(
             }
             let batch: Vec<(chrono::DateTime<chrono::Utc>, rust_decimal::Decimal)> =
                 points.iter().map(|p| (p.ts, p.unit_price)).collect();
-            // One batched upsert per instrument (a backfill can be hundreds of
-            // bars) instead of a round-trip per point.
             let written = insert_prices(conn, row.id, &batch, &currency).await?;
             summary.prices_inserted += written as usize;
         }

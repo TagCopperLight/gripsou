@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id from budget_category where user_id = $1 and seed_key = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b64f21665d31e282aed35486ce619134f4648d61e03ab5c2d467694e51f0ce29"
+}

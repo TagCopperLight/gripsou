@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::dto::SyncResult;
 use crate::error::CoreError;
 use crate::repo::account::upsert_account;
+use crate::repo::connection;
 use crate::repo::holding::{ids_for_connection, upsert_holding, zero_holding};
 use crate::repo::instrument::resolve_instrument;
 use crate::repo::snapshot::stamp_snapshot;
@@ -29,7 +30,8 @@ pub struct IngestSummary {
     /// Holdings present in a prior sync but absent from this one: their position
     /// was zeroed and a zero snapshot stamped for today.
     pub holdings_closed: usize,
-    /// Derived history rows written by the backfill engine.
+    /// Derived history rows written by the backfill engine, across every
+    /// connection of the user.
     pub backfill_rows: usize,
     /// Internal-transfer pairs written by the budget pairing pass, counted in
     /// pairs, not rows.
@@ -48,32 +50,27 @@ pub async fn ingest(
     // otherwise take row locks in opposite orders. Taken here rather than inside
     // the pairing pass because the upserts below already hold row locks by the
     // time pairing starts, which leaves the cycle open.
-    let user_id = sqlx::query_scalar!(
-        "select user_id from connection where id = $1",
-        connection_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let user_id = connection::user_id(&mut *tx, connection_id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    let mut tx = crate::db::lock_user_writes(tx, user_id).await?;
 
-    let today = sqlx::query_scalar!("select user_today($1) as \"day!\"", user_id)
-        .fetch_one(&mut *tx)
-        .await?;
+    let today = crate::repo::prefs::today(&mut *tx, user_id).await?;
 
-    // Accounts first; map external_id -> account id for later lookups.
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();
     // The day each account's holdings are true on: when the provider last read
     // the bank. A provider that can't reach the bank keeps returning old
     // balances, and dating them today would be a false snapshot (#58).
     let mut snapshot_day: HashMap<Uuid, NaiveDate> = HashMap::new();
+    let mut account_currency: HashMap<Uuid, &str> = HashMap::new();
     for acct in &sync.accounts {
         let id = upsert_account(&mut tx, connection_id, acct).await?;
         account_ids.insert(acct.external_id.as_str(), id);
         let day = acct.balance_as_of.map_or(today, |d| d.min(today));
         snapshot_day.insert(id, day);
+        account_currency.insert(id, acct.currency.as_str());
     }
 
-    // Holdings: resolve instrument, upsert holding, stamp its account's day.
     let mut snapshots = 0;
     let mut present: HashSet<Uuid> = HashSet::new();
     for holding in &sync.holdings {
@@ -86,11 +83,13 @@ pub async fn ingest(
         let holding_id = upsert_holding(&mut tx, account_id, instrument_id, holding).await?;
         present.insert(holding_id);
 
-        // Snapshot value is the provider's current valuation — a flat fallback.
-        // Price-based valuation is derived at read time from the `price` series
-        // (see query.rs / unit_value_asof), so it stays consistent across reads and
-        // doesn't depend on whether the price pass has run yet this sync.
-        let value = if holding.instrument.kind == "cash" {
+        // The snapshot value is in the account's currency: what readers fall
+        // back to when the holding has no price or rate. Cash in the account's
+        // currency is worth its quantity; any other line, foreign cash
+        // included, is worth the provider's valuation.
+        let value = if holding.instrument.kind == "cash"
+            && holding.instrument.currency == account_currency[&account_id]
+        {
             holding.quantity
         } else {
             holding.valuation.unwrap_or(Decimal::ZERO)
@@ -144,40 +143,22 @@ pub async fn ingest(
         }
     }
 
-    if sync.provider_meta.is_object() {
-        sqlx::query("update connection set provider_meta = provider_meta || $2 where id = $1")
-            .bind(connection_id)
-            .bind(&sync.provider_meta)
-            .execute(&mut *tx)
-            .await?;
-    }
+    connection::set_health(&mut *tx, connection_id, sync.health.as_ref()).await?;
 
-    // Stamp the institution onto the connection. Guarded so a provider that
-    // momentarily reports nothing can't clobber a previously-good value.
+    // Guarded so a provider that momentarily reports nothing can't clobber a
+    // previously-good value.
     if !sync.institution.key.is_empty() {
-        sqlx::query!(
-            "update connection set institution_key = $2, institution_name = $3 where id = $1",
-            connection_id,
-            sync.institution.key,
-            sync.institution.name,
-        )
-        .execute(&mut *tx)
-        .await?;
+        connection::set_institution(&mut *tx, connection_id, &sync.institution).await?;
     }
 
-    // Derive the past from the transactions just ingested. Runs inside the
-    // same transaction, so a failed sync leaves no half-written history.
-    let backfill_rows =
-        crate::backfill::backfill_connection(&mut tx, connection_id).await? as usize;
+    // Inside the same transaction, so a failed sync leaves no half-written history.
+    let backfill_rows = crate::backfill::backfill_user(&mut tx).await? as usize;
 
-    // The budget pairing pass. Inside the same transaction as
-    // everything else, so a failed sync leaves no half-paired ledger. Scoped to
+    // Inside the same transaction as everything else, so a failed sync
+    // leaves no half-paired ledger. Scoped to
     // the connection's owner, because a transfer's two halves routinely live
-    // under two different connections. `user_id` and this user's advisory lock
-    // were both taken at the top of the transaction; the pass takes no lock of
-    // its own and relies on this one.
-    let transfers_paired =
-        crate::budget::pairing::pair_internal_transfers(&mut tx, user_id).await?;
+    // under two different connections.
+    let transfers_paired = crate::budget::pairing::pair_internal_transfers(&mut tx).await?;
 
     tx.commit().await?;
 

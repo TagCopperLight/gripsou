@@ -6,7 +6,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::budget::ai::Decision;
+use crate::budget::vocab::{AiRunOutcome, CategoryKind, CategorySource};
 use crate::categorize::{CategoryOption, Example, Usage};
 use crate::error::CoreError;
 
@@ -14,8 +14,8 @@ use crate::error::CoreError;
 const SAME_DESCRIPTION: i64 = 20;
 const NEIGHBOURS: i64 = 5;
 
-/// Closes runs still marked `running` as `error`: for one user when their
-/// run starts or crashes, or for everyone at boot. Either way no live task
+/// Closes runs still marked `running` as `error`: for one user once their
+/// run's task has ended, or for everyone at boot. Either way no live task
 /// owns them.
 pub async fn close_abandoned_runs(
     pool: &sqlx::PgPool,
@@ -24,11 +24,13 @@ pub async fn close_abandoned_runs(
     Ok(sqlx::query!(
         r#"
         update budget_ai_run
-           set outcome = 'error', error = 'the run stopped before finishing'
-         where outcome = 'running'
+           set outcome = $2, error = 'the run stopped before finishing'
+         where outcome = $3
            and ($1::uuid is null or user_id = $1)
         "#,
         user_id as Option<Uuid>,
+        AiRunOutcome::Error as AiRunOutcome,
+        AiRunOutcome::Running as AiRunOutcome,
     )
     .execute(pool)
     .await?
@@ -39,26 +41,29 @@ pub async fn active_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Vec<CategoryOption>, CoreError> {
-    let rows = sqlx::query!(
+    Ok(sqlx::query_as!(
+        CategoryOption,
         r#"
-        select id, name, kind, hint
+        select id, name, kind as "kind: CategoryKind", hint
         from budget_category
         where user_id = $1 and archived_at is null
-        order by kind, sort_order, name
+        order by array_position($2, kind), sort_order, name
         "#,
-        user_id
+        user_id,
+        CategoryKind::ALL as &[CategoryKind],
     )
     .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| CategoryOption {
-            id: r.id,
-            name: r.name,
-            kind: r.kind,
-            hint: r.hint,
-        })
-        .collect())
+    .await?)
+}
+
+/// What gets written for one answered transaction. `category_id: None` is an
+/// abstention, which lands in the review queue as "no guess" and
+/// is never sent again.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decision {
+    pub txn_id: Uuid,
+    pub category_id: Option<Uuid>,
+    pub confidence: Option<Decimal>,
 }
 
 pub struct WorkRow {
@@ -70,9 +75,8 @@ pub struct WorkRow {
     pub day: NaiveDate,
 }
 
-/// The next chunk: uncategorised cash rows, newest first, minus the ones this
-/// run already sent (`skip`). Buy/sell rows are excluded — the list hides
-/// them (`budget_investment_leg`), so a guess on one could never be reviewed.
+/// The next chunk: the rows still the AI's to look at, newest first, minus the
+/// ones this run already sent (`skip`).
 pub async fn work_chunk(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -82,17 +86,11 @@ pub async fn work_chunk(
     Ok(sqlx::query_as!(
         WorkRow,
         r#"
-        select t.id, t.description, t.amount, a.currency, a.type_key as account_type,
-               t.spent_on as "day!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          -- What the AI still has to look at: keep in step with `remaining`.
-          and t.category_source is null
-          and t.budget_category_id is null
-          and t.amount <> 0
-          and not budget_investment_leg(t.type)
+        select t.id as "id!", t.description, t.amount as "amount!", a.currency,
+               a.type_key as account_type, t.spent_on as "day!"
+        from budget_transactions($1) t
+        join account a on a.id = t.account_id
+        where budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
           and t.id <> all($2)
         order by t.spent_on desc, t.id
         limit $3
@@ -110,15 +108,8 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
     Ok(sqlx::query_scalar!(
         r#"
         select count(*) as "n!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          -- What the AI still has to look at: keep in step with `work_chunk`.
-          and t.category_source is null
-          and t.budget_category_id is null
-          and t.amount <> 0
-          and not budget_investment_leg(t.type)
+        from budget_transactions($1) t
+        where budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
         "#,
         user_id
     )
@@ -128,8 +119,8 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
 
 /// Evidence per item: up to 20 confirmed rows with the same normalised
 /// description (most recent first), then up to 5 confirmed rows with the
-/// most similar other descriptions. "Confirmed" = the user set it, or
-/// reviewed an AI guess. One statement for the whole chunk; both lookups go
+/// most similar other descriptions. "Confirmed" = the user chose it
+/// (`budget_user_chose`). One statement for the whole chunk; both lookups go
 /// through the indexes on `description_norm`. Items not owned by `user_id`
 /// get no evidence.
 pub async fn examples_for(
@@ -141,39 +132,35 @@ pub async fn examples_for(
         r#"
         with items as (
             select t.id, t.description_norm as norm
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection k on k.id = a.connection_id
-            where k.user_id = $1 and t.id = any($2) and t.description_norm <> ''
+            from budget_transactions($1) t
+            where t.id = any($2) and t.description_norm <> ''
+        ),
+        confirmed as not materialized (
+            select c.id, c.description, c.description_norm, c.amount, a.currency, a.type_key,
+                   c.spent_on, c.budget_category_id
+            from budget_transactions($1) c
+            join account a on a.id = c.account_id
+            where c.budget_category_id is not null
+              and budget_user_chose(c.category_source, c.category_reviewed_at)
         )
         select i.id as "item_id!", e.description, e.amount as "amount!", e.currency as "currency!",
                e.type_key as "account_type!", e.day as "day!", e.category_id as "category_id!"
         from items i
         cross join lateral (
-            (select c.description, c.amount, a.currency, a.type_key,
+            (select c.description, c.amount, c.currency, c.type_key,
                     c.spent_on as day, c.budget_category_id as category_id
-               from transaction c
-               join account a    on a.id = c.account_id
-               join connection k on k.id = a.connection_id
+               from confirmed c
               where c.description_norm = i.norm
                 and c.id <> i.id
-                and k.user_id = $1
-                and c.budget_category_id is not null
-                and (c.category_source = 'user' or c.category_reviewed_at is not null)
               order by c.spent_on desc, c.id
               limit $3)
             union all
-            (select c.description, c.amount, a.currency, a.type_key,
+            (select c.description, c.amount, c.currency, c.type_key,
                     c.spent_on as day, c.budget_category_id as category_id
-               from transaction c
-               join account a    on a.id = c.account_id
-               join connection k on k.id = a.connection_id
+               from confirmed c
               where c.description_norm % i.norm
                 and similarity(c.description_norm, i.norm) > 0.3
                 and c.description_norm <> i.norm
-                and k.user_id = $1
-                and c.budget_category_id is not null
-                and (c.category_source = 'user' or c.category_reviewed_at is not null)
               order by similarity(c.description_norm, i.norm) desc, c.spent_on desc, c.id
               limit $4)
         ) e
@@ -207,16 +194,14 @@ pub async fn recent_corrections(
 ) -> Result<Vec<Example>, CoreError> {
     let rows = sqlx::query!(
         r#"
-        select t.description, t.amount, a.currency, a.type_key,
+        select t.description, t.amount as "amount!", a.currency, a.type_key,
                t.spent_on as "day!",
                t.budget_category_id as "category_id!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          and t.budget_category_id is not null
-          and t.category_reviewed_at is not null
-        order by t.category_reviewed_at desc
+        from budget_transactions($1) t
+        join account a on a.id = t.account_id
+        where t.budget_category_id is not null
+          and budget_user_chose(t.category_source, t.category_reviewed_at)
+        order by t.category_reviewed_at desc nulls last
         limit $2
         "#,
         user_id,
@@ -252,29 +237,25 @@ pub async fn write_decisions(
     let confidences: Vec<Option<Decimal>> = decisions.iter().map(|d| d.confidence).collect();
     // Many rows in one unordered update: queue behind a sync of another of the
     // user's connections rather than deadlock with its pairing pass.
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let written = sqlx::query!(
         r#"
         update transaction t
            set budget_category_id   = c.id,
-               category_source      = 'ai',
+               category_source      = $5,
                category_confidence  = case when c.id is not null then d.confidence end,
                category_reviewed_at = null
           from unnest($2::uuid[], $3::uuid[], $4::numeric[]) as d (txn_id, category_id, confidence)
           left join budget_category c on c.id = d.category_id and c.user_id = $1
          where t.id = d.txn_id
-           and t.category_source is null
-           and t.budget_category_id is null
-           and exists (select 1
-                         from account a
-                         join connection k on k.id = a.connection_id
-                        where a.id = t.account_id and k.user_id = $1)
+           and budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
+           and t.id in (select id from budget_transactions($1))
         "#,
         user_id,
         &txn_ids,
         &categories as &[Option<Uuid>],
         &confidences as &[Option<Decimal>],
+        CategorySource::Ai as CategorySource,
     )
     .execute(&mut *tx)
     .await?
@@ -318,17 +299,16 @@ pub async fn record_usage(
     Ok(())
 }
 
-/// Closes the run: `ok` | `partial` | `error`.
 pub async fn finish_run(
     pool: &sqlx::PgPool,
     run_id: Uuid,
-    outcome: &str,
+    outcome: AiRunOutcome,
     error: Option<&str>,
 ) -> Result<(), CoreError> {
     sqlx::query!(
         "update budget_ai_run set outcome = $2, error = $3 where id = $1",
         run_id,
-        outcome,
+        outcome as AiRunOutcome,
         error,
     )
     .execute(pool)
@@ -337,7 +317,7 @@ pub async fn finish_run(
 }
 
 pub struct LastRun {
-    pub outcome: String,
+    pub outcome: AiRunOutcome,
     pub error: Option<String>,
     pub started_at: DateTime<Utc>,
 }
@@ -347,13 +327,14 @@ pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastR
     Ok(sqlx::query_as!(
         LastRun,
         r#"
-        select outcome, error, started_at
+        select outcome as "outcome: AiRunOutcome", error, started_at
         from budget_ai_run
-        where user_id = $1 and outcome <> 'running'
+        where user_id = $1 and outcome <> $2
         order by started_at desc
         limit 1
         "#,
-        user_id
+        user_id,
+        AiRunOutcome::Running as AiRunOutcome,
     )
     .fetch_optional(pool)
     .await?)

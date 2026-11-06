@@ -5,6 +5,7 @@
 
 use uuid::Uuid;
 
+use crate::budget::vocab::{CategoryKind, SeedKey};
 use crate::error::CoreError;
 
 #[derive(Debug, Clone)]
@@ -16,7 +17,7 @@ pub struct BudgetCategoryRow {
     pub color: String,
     pub icon: Option<String>,
     pub hint: Option<String>,
-    pub kind: String,
+    pub kind: CategoryKind,
     pub system_key: Option<String>,
     pub archived: bool,
     /// How many of this user's transactions carry the category, all-time.
@@ -28,7 +29,7 @@ pub struct NewCategory<'a> {
     pub color: &'a str,
     pub icon: Option<&'a str>,
     pub hint: Option<&'a str>,
-    pub kind: &'a str,
+    pub kind: CategoryKind,
 }
 
 pub struct CategoryPatch<'a> {
@@ -36,7 +37,7 @@ pub struct CategoryPatch<'a> {
     pub color: &'a str,
     pub icon: Option<&'a str>,
     pub hint: Option<&'a str>,
-    pub kind: &'a str,
+    pub kind: CategoryKind,
     pub archived: bool,
 }
 
@@ -53,28 +54,21 @@ pub async fn list_categories(
                c.color       as "color!",
                c.icon,
                c.hint,
-               c.kind        as "kind!",
+               c.kind        as "kind!: CategoryKind",
                c.system_key,
                (c.archived_at is not null) as "archived!",
                coalesce(n.cnt, 0) as "tx_count!"
         from budget_category c
         left join (
             select t.budget_category_id as cid, count(*) as cnt
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection k on k.id = a.connection_id
-            where k.user_id = $1
+            from user_transactions($1) t
             group by t.budget_category_id
         ) n on n.cid = c.id
         where c.user_id = $1
-        order by case c.kind
-                     when 'expense' then 0
-                     when 'income' then 1
-                     else 2
-                 end,
-                 c.sort_order, lower(c.name)
+        order by array_position($2, c.kind), c.sort_order, lower(c.name)
         "#,
         user_id,
+        CategoryKind::ALL as &[CategoryKind],
     )
     .fetch_all(pool)
     .await?;
@@ -110,6 +104,21 @@ pub async fn category_refs(
     Ok(rows)
 }
 
+/// The user's catch-all expense category (seeded as "Other"), whatever it is
+/// called now.
+pub async fn catch_all_expense(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Option<Uuid>, CoreError> {
+    Ok(sqlx::query_scalar!(
+        "select id from budget_category where user_id = $1 and seed_key = $2",
+        user_id,
+        SeedKey::OtherExpense as SeedKey,
+    )
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// The next position within the kind is read and written under a lock on
 /// the user's row, so two categories created at once never share a number.
 pub async fn create_category(
@@ -139,7 +148,7 @@ pub async fn create_category(
                   color     as "color!",
                   icon,
                   hint,
-                  kind      as "kind!",
+                  kind      as "kind!: CategoryKind",
                   system_key,
                   (archived_at is not null) as "archived!",
                   0::bigint as "tx_count!"
@@ -149,7 +158,7 @@ pub async fn create_category(
         new.color,
         new.icon,
         new.hint,
-        new.kind,
+        new.kind as CategoryKind,
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -187,14 +196,12 @@ pub async fn update_category(
                   c.color     as "color!",
                   c.icon,
                   c.hint,
-                  c.kind      as "kind!",
+                  c.kind      as "kind!: CategoryKind",
                   c.system_key,
                   (c.archived_at is not null) as "archived!",
                   (select count(*)
-                     from transaction t
-                     join account a    on a.id = t.account_id
-                     join connection k on k.id = a.connection_id
-                    where k.user_id = $2 and t.budget_category_id = c.id) as "tx_count!"
+                     from user_transactions($2) t
+                    where t.budget_category_id = c.id) as "tx_count!"
         "#,
         id,
         user_id,
@@ -202,7 +209,7 @@ pub async fn update_category(
         patch.color,
         patch.icon,
         patch.hint,
-        patch.kind,
+        patch.kind as CategoryKind,
         patch.archived,
     )
     .fetch_optional(pool)
@@ -219,8 +226,8 @@ pub enum DeleteCategory {
     System,
 }
 
-/// Deletes one category. Its transactions survive — `on delete set null`
-/// sends them back to uncategorised.
+/// Deletes one category. Its transactions survive, uncategorised and back in
+/// the AI's, review's and pairing's hands.
 pub async fn delete_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -228,7 +235,7 @@ pub async fn delete_category(
 ) -> Result<DeleteCategory, CoreError> {
     // One transaction: the delete and the renumbering that closes the hole it
     // leaves have to be one step, or a concurrent reorder could interleave.
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let system = sqlx::query_scalar!(
         r#"
         select (system_key is not null) as "system!"
@@ -245,6 +252,7 @@ pub async fn delete_category(
         Some(true) => return Ok(DeleteCategory::System),
         Some(false) => {}
     }
+    super::assign::clear_category(&mut tx, id).await?;
     sqlx::query!(
         "delete from budget_category where id = $1 and user_id = $2",
         id,
@@ -259,10 +267,7 @@ pub async fn delete_category(
 
 /// Renumbers every kind back to `1..n`, keeping the order the rows are already
 /// in. Called after a delete so the numbers never grow holes.
-async fn compact_sort_order(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    user_id: Uuid,
-) -> Result<(), CoreError> {
+async fn compact_sort_order(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         r#"
         update budget_category c
@@ -277,7 +282,7 @@ async fn compact_sort_order(
         "#,
         user_id,
     )
-    .execute(&mut **tx)
+    .execute(conn)
     .await?;
     Ok(())
 }
@@ -287,15 +292,26 @@ async fn compact_sort_order(
 /// the numbering is re-derived per kind here, so two adjacent rows changing
 /// places is exactly their two numbers swapping.
 ///
-/// Ids that are not this user's are silently skipped — the caller compares the
-/// returned count against what it sent and refuses a partial write. The ids
-/// must be distinct; the caller refuses duplicates.
+/// Writes nothing and returns `false` unless every id is a distinct row of
+/// this user's: a partial write would leave the list in an order nobody
+/// asked for.
 pub async fn reorder_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     ids: &[Uuid],
-) -> Result<u64, CoreError> {
-    let done = sqlx::query!(
+) -> Result<bool, CoreError> {
+    let mut tx = pool.begin().await?;
+    let mine = sqlx::query_scalar!(
+        "select id from budget_category where id = any($1) and user_id = $2 for update",
+        ids,
+        user_id,
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    if mine.len() != ids.len() {
+        return Ok(false);
+    }
+    sqlx::query!(
         r#"
         update budget_category c
            set sort_order = r.ord::int
@@ -310,8 +326,8 @@ pub async fn reorder_categories(
         user_id,
         ids,
     )
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(done)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }

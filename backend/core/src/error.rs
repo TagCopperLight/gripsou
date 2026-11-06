@@ -20,4 +20,9 @@ pub enum CoreError {
     /// not present among the sync result's accounts.
     #[error("sync result references unknown account '{external_id}'")]
     UnknownAccountRef { external_id: String },
+
+    /// The caller asked for a row that does not exist or is not theirs. The
+    /// API answers 404 either way, so it never confirms ids the caller can't see.
+    #[error("{0}")]
+    NotFound(&'static str),
 }

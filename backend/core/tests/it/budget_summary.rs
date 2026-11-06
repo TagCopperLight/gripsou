@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::budget::pairing::pair_internal_transfers;
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::summary::day_category_totals;
@@ -7,7 +8,7 @@ use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{
     checking_account, checking_account_in, rate_on, seed_cash_instrument, seed_user_and_connection,
-    txn_on_day,
+    txn,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -51,7 +52,9 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day("acct-1", ext, "withdrawal", eur(-20), d, "LECLERC"),
+            &txn("acct-1", ext, "withdrawal", eur(-20))
+                .on(d)
+                .described("LECLERC"),
         )
         .await?;
     }
@@ -71,7 +74,7 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
     assert!(rows.iter().all(|r| r.category_id == Some(groceries)));
     assert!(
         rows.iter()
-            .all(|r| r.category_kind.as_deref() == Some("expense"))
+            .all(|r| r.category_kind == Some(CategoryKind::Expense))
     );
     assert_eq!(rows.iter().map(|r| r.txn_count).sum::<i64>(), 2);
     assert!(rows.iter().all(|r| !r.fx_missing));
@@ -86,14 +89,9 @@ async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyh
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-15),
-            day(2026, 3, 4),
-            "UNKNOWN",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-15))
+            .on(day(2026, 3, 4))
+            .described("UNKNOWN"),
     )
     .await?;
     drop(conn);
@@ -121,14 +119,9 @@ async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyho
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-usd",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "US SPEND",
-        ),
+        &txn("acct-usd", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("US SPEND"),
     )
     .await?;
     drop(conn);
@@ -154,14 +147,9 @@ async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> 
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-cny",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "CN SPEND",
-        ),
+        &txn("acct-cny", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("CN SPEND"),
     )
     .await?;
     drop(conn);
@@ -181,14 +169,9 @@ async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-30),
-            day(2026, 3, 4),
-            "DUPLICATE",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-30))
+            .on(day(2026, 3, 4))
+            .described("DUPLICATE"),
     )
     .await?;
     drop(conn);
@@ -212,14 +195,9 @@ async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "transfer",
-            eur(-500),
-            day(2026, 3, 4),
-            "VIR PEA",
-        ),
+        &txn("acct-1", "t1", "transfer", eur(-500))
+            .on(day(2026, 3, 4))
+            .described("VIR PEA"),
     )
     .await?;
     drop(conn);
@@ -250,14 +228,9 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "transfer",
-            eur(-500),
-            day(2026, 3, 4),
-            "VIR EPARGNE",
-        ),
+        &txn("acct-1", "t1", "transfer", eur(-500))
+            .on(day(2026, 3, 4))
+            .described("VIR EPARGNE"),
     )
     .await?;
     drop(conn);
@@ -275,7 +248,7 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     assert_eq!(rows[0].category_id, None);
     assert_eq!(rows[0].category_kind, None);
     assert_eq!(rows[0].amount, eur(-500));
-    let f = gripsou_core::budget::overview::figures(&rows);
+    let f = gripsou_core::budget::overview::calc::figures(&rows);
     assert_eq!(f.expenses, eur(500));
     Ok(())
 }
@@ -352,7 +325,7 @@ async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Resu
         upsert_transaction(
             &mut conn,
             account,
-            &txn_on_day(ext_acct, ext, kind, amount, d, desc),
+            &txn(ext_acct, ext, kind, amount).on(d).described(desc),
         )
         .await?;
     }
@@ -385,23 +358,20 @@ async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Re
     upsert_transaction(
         &mut conn,
         checking,
-        &txn_on_day("acct-1", "c1", "transfer", eur(-50), day(2026, 9, 2), "VIR"),
+        &txn("acct-1", "c1", "transfer", eur(-50))
+            .on(day(2026, 9, 2))
+            .described("VIR"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         pea_id,
-        &txn_on_day(
-            "acct-pea",
-            "p1",
-            "transfer",
-            eur(50),
-            day(2026, 9, 2),
-            "VIR",
-        ),
+        &txn("acct-pea", "p1", "transfer", eur(50))
+            .on(day(2026, 9, 2))
+            .described("VIR"),
     )
     .await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     drop(conn);
 
     let paired: i64 =
@@ -427,23 +397,20 @@ async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
     upsert_transaction(
         &mut conn,
         a,
-        &txn_on_day(
-            "acct-a",
-            "o1",
-            "transfer",
-            eur(-200),
-            day(2026, 5, 31),
-            "VIR",
-        ),
+        &txn("acct-a", "o1", "transfer", eur(-200))
+            .on(day(2026, 5, 31))
+            .described("VIR"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         b,
-        &txn_on_day("acct-b", "i1", "transfer", eur(200), day(2026, 6, 1), "VIR"),
+        &txn("acct-b", "i1", "transfer", eur(200))
+            .on(day(2026, 6, 1))
+            .described("VIR"),
     )
     .await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     drop(conn);
 
     for (from, to) in [
@@ -470,7 +437,9 @@ async fn the_window_bounds_are_inclusive(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day("acct-1", ext, "withdrawal", eur(-10), d, "X"),
+            &txn("acct-1", ext, "withdrawal", eur(-10))
+                .on(d)
+                .described("X"),
         )
         .await?;
     }
@@ -491,7 +460,9 @@ async fn another_users_rows_are_invisible(pool: PgPool) -> anyhow::Result<()> {
         upsert_transaction(
             &mut conn,
             account_id,
-            &txn_on_day(ext, ext, "withdrawal", eur(-10), day(2026, 3, 4), "X"),
+            &txn(ext, ext, "withdrawal", eur(-10))
+                .on(day(2026, 3, 4))
+                .described("X"),
         )
         .await?;
     }
@@ -519,27 +490,17 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t1",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "MARCH",
-        ),
+        &txn("acct-1", "t1", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("MARCH"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 4, 4),
-            "APRIL",
-        ),
+        &txn("acct-1", "t2", "withdrawal", eur(-100))
+            .on(day(2026, 4, 4))
+            .described("APRIL"),
     )
     .await?;
     drop(conn);
@@ -555,13 +516,10 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
+async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // No rate at all for CHF: the fallback is "report in the pivot", not zero
-    // — a user whose reporting currency has no stored rate must still see
-    // their figures, just unconverted. (A currency change fetches its rate
-    // first, so this is only a guard against dividing by nothing.)
+    // No rate at all for CHF: the euros are not shown as francs.
     seed_cash_instrument(&pool, "CHF").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     set_reporting_currency(&pool, user_id, "CHF").await;
@@ -570,22 +528,72 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day("acct-1", "t1", "withdrawal", eur(-30), day(2026, 3, 4), "X"),
+        &txn("acct-1", "t1", "withdrawal", eur(-30))
+            .on(day(2026, 3, 4))
+            .described("X"),
     )
     .await?;
     drop(conn);
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
     assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].amount, Decimal::ZERO);
+    assert!(rows[0].fx_missing, "the reporting leg had no rate");
+    Ok(())
+}
+
+/// The Overview and the Transactions list it deep-links into leave out the
+/// same rows when the reader's currency has no rate on their day.
+#[sqlx::test(migrations = "../migrations")]
+async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    use gripsou_core::repo::budget::transactions::{
+        TransactionFilters, transaction_counts, transactions,
+    };
+
+    let chf = seed_cash_instrument(&pool, "CHF").await;
+    rate_on(&pool, chf, day(2026, 3, 10), Decimal::new(125, 2)).await;
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    set_reporting_currency(&pool, user_id, "CHF").await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    for (ext, d, amount) in [
+        ("before", day(2026, 3, 4), eur(-30)),
+        ("after", day(2026, 3, 12), eur(-50)),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", amount)
+                .on(d)
+                .described("X"),
+        )
+        .await?;
+    }
+    drop(conn);
+
+    let (from, to) = (day(2026, 3, 1), day(2026, 3, 31));
+    let overview = day_category_totals(&pool, user_id, from, to).await?;
+    let overview_total: Decimal = overview.iter().map(|r| r.amount).sum();
     assert_eq!(
-        rows[0].amount,
-        eur(-30),
-        "falls back to the pivot figure, not zero"
+        overview_total,
+        Decimal::new(-40, 0),
+        "50 EUR / 1.25, the 30 left out"
     );
-    assert!(
-        !rows[0].fx_missing,
-        "the account leg (EUR, the pivot) was fine"
-    );
+    assert!(overview.iter().any(|r| r.fx_missing));
+
+    let f = TransactionFilters {
+        from: Some(from),
+        to: Some(to),
+        ..TransactionFilters::default()
+    };
+    let counts = transaction_counts(&pool, user_id, &f).await?;
+    assert_eq!(counts.matching_total, overview_total);
+    assert!(counts.fx_missing);
+    let rows = transactions(&pool, user_id, &f).await?;
+    let shown: Vec<Option<Decimal>> = rows.iter().map(|r| r.amount_reporting).collect();
+    assert_eq!(shown, vec![Some(Decimal::new(-40, 0)), None]);
     Ok(())
 }
 
@@ -611,27 +619,17 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     upsert_transaction(
         &mut conn,
         eur_account,
-        &txn_on_day(
-            "acct-eur",
-            "t1",
-            "deposit",
-            eur(20),
-            day(2026, 3, 4),
-            "VALUED",
-        ),
+        &txn("acct-eur", "t1", "deposit", eur(20))
+            .on(day(2026, 3, 4))
+            .described("VALUED"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         jpy_account,
-        &txn_on_day(
-            "acct-jpy",
-            "t2",
-            "withdrawal",
-            eur(-100),
-            day(2026, 3, 4),
-            "UNVALUED",
-        ),
+        &txn("acct-jpy", "t2", "withdrawal", eur(-100))
+            .on(day(2026, 3, 4))
+            .described("UNVALUED"),
     )
     .await?;
     drop(conn);
@@ -677,27 +675,17 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "salary",
-            "deposit",
-            eur(3000),
-            day(2026, 3, 4),
-            "SALARY",
-        ),
+        &txn("acct-1", "salary", "deposit", eur(3000))
+            .on(day(2026, 3, 4))
+            .described("SALARY"),
     )
     .await?;
     upsert_transaction(
         &mut conn,
         account_id,
-        &txn_on_day(
-            "acct-1",
-            "coffee",
-            "withdrawal",
-            eur(-4),
-            day(2026, 3, 4),
-            "COFFEE",
-        ),
+        &txn("acct-1", "coffee", "withdrawal", eur(-4))
+            .on(day(2026, 3, 4))
+            .described("COFFEE"),
     )
     .await?;
     drop(conn);
@@ -720,5 +708,74 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
         .sum();
     assert_eq!(income, eur(3000));
     assert_eq!(expense, eur(-4));
+    Ok(())
+}
+
+/// One pairing pass, under the user's write lock, committed.
+async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
+    let mut tx = gripsou_core::db::begin_user_writes(pool, user_id).await?;
+    let paired = pair_internal_transfers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(paired)
+}
+
+/// The user's catch-all is folded into the trend's Other series by what it
+/// was seeded as, so renaming it does not put two "Other"s in the legend.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_renamed_catch_all_still_folds_into_other(pool: PgPool) -> anyhow::Result<()> {
+    use gripsou_core::budget::overview::{
+        calc::{Month, Slice},
+        trend_for,
+    };
+    use gripsou_core::repo::budget::category::{CategoryPatch, update_category};
+
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    for (ext, amount) in [("t1", eur(-500)), ("t2", eur(-100))] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", amount)
+                .on(day(2026, 9, 5))
+                .described("SHOP"),
+        )
+        .await?;
+    }
+    drop(conn);
+    let other = cat(&pool, user_id, "other_expense").await;
+    let groceries = cat(&pool, user_id, "groceries").await;
+    let id = |ext: &'static str| {
+        sqlx::query_scalar::<_, Uuid>("select id from transaction where external_id = $1")
+            .bind(ext)
+            .fetch_one(&pool)
+    };
+    set_category(&pool, user_id, id("t1").await?, Some(other)).await;
+    set_category(&pool, user_id, id("t2").await?, Some(groceries)).await;
+
+    let renamed = update_category(
+        &pool,
+        user_id,
+        other,
+        &CategoryPatch {
+            name: "Misc",
+            color: "#10c4cb",
+            icon: None,
+            hint: None,
+            kind: CategoryKind::Expense,
+            archived: false,
+        },
+    )
+    .await?
+    .unwrap();
+    assert_eq!(
+        renamed.default_key, None,
+        "a rename clears the translation key"
+    );
+
+    let trend = trend_for(&pool, user_id, Month::parse("2026-09").unwrap(), 12).await?;
+    let slices: Vec<Slice> = trend.series.iter().map(|s| s.slice).collect();
+    assert_eq!(slices, vec![Slice::Category(groceries), Slice::Other]);
+    assert_eq!(trend.series[1].values[11], eur(500));
     Ok(())
 }

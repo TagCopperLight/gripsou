@@ -1,10 +1,10 @@
-import type { Transaction } from "../api/types";
+import type { Transaction } from "../api/wire";
 
 export type Resolution = {
   tx: Transaction;            // the row as it was when pending — the guess to restore on Undo
   /** `applied`: swept up by "apply to others" launched from another line. */
   outcome: "kept" | "corrected" | "applied";
-  categoryId: string;         // what it now holds — what "apply to others" widens
+  categoryId: string;         // what it holds — what "apply to others" widens
   categoryName: string;       // what it was kept as / corrected to, already translated
   /** Other rows sharing its description, once the server has said. Nothing
    *  is offered until then, nor when it is 0. */

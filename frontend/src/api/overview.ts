@@ -1,82 +1,23 @@
 import { calendarDay } from "../lib/date";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
-import { getJson } from "./client";
+import { api } from "./client";
 import { keys } from "./keys";
-import type { BudgetCategory } from "./budget";
-import type { Transaction } from "./types";
+import { TREND_MONTHS_DEFAULT, type SummaryParams } from "./wire";
 import { currentMonth, periodBounds, type Period } from "../lib/period";
 
-/** The chip fields, and no more — the same shape `/api/transactions` rows carry,
- *  so `CategoryChip` renders one of these unchanged. */
-export type CategoryRef = Pick<BudgetCategory, "id" | "name" | "defaultKey" | "color" | "icon">;
-
-/** One union for the Sankey's nodes, the breakdown's rows and the trend's
- *  series. Note the -s- in `uncategorised`: that is what the server sends. */
-export type Slice =
-  | { kind: "category"; category: CategoryRef }
-  | { kind: "uncategorised" }
-  | { kind: "other" };
-
-/** `amount` is always a POSITIVE magnitude — the direction is
- *  carried by which list the entry is in, never by its sign. */
-export type SliceAmount = { slice: Slice; amount: string };
-
-/** `prevMonth` and `avg12` are ABSENT, not null, when they do not apply: a
- *  date range has neither, and neither does a month with under three months
- *  of history before it. `avg12` comes rounded by the server. */
-export type Figure = { amount: string; prevMonth?: string; avg12?: string };
-
-export type BreakdownRow = {
-  slice: Slice;
-  amount: string;
-  txnCount: number;
-  /** Always absent on the `other` row, whose membership changes month to month. */
-  avg12?: string;
-};
-
-export type Sankey = {
-  sources: SliceAmount[];
-  /** At most 8 entries plus `other`, which, when present, is always last. */
-  destinations: SliceAmount[];
-  /** Neither field appears in `sources`/`destinations`; at a remainder of
-   *  exactly zero NEITHER is present. Three states, not two. */
-  notSpent?: string;
-  drawnFromSavings?: string;
-};
-
-export type BudgetSummary = {
-  /** NOT the transactions list's count for the same month: it leaves out lot
-   *  rows (purchases/sales), which the list shows. The two differing is
-   *  expected. */
-  txnCount: number;
-  /** Some row could not be valued — the figures are UNDERSTATED. */
-  fxMissing: boolean;
-  figures: { income: Figure; expenses: Figure; net: Figure };
-  sankey: Sankey;
-  /** Expense side only: expense-kind categories plus the uncategorised OUTFLOW
-   *  row. The 7 largest plus one rolled-up `other`; the rolled-up members are
-   *  not sent, which is why `other` does not expand. */
-  breakdown: BreakdownRow[];
-};
-
-export type TrendSeries = { slice: Slice; values: string[] };
-/** Every series has one value per month, zeros included, so nothing here needs
- *  sparse-array alignment. */
-export type BudgetTrend = { months: string[]; series: TrendSeries[] };
-
-function summaryParams(period: Period): string {
+function summaryParams(period: Period): SummaryParams {
   // Either `month` or `from`+`to`, never both and never neither — the server
   // answers 400 on anything else, on purpose.
-  if (period.mode === "month") return `month=${period.month}`;
+  if (period.mode === "month") return { month: period.month };
   const { from, to } = periodBounds(period);
-  return `from=${from}&to=${to}`;
+  return { from, to };
 }
 
 export function useBudgetSummary(period: Period) {
   return useQuery({
     queryKey: keys.budgetSummary(period),
-    queryFn: ({ signal }) => getJson<BudgetSummary>(`/budget/summary?${summaryParams(period)}`, { signal }),
+    queryFn: ({ signal }) => api("GET /budget/summary", { query: summaryParams(period), signal }),
     // Stepping a month keeps the old numbers on screen until the new ones land,
     // instead of flashing every surface through its loading state.
     placeholderData: keepPreviousData,
@@ -90,7 +31,7 @@ export function useBudgetSummary(period: Period) {
 export function useBudgetTrend(anchor: string) {
   return useQuery({
     queryKey: keys.budgetTrend(anchor),
-    queryFn: ({ signal }) => getJson<BudgetTrend>(`/budget/trend?anchor=${anchor}&months=12`, { signal }),
+    queryFn: ({ signal }) => api("GET /budget/trend", { query: { anchor, months: TREND_MONTHS_DEFAULT }, signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -104,7 +45,7 @@ export function useLatestDataMonth() {
   return useQuery({
     queryKey: keys.budgetLatestMonth(),
     queryFn: async ({ signal }) => {
-      const rows = await getJson<Transaction[]>("/transactions?limit=1", { signal });
+      const rows = await api("GET /transactions", { query: { limit: 1 }, signal });
       if (rows.length === 0) return null;
       const latest = calendarDay(rows[0].t).slice(0, 7);
       const now = currentMonth();

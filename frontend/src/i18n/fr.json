@@ -46,7 +46,6 @@
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
-    "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
     "empty": "Aucune banque connectée pour l’instant.",
     "startFailed": "Impossible de lancer la synchronisation"
@@ -62,8 +61,7 @@
     "pea": "PEA",
     "brokerage": "Compte-titres",
     "life_insurance": "Assurance-vie",
-    "retirement": "Épargne retraite",
-    "multiple": "Plusieurs types"
+    "retirement": "Épargne retraite"
   },
   "time": {
     "justNow": "à l'instant",
@@ -77,7 +75,6 @@
     "legendOthers_one": "+{{count}} autre",
     "legendOthers_other": "+{{count}} autres",
     "allAccounts": "Tous les comptes",
-    "unknownSource": "Autre",
     "edit": {
       "title": "Modifier le compte",
       "accountName": "Nom du compte",
@@ -131,6 +128,7 @@
       "clearSearch": "Effacer la recherche",
       "all": "Tous",
       "multipleAccounts": "Plusieurs comptes",
+      "multipleTypes": "Plusieurs types",
       "columns": {
         "asset": "ACTIF",
         "quantity": "QUANTITÉ",
@@ -225,8 +223,10 @@
       "title": "Lecture seule",
       "bodyOne": "gripsou consulte vos comptes et vos transactions par l'intermédiaire de {{provider}}, un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement.",
       "body": "gripsou consulte vos comptes et vos transactions par l'intermédiaire d'un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement."
-    },
-    "powens": {
+    }
+  },
+  "powens": {
+    "guide": {
       "psd2": {
         "title": "Une autorisation auprès de votre banque",
         "body": "Vous donnez votre accord (DSP2) depuis le site ou l'application de votre banque."
@@ -235,7 +235,17 @@
         "title": "Parfois, vos identifiants bancaires",
         "body": "Certains comptes, souvent un PEA ou une assurance vie, échappent à cette autorisation. Pour les récupérer, Powens peut vous demander l'identifiant et le mot de passe de votre banque ; gripsou ne les voit jamais. Libre à vous de refuser : ces comptes seront alors absents."
       }
-    }
+    },
+    "issue": "Powens signale un problème ({{state}}).",
+    "states": {
+      "bug": "Powens a rencontré un problème avec cette banque.",
+      "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
+      "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer.",
+      "webauthRequired": "La banque demande une validation. Cliquez sur Gérer.",
+      "decoupled": "Une validation est en attente dans votre application bancaire."
+    },
+    "manageBlocked": "Votre navigateur a bloqué la fenêtre de Powens : autorisez les pop-ups pour ce site.",
+    "manageFailed": "Impossible d'ouvrir Powens"
   },
   "welcome": {
     "title": "Bienvenue, {{name}}",
@@ -512,21 +522,11 @@
         "stale": "Données pas à jour",
         "attention": "Action requise",
         "bankUpdated": "Dernière mise à jour par la banque",
-        "providerError": "Powens signale un problème ({{state}}).",
         "staleMessage": "Aucune nouvelle donnée de la banque depuis le {{date}}.",
         "unknownMessage": "Impossible de savoir quand la banque a mis à jour ces données.",
-        "retry": "Nouvel essai automatique le {{date}}.",
-        "states": {
-          "bug": "Powens a rencontré un problème avec cette banque.",
-          "wrongpass": "La banque a refusé vos identifiants. Cliquez sur Gérer pour vous reconnecter.",
-          "SCARequired": "La banque demande de confirmer votre identité. Cliquez sur Gérer.",
-          "webauthRequired": "La banque demande une validation. Cliquez sur Gérer.",
-          "decoupled": "Une validation est en attente dans votre application bancaire."
-        }
+        "retry": "Nouvel essai automatique le {{date}}."
       },
-      "manage": "Gérer",
-      "manageBlocked": "Votre navigateur a bloqué la fenêtre de Powens : autorisez les pop-ups pour ce site.",
-      "manageFailed": "Impossible d'ouvrir Powens"
+      "manage": "Gérer"
     },
     "budget": {
       "title": "Budget",

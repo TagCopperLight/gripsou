@@ -1,3 +1,4 @@
+use gripsou_core::budget::vocab::AiRunOutcome;
 use gripsou_core::testkit::{self, checking_account, seed_user_and_connection, txn};
 use std::sync::Mutex;
 
@@ -124,13 +125,8 @@ async fn ledger(pool: &PgPool, rows: &[(&str, i64)]) -> anyhow::Result<(Uuid, Ve
     let acct = upsert_account(&mut conn, conn_id, &checking_account("a")).await?;
     let mut ids = vec![];
     for (i, (desc, cents)) in rows.iter().enumerate() {
-        let mut t = txn(
-            "a",
-            &format!("t{i}"),
-            "withdrawal",
-            Decimal::new(*cents, 2),
-            Some(desc),
-        );
+        let mut t =
+            txn("a", &format!("t{i}"), "withdrawal", Decimal::new(*cents, 2)).described(desc);
         t.spent_on = Utc::now().date_naive() - Duration::days(i as i64);
         upsert_transaction(&mut conn, acct, &t).await?;
         ids.push(
@@ -156,14 +152,14 @@ async fn guesses_are_written_as_ai_with_their_confidence(pool: PgPool) -> anyhow
     let out = run_for_user(&pool, user_id, &mock).await?;
 
     assert!(
-        matches!(out, RunOutcome::Finished { ref outcome, items: 2, batches: 1 } if outcome == "ok")
+        matches!(out, RunOutcome::Finished { ref outcome, items: 2, batches: 1 } if *outcome == AiRunOutcome::Ok)
     );
     let (cat, source, conf) = row(&pool, ids[0]).await;
     assert!(cat.is_some());
     assert_eq!(source.as_deref(), Some("ai"));
     assert_eq!(conf, Some(Decimal::new(91, 2)));
     let run = last_run(&pool, user_id).await?.unwrap();
-    assert_eq!(run.outcome, "ok");
+    assert_eq!(run.outcome, AiRunOutcome::Ok);
     let (model, tin, tout, complete): (String, i64, i64, bool) = sqlx::query_as(
         "select model, tokens_in, tokens_out, usage_complete from budget_ai_run where user_id = $1",
     )
@@ -205,7 +201,7 @@ async fn candidates_follow_the_sign_and_skip_archived(pool: PgPool) -> anyhow::R
     run_for_user(&pool, user_id, &mock).await?;
 
     let req = &mock.requests()[0];
-    let kind = |id: &Uuid| cats.iter().find(|c| c.id == *id).unwrap().kind.clone();
+    let kind = |id: &Uuid| cats.iter().find(|c| c.id == *id).unwrap().kind;
     let out = req.items.iter().find(|i| i.description == "OUT").unwrap();
     let inn = req.items.iter().find(|i| i.description == "IN").unwrap();
     assert!(
@@ -317,7 +313,7 @@ async fn a_rate_limit_stops_as_partial_and_the_next_run_resumes(
 
     let out = run_for_user(&pool, user_id, &mock).await?;
     assert!(
-        matches!(out, RunOutcome::Finished { ref outcome, items: 2, .. } if outcome == "partial")
+        matches!(out, RunOutcome::Finished { ref outcome, items: 2, .. } if *outcome == AiRunOutcome::Partial)
     );
     // Newest first: A and B were in the first chunk.
     assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
@@ -341,7 +337,7 @@ async fn a_failed_call_records_its_message_and_writes_nothing(pool: PgPool) -> a
     run_for_user(&pool, user_id, &Mock::new(50, vec![boom])).await?;
     assert_eq!(row(&pool, ids[0]).await.1, None);
     let run = last_run(&pool, user_id).await?.unwrap();
-    assert_eq!(run.outcome, "error");
+    assert_eq!(run.outcome, AiRunOutcome::Error);
     assert_eq!(run.error.as_deref(), Some("API key not valid"));
     Ok(())
 }
@@ -380,7 +376,7 @@ async fn an_item_the_model_skipped_is_sent_again_by_the_next_run(
     let out = run_for_user(&pool, user_id, &mock).await?;
 
     assert!(
-        matches!(out, RunOutcome::Finished { ref outcome, items: 1, batches: 1 } if outcome == "ok")
+        matches!(out, RunOutcome::Finished { ref outcome, items: 1, batches: 1 } if *outcome == AiRunOutcome::Ok)
     );
     assert_eq!(mock.requests().len(), 1, "not re-sent within the run");
     assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
@@ -411,7 +407,7 @@ async fn answers_received_before_an_interruption_are_kept(pool: PgPool) -> anyho
     let out = run_for_user(&pool, user_id, &mock).await?;
 
     assert!(
-        matches!(out, RunOutcome::Finished { ref outcome, items: 1, .. } if outcome == "partial")
+        matches!(out, RunOutcome::Finished { ref outcome, items: 1, .. } if *outcome == AiRunOutcome::Partial)
     );
     assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
     assert_eq!(remaining(&pool, user_id).await?, 2);
@@ -451,28 +447,8 @@ async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
     assert_eq!((tin, tout), (20, 4), "both paid calls are logged");
     assert!(started <= before + Duration::seconds(1));
     let run = last_run(&pool, user_id).await?.unwrap();
-    assert_eq!(run.outcome, "error");
+    assert_eq!(run.outcome, AiRunOutcome::Error);
     assert!(run.error.unwrap().contains("no_ai"));
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn a_run_left_running_is_closed_by_the_next_one(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
-    let dead = gripsou_core::repo::budget::ai::start_run(&pool, user_id, "mock:m1").await?;
-    assert!(
-        last_run(&pool, user_id).await?.is_none(),
-        "a live run is not the last result"
-    );
-
-    run_for_user(&pool, user_id, &Mock::new(50, vec![abstain_all()])).await?;
-
-    let outcome: String = sqlx::query_scalar("select outcome from budget_ai_run where id = $1")
-        .bind(dead)
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(outcome, "error");
-    assert_eq!(last_run(&pool, user_id).await?.unwrap().outcome, "ok");
     Ok(())
 }
 
@@ -483,7 +459,7 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
     let written = gripsou_core::repo::budget::ai::write_decisions(
         &pool,
         bob,
-        &[gripsou_core::budget::ai::Decision {
+        &[gripsou_core::repo::budget::ai::Decision {
             txn_id: ids[0],
             category_id: None,
             confidence: None,
@@ -516,7 +492,7 @@ async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
         gripsou_core::repo::transaction::upsert_transaction(
             &mut conn,
             acct,
-            &testkit::txn("acct-1", ext, kind, amount.parse().unwrap(), Some(desc)),
+            &testkit::txn("acct-1", ext, kind, amount.parse().unwrap()).described(desc),
         )
         .await?;
     }

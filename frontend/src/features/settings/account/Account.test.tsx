@@ -1,0 +1,288 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { SettingsAccount } from "./Account";
+import { authValue, testUser, renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
+
+const logoutSpy = vi.fn();
+const navigateSpy = vi.fn();
+
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigateSpy }));
+
+const SESSIONS = [
+  { id: "1", device: "Chrome on macOS", ip: "1.2.3.4", createdAt: 0, lastActiveAt: 0, remembered: true, current: true },
+  { id: "2", device: "Firefox on Linux", ip: null, createdAt: 0, lastActiveAt: 0, remembered: false, current: false },
+];
+
+const renderAccount = () =>
+  renderWithApp(<SettingsAccount />, {
+    auth: authValue({
+      user: testUser({ name: "Jules", email: "jules@gripsou.local", role: "admin" }),
+      logout: logoutSpy,
+    }),
+  });
+
+type Reply = () => Response;
+
+/** A fetch that answers `/auth/mfa/status` with the given two-factor state,
+ *  `/auth/sessions` with two sessions, and any other path from `routes` (by
+ *  path, after the `/api` prefix), else 204. */
+function stubAccount(
+  totp: boolean,
+  routes: Record<string, Reply> = {},
+  passkeys: { id: string; name: string; createdAt: number; lastUsedAt: number | null }[] = [],
+) {
+  const fetchMock = stubFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input).replace(/^\/api/, "");
+    if (path === "/auth/mfa/status") {
+      return jsonResponse({ totp, recoveryRemaining: 10, passkeys });
+    }
+    const reply = routes[path];
+    if (!reply && path === "/auth/sessions" && init?.method === "GET") return jsonResponse(SESSIONS);
+    return reply ? reply() : new Response(null, { status: 204 });
+  });
+  return fetchMock;
+}
+
+const twoFactorSwitch = () =>
+  screen.findByRole("switch", { name: "Two-factor authentication" });
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("SettingsAccount layout", () => {
+  it("opens the Edit profile window", async () => {
+    stubAccount(false);
+    renderAccount();
+    fireEvent.click(screen.getByRole("button", { name: "Edit profile" }));
+    expect(screen.getByRole("dialog", { name: "Edit profile" })).toBeInTheDocument();
+    await twoFactorSwitch();
+  });
+});
+
+describe("SettingsAccount two-factor row", () => {
+  it("shows the switch off and no gear when two-factor is off", async () => {
+    stubAccount(false);
+    renderAccount();
+    const sw = await twoFactorSwitch();
+    expect(sw).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+  });
+
+  it("shows the switch on and the gear when two-factor is on", async () => {
+    stubAccount(true);
+    renderAccount();
+    const sw = await twoFactorSwitch();
+    expect(sw).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Manage" })).toBeInTheDocument();
+  });
+
+  it("opens the setup window when the switch is turned on", async () => {
+    stubAccount(false);
+    renderAccount();
+    fireEvent.click(await twoFactorSwitch());
+    expect(screen.getByRole("dialog", { name: "Set up two-factor" })).toBeInTheDocument();
+    // Opening the window does not flip the switch: the server's state does.
+    expect(await twoFactorSwitch()).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("asks to confirm when the switch is turned off", async () => {
+    stubAccount(true);
+    renderAccount();
+    fireEvent.click(await twoFactorSwitch());
+    expect(screen.getByRole("dialog", { name: "Turn off two-factor?" })).toBeInTheDocument();
+    expect(await twoFactorSwitch()).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("opens the manage window from the gear", async () => {
+    stubAccount(true);
+    renderAccount();
+    await twoFactorSwitch();
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    expect(
+      screen.getByRole("dialog", { name: "Two-factor authentication" }),
+    ).toBeInTheDocument();
+    // The window's backup-code count comes from the same status answer.
+    expect(await screen.findByText("10 of 10 left")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount when two-factor's status can't be loaded", () => {
+  it("says so on both rows, offers a retry, and shows the switch once it loads", async () => {
+    let fail = true;
+    stubFetch(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/auth/sessions")) return jsonResponse(SESSIONS);
+      if (!url.endsWith("/auth/mfa/status")) return new Response(null, { status: 204 });
+      return fail ? new Response(null, { status: 500 }) : jsonResponse({ totp: false, recoveryRemaining: 0, passkeys: [] });
+    });
+    renderAccount();
+    expect(await screen.findAllByText("Couldn't load this")).toHaveLength(2);
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    fail = false;
+    fireEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
+    await twoFactorSwitch();
+    expect(screen.queryByText("Couldn't load this")).not.toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount passkeys row", () => {
+  const PASSKEY = { id: "p1", name: "MacBook", createdAt: 1_760_000_000_000, lastUsedAt: null };
+  it("shows only the add button when there are no passkeys", async () => {
+    stubAccount(false);
+    renderAccount();
+    expect(await screen.findByRole("button", { name: "Add passkey" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+  });
+
+  it("adds the gear when there are passkeys", async () => {
+    stubAccount(false, {}, [PASSKEY]);
+    renderAccount();
+    expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add passkey" })).toBeInTheDocument();
+  });
+
+  it("opens the passkeys list from the gear", async () => {
+    stubAccount(false, {}, [PASSKEY]);
+    renderAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getByRole("dialog", { name: "Passkeys" });
+    expect(await within(dialog).findByText("MacBook")).toBeInTheDocument();
+  });
+
+  it("opens the add window from the plus button", async () => {
+    stubAccount(false);
+    renderAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Add passkey" }));
+    expect(screen.getByRole("dialog", { name: "Add a passkey" })).toBeInTheDocument();
+  });
+
+  it("swaps the list for the add window when Add passkey is pressed inside the list", async () => {
+    stubAccount(false, {}, [PASSKEY]);
+    renderAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getByRole("dialog", { name: "Passkeys" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add passkey" }));
+    expect(screen.queryByRole("dialog", { name: "Passkeys" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add a passkey" })).toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount password", () => {
+  const set = (label: string, value: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+  async function openPasswordWindow() {
+    renderAccount();
+    await twoFactorSwitch();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    return screen.getByRole("dialog", { name: "Change password" });
+  }
+
+  it("posts to /auth/change-password, closes the window and says so on the row", async () => {
+    const fetchMock = stubAccount(false);
+    await openPasswordWindow();
+    expect(screen.queryByText("Password updated")).not.toBeInTheDocument();
+    set("Current password", "old");
+    set("New password", "newpass12");
+    set("Confirm new password", "newpass12");
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Change password" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/change-password",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("clears the success line when the window is opened again", async () => {
+    stubAccount(false);
+    await openPasswordWindow();
+    set("Current password", "old");
+    set("New password", "newpass12");
+    set("Confirm new password", "newpass12");
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.queryByText("Password updated")).not.toBeInTheDocument();
+  });
+
+  it("keeps the window open with a message when the current password is wrong", async () => {
+    stubAccount(false, {
+      "/auth/change-password": () => new Response("bad", { status: 400 }),
+    });
+    const dialog = await openPasswordWindow();
+    set("Current password", "old");
+    set("New password", "newpass12");
+    set("Confirm new password", "newpass12");
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(await within(dialog).findByText("Wrong current password.")).toBeInTheDocument();
+    expect(screen.queryByText("Password updated")).not.toBeInTheDocument();
+  });
+});
+
+describe("SettingsAccount sessions card", () => {
+  it("lists sessions, marks current, revokes others", async () => {
+    const fetchMock = stubAccount(false);
+    renderAccount();
+    // Phone and desktop layouts are both in the DOM (CSS picks one), so each
+    // session appears twice.
+    expect(await screen.findAllByText("Chrome on macOS")).not.toHaveLength(0);
+    expect(screen.getAllByText(/this device/i)).not.toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/auth/sessions/2", expect.objectContaining({ method: "DELETE" })),
+    );
+    await twoFactorSwitch();
+  });
+
+  it("logs out every other session", async () => {
+    const fetchMock = stubAccount(false);
+    renderAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Log out all other sessions" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/auth/sessions", expect.objectContaining({ method: "DELETE" })),
+    );
+    await twoFactorSwitch();
+  });
+});
+
+describe("SettingsAccount delete account", () => {
+  beforeEach(() => {
+    logoutSpy.mockReset();
+    navigateSpy.mockReset();
+  });
+
+  it("asks for the password before deleting", async () => {
+    stubAccount(false);
+    renderAccount();
+    await twoFactorSwitch();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+
+    const confirm = screen.getByRole("button", { name: "Delete my account" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/enter your password to confirm/i), {
+      target: { value: "hunter22" },
+    });
+    expect(confirm).toBeEnabled();
+  });
+
+  it("deletes via DELETE /auth/account, then logs out and redirects", async () => {
+    const fetchMock = stubAccount(false);
+    renderAccount();
+    await twoFactorSwitch();
+    fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
+    fireEvent.change(screen.getByLabelText(/enter your password to confirm/i), {
+      target: { value: "hunter22" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
+
+    // RTL's `waitFor`, not `vi.waitFor`: the delete mutation resolves and sets
+    // state between polls, and only RTL's wraps the wait in act(...).
+    await waitFor(() => expect(logoutSpy).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/account",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ password: "hunter22" }) }),
+    );
+    expect(navigateSpy).toHaveBeenCalledWith({ to: "/login" });
+  });
+});

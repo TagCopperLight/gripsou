@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import {
-  hashKey,
   useMutation,
   useQuery,
   useQueryClient,
@@ -8,9 +7,10 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
+import { api } from "./client";
 import { keys } from "./keys";
-import { transactionFilterFields } from "./filter";
+import { watchQuery } from "./watch";
+import { transactionFilterFields, type TransactionFilterQuery } from "./filter";
 import {
   afterAiRunFinished,
   afterAiRunProgress,
@@ -26,46 +26,38 @@ import {
   afterReviewChange,
   afterTransactionChange,
 } from "./invalidate";
-import type { Transaction, TransactionFilterQuery } from "./types";
-
-export type BudgetKind = "expense" | "income" | "neutral";
-
-/** One row of the user's own taxonomy. `defaultKey` survives only until the
- *  user renames the row, which is what makes a seeded name translatable and a
- *  renamed one verbatim. `systemKey` marks the undeletable pairing target. */
-export type BudgetCategory = {
-  id: string;
-  name: string;
-  defaultKey: string | null;
-  color: string;
-  icon: string | null;
-  hint: string | null;
-  kind: BudgetKind;
-  systemKey: string | null;
-  archived: boolean;
-  txCount: number;
-};
-
-export type BudgetTag = { id: string; name: string; color: string | null; txCount: number };
-
-/** The backend has no partial update: every write re-sends the whole row. */
-export type CategoryBody = Pick<
+import type {
+  ApplyToDescriptionBody,
+  AiStatus,
+  BudgetAiPriceReq,
   BudgetCategory,
-  "name" | "color" | "icon" | "hint" | "kind" | "archived"
->;
-export type TagBody = Pick<BudgetTag, "name" | "color">;
+  BudgetTag,
+  BulkBody,
+  CategoryBody,
+  SetBudgetAiSettingsReq,
+  TagBody,
+  Transaction,
+  TransactionPatch,
+  UndoReviewReq,
+} from "./wire";
+
+/** The whole body that re-sends what `c` holds, with `patch` over it: the
+ *  server has no partial update, so every write re-sends the whole row. */
+export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {}): CategoryBody {
+  return { name: c.name, color: c.color, icon: c.icon, hint: c.hint, kind: c.kind, archived: c.archived, ...patch };
+}
 
 export function useBudgetCategories() {
   return useQuery({
     queryKey: keys.budgetCategories(),
-    queryFn: ({ signal }) => getJson<BudgetCategory[]>("/budget/categories", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/categories", { signal }),
   });
 }
 
 export function useCreateBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CategoryBody) => postJson<BudgetCategory>("/budget/categories", body),
+    mutationFn: (body: CategoryBody) => api("POST /budget/categories", { body }),
     onSuccess: () => afterBudgetCategoryCreated(qc),
   });
 }
@@ -74,7 +66,7 @@ export function useUpdateBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: CategoryBody }) =>
-      patchJson<BudgetCategory>(`/budget/categories/${id}`, body),
+      api("PATCH /budget/categories/:id", { params: { id }, body }),
     onSuccess: () => afterBudgetCategoryChange(qc),
   });
 }
@@ -85,7 +77,7 @@ export function useUpdateBudgetCategory() {
 export function useReorderBudgetCategories() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => putJson<void>("/budget/categories/order", { ids }),
+    mutationFn: (ids: string[]) => api("PUT /budget/categories/order", { body: { ids } }),
     onMutate: async (ids: string[]) => {
       // An in-flight list refetch would otherwise land on top of the optimistic
       // order and bounce the row back.
@@ -110,7 +102,7 @@ export function useReorderBudgetCategories() {
 export function useDeleteBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteJson<void>(`/budget/categories/${id}`),
+    mutationFn: (id: string) => api("DELETE /budget/categories/:id", { params: { id } }),
     onSuccess: () => afterBudgetCategoryChange(qc),
   });
 }
@@ -118,14 +110,14 @@ export function useDeleteBudgetCategory() {
 export function useBudgetTags() {
   return useQuery({
     queryKey: keys.budgetTags(),
-    queryFn: ({ signal }) => getJson<BudgetTag[]>("/budget/tags", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/tags", { signal }),
   });
 }
 
 export function useCreateBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: TagBody) => postJson<BudgetTag>("/budget/tags", body),
+    mutationFn: (body: TagBody) => api("POST /budget/tags", { body }),
     onSuccess: () => afterBudgetTagCreated(qc),
   });
 }
@@ -134,7 +126,7 @@ export function useUpdateBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: TagBody }) =>
-      patchJson<BudgetTag>(`/budget/tags/${id}`, body),
+      api("PATCH /budget/tags/:id", { params: { id }, body }),
     onSuccess: () => afterBudgetTagChange(qc),
   });
 }
@@ -142,62 +134,78 @@ export function useUpdateBudgetTag() {
 export function useDeleteBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteJson<void>(`/budget/tags/${id}`),
+    mutationFn: (id: string) => api("DELETE /budget/tags/:id", { params: { id } }),
     onSuccess: () => afterBudgetTagChange(qc),
   });
 }
 
-type TransactionPatch = {
-  /** `null` clears the category. Omit the key to leave it untouched. */
-  categoryId?: string | null;
-  /** FULL REPLACE of the row's tag set — the server has no add/remove split,
-   *  so a caller toggling one tag sends the complete resulting list. */
-  tagIds?: string[];
-  checked?: boolean;
-  /** See `BulkBody.confirmBreakPairs`: recategorising a paired transfer is
-   *  refused until the caller confirms dissolving the pair. */
-  confirmBreakPairs?: boolean;
-  /** Which rows the returned `sameDescriptionCount` counts; see `SameDescriptionScope`. */
-  offerScope?: SameDescriptionScope;
-};
+/** A bulk write as the list makes it: `filter` is the list's own filter,
+ *  encoded on the way out. */
+export type BulkInput = Omit<BulkBody, "filter"> & { filter?: TransactionFilterQuery };
 
-/** Which rows sharing a description an "apply to all" reaches: every one, or
- *  — from the review queue — only those still in review. */
-export type SameDescriptionScope = "all" | "review";
-
-/** `pendingPairBreaks` set means refused, nothing written: see `WriteResult`. */
-type PatchResult = { sameDescriptionCount: number; pendingPairBreaks?: number | null };
-
-export type BulkBody = {
-  /** Explicit rows. Omit and pass `filter` for "select all shown". */
-  ids?: string[];
-  filter?: TransactionFilterQuery;
-  categoryId?: string | null;
-  addTagIds?: string[];
-  checked?: boolean;
-  /** The caller has seen how many internal-transfer pairs this write would
-   *  dissolve and wants it applied anyway. Without it, the server refuses such
-   *  a write and reports the count instead of applying it. */
-  confirmBreakPairs?: boolean;
-};
-
-/** A write that only ticks or unticks ✓ touches nothing but the rows. */
-function onlyChecked(body: object): boolean {
-  const fields = Object.entries(body)
-    .filter(([k, v]) => v !== undefined && k !== "ids" && k !== "filter")
-    .map(([k]) => k);
-  return fields.length === 1 && fields[0] === "checked";
+/** The flag goes on the wire only when set. */
+function withConfirm<B extends { confirmBreakPairs?: boolean }>({ confirmBreakPairs, ...rest }: B) {
+  return confirmBreakPairs ? { ...rest, confirmBreakPairs: true } : rest;
 }
 
-/** One row, applied to the cache before the request so the chip swaps at once.
- *  `optimistic` is the caller's view of the row after the write — the chip
- *  fields cannot be derived from the patch body, which carries only ids. */
+/** A write that only ticks or unticks ✓ touches nothing but the rows. */
+function onlyChecked(body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked"> & { tagIds?: string[] | null }) {
+  return body.checked != null && body.categoryId === undefined && body.tagIds == null && body.addTagIds == null;
+}
+
+/** A tag's place in the catalog; unknown tags sort after every known one. */
+function catalogRank(catalog: { id: string }[], id: string): number {
+  const i = catalog.findIndex((tag) => tag.id === id);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+/** The row as the server holds it once `body` is written, resolved from the
+ *  category and tag catalogs in the cache. A user's category write makes the
+ *  row `user`-sourced, which clears the confidence and the review flag; a
+ *  confirmed one unlinks the pair. The *other* half of that pair is not known
+ *  here: it arrives with the refetch. */
+function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Transaction {
+  const next = { ...row };
+  if (body.categoryId !== undefined) {
+    const categories = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
+    const c = categories?.find((x) => x.id === body.categoryId) ?? null;
+    Object.assign(next, {
+      categoryId: c?.id ?? null,
+      categoryName: c?.name ?? null,
+      categoryDefaultKey: c?.defaultKey ?? null,
+      categoryColor: c?.color ?? null,
+      categoryIcon: c?.icon ?? null,
+      categoryKind: c?.kind ?? null,
+      categorySource: c ? "user" : null,
+      categoryConfidence: null,
+      needsReview: false,
+      isTransfer: row.isTransfer && !body.confirmBreakPairs,
+    });
+  }
+  if (body.tagIds) {
+    const catalog = qc.getQueryData<BudgetTag[]>(keys.budgetTags()) ?? [];
+    // In the catalog's order, which is the order the server sends a row's
+    // tags back in, so a new tag doesn't jump when the response lands.
+    next.tags = body.tagIds
+      .map(
+        (id) =>
+          catalog.find((tag) => tag.id === id) ??
+          row.tags.find((tag) => tag.id === id) ?? { id, name: "", color: null },
+      )
+      .sort((a, b) => catalogRank(catalog, a.id) - catalogRank(catalog, b.id));
+  }
+  if (body.checked != null) next.checked = body.checked;
+  return next;
+}
+
+/** One row. With `optimistic`, the cached row shows the write before the
+ *  server answers, and goes back if the write fails or is refused. */
 export function usePatchTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
-      patchJson<PatchResult>(`/transactions/${id}`, body),
-    onMutate: async ({ id, optimistic }) => {
+    mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: boolean }) =>
+      api("PATCH /transactions/:id", { params: { id }, body: withConfirm(body) }),
+    onMutate: async ({ id, body, optimistic }) => {
       if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
       // Every cached filter combination may hold this row, so patch the whole
       // family rather than guessing which key the caller is reading.
@@ -208,7 +216,7 @@ export function usePatchTransaction() {
           ? {
               ...data,
               pages: data.pages.map((page) =>
-                page.map((row) => (row.id === id ? { ...row, ...optimistic } : row)),
+                page.map((row) => (row.id === id ? rowAfter(row, body, qc) : row)),
               ),
             }
           : data,
@@ -218,8 +226,6 @@ export function usePatchTransaction() {
     onError: (_err, _vars, ctx) => {
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
-    // Refused pending confirmation: nothing was written, so the row goes back
-    // to what it was while the caller asks.
     onSuccess: (res, _vars, ctx) => {
       if (!res?.pendingPairBreaks) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
@@ -229,33 +235,11 @@ export function usePatchTransaction() {
   });
 }
 
-/** A write the server refused pending confirmation reports `pendingPairBreaks`
- *  — how many internal-transfer pairs it would dissolve — and wrote nothing.
- *  Kept distinct from `updated: 0`: "wrote no rows" and "awaiting your
- *  confirmation" are different answers, and conflating them would silently
- *  swallow the confirmation step. */
-/** `ids` comes back from apply-to-description only: the rows it wrote. */
-type WriteResult = { updated: number; pendingPairBreaks?: number; ids?: string[] };
-
 export function useApplyToDescription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      categoryId,
-      scope,
-      confirmBreakPairs,
-    }: {
-      id: string;
-      categoryId: string | null;
-      scope?: SameDescriptionScope;
-      confirmBreakPairs?: boolean;
-    }) =>
-      postJson<WriteResult>(`/transactions/${id}/apply-to-description`, {
-        categoryId,
-        ...(scope ? { scope } : {}),
-        ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}),
-      }),
+    mutationFn: ({ id, ...body }: ApplyToDescriptionBody & { id: string }) =>
+      api("POST /transactions/:id/apply-to-description", { params: { id }, body: withConfirm(body) }),
     onSuccess: () => afterTransactionChange(qc),
   });
 }
@@ -267,97 +251,40 @@ export function useApplyToDescription() {
 export function useBulkTransactions() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: BulkBody) => {
-      const wire: Omit<BulkBody, "filter"> & { filter?: Record<string, unknown> } = {
-        ...body,
+    mutationFn: (body: BulkInput) => {
+      const wire: BulkBody = {
+        ...withConfirm(body),
         filter: body.filter ? transactionFilterFields(body.filter) : undefined,
       };
-      return postJson<WriteResult>("/transactions/bulk", wire);
+      return api("POST /transactions/bulk", { body: wire });
     },
     onSuccess: (_res, body) =>
       onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
   });
 }
 
-export type AiRunOutcome = "ok" | "partial" | "error";
-
-/** GET /budget/categorize/status. `configured`: the server has a provider with
- *  its key. The review threshold is the reader's own pref, not part of this. */
-export type AiStatus = {
-  configured: boolean;
-  running: boolean;
-  remaining: number;
-  reviewCount: number;
-  lastRun: { outcome: AiRunOutcome; error: string | null; startedAt: string } | null;
-};
-
-export type BudgetAiProvider = "jev";
-
-export type BudgetAiSettings = {
-  provider: BudgetAiProvider | null;
-  model: string | null;
-  available: BudgetAiProvider[];
-  defaults: Record<BudgetAiProvider, string>;
-};
-
-/** One model's spend: token counts are numbers, prices (per million tokens)
- *  and costs are decimal strings; `cost` is null until the model is priced. */
-export type BudgetAiModelUsage = {
-  model: string;
-  runs: number;
-  runsWithoutUsage: number;
-  tokensIn: number;
-  tokensOut: number;
-  priceIn: string | null;
-  priceOut: string | null;
-  cost: string | null;
-};
-
-export type BudgetAiUsage = {
-  currency: string;
-  models: BudgetAiModelUsage[];
-  /** Sum of the priced models only. */
-  totalCost: string;
-};
-
 /** Full replacement map of every model's prices, per million tokens. */
-export type BudgetAiPrices = Record<string, { in: string; out: string }>;
+export type BudgetAiPrices = Record<string, BudgetAiPriceReq>;
 
-const AI_STATUS_HASH = hashKey(keys.budgetAiStatus());
-const watchedClients = new WeakSet<QueryClient>();
-
-/** Installed once per client. A finished run has a durable timestamp, so a
- *  short run missed between polls still refreshes its dependent queries. */
-function watchAiRun(qc: QueryClient) {
-  if (watchedClients.has(qc)) return;
-  watchedClients.add(qc);
-  let last = qc.getQueryData<AiStatus>(keys.budgetAiStatus());
-  qc.getQueryCache().subscribe((event) => {
-    if (event.query.queryHash !== AI_STATUS_HASH) return;
-    if (event.type === "removed") {
-      last = undefined;
-      return;
-    }
-    if (event.type !== "updated" || event.action.type !== "success") return;
-    const next = event.query.state.data as AiStatus | undefined;
-    const prev = last;
-    last = next;
-    if (!prev || !next) return;
+/** A finished run has a durable timestamp, so a short run missed between
+ *  polls still refreshes its dependent queries. */
+function onAiStatusChange(qc: QueryClient) {
+  return (prev: AiStatus, next: AiStatus) => {
     const completed = next.lastRun !== null && next.lastRun.startedAt !== prev.lastRun?.startedAt;
     if ((prev.running && !next.running) || completed) void afterAiRunFinished(qc);
     else if (next.running && (next.remaining !== prev.remaining || next.reviewCount !== prev.reviewCount))
       afterAiRunProgress(qc);
-  });
+  };
 }
 
 /** Fast polls while running; idle checks discover automatic or short runs.
  *  The Overview fills in live; transaction rows catch up at completion. */
 export function useAiStatus() {
   const qc = useQueryClient();
-  useEffect(() => watchAiRun(qc), [qc]);
+  useEffect(() => watchQuery(qc, keys.budgetAiStatus(), onAiStatusChange(qc)), [qc]);
   return useQuery({
     queryKey: keys.budgetAiStatus(),
-    queryFn: ({ signal }) => getJson<AiStatus>("/budget/categorize/status", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/categorize/status", { signal }),
     refetchInterval: (q) => (q.state.data?.running ? 5000 : q.state.data?.configured ? 30_000 : false),
   });
 }
@@ -365,7 +292,7 @@ export function useAiStatus() {
 export function useRequestCategorize() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => postJson<void>("/budget/categorize", {}),
+    mutationFn: () => api("POST /budget/categorize"),
     onSettled: () => afterCategorizeRequested(qc),
   });
 }
@@ -374,7 +301,7 @@ export function useAcceptReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      postJson<{ sameDescriptionCount: number }>(`/budget/review/${id}/accept`, {}),
+      api("POST /budget/review/:id/accept", { params: { id } }),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -382,15 +309,8 @@ export function useAcceptReview() {
 export function useUndoReview() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      categoryId,
-      confidence,
-    }: {
-      id: string;
-      categoryId: string | null;
-      confidence: string | null;
-    }) => postJson<void>(`/budget/review/${id}/undo`, { categoryId, confidence }),
+    mutationFn: ({ id, ...body }: UndoReviewReq & { id: string }) =>
+      api("POST /budget/review/:id/undo", { params: { id }, body }),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -398,25 +318,25 @@ export function useUndoReview() {
 export function useBudgetAiSettings() {
   return useQuery({
     queryKey: keys.budgetAiSettings(),
-    queryFn: ({ signal }) => getJson<BudgetAiSettings>("/settings/budget-ai", { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai", { signal }),
   });
 }
 
 export function useSetBudgetAiSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { provider: BudgetAiProvider | null; model: string | null }) =>
-      patchJson<void>("/settings/budget-ai", body),
+    mutationFn: (body: SetBudgetAiSettingsReq) =>
+      api("PATCH /settings/budget-ai", { body }),
     onSettled: () => afterBudgetAiSettingsChange(qc),
   });
 }
 
 /** The models the provider offers, asked of the provider itself. Not
  *  retried: a failure falls back to typing the name. */
-export function useBudgetAiModels(provider: BudgetAiProvider | null) {
+export function useBudgetAiModels(provider: string | null) {
   return useQuery({
     queryKey: keys.budgetAiModels(provider ?? ""),
-    queryFn: ({ signal }) => getJson<string[]>(`/settings/budget-ai/models/${provider}`, { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai/models/:provider", { params: { provider: provider ?? "" }, signal }),
     enabled: provider !== null,
     retry: false,
     staleTime: 60 * 60 * 1000,
@@ -426,14 +346,14 @@ export function useBudgetAiModels(provider: BudgetAiProvider | null) {
 export function useBudgetAiUsage() {
   return useQuery({
     queryKey: keys.budgetAiUsage(),
-    queryFn: ({ signal }) => getJson<BudgetAiUsage>("/settings/budget-ai/usage", { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai/usage", { signal }),
   });
 }
 
 export function useSetBudgetAiPrices() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (prices: BudgetAiPrices) => putJson<void>("/settings/budget-ai/prices", prices),
+    mutationFn: (prices: BudgetAiPrices) => api("PUT /settings/budget-ai/prices", { body: prices }),
     onSettled: () => afterBudgetAiPricesChange(qc),
   });
 }

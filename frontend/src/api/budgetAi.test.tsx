@@ -1,48 +1,29 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 
-import {
-  useAiStatus,
-  useRequestCategorize,
-  useSetBudgetAiSettings,
-  useUndoReview,
-  type AiStatus,
-} from "./budget";
+import { useAiStatus, useRequestCategorize, useSetBudgetAiSettings, useUndoReview } from "./budget";
+import { useBudgetSummary } from "./overview";
+import { useTransactions } from "./transactions";
+import type { AiStatus } from "./wire";
 import { keys } from "./keys";
-
-function wrapper() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
-}
+import { appWrapper, requestsTo, stubFetch } from "../test/kit";
 
 function stub(body: unknown, status = 200) {
   const empty = status === 204 || status === 202;
-  const fetchMock = vi.fn(async () =>
+  const fetchMock = stubFetch(async () =>
     new Response(empty ? null : JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json" },
-    }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+    }));
   return fetchMock;
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("budget AI client", () => {
-  it("reads the run status", async () => {
-    stub({ configured: true, running: false, remaining: 0, reviewCount: 3, lastRun: null });
-    const { result } = renderHook(() => useAiStatus(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.data?.reviewCount).toBe(3));
-  });
-
   it("sends the original guess back on undo", async () => {
     const fetchMock = stub(null, 204);
-    const { result } = renderHook(() => useUndoReview(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useUndoReview(), appWrapper());
     await result.current.mutateAsync({ id: "t1", categoryId: "c1", confidence: "0.40" });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(String(url)).toContain("/budget/review/t1/undo");
@@ -51,7 +32,7 @@ describe("budget AI client", () => {
 
   it("accepts an empty 202 when a run is requested", async () => {
     const fetchMock = stub(null, 202);
-    const { result } = renderHook(() => useRequestCategorize(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useRequestCategorize(), appWrapper());
     await expect(result.current.mutateAsync()).resolves.toBeUndefined();
     const [url] = fetchMock.mock.calls[0] as unknown as [string];
     expect(String(url)).toContain("/budget/categorize");
@@ -59,7 +40,7 @@ describe("budget AI client", () => {
 
   it("accepts an empty 204 when the admin saves the provider", async () => {
     const fetchMock = stub(null, 204);
-    const { result } = renderHook(() => useSetBudgetAiSettings(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useSetBudgetAiSettings(), appWrapper());
     await expect(
       result.current.mutateAsync({ provider: "jev", model: null }),
     ).resolves.toBeUndefined();
@@ -70,57 +51,92 @@ describe("budget AI client", () => {
 });
 
 describe("refreshing as an AI run moves on", () => {
+  const SEPTEMBER = { mode: "month", month: "2026-09" } as const;
   let status: AiStatus;
+  let holdSummary: Promise<void> | null;
 
   function setup() {
     status = { configured: true, running: true, remaining: 10, reviewCount: 0, lastRun: null };
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(status)));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const spy = vi.spyOn(qc, "invalidateQueries");
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-    );
-    // Two readers at once, as the Budget page and its banner are.
-    const { result } = renderHook(() => [useAiStatus(), useAiStatus()], { wrapper });
-    const refreshed = (key: readonly unknown[]) =>
-      spy.mock.calls.filter(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(key)).length;
+    holdSummary = null;
+    const fetchMock = stubFetch(async (url: string) => {
+      if (url.includes("/budget/categorize/status")) return Response.json(status);
+      if (url.includes("/budget/summary")) {
+        if (holdSummary) await holdSummary;
+        return Response.json({});
+      }
+      return Response.json([]);
+    });
+    const { client: qc, wrapper } = appWrapper();
+    // Two status readers at once, as the Budget page and its banner are,
+    // beside the figures and the transaction list.
+    const { result } = renderHook(() => ({
+      statuses: [useAiStatus(), useAiStatus()],
+      summary: useBudgetSummary(SEPTEMBER),
+      list: useTransactions({}),
+    }), { wrapper });
+    const reads = (path: string) => requestsTo(fetchMock, path).length;
     const poll = async (next: Partial<AiStatus>) => {
       status = { ...status, ...next };
       await act(() => qc.refetchQueries({ queryKey: keys.budgetAiStatus() }));
+      await waitFor(() => expect(qc.isFetching()).toBe(0));
     };
-    return { result, spy, refreshed, poll };
+    const loaded = () => waitFor(() => {
+      expect(result.current.statuses[0].data).toBeDefined();
+      expect(result.current.list.isSuccess).toBe(true);
+    });
+    return { qc, result, reads, poll, loaded };
   }
 
-  it("refreshes the figures once per change, however many components read the status", async () => {
-    const { result, refreshed, poll } = setup();
-    await waitFor(() => expect(result.current[0].data?.remaining).toBe(10));
+  it("refetches the figures once per change, however many components read the status", async () => {
+    const { reads, poll, loaded } = setup();
+    await loaded();
+    await waitFor(() => expect(reads("/budget/summary")).toBe(1));
 
     await poll({ remaining: 8 });
-    expect(refreshed(keys.budgetSummary())).toBe(1);
+    expect(reads("/budget/summary")).toBe(2);
 
     // Nothing moved: nothing to refresh.
     await poll({});
-    expect(refreshed(keys.budgetSummary())).toBe(1);
+    expect(reads("/budget/summary")).toBe(2);
   });
 
-  it("refreshes the list once when the run ends", async () => {
-    const { result, refreshed, poll } = setup();
-    await waitFor(() => expect(result.current[0].data?.running).toBe(true));
+  it("only marks the list stale while the run goes on, and refetches it once when it ends", async () => {
+    const { qc, reads, poll, loaded } = setup();
+    await loaded();
+
+    await poll({ remaining: 8 });
+    expect(reads("/transactions")).toBe(1);
+    expect(qc.getQueryState(keys.transactions({}))?.isInvalidated).toBe(true);
 
     await poll({ running: false, remaining: 0, reviewCount: 4 });
-    expect(refreshed(keys.transactions())).toBe(1);
-    expect(refreshed(keys.budgetSummary())).toBe(1);
+    expect(reads("/transactions")).toBe(2);
+  });
+
+  it("lets a figures read already in flight finish instead of starting it again", async () => {
+    const { qc, result, reads, loaded } = setup();
+    await loaded();
+    await waitFor(() => expect(result.current.summary.isSuccess).toBe(true));
+    let release!: () => void;
+    holdSummary = new Promise((r) => { release = r; });
+    const inFlight = qc.refetchQueries({ queryKey: keys.budgetSummary() });
+    await waitFor(() => expect(reads("/budget/summary")).toBe(2));
+
+    status = { ...status, remaining: 8 };
+    await act(() => qc.refetchQueries({ queryKey: keys.budgetAiStatus() }));
+    await waitFor(() => expect(result.current.statuses[0].data?.remaining).toBe(8));
+    expect(reads("/budget/summary")).toBe(2);
+    await act(async () => { release(); await inFlight; });
   });
 
   it("does not refresh again after the user's own write when no run is going", async () => {
-    const { result, spy, poll } = setup();
+    const { reads, poll, loaded } = setup();
     status = { ...status, running: false, remaining: 0 };
-    await waitFor(() => expect(result.current[0].data).toBeDefined());
+    await loaded();
     await poll({});
-    spy.mockClear();
+    const before = [reads("/budget/summary"), reads("/transactions")];
 
     // An accept moves the queue count; its own mutation already refreshed.
     await poll({ reviewCount: 2 });
-    expect(spy).not.toHaveBeenCalled();
+    expect([reads("/budget/summary"), reads("/transactions")]).toEqual(before);
   });
 });

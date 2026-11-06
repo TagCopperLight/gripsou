@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select h.id as \"id!\", h.account_id as \"account_id!\", a.currency as \"account_currency!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1 and c.user_id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "holding",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "holding",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "account_currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bf0de01ee01ed22cd61bb0616e3b88eac92ed994796351cfca3f5b91ce3e2e43"
+}

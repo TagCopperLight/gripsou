@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                delete from lot\n                where holding_id = $1 and source = $3 and id = any($2)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fcba69908638265ba01ec1df67140b5b25df5ef950038cfe6ecde3e798e94c5c"
+}

@@ -1,13 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
-import { hasSyncing, type ProviderGroup } from "./types";
+import type { ProviderGroup } from "./wire";
+import { anySyncing } from "../lib/connectionState";
+import type { PrefsPatch } from "../lib/prefsPatch";
 
-// What each domain event makes stale, named once.
-//
-// A mutation should call one of these rather than listing keys itself — the
-// list is the thing that kept drifting. Adding a new
-// screen means adding its key to the groups it belongs to, here, not auditing
-// every mutation.
+// What each domain event makes stale, named once. A mutation calls one of
+// these rather than listing keys itself, so a screen's key is added to the
+// groups it belongs to here, not to every mutation.
 
 function invalidateAll(qc: QueryClient, groups: readonly (readonly unknown[])[]) {
   return Promise.all(groups.map(async (queryKey) => {
@@ -44,6 +43,7 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetCategories(),
     keys.budgetTags(),
     keys.budgetSummary(),
@@ -59,7 +59,7 @@ export async function afterSyncRequested(qc: QueryClient) {
   const before = qc.getQueryData<ProviderGroup[]>(keys.connections());
   await invalidateAll(qc, [keys.connections()]);
   const next = qc.getQueryData<ProviderGroup[]>(keys.connections());
-  if (!before && next && !hasSyncing(next)) await afterSyncFinished(qc);
+  if (!before && next && !anySyncing(next)) await afterSyncFinished(qc);
 }
 
 // A failed connect: the server deleted the pending connection.
@@ -98,6 +98,7 @@ export function afterLotsSaved(qc: QueryClient, holdingId: string) {
     keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.netWorth(),
     keys.accountSeries(),
     keys.holdingLots(holdingId),
@@ -142,6 +143,7 @@ export function afterBudgetCategoryChange(qc: QueryClient) {
     keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiStatus(),
@@ -161,6 +163,7 @@ export function afterTransactionChange(qc: QueryClient) {
     keys.budgetTags(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiStatus(),
@@ -181,15 +184,10 @@ export function afterReviewChange(qc: QueryClient) {
     keys.budgetAiStatus(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
   ]);
-}
-
-// The review threshold decides which AI guesses "need review": the flag on
-// each row, the needs-review filter's counts and the review queue's size.
-export function afterReviewThresholdChange(qc: QueryClient) {
-  return invalidateAll(qc, [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()]);
 }
 
 // Asking for a run: the server answers 202 and works in the background, so only
@@ -212,6 +210,7 @@ export function afterAiRunFinished(qc: QueryClient) {
     keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiUsage(),
@@ -236,4 +235,27 @@ export function afterProviderChange(qc: QueryClient) {
 // A key decides whether its provider works: the AI's provider list reads it.
 export function afterApiKeyChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.apiKeys(), keys.budgetAiSettings(), keys.budgetAiStatus()]);
+}
+
+// What a saved preference makes stale. The server converts figures into the
+// currency and dates them in the time zone, so those two refetch everything;
+// the formatting prefs are applied in the browser and stale nothing.
+const PREF_EFFECTS: { [K in keyof PrefsPatch]?: "everything" | readonly (readonly unknown[])[] } = {
+  currency: "everything",
+  timeZone: "everything",
+  // The threshold decides which AI guesses "need review": the flag on each
+  // row, the needs-review filter's counts and the review queue's size.
+  budgetAiThreshold: [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()],
+  // Opting in starts a run on the server, which the status shows.
+  budgetAiEnabled: [keys.budgetAiStatus()],
+};
+
+export async function afterPrefsSaved(qc: QueryClient, patch: PrefsPatch) {
+  const effects = (Object.keys(patch) as (keyof PrefsPatch)[]).map((key) => PREF_EFFECTS[key]);
+  if (effects.includes("everything")) {
+    await qc.cancelQueries();
+    await qc.invalidateQueries();
+    return;
+  }
+  await invalidateAll(qc, effects.flatMap((groups) => (Array.isArray(groups) ? groups : [])));
 }

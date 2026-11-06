@@ -1,48 +1,52 @@
-import { reply, type Router } from "../router.ts";
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
+import { fail, reply, type Router } from "../router.ts";
+import { DEFAULT_RANGE } from "../../src/api/wire.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
-import { id } from "../data/util.ts";
+import { connectionRow } from "../data/rows.ts";
+import en from "../../src/i18n/en.json" with { type: "json" };
+
+const owned = (store: Store, holdingId: string) => v.holdings(store).some((h) => h.id === holdingId);
 
 export function portfolioRoutes(r: Router<Store>): void {
-  r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
-  r.route("GET", "/accounts", ({ store }) => v.accounts(store));
-  r.route("GET", "/accounts/series", ({ store, query }) => v.accountSeries(store, query.get("range") ?? "6mo"));
-  r.route("PATCH", "/accounts/:id", ({ store, params, body }) => {
+  r.route("GET /dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.range ?? DEFAULT_RANGE));
+  r.route("GET /accounts", ({ store }) => v.accounts(store));
+  r.route("GET /accounts/series", ({ store, query }) => v.accountSeries(store, query.range ?? DEFAULT_RANGE));
+  r.route("PATCH /accounts/:id", ({ store, params, body: { name, typeKey, color } }) => {
     const account = store.accounts.find((a) => a.id === params.id);
-    if (!account) return reply(404);
-    if (store.accountSaveFails) return reply(500, { error: "forced by the review panel" });
-    const { name, typeKey, color } = body as { name: string; typeKey: string; color: string };
+    if (!account) return fail(404, "account not found");
     Object.assign(account, { name, typeKey, color });
-    return reply(204);
+    return { id: account.id, name, color, typeKey };
   });
-  r.route("GET", "/account-types", () => ["checking", "savings", "pea", "brokerage", "life_insurance", "retirement", "multiple"]);
-  r.route("GET", "/connections", ({ store }) => v.connections(store));
-  r.route("POST", "/sync", ({ store }) => {
-    for (const c of store.connections) if (c.status !== "pending") v.syncConnection(store, c.id);
-    return reply(202);
+  // The labelled types: a backend test pins them to the seeded `account_type` rows.
+  r.route("GET /account-types", () => Object.keys(en.accountTypes));
+  r.route("GET /connections", ({ store }) => v.connections(store));
+  r.route("POST /sync", ({ store }) => {
+    const ready = store.connections.filter((c) => c.status !== "pending" && c.status !== "syncing");
+    for (const c of ready) v.syncConnection(store, c.id);
+    return reply(202, { started: ready.length });
   });
-  r.route("POST", "/connections/:id/sync", ({ store, params }) => {
-    v.syncConnection(store, params.id);
-    return reply(202);
+  r.route("POST /connections/:id/sync", ({ store, params }) => {
+    const c = store.connections.find((x) => x.id === params.id);
+    if (!c) return fail(404, "connection not found");
+    if (c.status === "syncing") return fail(409, "connection is already syncing");
+    v.syncConnection(store, c.id);
+    return reply(202, { id: c.id, status: c.status, lastSyncAt: c.lastSyncAt, lastError: c.lastError });
   });
   // No provider page here: the new bank shows up at once, syncs for a few
   // seconds, then is healthy with no account.
-  r.route("POST", "/connections/init", ({ store, body }) => {
-    const n = store.connections.length + 1;
-    const connectionId = id("con", 900 + n);
-    store.connections.push({
-      providerKey: (body as { providerKey: string }).providerKey, id: connectionId, displayName: "Banque Populaire",
-      status: "syncing", lastSyncAt: null, lastError: null, logo: null, canManage: true, health: null,
-    });
+  r.route("POST /connections/init", ({ store, body: { providerKey } }) => {
+    const connectionId = store.ids.next("connection");
+    store.connections.push(connectionRow(connectionId, "Banque Populaire", {
+      providerKey, status: "syncing", lastSyncAt: null, health: null,
+    }));
     v.syncConnection(store, connectionId);
-    return { connectionId, redirectUrl: null };
+    return reply(201, { connectionId, redirectUrl: null });
   });
   // Back from the bank's page: an `error` from the provider fails it.
-  r.route("POST", "/connections/complete", ({ body }) =>
-    (body as { params: Record<string, string> }).params.error ? reply(400, { error: "provider error" }) : reply(204),
+  r.route("POST /connections/complete", ({ body }) =>
+    body.params.error ? fail(400, "provider error") : reply(204),
   );
-  r.route("DELETE", "/connections/:id", ({ store, params }) => {
+  r.route("DELETE /connections/:id", ({ store, params }) => {
     const gone = new Set(store.accounts.filter((a) => a.connectionId === params.id).map((a) => a.id));
     store.connections = store.connections.filter((c) => c.id !== params.id);
     store.accounts = store.accounts.filter((a) => !gone.has(a.id));
@@ -51,16 +55,25 @@ export function portfolioRoutes(r: Router<Store>): void {
     return reply(204);
   });
   // Powens' management page doesn't exist here: the tab opens on a blank page.
-  r.route("POST", "/connections/:id/manage", () => ({ redirectUrl: "about:blank" }));
-  r.route("GET", "/holdings", ({ store }) => v.holdings(store));
-  r.route("GET", "/investments/returns", ({ store }) => v.returns(store));
-  r.route("GET", "/holdings/:id/prices", ({ store, params, query }) => v.prices(store, params.id, query.get("range") ?? "1y"));
-  r.route("GET", "/holdings/:id/lots", ({ store, params }) => v.lotsOf(store, params.id));
-  r.route("GET", "/holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
-  r.route("POST", "/holdings/:id/lots/preview", ({ store, params, body }) =>
-    v.previewLots(store, params.id, (body as { rows: SaveLotAdd[] }).rows));
-  r.route("PUT", "/holdings/:id/lots", ({ store, params, body }) => {
-    v.saveLots(store, params.id, body as SaveLotsInput);
+  r.route("POST /connections/:id/manage", () => ({ redirectUrl: "about:blank" }));
+  r.route("GET /holdings", ({ store }) => v.holdings(store));
+  r.route("GET /investments/returns", ({ store }) => v.returns(store));
+  r.route("GET /holdings/:id/prices", ({ store, params, query }) =>
+    owned(store, params.id) ? v.prices(store, params.id, query.range ?? DEFAULT_RANGE) : fail(404, "unknown holding"));
+  r.route("GET /holdings/:id/lots", ({ store, params }) =>
+    owned(store, params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
+  r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) =>
+    owned(store, params.id) ? (store.lotSuggestions[params.id] ?? []) : fail(404, "unknown holding"));
+  r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) => {
+    const refused = v.refusedLot(body.rows);
+    if (refused) return fail(400, refused);
+    return owned(store, params.id) ? v.previewLots(store, params.id, body.rows) : fail(404, "unknown holding");
+  });
+  r.route("PUT /holdings/:id/lots", ({ store, params, body }) => {
+    const refused = v.refusedLot(body.adds ?? []);
+    if (refused) return fail(400, refused);
+    if (!owned(store, params.id)) return fail(404, "unknown holding");
+    v.saveLots(store, params.id, body);
     return reply(204);
   });
 }

@@ -1,5 +1,6 @@
 import { beforeEach, afterEach } from "vitest";
-import { DEFAULT_PREFS, setPrefs } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { setPrefs } from "./prefs";
 
 // These calendar-arithmetic fixtures use local Date constructors.
 beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
@@ -8,12 +9,9 @@ afterEach(() => setPrefs(DEFAULT_PREFS));
 import { describe, it, expect } from "vitest";
 
 import {
-  addMonths,
   anchorMonth,
   currentMonth,
-  monthBounds,
   monthLabel,
-  periodBounds,
   periodLabel,
   presetRange,
 } from "./period";
@@ -28,38 +26,6 @@ describe("currentMonth", () => {
   });
 });
 
-describe("addMonths", () => {
-  it("steps forward inside a year", () => {
-    expect(addMonths("2026-09", 1)).toBe("2026-10");
-  });
-
-  it("steps backward across a year boundary", () => {
-    expect(addMonths("2026-01", -1)).toBe("2025-12");
-  });
-
-  it("steps forward across a year boundary", () => {
-    expect(addMonths("2026-12", 1)).toBe("2027-01");
-  });
-
-  it("steps by more than twelve", () => {
-    expect(addMonths("2026-09", -13)).toBe("2025-08");
-  });
-});
-
-describe("monthBounds", () => {
-  it("spans a 30-day month", () => {
-    expect(monthBounds("2026-09")).toEqual({ from: "2026-09-01", to: "2026-09-30" });
-  });
-
-  it("spans a leap February", () => {
-    expect(monthBounds("2024-02")).toEqual({ from: "2024-02-01", to: "2024-02-29" });
-  });
-
-  it("spans a non-leap February", () => {
-    expect(monthBounds("2026-02")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
-  });
-});
-
 describe("monthLabel", () => {
   it("names the month in English", () => {
     expect(monthLabel("2026-09", "en")).toBe("September 2026");
@@ -70,26 +36,7 @@ describe("monthLabel", () => {
   });
 });
 
-describe("periodBounds", () => {
-  it("expands a month to its first and last day", () => {
-    expect(periodBounds({ mode: "month", month: "2026-09" })).toEqual({
-      from: "2026-09-01",
-      to: "2026-09-30",
-    });
-  });
-
-  it("passes a range through untouched", () => {
-    expect(
-      periodBounds({ mode: "range", from: "2026-03-14", to: "2026-04-02" }),
-    ).toEqual({ from: "2026-03-14", to: "2026-04-02" });
-  });
-});
-
 describe("anchorMonth", () => {
-  it("is the month itself in month mode", () => {
-    expect(anchorMonth({ mode: "month", month: "2026-09" })).toBe("2026-09");
-  });
-
   it("is the month containing `to` in range mode", () => {
     // A range has no anchor of its own, so the trend anchors on the
     // month its end date falls in rather than disappearing.
@@ -100,10 +47,6 @@ describe("anchorMonth", () => {
 });
 
 describe("periodLabel", () => {
-  it("labels a month by name", () => {
-    expect(periodLabel({ mode: "month", month: "2026-09" }, "en")).toBe("September 2026");
-  });
-
   it("labels a range as two formatted dates", () => {
     // Uses the user's date-format preference, whose default pattern is
     // DD/MM/YYYY.
@@ -127,11 +70,6 @@ describe("presetRange", () => {
       from: "2026-02-28",
       to: "2026-05-31",
     });
-  });
-
-  it("runs 'this year' to today and 'last year' over the whole year", () => {
-    expect(presetRange("thisYear", today)).toEqual({ from: "2026-01-01", to: "2026-09-21" });
-    expect(presetRange("lastYear", today)).toEqual({ from: "2025-01-01", to: "2025-12-31" });
   });
 
   it("keeps 'this month' as the whole calendar month", () => {
