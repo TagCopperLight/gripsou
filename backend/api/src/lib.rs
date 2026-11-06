@@ -30,7 +30,7 @@ use tower_http::trace::TraceLayer;
 pub use auth::passkey::Passkeys;
 
 use crate::auth::throttle::Throttles;
-use crate::error::Json;
+use crate::error::{ApiError, Json};
 use gripsou_core::crypto::EncryptionKey;
 
 #[derive(Clone, FromRef)]
@@ -79,6 +79,8 @@ pub fn router(
     let api = member_routes()
         .into_router()
         .merge(admin::router(state.clone()))
+        // An unknown API path is an API error, not the SPA's index.html.
+        .fallback(|| async { ApiError::NotFound("no such API route") })
         .with_state(state);
 
     // Per-request span: every line a handler logs carries request_id, method,

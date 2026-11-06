@@ -31,6 +31,7 @@ async fn public_health_auth_static_fallback_and_webhook_limit() {
         ("/api/holdings", StatusCode::UNAUTHORIZED),
         ("/api/auth/mfa/status", StatusCode::UNAUTHORIZED),
         ("/bookmarked/path", StatusCode::NOT_FOUND),
+        ("/api/nope", StatusCode::NOT_FOUND),
     ] {
         let response = app
             .clone()
@@ -39,6 +40,33 @@ async fn public_health_auth_static_fallback_and_webhook_limit() {
             .unwrap();
         assert_eq!(response.status(), status);
     }
+    // An unknown API path answers like any API error, not with the SPA.
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/nope")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = axum::body::to_bytes(r.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&body).contains("SPA fixture"));
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::METHOD_NOT_ALLOWED);
     // Passwordless sign-in starts without a session (the unused pool makes
     // it fail later, but never as unauthorised).
     let r = app
