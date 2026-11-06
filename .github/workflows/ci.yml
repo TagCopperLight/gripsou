@@ -15,7 +15,7 @@ concurrency:
 
 # The checks themselves live in ci.sh, so a local run is the same as this one.
 jobs:
-  backend:
+  backend-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -25,7 +25,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - run: ./ci.sh backend
+      - run: ./ci.sh backend-lint
+
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - run: ./ci.sh backend-test
 
   frontend:
     runs-on: ubuntu-latest
