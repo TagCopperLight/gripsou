@@ -13,6 +13,8 @@ pub enum ReviewWrite {
     NotFound,
     /// The row is not in a state this action applies to.
     Refused,
+    /// The confidence is outside 0 to 1.
+    BadConfidence,
 }
 
 /// Tells a refused write apart from someone else's row. Runs only after a
@@ -76,8 +78,7 @@ pub async fn accept(
 ///
 /// The state is checked by the update itself, not read beforehand: a sync
 /// that pairs the row in between makes the update match nothing, rather than
-/// turning half a transfer back into an AI guess. `confidence` is the
-/// caller's to validate (0 to 1).
+/// turning half a transfer back into an AI guess.
 pub async fn undo(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -85,6 +86,9 @@ pub async fn undo(
     category_id: Option<Uuid>,
     confidence: Option<Decimal>,
 ) -> Result<ReviewWrite, CoreError> {
+    if confidence.is_some_and(|c| c < Decimal::ZERO || c > Decimal::ONE) {
+        return Ok(ReviewWrite::BadConfidence);
+    }
     let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let n = sqlx::query!(
         r#"

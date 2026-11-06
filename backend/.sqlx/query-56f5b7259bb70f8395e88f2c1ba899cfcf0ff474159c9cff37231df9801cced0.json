@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id from budget_category where id = $1 and user_id = $2 for share",
+  "query": "select id from budget_category where id = any($1) and user_id = $2 for update",
   "describe": {
     "columns": [
       {
@@ -17,7 +17,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
+        "UuidArray",
         "Uuid"
       ]
     },
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "ea1913813d310d848f36ad35d14f7d42dfb5c06024a3ad943bfe865c7739ff25"
+  "hash": "56f5b7259bb70f8395e88f2c1ba899cfcf0ff474159c9cff37231df9801cced0"
 }

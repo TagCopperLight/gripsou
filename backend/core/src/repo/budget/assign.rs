@@ -9,86 +9,42 @@
 //! a timid heuristic, but it can still false-match two unrelated movements of
 //! the same amount. What must not survive the correction is the link: a row
 //! still pointing at a counterpart that is no longer a transfer is a
-//! half-transfer that nets against nothing. So every category writer here runs
-//! in a transaction and calls [`dissolve_pairs`] with the ids it actually
-//! wrote — unless the new category is neutral ([`keeps_pairs`]): Savings or
-//! Investments instead of Internal transfer is a finer label for the same
-//! movement, which still counts toward nothing either way. Both halves lose
-//! `transfer_pair_id`; the untouched half keeps its category and its
-//! `category_source = 'pair'`, which surfaces it to the reader as an orphaned
-//! transfer, counts as uncategorised in the Overview, and leaves it eligible
-//! for the next pairing pass.
+//! half-transfer that nets against nothing. So a category write unlinks both
+//! halves of every pair it touches — unless the new category is neutral:
+//! Savings or Investments instead of Internal transfer is a finer label for
+//! the same movement, which still counts toward nothing either way. The
+//! untouched half keeps its category and its `category_source = 'pair'`,
+//! which surfaces it to the reader as an orphaned transfer, counts as
+//! uncategorised in the Overview, and leaves it eligible for the next pairing
+//! pass.
 //!
 //! What the API calls ([`patch_transaction`], [`bulk_apply`],
-//! [`apply_to_description`]) each run as one database transaction: they lock
-//! the rows they target, check that every category and tag named is the
-//! user's, ask for confirmation before dissolving a pair, and only then write.
-//! A refused request writes nothing. The private writers below them are the
-//! confirmed, unchecked building blocks.
+//! [`apply_to_description`]) each run as one database transaction under the
+//! user's write lock, through the same steps: lock the rows they target
+//! ([`lock_owned`]), check the category and tags named ([`gate`]), ask for
+//! confirmation before dissolving a pair, and only then write. A refused
+//! request writes nothing.
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// Unlinks every internal-transfer pair that `ids` takes part in — both the
-/// listed row and its counterpart. Ids the caller did not just write, or that
-/// carry no pair, are no-ops.
-///
-/// Ownership is the caller's business: it passes only ids its own
-/// user-scoped UPDATE returned. The counterpart needs no separate check, since
-/// pairing only ever matches two accounts of the same user.
-async fn dissolve_pairs(conn: &mut sqlx::PgConnection, ids: &[Uuid]) -> Result<(), CoreError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    sqlx::query!(
-        r#"
-        with victims as (
-            select id, transfer_pair_id
-            from transaction
-            where id = any($1) and transfer_pair_id is not null
-        )
-        update transaction t
-           set transfer_pair_id = null
-         where t.id in (select id from victims)
-            or t.id in (select transfer_pair_id from victims)
-        "#,
-        ids,
-    )
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
-/// Whether writing `category_id` leaves the pairs it touches alone: a
-/// neutral category counts toward nothing, as a pair does, so filing one half
-/// under it changes no total and the pair stands. Clearing the category does
-/// not keep them — an uncategorised half is not a transfer.
-async fn keeps_pairs(
-    conn: &mut sqlx::PgConnection,
-    category_id: Option<Uuid>,
-) -> Result<bool, CoreError> {
-    let Some(category_id) = category_id else {
-        return Ok(false);
-    };
-    let neutral = sqlx::query_scalar!(
-        r#"select kind = 'neutral' as "neutral!" from budget_category where id = $1"#,
-        category_id,
-    )
-    .fetch_optional(&mut *conn)
-    .await?;
-    Ok(neutral.unwrap_or(false))
-}
-
-/// Why a write was not made, or what it is waiting for.
+/// What a write did, or what it is waiting for.
 #[derive(Debug, PartialEq, Eq)]
 pub enum WriteOutcome<T> {
     Done(T),
-    /// Nothing was written: the write would unlink this many of the user's
-    /// rows from their internal-transfer pairs, and the caller has not
-    /// confirmed. Counts rows, not pairs.
+    /// Nothing was written: this many of the rows the write targets are half
+    /// of an internal-transfer pair the write would unlink, and the caller has
+    /// not confirmed.
     PendingPairBreaks(i64),
+    Refused(Refusal),
+}
+
+/// Why a write was refused. Nothing was written.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Refusal {
     /// The transaction is not this user's.
     NotFound,
     /// The category is not this user's, or no longer exists.
@@ -97,15 +53,27 @@ pub enum WriteOutcome<T> {
     UnknownTag,
 }
 
-/// Locks the rows of `ids` this user owns, for the rest of the caller's
-/// database transaction, and says which are half of a pair. A sync that
-/// pairs one of them has to wait until the write commits, so the pair check
-/// the caller makes on this answer still holds when it writes.
-async fn lock_owned(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    ids: &[Uuid],
-) -> Result<Vec<(Uuid, bool)>, CoreError> {
+/// Rows of the user's, locked for the rest of the database transaction, with
+/// whether each is half of a pair. Only [`lock_owned`] makes one, so every
+/// writer below writes rows whose ownership was checked once, here.
+struct Locked {
+    rows: Vec<(Uuid, bool)>,
+}
+
+impl Locked {
+    fn ids(&self) -> Vec<Uuid> {
+        self.rows.iter().map(|(id, _)| *id).collect()
+    }
+
+    fn paired(&self) -> i64 {
+        self.rows.iter().filter(|(_, paired)| *paired).count() as i64
+    }
+}
+
+/// Locks the rows of `ids` this user owns. A sync that pairs one of them has
+/// to wait until the write commits, so the pair check made on this answer
+/// still holds when the write happens.
+async fn lock_owned(tx: &mut UserWriteTx<'_>, ids: &[Uuid]) -> Result<Locked, CoreError> {
     let rows = sqlx::query!(
         r#"
         select t.id as "id!", (t.transfer_pair_id is not null) as "paired!"
@@ -116,40 +84,102 @@ async fn lock_owned(
         for update of t
         "#,
         ids,
-        user_id,
+        tx.user_id(),
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(&mut **tx)
     .await?;
-    Ok(rows.into_iter().map(|r| (r.id, r.paired)).collect())
+    Ok(Locked {
+        rows: rows.into_iter().map(|r| (r.id, r.paired)).collect(),
+    })
 }
 
-/// Whether a category write to `category_id` is allowed: clearing always is,
-/// setting one only if it is the user's. Locks the category row, so a
-/// concurrent delete cannot slip in before the write.
-async fn category_is_mine(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
+/// A category write whose category was checked: the user's, or a clear.
+struct CategoryWrite {
     category_id: Option<Uuid>,
-) -> Result<bool, CoreError> {
-    let Some(category_id) = category_id else {
-        return Ok(true);
-    };
-    let found = sqlx::query_scalar!(
-        "select id from budget_category where id = $1 and user_id = $2 for share",
-        category_id,
-        user_id,
-    )
-    .fetch_optional(&mut *conn)
-    .await?;
-    Ok(found.is_some())
+    /// A neutral category counts toward nothing, as a pair does, so filing
+    /// one half under it changes no total and the pair stands. Clearing does
+    /// not keep pairs: an uncategorised half is not a transfer.
+    keeps_pairs: bool,
+}
+
+impl CategoryWrite {
+    fn clear() -> Self {
+        CategoryWrite {
+            category_id: None,
+            keeps_pairs: false,
+        }
+    }
+
+    /// `None` when the category is not the user's. Locks the category row,
+    /// so a concurrent delete cannot slip in before the write.
+    async fn check(
+        tx: &mut UserWriteTx<'_>,
+        category_id: Option<Uuid>,
+    ) -> Result<Option<Self>, CoreError> {
+        let Some(id) = category_id else {
+            return Ok(Some(Self::clear()));
+        };
+        let neutral = sqlx::query_scalar!(
+            r#"
+            select kind = 'neutral' as "neutral!"
+            from budget_category
+            where id = $1 and user_id = $2
+            for share
+            "#,
+            id,
+            tx.user_id(),
+        )
+        .fetch_optional(&mut **tx)
+        .await?;
+        Ok(neutral.map(|keeps_pairs| CategoryWrite {
+            category_id: Some(id),
+            keeps_pairs,
+        }))
+    }
+
+    /// Writes the category to `rows` and unlinks every pair they take part
+    /// in, both halves, unless the category keeps pairs. Returns the ids
+    /// written.
+    async fn write(&self, tx: &mut UserWriteTx<'_>, rows: &Locked) -> Result<Vec<Uuid>, CoreError> {
+        let ids = rows.ids();
+        sqlx::query!(
+            r#"
+            update transaction t
+               set budget_category_id = $2,
+                   category_source = case when $2::uuid is null then null else 'user' end,
+                   category_confidence = null,
+                   category_reviewed_at = case when $2::uuid is null then null else now() end
+             where t.id = any($1)
+            "#,
+            &ids,
+            self.category_id,
+        )
+        .execute(&mut **tx)
+        .await?;
+        if !self.keeps_pairs && rows.paired() > 0 {
+            sqlx::query!(
+                r#"
+                with victims as (
+                    select id, transfer_pair_id
+                    from transaction
+                    where id = any($1) and transfer_pair_id is not null
+                )
+                update transaction t
+                   set transfer_pair_id = null
+                 where t.id in (select id from victims)
+                    or t.id in (select transfer_pair_id from victims)
+                "#,
+                &ids,
+            )
+            .execute(&mut **tx)
+            .await?;
+        }
+        Ok(ids)
+    }
 }
 
 /// Whether every one of `tag_ids` is the user's. Locks them, as above.
-async fn tags_are_mine(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    tag_ids: &[Uuid],
-) -> Result<bool, CoreError> {
+async fn tags_are_mine(tx: &mut UserWriteTx<'_>, tag_ids: &[Uuid]) -> Result<bool, CoreError> {
     let mut wanted = tag_ids.to_vec();
     wanted.sort();
     wanted.dedup();
@@ -159,81 +189,90 @@ async fn tags_are_mine(
     let found = sqlx::query_scalar!(
         "select id from budget_tag where id = any($1) and user_id = $2 for share",
         &wanted,
-        user_id,
+        tx.user_id(),
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(&mut **tx)
     .await?;
     Ok(found.len() == wanted.len())
 }
 
-/// The category write itself, over the rows of `ids` this user owns. Returns
-/// the ids written and unlinks their pairs, unless the category keeps them
-/// ([`keeps_pairs`]). A category that is not the user's writes nothing.
-async fn write_category(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    ids: &[Uuid],
-    category_id: Option<Uuid>,
-) -> Result<Vec<Uuid>, CoreError> {
-    let written: Vec<Uuid> = sqlx::query_scalar!(
-        r#"
-        update transaction t
-           set budget_category_id = $3,
-               category_source = case when $3::uuid is null then null else 'user' end,
-               category_confidence = null,
-               category_reviewed_at = case when $3::uuid is null then null else now() end
-         where t.id = any($1)
-           and t.id in (select id from user_transactions($2))
-           and ($3::uuid is null
-                or exists (select 1 from budget_category c
-                            where c.id = $3 and c.user_id = $2))
-        returning t.id
-        "#,
-        ids,
-        user_id,
-        category_id,
-    )
-    .fetch_all(&mut *conn)
-    .await?;
-    if !keeps_pairs(conn, category_id).await? {
-        dissolve_pairs(conn, &written).await?;
+/// What the gates let through.
+enum Gate<T> {
+    /// Go ahead; the category write, when the call carries one.
+    Go(Option<CategoryWrite>),
+    Stop(WriteOutcome<T>),
+}
+
+/// The checks every write makes on its locked rows, in this order: the
+/// category, the tags, then the confirmation a pair-breaking category write
+/// waits for. Tags and ✓ break no pairs, so a call with no category is never
+/// held for confirmation.
+async fn gate<T>(
+    tx: &mut UserWriteTx<'_>,
+    rows: &Locked,
+    category_id: Option<Option<Uuid>>,
+    tag_ids: Option<&[Uuid]>,
+    confirm_break_pairs: bool,
+) -> Result<Gate<T>, CoreError> {
+    let category = match category_id {
+        None => None,
+        Some(id) => match CategoryWrite::check(tx, id).await? {
+            Some(c) => Some(c),
+            None => return Ok(Gate::Stop(WriteOutcome::Refused(Refusal::UnknownCategory))),
+        },
+    };
+    if let Some(tag_ids) = tag_ids
+        && !tags_are_mine(tx, tag_ids).await?
+    {
+        return Ok(Gate::Stop(WriteOutcome::Refused(Refusal::UnknownTag)));
     }
-    Ok(written)
+    let breaks = rows.paired();
+    if let Some(c) = &category
+        && !c.keeps_pairs
+        && breaks > 0
+        && !confirm_break_pairs
+    {
+        return Ok(Gate::Stop(WriteOutcome::PendingPairBreaks(breaks)));
+    }
+    Ok(Gate::Go(category))
+}
+
+impl<T> WriteOutcome<T> {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> WriteOutcome<U> {
+        match self {
+            WriteOutcome::Done(t) => WriteOutcome::Done(f(t)),
+            WriteOutcome::PendingPairBreaks(n) => WriteOutcome::PendingPairBreaks(n),
+            WriteOutcome::Refused(r) => WriteOutcome::Refused(r),
+        }
+    }
 }
 
 /// Clears the category of every row filed under `category_id`, as the user
 /// clearing each one would: the rows go back to the AI, review and pairing,
 /// and their pairs are unlinked. Run before the category is deleted.
 pub(crate) async fn clear_category(
-    tx: &mut crate::db::UserWriteTx<'_>,
+    tx: &mut UserWriteTx<'_>,
     category_id: Uuid,
 ) -> Result<(), CoreError> {
-    let user_id = tx.user_id();
     let ids = sqlx::query_scalar!(
         r#"
         select t.id as "id!"
         from user_transactions($1) t
         where t.budget_category_id = $2
         "#,
-        user_id,
+        tx.user_id(),
         category_id,
     )
     .fetch_all(&mut **tx)
     .await?;
-    let owned: Vec<Uuid> = lock_owned(tx, user_id, &ids)
-        .await?
-        .into_iter()
-        .map(|(id, _)| id)
-        .collect();
-    write_category(tx, user_id, &owned, None).await?;
+    let rows = lock_owned(tx, &ids).await?;
+    CategoryWrite::clear().write(tx, &rows).await?;
     Ok(())
 }
 
-/// Replaces one owned transaction's tag set. Tags that are not the user's are
-/// left out by the join.
+/// Replaces one row's tag set with `tag_ids`, already checked.
 async fn replace_tags(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
+    tx: &mut UserWriteTx<'_>,
     txn_id: Uuid,
     tag_ids: &[Uuid],
 ) -> Result<(), CoreError> {
@@ -241,77 +280,59 @@ async fn replace_tags(
         "delete from budget_transaction_tag where transaction_id = $1",
         txn_id
     )
-    .execute(&mut *conn)
+    .execute(&mut **tx)
     .await?;
     sqlx::query!(
         r#"
         insert into budget_transaction_tag (transaction_id, tag_id)
-        select $1, g.id from budget_tag g
-        where g.user_id = $2 and g.id = any($3)
+        select $1, unnest($2::uuid[])
+        on conflict do nothing
         "#,
         txn_id,
-        user_id,
         tag_ids,
     )
-    .execute(&mut *conn)
+    .execute(&mut **tx)
     .await?;
     Ok(())
 }
 
-/// Adds tags to the rows of `ids` this user owns, keeping what is there.
-/// Returns how many transactions that covers; none when `tag_ids` is empty.
+/// Adds `tag_ids`, already checked, to `rows`, keeping what is there.
 async fn add_tags(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    ids: &[Uuid],
+    tx: &mut UserWriteTx<'_>,
+    rows: &Locked,
     tag_ids: &[Uuid],
-) -> Result<u64, CoreError> {
-    if tag_ids.is_empty() {
-        return Ok(0);
-    }
-    let touched = sqlx::query_scalar!(
+) -> Result<(), CoreError> {
+    sqlx::query!(
         r#"
-        with owned as (
-            select t.id from user_transactions($2) t where t.id = any($1)
-        ), mine as (
-            select id from budget_tag where user_id = $2 and id = any($3)
-        ), ins as (
-            insert into budget_transaction_tag (transaction_id, tag_id)
-            select owned.id, mine.id from owned cross join mine
-            on conflict do nothing
-            returning transaction_id
-        )
-        select count(*) as "n!" from owned
+        insert into budget_transaction_tag (transaction_id, tag_id)
+        select t, g from unnest($1::uuid[]) t cross join unnest($2::uuid[]) g
+        on conflict do nothing
         "#,
-        ids,
-        user_id,
+        &rows.ids(),
         tag_ids,
     )
-    .fetch_one(&mut *conn)
+    .execute(&mut **tx)
     .await?;
-    Ok(touched as u64)
+    Ok(())
 }
 
 async fn write_checked(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    ids: &[Uuid],
+    tx: &mut UserWriteTx<'_>,
+    rows: &Locked,
     checked: bool,
-) -> Result<u64, CoreError> {
-    let done = sqlx::query!(
+) -> Result<(), CoreError> {
+    sqlx::query!(
         r#"
         update transaction t
-           set checked_at = case when $3 then now() else null end
+           set checked_at = case when $2 then now() else null end
          where t.id = any($1)
-           and t.id in (select id from user_transactions($2))
         "#,
-        ids,
-        user_id,
+        &rows.ids(),
         checked,
     )
-    .execute(&mut *conn)
+    .execute(&mut **tx)
     .await?;
-    Ok(done.rows_affected())
+    Ok(())
 }
 
 /// What a single-row save changes. `None` leaves a field alone;
@@ -324,11 +345,6 @@ pub struct TransactionPatch<'a> {
 }
 
 /// Saves one row: category, tags and ✓ together or not at all.
-///
-/// A category write on half of an internal transfer unlinks the pair, so it
-/// waits for `confirm_break_pairs` like the bulk paths do
-/// ([`WriteOutcome::PendingPairBreaks`]) — unless the category is neutral and
-/// keeps the pair. Tags and ✓ break nothing and are never gated.
 pub async fn patch_transaction(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -337,35 +353,30 @@ pub async fn patch_transaction(
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<()>, CoreError> {
     let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
-    let Some(&(_, paired)) = lock_owned(&mut tx, user_id, &[txn_id]).await?.first() else {
-        return Ok(WriteOutcome::NotFound);
+    let rows = lock_owned(&mut tx, &[txn_id]).await?;
+    if rows.rows.is_empty() {
+        return Ok(WriteOutcome::Refused(Refusal::NotFound));
+    }
+    let category = match gate(
+        &mut tx,
+        &rows,
+        patch.category_id,
+        patch.tag_ids,
+        confirm_break_pairs,
+    )
+    .await?
+    {
+        Gate::Go(category) => category,
+        Gate::Stop(outcome) => return Ok(outcome),
     };
-    if let Some(category_id) = patch.category_id
-        && !category_is_mine(&mut tx, user_id, category_id).await?
-    {
-        return Ok(WriteOutcome::UnknownCategory);
-    }
-    if let Some(tag_ids) = patch.tag_ids
-        && !tags_are_mine(&mut tx, user_id, tag_ids).await?
-    {
-        return Ok(WriteOutcome::UnknownTag);
-    }
-    if let Some(category_id) = patch.category_id
-        && paired
-        && !confirm_break_pairs
-        && !keeps_pairs(&mut tx, category_id).await?
-    {
-        return Ok(WriteOutcome::PendingPairBreaks(1));
-    }
-
-    if let Some(category_id) = patch.category_id {
-        write_category(&mut tx, user_id, &[txn_id], category_id).await?;
+    if let Some(category) = category {
+        category.write(&mut tx, &rows).await?;
     }
     if let Some(tag_ids) = patch.tag_ids {
-        replace_tags(&mut tx, user_id, txn_id, tag_ids).await?;
+        replace_tags(&mut tx, txn_id, tag_ids).await?;
     }
     if let Some(checked) = patch.checked {
-        write_checked(&mut tx, user_id, &[txn_id], checked).await?;
+        write_checked(&mut tx, &rows, checked).await?;
     }
     tx.commit().await?;
     Ok(WriteOutcome::Done(()))
@@ -394,12 +405,6 @@ impl SameDescription {
 
 /// How many *other* transactions of this user share the row's normalised
 /// description, within `scope` — the number the "apply to all?" prompt shows.
-///
-/// Guards on the *normalised* value, not the raw one: `description_norm` (`budget_norm_description`)
-/// collapses any run of 2+ digits, so a raw description like `"12345"` is
-/// non-blank yet normalises to `''`, same as NULL or empty. A row whose
-/// normalised description is `''` carries no merchant identity, so it must
-/// never cluster with anything — including another digit-only description.
 pub async fn count_same_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -410,25 +415,15 @@ pub async fn count_same_description(
     Ok(ids.iter().filter(|&&id| id != txn_id).count() as i64)
 }
 
-/// The anchor row and every transaction of this user sharing its normalised
-/// description — or, under [`SameDescription::NeedsReview`], only those still
-/// in review, anchor excluded — locked, with whether each is half of a pair.
+/// The anchor row (outside the review scope) and every transaction of this
+/// user sharing its normalised description.
 ///
-/// A description that is null, empty, or normalises to `''` (e.g.
-/// digit-only) never clusters with other blank descriptions as "the same
-/// merchant": the inner subquery then yields `NULL`, and nothing matches.
-async fn same_description_rows(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-    txn_id: Uuid,
-    scope: SameDescription,
-) -> Result<Vec<(Uuid, bool)>, CoreError> {
-    let ids = same_description_ids(&mut *conn, user_id, txn_id, scope).await?;
-    lock_owned(conn, user_id, &ids).await
-}
-
-/// The ids behind both functions above: the anchor (outside the review
-/// scope) and every row sharing its normalised description.
+/// Guards on the *normalised* value, not the raw one: `description_norm`
+/// (`budget_norm_description`) collapses any run of 2+ digits, so a raw
+/// description like `"12345"` is non-blank yet normalises to `''`, same as
+/// NULL or empty. A row whose normalised description is `''` carries no
+/// merchant identity, so it never clusters with anything: the inner subquery
+/// then yields `NULL`, and nothing matches.
 async fn same_description_ids<'e>(
     executor: impl sqlx::PgExecutor<'e>,
     user_id: Uuid,
@@ -459,11 +454,9 @@ async fn same_description_ids<'e>(
     Ok(ids)
 }
 
-/// "Apply to the same description", as one database transaction: the rows
-/// in `scope` are locked, the category checked, and a write that would unlink
-/// pairs waits for `confirm_break_pairs`. Returns the ids written (the row
-/// itself included under [`SameDescription::All`]) — the review queue needs
-/// to know *which* of its lines this resolved.
+/// "Apply to the same description", as one database transaction. Returns the
+/// ids written (the row itself included under [`SameDescription::All`]) —
+/// the review queue needs to know *which* of its lines this resolved.
 pub async fn apply_to_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -473,19 +466,16 @@ pub async fn apply_to_description(
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<Vec<Uuid>>, CoreError> {
     let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
-    if lock_owned(&mut tx, user_id, &[txn_id]).await?.is_empty() {
-        return Ok(WriteOutcome::NotFound);
+    if lock_owned(&mut tx, &[txn_id]).await?.rows.is_empty() {
+        return Ok(WriteOutcome::Refused(Refusal::NotFound));
     }
-    if !category_is_mine(&mut tx, user_id, category_id).await? {
-        return Ok(WriteOutcome::UnknownCategory);
-    }
-    let rows = same_description_rows(&mut tx, user_id, txn_id, scope).await?;
-    let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
-    if breaks > 0 && !confirm_break_pairs && !keeps_pairs(&mut tx, category_id).await? {
-        return Ok(WriteOutcome::PendingPairBreaks(breaks));
-    }
-    let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
-    let written = write_category(&mut tx, user_id, &ids, category_id).await?;
+    let ids = same_description_ids(&mut *tx, user_id, txn_id, scope).await?;
+    let rows = lock_owned(&mut tx, &ids).await?;
+    let written = match gate(&mut tx, &rows, Some(category_id), None, confirm_break_pairs).await? {
+        Gate::Go(Some(category)) => category.write(&mut tx, &rows).await?,
+        Gate::Go(None) => vec![],
+        Gate::Stop(outcome) => return Ok(outcome),
+    };
     tx.commit().await?;
     Ok(WriteOutcome::Done(written))
 }
@@ -504,12 +494,9 @@ pub struct BulkChanges<'a> {
 /// Applies one bulk write as one database transaction. Returns how many of
 /// the user's rows it covered.
 ///
-/// A category write unlinks every internal-transfer pair it touches, unless
-/// the category is neutral (see this module's header). "Select all shown" resolves server-side and can hold rows
-/// the client has never loaded, so the client cannot count those pairs itself
-/// — this does, on the locked rows, and refuses until the caller confirms.
-/// A refused call writes nothing, tags and ✓ included. Tags and ✓ break no
-/// pairs, so a call carrying no category is never gated.
+/// "Select all shown" resolves server-side and can hold rows the client has
+/// never loaded, so the client cannot count the pairs a category write would
+/// break itself — this does, on the locked rows.
 pub async fn bulk_apply(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -519,43 +506,34 @@ pub async fn bulk_apply(
 ) -> Result<WriteOutcome<u64>, CoreError> {
     let add_tag_ids = changes.add_tag_ids.filter(|t| !t.is_empty());
     let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
-    let rows = lock_owned(&mut tx, user_id, ids).await?;
-    if let Some(category_id) = changes.category_id
-        && !category_is_mine(&mut tx, user_id, category_id).await?
+    let rows = lock_owned(&mut tx, ids).await?;
+    let category = match gate(
+        &mut tx,
+        &rows,
+        changes.category_id,
+        add_tag_ids,
+        confirm_break_pairs,
+    )
+    .await?
     {
-        return Ok(WriteOutcome::UnknownCategory);
-    }
-    if let Some(tag_ids) = add_tag_ids
-        && !tags_are_mine(&mut tx, user_id, tag_ids).await?
-    {
-        return Ok(WriteOutcome::UnknownTag);
-    }
-    let breaks = rows.iter().filter(|(_, paired)| *paired).count() as i64;
-    if let Some(category_id) = changes.category_id
-        && breaks > 0
-        && !confirm_break_pairs
-        && !keeps_pairs(&mut tx, category_id).await?
-    {
-        return Ok(WriteOutcome::PendingPairBreaks(breaks));
-    }
-
-    let owned: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
-    if let Some(category_id) = changes.category_id {
-        write_category(&mut tx, user_id, &owned, category_id).await?;
+        Gate::Go(category) => category,
+        Gate::Stop(outcome) => return Ok(outcome),
+    };
+    if let Some(category) = &category {
+        category.write(&mut tx, &rows).await?;
     }
     if let Some(tag_ids) = add_tag_ids {
-        add_tags(&mut tx, user_id, &owned, tag_ids).await?;
+        add_tags(&mut tx, &rows, tag_ids).await?;
     }
     if let Some(checked) = changes.checked {
-        write_checked(&mut tx, user_id, &owned, checked).await?;
+        write_checked(&mut tx, &rows, checked).await?;
     }
     tx.commit().await?;
     // Every arm covers the same locked rows, so that is the count — not a sum
     // of arms, which would report a multiple of the selection.
-    let wrote_anything =
-        changes.category_id.is_some() || add_tag_ids.is_some() || changes.checked.is_some();
+    let wrote_anything = category.is_some() || add_tag_ids.is_some() || changes.checked.is_some();
     Ok(WriteOutcome::Done(if wrote_anything {
-        owned.len() as u64
+        rows.rows.len() as u64
     } else {
         0
     }))

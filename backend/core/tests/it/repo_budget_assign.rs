@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use gripsou_core::dto::CanonicalTransaction;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
-    count_same_description, patch_transaction,
+    BulkChanges, Refusal, SameDescription, TransactionPatch, WriteOutcome, apply_to_description,
+    bulk_apply, count_same_description, patch_transaction,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -625,7 +625,7 @@ async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow:
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownCategory);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownCategory));
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
 }
@@ -649,7 +649,7 @@ async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resu
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownTag));
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
 }
@@ -698,7 +698,7 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
             },
         )
         .await?,
-        WriteOutcome::NotFound
+        WriteOutcome::Refused(Refusal::NotFound)
     );
     assert_eq!(
         bulk_apply(
@@ -725,7 +725,7 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
             true
         )
         .await?,
-        WriteOutcome::NotFound
+        WriteOutcome::Refused(Refusal::NotFound)
     );
     assert_eq!(row_state(&pool, ids[0]).await, (None, false, 0, None));
     Ok(())
@@ -800,7 +800,7 @@ async fn a_bulk_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resul
         false,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::UnknownTag);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::UnknownTag));
     for id in &ids {
         assert_eq!(row_state(&pool, *id).await, (None, false, 0, None));
     }
@@ -828,7 +828,7 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
             true
         )
         .await?,
-        WriteOutcome::UnknownCategory
+        WriteOutcome::Refused(Refusal::UnknownCategory)
     );
     assert_eq!(
         apply_to_description(

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select kind = 'neutral' as \"neutral!\" from budget_category where id = $1",
+  "query": "\n            select kind = 'neutral' as \"neutral!\"\n            from budget_category\n            where id = $1 and user_id = $2\n            for share\n            ",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -19,5 +20,5 @@
       null
     ]
   },
-  "hash": "30e47461af46a06dd4a37af44b5113e79d151f7a966192862e0d5fcff214489f"
+  "hash": "f0ad31936390961ce18637281d30e7d3513b47d167f705672063de7375d56160"
 }

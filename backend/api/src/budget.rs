@@ -186,10 +186,7 @@ pub async fn reorder_categories(
     if ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
         return Err(ApiError::bad_request("duplicate id"));
     }
-    let done = category::reorder_categories(&pool, user_id, &ids).await?;
-    // Every id has to be one of this user's rows: a partial write would leave
-    // the list in an order nobody asked for.
-    if done != ids.len() as u64 {
+    if !category::reorder_categories(&pool, user_id, &ids).await? {
         return Err(ApiError::NotFound("not found"));
     }
     Ok(StatusCode::NO_CONTENT)
@@ -667,15 +664,11 @@ pub struct PatchTransactionResponse {
     pub pending_pair_breaks: Option<i64>,
 }
 
-/// The refusals every assignment write shares.
-fn write_refused<T>(o: assign::WriteOutcome<T>) -> ApiError {
-    match o {
-        assign::WriteOutcome::NotFound => ApiError::NotFound("not found"),
-        assign::WriteOutcome::UnknownCategory => ApiError::Unprocessable("unknown category"),
-        assign::WriteOutcome::UnknownTag => ApiError::Unprocessable("unknown tag"),
-        assign::WriteOutcome::Done(_) | assign::WriteOutcome::PendingPairBreaks(_) => {
-            ApiError::internal("write_refused called on an accepted write")
-        }
+fn refused(r: assign::Refusal) -> ApiError {
+    match r {
+        assign::Refusal::NotFound => ApiError::NotFound("not found"),
+        assign::Refusal::UnknownCategory => ApiError::Unprocessable("unknown category"),
+        assign::Refusal::UnknownTag => ApiError::Unprocessable("unknown tag"),
     }
 }
 
@@ -702,7 +695,7 @@ pub async fn patch_transaction(
                 pending_pair_breaks: Some(n),
             }));
         }
-        other => return Err(write_refused(other)),
+        assign::WriteOutcome::Refused(r) => return Err(refused(r)),
     }
     // Only a category change makes "apply to the others?" a question.
     let same_description_count = match b.category_id {
@@ -751,6 +744,25 @@ pub struct UpdatedResponse {
     pub ids: Option<Vec<Uuid>>,
 }
 
+impl UpdatedResponse {
+    /// The answer to a write that did `(rows written, ids to report)`.
+    fn answer(outcome: assign::WriteOutcome<(i64, Option<Vec<Uuid>>)>) -> Result<Self, ApiError> {
+        match outcome {
+            assign::WriteOutcome::Done((updated, ids)) => Ok(UpdatedResponse {
+                updated,
+                pending_pair_breaks: None,
+                ids,
+            }),
+            assign::WriteOutcome::PendingPairBreaks(n) => Ok(UpdatedResponse {
+                updated: 0,
+                pending_pair_breaks: Some(n),
+                ids: None,
+            }),
+            assign::WriteOutcome::Refused(r) => Err(refused(r)),
+        }
+    }
+}
+
 pub async fn apply_to_description(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -758,7 +770,7 @@ pub async fn apply_to_description(
     Json(b): Json<ApplyToDescriptionBody>,
 ) -> Result<Json<UpdatedResponse>, ApiError> {
     let scope = same_description(&pool, user_id, b.scope).await?;
-    match assign::apply_to_description(
+    let outcome = assign::apply_to_description(
         &pool,
         user_id,
         id,
@@ -766,20 +778,8 @@ pub async fn apply_to_description(
         scope,
         b.confirm_break_pairs,
     )
-    .await?
-    {
-        assign::WriteOutcome::Done(ids) => Ok(Json(UpdatedResponse {
-            updated: ids.len() as i64,
-            pending_pair_breaks: None,
-            ids: Some(ids),
-        })),
-        assign::WriteOutcome::PendingPairBreaks(n) => Ok(Json(UpdatedResponse {
-            updated: 0,
-            pending_pair_breaks: Some(n),
-            ids: None,
-        })),
-        other => Err(write_refused(other)),
-    }
+    .await?;
+    UpdatedResponse::answer(outcome.map(|ids| (ids.len() as i64, Some(ids)))).map(Json)
 }
 
 #[derive(Deserialize)]
@@ -830,7 +830,7 @@ pub async fn bulk_transactions(
         (None, None) => return Err(ApiError::bad_request("ids or filter required")),
     };
 
-    match assign::bulk_apply(
+    let outcome = assign::bulk_apply(
         &pool,
         user_id,
         &ids,
@@ -841,20 +841,8 @@ pub async fn bulk_transactions(
         },
         b.confirm_break_pairs,
     )
-    .await?
-    {
-        assign::WriteOutcome::Done(n) => Ok(Json(UpdatedResponse {
-            updated: n as i64,
-            pending_pair_breaks: None,
-            ids: None,
-        })),
-        assign::WriteOutcome::PendingPairBreaks(n) => Ok(Json(UpdatedResponse {
-            updated: 0,
-            pending_pair_breaks: Some(n),
-            ids: None,
-        })),
-        other => Err(write_refused(other)),
-    }
+    .await?;
+    UpdatedResponse::answer(outcome.map(|n| (n as i64, None))).map(Json)
 }
 
 #[derive(Serialize)]
@@ -960,6 +948,9 @@ fn review_result(w: review::ReviewWrite) -> Result<StatusCode, ApiError> {
         review::ReviewWrite::Done => Ok(StatusCode::NO_CONTENT),
         review::ReviewWrite::NotFound => Err(ApiError::NotFound("not found")),
         review::ReviewWrite::Refused => Err(ApiError::Conflict("not in review")),
+        review::ReviewWrite::BadConfidence => {
+            Err(ApiError::bad_request("confidence must be between 0 and 1"))
+        }
     }
 }
 
@@ -990,13 +981,6 @@ pub async fn undo_review(
     Path(id): Path<Uuid>,
     Json(body): Json<crate::dto::UndoReviewReq>,
 ) -> Result<StatusCode, ApiError> {
-    // The only range check: the repository stores what it is given.
-    if body
-        .confidence
-        .is_some_and(|c| c < Decimal::ZERO || c > Decimal::ONE)
-    {
-        return Err(ApiError::bad_request("confidence must be between 0 and 1"));
-    }
     review_result(review::undo(&pool, user_id, id, body.category_id, body.confidence).await?)
 }
 

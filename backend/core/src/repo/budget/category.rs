@@ -280,15 +280,26 @@ async fn compact_sort_order(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Res
 /// the numbering is re-derived per kind here, so two adjacent rows changing
 /// places is exactly their two numbers swapping.
 ///
-/// Ids that are not this user's are silently skipped — the caller compares the
-/// returned count against what it sent and refuses a partial write. The ids
-/// must be distinct; the caller refuses duplicates.
+/// Writes nothing and returns `false` unless every id is a distinct row of
+/// this user's: a partial write would leave the list in an order nobody
+/// asked for.
 pub async fn reorder_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     ids: &[Uuid],
-) -> Result<u64, CoreError> {
-    let done = sqlx::query!(
+) -> Result<bool, CoreError> {
+    let mut tx = pool.begin().await?;
+    let mine = sqlx::query_scalar!(
+        "select id from budget_category where id = any($1) and user_id = $2 for update",
+        ids,
+        user_id,
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    if mine.len() != ids.len() {
+        return Ok(false);
+    }
+    sqlx::query!(
         r#"
         update budget_category c
            set sort_order = r.ord::int
@@ -303,8 +314,8 @@ pub async fn reorder_categories(
         user_id,
         ids,
     )
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(done)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }

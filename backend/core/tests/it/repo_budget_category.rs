@@ -313,10 +313,7 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
     // Last expense first, kinds interleaved.
     let mut order = vec![*expenses.last().unwrap(), incomes[1], incomes[0]];
     order.extend(&expenses[..expenses.len() - 1]);
-    assert_eq!(
-        reorder_categories(&pool, user_id, &order).await?,
-        order.len() as u64
-    );
+    assert!(reorder_categories(&pool, user_id, &order).await?);
 
     let after = list_categories(&pool, user_id).await?;
     assert_eq!(after[0].id, *expenses.last().unwrap(), "moved to the top");
@@ -328,12 +325,25 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
         .collect();
     assert_eq!(income_order, vec![incomes[1], incomes[0]]);
 
+    // A list naming a row that is not the user's is refused whole: their own
+    // rows keep the order they had.
     let (stranger, _c) = seed_user_and_connection(&pool).await;
     let theirs = list_categories(&pool, stranger).await?[0].id;
+    let before = list_categories(&pool, user_id).await?;
+    let reversed: Vec<Uuid> = before.iter().rev().map(|r| r.id).chain([theirs]).collect();
+    assert!(!reorder_categories(&pool, user_id, &reversed).await?);
+    let ids = |rows: &[gripsou_core::repo::budget::category::BudgetCategoryRow]| {
+        rows.iter().map(|r| r.id).collect::<Vec<_>>()
+    };
     assert_eq!(
-        reorder_categories(&pool, user_id, &[expenses[0], theirs]).await?,
-        1,
-        "the stranger's row is not touched, and the count says so"
+        ids(&list_categories(&pool, user_id).await?),
+        ids(&before),
+        "nothing was written"
+    );
+    assert_eq!(
+        list_categories(&pool, stranger).await?[0].id,
+        theirs,
+        "the stranger's row is not touched"
     );
     Ok(())
 }

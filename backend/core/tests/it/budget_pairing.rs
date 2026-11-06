@@ -3,8 +3,8 @@ use gripsou_core::budget::pairing::pair_internal_transfers;
 use gripsou_core::dto::CanonicalAccount;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
-    BulkChanges, SameDescription, TransactionPatch, WriteOutcome, apply_to_description, bulk_apply,
-    patch_transaction,
+    BulkChanges, Refusal, SameDescription, TransactionPatch, WriteOutcome, apply_to_description,
+    bulk_apply, patch_transaction,
 };
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::transaction::upsert_transaction;
@@ -1116,7 +1116,7 @@ async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result
         true,
     )
     .await?;
-    assert_eq!(outcome, WriteOutcome::NotFound);
+    assert_eq!(outcome, WriteOutcome::Refused(Refusal::NotFound));
 
     assert_eq!(row(&pool, out).await?.1, Some(inn));
     assert_eq!(row(&pool, inn).await?.1, Some(out));

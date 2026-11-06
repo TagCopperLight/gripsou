@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into budget_transaction_tag (transaction_id, tag_id)\n        select $1, unnest($2::uuid[])\n        on conflict do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee15b3dbfbb67c3cac09562f66acc150db970c8a4511c0b9365f9fb2f87b6b91"
+}
