@@ -1,7 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { getJson } from "./client";
-import type { Transaction, TransactionCounts } from "./wire";
-import { transactionFilterParams, type TransactionFilterQuery } from "./filter";
+import { api } from "./client";
+import { transactionFilterFields, type TransactionFilterQuery } from "./filter";
 import { keys } from "./keys";
 
 // A page shorter than the page size is the last one.
@@ -10,12 +9,11 @@ const TRANSACTIONS_PAGE_SIZE = 200;
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({
     queryKey: keys.transactions(q),
-    queryFn: ({ pageParam, signal }) => {
-      const params = transactionFilterParams(q);
-      params.set("limit", String(TRANSACTIONS_PAGE_SIZE));
-      params.set("offset", String(pageParam));
-      return getJson<Transaction[]>(`/transactions?${params}`, { signal });
-    },
+    queryFn: ({ pageParam, signal }) =>
+      api("GET /transactions", {
+        query: { ...transactionFilterFields(q), limit: TRANSACTIONS_PAGE_SIZE, offset: pageParam },
+        signal,
+      }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.length < TRANSACTIONS_PAGE_SIZE
@@ -31,7 +29,7 @@ export function useTransactions(q: TransactionFilterQuery) {
 export function useTransactionCounts(q: TransactionFilterQuery) {
   return useQuery({
     queryKey: keys.transactionCounts(q),
-    queryFn: ({ signal }) => getJson<TransactionCounts>(`/transactions/counts?${transactionFilterParams(q)}`, { signal }),
+    queryFn: ({ signal }) => api("GET /transactions/counts", { query: transactionFilterFields(q), signal }),
     placeholderData: keepPreviousData,
   });
 }

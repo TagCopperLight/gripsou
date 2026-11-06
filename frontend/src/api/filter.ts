@@ -22,8 +22,8 @@ export type TransactionFilterQuery = {
 /** The one place a transaction filter becomes request fields, shared by the
  *  list, the counts and the bulk write so "select all shown" writes exactly the
  *  rows the list shows. Values are typed for the JSON bulk body (booleans must
- *  be real booleans there: serde_json will not coerce "true"); the query-string
- *  readers stringify them.
+ *  be real booleans there: serde_json will not coerce "true"); a query string
+ *  stringifies them.
  *
  *  An empty value is omitted rather than sent blank: the server reads a blank
  *  list as "no filter", but an omitted one keeps the request — and the cache —
@@ -42,11 +42,4 @@ export function transactionFilterFields(q: TransactionFilterQuery): TransactionP
   if (q.needsReview) f.needsReview = true;
   if (q.includeTransfers) f.includeTransfers = true;
   return f;
-}
-
-/** The same fields as a query string, for the GET readers. */
-export function transactionFilterParams(q: TransactionFilterQuery): URLSearchParams {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(transactionFilterFields(q))) params.set(k, String(v));
-  return params;
 }

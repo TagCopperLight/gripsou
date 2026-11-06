@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getJson, patchJson } from "./client";
-import type { Account, AccountSeries, NetWorthResponse, Range, UpdateAccountReq, UpdatedAccount } from "./wire";
+import { api } from "./client";
+import type { Range, UpdateAccountReq } from "./wire";
 import { keys } from "./keys";
 import { afterAccountEdit } from "./invalidate";
 
@@ -12,7 +12,7 @@ export function useNetWorth(range: Range) {
   return useQuery({
     queryKey: keys.netWorth(range),
     staleTime: PORTFOLIO_STALE_MS,
-    queryFn: ({ signal }) => getJson<NetWorthResponse>(`/dashboard/net-worth?range=${range}`, { signal }),
+    queryFn: ({ signal }) => api("GET /dashboard/net-worth", { query: { range }, signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -21,7 +21,7 @@ export function useAccounts() {
   return useQuery({
     queryKey: keys.accounts(),
     staleTime: PORTFOLIO_STALE_MS,
-    queryFn: ({ signal }) => getJson<Account[]>(`/accounts`, { signal }),
+    queryFn: ({ signal }) => api("GET /accounts", { signal }),
   });
 }
 
@@ -29,7 +29,7 @@ export function useAccountSeries(range: Range) {
   return useQuery({
     queryKey: keys.accountSeries(range),
     staleTime: PORTFOLIO_STALE_MS,
-    queryFn: ({ signal }) => getJson<AccountSeries>(`/accounts/series?range=${range}`, { signal }),
+    queryFn: ({ signal }) => api("GET /accounts/series", { query: { range }, signal }),
     placeholderData: keepPreviousData,
   });
 }
@@ -37,7 +37,7 @@ export function useAccountSeries(range: Range) {
 export function useAccountTypes() {
   return useQuery({
     queryKey: keys.accountTypes(),
-    queryFn: ({ signal }) => getJson<string[]>(`/account-types`, { signal }),
+    queryFn: ({ signal }) => api("GET /account-types", { signal }),
   });
 }
 
@@ -45,7 +45,7 @@ export function useUpdateAccount() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, name, typeKey, color }: UpdateAccountReq & { id: string }) =>
-      patchJson<UpdatedAccount>(`/accounts/${id}`, { name, typeKey, color }),
+      api("PATCH /accounts/:id", { params: { id }, body: { name, typeKey, color } }),
     onSuccess: () => afterAccountEdit(qc),
   });
 }

@@ -13,7 +13,7 @@ import { CardState } from "../../ui/CardState";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useNetWorth, useAccountSeries } from "../../api/accounts";
 import { useFxExcludedCount } from "../../api/holdings";
-import type { Range } from "../../api/wire";
+import { DEFAULT_RANGE, type Range } from "../../api/wire";
 import { bySize, legendAccounts } from "../../lib/accounts";
 import { numberOrNull } from "../../lib/valueChart";
 
@@ -28,7 +28,7 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
   const { t } = useTranslation();
   // One eye for the headline and the gain; the percentage is never masked.
   const privacy = usePrivacy();
-  const [range, setRange] = useState<Range>("6mo");
+  const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const nw = useNetWorth(range);
   const series = useAccountSeries(range);
   const excluded = useFxExcludedCount();

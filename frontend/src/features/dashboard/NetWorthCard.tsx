@@ -17,7 +17,7 @@ import { ExcludedFootnote } from "../../ui/FxNote";
 import { usePrefs } from "../../auth/context";
 import { currencySymbol } from "../../lib/currency";
 import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
-import type { Range } from "../../api/wire";
+import { DEFAULT_RANGE, type Range } from "../../api/wire";
 import { legendItems, numberOrNull, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
@@ -25,7 +25,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const readerCurrency = usePrefs().currency;
   // One eye for the headline and the gain; the percentage is never masked.
   const privacy = usePrivacy();
-  const [range, setRange] = useState<Range>("6mo");
+  const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
   // Counts what the headline leaves out; shares the holdings card's query.

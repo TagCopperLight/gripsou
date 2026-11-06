@@ -1,26 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteJson, getJson, patchJson, postJson } from "./client";
-import type { ApiKeyProvider, InviteLinkResp, Provider, Role, User } from "./wire";
+import { api } from "./client";
+import type { Provider, Role } from "./wire";
 import { keys } from "./keys";
 import { afterApiKeyChange, afterProviderChange, afterUserChange } from "./invalidate";
 
 export function useUsers() {
   return useQuery({
     queryKey: keys.users(),
-    queryFn: ({ signal }) => getJson<User[]>(`/users`, { signal }),
+    queryFn: ({ signal }) => api("GET /users", { signal }),
   });
 }
 
 export function useCreateInvite() {
   return useMutation({
-    mutationFn: () => postJson<InviteLinkResp>("/invites", {}),
+    mutationFn: () => api("POST /invites"),
   });
 }
 
 export function useCreateResetLink() {
   return useMutation({
     mutationFn: ({ id, reauth }: { id: string; reauth: string }) =>
-      postJson<InviteLinkResp>(`/users/${id}/reset-link`, { reauth }),
+      api("POST /users/:id/reset-link", { params: { id }, body: { reauth } }),
   });
 }
 
@@ -28,7 +28,7 @@ export function useSetUserRole() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, role }: { id: string; role: Role }) =>
-      patchJson<void>(`/users/${id}`, { role }),
+      api("PATCH /users/:id", { params: { id }, body: { role } }),
     onSuccess: () => afterUserChange(qc),
   });
 }
@@ -37,7 +37,7 @@ export function useDeleteUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, email }: { id: string; email: string }) =>
-      deleteJson<void>(`/users/${id}`, { email }),
+      api("DELETE /users/:id", { params: { id }, body: { email } }),
     onSuccess: () => afterUserChange(qc),
   });
 }
@@ -45,7 +45,7 @@ export function useDeleteUser() {
 export function useProviders() {
   return useQuery({
     queryKey: keys.providers(),
-    queryFn: ({ signal }) => getJson<Provider[]>("/providers", { signal }),
+    queryFn: ({ signal }) => api("GET /providers", { signal }),
   });
 }
 
@@ -53,7 +53,7 @@ export function useSetProviderEnabled() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) =>
-      patchJson<Provider>(`/providers/${key}`, { enabled }),
+      api("PATCH /providers/:key", { params: { key }, body: { enabled } }),
     onMutate: async ({ key, enabled }) => {
       await qc.cancelQueries({ queryKey: keys.providers() });
       const prev = qc.getQueryData<Provider[]>(keys.providers());
@@ -72,7 +72,7 @@ export function useSetProviderEnabled() {
 export function useApiKeys() {
   return useQuery({
     queryKey: keys.apiKeys(),
-    queryFn: ({ signal }) => getJson<ApiKeyProvider[]>("/settings/api-keys", { signal }),
+    queryFn: ({ signal }) => api("GET /settings/api-keys", { signal }),
   });
 }
 
@@ -81,7 +81,7 @@ export function useSetApiKey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ provider, field, value }: { provider: string; field: string; value: string | null }) =>
-      patchJson<ApiKeyProvider>(`/settings/api-keys/${provider}`, { field, value }),
+      api("PATCH /settings/api-keys/:provider", { params: { provider }, body: { field, value } }),
     onSettled: () => afterApiKeyChange(qc),
   });
 }

@@ -1,15 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteJson, getJson, postJson } from "./client";
-import type {
-  CompleteConnectionReq,
-  ConnectionState,
-  EnabledProvider,
-  InitConnectionResp,
-  ManageResp,
-  ProviderGroup,
-  SyncAllResp,
-} from "./wire";
+import { api } from "./client";
+import type { CompleteConnectionReq, ProviderGroup } from "./wire";
 import { keys } from "./keys";
 import { watchQuery } from "./watch";
 import {
@@ -30,32 +22,32 @@ export function useConnections() {
   );
   return useQuery({
     queryKey: keys.connections(),
-    queryFn: ({ signal }) => getJson<ProviderGroup[]>("/connections", { signal }),
+    queryFn: ({ signal }) => api("GET /connections", { signal }),
     // Check idle connections too: scheduled syncs and other tabs may finish
     // without this page ever seeing a running state.
     refetchInterval: (query) =>
-      anySyncing(query.state.data as ProviderGroup[] | undefined) ? 2000 : 30_000,
+      anySyncing(query.state.data) ? 2000 : 30_000,
   });
 }
 
 export function useSyncConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => postJson<ConnectionState>(`/connections/${id}/sync`, {}),
+    mutationFn: (id: string) => api("POST /connections/:id/sync", { params: { id } }),
     onSuccess: () => afterSyncRequested(qc),
   });
 }
 
 export function useManageConnection() {
   return useMutation({
-    mutationFn: (id: string) => postJson<ManageResp>(`/connections/${id}/manage`, {}),
+    mutationFn: (id: string) => api("POST /connections/:id/manage", { params: { id } }),
   });
 }
 
 export function useSyncAll() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => postJson<SyncAllResp>("/sync", {}),
+    mutationFn: () => api("POST /sync"),
     onSuccess: () => afterSyncRequested(qc),
   });
 }
@@ -63,17 +55,14 @@ export function useSyncAll() {
 export function useEnabledProviders() {
   return useQuery({
     queryKey: keys.providersEnabled(),
-    queryFn: ({ signal }) => getJson<EnabledProvider[]>("/providers/enabled", { signal }),
+    queryFn: ({ signal }) => api("GET /providers/enabled", { signal }),
   });
 }
 
 export function useInitConnection() {
   return useMutation({
     mutationFn: (providerKey: string) =>
-      postJson<InitConnectionResp>(
-        "/connections/init",
-        { providerKey },
-      ),
+      api("POST /connections/init", { body: { providerKey } }),
   });
 }
 
@@ -81,7 +70,7 @@ export function useCompleteConnection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ connectionId, params }: CompleteConnectionReq) =>
-      postJson<void>("/connections/complete", { connectionId, params }),
+      api("POST /connections/complete", { body: { connectionId, params } }),
     // A completed connect kicks an initial sync server-side, so the poll that
     // `afterSyncRequested` starts is what eventually refreshes the data views.
     onSuccess: () => afterSyncRequested(qc),
@@ -92,7 +81,7 @@ export function useCompleteConnection() {
 export function useDeleteConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteJson<void>(`/connections/${id}`),
+    mutationFn: (id: string) => api("DELETE /connections/:id", { params: { id } }),
     // Deleting cascades to the connection's accounts and holdings immediately,
     // so every dashboard figure changes with it — not just the list.
     onSuccess: () => afterConnectionDeleted(qc),

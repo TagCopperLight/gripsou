@@ -7,7 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
+import { api } from "./client";
 import { keys } from "./keys";
 import { watchQuery } from "./watch";
 import { transactionFilterFields, type TransactionFilterQuery } from "./filter";
@@ -27,23 +27,18 @@ import {
   afterTransactionChange,
 } from "./invalidate";
 import type {
-  AcceptReviewResponse,
   ApplyToDescriptionBody,
   AiStatus,
   BudgetAiPriceReq,
-  BudgetAiSettings,
-  BudgetAiUsage,
   BudgetCategory,
   BudgetTag,
   BulkBody,
   CategoryBody,
-  PatchResult,
   SetBudgetAiSettingsReq,
   TagBody,
   Transaction,
   TransactionPatch,
   UndoReviewReq,
-  WriteResult,
 } from "./wire";
 
 /** The whole body that re-sends what `c` holds, with `patch` over it: the
@@ -55,14 +50,14 @@ export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {})
 export function useBudgetCategories() {
   return useQuery({
     queryKey: keys.budgetCategories(),
-    queryFn: ({ signal }) => getJson<BudgetCategory[]>("/budget/categories", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/categories", { signal }),
   });
 }
 
 export function useCreateBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CategoryBody) => postJson<BudgetCategory>("/budget/categories", body),
+    mutationFn: (body: CategoryBody) => api("POST /budget/categories", { body }),
     onSuccess: () => afterBudgetCategoryCreated(qc),
   });
 }
@@ -71,7 +66,7 @@ export function useUpdateBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: CategoryBody }) =>
-      patchJson<BudgetCategory>(`/budget/categories/${id}`, body),
+      api("PATCH /budget/categories/:id", { params: { id }, body }),
     onSuccess: () => afterBudgetCategoryChange(qc),
   });
 }
@@ -82,7 +77,7 @@ export function useUpdateBudgetCategory() {
 export function useReorderBudgetCategories() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => putJson<void>("/budget/categories/order", { ids }),
+    mutationFn: (ids: string[]) => api("PUT /budget/categories/order", { body: { ids } }),
     onMutate: async (ids: string[]) => {
       // An in-flight list refetch would otherwise land on top of the optimistic
       // order and bounce the row back.
@@ -107,7 +102,7 @@ export function useReorderBudgetCategories() {
 export function useDeleteBudgetCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteJson<void>(`/budget/categories/${id}`),
+    mutationFn: (id: string) => api("DELETE /budget/categories/:id", { params: { id } }),
     onSuccess: () => afterBudgetCategoryChange(qc),
   });
 }
@@ -115,14 +110,14 @@ export function useDeleteBudgetCategory() {
 export function useBudgetTags() {
   return useQuery({
     queryKey: keys.budgetTags(),
-    queryFn: ({ signal }) => getJson<BudgetTag[]>("/budget/tags", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/tags", { signal }),
   });
 }
 
 export function useCreateBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: TagBody) => postJson<BudgetTag>("/budget/tags", body),
+    mutationFn: (body: TagBody) => api("POST /budget/tags", { body }),
     onSuccess: () => afterBudgetTagCreated(qc),
   });
 }
@@ -131,7 +126,7 @@ export function useUpdateBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: TagBody }) =>
-      patchJson<BudgetTag>(`/budget/tags/${id}`, body),
+      api("PATCH /budget/tags/:id", { params: { id }, body }),
     onSuccess: () => afterBudgetTagChange(qc),
   });
 }
@@ -139,7 +134,7 @@ export function useUpdateBudgetTag() {
 export function useDeleteBudgetTag() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteJson<void>(`/budget/tags/${id}`),
+    mutationFn: (id: string) => api("DELETE /budget/tags/:id", { params: { id } }),
     onSuccess: () => afterBudgetTagChange(qc),
   });
 }
@@ -209,7 +204,7 @@ export function usePatchTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: boolean }) =>
-      patchJson<PatchResult>(`/transactions/${id}`, withConfirm(body)),
+      api("PATCH /transactions/:id", { params: { id }, body: withConfirm(body) }),
     onMutate: async ({ id, body, optimistic }) => {
       if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
       // Every cached filter combination may hold this row, so patch the whole
@@ -244,7 +239,7 @@ export function useApplyToDescription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: ApplyToDescriptionBody & { id: string }) =>
-      postJson<WriteResult>(`/transactions/${id}/apply-to-description`, withConfirm(body)),
+      api("POST /transactions/:id/apply-to-description", { params: { id }, body: withConfirm(body) }),
     onSuccess: () => afterTransactionChange(qc),
   });
 }
@@ -261,7 +256,7 @@ export function useBulkTransactions() {
         ...withConfirm(body),
         filter: body.filter ? transactionFilterFields(body.filter) : undefined,
       };
-      return postJson<WriteResult>("/transactions/bulk", wire);
+      return api("POST /transactions/bulk", { body: wire });
     },
     onSuccess: (_res, body) =>
       onlyChecked(body) ? afterCheckedChange(qc) : afterTransactionChange(qc),
@@ -289,7 +284,7 @@ export function useAiStatus() {
   useEffect(() => watchQuery(qc, keys.budgetAiStatus(), onAiStatusChange(qc)), [qc]);
   return useQuery({
     queryKey: keys.budgetAiStatus(),
-    queryFn: ({ signal }) => getJson<AiStatus>("/budget/categorize/status", { signal }),
+    queryFn: ({ signal }) => api("GET /budget/categorize/status", { signal }),
     refetchInterval: (q) => (q.state.data?.running ? 5000 : q.state.data?.configured ? 30_000 : false),
   });
 }
@@ -297,7 +292,7 @@ export function useAiStatus() {
 export function useRequestCategorize() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => postJson<void>("/budget/categorize", {}),
+    mutationFn: () => api("POST /budget/categorize"),
     onSettled: () => afterCategorizeRequested(qc),
   });
 }
@@ -306,7 +301,7 @@ export function useAcceptReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      postJson<AcceptReviewResponse>(`/budget/review/${id}/accept`, {}),
+      api("POST /budget/review/:id/accept", { params: { id } }),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -315,7 +310,7 @@ export function useUndoReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: UndoReviewReq & { id: string }) =>
-      postJson<void>(`/budget/review/${id}/undo`, body),
+      api("POST /budget/review/:id/undo", { params: { id }, body }),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -323,7 +318,7 @@ export function useUndoReview() {
 export function useBudgetAiSettings() {
   return useQuery({
     queryKey: keys.budgetAiSettings(),
-    queryFn: ({ signal }) => getJson<BudgetAiSettings>("/settings/budget-ai", { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai", { signal }),
   });
 }
 
@@ -331,7 +326,7 @@ export function useSetBudgetAiSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SetBudgetAiSettingsReq) =>
-      patchJson<void>("/settings/budget-ai", body),
+      api("PATCH /settings/budget-ai", { body }),
     onSettled: () => afterBudgetAiSettingsChange(qc),
   });
 }
@@ -341,7 +336,7 @@ export function useSetBudgetAiSettings() {
 export function useBudgetAiModels(provider: string | null) {
   return useQuery({
     queryKey: keys.budgetAiModels(provider ?? ""),
-    queryFn: ({ signal }) => getJson<string[]>(`/settings/budget-ai/models/${provider}`, { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai/models/:provider", { params: { provider: provider ?? "" }, signal }),
     enabled: provider !== null,
     retry: false,
     staleTime: 60 * 60 * 1000,
@@ -351,14 +346,14 @@ export function useBudgetAiModels(provider: string | null) {
 export function useBudgetAiUsage() {
   return useQuery({
     queryKey: keys.budgetAiUsage(),
-    queryFn: ({ signal }) => getJson<BudgetAiUsage>("/settings/budget-ai/usage", { signal }),
+    queryFn: ({ signal }) => api("GET /settings/budget-ai/usage", { signal }),
   });
 }
 
 export function useSetBudgetAiPrices() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (prices: BudgetAiPrices) => putJson<void>("/settings/budget-ai/prices", prices),
+    mutationFn: (prices: BudgetAiPrices) => api("PUT /settings/budget-ai/prices", { body: prices }),
     onSettled: () => afterBudgetAiPricesChange(qc),
   });
 }
