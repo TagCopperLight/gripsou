@@ -82,6 +82,12 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
 - **Cost basis comes only from the `lot_basis` SQL function** (fee-inclusive weighted average, plus the part of the position no lot explains). Never reimplement it: a second copy drifts apart and the screens disagree.
 - A holding whose lots don't explain its quantity gets a badge and a modal to record the missing lots. For securities this is the main path (see Provider facts).
 
+### Days and timezones
+
+- **A user's day is in their saved timezone** (`user_today` in SQL, `repo::prefs::today`, `zonedDay()` in the browser), wherever they are. **Market data uses the UTC day** (`repo::price::market_today`): prices, rates and compositions are shared by every user, so they never take the timezone of whoever triggered the fetch.
+- **Calendar dates travel as UTC-midnight epoch milliseconds** (transaction, lot and chart-point days). They are labels, not instants: the frontend reads them with `calendarDay()`/`formatDay()`, never `formatDate()`, which would show them a day early west of UTC. Only real timestamps (sessions, syncs) go through `formatDate()`.
+- **A timezone change rewrites nothing.** Snapshots keep the day they were stamped with (they store no instant to redate from), provider dates and prices stay as they are, and the backfill follows at the next sync or lot save.
+
 ### Budget
 
 Categories are per user (`budget_category`, seeded by a trigger on `users` insert). Tags live on `transaction`.
