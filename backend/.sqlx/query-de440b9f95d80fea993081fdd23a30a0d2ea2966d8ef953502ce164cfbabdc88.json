@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select h.id\n        from holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where h.id = $1 and c.user_id = $2\n        ",
+  "query": "select id from connection where user_id = $1 order by id",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "holding",
+            "table": "connection",
             "name": "id"
           }
         }
@@ -17,7 +17,6 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Uuid"
       ]
     },
@@ -25,5 +24,5 @@
       false
     ]
   },
-  "hash": "2ac292bee6539b969bf9458c9e5de82c06b649e826a59e2bc88c351181538b62"
+  "hash": "de440b9f95d80fea993081fdd23a30a0d2ea2966d8ef953502ce164cfbabdc88"
 }

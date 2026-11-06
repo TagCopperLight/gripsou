@@ -30,7 +30,8 @@ pub struct IngestSummary {
     /// Holdings present in a prior sync but absent from this one: their position
     /// was zeroed and a zero snapshot stamped for today.
     pub holdings_closed: usize,
-    /// Derived history rows written by the backfill engine.
+    /// Derived history rows written by the backfill engine, across every
+    /// connection of the user.
     pub backfill_rows: usize,
     /// Internal-transfer pairs written by the budget pairing pass, counted in
     /// pairs, not rows.
@@ -154,10 +155,8 @@ pub async fn ingest(
         connection::set_institution(&mut *tx, connection_id, &sync.institution).await?;
     }
 
-    // Derive the past from the transactions just ingested. Runs inside the
-    // same transaction, so a failed sync leaves no half-written history.
-    let backfill_rows =
-        crate::backfill::backfill_connection(&mut tx, connection_id).await? as usize;
+    // Inside the same transaction, so a failed sync leaves no half-written history.
+    let backfill_rows = crate::backfill::backfill_user(&mut tx, user_id).await? as usize;
 
     // The budget pairing pass. Inside the same transaction as
     // everything else, so a failed sync leaves no half-paired ledger. Scoped to

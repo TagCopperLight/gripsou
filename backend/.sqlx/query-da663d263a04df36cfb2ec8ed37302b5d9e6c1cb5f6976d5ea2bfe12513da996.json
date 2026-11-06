@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source)\n            select $1, a.side, a.day, a.quantity, a.unit_price, a.fee, 'manual'\n            from unnest($2::text[], $3::date[], $4::numeric[], $5::numeric[], $6::numeric[])\n                 as a(side, day, quantity, unit_price, fee)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "DateArray",
+        "NumericArray",
+        "NumericArray",
+        "NumericArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da663d263a04df36cfb2ec8ed37302b5d9e6c1cb5f6976d5ea2bfe12513da996"
+}

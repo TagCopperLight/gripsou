@@ -14,8 +14,9 @@ pub async fn connect(database_url: &str) -> Result<Db, sqlx::Error> {
 
 /// Takes the user's write lock for the rest of the caller's transaction.
 ///
-/// It serialises everything that writes a user's `transaction` rows across
-/// accounts: their syncs (ingest and its pairing pass) and their budget edits.
+/// It serialises everything that writes a user's `transaction` rows or
+/// derived history across accounts: their syncs (ingest and its pairing pass),
+/// their budget edits and their lot edits.
 /// Those paths lock rows in different orders (a bulk edit by id, pairing in
 /// whatever order its update meets them), so without one lock taken first, an
 /// edit overlapping a sync can form a cycle and Postgres aborts one of them.

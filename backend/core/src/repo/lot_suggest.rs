@@ -18,6 +18,8 @@ use rust_decimal::{Decimal, RoundingStrategy};
 use uuid::Uuid;
 
 use crate::error::CoreError;
+use crate::repo::holding::{OwnedHolding, owned_holding};
+use crate::repo::lot::LOT_DECIMAL_PLACES;
 
 /// A buy/sell transaction whose day and amount fit a jump.
 #[derive(Debug, Clone)]
@@ -77,7 +79,7 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
             }
             let quantity = j.dq.abs();
             let unit_price = (c.amount.abs() / quantity)
-                .round_dp_with_strategy(8, RoundingStrategy::MidpointAwayFromZero)
+                .round_dp_with_strategy(LOT_DECIMAL_PLACES, RoundingStrategy::MidpointAwayFromZero)
                 .normalize();
             Some(Suggestion {
                 holding_id: j.holding_id,
@@ -89,12 +91,6 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
             })
         })
         .collect()
-}
-
-/// The account a holding lives in, and its currency, if the caller owns it.
-struct AccountRef {
-    id: Uuid,
-    currency: String,
 }
 
 /// Every quantity jump of the account's non-cash holdings, with its
@@ -111,7 +107,7 @@ struct AccountRef {
 async fn account_jumps(
     pool: &sqlx::PgPool,
     user_id: Uuid,
-    account: &AccountRef,
+    holding: &OwnedHolding,
 ) -> Result<Vec<Jump>, CoreError> {
     let rows = sqlx::query!(
         r#"
@@ -178,8 +174,8 @@ async fn account_jumps(
         ) c on true
         order by oj.holding_id, oj.day, c.day, c.id
         "#,
-        account.id,
-        account.currency,
+        holding.account_id,
+        holding.account_currency,
         user_id,
     )
     .fetch_all(pool)
@@ -214,40 +210,20 @@ async fn account_jumps(
     Ok(jumps)
 }
 
-/// This holding's suggested lots. `Ok(None)` when the holding is unknown or
-/// not the caller's, which the API must render as 404, like the sibling lot
-/// endpoints. Uniqueness is decided across the whole account (two holdings
-/// may compete for one transaction), then filtered to the holding asked for.
+/// This holding's suggested lots. Uniqueness is decided across the whole
+/// account (two holdings may compete for one transaction), then filtered to
+/// the holding asked for.
 pub async fn suggest_lots(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     holding_id: Uuid,
-) -> Result<Option<Vec<Suggestion>>, CoreError> {
-    let account = sqlx::query_as!(
-        AccountRef,
-        r#"
-        select a.id as "id!", a.currency as "currency!"
-        from holding h
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where h.id = $1 and c.user_id = $2
-        "#,
-        holding_id,
-        user_id,
-    )
-    .fetch_optional(pool)
-    .await?;
-    let Some(account) = account else {
-        return Ok(None);
-    };
-
-    let jumps = account_jumps(pool, user_id, &account).await?;
-    Ok(Some(
-        pick(&jumps)
-            .into_iter()
-            .filter(|s| s.holding_id == holding_id)
-            .collect(),
-    ))
+) -> Result<Vec<Suggestion>, CoreError> {
+    let holding = owned_holding(pool, user_id, holding_id).await?;
+    let jumps = account_jumps(pool, user_id, &holding).await?;
+    Ok(pick(&jumps)
+        .into_iter()
+        .filter(|s| s.holding_id == holding_id)
+        .collect())
 }
 
 #[cfg(test)]

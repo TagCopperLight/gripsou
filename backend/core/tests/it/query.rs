@@ -451,6 +451,106 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
     Ok(())
 }
 
+/// Each price point carries the position that day from `lot_basis`: none
+/// before the first lot, and a sale removes its share of the cost, not its
+/// proceeds.
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::Result<()> {
+    use gripsou_core::testkit::{rate_on, seed_cash_instrument, seed_lot};
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(6, 0),
+                Decimal::new(600, 0),
+                None,
+            )],
+            ..Default::default()
+        },
+    )
+    .await?;
+    let holding_id = holding_ids(&pool).await[0];
+    let instrument_id: Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'")
+        .fetch_one(&pool)
+        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
+    let d = |n: u32| NaiveDate::from_ymd_opt(2026, 3, n).unwrap();
+    let at = |n: u32| d(n).and_hms_opt(12, 0, 0).unwrap().and_utc();
+    for day in [1, 3, 7] {
+        insert_price_on(&pool, instrument_id, at(day), Decimal::new(150, 0)).await;
+    }
+    seed_lot(&pool, holding_id, Lot::buy(d(2), dec("10"), dec("100"))).await;
+    seed_lot(&pool, holding_id, Lot::sell(d(6), dec("4"), dec("200"))).await;
+
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    let position: Vec<_> = prices.iter().map(|p| (p.qty, p.invested)).collect();
+    assert_eq!(
+        position,
+        vec![
+            (None, None),
+            (Some(dec("10")), Some(dec("1000"))),
+            (Some(dec("6")), Some(dec("600"))),
+        ]
+    );
+
+    // In USD at 0.5 EUR per USD, the invested line doubles.
+    let usd = seed_cash_instrument(&pool, "USD").await;
+    rate_on(&pool, usd, d(1), Decimal::new(5, 1)).await;
+    sqlx::query("update users set currency = 'USD' where id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    assert_eq!(prices[2].reporting_invested, Some(dec("1200")));
+    Ok(())
+}
+
+/// A holding with no lot at all (a balance-only provider) is held flat at its
+/// quantity and the provider's basis.
+#[sqlx::test(migrations = "../migrations")]
+async fn holding_prices_hold_a_lotless_position_flat(pool: PgPool) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![equity_holding(
+                "acct-1",
+                "US0378331005",
+                Decimal::new(7, 0),
+                Decimal::new(70, 0),
+                None,
+            )],
+            ..Default::default()
+        },
+    )
+    .await?;
+    let holding_id = holding_ids(&pool).await[0];
+    let instrument_id: Uuid = sqlx::query_scalar("select id from instrument where kind <> 'cash'")
+        .fetch_one(&pool)
+        .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
+    let at = |n: u32| {
+        NaiveDate::from_ymd_opt(2026, 3, n)
+            .unwrap()
+            .and_hms_opt(12, 0, 0)
+            .unwrap()
+            .and_utc()
+    };
+    insert_price_on(&pool, instrument_id, at(1), Decimal::new(10, 0)).await;
+
+    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    assert_eq!(prices[0].qty, Some(dec("7")));
+    assert_eq!(prices[0].invested, Some(dec("70")));
+    Ok(())
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -2037,11 +2137,6 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
         "the 1,05 fee is part of the basis"
     );
     assert_eq!(h.mean_price, dec("98.895"));
-    assert_eq!(
-        h.unexplained_cost,
-        dec("0"),
-        "the lot explains the position exactly"
-    );
 }
 
 /// The other half: the chart's invested line and the holdings table's Invested

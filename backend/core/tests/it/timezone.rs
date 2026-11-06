@@ -103,17 +103,19 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         .await?;
     let preview_rows: Vec<_> = [today, today + chrono::Duration::days(1)]
         .into_iter()
-        .map(|day| gripsou_core::repo::lot::PreviewLot {
-            side: "buy".into(),
-            acquired_on: day,
-            quantity: Decimal::ONE,
-            unit_price: Decimal::TEN,
-            fee: Decimal::ZERO,
+        .map(|day| {
+            gripsou_core::repo::lot::NewLot::new(
+                "buy",
+                day,
+                Decimal::ONE,
+                Decimal::TEN,
+                Decimal::ZERO,
+            )
+            .unwrap()
         })
         .collect();
-    let preview = gripsou_core::repo::lot::basis_preview(&pool, user, holding_id, &preview_rows)
-        .await?
-        .unwrap();
+    let changes = gripsou_core::repo::lot::LotChanges::replace_manual(preview_rows);
+    let preview = gripsou_core::repo::lot::basis_preview(&pool, user, holding_id, &changes).await?;
     assert_eq!(preview.explained_qty, Decimal::ONE);
     let holdings = query::holdings(&pool, user).await?;
     assert_eq!(holdings[0].price, Some(Decimal::TEN));

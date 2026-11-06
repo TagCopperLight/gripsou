@@ -166,13 +166,10 @@ pub struct HoldingRow {
     /// and the pre-purchase history are guesses, which the Holdings badge says
     /// out loud. Always zero for cash — a cash line has nothing to explain.
     pub unexplained_quantity: Decimal,
-    /// Fee-inclusive mean buy price, amount domain (account currency). Zero
-    /// when no buys are recorded. Exported so the frontend can draw the
-    /// invested line without reimplementing the basis rule.
+    /// Fee-inclusive mean buy price, amount domain (account currency). When
+    /// no buy is recorded (a provider that reports a balance but no lots), the
+    /// basis over the quantity, so a real position does not read as zero.
     pub mean_price: Decimal,
-    /// The part of the basis no recorded lot explains, amount domain. Zero when
-    /// the lots account for the position exactly.
-    pub unexplained_cost: Decimal,
 }
 
 pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
@@ -200,7 +197,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         fx_missing: bool,
         unexplained_quantity: Decimal,
         mean_price: Decimal,
-        unexplained_cost: Decimal,
     }
 
     let bases = sqlx::query_as!(
@@ -248,8 +244,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                coalesce(fx_convert(v.value, 1, rep.unit_value), 0) as "value!",
                coalesce(fx_convert(v.invested, 1, rep.unit_value), 0) as "invested!",
                lot.basis      as "invested_native!",
-               lot.mean_price       as "mean_price!",
-               lot.unexplained_cost as "unexplained_cost!",
+               lot.mean_price as "mean_price!",
                v.fx_missing   as "fx_missing!",
                -- Shares no recorded lot explains. Scoped to THIS holding's
                -- (account, instrument) via the `lot` lateral — never the
@@ -282,13 +277,11 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             limit 1
         ) snap on true
         left join lateral (
-            -- `unexplained_cost` lets the asset modal draw its invested line
-            -- as mean_price x qty(t) + unexplained_cost, a multiplication
-            -- rather than the basis rule.
-            select coalesce(b.mean_price, 0) as mean_price,
+            select case when coalesce(b.mean_price, 0) = 0
+                        then coalesce(b.basis / nullif(h.quantity, 0), 0)
+                        else b.mean_price end as mean_price,
                    b.explained_qty,
-                   b.basis,
-                   b.basis - coalesce(b.mean_price, 0) * b.explained_qty as unexplained_cost
+                   b.basis
             from lot_basis(array[h.id], array[(select d from today)]) b
         ) lot on true
         left join grid uv on uv.instrument_id = i.id
@@ -360,7 +353,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             fx_missing: b.fx_missing,
             unexplained_quantity: b.unexplained_quantity,
             mean_price: b.mean_price,
-            unexplained_cost: b.unexplained_cost,
         });
     }
     Ok(out)
@@ -377,6 +369,13 @@ pub struct PricePointRow {
     /// The same price in the reader's currency at that day's rates. Null when
     /// either rate is unknown.
     pub reporting_price: Option<Decimal>,
+    /// Shares held that day as the lots explain them. Null before the first lot.
+    pub qty: Option<Decimal>,
+    /// Cost basis that day (`lot_basis`), in the account's currency. Null
+    /// before the first lot.
+    pub invested: Option<Decimal>,
+    /// `invested` in the reader's currency. Null when either rate is unknown.
+    pub reporting_invested: Option<Decimal>,
 }
 
 pub async fn holding_prices(
@@ -407,14 +406,37 @@ pub async fn holding_prices(
                       union select acct from pts
                       union select code from reporting)
             )
+        ),
+        lots as (
+            select h.quantity as held,
+                   (select min(l.acquired_on) from lot l where l.holding_id = h.id) as first_day
+            from holding h
+            where h.id = $1
+        ),
+        basis as materialized (
+            select as_of, explained_qty, basis
+            from lot_basis(array[$1]::uuid[], array(select distinct day from pts))
         )
         select pts.ts as "ts!", pts.unit_price as "unit_price!",
                fx_convert(pts.unit_price, q.rate, ac.rate) as "account_price?",
-               fx_convert(pts.unit_price, q.rate, rp.rate) as "reporting_price?"
+               fx_convert(pts.unit_price, q.rate, rp.rate) as "reporting_price?",
+               pos.qty as "qty?",
+               pos.invested as "invested?",
+               fx_convert(pos.invested, ac.rate, rp.rate) as "reporting_invested?"
         from pts
         left join rates q  on q.currency = pts.quote and q.as_of = pts.day
         left join rates ac on ac.currency = pts.acct and ac.as_of = pts.day
         left join rates rp on rp.currency = (select code from reporting) and rp.as_of = pts.day
+        cross join lots
+        left join basis b on b.as_of = pts.day
+        -- No position before the first lot. A holding with no lot at all (a
+        -- provider that reports balances only) is held flat at its quantity.
+        left join lateral (
+            select case when lots.first_day is null then lots.held
+                        else b.explained_qty end as qty,
+                   b.basis as invested
+            where lots.first_day is null or pts.day >= lots.first_day
+        ) pos on true
         order by pts.ts
         "#,
         holding_id,

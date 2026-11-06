@@ -3,6 +3,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use gripsou_core::repo::lot::{self, LotChanges, NewLot};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -83,160 +84,39 @@ pub async fn holding_prices(
     ))
 }
 
-/// Validate a batch of lot adds shared by `save_lots` and `preview_lots` —
-/// the buy/sell check, the decimal parses, the positivity checks, and the
-/// `MAX_SCALE` / `10^12` magnitude bounds all live here exactly once, so the
+/// Parse a batch of lot adds, shared by `save_lots` and `preview_lots` so the
 /// number shown while editing and the number accepted on save reject the same
 /// inputs.
-fn parse_lot_adds(
-    adds: &[dto::LotEntry],
-) -> Result<Vec<gripsou_core::repo::lot::PreviewLot>, ApiError> {
+fn parse_lot_adds(adds: &[dto::LotEntry]) -> Result<Vec<NewLot>, ApiError> {
     let bad = ApiError::bad_request;
-
-    let mut parsed = Vec::with_capacity(adds.len());
-    for a in adds {
-        let side = match a.kind.as_str() {
-            "buy" => "buy",
-            "sell" => "sell",
-            _ => return Err(bad("type must be buy or sell")),
-        };
-        let quantity: Decimal = a
-            .quantity
-            .parse()
-            .map_err(|_| bad("quantity is not a decimal"))?;
-        let unit_price: Decimal = a
-            .unit_price
-            .parse()
-            .map_err(|_| bad("unitPrice is not a decimal"))?;
-        let fee: Decimal = match &a.fee {
-            Some(f) => f.parse().map_err(|_| bad("fee is not a decimal"))?,
-            None => Decimal::ZERO,
-        };
-        if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
-            return Err(bad(
-                "quantity must be positive and unitPrice must not be negative",
-            ));
-        }
-        if fee < Decimal::ZERO {
-            return Err(bad("fee must not be negative"));
-        }
-        // A lot that doesn't fit a `Decimal` would make every read of its holding fail.
-        const MAX_SCALE: u32 = 8;
-        let max_magnitude = Decimal::from(1_000_000_000_000i64); // 10^12
-        if quantity.scale() > MAX_SCALE || unit_price.scale() > MAX_SCALE || fee.scale() > MAX_SCALE
-        {
-            return Err(bad(
-                "quantity, unitPrice and fee support at most 8 decimal places",
-            ));
-        }
-        if quantity.abs() >= max_magnitude
-            || unit_price.abs() >= max_magnitude
-            || fee.abs() >= max_magnitude
-        {
-            return Err(bad("quantity, unitPrice and fee must be below 10^12"));
-        }
-        let gross = quantity
-            .checked_mul(unit_price)
-            .ok_or_else(|| bad("quantity * unitPrice does not fit in a decimal"))?;
-        if gross.scale() > 28 {
-            return Err(bad("quantity * unitPrice does not fit in a decimal"));
-        }
-        parsed.push(gripsou_core::repo::lot::PreviewLot {
-            side: side.to_string(),
-            acquired_on: a.date,
-            quantity,
-            unit_price,
-            fee,
-        });
-    }
-    Ok(parsed)
+    adds.iter()
+        .map(|a| {
+            let quantity: Decimal = a
+                .quantity
+                .parse()
+                .map_err(|_| bad("quantity is not a decimal"))?;
+            let unit_price: Decimal = a
+                .unit_price
+                .parse()
+                .map_err(|_| bad("unitPrice is not a decimal"))?;
+            let fee: Decimal = match &a.fee {
+                Some(f) => f.parse().map_err(|_| bad("fee is not a decimal"))?,
+                None => Decimal::ZERO,
+            };
+            NewLot::new(&a.kind, a.date, quantity, unit_price, fee).map_err(bad)
+        })
+        .collect()
 }
 
 /// Apply a batch of manual lot adds and deletes atomically.
-///
-/// One DB transaction and ONE backfill run for the whole batch: the previous
-/// per-row endpoint re-derived the entire connection's history once per lot,
-/// and a partial failure left the user looking at a half-applied edit with no
-/// way to tell which half.
 pub async fn save_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
     Json(req): Json<dto::SaveLotsReq>,
 ) -> Result<StatusCode, ApiError> {
-    // Validate EVERY add before writing anything, so a rejected batch leaves no
-    // trace — the transaction would roll back anyway, but failing early keeps
-    // the error attributable to a row rather than to the batch.
-    let parsed = parse_lot_adds(&req.adds)?;
-
-    // A repeated id would make the delete count fall short of the requested
-    // count and reject a request that is merely redundant.
-    let mut deletes = req.deletes.clone();
-    deletes.sort();
-    deletes.dedup();
-
-    let mut tx = pool.begin().await?;
-
-    // Ownership check and the connection the backfill must rebuild, in one
-    // query: the connection is *derived* from the holding, never taken from the
-    // request, so a caller cannot aim the rebuild at someone else's connection.
-    let connection_id = sqlx::query_scalar!(
-        r#"
-        select a.connection_id as "connection_id!"
-        from holding h
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where h.id = $1 and c.user_id = $2
-        "#,
-        holding_id,
-        user_id,
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-    // A holding the caller does not own reads as 404, so the endpoint does not
-    // confirm the existence of ids the caller cannot see.
-    let Some(connection_id) = connection_id else {
-        return Err(ApiError::NotFound("unknown holding"));
-    };
-
-    if !deletes.is_empty() {
-        let deleted =
-            gripsou_core::repo::lot::delete_lots(&mut tx, holding_id, user_id, &deletes).await?;
-        // Anything the predicate refused — another user's row, a provider row,
-        // another holding's row, an id that never existed — lands here as the
-        // same 404, and takes the adds down with it.
-        if deleted != deletes.len() as u64 {
-            return Err(ApiError::NotFound("unknown entry"));
-        }
-    }
-
-    for p in &parsed {
-        let inserted = gripsou_core::repo::lot::insert_lot(
-            &mut tx,
-            holding_id,
-            user_id,
-            &p.side,
-            p.acquired_on,
-            p.quantity,
-            p.unit_price,
-            p.fee,
-        )
-        .await?;
-        if inserted.is_none() {
-            // The check above already gated on ownership; the write's own
-            // predicate is belt and braces — 404, never a 500 from an empty row.
-            return Err(ApiError::NotFound("unknown holding"));
-        }
-    }
-
-    // Manual entry is the main path for securities, so the derived history
-    // must move now — not at the next daily sync, a day later. Once, after all
-    // the writes, not per row.
-    if !parsed.is_empty() || !deletes.is_empty() {
-        gripsou_core::backfill::backfill_connection(&mut tx, connection_id).await?;
-    }
-
-    tx.commit().await?;
+    let changes = LotChanges::edit(parse_lot_adds(&req.adds)?, req.deletes);
+    lot::save(&pool, user_id, holding_id, &changes).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -256,9 +136,7 @@ pub async fn lot_suggestions(
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
 ) -> Result<Json<Vec<dto::LotSuggestion>>, ApiError> {
-    let rows = gripsou_core::repo::lot_suggest::suggest_lots(&pool, user_id, holding_id)
-        .await?
-        .ok_or(ApiError::NotFound("unknown holding"))?;
+    let rows = gripsou_core::repo::lot_suggest::suggest_lots(&pool, user_id, holding_id).await?;
     Ok(Json(
         rows.into_iter()
             .map(dto::LotSuggestion::from_suggestion)
@@ -266,88 +144,16 @@ pub async fn lot_suggestions(
     ))
 }
 
-/// Today's price of one share in the holding's account currency — the domain
-/// lots and their basis are in. `None` when the price or a rate is unknown.
-async fn current_price(
-    pool: &PgPool,
-    user_id: Uuid,
-    holding_id: Uuid,
-) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
-    let price = sqlx::query_scalar!(
-        r#"
-        select fx_convert(1, unit_value_asof(h.instrument_id, user_today($2)),
-                          fx_asof(a.currency, user_today($2)))
-        from holding h
-        join account a on a.id = h.account_id
-        where h.id = $1
-        "#,
-        holding_id,
-        user_id,
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(price.flatten())
-}
-
-/// How many units of the reader's currency one unit of the holding's account
-/// currency is worth today; `None` when either rate is unknown.
-async fn account_to_reader_rate(
-    pool: &PgPool,
-    user_id: Uuid,
-    holding_id: Uuid,
-) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
-    let rate = sqlx::query_scalar!(
-        r#"
-        select fx_convert(1, fx_asof(a.currency, user_today($2)), reporting_fx_asof($2, user_today($2)))
-        from holding h
-        join account a on a.id = h.account_id
-        where h.id = $1
-        "#,
-        holding_id,
-        user_id,
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(rate.flatten())
-}
-
-/// What the figures would be for a set of unsaved rows.
-///
-/// The math is not duplicated here: `basis_preview` writes the rows, calls
-/// `lot_basis`, and rolls back. That is what guarantees the number shown while
-/// editing is the number obtained after saving.
+/// What the figures would be if `rows` were the holding's manual lots.
 pub async fn preview_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Path(holding_id): Path<Uuid>,
     Json(req): Json<dto::PreviewLotsReq>,
 ) -> Result<Json<dto::BasisPreview>, ApiError> {
-    let rows = parse_lot_adds(&req.rows)?;
-    // `None` is an unowned or unknown holding. It must read as 404, exactly as
-    // `save_lots` does — that handler's comment states the reason: the endpoint
-    // must not confirm the existence of ids the caller cannot see. Letting this
-    // fall through as a 500 would diverge from the sibling endpoint on the same
-    // resource.
-    let f = gripsou_core::repo::lot::basis_preview(&pool, user_id, holding_id, &rows)
-        .await?
-        .ok_or(ApiError::NotFound("unknown holding"))?;
-    let price = current_price(&pool, user_id, holding_id).await?;
-    // An unknown price is no figure, not a total loss.
-    let unrealised = price.map(|p| f.explained_qty * p - f.basis);
-    let rate = account_to_reader_rate(&pool, user_id, holding_id).await?;
-    let reporting = rate.map(|r| dto::BasisFigures {
-        mean_price: (f.mean_price * r).to_string(),
-        invested: (f.basis * r).to_string(),
-        realised: (f.realised * r).to_string(),
-        unrealised: unrealised.map(|u| (u * r).to_string()),
-    });
-    Ok(Json(dto::BasisPreview {
-        mean_price: f.mean_price.to_string(),
-        invested: f.basis.to_string(),
-        realised: f.realised.to_string(),
-        unrealised: unrealised.map(|u| u.to_string()),
-        reporting,
-    }))
+    let changes = LotChanges::replace_manual(parse_lot_adds(&req.rows)?);
+    let preview = lot::basis_preview(&pool, user_id, holding_id, &changes).await?;
+    Ok(Json(dto::BasisPreview::from_core(preview)))
 }
 
 #[cfg(test)]
@@ -631,15 +437,10 @@ mod tests {
             .unwrap()
     }
 
-    /// Pins the `l.holding_id = h.id` correlation in `lot::delete_lots`. Every
-    /// other refusal test is settled before that predicate ever runs — by the
-    /// handler's own ownership lookup, or by `source = 'manual'` — so none of
-    /// them exercises this clause. This is the only test where the caller
-    /// legitimately owns BOTH holdings: the row belongs to holding A, and the
-    /// delete is aimed at holding B. If that clause were ever dropped, a user
-    /// could delete their OWN manual lot through the WRONG holding's endpoint —
-    /// silently corrupting that other holding's cost basis while the rest of
-    /// the suite stayed green.
+    /// The caller owns BOTH holdings: the row belongs to holding A, and the
+    /// delete is aimed at holding B. It must be refused, or a user could delete
+    /// their own manual lot through the wrong holding's endpoint and silently
+    /// corrupt that holding's cost basis.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_row_from_another_holding_of_the_same_user_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_a) = seed_holding(&pool, "owner@t.local").await;
@@ -1007,7 +808,7 @@ mod tests {
         // the part of the 100-unit position the 10 previewed units leave
         // unexplained, which is `lot_basis`'s business, not this endpoint's.
         assert_eq!(
-            preview.mean_price.parse::<Decimal>().unwrap(),
+            preview.account.mean_price.parse::<Decimal>().unwrap(),
             Decimal::new(15, 0)
         );
 
@@ -1061,8 +862,8 @@ mod tests {
         .unwrap()
         .0;
         // 10 shares x 30 USD x 0.5 EUR per USD = 150 EUR, whatever the basis.
-        let invested: Decimal = preview.invested.parse().unwrap();
-        let unrealised: Decimal = preview.unrealised.unwrap().parse().unwrap();
+        let invested: Decimal = preview.account.invested.parse().unwrap();
+        let unrealised: Decimal = preview.account.unrealised.unwrap().parse().unwrap();
         assert_eq!(invested + unrealised, Decimal::new(150, 0));
     }
 
@@ -1103,7 +904,7 @@ mod tests {
         .await
         .unwrap()
         .0;
-        assert_eq!(preview.unrealised, None);
+        assert_eq!(preview.account.unrealised, None);
     }
 
     /// The figures also come in the reader's currency, converted from the
@@ -1136,12 +937,18 @@ mod tests {
         .0;
         let r = p.reporting.expect("a rate exists today");
         let half = |s: &str| s.parse::<Decimal>().unwrap() * Decimal::new(5, 1);
-        assert_eq!(r.invested.parse::<Decimal>().unwrap(), half(&p.invested));
+        assert_eq!(
+            r.invested.parse::<Decimal>().unwrap(),
+            half(&p.account.invested)
+        );
         assert_eq!(
             r.mean_price.parse::<Decimal>().unwrap(),
-            half(&p.mean_price)
+            half(&p.account.mean_price)
         );
-        assert_eq!(r.realised.parse::<Decimal>().unwrap(), half(&p.realised));
+        assert_eq!(
+            r.realised.parse::<Decimal>().unwrap(),
+            half(&p.account.realised)
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

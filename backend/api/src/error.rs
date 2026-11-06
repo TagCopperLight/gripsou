@@ -108,9 +108,15 @@ impl From<crate::auth::throttle::Blocked> for ApiError {
     }
 }
 
-/// Any other error is ours: logged with its causes, answered 500.
+/// A core `NotFound` is a 404. Any other error is ours: logged with its
+/// causes, answered 500.
 impl<E: std::error::Error + 'static> From<E> for ApiError {
     fn from(e: E) -> Self {
+        if let Some(gripsou_core::error::CoreError::NotFound(what)) =
+            (&e as &dyn std::any::Any).downcast_ref()
+        {
+            return ApiError::NotFound(what);
+        }
         ApiError::internal(gripsou_core::logs::error_chain(&e))
     }
 }

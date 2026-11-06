@@ -10,10 +10,30 @@
 //!
 //! The whole connection is deleted and refilled on every run: simpler than an
 //! incremental refill and cheap at this size.
+//!
+//! Every connection of a user starts on the same day (the day before the
+//! user's earliest evidence), so new evidence on one connection can move the
+//! start of all of them: writers rebuild with [`backfill_user`].
 
 use uuid::Uuid;
 
 use crate::error::CoreError;
+
+/// Rewrites the derived history of every connection of `user_id`. Returns the
+/// number of derived rows written.
+pub async fn backfill_user(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<u64, CoreError> {
+    let connections = sqlx::query_scalar!(
+        "select id from connection where user_id = $1 order by id",
+        user_id,
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut written = 0;
+    for connection_id in connections {
+        written += backfill_connection(conn, connection_id).await?;
+    }
+    Ok(written)
+}
 
 /// Rewrites the derived history for every holding on `connection_id`.
 /// Returns the number of derived rows written.

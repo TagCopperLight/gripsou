@@ -110,12 +110,9 @@ pub struct Holding {
     /// Shares no recorded lot explains. "0" when the position is fully
     /// accounted for. A non-zero value drives the fill-in badge.
     pub unexplained_qty: String,
-    /// Fee-inclusive mean buy price, amount domain (account currency). "0" when
-    /// no buys are recorded.
+    /// Fee-inclusive mean buy price, amount domain (account currency); the
+    /// basis over the quantity when no buy is recorded.
     pub mean_price: String,
-    /// The part of the cost basis no recorded lot explains, amount domain.
-    /// "0" when the lots account for the position exactly.
-    pub unexplained_cost: String,
 }
 
 /// Display kind for a holding.
@@ -196,7 +193,6 @@ impl Holding {
             composition: r.composition,
             unexplained_qty: r.unexplained_quantity.to_string(),
             mean_price: r.mean_price.to_string(),
-            unexplained_cost: r.unexplained_cost.to_string(),
         }
     }
 }
@@ -288,14 +284,21 @@ pub struct PreviewLotsReq {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisPreview {
-    pub mean_price: String,
-    pub invested: String,
-    pub realised: String,
-    /// Null when today's price or rate is unknown.
-    pub unrealised: Option<String>,
+    /// In the account's currency.
+    #[serde(flatten)]
+    pub account: BasisFigures,
     /// The same figures in the reader's currency; null when the rate from the
     /// account's currency is unknown today.
     pub reporting: Option<BasisFigures>,
+}
+
+impl BasisPreview {
+    pub fn from_core(p: gripsou_core::repo::lot::BasisPreview) -> Self {
+        BasisPreview {
+            account: BasisFigures::from_core(p.account),
+            reporting: p.reporting.map(BasisFigures::from_core),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -304,7 +307,19 @@ pub struct BasisFigures {
     pub mean_price: String,
     pub invested: String,
     pub realised: String,
+    /// Null when today's price or rate is unknown.
     pub unrealised: Option<String>,
+}
+
+impl BasisFigures {
+    fn from_core(f: gripsou_core::repo::lot::BasisFigures) -> Self {
+        BasisFigures {
+            mean_price: f.mean_price.to_string(),
+            invested: f.invested.to_string(),
+            realised: f.realised.to_string(),
+            unrealised: f.unrealised.map(|u| u.to_string()),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -314,6 +329,9 @@ pub struct PricePoint {
     pub price: String,
     pub account_price: Option<String>,
     pub reporting_price: Option<String>,
+    pub qty: Option<String>,
+    pub invested: Option<String>,
+    pub reporting_invested: Option<String>,
 }
 
 impl PricePoint {
@@ -323,6 +341,9 @@ impl PricePoint {
             price: r.unit_price.to_string(),
             account_price: r.account_price.map(|p| p.to_string()),
             reporting_price: r.reporting_price.map(|p| p.to_string()),
+            qty: r.qty.map(|q| q.to_string()),
+            invested: r.invested.map(|i| i.to_string()),
+            reporting_invested: r.reporting_invested.map(|i| i.to_string()),
         }
     }
 }

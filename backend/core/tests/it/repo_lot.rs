@@ -83,10 +83,30 @@ async fn lot_rejects_an_unknown_source(pool: PgPool) {
     );
 }
 
-use gripsou_core::repo::lot::{PreviewLot, basis_preview, delete_lots, insert_lot, list_lots};
+use gripsou_core::error::CoreError;
+use gripsou_core::repo::lot::{LotChanges, NewLot, basis_preview, list_lots, save};
+
+fn buy(day: &str, quantity: &str, unit_price: &str, fee: &str) -> NewLot {
+    NewLot::new(
+        "buy",
+        day.parse().unwrap(),
+        dec(quantity),
+        dec(unit_price),
+        dec(fee),
+    )
+    .unwrap()
+}
+
+async fn lot_count(pool: &PgPool, holding_id: uuid::Uuid) -> i64 {
+    sqlx::query_scalar("select count(*) from lot where holding_id = $1")
+        .bind(holding_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
 
 #[sqlx::test(migrations = "../migrations")]
-async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
+async fn save_then_list_round_trips_the_fee(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -95,19 +115,8 @@ async fn insert_then_list_round_trips_the_fee(pool: PgPool) {
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    let id = insert_lot(
-        &mut conn,
-        holding_id,
-        user_id,
-        "buy",
-        "2026-06-01".parse().unwrap(),
-        dec("2"),
-        dec("98.37"),
-        dec("1.05"),
-    )
-    .await
-    .unwrap();
-    assert!(id.is_some());
+    let changes = LotChanges::edit(vec![buy("2026-06-01", "2", "98.37", "1.05")], []);
+    save(&pool, user_id, holding_id, &changes).await.unwrap();
 
     let rows = list_lots(&pool, user_id, holding_id).await.unwrap();
     assert_eq!(rows.len(), 1);
@@ -139,10 +148,83 @@ async fn delete_refuses_a_provider_lot(pool: PgPool) {
     )
     .await;
 
-    let deleted = delete_lots(&mut conn, holding_id, user_id, &[lot_id])
+    let err = save(
+        &pool,
+        user_id,
+        holding_id,
+        &LotChanges::edit(vec![], [lot_id]),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, CoreError::NotFound(_)));
+    assert_eq!(
+        lot_count(&pool, holding_id).await,
+        1,
+        "a provider lot is not the user's to delete"
+    );
+}
+
+/// The same id twice is one delete, not a shortfall that rejects the batch.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_repeated_delete_id_is_one_delete(pool: PgPool) {
+    let conn_id = seed_connection(&pool).await;
+    let user_id = testkit::owner(&pool, conn_id).await;
+    let mut conn = pool.acquire().await.unwrap();
+    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
         .await
         .unwrap();
-    assert_eq!(deleted, 0, "a provider lot is not the user's to delete");
+    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
+    let changes = LotChanges::edit(vec![buy("2026-06-01", "2", "98.37", "0")], []);
+    save(&pool, user_id, holding_id, &changes).await.unwrap();
+    let id = list_lots(&pool, user_id, holding_id).await.unwrap()[0].id;
+
+    save(
+        &pool,
+        user_id,
+        holding_id,
+        &LotChanges::edit(vec![], [id, id]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(lot_count(&pool, holding_id).await, 0);
+}
+
+/// Every connection of a user starts its history on the same day, the day
+/// before the user's earliest evidence. A lot dated before it moves that day
+/// for the user's other connections too.
+#[sqlx::test(migrations = "../migrations")]
+async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
+    let (user_id, conn_a) = testkit::seed_user_and_connection(&pool).await;
+    let conn_b = testkit::seed_connection_for(&pool, user_id).await;
+    let today = gripsou_core::repo::prefs::today(&pool, user_id)
+        .await
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let account_a = upsert_account(&mut conn, conn_a, &testkit::checking_account("acct-a"))
+        .await
+        .unwrap();
+    let account_b = upsert_account(&mut conn, conn_b, &testkit::checking_account("acct-b"))
+        .await
+        .unwrap();
+    let holding_a = testkit::seed_equity_holding(&pool, account_a, "PUST", dec("2")).await;
+    let holding_b = testkit::seed_equity_holding(&pool, account_b, "WLDX", dec("5")).await;
+    testkit::stamp_on(&pool, holding_a, today, dec("2"), dec("200")).await;
+    testkit::stamp_on(&pool, holding_b, today, dec("5"), dec("500")).await;
+    gripsou_core::backfill::backfill_user(&mut conn, user_id)
+        .await
+        .unwrap();
+
+    let lot_day = today - chrono::Duration::days(30);
+    let changes = LotChanges::edit(vec![buy(&lot_day.to_string(), "2", "100", "0")], []);
+    save(&pool, user_id, holding_a, &changes).await.unwrap();
+
+    let first_b: Option<chrono::NaiveDate> =
+        sqlx::query_scalar("select min(as_of) from holding_backfill where holding_id = $1")
+            .bind(holding_b)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(first_b, Some(lot_day - chrono::Duration::days(1)));
 }
 
 /// The preview must leave nothing behind: it computes inside a rolled-back
@@ -157,29 +239,16 @@ async fn preview_computes_without_writing(pool: PgPool) {
         .unwrap();
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
-    let figures = basis_preview(
-        &pool,
-        user_id,
-        holding_id,
-        &[PreviewLot {
-            side: "buy".into(),
-            acquired_on: "2026-06-01".parse().unwrap(),
-            quantity: dec("2"),
-            unit_price: dec("98.37"),
-            fee: dec("1.05"),
-        }],
-    )
-    .await
-    .unwrap()
-    .expect("holding is owned by user_id");
-    assert_eq!(figures.basis, dec("197.79"));
-
-    let remaining: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
-        .bind(holding_id)
-        .fetch_one(&pool)
+    let changes = LotChanges::replace_manual(vec![buy("2026-06-01", "2", "98.37", "1.05")]);
+    let preview = basis_preview(&pool, user_id, holding_id, &changes)
         .await
         .unwrap();
-    assert_eq!(remaining, 0, "the preview must have rolled back");
+    assert_eq!(preview.account.invested, dec("197.79"));
+    assert_eq!(
+        lot_count(&pool, holding_id).await,
+        0,
+        "the preview must have rolled back"
+    );
 }
 
 /// A provider's lots are not the user's to replace: the preview keeps them, as
@@ -205,31 +274,18 @@ async fn preview_keeps_the_provider_lots(pool: PgPool) {
     )
     .await;
 
-    let figures = basis_preview(
-        &pool,
-        user_id,
-        holding_id,
-        &[PreviewLot {
-            side: "buy".into(),
-            acquired_on: "2026-06-01".parse().unwrap(),
-            quantity: dec("1"),
-            unit_price: dec("130"),
-            fee: dec("0"),
-        }],
-    )
-    .await
-    .unwrap()
-    .expect("holding is owned by user_id");
-    assert_eq!(figures.explained_qty, dec("3"));
-    assert_eq!(figures.basis, dec("330"));
+    let changes = LotChanges::replace_manual(vec![buy("2026-06-01", "1", "130", "0")]);
+    let preview = basis_preview(&pool, user_id, holding_id, &changes)
+        .await
+        .unwrap();
+    assert_eq!(preview.explained_qty, dec("3"));
+    assert_eq!(preview.account.invested, dec("330"));
 }
 
-/// The trespass path: a holding that belongs to a different user must read as
-/// "unknown" (`Ok(None)`), the same as `save_lots` treats it, so the endpoint
-/// never confirms the existence of ids the caller cannot see. Must also write
-/// nothing — the rollback must fire on this early-exit path too.
+/// A holding that belongs to a different user reads as unknown, and nothing
+/// is written: neither the preview's rows nor a save's.
 #[sqlx::test(migrations = "../migrations")]
-async fn preview_refuses_a_foreign_holding(pool: PgPool) {
+async fn a_foreign_holding_is_not_found(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
     let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
@@ -238,72 +294,24 @@ async fn preview_refuses_a_foreign_holding(pool: PgPool) {
     let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
 
     let other_user_id = testkit::seed_user(&pool).await;
+    let rows = || vec![buy("2026-06-01", "2", "98.37", "1.05")];
 
-    let figures = basis_preview(
+    let preview = basis_preview(
         &pool,
         other_user_id,
         holding_id,
-        &[PreviewLot {
-            side: "buy".into(),
-            acquired_on: "2026-06-01".parse().unwrap(),
-            quantity: dec("2"),
-            unit_price: dec("98.37"),
-            fee: dec("1.05"),
-        }],
+        &LotChanges::replace_manual(rows()),
     )
-    .await
-    .unwrap();
-    assert!(
-        figures.is_none(),
-        "a foreign holding must read as unknown, not error"
-    );
-
-    let remaining: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(remaining, 0, "the refusal path must not write anything");
-}
-
-/// The insert path must enforce ownership itself, not merely trust a caller's
-/// prior check — a non-owning `user_id` must write nothing and report
-/// not-found, not just return a value the caller happens to ignore.
-#[sqlx::test(migrations = "../migrations")]
-async fn insert_lot_rejects_a_non_owning_user(pool: PgPool) {
-    let conn_id = seed_connection(&pool).await;
-    let mut conn = pool.acquire().await.unwrap();
-    let account_id = upsert_account(&mut conn, conn_id, &testkit::checking_account("acct-1"))
-        .await
-        .unwrap();
-    let holding_id = testkit::seed_equity_holding(&pool, account_id, "PUST", dec("2")).await;
-
-    let other_user_id = testkit::seed_user(&pool).await;
-
-    let result = insert_lot(
-        &mut conn,
-        holding_id,
+    .await;
+    assert!(matches!(preview, Err(CoreError::NotFound(_))));
+    let saved = save(
+        &pool,
         other_user_id,
-        "buy",
-        "2026-06-01".parse().unwrap(),
-        dec("20"),
-        dec("15.617"),
-        dec("0"),
+        holding_id,
+        &LotChanges::edit(rows(), []),
     )
-    .await
-    .unwrap();
-    assert!(
-        result.is_none(),
-        "a non-owning user_id must not be able to write a lot"
-    );
+    .await;
+    assert!(matches!(saved, Err(CoreError::NotFound(_))));
 
-    let remaining: i64 = sqlx::query_scalar("select count(*) from lot where holding_id = $1")
-        .bind(holding_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        remaining, 0,
-        "the refusal path must not write anything, not merely return None"
-    );
+    assert_eq!(lot_count(&pool, holding_id).await, 0);
 }
