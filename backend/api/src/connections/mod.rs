@@ -6,7 +6,6 @@ pub mod dto;
 use crate::routes::Routes;
 use axum::extract::{DefaultBodyLimit, OriginalUri, Path, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
-use axum::routing::post;
 use gripsou_jobs::ConnectError;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -231,11 +230,9 @@ pub(crate) fn routes() -> Routes {
         .post("/connections/{id}/manage", manage_connection)
         .post("/sync", sync_all)
         .get("/providers/enabled", enabled_providers)
-        .with(
-            Method::POST,
-            "/webhooks/{provider}",
-            post(webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
-        )
+        .layered(Method::POST, "/webhooks/{provider}", webhook, |route| {
+            route.layer(DefaultBodyLimit::max(32 * 1024 * 1024))
+        })
 }
 
 #[cfg(test)]

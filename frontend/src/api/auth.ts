@@ -22,6 +22,7 @@ import type {
   SessionUser,
   TokenInfo,
   TotpSetup,
+  UpdatePrefsReq,
   UpdateProfileReq,
 } from "./wire";
 import type { PrefsPatch } from "../lib/prefsPatch";
@@ -44,7 +45,7 @@ export const authApi = {
   loginWithPasskey: (challenge: string, credential: AuthenticationResponseJSON, remember: boolean) =>
     postJson<SessionResponse>("/auth/passkey", { challenge, credential, remember }),
   logout: () => postJson<void>("/auth/logout", {}),
-  savePrefs: (patch: PrefsPatch) => patchJson<SessionUser>("/auth/prefs", patch),
+  savePrefs: (patch: PrefsPatch) => patchJson<SessionUser>("/auth/prefs", patch satisfies UpdatePrefsReq),
   finishWelcome: () => postJson<void>("/auth/welcome", {}),
   tokenInfo: (token: string) => getJson<TokenInfo>(`/auth/token/${token}`),
   redeemInvite: (token: string, body: RedeemInviteReq) =>

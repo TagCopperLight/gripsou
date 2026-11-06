@@ -11,6 +11,16 @@ use crate::auth::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::{prefs, user};
 
+/// The settings one save changes, the rest untouched. `null` puts a display
+/// setting back to its default and removes the avatar; the other settings
+/// refuse it.
+#[derive(serde::Deserialize, ts_rs::TS)]
+#[serde(transparent)]
+pub struct UpdatePrefsReq(
+    #[ts(type = "{ [K in keyof UserPrefs]?: UserPrefs[K] | null }")]
+    pub  serde_json::Map<String, serde_json::Value>,
+);
+
 /// Saves only the settings in the body (see `prefs::patch_prefs`), so two
 /// settings changed at once never overwrite each other.
 ///
@@ -22,7 +32,7 @@ pub async fn update_prefs(
     State(pool): State<PgPool>,
     State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
-    Json(patch): Json<serde_json::Map<String, serde_json::Value>>,
+    Json(UpdatePrefsReq(patch)): Json<UpdatePrefsReq>,
 ) -> Result<Json<dto::SessionUser>, ApiError> {
     let before = prefs::get(&pool, user_id)
         .await?
@@ -114,7 +124,7 @@ mod tests {
                 user_id,
                 session_id: Uuid::new_v4(),
             },
-            Json(patch),
+            Json(UpdatePrefsReq(patch)),
         )
         .await
         .map(|Json(user)| user)

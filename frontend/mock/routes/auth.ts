@@ -1,8 +1,16 @@
-import { withPatch } from "../../src/lib/prefsPatch.ts";
+import { DEFAULT_PREFS, type UpdatePrefsReq, type UserPrefs } from "../../src/api/wire.ts";
 import { fail, reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
 
 const TOKEN = "mock";
+
+/** The server's merge: a setting sent as null goes back to its default, and
+ *  the avatar, which has none, is removed. */
+function patchPrefs(prefs: UserPrefs, patch: UpdatePrefsReq): UserPrefs {
+  const sent = Object.entries(patch).map(([key, value]) => [key, value ?? DEFAULT_PREFS[key as keyof UserPrefs]]);
+  const { avatar, ...rest }: UserPrefs = { ...prefs, ...Object.fromEntries(sent) };
+  return avatar === undefined ? rest : { ...rest, avatar };
+}
 
 /** Made-up codes, the server's shape (xxxx-xxxx). */
 const RECOVERY_CODES = ["k7qm-2xd9", "p4wn-8rtc", "h3vb-6yle", "z9fa-1mks", "c2tj-7gqp", "n8re-4wvd", "u5xh-3bnz", "f6ly-9cpa", "m1gs-5kte", "w4dq-2jhr"];
@@ -45,7 +53,7 @@ export function authRoutes(r: Router<Store>): void {
     if (store.fx.rateDown && currency !== undefined && currency !== store.user.prefs.currency && currency !== "EUR") {
       return fail(502, `no exchange rate into ${currency} right now`);
     }
-    store.user = { ...store.user, prefs: withPatch(store.user.prefs, body) };
+    store.user = { ...store.user, prefs: patchPrefs(store.user.prefs, body) };
     return store.user;
   });
 

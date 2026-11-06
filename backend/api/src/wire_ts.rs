@@ -10,7 +10,7 @@ use std::fmt::Write;
 
 use ts_rs::{Config, TS, TypeVisitor};
 
-use crate::{accounts, admin, auth, budget, connections, holdings, transactions, wire};
+use crate::{auth, budget, wire};
 use gripsou_core::repo::prefs;
 
 /// The command that writes the file, named in its header.
@@ -22,9 +22,14 @@ pub const PATH: &str = concat!(
     "/../../frontend/src/api/wire.ts"
 );
 
+/// How ts-rs writes the types: i64 counts and timestamps fit a JS number.
+pub(crate) fn config() -> Config {
+    Config::new().with_large_int("number")
+}
+
 pub fn render() -> String {
     let mut types = Types {
-        cfg: Config::new().with_large_int("number"),
+        cfg: config(),
         decls: BTreeMap::new(),
     };
     types.roots();
@@ -41,97 +46,29 @@ pub fn render() -> String {
     out
 }
 
-struct Types {
+pub(crate) struct Types {
     cfg: Config,
     /// By TypeScript name, so the file's order is stable.
     decls: BTreeMap<String, (TypeId, String)>,
 }
 
 impl Types {
+    /// Every route's body and answer, and the query parameters the frontend
+    /// builds.
     fn roots(&mut self) {
-        self.visit::<accounts::dto::NetWorthResponse>();
-        self.visit::<accounts::dto::Account>();
-        self.visit::<accounts::dto::AccountSeriesResponse>();
-        self.visit::<accounts::dto::UpdateAccountReq>();
-        self.visit::<accounts::dto::UpdatedAccount>();
-        self.visit::<admin::dto::User>();
-        self.visit::<admin::dto::DeleteUserReq>();
-        self.visit::<admin::dto::SetRoleReq>();
-        self.visit::<admin::dto::Provider>();
-        self.visit::<admin::dto::SetProviderReq>();
-        self.visit::<admin::dto::ApiKeyProvider>();
-        self.visit::<admin::dto::SetApiKeyReq>();
-        self.visit::<admin::dto::InviteLinkResp>();
-        self.visit::<admin::dto::BudgetAiSettingsDto>();
-        self.visit::<admin::dto::SetBudgetAiSettingsReq>();
-        self.visit::<admin::dto::BudgetAiUsageDto>();
-        self.visit::<admin::dto::BudgetAiPriceReq>();
-        self.visit::<auth::dto::LoginReq>();
-        self.visit::<auth::dto::LoginOutcome>();
-        self.visit::<auth::dto::LoginVerifyReq>();
-        self.visit::<auth::dto::SessionDto>();
-        self.visit::<auth::dto::UpdateProfileReq>();
-        self.visit::<auth::dto::ChangePasswordReq>();
-        self.visit::<auth::dto::DeleteAccountReq>();
-        self.visit::<auth::dto::TokenInfoResp>();
-        self.visit::<auth::dto::RedeemInviteReq>();
-        self.visit::<auth::dto::RedeemResetReq>();
-        self.visit::<auth::dto::ReauthReq>();
-        self.visit::<auth::dto::ReauthResponse>();
-        self.visit::<auth::dto::ReauthTokenReq>();
-        self.visit::<auth::dto::MfaStatus>();
-        self.visit::<auth::dto::PasskeyOptions>();
-        self.visit::<auth::dto::PasskeyRegisterReq>();
-        self.visit::<auth::dto::RenamePasskeyReq>();
-        self.visit::<auth::dto::PasskeySignInReq>();
-        self.visit::<auth::dto::TotpSetup>();
-        self.visit::<auth::dto::TotpConfirmReq>();
-        self.visit::<auth::dto::RecoveryCodes>();
-        self.visit::<budget::dto::CategoryDto>();
-        self.visit::<budget::dto::CategoryBody>();
-        self.visit::<budget::dto::ReorderBody>();
-        self.visit::<budget::dto::TagDto>();
-        self.visit::<budget::dto::TagBody>();
-        self.visit::<budget::dto::SummaryDto>();
+        crate::api_routes().visit_types(self);
         self.visit::<budget::dto::SummaryParams>();
-        self.visit::<budget::dto::TrendDto>();
         self.visit::<budget::dto::TrendParams>();
-        self.visit::<budget::dto::PatchTransactionBody>();
-        self.visit::<budget::dto::PatchTransactionResponse>();
-        self.visit::<budget::dto::ApplyToDescriptionBody>();
-        self.visit::<budget::dto::UpdatedResponse>();
-        self.visit::<budget::dto::BulkBody>();
-        self.visit::<budget::dto::AcceptReviewResponse>();
-        self.visit::<budget::dto::AiStatusDto>();
-        self.visit::<budget::dto::UndoReviewReq>();
-        self.visit::<connections::dto::ProviderGroup>();
-        self.visit::<connections::dto::ConnectionState>();
-        self.visit::<connections::dto::EnabledProvider>();
-        self.visit::<connections::dto::InitConnectionReq>();
-        self.visit::<connections::dto::InitConnectionResp>();
-        self.visit::<connections::dto::SyncAllResp>();
-        self.visit::<connections::dto::ManageResp>();
-        self.visit::<connections::dto::CompleteConnectionReq>();
-        self.visit::<holdings::dto::Holding>();
-        self.visit::<holdings::dto::SaveLotsReq>();
-        self.visit::<holdings::dto::Lot>();
-        self.visit::<holdings::dto::LotSuggestion>();
-        self.visit::<holdings::dto::PreviewLotsReq>();
-        self.visit::<holdings::dto::BasisPreview>();
-        self.visit::<holdings::dto::PricePoint>();
-        self.visit::<holdings::dto::InvestmentReturns>();
-        self.visit::<transactions::dto::Transaction>();
-        self.visit::<transactions::dto::CountsDto>();
-        self.visit::<transactions::TransactionParams>();
         self.visit::<wire::Range>();
-        self.visit::<crate::Health>();
     }
 }
 
 impl TypeVisitor for Types {
     fn visit<T: TS + 'static + ?Sized>(&mut self) {
-        // Primitives and wrappers have no file, hence no declaration.
+        // Primitives and wrappers have no file, hence no declaration, but a
+        // wrapper's parameters may (`Vec<Account>`).
         if T::output_path().is_none() {
+            T::visit_generics(self);
             return;
         }
         let name = T::ident(&self.cfg);

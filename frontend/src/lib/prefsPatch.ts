@@ -1,4 +1,3 @@
-// Type-only imports: the mock server loads this file in the Vite config.
 import type { UserPrefs } from "../api/wire";
 
 /** The settings one save changes, the rest untouched. `avatar: null` removes it. */

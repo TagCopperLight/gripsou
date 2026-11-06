@@ -664,6 +664,13 @@ export type UndoReviewReq = { categoryId?: string | null, confidence?: string | 
 
 export type UpdateAccountReq = { name: string, typeKey: string, color: string, };
 
+/**
+ * The settings one save changes, the rest untouched. `null` puts a display
+ * setting back to its default and removes the avatar; the other settings
+ * refuse it.
+ */
+export type UpdatePrefsReq = { [K in keyof UserPrefs]?: UserPrefs[K] | null };
+
 export type UpdateProfileReq = { name: string, email: string, };
 
 export type UpdatedAccount = { id: string, name: string, color: string, typeKey: string, };
