@@ -2,12 +2,12 @@
 //! that need the api's own password and session hashing.
 
 use crate::auth::client::Client;
+use crate::auth::dto::{self, LoginReq};
 use crate::auth::login::login;
 use crate::auth::throttle::Throttles;
 use crate::auth::{self, AuthUser, factors};
-use crate::dto::{self, LoginReq};
 use crate::error::ApiError;
-use axum::Json;
+use crate::error::Json;
 use axum::extract::State;
 use gripsou_core::repo::session;
 pub(crate) use gripsou_core::repo::user::Role;
@@ -16,19 +16,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// The job deps with whatever adapters the saved keys configure.
-pub(crate) fn deps() -> std::sync::Arc<gripsou_jobs::Deps> {
-    let key = gripsou_core::testkit::encryption_key();
-    std::sync::Arc::new(
-        gripsou_jobs::Deps::build(
-            key,
-            "EUR".into(),
-            "http://localhost:5173".into(),
-            Default::default(),
-        )
-        .unwrap(),
-    )
-}
+pub(crate) use gripsou_jobs::testing::deps;
 
 /// The password `seed_user` gives its users.
 pub(crate) const PASSWORD: &str = "hunter22";
@@ -63,13 +51,6 @@ pub(crate) async fn seed_session(pool: &PgPool, user_id: Uuid) -> AuthUser {
     AuthUser {
         user_id,
         session_id: s.id,
-    }
-}
-
-pub(crate) fn who(a: &AuthUser) -> AuthUser {
-    AuthUser {
-        user_id: a.user_id,
-        session_id: a.session_id,
     }
 }
 
@@ -171,7 +152,7 @@ pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) ->
         State(pool.clone()),
         State(throttles()),
         local(),
-        who(a),
+        a.clone(),
         Json(dto::ReauthReq {
             password: password.into(),
         }),
@@ -182,14 +163,9 @@ pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) ->
     .reauth
 }
 
-/// Seed an admin user and return their id — mirrors what `seed_user` does for
-/// the existing tests (email "a@t.local").
-pub(crate) async fn seed_admin_user(pool: &PgPool) -> Uuid {
-    seed_admin(pool, "a@t.local", "hunter2").await
-}
-
-pub(crate) async fn seed_admin(pool: &PgPool, email: &str, password: &str) -> Uuid {
-    seed_user_with_password(pool, email, password, Role::Admin).await
+/// An admin who can log in with `PASSWORD`.
+pub(crate) async fn seed_admin(pool: &PgPool, email: &str) -> Uuid {
+    seed_user_with_password(pool, email, PASSWORD, Role::Admin).await
 }
 
 pub(crate) async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
@@ -211,11 +187,9 @@ pub(crate) async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth:
     }
 }
 
-/// Insert a user + connection, returning the connection id (mirrors
-/// core's `common::seed_connection`, but this crate can't import that
-/// test-only module across crates).
-pub(crate) async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
-    let user_id = seed_user_with_password(pool, email, "hunter2", Role::User).await;
+/// A user with one connection; returns the connection id.
+async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
+    let user_id = seed_user(pool, email).await;
     let conn_id = Uuid::new_v4();
     sqlx::query(
         "insert into connection (id, user_id, provider_key, display_name) \

@@ -1,13 +1,13 @@
 //! The signed-in user's preferences. A currency change needs a rate into the
 //! new currency, and switching AI categorisation on starts a run.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::State;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
-use crate::dto;
+use crate::auth::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::{prefs, user};
 
@@ -128,7 +128,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_saves_only_the_settings_sent(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "a@t.local").await;
         let updated = patch_prefs(
             &pool,
             user_id,
@@ -152,7 +152,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_new_currency_fetches_its_rate_before_saving(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "a@t.local").await;
         patch_prefs(&pool, user_id, json!({ "currency": "USD" }))
             .await
             .unwrap();
@@ -168,7 +168,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_currency_with_no_rate_is_refused_and_nothing_saved(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "a@t.local").await;
         let err = patch_prefs_with_rate(
             &pool,
             user_id,
@@ -194,7 +194,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn two_settings_saved_at_once_both_stick(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "a@t.local").await;
         let (a, b) = tokio::join!(
             patch_prefs(&pool, user_id, json!({ "currency": "USD" })),
             patch_prefs(&pool, user_id, json!({ "numberDecimals": 0 })),
@@ -210,7 +210,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_prefs_rejects_bad_values_without_writing(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "tz@example.com", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "tz@example.com").await;
         let before = prefs_of(&pool, user_id).await;
         let big = format!("data:image/webp;base64,{}", "A".repeat(200 * 1024));
         let bad = [
@@ -241,7 +241,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_null_removes_the_avatar(pool: PgPool) {
-        let user_id = seed_user_with_password(&pool, "av@example.com", "pw", Role::User).await;
+        let user_id = seed_user(&pool, "av@example.com").await;
         patch_prefs(
             &pool,
             user_id,

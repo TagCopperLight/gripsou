@@ -1,6 +1,8 @@
 //! Holdings, their prices and returns, and the lots recorded against them.
 
-use axum::Json;
+pub mod dto;
+
+use crate::error::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use gripsou_core::repo::lot::{self, LotChanges, NewLot};
@@ -8,10 +10,12 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::accounts::{RangeParams, range_window};
+use crate::AppState;
 use crate::auth::AuthUser;
-use crate::dto;
 use crate::error::ApiError;
+use crate::wire::RangeParams;
+use axum::Router;
+use axum::routing::{get, post};
 
 pub async fn holdings(
     State(pool): State<PgPool>,
@@ -47,7 +51,7 @@ pub async fn investment_returns(
                 id: a.account_id.to_string(),
                 name: acc.name.clone(),
                 color: acc.color.clone(),
-                source: dto::source_name(acc),
+                source: crate::accounts::dto::source_name(acc),
                 missing: a
                     .figures
                     .missing
@@ -75,8 +79,7 @@ pub async fn holding_prices(
     Path(id): Path<Uuid>,
     Query(p): Query<RangeParams>,
 ) -> Result<Json<Vec<dto::PricePoint>>, ApiError> {
-    let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
-    let (from, to) = range_window(&p.range, today);
+    let (from, to) = p.window(&pool, user_id).await?;
     let rows = gripsou_core::repo::valuation::holding_prices(
         &pool,
         user_id,
@@ -109,7 +112,7 @@ fn parse_lot_adds(adds: &[dto::LotEntry]) -> Result<Vec<NewLot>, ApiError> {
                 Some(f) => f.parse().map_err(|_| bad("fee is not a decimal"))?,
                 None => Decimal::ZERO,
             };
-            NewLot::new(&a.kind, a.date, quantity, unit_price, fee).map_err(bad)
+            NewLot::new(a.kind, a.date, quantity, unit_price, fee).map_err(bad)
         })
         .collect()
 }
@@ -162,6 +165,16 @@ pub async fn preview_lots(
     Ok(Json(dto::BasisPreview::from_core(preview)))
 }
 
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/holdings", get(holdings))
+        .route("/investments/returns", get(investment_returns))
+        .route("/holdings/{id}/prices", get(holding_prices))
+        .route("/holdings/{id}/lots", get(holding_lots).put(save_lots))
+        .route("/holdings/{id}/lots/preview", post(preview_lots))
+        .route("/holdings/{id}/lots/suggestions", get(lot_suggestions))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,7 +185,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn investment_returns_lists_accounts_with_securities(pool: PgPool) {
-        let user_id = seed_admin(&pool, "a@t.local", "hunter2").await;
+        let user_id = seed_admin(&pool, "a@t.local").await;
         let conn_id = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -248,7 +261,7 @@ mod tests {
 
     fn add(kind: &str, day: (i32, u32, u32), quantity: &str, unit_price: &str) -> dto::LotEntry {
         dto::LotEntry {
-            kind: kind.into(),
+            kind: gripsou_core::repo::lot::LotSide::parse(kind).unwrap(),
             date: NaiveDate::from_ymd_opt(day.0, day.1, day.2).unwrap(),
             quantity: quantity.into(),
             unit_price: unit_price.into(),
@@ -575,23 +588,6 @@ mod tests {
         assert_eq!(written, 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
-    async fn an_unknown_lot_type_is_rejected(pool: PgPool) {
-        let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
-        let err = save_lots(
-            State(pool.clone()),
-            auth(user_id),
-            Path(holding_id),
-            Json(dto::SaveLotsReq {
-                adds: vec![add("dividend", (2024, 5, 2), "20", "10")],
-                deletes: vec![],
-            }),
-        )
-        .await
-        .expect_err("only buy and sell are writable here");
-        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
-    }
-
     /// Manual entry is the main path for securities, so the derived history
     /// must move now — and ONCE, not per row.
     #[sqlx::test(migrations = "../migrations")]
@@ -728,7 +724,7 @@ mod tests {
         .unwrap();
         let range = || {
             Query(RangeParams {
-                range: "1mo".into(),
+                range: crate::wire::Range::Month,
             })
         };
 

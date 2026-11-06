@@ -1,14 +1,16 @@
 //! Sessions: issuing one at sign-in, and resolving the bearer token of every
 //! authenticated request into [`AuthUser`].
 
-use axum::extract::{FromRef, FromRequestParts};
+use axum::extract::{FromRef, FromRequestParts, Request, State};
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
+use axum::middleware::Next;
+use axum::response::Response;
 use chrono::Utc;
 use uuid::Uuid;
 
+use crate::auth::dto;
 use crate::auth::{self, client::Client};
-use crate::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::session;
 use gripsou_core::repo::user::Role;
@@ -45,7 +47,7 @@ pub async fn issue(
 
 /// The authenticated principal, resolved from the opaque bearer token by DB
 /// lookup. Carries the session id so handlers can mark/skip the current session.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: Uuid,
     pub session_id: Uuid,
@@ -87,32 +89,43 @@ where
     }
 }
 
-/// An [`AuthUser`] whose role is admin, else 403. Server config, providers
-/// and user management are admin-only: `app_settings` is the admin-tunable
-/// config.
-#[derive(Debug)]
+/// The admin making the request. Only [`require_admin`] creates one, so a
+/// handler can only get it behind the admin check.
+#[derive(Debug, Clone)]
 pub struct AdminUser {
     pub user_id: Uuid,
 }
 
-impl<S> FromRequestParts<S> for AdminUser
-where
-    S: Send + Sync,
-    sqlx::PgPool: FromRef<S>,
-{
+impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let AuthUser { user_id, .. } = AuthUser::from_request_parts(parts, state).await?;
-        let pool = sqlx::PgPool::from_ref(state);
-        let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-            .await?
-            .ok_or(ApiError::Unauthorized)?;
-        if profile.role != Role::Admin {
-            return Err(ApiError::Forbidden("admin access required"));
-        }
-        Ok(AdminUser { user_id })
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<AdminUser>()
+            .cloned()
+            .ok_or_else(|| ApiError::internal("admin handler outside the admin routes"))
     }
+}
+
+/// Lets a request through only from an admin, else 403. Server config,
+/// providers and user management are admin-only: `app_settings` is the
+/// admin-tunable config.
+pub async fn require_admin(
+    State(pool): State<sqlx::PgPool>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let (mut parts, body) = request.into_parts();
+    let AuthUser { user_id, .. } = AuthUser::from_request_parts(&mut parts, &pool).await?;
+    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    if profile.role != Role::Admin {
+        return Err(ApiError::Forbidden("admin access required"));
+    }
+    parts.extensions.insert(AdminUser { user_id });
+    Ok(next.run(Request::from_parts(parts, body)).await)
 }
 
 #[cfg(test)]

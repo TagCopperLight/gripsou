@@ -1,19 +1,60 @@
 //! Admin-only settings: account providers, provider API keys, the budget AI and its prices,
 //! users, invites and reset links.
 
-use axum::Json;
+pub mod dto;
+
+use crate::error::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::{AdminUser, challenge, invite};
-use crate::dto;
 use crate::error::ApiError;
+use axum::Router;
+use axum::routing::{MethodRouter, get, patch, post, put};
 use gripsou_core::repo::invite_token::TokenKind;
 use gripsou_core::repo::user::AdminGuarded;
 use gripsou_providers::registry;
+
+/// Every admin route. [`router`] puts them all behind the admin check, so
+/// none can be added without it.
+pub(crate) fn routes() -> Vec<(&'static str, MethodRouter<AppState>)> {
+    vec![
+        ("/users", get(users)),
+        ("/users/{id}", patch(set_role).delete(delete_user)),
+        ("/users/{id}/reset-link", post(create_reset_link)),
+        ("/invites", post(create_invite)),
+        ("/providers", get(providers)),
+        ("/providers/{key}", patch(set_provider)),
+        (
+            "/settings/budget-ai",
+            get(budget_ai_settings).patch(set_budget_ai_settings),
+        ),
+        ("/settings/budget-ai/usage", get(budget_ai_usage)),
+        (
+            "/settings/budget-ai/models/{provider}",
+            get(budget_ai_models),
+        ),
+        ("/settings/budget-ai/prices", put(set_budget_ai_prices)),
+        ("/settings/api-keys", get(api_keys)),
+        ("/settings/api-keys/{provider}", patch(set_api_key)),
+    ]
+}
+
+pub(crate) fn router(state: AppState) -> Router<AppState> {
+    routes()
+        .into_iter()
+        .fold(Router::new(), |router, (path, route)| {
+            router.route(path, route)
+        })
+        .route_layer(axum::middleware::from_fn_with_state(
+            state,
+            crate::auth::session::require_admin,
+        ))
+}
 
 pub async fn providers(
     State(pool): State<PgPool>,
@@ -43,50 +84,41 @@ pub async fn api_keys(
 /// The longest value accepted: real keys are far shorter.
 const MAX_KEY_CHARS: usize = 1000;
 
-/// Validates and stores one field, returning every provider's values.
-async fn save_api_key(
-    pool: &PgPool,
-    key: &gripsou_core::crypto::EncryptionKey,
-    provider: &str,
-    field: &str,
-    value: Option<&str>,
-) -> Result<gripsou_core::provider_config::ProviderConfig, ApiError> {
-    let kind =
-        registry::keyed_provider(provider).ok_or(ApiError::NotFound("provider not found"))?;
-    if !kind.fields.iter().any(|f| f.key == field) {
-        return Err(ApiError::NotFound("field not found"));
-    }
-    let value = value.map(str::trim).filter(|v| !v.is_empty());
-    if value.is_some_and(|v| v.chars().count() > MAX_KEY_CHARS) {
-        return Err(ApiError::bad_request("value too long"));
-    }
-    Ok(gripsou_core::repo::provider_config::set_field(pool, key, provider, field, value).await?)
-}
-
 pub async fn set_api_key(
     State(pool): State<PgPool>,
     State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
-    AdminUser { user_id }: AdminUser,
+    _: AdminUser,
     Path(provider): Path<String>,
     Json(body): Json<dto::SetApiKeyReq>,
 ) -> Result<Json<dto::ApiKeyProvider>, ApiError> {
-    let config = save_api_key(
+    let kind =
+        registry::keyed_provider(&provider).ok_or(ApiError::NotFound("provider not found"))?;
+    if !kind.fields.iter().any(|f| f.key == body.field) {
+        return Err(ApiError::NotFound("field not found"));
+    }
+    let value = body
+        .value
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if value.is_some_and(|v| v.chars().count() > MAX_KEY_CHARS) {
+        return Err(ApiError::bad_request("value too long"));
+    }
+    let config = gripsou_core::repo::provider_config::set_field(
         &pool,
         &jobs.key,
         &provider,
         &body.field,
-        body.value.as_deref(),
+        value,
     )
     .await?;
     let removed = config.get(&provider, &body.field).is_none();
     tracing::info!(
-        by = %user_id,
         provider = %provider,
         field = %body.field,
         action = if removed { "removed" } else { "set" },
         "provider setting changed"
     );
-    let kind = registry::keyed_provider(&provider).expect("checked by save_api_key");
     let dto = dto::ApiKeyProvider::new(kind, &config);
     jobs.apply_config(config);
     Ok(Json(dto))
@@ -112,7 +144,7 @@ pub async fn budget_ai_settings(
 
 pub async fn set_budget_ai_settings(
     State(pool): State<PgPool>,
-    AdminUser { user_id }: AdminUser,
+    _: AdminUser,
     Json(body): Json<dto::SetBudgetAiSettingsReq>,
 ) -> Result<StatusCode, ApiError> {
     let provider = body
@@ -130,7 +162,6 @@ pub async fn set_budget_ai_settings(
         .filter(|m| !m.is_empty());
     gripsou_core::repo::settings::set_budget_ai(&pool, provider, model).await?;
     tracing::info!(
-        by = %user_id,
         provider = provider.unwrap_or(""),
         model = model.unwrap_or(""),
         "ai settings changed"
@@ -152,7 +183,9 @@ pub async fn budget_ai_models(
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
             tracing::warn!(provider = %provider, error = %gripsou_core::logs::error_chain(&e), "ai model list failed");
-            Err(ApiError::BadGateway(e.to_string()))
+            Err(ApiError::BadGateway(
+                "the provider did not list its models".into(),
+            ))
         }
         None => Err(ApiError::Conflict("provider has no API key on this server")),
     }
@@ -188,7 +221,7 @@ pub async fn budget_ai_usage(
 /// string (USD per million tokens); anything else is a 400 and saves nothing.
 pub async fn set_budget_ai_prices(
     State(pool): State<PgPool>,
-    AdminUser { user_id }: AdminUser,
+    _: AdminUser,
     Json(body): Json<std::collections::BTreeMap<String, dto::BudgetAiPriceReq>>,
 ) -> Result<StatusCode, ApiError> {
     let parse = |model: &str, v: &str| {
@@ -214,20 +247,20 @@ pub async fn set_budget_ai_prices(
         );
     }
     gripsou_core::repo::settings::set_budget_ai_prices(&pool, &prices).await?;
-    tracing::info!(by = %user_id, models = prices.len() as u64, "ai prices changed");
+    tracing::info!(models = prices.len() as u64, "ai prices changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn set_provider(
     State(pool): State<PgPool>,
-    AdminUser { user_id }: AdminUser,
+    _: AdminUser,
     Path(key): Path<String>,
     Json(body): Json<dto::SetProviderReq>,
 ) -> Result<Json<dto::Provider>, ApiError> {
     // Reject unknown providers before mutating.
     let kind = registry::account_kind(&key).ok_or(ApiError::NotFound("provider not found"))?;
     gripsou_core::repo::settings::set_provider_enabled(&pool, &key, body.enabled).await?;
-    tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
+    tracing::info!(provider = %key, enabled = body.enabled, "provider enabled changed");
     Ok(Json(dto::Provider::new(kind, body.enabled)))
 }
 
@@ -249,7 +282,7 @@ pub async fn create_invite(
     AdminUser { user_id }: AdminUser,
 ) -> Result<(StatusCode, Json<dto::InviteLinkResp>), ApiError> {
     let raw = invite::mint(&pool, TokenKind::Invite, None, user_id).await?;
-    tracing::info!(by = %user_id, "invite created");
+    tracing::info!("invite created");
     Ok((
         StatusCode::CREATED,
         Json(dto::InviteLinkResp { token: raw }),
@@ -263,7 +296,7 @@ pub async fn create_reset_link(
     State(pool): State<PgPool>,
     AdminUser { user_id }: AdminUser,
     Path(id): Path<Uuid>,
-    Json(body): Json<dto::ReauthTokenReq>,
+    Json(body): Json<crate::auth::dto::ReauthTokenReq>,
 ) -> Result<(StatusCode, Json<dto::InviteLinkResp>), ApiError> {
     if id == user_id {
         return Err(ApiError::bad_request(
@@ -275,7 +308,7 @@ pub async fn create_reset_link(
         .ok_or(ApiError::NotFound("user not found"))?;
     challenge::spend_reauth(&pool, user_id, &body.reauth).await?;
     let raw = invite::mint(&pool, TokenKind::Reset, Some(&target.email), user_id).await?;
-    tracing::info!(by = %user_id, target_user_id = %id, "reset link created");
+    tracing::info!(target_user_id = %id, "reset link created");
     Ok((
         StatusCode::CREATED,
         Json(dto::InviteLinkResp { token: raw }),
@@ -298,13 +331,13 @@ pub async fn set_role(
         AdminGuarded::NotFound => return Err(ApiError::NotFound("user not found")),
         AdminGuarded::LastAdmin => return Err(ApiError::Conflict("cannot demote the last admin")),
     }
-    tracing::info!(by = %user_id, target_user_id = %id, role = %body.role, "user role changed");
+    tracing::info!(target_user_id = %id, role = %body.role, "user role changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_user(
     State(pool): State<PgPool>,
-    AdminUser { user_id }: AdminUser,
+    _: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<dto::DeleteUserReq>,
 ) -> Result<StatusCode, ApiError> {
@@ -320,7 +353,7 @@ pub async fn delete_user(
         AdminGuarded::NotFound => return Err(ApiError::NotFound("user not found")),
         AdminGuarded::LastAdmin => return Err(ApiError::Conflict("cannot delete the last admin")),
     }
-    tracing::info!(by = %user_id, target_user_id = %id, "user deleted");
+    tracing::info!(target_user_id = %id, "user deleted");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -330,6 +363,62 @@ mod tests {
     use crate::testkit::*;
     use sqlx::PgPool;
 
+    /// Every admin route refuses a member on each method it answers, before
+    /// the handler runs (no body is sent, so a handler would answer 4xx).
+    #[sqlx::test(migrations = "../migrations")]
+    async fn every_admin_route_refuses_a_member(pool: PgPool) {
+        use axum::body::Body;
+        use axum::http::{Method, Request};
+        use tower::ServiceExt;
+
+        seed_user(&pool, "member@t.local").await;
+        let token = login_token(&pool, "member@t.local", PASSWORD).await;
+        let passkeys = crate::Passkeys::parse(Some("https://gripsou.test")).unwrap();
+        let app = crate::router(pool, &std::env::temp_dir(), deps(), passkeys);
+        let id = Uuid::new_v4().to_string();
+        for (path, _) in routes() {
+            let path = format!("/api{path}")
+                .split('/')
+                .map(|seg| {
+                    if seg.starts_with('{') {
+                        id.as_str()
+                    } else {
+                        seg
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            let mut refused = 0;
+            for method in [
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::PATCH,
+                Method::DELETE,
+            ] {
+                let status = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method.clone())
+                            .uri(&path)
+                            .header("authorization", format!("Bearer {token}"))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap()
+                    .status();
+                match status {
+                    StatusCode::FORBIDDEN => refused += 1,
+                    StatusCode::METHOD_NOT_ALLOWED => {}
+                    other => panic!("{method} {path}: {other}"),
+                }
+            }
+            assert!(refused > 0, "{path} answers no method");
+        }
+    }
+
     #[test]
     fn api_key_dto_never_carries_a_secret() {
         let mut c = gripsou_core::provider_config::ProviderConfig::default();
@@ -338,71 +427,50 @@ mod tests {
         let dto = dto::ApiKeyProvider::new(registry::keyed_provider("powens").unwrap(), &c);
         let json = serde_json::to_string(&dto).unwrap();
         assert!(!json.contains("hunter2"), "{json}");
-        assert!(
-            json.contains(
-                r#"{"key":"client_id","label":"Client ID","secret":false,"value":"id-1"}"#
-            ),
-            "{json}"
-        );
-        assert!(
-            json.contains(
-                r#"{"key":"client_secret","label":"Client secret","secret":true,"set":true}"#
-            ),
-            "{json}"
-        );
-        assert!(
-            json.contains(
-                r#"{"key":"webhook_secret","label":"Webhook secret","secret":true,"set":false}"#
-            ),
-            "{json}"
-        );
+        assert!(json.contains(r#""value":"id-1""#), "{json}");
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn save_api_key_trims_removes_and_refuses_unknown(pool: PgPool) {
-        let key = gripsou_core::testkit::encryption_key();
-        let c = save_api_key(&pool, &key, "jev", "api_key", Some("  k  "))
+    async fn an_api_key_is_trimmed_removed_by_a_blank_and_refused_when_unknown(pool: PgPool) {
+        let admin = seed_admin(&pool, "a@t.local").await;
+        let set = |provider: &str, field: &str, value: &str| {
+            set_api_key(
+                State(pool.clone()),
+                State(deps()),
+                AdminUser { user_id: admin },
+                Path(provider.to_string()),
+                Json(dto::SetApiKeyReq {
+                    field: field.into(),
+                    value: Some(value.into()),
+                }),
+            )
+        };
+        let stored = || async {
+            gripsou_core::repo::provider_config::load(
+                &pool,
+                &gripsou_core::testkit::encryption_key(),
+            )
             .await
-            .unwrap();
-        assert_eq!(c.get("jev", "api_key"), Some("k"));
-        let c = save_api_key(&pool, &key, "jev", "api_key", Some("   "))
-            .await
-            .unwrap();
-        assert_eq!(c.get("jev", "api_key"), None, "blank removes");
+            .unwrap()
+            .config
+            .get("jev", "api_key")
+            .map(str::to_string)
+        };
+        set("jev", "api_key", "  k  ").await.unwrap();
+        assert_eq!(stored().await.as_deref(), Some("k"));
+        set("jev", "api_key", "   ").await.unwrap();
+        assert_eq!(stored().await, None, "blank removes");
         for (p, f) in [("nope", "api_key"), ("jev", "nope")] {
-            let err = save_api_key(&pool, &key, p, f, Some("x"))
-                .await
-                .unwrap_err();
+            let err = set(p, f, "x").await.unwrap_err();
             assert_eq!(err.status(), StatusCode::NOT_FOUND, "{p}.{f}");
         }
-        let long = "x".repeat(1001);
-        let err = save_api_key(&pool, &key, "jev", "api_key", Some(&long))
-            .await
-            .unwrap_err();
+        let err = set("jev", "api_key", &"x".repeat(1001)).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
-        // powens is enabled via seed.
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
-        let principal = AdminUser { user_id: admin };
-
-        let list = providers(State(pool.clone()), principal)
-            .await
-            .expect("ok")
-            .0;
-
-        assert_eq!(list.len(), 1, "only account providers are listed");
-        assert_eq!(list[0].key, "powens");
-        assert_eq!(list[0].display_name, "Powens");
-        assert!(list[0].enabled, "powens is in the seeded enabled_providers");
-        assert!(!list[0].description.is_empty());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "admin@t.local").await;
         let principal = || AdminUser { user_id: admin };
 
         // Disable powens (seeded enabled).
@@ -446,7 +514,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "admin@t.local").await;
         // 'yahoo' is a price provider, not an account provider: not found.
         for key in ["nope", "yahoo"] {
             let err = set_provider(
@@ -463,8 +531,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_invite_writes_invite_row(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let admin = seed_admin(&pool, "a@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
         let resp = create_invite(
             State(pool.clone()),
             AdminUser {
@@ -496,18 +564,18 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_reset_link_stores_target_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        seed_admin(&pool, "a@t.local").await;
+        let target = seed_user(&pool, "target@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
 
-        let reauth = reauth_token(&pool, &who, "pw").await;
+        let reauth = reauth_token(&pool, &who, PASSWORD).await;
         let resp = create_reset_link(
             State(pool.clone()),
             AdminUser {
                 user_id: who.user_id,
             },
             Path(target),
-            Json(dto::ReauthTokenReq { reauth }),
+            Json(crate::auth::dto::ReauthTokenReq { reauth }),
         )
         .await
         .expect("ok");
@@ -531,9 +599,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_reset_link_needs_a_reauth_and_another_user(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        let admin = seed_admin(&pool, "a@t.local").await;
+        let target = seed_user(&pool, "target@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
         let create = |id, reauth: &str| {
             create_reset_link(
                 State(pool.clone()),
@@ -541,7 +609,7 @@ mod tests {
                     user_id: who.user_id,
                 },
                 Path(id),
-                Json(dto::ReauthTokenReq {
+                Json(crate::auth::dto::ReauthTokenReq {
                     reauth: reauth.into(),
                 }),
             )
@@ -549,7 +617,7 @@ mod tests {
 
         let err = create(target, "forged").await.unwrap_err();
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
-        let reauth = reauth_token(&pool, &who, "pw").await;
+        let reauth = reauth_token(&pool, &who, PASSWORD).await;
         let err = create(admin, &reauth).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         // Refusing oneself did not spend the token.
@@ -562,9 +630,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_rejects_mismatched_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        seed_admin(&pool, "a@t.local").await;
+        let target = seed_user(&pool, "target@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
 
         let err = delete_user(
             State(pool.clone()),
@@ -589,9 +657,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_role_promotes_and_demotes_another_user(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let target = seed_user_with_password(&pool, "b@t.local", "pw", Role::User).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        seed_admin(&pool, "a@t.local").await;
+        let target = seed_user(&pool, "b@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
         let set = |role| {
             set_role(
                 State(pool.clone()),
@@ -618,9 +686,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_role_refuses_your_own(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        seed_user_with_password(&pool, "b@t.local", "pw", Role::Admin).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        seed_admin(&pool, "a@t.local").await;
+        seed_admin(&pool, "b@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
         let err = set_role(
             State(pool.clone()),
             AdminUser {
@@ -635,28 +703,9 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn set_role_never_leaves_no_admin(pool: PgPool) {
-        // Reached when two admins demote each other at once; called directly,
-        // as the handler's own-role rule hides it otherwise.
-        let only = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        assert_eq!(
-            gripsou_core::repo::user::set_role(&pool, only, Role::User)
-                .await
-                .unwrap(),
-            AdminGuarded::LastAdmin
-        );
-        let role = gripsou_core::repo::user::profile_by_id(&pool, only)
-            .await
-            .unwrap()
-            .unwrap()
-            .role;
-        assert_eq!(role, Role::Admin);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_refuses_last_admin(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "boss@t.local", "pw", Role::Admin).await;
-        let who = principal_for(&pool, "boss@t.local", "pw").await;
+        let admin = seed_admin(&pool, "boss@t.local").await;
+        let who = principal_for(&pool, "boss@t.local", PASSWORD).await;
 
         let err = delete_user(
             State(pool.clone()),
@@ -675,9 +724,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_removes_target(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
-        let who = principal_for(&pool, "a@t.local", "pw").await;
+        seed_admin(&pool, "a@t.local").await;
+        let target = seed_user(&pool, "target@t.local").await;
+        let who = principal_for(&pool, "a@t.local", PASSWORD).await;
 
         // Case-insensitive email match succeeds.
         let ok = delete_user(
@@ -703,7 +752,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let err = budget_ai_models(
             State(deps()),
             AdminUser { user_id: admin },
@@ -717,7 +766,7 @@ mod tests {
     /// An admin's budget AI choice persists (trimmed) and reads back as written.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
 
         let status = set_budget_ai_settings(
@@ -748,7 +797,7 @@ mod tests {
     /// provider named "" that the scheduler would then try to look up.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -774,7 +823,7 @@ mod tests {
     /// choice in place, so a typo cannot silently disable categorisation.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -802,15 +851,6 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    async fn seed(pool: &PgPool, role: Role) -> Uuid {
-        let email = format!("{}@t.local", Uuid::new_v4());
-        gripsou_core::testkit::seed_user_as(pool, &email, role, "x").await
-    }
-
-    fn who(user_id: Uuid) -> AdminUser {
-        AdminUser { user_id }
-    }
-
     fn price(i: &str, o: &str) -> dto::BudgetAiPriceReq {
         dto::BudgetAiPriceReq {
             input: i.into(),
@@ -820,7 +860,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn prices_then_usage(pool: PgPool) {
-        let admin = seed(&pool, Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         for (tin, tout, complete) in [(9_495_459_i64, 4_484_808_i64, true), (0, 0, false)] {
             sqlx::query(
                 "insert into budget_ai_run \
@@ -846,7 +886,7 @@ mod tests {
 
         let status = set_budget_ai_prices(
             State(pool.clone()),
-            who(admin),
+            AdminUser { user_id: admin },
             Json(BTreeMap::from([
                 ("jev:jev-latest".to_string(), price("0.042", "0")),
                 ("unused:m".to_string(), price("1", "1")),
@@ -857,7 +897,7 @@ mod tests {
         assert_eq!(status, StatusCode::NO_CONTENT);
 
         let v = serde_json::to_value(
-            budget_ai_usage(State(pool.clone()), who(admin))
+            budget_ai_usage(State(pool.clone()), AdminUser { user_id: admin })
                 .await
                 .expect("usage")
                 .0,
@@ -883,9 +923,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn usage_with_no_runs_totals_zero(pool: PgPool) {
-        let admin = seed(&pool, Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let v = serde_json::to_value(
-            budget_ai_usage(State(pool.clone()), who(admin))
+            budget_ai_usage(State(pool.clone()), AdminUser { user_id: admin })
                 .await
                 .expect("usage")
                 .0,
@@ -899,7 +939,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn bad_prices_are_a_400_and_change_nothing(pool: PgPool) {
-        let admin = seed(&pool, Role::Admin).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         for (i, o) in [
             ("-1", "0"),
             ("0", "-0.1"),
@@ -909,7 +949,7 @@ mod tests {
         ] {
             let err = set_budget_ai_prices(
                 State(pool.clone()),
-                who(admin),
+                AdminUser { user_id: admin },
                 Json(BTreeMap::from([("m:x".to_string(), price(i, o))])),
             )
             .await

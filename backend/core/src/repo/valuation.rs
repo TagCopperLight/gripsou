@@ -178,6 +178,41 @@ impl HoldingRow {
     pub fn display_kind(&self) -> &str {
         display_kind(&self.kind, self.composition.is_some())
     }
+
+    /// A unit of cash is worth one unit of its own currency by definition:
+    /// its `price` row holds an exchange rate, not a unit price.
+    fn is_cash(&self) -> bool {
+        self.kind == "cash"
+    }
+
+    /// The unit price, in [`Self::unit_price_currency`]; zero with no price.
+    pub fn unit_price(&self) -> Decimal {
+        if self.is_cash() {
+            Decimal::ONE
+        } else {
+            self.price.unwrap_or(Decimal::ZERO)
+        }
+    }
+
+    /// The currency stamped on the price row the unit price comes from, which
+    /// may differ from the instrument's (Yahoo can resolve a listing quoted
+    /// elsewhere). The instrument's own when there is no price row.
+    pub fn unit_price_currency(&self) -> &str {
+        match &self.price_currency {
+            Some(c) if !self.is_cash() => c,
+            _ => &self.currency,
+        }
+    }
+
+    /// `quantity × unit price`, before any conversion; `None` without a price.
+    pub fn value_native(&self) -> Option<Decimal> {
+        (self.is_cash() || self.price.is_some()).then(|| self.quantity * self.unit_price())
+    }
+
+    /// The recent prices, for a security that has some.
+    pub fn spark(&self) -> Option<&[Decimal]> {
+        (!self.is_cash() && !self.spark.is_empty()).then_some(self.spark.as_slice())
+    }
 }
 
 fn display_kind(kind: &str, has_composition: bool) -> &str {

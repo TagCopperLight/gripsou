@@ -114,6 +114,25 @@ pub struct ScopeReturn {
     pub unvalued: Vec<Missing>,
 }
 
+impl ScopeReturn {
+    /// `invested` and `received` to the cent.
+    pub fn invested_cents(&self) -> Option<Decimal> {
+        self.invested.map(|d| d.round_dp(2))
+    }
+
+    pub fn received_cents(&self) -> Option<Decimal> {
+        self.received.map(|d| d.round_dp(2))
+    }
+
+    /// value + received − invested, to the cent: the money the return
+    /// annualises. `None` when a rate is missing for a flow it needs.
+    pub fn gain(&self) -> Option<Decimal> {
+        self.invested_cents()
+            .zip(self.received_cents())
+            .map(|(i, r)| self.value.round_dp(2) + r - i)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccountReturn {
     pub account_id: Uuid,

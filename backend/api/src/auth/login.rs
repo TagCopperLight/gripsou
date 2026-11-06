@@ -1,6 +1,6 @@
 //! Password sign-in with its optional second step.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::State;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -8,9 +8,9 @@ use std::time::Instant;
 
 use crate::auth::challenge::{self, Mfa};
 use crate::auth::client::Client;
+use crate::auth::dto;
 use crate::auth::throttle::{Account, Throttles};
 use crate::auth::{factors, password, session};
-use crate::dto;
 use crate::error::ApiError;
 use gripsou_core::crypto::EncryptionKey;
 use gripsou_core::repo::{mfa, user};
@@ -159,7 +159,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn sixth_attempt_after_five_failures_is_refused_with_retry_after(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
         for _ in 0..5 {
             let err = try_login(&pool, &throttle, "a@t.local", "wrong")
@@ -181,7 +181,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_successful_login_clears_earlier_failures(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
         for _ in 0..4 {
             try_login(&pool, &throttle, "a@t.local", "wrong")
@@ -217,7 +217,7 @@ mod tests {
     /// sent one by one: each attempt is counted before the password is checked.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "hunter22").await;
+        seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
         let mut set = tokio::task::JoinSet::new();
         for _ in 0..10 {
@@ -254,7 +254,7 @@ mod tests {
     /// typed: changing the email doesn't wipe the failures.
     #[sqlx::test(migrations = "../migrations")]
     async fn an_email_change_keeps_the_failures(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
         for _ in 0..5 {
             try_login(&pool, &throttle, "a@t.local", "wrong")
@@ -307,7 +307,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_without_second_factor_gives_a_session(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let out = login_outcome(&pool, &throttles(), "a@t.local", "hunter22", false).await;
         let dto::LoginOutcome::Session(resp) = out else {
             panic!("expected a session, got {out:?}");
@@ -327,7 +327,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn login_with_totp_asks_for_a_code_and_makes_no_session(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
         match login_outcome(&pool, &throttles(), "a@t.local", "hunter22", false).await {
             dto::LoginOutcome::Mfa(m) => {
@@ -341,7 +341,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn correct_totp_gives_a_session_that_keeps_remember(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, true).await;
@@ -361,7 +361,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_totp_code_works_once(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let code = totp_now(&secret);
@@ -378,7 +378,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_wrong_code_keeps_the_challenge(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -398,7 +398,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn a_failed_second_step_is_saved_with_the_user_id(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -417,7 +417,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn exactly_one_code_kind_is_required(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -434,7 +434,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn a_recovery_code_works_once(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -452,7 +452,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn unusable_challenges_are_refused(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let code = totp_now(&secret);
@@ -498,7 +498,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn wrong_codes_are_throttled(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = issue_mfa(&pool, uid).await;
@@ -524,7 +524,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn wrong_codes_wait_on_the_second_factor_limiter(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -557,7 +557,7 @@ mod tests {
     /// code unspent.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_lost_challenge_does_not_burn_a_backup_code(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let ch = mfa_challenge(&pool, &throttles(), false).await;
         // A parallel request holds the challenge, not yet committed.
@@ -583,7 +583,7 @@ mod tests {
     /// A wrong backup code leaves the challenge usable.
     #[sqlx::test(migrations = "../migrations")]
     async fn a_wrong_backup_code_keeps_the_challenge(pool: PgPool) {
-        let uid = seed_admin(&pool, "a@t.local", "hunter22").await;
+        let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let throttle = throttles();
         let ch = mfa_challenge(&pool, &throttle, false).await;
@@ -603,7 +603,7 @@ mod tests {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
 
         let password = "correct horse battery staple";
-        let admin = seed_admin(&pool, "log@t.local", password).await;
+        let admin = seed_user_with_password(&pool, "log@t.local", password, Role::Admin).await;
         login_token(&pool, "log@t.local", password).await;
         let client = Client {
             user_agent: "test-agent/1".into(),

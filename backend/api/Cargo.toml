@@ -15,7 +15,7 @@ gripsou-jobs = { path = "../jobs" }
 gripsou-providers = { path = "../providers" }
 anyhow.workspace = true
 argon2 = { version = "0.5.3", features = ["std"] }
-axum.workspace = true
+axum = { workspace = true, features = ["macros"] }
 chrono.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true

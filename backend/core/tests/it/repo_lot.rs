@@ -88,7 +88,7 @@ use gripsou_core::repo::lot::{LotChanges, NewLot, basis_preview, list_lots, save
 
 fn buy(day: &str, quantity: &str, unit_price: &str, fee: &str) -> NewLot {
     NewLot::new(
-        "buy",
+        gripsou_core::repo::lot::LotSide::Buy,
         day.parse().unwrap(),
         dec(quantity),
         dec(unit_price),

@@ -1,8 +1,43 @@
 //! The one error every handler and extractor returns. Each case knows its
 //! status; handlers use `?`, and an unexpected error becomes `Internal`.
 
+use axum::extract::FromRequest;
+use axum::extract::rejection::JsonRejection;
 use axum::http::{HeaderValue, StatusCode, header::RETRY_AFTER};
 use axum::response::{IntoResponse, Response};
+use gripsou_core::error::CoreError;
+use serde::Serialize;
+
+/// `axum::Json`, except that a body that isn't the expected JSON is an
+/// [`ApiError`]: 400 whether it is malformed or merely the wrong shape.
+#[derive(Debug, FromRequest)]
+#[from_request(via(axum::Json), rejection(ApiError))]
+pub struct Json<T>(pub T);
+
+impl<T> std::ops::Deref for Json<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Serialize> IntoResponse for Json<T> {
+    fn into_response(self) -> Response {
+        axum::Json(self.0).into_response()
+    }
+}
+
+impl From<JsonRejection> for ApiError {
+    fn from(rejection: JsonRejection) -> Self {
+        match rejection {
+            JsonRejection::JsonDataError(_) | JsonRejection::JsonSyntaxError(_) => {
+                ApiError::BadRequest(rejection.body_text())
+            }
+            _ => ApiError::Rejected(rejection.status(), rejection.body_text()),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ApiError {
@@ -24,6 +59,9 @@ pub enum ApiError {
         retry_after: u64,
     },
     BadGateway(String),
+    /// A request body axum refused before parsing it (wrong content type,
+    /// too large).
+    Rejected(StatusCode, String),
     /// Already logged by [`ApiError::internal`].
     Internal,
 }
@@ -44,13 +82,9 @@ impl ApiError {
     }
 
     /// A unique-constraint violation becomes 409 with `msg`; anything else 500.
-    pub fn conflict_on_unique(
-        msg: &'static str,
-    ) -> impl Fn(gripsou_core::error::CoreError) -> Self {
+    pub fn conflict_on_unique(msg: &'static str) -> impl Fn(CoreError) -> Self {
         move |e| match &e {
-            gripsou_core::error::CoreError::Db(sqlx::Error::Database(db))
-                if db.is_unique_violation() =>
-            {
+            CoreError::Db(sqlx::Error::Database(db)) if db.is_unique_violation() => {
                 ApiError::Conflict(msg)
             }
             _ => e.into(),
@@ -68,13 +102,14 @@ impl ApiError {
             ApiError::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             ApiError::TooMany { .. } => StatusCode::TOO_MANY_REQUESTS,
             ApiError::BadGateway(_) => StatusCode::BAD_GATEWAY,
+            ApiError::Rejected(status, _) => *status,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     pub fn message(&self) -> &str {
         match self {
-            ApiError::BadRequest(m) | ApiError::BadGateway(m) => m,
+            ApiError::BadRequest(m) | ApiError::BadGateway(m) | ApiError::Rejected(_, m) => m,
             ApiError::Forbidden(m)
             | ApiError::NotFound(m)
             | ApiError::Conflict(m)
@@ -110,13 +145,32 @@ impl From<crate::auth::throttle::Blocked> for ApiError {
 
 /// A core `NotFound` is a 404. Any other error is ours: logged with its
 /// causes, answered 500.
-impl<E: std::error::Error + 'static> From<E> for ApiError {
-    fn from(e: E) -> Self {
-        if let Some(gripsou_core::error::CoreError::NotFound(what)) =
-            (&e as &dyn std::any::Any).downcast_ref()
-        {
-            return ApiError::NotFound(what);
+impl From<CoreError> for ApiError {
+    fn from(e: CoreError) -> Self {
+        match e {
+            CoreError::NotFound(what) => ApiError::NotFound(what),
+            e => ApiError::internal(gripsou_core::logs::error_chain(&e)),
         }
-        ApiError::internal(gripsou_core::logs::error_chain(&e))
     }
 }
+
+/// Errors that can only mean something broke on our side: logged with their
+/// causes, answered 500.
+macro_rules! internal_errors {
+    ($($t:ty),* $(,)?) => {$(
+        impl From<$t> for ApiError {
+            fn from(e: $t) -> Self {
+                ApiError::internal(gripsou_core::logs::error_chain(&e))
+            }
+        }
+    )*};
+}
+
+internal_errors!(
+    sqlx::Error,
+    serde_json::Error,
+    gripsou_core::crypto::CryptoError,
+    argon2::password_hash::Error,
+    qrcode::types::QrError,
+    webauthn_rs::prelude::WebauthnError,
+);

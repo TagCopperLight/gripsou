@@ -4,85 +4,54 @@ pub mod auth;
 mod budget;
 pub mod cli;
 mod connections;
-mod dto;
 pub mod error;
 mod holdings;
 mod prefs;
 mod security_headers;
 #[cfg(test)]
 mod testkit;
+mod transactions;
+mod wire;
+
+use axum::extract::FromRef;
 use axum::http::header::CACHE_CONTROL;
 use axum::http::{HeaderValue, Response};
-use axum::{
-    Json, Router,
-    extract::{DefaultBodyLimit, FromRef},
-    routing::{delete, get, patch, post, put},
-};
-use serde_json::{Value, json};
+use axum::{Router, routing::get};
+use serde::Serialize;
 use std::sync::Arc;
 
-use crate::auth::{account, invite, login, mfa, passkey};
 use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeader;
 use tower_http::trace::TraceLayer;
 
 pub use auth::passkey::Passkeys;
-pub use gripsou_core::crypto::EncryptionKey;
 
 use crate::auth::throttle::Throttles;
+use crate::error::Json;
+use gripsou_core::crypto::EncryptionKey;
 
-#[derive(Clone)]
+#[derive(Clone, FromRef)]
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub throttles: Arc<Throttles>,
-    /// Encrypts the authenticator secrets.
+    /// Encrypts the authenticator secrets (and the provider credentials:
+    /// the same key the jobs hold).
     pub key: EncryptionKey,
     pub jobs: Arc<gripsou_jobs::Deps>,
     pub passkeys: Passkeys,
-}
-
-impl FromRef<AppState> for EncryptionKey {
-    fn from_ref(state: &AppState) -> EncryptionKey {
-        state.key.clone()
-    }
-}
-
-impl FromRef<AppState> for Arc<gripsou_jobs::Deps> {
-    fn from_ref(state: &AppState) -> Arc<gripsou_jobs::Deps> {
-        state.jobs.clone()
-    }
-}
-
-impl FromRef<AppState> for Passkeys {
-    fn from_ref(state: &AppState) -> Passkeys {
-        state.passkeys.clone()
-    }
-}
-
-impl FromRef<AppState> for sqlx::PgPool {
-    fn from_ref(state: &AppState) -> sqlx::PgPool {
-        state.db.clone()
-    }
-}
-
-impl FromRef<AppState> for Arc<Throttles> {
-    fn from_ref(state: &AppState) -> Arc<Throttles> {
-        state.throttles.clone()
-    }
 }
 
 pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
     jobs: Arc<gripsou_jobs::Deps>,
-    key: EncryptionKey,
     passkeys: Passkeys,
 ) -> Router {
-    let app_state = AppState {
-        db: db.clone(),
+    let state = AppState {
+        db,
         throttles: Arc::new(Throttles::default()),
-        key,
+        key: jobs.key.clone(),
         jobs,
         passkeys,
     };
@@ -91,136 +60,14 @@ pub fn router(
 
     let api = Router::new()
         .route("/health", get(health))
-        .route("/auth/login", post(login::login))
-        .route("/auth/login/verify", post(login::login_verify))
-        .route("/auth/passkey/options", post(passkey::sign_in_options))
-        .route("/auth/passkey", post(passkey::sign_in))
-        .route("/auth/reauth", post(mfa::reauth))
-        .route("/auth/mfa/status", get(mfa::status))
-        .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
-        .route("/auth/mfa/totp/confirm", post(mfa::totp_confirm))
-        .route("/auth/mfa/totp", delete(mfa::totp_remove))
-        .route(
-            "/auth/mfa/recovery/regenerate",
-            post(mfa::recovery_regenerate),
-        )
-        .route(
-            "/auth/mfa/passkeys/register/options",
-            post(passkey::register_options),
-        )
-        .route("/auth/mfa/passkeys/register", post(passkey::register))
-        .route(
-            "/auth/mfa/passkeys/{id}",
-            patch(passkey::rename).delete(passkey::remove),
-        )
-        .route("/auth/me", get(account::me).patch(account::update_profile))
-        .route("/auth/logout", post(account::logout))
-        .route("/auth/token/{token}", get(invite::token_info))
-        .route("/auth/invite/{token}/redeem", post(invite::redeem_invite))
-        .route("/auth/reset/{token}/redeem", post(invite::redeem_reset))
-        .route("/auth/prefs", patch(prefs::update_prefs))
-        .route("/auth/welcome", post(account::finish_welcome))
-        .route("/auth/change-password", post(account::change_password))
-        .route("/auth/account", delete(account::delete_account))
-        .route(
-            "/auth/sessions",
-            get(account::list_sessions).delete(account::revoke_other_sessions),
-        )
-        .route("/auth/sessions/{id}", delete(account::revoke_session))
-        .route("/dashboard/net-worth", get(accounts::net_worth))
-        .route("/accounts", get(accounts::accounts))
-        .route("/accounts/series", get(accounts::account_series))
-        .route("/accounts/{id}", patch(accounts::update_account))
-        .route("/transactions", get(accounts::transactions))
-        .route(
-            "/transactions/counts",
-            get(budget::transaction_count_summary),
-        )
-        .route("/transactions/{id}", patch(budget::patch_transaction))
-        .route(
-            "/transactions/{id}/apply-to-description",
-            post(budget::apply_to_description),
-        )
-        .route("/transactions/bulk", post(budget::bulk_transactions))
-        .route(
-            "/budget/categories",
-            get(budget::list_categories).post(budget::create_category),
-        )
-        .route("/budget/categories/order", put(budget::reorder_categories))
-        .route(
-            "/budget/categories/{id}",
-            patch(budget::update_category).delete(budget::delete_category),
-        )
-        .route(
-            "/budget/tags",
-            get(budget::list_tags).post(budget::create_tag),
-        )
-        .route("/budget/summary", get(budget::summary))
-        .route("/budget/categorize", post(budget::request_categorize))
-        .route("/budget/categorize/status", get(budget::categorize_status))
-        .route("/budget/review/{id}/accept", post(budget::accept_review))
-        .route("/budget/review/{id}/undo", post(budget::undo_review))
-        .route("/budget/trend", get(budget::trend_handler))
-        .route(
-            "/budget/tags/{id}",
-            patch(budget::update_tag).delete(budget::delete_tag),
-        )
-        .route("/account-types", get(accounts::account_types))
-        .route("/connections", get(connections::connections))
-        .route("/connections/{id}/sync", post(connections::sync_connection))
-        .route(
-            "/connections/{id}/manage",
-            post(connections::manage_connection),
-        )
-        .route("/sync", post(connections::sync_all))
-        .route("/users", get(admin::users))
-        .route("/invites", post(admin::create_invite))
-        .route("/users/{id}/reset-link", post(admin::create_reset_link))
-        .route(
-            "/users/{id}",
-            delete(admin::delete_user).patch(admin::set_role),
-        )
-        .route("/providers", get(admin::providers))
-        .route("/providers/{key}", patch(admin::set_provider))
-        .route("/providers/enabled", get(connections::enabled_providers))
-        .route(
-            "/settings/budget-ai",
-            get(admin::budget_ai_settings).patch(admin::set_budget_ai_settings),
-        )
-        .route("/settings/budget-ai/usage", get(admin::budget_ai_usage))
-        .route(
-            "/settings/budget-ai/models/{provider}",
-            get(admin::budget_ai_models),
-        )
-        .route(
-            "/settings/budget-ai/prices",
-            put(admin::set_budget_ai_prices),
-        )
-        .route("/settings/api-keys", get(admin::api_keys))
-        .route("/settings/api-keys/{provider}", patch(admin::set_api_key))
-        .route("/connections/init", post(connections::init_connection))
-        .route(
-            "/connections/complete",
-            post(connections::complete_connection),
-        )
-        .route("/connections/{id}", delete(connections::delete_connection))
-        .route(
-            "/webhooks/{provider}",
-            post(connections::webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
-        )
-        .route("/holdings", get(holdings::holdings))
-        .route("/investments/returns", get(holdings::investment_returns))
-        .route("/holdings/{id}/prices", get(holdings::holding_prices))
-        .route(
-            "/holdings/{id}/lots",
-            get(holdings::holding_lots).put(holdings::save_lots),
-        )
-        .route("/holdings/{id}/lots/preview", post(holdings::preview_lots))
-        .route(
-            "/holdings/{id}/lots/suggestions",
-            get(holdings::lot_suggestions),
-        )
-        .with_state(app_state);
+        .merge(auth::routes())
+        .merge(accounts::routes())
+        .merge(transactions::routes())
+        .merge(budget::routes())
+        .merge(holdings::routes())
+        .merge(connections::routes())
+        .merge(admin::router(state.clone()))
+        .with_state(state);
 
     // Per-request span: every line a handler logs carries request_id, method,
     // the route pattern (not the raw path, full of ids) and, once the session is
@@ -282,6 +129,15 @@ pub fn router(
         ))
 }
 
-async fn health() -> Json<Value> {
-    Json(json!({ "status": "ok", "version": env!("GRIPSOU_VERSION") }))
+#[derive(Serialize)]
+struct Health {
+    status: &'static str,
+    version: &'static str,
+}
+
+async fn health() -> Json<Health> {
+    Json(Health {
+        status: "ok",
+        version: env!("GRIPSOU_VERSION"),
+    })
 }

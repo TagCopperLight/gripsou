@@ -1,14 +1,14 @@
 //! Invite and reset links: minting one, reading it, and redeeming it for a
 //! password.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::{Path, State};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::client::Client;
+use crate::auth::dto;
 use crate::auth::{self, password, session};
-use crate::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::invite_token::{self, TokenKind};
 
@@ -128,7 +128,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_invite_endpoint_creates_account(pool: PgPool) {
-        let admin = seed_admin_user(&pool).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
 
         let resp = redeem(&pool, &raw, "new@t.local", "hunter2-long")
@@ -143,7 +143,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn redeemed_account_needs_welcome_until_finished(pool: PgPool) {
-        let admin = seed_admin_user(&pool).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
         let resp = redeem(&pool, &raw, "new@t.local", "hunter2-long")
             .await
@@ -172,7 +172,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_invite_endpoint_conflicts_on_existing_email(pool: PgPool) {
-        let admin = seed_admin_user(&pool).await; // creates a@t.local
+        let admin = seed_admin(&pool, "a@t.local").await; // creates a@t.local
         let raw = invite(&pool, admin).await;
 
         let err = redeem(&pool, &raw, "a@t.local", "hunter2-long")
@@ -195,7 +195,7 @@ mod tests {
     /// can't collide with a test's own users.
     async fn mint_reset(pool: &PgPool, email: &str) -> String {
         let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
-        let admin = seed_user_with_password(pool, &issuer, "pw", Role::Admin).await;
+        let admin = seed_user_with_password(pool, &issuer, PASSWORD, Role::Admin).await;
         mint(pool, TokenKind::Reset, Some(email), admin)
             .await
             .unwrap()
@@ -304,7 +304,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn invite_refuses_a_short_password(pool: PgPool) {
-        let admin = seed_admin_user(&pool).await;
+        let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
         let err = redeem(&pool, &raw, "new@t.local", "1234567")
             .await

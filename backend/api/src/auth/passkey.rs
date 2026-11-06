@@ -1,7 +1,7 @@
 //! Passkeys: the `PUBLIC_URL` they are bound to, adding and managing them in
 //! Settings, and signing in with one without a password.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use gripsou_core::repo::{passkey as repo, session};
@@ -16,16 +16,16 @@ use webauthn_rs_proto::ResidentKeyRequirement;
 
 use crate::auth::challenge::{self, PasskeyLogin, PasskeyRegister, check_reauth, spend_reauth};
 use crate::auth::client::{Client, device_name};
+use crate::auth::dto;
 use crate::auth::throttle::Throttles;
 use crate::auth::{AuthUser, session as sessions};
-use crate::dto;
 use crate::error::ApiError;
 
 /// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
 /// to start without a usable address. Every saved passkey is bound to its
 /// host, so changing `PUBLIC_URL` makes them all stop working.
 #[derive(Clone)]
-pub struct Passkeys(pub Arc<Webauthn>);
+pub struct Passkeys(pub Arc<Webauthn>, Arc<str>);
 
 impl Passkeys {
     /// Check the raw `PUBLIC_URL` once, at startup.
@@ -57,12 +57,19 @@ impl Passkeys {
         if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
             return Err("PUBLIC_URL must be just the address, without a path (e.g. https://gripsou.example.com)".into());
         }
-        let origin = Url::parse(&url.origin().ascii_serialization())
+        let public_url = url.origin().ascii_serialization();
+        let origin = Url::parse(&public_url)
             .map_err(|_| format!("PUBLIC_URL is not a valid address: {raw}"))?;
         let webauthn = WebauthnBuilder::new(&host, &origin)
             .and_then(|b| b.rp_name("gripsou").build())
             .map_err(|e| format!("PUBLIC_URL can't be used for passkeys: {e}"))?;
-        Ok(Passkeys(Arc::new(webauthn)))
+        Ok(Passkeys(Arc::new(webauthn), public_url.into()))
+    }
+
+    /// The address gripsou is opened at, as an origin (no trailing slash):
+    /// what links sent to users start with.
+    pub fn public_url(&self) -> &str {
+        &self.1
     }
 }
 
@@ -368,7 +375,7 @@ pub(crate) mod soft {
 mod tests {
     use super::soft::{Soft, passkeys};
     use super::*;
-    use crate::testkit::{local, reauth_token, seed_session, seed_user, sessions, throttles, who};
+    use crate::testkit::{local, reauth_token, seed_session, seed_user, sessions, throttles};
     use gripsou_core::repo::login_challenge::ChallengeKind;
     use sqlx::PgPool;
 
@@ -388,7 +395,7 @@ mod tests {
         register_options(
             State(pool.clone()),
             State(passkeys()),
-            who(a),
+            a.clone(),
             Json(dto::ReauthTokenReq {
                 reauth: reauth.into(),
             }),
@@ -408,7 +415,7 @@ mod tests {
             State(pool.clone()),
             State(passkeys()),
             firefox(),
-            who(a),
+            a.clone(),
             Json(dto::PasskeyRegisterReq {
                 reauth: reauth.into(),
                 challenge: o.challenge.clone(),
@@ -448,7 +455,7 @@ mod tests {
         let (info, _) = add_passkey(&pool, &a, &mut Soft::new()).await;
         assert_eq!(info.name, "Firefox on Linux");
         assert_eq!(sessions(&pool, u).await, 1);
-        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), a.clone())
             .await
             .unwrap()
             .0;
@@ -501,7 +508,7 @@ mod tests {
             State(pool.clone()),
             State(passkeys()),
             firefox(),
-            who(&a),
+            a.clone(),
             Json(dto::PasskeyRegisterReq {
                 reauth: reauth.clone(),
                 challenge: o.challenge.clone(),
@@ -527,7 +534,7 @@ mod tests {
         let ren = |s: &AuthUser, name: &str| {
             rename(
                 State(pool.clone()),
-                who(s),
+                s.clone(),
                 Path(info.id),
                 Json(dto::RenamePasskeyReq { name: name.into() }),
             )
@@ -545,13 +552,13 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(ren(&a, "  Phone  ").await.unwrap(), StatusCode::NO_CONTENT);
-        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), a.clone())
             .await
             .unwrap()
             .0;
         assert_eq!(st.passkeys[0].name, "Phone");
         assert_eq!(
-            remove(State(pool.clone()), who(&b), Path(info.id))
+            remove(State(pool.clone()), b.clone(), Path(info.id))
                 .await
                 .err()
                 .unwrap()
@@ -559,7 +566,7 @@ mod tests {
             StatusCode::NOT_FOUND
         );
         assert_eq!(
-            remove(State(pool.clone()), who(&a), Path(info.id))
+            remove(State(pool.clone()), a.clone(), Path(info.id))
                 .await
                 .unwrap(),
             StatusCode::NO_CONTENT
@@ -611,7 +618,7 @@ mod tests {
             State(pool.clone()),
             State(passkeys()),
             firefox(),
-            who(&a),
+            a.clone(),
             Json(dto::PasskeyRegisterReq {
                 reauth: reauth.clone(),
                 challenge: o.challenge.clone(),
@@ -677,7 +684,7 @@ mod tests {
             .expect("signed in");
         assert_eq!(resp.user.email, "a@t.local");
         assert_eq!(sessions(&pool, u).await, 2);
-        let st = crate::auth::mfa::status(State(pool.clone()), who(&a))
+        let st = crate::auth::mfa::status(State(pool.clone()), a.clone())
             .await
             .unwrap()
             .0;
@@ -743,7 +750,7 @@ mod tests {
             (e.status(), e.message()),
             (StatusCode::GONE, "challenge expired")
         );
-        remove(State(pool.clone()), who(&a), Path(info.id))
+        remove(State(pool.clone()), a.clone(), Path(info.id))
             .await
             .unwrap();
         let e = passwordless(&pool, &t, &mut soft, &cred, u)
@@ -881,7 +888,7 @@ mod tests {
             State(pool.clone()),
             State(passkeys()),
             firefox(),
-            who(&a),
+            a.clone(),
             Json(body),
         )
         .await

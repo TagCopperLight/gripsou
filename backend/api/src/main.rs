@@ -1,3 +1,4 @@
+use gripsou_core::crypto::EncryptionKey;
 use std::env;
 use tracing_subscriber::EnvFilter;
 
@@ -10,25 +11,13 @@ async fn main() -> anyhow::Result<()> {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
     );
 
-    // Every subcommand but `reset-2fa` serves the app, which needs ENCRYPTION_KEY
-    // and PUBLIC_URL: checked before touching the database, and the key is never
-    // printed.
-    let subcommand = env::args().nth(1);
-    let keys = if subcommand.as_deref() == Some("reset-2fa") {
-        None
-    } else {
-        let raw = env::var("ENCRYPTION_KEY").ok();
-        let key = gripsou_api::EncryptionKey::parse(raw.as_deref()).map_err(anyhow::Error::msg)?;
-        let public_url = env::var("PUBLIC_URL").ok();
-        let passkeys =
-            gripsou_api::Passkeys::parse(public_url.as_deref()).map_err(anyhow::Error::msg)?;
-        // Parse proved it is a bare origin; the jobs build links from it.
-        let public_url = public_url
-            .unwrap_or_default()
-            .trim()
-            .trim_end_matches('/')
-            .to_string();
-        Some((key, passkeys, public_url))
+    let command = match env::args().nth(1).as_deref() {
+        None => Command::Serve(serve_config()?),
+        Some("reset-2fa") => Command::ResetTwoFactor(env::args().nth(2)),
+        Some(other) => {
+            eprintln!("unknown command: {other}\nusage: gripsou [reset-2fa <email>]");
+            std::process::exit(2);
+        }
     };
 
     let database_url =
@@ -40,13 +29,16 @@ async fn main() -> anyhow::Result<()> {
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
 
-    let Some((key, passkeys, public_url)) = keys else {
-        let code = gripsou_api::cli::reset_two_factor(&db, env::args().nth(2)).await;
-        log_handle.shutdown().await;
-        std::process::exit(code);
+    let (key, passkeys) = match command {
+        Command::Serve(config) => config,
+        Command::ResetTwoFactor(email) => {
+            let code = gripsou_api::cli::reset_two_factor(&db, email).await;
+            log_handle.shutdown().await;
+            std::process::exit(code);
+        }
     };
 
-    let jobs = gripsou_jobs::Deps::load(&db, key.clone(), public_url)
+    let jobs = gripsou_jobs::Deps::load(&db, key, passkeys.public_url().to_string())
         .await
         .map_err(anyhow::Error::msg)?;
     let jobs = std::sync::Arc::new(jobs);
@@ -57,7 +49,6 @@ async fn main() -> anyhow::Result<()> {
         db.clone(),
         std::path::Path::new(&static_dir),
         jobs,
-        key,
         passkeys,
     );
     // Hash the dummy password now so the first login isn't slower.
@@ -75,6 +66,21 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("server stopped");
     log_handle.shutdown().await;
     Ok(())
+}
+
+enum Command {
+    Serve((EncryptionKey, gripsou_api::Passkeys)),
+    ResetTwoFactor(Option<String>),
+}
+
+/// What serving needs from the environment, checked before touching the
+/// database. The key is never printed.
+fn serve_config() -> anyhow::Result<(EncryptionKey, gripsou_api::Passkeys)> {
+    let key = EncryptionKey::parse(env::var("ENCRYPTION_KEY").ok().as_deref())
+        .map_err(anyhow::Error::msg)?;
+    let passkeys = gripsou_api::Passkeys::parse(env::var("PUBLIC_URL").ok().as_deref())
+        .map_err(anyhow::Error::msg)?;
+    Ok((key, passkeys))
 }
 
 /// Ctrl-C locally, SIGTERM from `docker stop`.

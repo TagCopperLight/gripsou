@@ -5,6 +5,7 @@
 pub mod account;
 pub mod challenge;
 pub mod client;
+pub mod dto;
 pub mod factors;
 pub mod invite;
 pub mod login;
@@ -15,6 +16,11 @@ pub mod session;
 pub mod throttle;
 
 pub use session::{AdminUser, AuthUser};
+
+use axum::Router;
+use axum::routing::{delete, get, patch, post};
+
+use crate::AppState;
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use base64::Engine as _;
@@ -36,6 +42,46 @@ pub fn hash_token(token: &str) -> Vec<u8> {
 /// [`hash_token`], base64url-encoded, for the `invite_token.token` text column.
 pub fn hash_token_str(token: &str) -> String {
     URL_SAFE_NO_PAD.encode(hash_token(token))
+}
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/auth/login", post(login::login))
+        .route("/auth/login/verify", post(login::login_verify))
+        .route("/auth/passkey/options", post(passkey::sign_in_options))
+        .route("/auth/passkey", post(passkey::sign_in))
+        .route("/auth/reauth", post(mfa::reauth))
+        .route("/auth/mfa/status", get(mfa::status))
+        .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
+        .route("/auth/mfa/totp/confirm", post(mfa::totp_confirm))
+        .route("/auth/mfa/totp", delete(mfa::totp_remove))
+        .route(
+            "/auth/mfa/recovery/regenerate",
+            post(mfa::recovery_regenerate),
+        )
+        .route(
+            "/auth/mfa/passkeys/register/options",
+            post(passkey::register_options),
+        )
+        .route("/auth/mfa/passkeys/register", post(passkey::register))
+        .route(
+            "/auth/mfa/passkeys/{id}",
+            patch(passkey::rename).delete(passkey::remove),
+        )
+        .route("/auth/me", get(account::me).patch(account::update_profile))
+        .route("/auth/logout", post(account::logout))
+        .route("/auth/token/{token}", get(invite::token_info))
+        .route("/auth/invite/{token}/redeem", post(invite::redeem_invite))
+        .route("/auth/reset/{token}/redeem", post(invite::redeem_reset))
+        .route("/auth/prefs", patch(crate::prefs::update_prefs))
+        .route("/auth/welcome", post(account::finish_welcome))
+        .route("/auth/change-password", post(account::change_password))
+        .route("/auth/account", delete(account::delete_account))
+        .route(
+            "/auth/sessions",
+            get(account::list_sessions).delete(account::revoke_other_sessions),
+        )
+        .route("/auth/sessions/{id}", delete(account::revoke_session))
 }
 
 #[cfg(test)]

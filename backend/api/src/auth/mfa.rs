@@ -1,7 +1,7 @@
 //! Two-factor settings: set up and remove an authenticator app, regenerate
 //! backup codes, and the password re-authentication the destructive steps need.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use gripsou_core::crypto::EncryptionKey;
@@ -12,9 +12,9 @@ use std::time::Instant;
 
 use crate::auth::challenge::{self, Reauth, spend_reauth};
 use crate::auth::client::Client;
+use crate::auth::dto;
 use crate::auth::throttle::Throttles;
 use crate::auth::{AuthUser, factors, password};
-use crate::dto;
 use crate::error::ApiError;
 
 /// Trade the password for a short-lived token that authorises one sensitive
@@ -181,7 +181,7 @@ mod tests {
         totp_setup(
             State(pool.clone()),
             State(key()),
-            who(a),
+            a.clone(),
             Json(dto::ReauthTokenReq {
                 reauth: token.into(),
             }),
@@ -212,7 +212,7 @@ mod tests {
             State(pool.clone()),
             State(key()),
             State(throttles.clone()),
-            who(a),
+            a.clone(),
             Json(dto::TotpConfirmReq { code }),
         )
         .await
@@ -247,7 +247,7 @@ mod tests {
             State(pool.clone()),
             State(throttles.clone()),
             local(),
-            who(a),
+            a.clone(),
             Json(dto::ReauthReq {
                 password: password.into(),
             }),
@@ -258,7 +258,7 @@ mod tests {
     async fn remove(pool: &PgPool, a: &AuthUser, token: &str) -> Result<StatusCode, ApiError> {
         totp_remove(
             State(pool.clone()),
-            who(a),
+            a.clone(),
             Json(dto::ReauthTokenReq {
                 reauth: token.into(),
             }),
@@ -273,7 +273,7 @@ mod tests {
     ) -> Result<Json<dto::RecoveryCodes>, ApiError> {
         recovery_regenerate(
             State(pool.clone()),
-            who(a),
+            a.clone(),
             Json(dto::ReauthTokenReq {
                 reauth: token.into(),
             }),
@@ -296,7 +296,7 @@ mod tests {
             .0
             .recovery_codes;
         assert_eq!(codes.len(), 10);
-        let st = status(State(pool.clone()), who(&me)).await.unwrap().0;
+        let st = status(State(pool.clone()), me.clone()).await.unwrap().0;
         assert!(st.totp);
         assert_eq!(st.recovery_remaining, 10);
         assert_eq!(sessions(&pool, uid).await, 1);
@@ -571,8 +571,8 @@ mod tests {
         let sa = seed_session(&pool, a).await;
         let sb = seed_session(&pool, b).await;
         enrol(&pool, &sa).await;
-        let st_a = status(State(pool.clone()), who(&sa)).await.unwrap().0;
-        let st_b = status(State(pool.clone()), who(&sb)).await.unwrap().0;
+        let st_a = status(State(pool.clone()), sa.clone()).await.unwrap().0;
+        let st_b = status(State(pool.clone()), sb.clone()).await.unwrap().0;
         assert!(st_a.totp);
         assert_eq!(st_a.recovery_remaining, 10);
         assert!(!st_b.totp);

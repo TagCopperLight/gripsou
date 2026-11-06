@@ -1,7 +1,7 @@
 //! The signed-in user's own account: profile, password, sessions, logout
 //! and deletion.
 
-use axum::Json;
+use crate::error::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use gripsou_core::repo::session;
@@ -11,9 +11,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::auth::client::Client;
+use crate::auth::dto;
 use crate::auth::throttle::Throttles;
 use crate::auth::{AuthUser, password};
-use crate::dto;
 use crate::error::ApiError;
 
 pub async fn me(
@@ -149,14 +149,14 @@ pub async fn delete_account(
 mod tests {
     use super::*;
     use crate::auth;
-    use crate::dto::ChangePasswordReq;
+    use crate::auth::dto::ChangePasswordReq;
     use crate::testkit::*;
     use sqlx::PgPool;
 
     #[sqlx::test(migrations = "../migrations")]
     async fn me_returns_profile_and_logout_revokes(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "hunter2").await;
-        let token = login_token(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local").await;
+        let token = login_token(&pool, "a@t.local", PASSWORD).await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
                 .await
@@ -197,9 +197,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn lists_marks_current_and_revokes(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "hunter2").await;
-        let t1 = login_token(&pool, "a@t.local", "hunter2").await;
-        let t2 = login_token(&pool, "a@t.local", "hunter2").await;
+        seed_admin(&pool, "a@t.local").await;
+        let t1 = login_token(&pool, "a@t.local", PASSWORD).await;
+        let t2 = login_token(&pool, "a@t.local", PASSWORD).await;
         let s1 = gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&t1))
             .await
             .unwrap()
@@ -267,7 +267,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_revokes_other_sessions(pool: PgPool) {
-        seed_admin(&pool, "a@t.local", "old-pass").await;
+        seed_user_with_password(&pool, "a@t.local", "old-pass", Role::Admin).await;
         let current = login_token(&pool, "a@t.local", "old-pass").await;
         let other = login_token(&pool, "a@t.local", "old-pass").await;
         let cur =
@@ -316,8 +316,8 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_requires_the_password(pool: PgPool) {
         // A non-admin user, so the last-admin guard is not in play here.
-        seed_user_with_password(&pool, "a@t.local", "hunter2", Role::User).await;
-        let token = login_token(&pool, "a@t.local", "hunter2").await;
+        seed_user_with_password(&pool, "a@t.local", PASSWORD, Role::User).await;
+        let token = login_token(&pool, "a@t.local", PASSWORD).await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
                 .await
@@ -361,7 +361,7 @@ mod tests {
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                password: "hunter2".into(),
+                password: PASSWORD.into(),
             }),
         )
         .await
@@ -382,8 +382,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_refuses_last_admin(pool: PgPool) {
-        seed_user_with_password(&pool, "boss@t.local", "pw", Role::Admin).await;
-        let token = login_token(&pool, "boss@t.local", "pw").await;
+        seed_admin(&pool, "boss@t.local").await;
+        let token = login_token(&pool, "boss@t.local", PASSWORD).await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
                 .await
@@ -404,7 +404,7 @@ mod tests {
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                password: "pw".into(),
+                password: PASSWORD.into(),
             }),
         )
         .await
@@ -418,7 +418,7 @@ mod tests {
         );
 
         // With a second admin present, the first admin can delete itself.
-        seed_user_with_password(&pool, "boss2@t.local", "pw", Role::Admin).await;
+        seed_admin(&pool, "boss2@t.local").await;
         delete_account(
             State(pool.clone()),
             State(throttles()),
@@ -428,7 +428,7 @@ mod tests {
                 session_id: principal.session_id,
             },
             Json(dto::DeleteAccountReq {
-                password: "pw".into(),
+                password: PASSWORD.into(),
             }),
         )
         .await
@@ -443,9 +443,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_profile_persists_and_rejects_duplicate_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
-        seed_user_with_password(&pool, "taken@t.local", "pw", Role::User).await;
-        let token = login_token(&pool, "a@t.local", "pw").await;
+        seed_user(&pool, "a@t.local").await;
+        seed_user(&pool, "taken@t.local").await;
+        let token = login_token(&pool, "a@t.local", PASSWORD).await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
                 .await
@@ -518,7 +518,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_requires_correct_current(pool: PgPool) {
-        let id = seed_admin(&pool, "a@t.local", "old-pass").await;
+        let id = seed_user_with_password(&pool, "a@t.local", "old-pass", Role::Admin).await;
         // Need a real session_id for change_password
         let token = login_token(&pool, "a@t.local", "old-pass").await;
         let session =
@@ -580,9 +580,9 @@ mod tests {
     /// "Sign out everywhere else" keeps the caller's own session alive.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_keeps_current(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
-        let current = principal_for(&pool, "a@t.local", "pw").await;
-        principal_for(&pool, "a@t.local", "pw").await;
+        seed_user(&pool, "a@t.local").await;
+        let current = principal_for(&pool, "a@t.local", PASSWORD).await;
+        principal_for(&pool, "a@t.local", PASSWORD).await;
         let session_id = current.session_id;
 
         let status = revoke_other_sessions(State(pool.clone()), current)
@@ -595,9 +595,9 @@ mod tests {
     /// "Sign out everywhere else" revokes the caller's other sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
-        let current = principal_for(&pool, "a@t.local", "pw").await;
-        let other = principal_for(&pool, "a@t.local", "pw").await;
+        seed_user(&pool, "a@t.local").await;
+        let current = principal_for(&pool, "a@t.local", PASSWORD).await;
+        let other = principal_for(&pool, "a@t.local", PASSWORD).await;
 
         revoke_other_sessions(State(pool.clone()), current)
             .await
@@ -608,10 +608,10 @@ mod tests {
     /// "Sign out everywhere else" never touches another user's sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
-        seed_user_with_password(&pool, "b@t.local", "pw", Role::User).await;
-        let a = principal_for(&pool, "a@t.local", "pw").await;
-        let b = principal_for(&pool, "b@t.local", "pw").await;
+        seed_user(&pool, "a@t.local").await;
+        seed_user(&pool, "b@t.local").await;
+        let a = principal_for(&pool, "a@t.local", PASSWORD).await;
+        let b = principal_for(&pool, "b@t.local", PASSWORD).await;
 
         revoke_other_sessions(State(pool.clone()), a)
             .await

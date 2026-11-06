@@ -105,7 +105,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
         .into_iter()
         .map(|day| {
             gripsou_core::repo::lot::NewLot::new(
-                "buy",
+                gripsou_core::repo::lot::LotSide::Buy,
                 day,
                 Decimal::ONE,
                 Decimal::TEN,

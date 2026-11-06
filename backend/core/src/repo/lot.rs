@@ -85,15 +85,12 @@ pub struct NewLot {
 impl NewLot {
     /// The error is the message the API answers with.
     pub fn new(
-        side: &str,
+        side: LotSide,
         acquired_on: NaiveDate,
         quantity: Decimal,
         unit_price: Decimal,
         fee: Decimal,
     ) -> Result<Self, &'static str> {
-        let Some(side) = LotSide::parse(side) else {
-            return Err("type must be buy or sell");
-        };
         if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
             return Err("quantity must be positive and unitPrice must not be negative");
         }

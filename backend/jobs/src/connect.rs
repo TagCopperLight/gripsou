@@ -14,18 +14,25 @@ use uuid::Uuid;
 use crate::sync::{Trigger, request_sync};
 use crate::{Deps, credentials};
 
-/// Credentials never leave the server; the returned URL contains a single-use code.
+/// The provider's page for managing the user's connection `connection_id`.
+/// Credentials never leave the server; the returned URL contains a
+/// single-use code.
 pub async fn manage_connection(
+    db: &Db,
     deps: &Deps,
-    conn: &connection::ConnForSync,
-) -> Result<ConnectInit, ProviderError> {
+    user_id: Uuid,
+    connection_id: Uuid,
+) -> Result<ConnectInit, ConnectError> {
+    let conn = connection::connection_for_sync(db, user_id, connection_id)
+        .await?
+        .ok_or(ConnectError::NotFound)?;
     let adapter = deps
         .account(conn.provider_key.as_str())
         .filter(|p| p.supports_manage())
-        .ok_or(ProviderError::NotImplemented)?;
-    let credentials = credentials::open(&deps.key, &conn.credentials)
-        .map_err(|_| ProviderError::Other("connection credentials unavailable".into()))?;
-    adapter.manage(&credentials, &conn.provider_meta).await
+        .ok_or(ConnectError::NoAdapter)?;
+    let credentials =
+        credentials::open(&deps.key, &conn.credentials).map_err(ConnectError::Credentials)?;
+    Ok(adapter.manage(&credentials, &conn.provider_meta).await?)
 }
 
 /// Begin a provider connection: check the adapter exists, call `connect()`,
@@ -39,16 +46,13 @@ pub async fn init_connection(
     user_id: Uuid,
     provider_key: &str,
     display_name: &str,
-) -> Result<(Uuid, ConnectInit), ProviderError> {
-    let adapter = deps
-        .account(provider_key)
-        .ok_or_else(|| ProviderError::Other(format!("no adapter for provider '{provider_key}'")))?;
+) -> Result<(Uuid, ConnectInit), ConnectError> {
+    let adapter = deps.account(provider_key).ok_or(ConnectError::NoAdapter)?;
 
     let init = adapter.connect().await?;
 
-    let connection_id = connection::insert_pending(&db, user_id, provider_key, display_name)
-        .await
-        .map_err(|e| ProviderError::Other(e.to_string()))?;
+    let connection_id =
+        connection::insert_pending(&db, user_id, provider_key, display_name).await?;
     tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = provider_key, "connection created");
 
     let init = ConnectInit {
@@ -61,20 +65,52 @@ pub async fn init_connection(
     Ok((connection_id, init))
 }
 
-/// Why [`complete_connection`] failed.
+/// Why connecting failed.
 #[derive(Debug)]
-pub enum CompleteError {
+pub enum ConnectError {
     /// No connection with this id belongs to the user.
     NotFound,
-    /// The provider refused or failed the callback.
+    /// No adapter for the provider does this: its keys aren't saved, or it
+    /// has no management page.
+    NoAdapter,
+    /// The provider refused or failed the call.
     Provider(ProviderError),
-    /// Our side failed (database, encryption, a missing adapter).
-    Internal(String),
+    Db(CoreError),
+    /// The credentials couldn't be sealed or opened.
+    Credentials(String),
 }
 
-impl From<ProviderError> for CompleteError {
+impl std::fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectError::NotFound => f.write_str("connection not found"),
+            ConnectError::NoAdapter => f.write_str("provider has no adapter"),
+            ConnectError::Provider(_) => f.write_str("provider call failed"),
+            ConnectError::Db(_) => f.write_str("database error"),
+            ConnectError::Credentials(e) => write!(f, "credentials unavailable: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ConnectError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConnectError::Provider(e) => Some(e),
+            ConnectError::Db(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<ProviderError> for ConnectError {
     fn from(e: ProviderError) -> Self {
-        CompleteError::Provider(e)
+        ConnectError::Provider(e)
+    }
+}
+
+impl From<CoreError> for ConnectError {
+    fn from(e: CoreError) -> Self {
+        ConnectError::Db(e)
     }
 }
 
@@ -88,7 +124,7 @@ pub async fn complete_connection(
     user_id: Uuid,
     connection_id: Uuid,
     params: &HashMap<String, String>,
-) -> Result<(), CompleteError> {
+) -> Result<(), ConnectError> {
     let result = finish_connection(db.clone(), deps, user_id, connection_id, params).await;
     if result.is_err()
         && let Err(e) = connection::delete_pending(&db, user_id, connection_id).await
@@ -108,20 +144,18 @@ async fn finish_connection(
     user_id: Uuid,
     connection_id: Uuid,
     params: &HashMap<String, String>,
-) -> Result<(), CompleteError> {
-    let internal = |e: CoreError| CompleteError::Internal(error_chain(&e));
+) -> Result<(), ConnectError> {
     let provider_key = connection::provider_key(&db, connection_id)
-        .await
-        .map_err(internal)?
-        .ok_or(CompleteError::NotFound)?;
+        .await?
+        .ok_or(ConnectError::NotFound)?;
 
     let adapter = deps
         .account(provider_key.as_str())
-        .ok_or_else(|| CompleteError::Internal(format!("no adapter for '{provider_key}'")))?;
+        .ok_or(ConnectError::NoAdapter)?;
 
     let completed = adapter.complete_connect(params).await?;
     let encrypted =
-        credentials::seal(&deps.key, &completed.credentials).map_err(CompleteError::Internal)?;
+        credentials::seal(&deps.key, &completed.credentials).map_err(ConnectError::Credentials)?;
 
     let updated = connection::finish_connect(
         &db,
@@ -130,10 +164,9 @@ async fn finish_connection(
         encrypted,
         completed.provider_meta,
     )
-    .await
-    .map_err(internal)?;
+    .await?;
     if !updated {
-        return Err(CompleteError::NotFound);
+        return Err(ConnectError::NotFound);
     }
     tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = %provider_key, "connection activated");
     // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).

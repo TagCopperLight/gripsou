@@ -10,7 +10,7 @@ mod sync;
 mod webhook;
 
 pub use ai::{Categorize, ai_configured, ai_running, categorize_ready, request_categorize};
-pub use connect::{CompleteError, complete_connection, init_connection, manage_connection};
+pub use connect::{ConnectError, complete_connection, init_connection, manage_connection};
 pub use deps::{Deps, enabled_provider, enabled_providers};
 pub use scheduler::run_scheduler;
 pub use sync::{Trigger, request_sync};
@@ -37,5 +37,18 @@ pub mod testing {
     ) -> Option<bool> {
         let claimed = crate::sync::claim(&db, user_id, connection_id, trigger).await?;
         Some(claimed.spawn(db, deps).await.expect("supervised sync"))
+    }
+
+    /// Deps built from an empty provider config, with the test key.
+    pub fn deps() -> Arc<Deps> {
+        Arc::new(
+            Deps::build(
+                gripsou_core::testkit::encryption_key(),
+                "EUR".into(),
+                "http://localhost:5173".into(),
+                Default::default(),
+            )
+            .unwrap(),
+        )
     }
 }
