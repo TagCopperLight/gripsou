@@ -38,6 +38,7 @@ describe("a background AI run", () => {
       ["budget-categories"],
       ["transactions"],
       ["transaction-counts"],
+      ["budget-latest-month"],
       ["budget-summary"],
       ["budget-trend"],
       ["budget-ai-usage"],

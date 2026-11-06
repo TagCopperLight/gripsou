@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Login } from "./Login";
 import { AuthProvider } from "../../auth/AuthProvider";
 import { AuthContext, useAuth, type AuthValue } from "../../auth/context";
@@ -17,7 +18,7 @@ vi.mock("@simplewebauthn/browser", () => ({
 // flips (see router.test.tsx for that end-to-end flow). Here we only assert it
 // calls `login` correctly and surfaces credential errors.
 function wrap(children: ReactNode) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return <QueryClientProvider client={new QueryClient()}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
 }
 
 /** Render Login with a fully controlled auth context (no real provider). */

@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
 import type { MfaRequired, SessionUser } from "../api/types";
 import {
   startAuthentication,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { AuthContext, type AuthValue, type SecondFactor } from "./context";
+import { AuthContext, isCurrencyRefused, type AuthValue, type SecondFactor } from "./context";
 import i18n from "../i18n";
 import { showError } from "../lib/errorToasts";
 import { DEFAULT_PREFS, setPrefs, withPatch, type PrefsPatch } from "../lib/prefs";
-import { afterCategorizeRequested, afterReviewThresholdChange } from "../api/invalidate";
-import { queryClient } from "../queryClient";
+import { afterPrefsSaved } from "../api/invalidate";
 
 type SessionResponse = { token: string; user: SessionUser };
 type LoginResponse = SessionResponse | MfaRequired;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   // The user as shown, readable by two saves made in the same tick.
@@ -25,9 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetSession = useCallback(() => {
     shown.current = null;
     queryClient.clear();
-  }, []);
+  }, [queryClient]);
 
-  // Apply a user's prefs everywhere: the formatter singleton + i18n language.
+  // Apply a user's prefs everywhere: the formatters' default + i18n language.
   const applyUser = useCallback((u: SessionUser) => {
     shown.current = u;
     setUser(u);
@@ -175,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Show what is stored, once the saves queued behind this one are in;
         // then say so in the corner, in the language shown again. A refused
         // currency (no rate to be had) is explained next to its field instead.
-        const refused = waits && err instanceof ApiError && err.status === 502;
+        const refused = waits && isCurrencyRefused(err);
         prefsSaves.current = prefsSaves.current.then(showStoredPrefs).then(() => {
           if (!refused) showError(i18n.t("settings.prefSaveFailed"));
         });
@@ -186,15 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (waits && shown.current) {
         applyUser({ ...shown.current, prefs: withPatch(shown.current.prefs, patch) });
       }
-      if ("currency" in patch || "timeZone" in patch) {
-        await queryClient.cancelQueries();
-        await queryClient.invalidateQueries();
-      } else if ("budgetAiThreshold" in patch) {
-        await afterReviewThresholdChange(queryClient);
-      }
-      if ("budgetAiEnabled" in patch) await afterCategorizeRequested(queryClient);
+      await afterPrefsSaved(queryClient, patch);
     },
-    [applyUser, showStoredPrefs],
+    [applyUser, showStoredPrefs, queryClient],
   );
 
   const value = useMemo<AuthValue>(

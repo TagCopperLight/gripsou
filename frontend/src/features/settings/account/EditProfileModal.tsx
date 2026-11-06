@@ -18,7 +18,7 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
  *  name and email on Save. */
 export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const { user, updateUser, prefs, updatePrefs } = useAuth();
+  const { user, prefs, updatePrefs } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -46,17 +46,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
 
   const save = () => {
     if (!canSave) return;
-    updateProfile.mutate(
-      { name: name.trim(), email: email.trim() },
-      {
-        onSuccess: (updated) => {
-          // Reflect the edit everywhere the cached profile is read (sidebar
-          // avatar, delete-account confirmation, admin user list).
-          updateUser(updated);
-          onClose();
-        },
-      },
-    );
+    updateProfile.mutate({ name: name.trim(), email: email.trim() }, { onSuccess: onClose });
   };
 
   useErrorToast(updateProfile.isError && !emailTaken && t("settings.account.profileUpdateFailed"));

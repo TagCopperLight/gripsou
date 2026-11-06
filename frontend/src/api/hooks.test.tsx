@@ -109,6 +109,7 @@ describe("useDeleteConnection", () => {
       ["investment-returns"],
       ["transactions"],
       ["transaction-counts"],
+      ["budget-latest-month"],
       ["budget-categories"],
       ["budget-tags"],
       ["budget-summary"],
@@ -140,6 +141,8 @@ describe("useSaveLots", () => {
     expect(invalidatedKeys).toContainEqual(["investment-returns"]);
     expect(invalidatedKeys).toContainEqual(["transactions"]);
     expect(invalidatedKeys).toContainEqual(["transaction-counts"]);
+    // A saved lot can be the newest row, which is where the Overview opens.
+    expect(invalidatedKeys).toContainEqual(["budget-latest-month"]);
     expect(invalidatedKeys).toContainEqual(["net-worth"]);
     expect(invalidatedKeys).toContainEqual(["account-series"]);
     expect(invalidatedKeys).toContainEqual(["holding-lots", "h1"]);

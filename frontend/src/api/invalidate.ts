@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
 import { hasSyncing, type ProviderGroup } from "./types";
+import type { PrefsPatch } from "../lib/prefs";
 
 // What each domain event makes stale, named once.
 //
@@ -44,6 +45,7 @@ export function afterSyncFinished(qc: QueryClient) {
     keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetCategories(),
     keys.budgetTags(),
     keys.budgetSummary(),
@@ -98,6 +100,7 @@ export function afterLotsSaved(qc: QueryClient, holdingId: string) {
     keys.investmentReturns(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.netWorth(),
     keys.accountSeries(),
     keys.holdingLots(holdingId),
@@ -142,6 +145,7 @@ export function afterBudgetCategoryChange(qc: QueryClient) {
     keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiStatus(),
@@ -161,6 +165,7 @@ export function afterTransactionChange(qc: QueryClient) {
     keys.budgetTags(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiStatus(),
@@ -181,15 +186,10 @@ export function afterReviewChange(qc: QueryClient) {
     keys.budgetAiStatus(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
   ]);
-}
-
-// The review threshold decides which AI guesses "need review": the flag on
-// each row, the needs-review filter's counts and the review queue's size.
-export function afterReviewThresholdChange(qc: QueryClient) {
-  return invalidateAll(qc, [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()]);
 }
 
 // Asking for a run: the server answers 202 and works in the background, so only
@@ -212,6 +212,7 @@ export function afterAiRunFinished(qc: QueryClient) {
     keys.budgetCategories(),
     keys.transactions(),
     keys.transactionCounts(),
+    keys.budgetLatestMonth(),
     keys.budgetSummary(),
     keys.budgetTrend(),
     keys.budgetAiUsage(),
@@ -236,4 +237,27 @@ export function afterProviderChange(qc: QueryClient) {
 // A key decides whether its provider works: the AI's provider list reads it.
 export function afterApiKeyChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.apiKeys(), keys.budgetAiSettings(), keys.budgetAiStatus()]);
+}
+
+// What a saved preference makes stale. The server converts figures into the
+// currency and dates them in the time zone, so those two refetch everything;
+// the formatting prefs are applied in the browser and stale nothing.
+const PREF_EFFECTS: { [K in keyof PrefsPatch]?: "everything" | readonly (readonly unknown[])[] } = {
+  currency: "everything",
+  timeZone: "everything",
+  // The threshold decides which AI guesses "need review": the flag on each
+  // row, the needs-review filter's counts and the review queue's size.
+  budgetAiThreshold: [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()],
+  // Opting in starts a run on the server, which the status shows.
+  budgetAiEnabled: [keys.budgetAiStatus()],
+};
+
+export async function afterPrefsSaved(qc: QueryClient, patch: PrefsPatch) {
+  const effects = (Object.keys(patch) as (keyof PrefsPatch)[]).map((key) => PREF_EFFECTS[key]);
+  if (effects.includes("everything")) {
+    await qc.cancelQueries();
+    await qc.invalidateQueries();
+    return;
+  }
+  await invalidateAll(qc, effects.flatMap((groups) => (Array.isArray(groups) ? groups : [])));
 }

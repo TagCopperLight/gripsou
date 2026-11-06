@@ -1,17 +1,19 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryObserver } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AuthProvider } from "./AuthProvider";
 import { useAuth } from "./context";
 import * as api from "../api/client";
-import { queryClient } from "../queryClient";
 import { keys } from "../api/keys";
 import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 import type { SessionUser } from "../api/types";
 
 const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true };
-const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
+const queryClient = new QueryClient();
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={queryClient}><AuthProvider>{children}</AuthProvider></QueryClientProvider>
+);
 
 afterEach(() => {
   queryClient.clear();

@@ -13,7 +13,7 @@ import { CardState } from "../../ui/CardState";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useHoldings, useNetWorth } from "../../api/hooks";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "../../ui/FxNote";
-import { getPrefs } from "../../lib/prefs";
+import { usePrefs } from "../../auth/context";
 import { currencySymbol } from "../../lib/currency";
 import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
 import { rangeOptions, type Range } from "../../lib/ranges";
@@ -21,6 +21,7 @@ import { legendItems, plotSeries, type ChartSeries, type ChartUnit } from "../..
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
+  const readerCurrency = usePrefs().currency;
   // One eye for the headline and the gain; the percentage is never masked.
   const privacy = usePrivacy();
   const [range, setRange] = useState<Range>("6mo");
@@ -40,7 +41,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
 
   // Phone: the word "Value" costs more width than it earns next to "%".
   const UNIT_OPTIONS_SHORT = [
-    { value: "value", label: currencySymbol(getPrefs().currency) },
+    { value: "value", label: currencySymbol(readerCurrency) },
     { value: "percent", label: "%" },
   ];
 

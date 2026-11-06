@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18n from "../../../i18n";
 import { AuthProvider } from "../../../auth/AuthProvider";
 import * as client from "../../../api/client";
@@ -34,9 +35,11 @@ test("preview updates live (no refresh) when prefs change", async () => {
 
   render(
     <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <SettingsGeneral />
-      </AuthProvider>
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider>
+          <SettingsGeneral />
+        </AuthProvider>
+      </QueryClientProvider>
     </I18nextProvider>,
   );
 
@@ -66,9 +69,11 @@ test("a currency the server can't get a rate for is refused and the old one stay
 
   render(
     <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <SettingsGeneral />
-      </AuthProvider>
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider>
+          <SettingsGeneral />
+        </AuthProvider>
+      </QueryClientProvider>
     </I18nextProvider>,
   );
   await screen.findByText("1 234 567,89 £");
@@ -88,9 +93,11 @@ test("a setting the server failed to save says so and goes back", async () => {
 
   render(
     <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <SettingsGeneral />
-      </AuthProvider>
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider>
+          <SettingsGeneral />
+        </AuthProvider>
+      </QueryClientProvider>
     </I18nextProvider>,
   );
   fireEvent.click(await screen.findByText("English"));

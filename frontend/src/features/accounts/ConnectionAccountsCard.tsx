@@ -8,7 +8,7 @@ import { AlertDot } from "../connections/AlertDot";
 import { Money } from "../../ui/Money";
 import { MaskedMoney } from "../../ui/PrivateMoney";
 import { MoneyHint } from "../../ui/MoneyHint";
-import { getPrefs } from "../../lib/prefs";
+import { usePrefs } from "../../auth/context";
 import { HoldingBadge } from "../../ui/HoldingBadge";
 import { EditAccountModal } from "./EditAccountModal";
 import { formatShare } from "../../lib/distribution";
@@ -33,6 +33,7 @@ type ConnectionAccountsCardProps = {
  * Clicking a row opens the account's edit modal. */
 export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
+  const readerCurrency = usePrefs().currency;
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
   const holdings = useHoldings();
@@ -62,7 +63,7 @@ export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, c
         {group.accounts.map((a) => {
           const share = Number(a.value) > 0 ? Number(a.value) / owned : null;
           // A foreign account reads in its own currency, the converted value on hover.
-          const native = a.currency !== getPrefs().currency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
+          const native = a.currency !== readerCurrency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
           return (
             <li key={a.id} className="border-t border-surface-2 first:border-t-0">
               <button

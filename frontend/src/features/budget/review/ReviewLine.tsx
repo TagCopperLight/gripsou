@@ -4,7 +4,7 @@ import { TransactionAvatar } from "../TransactionAvatar";
 import { CategoryChip } from "../CategoryChip";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
-import { getPrefs } from "../../../lib/prefs";
+import { usePrefs } from "../../../auth/context";
 import { Button } from "../../../ui/Button";
 import { formatDay } from "../../../lib/date";
 import { categoryOfTransaction } from "../../../lib/budget";
@@ -23,6 +23,7 @@ type Props = {
  *  goes, so the line adds no warning (user's call). */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
   const { t } = useTranslation();
+  const readerCurrency = usePrefs().currency;
   const category = categoryOfTransaction(tx);
   const confidence = tx.categoryConfidence === null ? null : Math.round(Number(tx.categoryConfidence) * 100);
 
@@ -40,7 +41,7 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
       {/* Fixed-width columns, so amounts, chips and buttons line up down the
           list whatever the chip's label or whether a guess exists. */}
       <span className="w-28 shrink-0 text-right">
-        <MoneyHint hint={tx.currency !== getPrefs().currency && tx.amountReporting !== null
+        <MoneyHint hint={tx.currency !== readerCurrency && tx.amountReporting !== null
           ? <Money value={tx.amountReporting} signed /> : null}>
           <Money value={tx.amount} currency={tx.currency} signed className="text-fg" />
         </MoneyHint>

@@ -11,7 +11,7 @@ import { Modal } from "../../../ui/Modal";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
-import { getPrefs } from "../../../lib/prefs";
+import { usePrefs } from "../../../auth/context";
 import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/hooks";
 import { formatMoney, formatQuantity } from "../../../lib/money";
@@ -55,6 +55,7 @@ export function RecordLotsModal({
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const readerCurrency = usePrefs().currency;
   const { data, isError, refetch } = useHoldingLots(holding.id);
   const saveLots = useSaveLots(holding.id);
   const preview = useLotsPreview(holding.id);
@@ -176,7 +177,7 @@ export function RecordLotsModal({
   const currency = holding.accountCurrency;
   // The same figure in the reader's currency, only when it differs from the account's.
   const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
-    v != null && currency !== getPrefs().currency ? <Money value={v} signed={signed} /> : null;
+    v != null && currency !== readerCurrency ? <Money value={v} signed={signed} /> : null;
 
   useErrorToast(failed && t("dashboard.holdings.gap.saveError"), t("dashboard.holdings.gap.saveErrorDetail"));
 

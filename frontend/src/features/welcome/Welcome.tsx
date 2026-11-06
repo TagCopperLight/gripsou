@@ -10,6 +10,8 @@ import { Toggle } from "../../ui/Toggle";
 import { AddConnectionModal } from "../connections/AddConnectionModal";
 import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { useAuth } from "../../auth/context";
+import { useCurrencyChange } from "../../auth/useCurrencyChange";
+import { CurrencyChangeHint } from "../../auth/CurrencyChangeHint";
 import { postJson } from "../../api/client";
 import {
   useCompleteConnection,
@@ -45,6 +47,7 @@ export function Welcome() {
   const save = (patch: PrefsPatch) => {
     updatePrefs(patch).catch(() => {});
   };
+  const currency = useCurrencyChange();
 
   const connections = flattenConnections(useConnections().data);
   const providers = useEnabledProviders().data;
@@ -188,10 +191,13 @@ export function Welcome() {
               <div className="flex flex-col gap-2">
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
                 <Select
-                  value={prefs.currency}
-                  onChange={(currency) => save({ currency })}
+                  value={currency.value}
+                  onChange={currency.change}
                   options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
                 />
+                {currency.pick && (
+                  <span className="text-xs text-fg-faint"><CurrencyChangeHint pick={currency.pick} /></span>
+                )}
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>

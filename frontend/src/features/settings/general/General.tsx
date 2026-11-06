@@ -1,6 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { CircleAlert } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
@@ -12,7 +11,8 @@ import { formatMoney } from "../../../lib/money";
 import { formatDate } from "../../../lib/date";
 import { CURRENCIES } from "../../../lib/currency";
 import { timeZoneOptions } from "../../../lib/timeZoneList";
-import { ApiError } from "../../../api/client";
+import { useCurrencyChange } from "../../../auth/useCurrencyChange";
+import { CurrencyChangeHint } from "../../../auth/CurrencyChangeHint";
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD", "YYYY-MM-DD"];
 
@@ -41,45 +41,7 @@ export function SettingsGeneral() {
   const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
     void updatePrefs({ [key]: value });
 
-  // The server fetches the new currency's rate before saving it, and refuses
-  // it when the rate can't be had: the select shows the pick meanwhile.
-  const [currency, setCurrency] = useState<{ code: string; state: "fetching" | "refused" } | null>(null);
-  const latest = useRef<string | null>(null);
-  const changeCurrency = (code: string) => {
-    // Only the last pick speaks: an earlier one answering late must not clear it.
-    latest.current = code;
-    setCurrency({ code, state: "fetching" });
-    updatePrefs({ currency: code }).then(
-      () => latest.current === code && setCurrency(null),
-      (err: unknown) =>
-        latest.current === code &&
-        setCurrency(err instanceof ApiError && err.status === 502 ? { code, state: "refused" } : null),
-    );
-  };
-  const currencyHint =
-    currency?.state === "fetching" ? (
-      t("fx.fetching", { currency: currency.code })
-    ) : currency?.state === "refused" ? (
-      <span role="alert" className="inline-flex items-center gap-1.5 text-red">
-        <CircleAlert className="size-3.5 shrink-0" />
-        {t("fx.refused", { currency: currency.code })}
-      </span>
-    ) : (
-      t("settings.general.baseReportingCurrency")
-    );
-
-  // Drive the preview from the reactive context prefs, not the module singleton
-  // that formatMoney reads by default — the singleton isn't a React-tracked
-  // dependency, so a default-args formatMoney("…") would render stale until a
-  // remount. Passing explicit options makes the preview a pure function of the
-  // context prefs, so it updates in lockstep with the controls above.
-  const previewMoneyOpts = {
-    groupSep: prefs.numberGroupSep,
-    decimalSep: prefs.numberDecimalSep,
-    currency: prefs.currency,
-    currencyPosition: prefs.currencyPosition,
-    fractionDigits: prefs.numberDecimals,
-  };
+  const currency = useCurrencyChange();
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -115,7 +77,7 @@ export function SettingsGeneral() {
           <Setting
             label={t("settings.general.dateFormat")}
             hint={t("settings.general.today", {
-              date: formatDate(new Date(), { pattern: prefs.dateFormat, timeZone: prefs.timeZone }),
+              date: formatDate(new Date(), { prefs }),
             })}
           >
             <Select
@@ -135,11 +97,11 @@ export function SettingsGeneral() {
         <div className="flex flex-col gap-5">
           <Setting
             label={t("settings.general.currency")}
-            hint={currencyHint}
+            hint={<CurrencyChangeHint pick={currency.pick} idle={t("settings.general.baseReportingCurrency")} />}
           >
             <Select
-              value={currency?.state === "fetching" ? currency.code : prefs.currency}
-              onChange={changeCurrency}
+              value={currency.value}
+              onChange={currency.change}
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               className="w-36 md:w-60"
             />
@@ -185,10 +147,10 @@ export function SettingsGeneral() {
               <span className="text-xs text-fg-faint">{t("settings.general.preview")}</span>
               <span className="flex flex-wrap gap-x-5 font-mono text-sm">
                 <span className="text-fg">
-                  {formatMoney("1234567.89", previewMoneyOpts)}
+                  {formatMoney("1234567.89", { prefs })}
                 </span>
                 <span className="text-green">
-                  {formatMoney("1234.5", { ...previewMoneyOpts, signed: true })}
+                  {formatMoney("1234.5", { prefs, signed: true })}
                 </span>
               </span>
             </div>

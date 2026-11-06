@@ -1,20 +1,23 @@
 import i18n from "../i18n";
-import { getPrefs } from "./prefs";
+import { getPrefs, type UserPrefs } from "./prefs";
 
 export type DateFormatOptions = {
   /** Token pattern. Supports YYYY, YY, MM, DD. Defaults to the user's prefs. */
   pattern?: string;
   timeZone?: string;
+  /** The prefs to fall back on. Defaults to the signed-in user's. */
+  prefs?: UserPrefs;
 };
 
 export function formatDate(
   value: Date | number | string,
   options: DateFormatOptions = {},
 ): string {
-  const pattern = options.pattern ?? getPrefs().dateFormat;
+  const prefs = options.prefs ?? getPrefs();
+  const pattern = options.pattern ?? prefs.dateFormat;
   const day = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? value
-    : zonedDay(value, options.timeZone);
+    : zonedDay(value, options.timeZone ?? prefs.timeZone);
   const [year, month, date] = day.split("-");
   const tokens: Record<string, string> = {
     YYYY: year, YY: year.slice(-2), MM: month, DD: date,

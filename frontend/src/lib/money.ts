@@ -4,7 +4,7 @@
 // separators / currency symbol from prefs. This supports free-form combinations
 // (e.g. US dates + French separators + symbol-after) that a single locale can't.
 
-import { getPrefs } from "./prefs";
+import { getPrefs, type UserPrefs } from "./prefs";
 import { currencySymbol } from "./currency";
 
 type SignOption = {
@@ -12,7 +12,12 @@ type SignOption = {
   signed?: boolean;
 };
 
-type SepOptions = {
+type PrefsOption = {
+  /** The prefs to format with. Defaults to the signed-in user's. */
+  prefs?: UserPrefs;
+};
+
+type SepOptions = PrefsOption & {
   /** Thousands group separator. Defaults to prefs. */
   groupSep?: string;
   /** Decimal separator. Defaults to prefs. */
@@ -105,7 +110,7 @@ export function formatMoney(
   value: string | number,
   options: MoneyFormatOptions = {},
 ): string {
-  const p = getPrefs();
+  const p = options.prefs ?? getPrefs();
   const frac = options.fractionDigits ?? p.numberDecimals;
   const { sign, body } = renderParts(value, {
     style: "decimal",
@@ -127,7 +132,7 @@ export function formatQuantity(
   value: string | number,
   options: SepOptions & { fractionDigits?: number } = {},
 ): string {
-  const p = getPrefs();
+  const p = options.prefs ?? getPrefs();
   const { sign, body } = renderParts(value, {
     style: "decimal",
     groupSep: options.groupSep ?? p.numberGroupSep,
@@ -145,7 +150,7 @@ export function formatPercent(
   value: string | number,
   options: PercentFormatOptions = {},
 ): string {
-  const p = getPrefs();
+  const p = options.prefs ?? getPrefs();
   // Value is a ratio (0.1234 = 12.34%); Intl percent style multiplies by 100
   // and appends the % sign (captured in body via the percentSign part).
   const { sign, body } = renderParts(value, {

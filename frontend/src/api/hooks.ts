@@ -39,6 +39,7 @@ import { hasSyncing } from "./types";
 import { transactionFilterParams } from "./filter";
 import { keys } from "./keys";
 import { watchSync } from "./watchSync";
+import { useAuth } from "../auth/context";
 import {
   afterAccountEdit,
   afterConnectionDeleted,
@@ -234,13 +235,14 @@ export type UpdateProfileInput = {
 
 export function useUpdateProfile() {
   const qc = useQueryClient();
+  const { updateUser } = useAuth();
   return useMutation({
     mutationFn: ({ name, email }: UpdateProfileInput) =>
       patchJson<SessionUser>("/auth/me", { name, email }),
-    onSuccess: () => {
-      // The admin user list shows the current user's name/email; refresh it so
-      // an edit is reflected there too.
-      afterUserChange(qc);
+    onSuccess: (updated) => {
+      updateUser(updated);
+      // The admin user list shows the current user's name/email too.
+      void afterUserChange(qc);
     },
   });
 }

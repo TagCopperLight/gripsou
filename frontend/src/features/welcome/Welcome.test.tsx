@@ -7,6 +7,7 @@ import { Welcome } from "./Welcome";
 import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
 import type { SessionUser } from "../../api/types";
+import { ApiError } from "../../api/client";
 
 vi.mock("../../lib/navigate", () => ({ goTo: vi.fn() }));
 
@@ -194,6 +195,17 @@ describe("Welcome", () => {
     fireEvent.click(skip);
     await waitFor(() => expect(posted("/auth/welcome")).toHaveLength(1));
     await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith(expect.objectContaining({ welcomeDone: true })));
+  });
+
+  it("says so when the server refuses a currency it has no rate for", async () => {
+    const updatePrefs = vi.fn(async (patch: object) => {
+      if ("currency" in patch) throw new ApiError("no rate", 502);
+    });
+    renderWelcome({ updatePrefs });
+    fireEvent.click(await screen.findByText("EUR (€)"));
+    fireEvent.click(screen.getByText("USD ($)"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't get the USD rate. Try again later.");
+    expect(screen.getByText("EUR (€)")).toBeInTheDocument();
   });
 
   it("does not leave a rejected save unhandled", async () => {

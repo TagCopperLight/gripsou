@@ -25,7 +25,7 @@ import { positionChart, priceChart, shownMeanPrice } from "../../../lib/assetSer
 import { usePrivacy } from "../../../auth/usePrivacy";
 import { reportingOffered } from "../../../lib/reportingUnit";
 import { currencySymbol } from "../../../lib/currency";
-import { getPrefs } from "../../../lib/prefs";
+import { usePrefs } from "../../../auth/context";
 import { rangeOptions, type Range } from "../../../lib/ranges";
 import { legendItems, plotSeries } from "../../../lib/valueChart";
 import { FG_FAINT, GREEN } from "../../../lib/theme";
@@ -74,6 +74,7 @@ type AssetModalProps = {
 
 export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetModalProps) {
   const { t } = useTranslation();
+  const reader = usePrefs().currency;
   const [mode, setMode] = useState<Mode>("asset");
   const [range, setRange] = useState<Range>("1mo");
   const [unit, setUnit] = useState<ChartUnit>("value");
@@ -101,7 +102,6 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const meanPrice = shownMeanPrice(holding);
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
-  const reader = getPrefs().currency;
   const offered = reportingOffered(chartCurrency, reader, prices);
   // Private mode: the purchases chart plots the position's own value, so it
   // shows in % only (the unit price of the asset tab is public).

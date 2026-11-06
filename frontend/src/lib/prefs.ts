@@ -1,8 +1,5 @@
 // Per-user localization & formatting preferences. Mirrors the backend
-// `UserPrefs` (users.prefs JSONB). Held in a module singleton so the plain
-// formatter functions in lib/money.ts / lib/date.ts can read it without every
-// call site threading prefs through — the AuthProvider keeps it in sync. React
-// reactivity comes from the auth context; this singleton is the default source.
+// `UserPrefs` (users.prefs JSONB).
 
 export type CurrencyPosition = "before" | "after";
 
@@ -45,6 +42,9 @@ export const DEFAULT_PREFS: UserPrefs = {
   budgetAiThreshold: 70,
 };
 
+// The prefs the formatters in money.ts and date.ts fall back on when a call
+// passes none. AuthProvider writes it with every user it shows. It is not
+// reactive: a component reads `usePrefs()` (auth/context), which re-renders.
 let current: UserPrefs = DEFAULT_PREFS;
 
 export function getPrefs(): UserPrefs {

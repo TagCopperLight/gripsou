@@ -9,7 +9,7 @@ import { Checkbox } from "../../../ui/Checkbox";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
 import { MaskedMoney } from "../../../ui/PrivateMoney";
-import { getPrefs } from "../../../lib/prefs";
+import { usePrefs } from "../../../auth/context";
 import { formatDay } from "../../../lib/date";
 import { formatQuantity } from "../../../lib/money";
 import { categoryOfTransaction } from "../../../lib/budget";
@@ -41,6 +41,7 @@ export const TransactionRow = memo(function TransactionRow({
   onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
 }: TransactionRowProps) {
   const { t } = useTranslation();
+  const readerCurrency = usePrefs().currency;
   const isLot = tx.source === "lot";
   /** Every row's controls would otherwise share one name ("Select row"), so
    *  each carries the row's own text, the way the settings tables do. */
@@ -197,7 +198,7 @@ export const TransactionRow = memo(function TransactionRow({
       <td role="cell" className={`justify-end whitespace-nowrap py-2.25 ${COL_PAD.amount}`}>
         {/* Denominated in the ACCOUNT's own currency, never the reporting one. */}
         <span data-testid="tx-amount" className={dim}>
-          <MoneyHint hint={!masked && tx.currency !== getPrefs().currency && tx.amountReporting !== null
+          <MoneyHint hint={!masked && tx.currency !== readerCurrency && tx.amountReporting !== null
             ? <Money value={tx.amountReporting} signed /> : null}>
             <MaskedMoney masked={masked} value={tx.amount} currency={tx.currency} signed className="text-fg" />
           </MoneyHint>
