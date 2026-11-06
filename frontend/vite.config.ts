@@ -19,10 +19,10 @@ export default defineConfig(async ({ mode }) => ({
     },
   },
   build: {
-    // Pages load on demand (`lazyRouteComponent` in router.tsx). The largest
-    // chunk left is ECharts, already trimmed to the parts `lib/echarts.ts`
-    // registers (about 615 kB), and loaded only with pages that draw a chart.
-    chunkSizeWarningLimit: 650,
+    // The app ships as one chunk (about 1.6 MB, 515 kB gzip), so changing page
+    // never waits on a download. ECharts is most of it, already trimmed to the
+    // parts `lib/echarts.ts` registers. The limit warns if it grows much more.
+    chunkSizeWarningLimit: 1800,
   },
   test: {
     environment: 'jsdom',
