@@ -46,7 +46,6 @@
     "title": "Sync",
     "openLabel": "Sync data",
     "syncAll": "Sync all",
-    "sync": "Sync",
     "neverSynced": "Never synced",
     "empty": "No bank connected yet.",
     "startFailed": "Couldn't start the sync"

@@ -18,7 +18,7 @@ import { useAiStatus } from "../../api/budget";
 import type { SyncConnection, ConnectionStatus } from "../../api/wire";
 import { useStartConnection } from "../connections/useStartConnection";
 import { useFinishConnection } from "../connections/useFinishConnection";
-import { flattenConnections } from "../../lib/connectionState";
+import { flattenConnections, isPending, isSyncing } from "../../lib/connectionState";
 import { CURRENCIES } from "../../lib/currency";
 import { timeZoneOptions } from "../../lib/timeZoneList";
 import { prefillFromBrowser } from "../../lib/welcome";
@@ -121,9 +121,7 @@ export function Welcome() {
   // As the dropdown reads it ("Paris (UTC+1)"), not the zone's code.
   const zoneLabel = zones.find((z) => z.value === prefs.timeZone)?.label ?? prefs.timeZone;
   const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
-  // A pending row is a connection still being set up (or about to be deleted):
-  // listed, but not a bank yet.
-  const readyBanks = connections.filter((c) => c.status !== "pending");
+  const readyBanks = connections.filter((c) => !isPending(c.status));
   const hasBank = readyBanks.length > 0;
   const connectDisabled = connecting || flow.pending || providers === undefined;
 
@@ -311,17 +309,15 @@ function WelcomeStep({
   );
 }
 
-const BANK_STATE: Record<ConnectionStatus, "ok" | "error" | "syncing" | "connecting"> = {
-  ok: "ok",
-  error: "error",
-  syncing: "syncing",
-  awaiting: "syncing",
-  pending: "connecting",
-};
+function bankState(status: ConnectionStatus): "ok" | "error" | "syncing" | "connecting" {
+  if (isPending(status)) return "connecting";
+  if (isSyncing(status)) return "syncing";
+  return status === "error" ? "error" : "ok";
+}
 
 function BankRow({ connection }: { connection: SyncConnection }) {
   const { t } = useTranslation();
-  const state = BANK_STATE[connection.status];
+  const state = bankState(connection.status);
   const tone = { ok: "text-green", error: "text-red", syncing: "text-amber", connecting: "text-fg-dim" }[state];
   return (
     <div className="flex items-center gap-3 rounded-xl bg-surface-2 px-3.5 py-2.5">

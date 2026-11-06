@@ -46,7 +46,6 @@
     "title": "Synchronisation",
     "openLabel": "Synchroniser les données",
     "syncAll": "Tout synchroniser",
-    "sync": "Synchroniser",
     "neverSynced": "Jamais synchronisé",
     "empty": "Aucune banque connectée pour l’instant.",
     "startFailed": "Impossible de lancer la synchronisation"

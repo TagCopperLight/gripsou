@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
-import { NetWorthCard } from "../features/dashboard/NetWorthCard";
-import { DistributionCard } from "../features/dashboard/DistributionCard";
-import { HoldingsCard } from "../features/dashboard/holdings/HoldingsCard";
-import type { Account, Holding, NetWorthResponse } from "../api/wire";
-import { setPrefs } from "../lib/prefs";
-import { DEFAULT_PREFS } from "../api/wire";
-import { renderWithApp, jsonResponse, stubFetch } from "../test/kit";
+import { NetWorthCard } from "./NetWorthCard";
+import { DistributionCard } from "./DistributionCard";
+import { HoldingsCard } from "./holdings/HoldingsCard";
+import type { Account, Holding, NetWorthResponse } from "../../api/wire";
+import { setPrefs } from "../../lib/prefs";
+import { DEFAULT_PREFS } from "../../api/wire";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
-vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
+vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 /** Answers each endpoint the cards read. */
 function stubApi(routes: Record<string, unknown>) {

@@ -12,10 +12,15 @@ export function isSyncing(status: ConnectionStatus): boolean {
   return status === "syncing" || status === "awaiting";
 }
 
-/** No result to judge yet: a sync in flight, or a connection still being set
- *  up (listed, but not a bank yet). */
+/** A connection still being set up (or about to be deleted): listed, but not
+ *  a bank yet. */
+export function isPending(status: ConnectionStatus): boolean {
+  return status === "pending";
+}
+
+/** No result to judge yet: a sync in flight, or a pending connection. */
 function isUnsettled(status: ConnectionStatus): boolean {
-  return isSyncing(status) || status === "pending";
+  return isSyncing(status) || isPending(status);
 }
 
 export function anySyncing(groups: ProviderGroup[] | undefined): boolean {
@@ -109,7 +114,7 @@ export function connectionProblems(
   if (conn.status === "error") {
     problems.push({ severity: "error", accounts: [], text: t("settings.connections.syncFailedMessage"), detail: conn.lastError ?? undefined, technical: true });
   }
-  if (conn.status === "pending") return problems;
+  if (isPending(conn.status)) return problems;
   for (const issue of issues) {
     problems.push({
       severity: "warning",
