@@ -57,8 +57,8 @@ backend-lint() {
 
 backend-test() { backend_test --workspace; }
 # GitHub runs backend-test as these two halves, each on a runner of its own.
-backend-test-api() { backend_test -p gripsou-api; }
-backend-test-rest() { backend_test --workspace --exclude gripsou-api; }
+backend-test-core() { backend_test -p gripsou-core; }
+backend-test-rest() { backend_test -p gripsou-api -p gripsou-jobs -p gripsou-providers; }
 
 # $@: the packages to test, as cargo selects them.
 backend_test() {
@@ -70,7 +70,7 @@ backend_test() {
   step "build" bash -c 'cd backend && cargo test "$@" --no-run \
     && cargo build -q "$@" -p gripsou-core --example migrate' _ "$@"
   examples=backend/${CARGO_TARGET_DIR:-target}/debug/examples
-  if [[ " $* " != *" --exclude gripsou-api "* ]]; then
+  if [[ " $* " != " -p gripsou-core " ]]; then
     # The frontend's copy of the API types and routes is generated: it must match the code.
     step "wire types" bash -c "$examples/wire-types \
       && git diff --exit-code -- frontend/src/api/wire.ts frontend/src/api/routes.ts"
@@ -120,7 +120,7 @@ jobs=("$@")
 [ ${#jobs[@]} -eq 0 ] && jobs=(backend frontend)
 for job in "${jobs[@]}"; do
   case $job in
-    backend | backend-lint | backend-test | backend-test-api | backend-test-rest \
+    backend | backend-lint | backend-test | backend-test-core | backend-test-rest \
       | frontend | frontend-lint | frontend-test) $job ;;
     *) echo "unknown job: $job"; exit 2 ;;
   esac
