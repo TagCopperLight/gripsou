@@ -13,7 +13,6 @@
 //! A failing golden file is a conversation about which answer is correct.
 
 use chrono::{Duration, NaiveDate, Utc};
-use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
@@ -332,9 +331,7 @@ async fn backfill_digest(pool: &PgPool) -> String {
 #[sqlx::test(migrations = "../migrations")]
 async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     assert_golden("backfill", &backfill_digest(&pool).await);
     Ok(())
@@ -343,9 +340,7 @@ async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
     let rows = gripsou_core::repo::valuation::net_worth_series(
@@ -373,9 +368,7 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
     let mut rows = gripsou_core::repo::valuation::account_series(
@@ -417,9 +410,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = "../migrations")]
 async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
     let wide = gripsou_core::repo::valuation::net_worth_series(
@@ -451,9 +442,7 @@ async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()>
 #[sqlx::test(migrations = "../migrations")]
 async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let today = Utc::now().date_naive();
     let sampled = gripsou_core::repo::valuation::net_worth_series(
@@ -498,7 +487,7 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
         dec("600"),
     )
     .await?;
-    backfill_connection(&mut conn, connection_id).await?;
+    testkit::backfill(&pool, connection_id).await?;
     drop(conn);
 
     let sampled = gripsou_core::repo::valuation::net_worth_series(
@@ -559,9 +548,7 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
 #[sqlx::test(migrations = "../migrations")]
 async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, connection_id).await?;
 
     let rows = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
 

@@ -38,7 +38,7 @@ pub async fn backfill_user(tx: &mut UserWriteTx<'_>) -> Result<u64, CoreError> {
 
 /// Rewrites the derived history for every holding on `connection_id`.
 /// Returns the number of derived rows written.
-pub async fn backfill_connection(
+async fn backfill_connection(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
 ) -> Result<u64, CoreError> {

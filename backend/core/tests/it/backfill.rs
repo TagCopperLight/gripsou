@@ -1,5 +1,4 @@
 use chrono::NaiveDate;
-use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
@@ -112,7 +111,7 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
 
-    let written = backfill_connection(&mut conn, conn_id).await?;
+    let written = testkit::backfill(&pool, conn_id).await?;
     assert!(written > 0, "backfill wrote nothing");
 
     // A movement dated `d` is already in the balance *on* `d`, so it is undone
@@ -166,7 +165,7 @@ async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<(
     ] {
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     // Walking back from 150: -12 dividend, -100 sell, +480 buy, -500 transfer.
     for (day, want) in [(8, "150"), (7, "138"), (6, "38"), (5, "518"), (4, "18")] {
@@ -256,7 +255,7 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
     )
     .await;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     for (day, want) in [
         (d(2026, 1, 15), "112.60"),
@@ -301,7 +300,7 @@ async fn lots_alone_do_not_move_cash_before_the_provider_history(
     )
     .await;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, cash_id, d(2025, 12, 1)).await,
@@ -325,7 +324,7 @@ async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
         &txn("acct-1", "t1", "transfer", dec("-500")).on(d(2026, 1, 5)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
@@ -347,8 +346,7 @@ async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     // explain the difference: each gap must resolve against its own anchor.
     stamp_on(&pool, holding_id, d(2026, 1, 20), dec("300"), dec("300")).await;
 
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 15)).await,
@@ -380,9 +378,9 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     )
     .await?;
 
-    let first = backfill_connection(&mut conn, conn_id).await?;
+    let first = testkit::backfill(&pool, conn_id).await?;
     let first_digest = backfill_digest(&pool, holding_id).await;
-    let second = backfill_connection(&mut conn, conn_id).await?;
+    let second = testkit::backfill(&pool, conn_id).await?;
     let second_digest = backfill_digest(&pool, holding_id).await;
     assert_eq!(first, second, "re-running writes the same number of rows");
     assert_eq!(
@@ -402,7 +400,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
         &txn("acct-1", "t1", "deposit", dec("50")).on(d(2026, 1, 5)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
         Some(dec("50"))
@@ -481,7 +479,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
     )
     .await?;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, eur_holding, d(2026, 1, 4)).await,
@@ -499,8 +497,8 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
 /// Two accounts on the same connection, each with its own cash holding and
 /// its own transactions: covers the scope × horizon cross join, the
 /// per-holding `moves` grouping, and the delete's connection scoping. Also
-/// checks that a pre-existing `holding_backfill` row belonging to a
-/// DIFFERENT connection survives this connection's delete-and-refill.
+/// checks that a pre-existing `holding_backfill` row of another user's
+/// connection survives this user's delete-and-refill.
 #[sqlx::test(migrations = "../migrations")]
 async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     pool: PgPool,
@@ -526,8 +524,8 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     )
     .await?;
 
-    // A pre-existing backfill row belonging to a DIFFERENT connection must
-    // survive this connection's delete-and-refill.
+    // A pre-existing backfill row of another user's connection must survive
+    // this user's delete-and-refill.
     let other_conn = seed_connection(&pool).await;
     let other_acct = checking_account("other-acct");
     let (other_account, other_holding) =
@@ -538,14 +536,14 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
         &txn("other-acct", "t3", "deposit", dec("5")).on(d(2026, 1, 5)),
     )
     .await?;
-    backfill_connection(&mut conn, other_conn).await?;
+    testkit::backfill(&pool, other_conn).await?;
     let other_before = backfill_rows_on(&pool, other_holding, d(2026, 1, 4)).await;
     assert!(
         other_before > 0,
         "sanity: the other connection produced rows"
     );
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     // Each holding's derived series reflects only its own account's txns.
     assert_eq!(
@@ -557,7 +555,7 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
         Some(dec("240"))
     );
 
-    // Untouched by conn_id's delete-and-refill.
+    // Untouched by this user's delete-and-refill.
     assert_eq!(
         backfill_rows_on(&pool, other_holding, d(2026, 1, 4)).await,
         other_before
@@ -605,7 +603,7 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
     )
     .await?;
 
-    backfill_connection(&mut conn, shallow_conn).await?;
+    testkit::backfill(&pool, shallow_conn).await?;
 
     // Held flat all the way back to the deep connection's horizon.
     assert_eq!(
@@ -657,7 +655,7 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
         Some(dec("70"))
@@ -691,7 +689,7 @@ async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::R
             .booked_on(d(2026, 1, 8)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
@@ -744,7 +742,7 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
         )
         .await?;
     }
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     // The derived day immediately after the earlier snapshot must agree with it:
     // nothing was booked on the 2nd, so the balance is still 100.
@@ -804,7 +802,7 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
         )
         .await?;
     }
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     // On the statement dates the batch nets +260, so keying on them puts the
     // 15th at 20 − 260 = −240. Keyed on the spend date only the −40 of the 19th
@@ -854,7 +852,7 @@ async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow:
         &txn("acct-1", "t1", "deposit", dec("50")).on(d(2026, 1, 5)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
@@ -899,7 +897,7 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
         )
         .await?;
     }
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
 
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 14)).await,
@@ -936,7 +934,7 @@ async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result
         &txn("acct-1", "past-1", "deposit", dec("100")).on(today - chrono::Duration::days(3)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
     // Anchor holds 1000 on `future`. Walking back past the +100 deposit gives
@@ -983,7 +981,7 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
             .on(today + chrono::Duration::days(2)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
     // The deposit at today+2 sits inside (today, future_anchor], so walking
@@ -1036,8 +1034,8 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
         &txn("acct-b", "future-b", "deposit", dec("500")).on(today + chrono::Duration::days(7)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_a).await?;
-    backfill_connection(&mut conn, conn_b).await?;
+    testkit::backfill(&pool, conn_a).await?;
+    testkit::backfill(&pool, conn_b).await?;
     drop(conn);
 
     let a = backfill_digest(&pool, holding_a).await;
@@ -1081,7 +1079,7 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
         &txn("acct-1", "on-day", "deposit", dec("7")).on(d(2026, 8, 15)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
     // 1000 (anchor) - 100 (the on-anchor deposit, inside the window) = 900.
@@ -1138,7 +1136,7 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     )
     .await;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
     let rows = backfill_digest(&pool, holding_id).await;
@@ -1194,9 +1192,7 @@ async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Re
     let (_account_id, holding_id) =
         seed_cash(&pool, conn_id, &acct, dec("750"), d(2026, 8, 20)).await;
 
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, conn_id).await?;
-    drop(conn);
+    testkit::backfill(&pool, conn_id).await?;
 
     // Outside the derived range: no row at all.
     assert_eq!(quantity_on(&pool, holding_id, d(2026, 8, 10)).await, None);
@@ -1224,7 +1220,7 @@ async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<(
         &txn("acct-1", "first", "deposit", dec("50")).on(d(2026, 8, 10)),
     )
     .await?;
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
     let rows = backfill_digest(&pool, holding_id).await;

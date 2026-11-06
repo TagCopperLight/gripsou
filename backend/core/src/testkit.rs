@@ -352,6 +352,15 @@ pub async fn owner(pool: &PgPool, connection_id: Uuid) -> Uuid {
         .expect("the connection exists")
 }
 
+/// Rebuilds the derived history of the user owning `connection_id`, under
+/// their write lock, as a sync does. Returns the number of rows written.
+pub async fn backfill(pool: &PgPool, connection_id: Uuid) -> Result<u64, CoreError> {
+    let mut tx = crate::db::begin_user_writes(pool, owner(pool, connection_id).await).await?;
+    let written = crate::backfill::backfill_user(&mut tx).await?;
+    tx.commit().await?;
+    Ok(written)
+}
+
 /// A synced connection holding one equity: three USD-quoted shares (bought
 /// for 450, valued at 600 by the provider) in an EUR checking account.
 /// Returns the connection id.

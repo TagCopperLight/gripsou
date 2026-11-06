@@ -1,5 +1,4 @@
 use chrono::NaiveDate;
-use gripsou_core::backfill::backfill_connection;
 use gripsou_core::dto::SyncResult;
 use gripsou_core::ingest::ingest;
 use gripsou_core::repo::account::upsert_account;
@@ -1045,8 +1044,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     .await?;
     drop(conn);
 
-    // Snapshots are what net_worth_series/accounts read from (and
-    // now holdings() too, for its fallback); stamp today's for each holding.
+    // Snapshots are what every reader values from; stamp today's for each holding.
     // Every priced holding gets value 0 so that a path accidentally reading
     // snapshot.value instead of the price would show up immediately; the
     // unpriced one gets a real provider valuation of 400, which is the only way
@@ -1361,7 +1359,7 @@ async fn seed_backfilled_equity(
     let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &holding).await?;
     stamp_on(pool, holding_id, anchor, Decimal::new(10, 0), valuation).await;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(pool, conn_id).await?;
     Ok((user_id, instrument_id))
 }
 
@@ -1465,7 +1463,7 @@ async fn seed_sold_equity(
     .await;
     stamp_on(pool, holding_id, anchor, Decimal::ZERO, Decimal::ZERO).await;
 
-    backfill_connection(&mut conn, conn_id).await?;
+    testkit::backfill(pool, conn_id).await?;
     Ok(user_id)
 }
 

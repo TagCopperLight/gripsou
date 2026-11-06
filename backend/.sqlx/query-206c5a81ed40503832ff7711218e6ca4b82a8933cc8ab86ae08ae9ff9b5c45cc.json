@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        with v as (\n            select v.account_id,\n                   sum(v.value) as value,\n                   v.account_rate,\n                   v.reporting_rate,\n                   bool_or(v.fx_missing) as fx_missing\n            from holding_day_values($1, array[user_today($1)]) v\n            group by v.account_id, v.account_rate, v.reporting_rate\n        )\n        select a.id    as \"account_id!\",\n               c.id    as \"connection_id!\",\n               a.name  as \"name!\",\n               a.color,\n               a.type_key as \"type_key!\",\n               coalesce(fx_convert(v.value, 1, v.reporting_rate), 0) as \"value!\",\n               a.currency as \"currency!\",\n               -- The same sum in the account's own currency.\n               fx_convert(v.value, 1, v.account_rate) as \"value_native?\",\n               coalesce(v.fx_missing, false) as \"fx_missing!\",\n               c.last_sync_at,\n               c.institution_key,\n               c.institution_name,\n               c.provider_key\n        from v\n        join account a    on a.id = v.account_id\n        join connection c on c.id = a.connection_id\n        order by v.value desc\n        ",
+  "query": "\n        select a.id    as \"account_id!\",\n               c.id    as \"connection_id!\",\n               a.name  as \"name!\",\n               a.color,\n               a.type_key as \"type_key!\",\n               coalesce(v.value, 0) as \"value!\",\n               a.currency as \"currency!\",\n               v.value_native as \"value_native?\",\n               coalesce(v.fx_missing, false) as \"fx_missing!\",\n               c.last_sync_at,\n               c.institution_key,\n               c.institution_name,\n               c.provider_key\n        from account_values_today($1) v\n        join account a    on a.id = v.account_id\n        join connection c on c.id = a.connection_id\n        order by v.value_pivot desc\n        ",
   "describe": {
     "columns": [
       {
@@ -153,5 +153,5 @@
       false
     ]
   },
-  "hash": "fb0d92dff57193a1523c483ef82fd55f57abad1cdda58553650894e28278c201"
+  "hash": "206c5a81ed40503832ff7711218e6ca4b82a8933cc8ab86ae08ae9ff9b5c45cc"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select h.id as \"holding_id!\", h.account_id as \"account_id!\", i.name as \"name!\",\n               sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as \"explained!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        join instrument i on i.id = h.instrument_id\n        join lot l        on l.holding_id = h.id\n        where c.user_id = $1 and h.quantity = 0 and i.kind <> 'cash'\n        group by h.id, h.account_id, i.name\n        ",
+  "query": "\n        select h.id as \"holding_id!\", h.account_id as \"account_id!\", i.name as \"name!\",\n               b.explained_qty as \"explained!\"\n        from holding h\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        join instrument i on i.id = h.instrument_id\n        cross join lateral lot_basis(array[h.id], array[user_today($1)]) b\n        where c.user_id = $1 and h.quantity = 0 and i.kind <> 'cash'\n          and exists (select 1 from lot l where l.holding_id = h.id)\n        ",
   "describe": {
     "columns": [
       {
@@ -55,5 +55,5 @@
       null
     ]
   },
-  "hash": "2e25cea110708799dd71bd15fd7ba327932387c427d7757cebc5484b562d59f8"
+  "hash": "28b0177a0fd5edc6766e57b5c3e558127717c886f750f94ca46a63050a578ef8"
 }

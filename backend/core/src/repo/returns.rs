@@ -41,14 +41,14 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
     let sold_out = sqlx::query!(
         r#"
         select h.id as "holding_id!", h.account_id as "account_id!", i.name as "name!",
-               sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as "explained!"
+               b.explained_qty as "explained!"
         from holding h
         join account a    on a.id = h.account_id
         join connection c on c.id = a.connection_id
         join instrument i on i.id = h.instrument_id
-        join lot l        on l.holding_id = h.id
+        cross join lateral lot_basis(array[h.id], array[user_today($1)]) b
         where c.user_id = $1 and h.quantity = 0 and i.kind <> 'cash'
-        group by h.id, h.account_id, i.name
+          and exists (select 1 from lot l where l.holding_id = h.id)
         "#,
         user_id,
     )

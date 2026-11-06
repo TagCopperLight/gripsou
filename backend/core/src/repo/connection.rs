@@ -87,7 +87,7 @@ pub struct ConnectionAccountRow {
 }
 
 /// Every account under a user's connections, valued today in the reader's
-/// currency like the accounts grid (`holding_day_values`), with the parent
+/// currency like the accounts grid (`account_values_today`), with the parent
 /// connection's last sync time. Zero when it has nothing valued yet.
 pub async fn list_connection_accounts(
     pool: &sqlx::PgPool,
@@ -95,23 +95,17 @@ pub async fn list_connection_accounts(
 ) -> Result<Vec<ConnectionAccountRow>, CoreError> {
     let rows = sqlx::query!(
         r#"
-        with v as (
-            select v.account_id, sum(v.value) as value, v.reporting_rate
-            from holding_day_values($1, array[user_today($1)]) v
-            group by v.account_id, v.reporting_rate
-        )
         select a.connection_id         as "connection_id!",
                a.id                    as "account_id!",
                a.name                  as "name!",
                a.color                 as "color",
                a.type_key              as "type_key!",
-               case when v.account_id is null then 0
-                    else fx_convert(v.value, 1, v.reporting_rate) end as "value?",
+               case when v.account_id is null then 0 else v.value end as "value?",
                c.last_sync_at,
                a.provider_meta as "provider_meta!"
         from account a
         join connection c on c.id = a.connection_id
-        left join v       on v.account_id = a.id
+        left join account_values_today($1) v on v.account_id = a.id
         where c.user_id = $1
         order by a.name
         "#,

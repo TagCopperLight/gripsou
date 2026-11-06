@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        with v as (\n            select v.account_id, sum(v.value) as value, v.reporting_rate\n            from holding_day_values($1, array[user_today($1)]) v\n            group by v.account_id, v.reporting_rate\n        )\n        select a.connection_id         as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               a.color                 as \"color\",\n               a.type_key              as \"type_key!\",\n               case when v.account_id is null then 0\n                    else fx_convert(v.value, 1, v.reporting_rate) end as \"value?\",\n               c.last_sync_at,\n               a.provider_meta as \"provider_meta!\"\n        from account a\n        join connection c on c.id = a.connection_id\n        left join v       on v.account_id = a.id\n        where c.user_id = $1\n        order by a.name\n        ",
+  "query": "\n        select a.connection_id         as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               a.color                 as \"color\",\n               a.type_key              as \"type_key!\",\n               case when v.account_id is null then 0 else v.value end as \"value?\",\n               c.last_sync_at,\n               a.provider_meta as \"provider_meta!\"\n        from account a\n        join connection c on c.id = a.connection_id\n        left join account_values_today($1) v on v.account_id = a.id\n        where c.user_id = $1\n        order by a.name\n        ",
   "describe": {
     "columns": [
       {
@@ -103,5 +103,5 @@
       false
     ]
   },
-  "hash": "ce69e3982382f9c7627e83be06bcdd55c2c7d221f766606afeae78f37f6ee55b"
+  "hash": "7f9ebab56ac0f3328f28a9c1671d5db94ef3ab3d6ef2d32f7c934a044b51f357"
 }

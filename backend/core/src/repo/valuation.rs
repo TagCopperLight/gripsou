@@ -257,6 +257,10 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         -- snapshot lateral is LEFT because a holding ingested before its first
         -- snapshot must still list (it just has no provider valuation).
         --
+        -- This restates `holding_day_values`' inputs for today alone, kept
+        -- apart for speed: a change to what feeds `holding_valuation` is made
+        -- in both.
+        --
         -- Today is `user_today($1)` in each call, never a sub-select: Postgres
         -- does not inline a SQL function given a sub-select argument, and the
         -- opaque calls' cost estimate turns on JIT, which takes a second.
@@ -515,39 +519,30 @@ pub struct AccountRow {
     pub provider_key: String,
 }
 
-/// One row per account valued today, by the same `holding_day_values` as the
-/// net-worth chart, so the accounts grid sums to the chart's last point.
+/// One row per account valued today (`account_values_today`, from the same
+/// `holding_day_values` as the net-worth chart), so the accounts grid sums to
+/// the chart's last point.
 pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountRow,
         r#"
-        with v as (
-            select v.account_id,
-                   sum(v.value) as value,
-                   v.account_rate,
-                   v.reporting_rate,
-                   bool_or(v.fx_missing) as fx_missing
-            from holding_day_values($1, array[user_today($1)]) v
-            group by v.account_id, v.account_rate, v.reporting_rate
-        )
         select a.id    as "account_id!",
                c.id    as "connection_id!",
                a.name  as "name!",
                a.color,
                a.type_key as "type_key!",
-               coalesce(fx_convert(v.value, 1, v.reporting_rate), 0) as "value!",
+               coalesce(v.value, 0) as "value!",
                a.currency as "currency!",
-               -- The same sum in the account's own currency.
-               fx_convert(v.value, 1, v.account_rate) as "value_native?",
+               v.value_native as "value_native?",
                coalesce(v.fx_missing, false) as "fx_missing!",
                c.last_sync_at,
                c.institution_key,
                c.institution_name,
                c.provider_key
-        from v
+        from account_values_today($1) v
         join account a    on a.id = v.account_id
         join connection c on c.id = a.connection_id
-        order by v.value desc
+        order by v.value_pivot desc
         "#,
         user_id,
     )
