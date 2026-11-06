@@ -62,14 +62,17 @@ export function portfolioRoutes(r: Router<Store>): void {
     owned(store, params.id) ? v.prices(store, params.id, query.range ?? DEFAULT_RANGE) : fail(404, "unknown holding"));
   r.route("GET /holdings/:id/lots", ({ store, params }) =>
     owned(store, params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
-  r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
+  r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) =>
+    owned(store, params.id) ? (store.lotSuggestions[params.id] ?? []) : fail(404, "unknown holding"));
   r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) => {
     const refused = v.refusedLot(body.rows);
-    return refused ? fail(400, refused) : v.previewLots(store, params.id, body.rows);
+    if (refused) return fail(400, refused);
+    return owned(store, params.id) ? v.previewLots(store, params.id, body.rows) : fail(404, "unknown holding");
   });
   r.route("PUT /holdings/:id/lots", ({ store, params, body }) => {
     const refused = v.refusedLot(body.adds ?? []);
     if (refused) return fail(400, refused);
+    if (!owned(store, params.id)) return fail(404, "unknown holding");
     v.saveLots(store, params.id, body);
     return reply(204);
   });
