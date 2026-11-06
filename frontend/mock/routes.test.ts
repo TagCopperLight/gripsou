@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ROUTES } from "../src/api/routes.ts";
+import { ROUTES, type Route } from "../src/api/routes.ts";
 import type { Account, Holding } from "../src/api/wire.ts";
-import { NOT_MOCKED } from "./contract.ts";
 import { CW8 } from "./data/base.ts";
 import { router } from "./routes/index.ts";
 import { createStore } from "./store.ts";
+
+/** Server routes the app never calls, so the mock leaves them out. */
+const NOT_MOCKED: readonly Route[] = [
+  // Providers call it, not the app.
+  "POST /webhooks/:provider",
+];
 
 /** A value for each path parameter of a server GET, and the queries it requires. */
 const PARAMS: Record<string, string> = { id: CW8, token: "abc", provider: "jev" };
@@ -21,8 +26,7 @@ const body = <T,>(path: string, query: Record<string, string> = {}): T => {
 
 describe("the mock against the server's routes", () => {
   it("handles every server route but the listed ones, and no other", () => {
-    const skipped: readonly string[] = NOT_MOCKED;
-    expect([...router.keys()].sort()).toEqual(ROUTES.filter((r) => !skipped.includes(r)).sort());
+    expect([...router.keys()].sort()).toEqual(ROUTES.filter((r) => !NOT_MOCKED.includes(r)).sort());
   });
 
   const gets = ROUTES.filter((r) => r.startsWith("GET ")).map((r) => r.slice(4));

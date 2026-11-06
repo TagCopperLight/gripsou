@@ -1,4 +1,4 @@
-import type { SameDescriptionScope } from "../../src/api/wire.ts";
+import { TREND_MONTHS_DEFAULT, TREND_MONTHS_MAX, type SameDescriptionScope } from "../../src/api/wire.ts";
 import type { TxnRow } from "../data/rows.ts";
 import { fail, reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
@@ -15,21 +15,28 @@ function sameDescription(store: Store, row: TxnRow, categoryId: string | null, s
   );
 }
 
+/** `"2026-09"`, as the server's `Month::parse` reads it. */
+const isMonth = (s: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+
 const isNeutral = (store: Store, categoryId: string | null) =>
   store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
 
 /** A user's category write, as the server makes it: final, out of review, and
- *  outside a neutral category it unlinks the row's pair. */
+ *  outside a neutral category it unlinks both halves of the row's pair. A
+ *  partner pairing filed is left an orphan. */
 function file(store: Store, row: TxnRow, categoryId: string | null) {
   Object.assign(row, { categoryId, categorySource: categoryId ? "user" : null, categoryConfidence: null, needsReview: false });
-  if (!isNeutral(store, categoryId)) row.isTransfer = false;
+  if (row.pairId === null || isNeutral(store, categoryId)) return;
+  const partner = store.txns.find((x) => x.id === row.pairId);
+  if (partner) partner.pairId = null;
+  row.pairId = null;
 }
 
 /** Filing a paired transfer outside a neutral category breaks its pair, so the
  *  server asks first: how many pairs it would break, nothing written. */
 function pairBreaks(store: Store, rows: TxnRow[], categoryId: string | null | undefined, confirmed?: boolean): number {
   if (categoryId === undefined || confirmed) return 0;
-  return isNeutral(store, categoryId) ? 0 : rows.filter((x) => x.isTransfer).length;
+  return isNeutral(store, categoryId) ? 0 : rows.filter((x) => x.pairId !== null).length;
 }
 
 export function budgetRoutes(r: Router<Store>): void {
@@ -131,13 +138,21 @@ export function budgetRoutes(r: Router<Store>): void {
     Object.assign(tag, b);
     return v.tags(store).find((t) => t.id === tag.id)!;
   });
-  r.route("GET /budget/summary", ({ store, query }) => {
-    const period = query.has("month") ? !query.has("from") && !query.has("to") : query.has("from") && query.has("to");
-    return period ? v.summary(store, query) : fail(400, "pass either month, or both from and to");
+  r.route("GET /budget/summary", ({ store, query: { month, from, to } }) => {
+    if (month != null && from == null && to == null) {
+      return isMonth(month) ? v.summary(store, { month }) : fail(400, `invalid month: ${month}`);
+    }
+    if (month == null && from != null && to != null) {
+      return from <= to ? v.summary(store, { from, to }) : fail(400, `from ${from} is after to ${to}`);
+    }
+    return fail(400, "pass either month, or both from and to");
   });
-  r.route("GET /budget/trend", ({ store, query }) =>
-    query.has("anchor") ? v.trend(store, query) : fail(400, "missing anchor"),
-  );
+  r.route("GET /budget/trend", ({ store, query: { anchor, months } }) => {
+    if (!isMonth(anchor)) return fail(400, `invalid anchor: ${anchor}`);
+    const n = months ?? TREND_MONTHS_DEFAULT;
+    if (n < 1 || n > TREND_MONTHS_MAX) return fail(400, `months must be 1..=${TREND_MONTHS_MAX}`);
+    return v.trend(store, anchor, n);
+  });
   // As the server: refused unless the admin set up an AI and the user opted in.
   r.route("POST /budget/categorize", ({ store }) =>
     store.aiStatus.configured && store.user.prefs.budgetAiEnabled ? reply(202) : fail(409, "no AI categorisation for this user"),

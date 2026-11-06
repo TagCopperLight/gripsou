@@ -1,28 +1,16 @@
-import { fail, reply, type Failure, type Router } from "../router.ts";
-import { DEFAULT_RANGE, RANGES, type Range } from "../../src/api/wire.ts";
+import { fail, reply, type Router } from "../router.ts";
+import { DEFAULT_RANGE } from "../../src/api/wire.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";
 import en from "../../src/i18n/en.json" with { type: "json" };
 
-/** A chart's `range` parameter, as the server's `RangeParams` reads it. */
-function rangeParam(query: URLSearchParams): Range | Failure {
-  const range = query.get("range");
-  if (range === null) return DEFAULT_RANGE;
-  return RANGES.find((r) => r === range)
-    ?? fail(400, `Failed to deserialize query string: range: unknown variant \`${range}\`, expected one of ${RANGES.map((r) => `\`${r}\``).join(", ")}`);
-}
+const owned = (store: Store, holdingId: string) => v.holdings(store).some((h) => h.id === holdingId);
 
 export function portfolioRoutes(r: Router<Store>): void {
-  r.route("GET /dashboard/net-worth", ({ store, query }) => {
-    const range = rangeParam(query);
-    return typeof range === "string" ? v.netWorth(store, range) : range;
-  });
+  r.route("GET /dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.range ?? DEFAULT_RANGE));
   r.route("GET /accounts", ({ store }) => v.accounts(store));
-  r.route("GET /accounts/series", ({ store, query }) => {
-    const range = rangeParam(query);
-    return typeof range === "string" ? v.accountSeries(store, range) : range;
-  });
+  r.route("GET /accounts/series", ({ store, query }) => v.accountSeries(store, query.range ?? DEFAULT_RANGE));
   r.route("PATCH /accounts/:id", ({ store, params, body: { name, typeKey, color } }) => {
     const account = store.accounts.find((a) => a.id === params.id);
     if (!account) return fail(404, "account not found");
@@ -70,12 +58,10 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("POST /connections/:id/manage", () => ({ redirectUrl: "about:blank" }));
   r.route("GET /holdings", ({ store }) => v.holdings(store));
   r.route("GET /investments/returns", ({ store }) => v.returns(store));
-  r.route("GET /holdings/:id/prices", ({ store, params, query }) => {
-    const range = rangeParam(query);
-    return typeof range === "string" ? v.prices(store, params.id, range) : range;
-  });
+  r.route("GET /holdings/:id/prices", ({ store, params, query }) =>
+    owned(store, params.id) ? v.prices(store, params.id, query.range ?? DEFAULT_RANGE) : fail(404, "unknown holding"));
   r.route("GET /holdings/:id/lots", ({ store, params }) =>
-    v.holdings(store).some((h) => h.id === params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
+    owned(store, params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
   r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
   r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) => {
     const refused = v.refusedLot(body.rows);

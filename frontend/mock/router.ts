@@ -1,9 +1,11 @@
-// Method + path router for the review mode's fake API, typed by the contract
-// (contract.ts): a handler gets its route's request body and must answer its
-// response type. It returns the body (sent as 200 JSON), `reply(status, body?)`
-// for another status, or `fail(status, message)` for an error.
+// Method + path router for the review mode's fake API, typed by the generated
+// `Api` (src/api/route.ts): a handler gets its route's query and request body
+// and must answer its response type. It returns the body (sent as 200 JSON),
+// `reply(status, body?)` for another status, or `fail(status, message)` for an
+// error. A query the server couldn't read is refused before the handler.
 
-import type { Body, Key, Res } from "./contract.ts";
+import type { Body, Key, Query, Res } from "../src/api/route.ts";
+import { BadQuery, readQuery } from "./query.ts";
 
 /** What the plugin sends: JSON (or nothing), or an error as plain text, as the server does. */
 export type Sent = { status: number; body?: unknown } | { status: number; text: string };
@@ -29,11 +31,11 @@ function isReply(v: unknown): v is Reply<unknown> | Failure {
   return typeof v === "object" && v !== null && REPLY in v;
 }
 
-export type Ctx<S, B> = {
+export type Ctx<S, K extends Key> = {
   store: S;
   params: Record<string, string>;
-  query: URLSearchParams;
-  body: B;
+  query: Query<K>;
+  body: Body<K>;
 };
 
 /** A route with no response body answers with a status only (`reply(204)`). */
@@ -54,12 +56,12 @@ export function matchPath(pattern: string, path: string): Record<string, string>
   return params;
 }
 
-type Route<S> = { key: Key; method: string; pattern: string; handler: (ctx: Ctx<S, unknown>) => unknown };
+type Route<S> = { key: Key; method: string; pattern: string; handler: (ctx: Ctx<S, Key>) => unknown };
 
 export function createRouter<S>() {
   const routes: Route<S>[] = [];
 
-  function route<K extends Key>(key: K, handler: (ctx: Ctx<S, Body<K>>) => Answer<Res<K>>): void {
+  function route<K extends Key>(key: K, handler: (ctx: Ctx<S, K>) => Answer<Res<K>>): void {
     const [method, pattern] = key.split(" ");
     routes.push({ key, method, pattern, handler: handler as Route<S>["handler"] });
   }
@@ -70,7 +72,14 @@ export function createRouter<S>() {
       if (r.method !== method) continue;
       const params = matchPath(r.pattern, path);
       if (!params) continue;
-      const out = r.handler({ store, params, query, body });
+      let typed: Query<Key>;
+      try {
+        typed = readQuery(r.key, query);
+      } catch (e) {
+        if (e instanceof BadQuery) return { status: 400, text: e.message };
+        throw e;
+      }
+      const out = r.handler({ store, params, query: typed, body: body as Body<Key> });
       if (!isReply(out)) return { status: 200, body: out };
       if ("text" in out) return { status: out.status, text: out.text };
       return out.body === undefined ? { status: out.status } : { status: out.status, body: out.body };
@@ -78,7 +87,7 @@ export function createRouter<S>() {
     return null;
   }
 
-  /** Every route registered, as the contract names it. */
+  /** Every route registered, as `Api` names it. */
   const keys = (): Key[] => routes.map((r) => r.key);
 
   return { route, dispatch, keys };

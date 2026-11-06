@@ -153,7 +153,7 @@ function transactions(ids: Ids, cats: CategoryRow[], tags: BaseTags, securities:
     let categoryId = categoryKey ? cat(cats, categoryKey) : null;
     let categorySource: TxnRow["categorySource"] = categoryId ? (roll < 0.5 ? "user" : "ai") : null;
     let categoryConfidence = categorySource === "ai" ? money(0.8 + r() * 0.19, 2) : null;
-    if (recent && categoryKey && !extra.isTransfer) {
+    if (recent && categoryKey && extra.categorySource !== "pair") {
       if (roll < 0.15) {
         categoryId = null;
         categorySource = null;
@@ -167,9 +167,11 @@ function transactions(ids: Ids, cats: CategoryRow[], tags: BaseTags, securities:
   }
 
   function transfer(t: number, from: string, to: string, amount: number, outText: string, inText: string) {
-    const pair = { isTransfer: true, categorySource: "pair" as const };
-    add(t, from, -amount, outText, "transfer", "internal", pair);
-    add(t + DAY_MS, to, amount, inText, "transfer", "internal", pair);
+    const pair = { categorySource: "pair" as const };
+    const out = add(t, from, -amount, outText, "transfer", "internal", pair);
+    const back = add(t + DAY_MS, to, amount, inText, "transfer", "internal", pair);
+    out.pairId = back.id;
+    back.pairId = out.id;
   }
 
   const peaCash = { value: openingPeaCash };

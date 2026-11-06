@@ -1,5 +1,5 @@
 // What each route takes and answers, read off the generated `Api`. Shared by
-// the client and the review mode's fake API (mock/contract.ts).
+// the client and the review mode's fake API (mock/router.ts).
 
 import type { Api } from "./routes";
 

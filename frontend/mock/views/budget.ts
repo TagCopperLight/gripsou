@@ -3,7 +3,7 @@
 // simplified copy of the server's rules (core/src/budget/overview/calc.rs), close
 // enough to review the screens with.
 
-import type { BreakdownRow, BudgetCategory, BudgetSummary, BudgetTag, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount, Transaction, TransactionCounts, TransactionParams, TypeBucket } from "../../src/api/wire.ts";
+import { TRANSACTIONS_LIMIT_DEFAULT, TRANSACTIONS_LIMIT_MAX, type BreakdownRow, type BudgetCategory, type BudgetSummary, type BudgetTag, type BudgetTrend, type CategoryRef, type Figure, type Slice, type SliceAmount, type Transaction, type TransactionCounts, type TransactionParams } from "../../src/api/wire.ts";
 import type { TransactionFilterQuery } from "../../src/api/filter.ts";
 import {
   BASELINE_MONTHS,
@@ -86,38 +86,30 @@ export function transactionView(store: Store, x: TxnRow): Transaction {
     categoryConfidence: x.categoryConfidence,
     needsReview: x.needsReview,
     checked: x.checked,
-    isTransfer: x.isTransfer,
-    isOrphanTransfer: x.isOrphanTransfer,
+    isTransfer: x.pairId !== null,
+    isOrphanTransfer: x.pairId === null && x.categorySource === "pair",
     tags: store.tags.filter((t) => x.tagIds.includes(t.id)),
   };
 }
 
-const ids = (raw: string) => raw.split(",").filter(Boolean);
-const flag = (raw: string) => raw === "true";
+const ids = (raw: string | undefined) => raw?.split(",").filter(Boolean);
 
-/** Reads each field `transactionFilterFields` writes: a new filter field
- *  fails to type-check here until the mock reads it. */
-const FILTER_FIELDS: { [K in keyof TransactionFilterQuery]-?: (raw: string) => TransactionFilterQuery[K] } = {
-  search: (raw) => raw,
-  accountId: (raw) => raw,
-  bucket: (raw) => raw as TypeBucket,
-  from: (raw) => raw,
-  to: (raw) => raw,
-  categoryIds: ids,
-  tagIds: ids,
-  uncategorized: flag,
-  needsReview: flag,
-  includeTransfers: flag,
-};
-
-/** The filter of a query string or of a bulk body's `filter`. */
-export function parseTransactionFilter(fields: URLSearchParams | TransactionParams): TransactionFilterQuery {
-  const entries = fields instanceof URLSearchParams ? [...fields] : Object.entries(fields);
-  const f: Record<string, unknown> = {};
-  for (const [k, v] of entries) {
-    if (k in FILTER_FIELDS && v !== undefined) f[k] = FILTER_FIELDS[k as keyof TransactionFilterQuery](String(v));
-  }
-  return f as TransactionFilterQuery;
+/** The filter of the list's query or of a bulk body's `filter`. Names each
+ *  field `transactionFilterFields` writes: a new filter field fails to
+ *  type-check here until the mock reads it. */
+export function parseTransactionFilter(p: TransactionParams): TransactionFilterQuery {
+  return {
+    search: p.search,
+    accountId: p.accountId,
+    bucket: p.bucket,
+    from: p.from,
+    to: p.to,
+    categoryIds: ids(p.categoryIds),
+    tagIds: ids(p.tagIds),
+    uncategorized: p.uncategorized,
+    needsReview: p.needsReview,
+    includeTransfers: p.includeTransfers,
+  } satisfies Record<keyof TransactionFilterQuery, unknown>;
 }
 
 /** The rows a filter selects, newest first — the list, counts and bulk share it. */
@@ -127,7 +119,7 @@ export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
   const catIds = f.categoryIds ?? [];
   const tagIds = f.tagIds ?? [];
   return store.txns.filter((x) => {
-    if (x.isTransfer && !f.includeTransfers) return false;
+    if (x.pairId !== null && !f.includeTransfers) return false;
     if (search && !(x.description ?? "").toLowerCase().includes(search)) return false;
     if (f.accountId && x.accountId !== f.accountId) return false;
     if (bucket === "in" && !(x.source === "cash" && x.amount > 0)) return false;
@@ -143,19 +135,19 @@ export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
   });
 }
 
-export function transactions(store: Store, q: URLSearchParams): Transaction[] {
-  const limit = Number(q.get("limit") ?? 200);
-  const offset = Number(q.get("offset") ?? 0);
+export function transactions(store: Store, q: TransactionParams): Transaction[] {
+  const limit = Math.min(Math.max(q.limit ?? TRANSACTIONS_LIMIT_DEFAULT, 1), TRANSACTIONS_LIMIT_MAX);
+  const offset = Math.max(q.offset ?? 0, 0);
   return matching(store, parseTransactionFilter(q))
     .slice(offset, offset + limit)
     .map((x) => transactionView(store, x));
 }
 
-export function counts(store: Store, q: URLSearchParams): TransactionCounts {
+export function counts(store: Store, q: TransactionParams): TransactionCounts {
   const rows = matching(store, parseTransactionFilter(q));
   // What "select all shown" covers, as the server: the cash rows only.
   const cash = rows.filter((x) => x.source === "cash");
-  const visible = store.txns.filter((x) => !x.isTransfer);
+  const visible = store.txns.filter((x) => x.pairId === null);
   return {
     matching: rows.length,
     total: visible.length,
@@ -242,10 +234,14 @@ function monthRows(rows: Row[], m: Month): Row[] {
   return rows.filter((x) => monthOf(x.t) === m);
 }
 
-export function summary(store: Store, q: URLSearchParams): BudgetSummary {
+/** What the overview sums: one month (compared with the months before it), or
+ *  a span of days. */
+export type Period = { month: string } | { month?: undefined; from: string; to: string };
+
+export function summary(store: Store, period: Period): BudgetSummary {
   const all = budgetRows(store);
-  const month = q.get("month");
-  const { from, to } = month ? monthBounds(month) : { from: q.get("from")!, to: q.get("to")! };
+  const month = period.month;
+  const { from, to } = period.month === undefined ? period : monthBounds(period.month);
   const rows = inPeriod(all, from, to);
   const exp = expenseSide(rows);
   const inc = incomeSide(rows);
@@ -304,9 +300,8 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
   };
 }
 
-export function trend(store: Store, q: URLSearchParams): BudgetTrend {
-  const anchor = q.get("anchor")!;
-  const n = Number(q.get("months") ?? 12);
+/** The `n` months ending with `anchor`. */
+export function trend(store: Store, anchor: string, n: number): BudgetTrend {
   const months = Array.from({ length: n }, (_, i) => addMonths(anchor, i - n + 1));
   const all = budgetRows(store);
   const perMonth = months.map((m) => expenseSide(monthRows(all, m)));

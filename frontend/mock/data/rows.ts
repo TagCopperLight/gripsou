@@ -23,8 +23,9 @@ export type TxnRow = {
   categoryConfidence: string | null;
   needsReview: boolean;
   checked: boolean;
-  isTransfer: boolean;
-  isOrphanTransfer: boolean;
+  /** The other half of the internal transfer this row is paired with. A
+   *  `pair`-filed row with none lost its partner: an orphaned transfer. */
+  pairId: string | null;
   tagIds: string[];
 };
 
@@ -72,8 +73,7 @@ export function cashRow(id: string, row: Pick<TxnRow, "t" | "type" | "amount" | 
     categoryConfidence: null,
     needsReview: false,
     checked: false,
-    isTransfer: false,
-    isOrphanTransfer: false,
+    pairId: null,
     tagIds: [],
     ...row,
   };

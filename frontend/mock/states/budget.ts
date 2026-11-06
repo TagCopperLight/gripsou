@@ -9,7 +9,7 @@ import type { MockState } from "./pieces.ts";
 /** This month's net (income − expenses), as the overview shows it. */
 function monthNet(store: Store): number {
   const month = isoDay(TODAY).slice(0, 7);
-  return Number(summary(store, new URLSearchParams({ month })).figures.net.amount);
+  return Number(summary(store, { month }).figures.net.amount);
 }
 
 /** One more expense today, filed under housing. */
@@ -25,7 +25,7 @@ export const overview: MockState[] = [
     apply(store) {
       const from = daysAgo(30);
       store.txns
-        .filter((x) => x.source === "cash" && x.t >= from && x.categorySource === "ai" && !x.isTransfer)
+        .filter((x) => x.source === "cash" && x.t >= from && x.categorySource === "ai" && x.pairId === null)
         .slice(0, 9)
         .forEach((x, i) => queueForReview(x, x.categoryId, (0.45 + (i % 4) * 0.05).toFixed(2)));
     },
@@ -91,7 +91,7 @@ export const review: MockState[] = [
     label: "A guess into Savings (hides the amount from the totals)",
     pieces: ["Budget review"],
     apply(store) {
-      queue(store, 1, "savings", (x) => x.amount < 0 && !x.isTransfer);
+      queue(store, 1, "savings", (x) => x.amount < 0 && x.pairId === null);
     },
   },
   {
@@ -99,7 +99,7 @@ export const review: MockState[] = [
     label: "Two rows the AI couldn't guess",
     pieces: ["Budget review"],
     apply(store) {
-      queue(store, 2, null, (x) => !x.isTransfer);
+      queue(store, 2, null, (x) => x.pairId === null);
     },
   },
   {
@@ -107,8 +107,8 @@ export const review: MockState[] = [
     label: "A guess whose description 5 other rows share",
     pieces: ["Budget review"],
     apply(store) {
-      const [row] = queue(store, 1, "groceries", (x) => x.amount < 0 && !x.isTransfer);
-      store.txns.filter((x) => x.source === "cash" && x !== row && x.amount < 0 && !x.isTransfer && !x.needsReview).slice(0, 5)
+      const [row] = queue(store, 1, "groceries", (x) => x.amount < 0 && x.pairId === null);
+      store.txns.filter((x) => x.source === "cash" && x !== row && x.amount < 0 && x.pairId === null && !x.needsReview).slice(0, 5)
         .forEach((x) => { x.description = row.description; });
     },
   },
@@ -117,8 +117,7 @@ export const review: MockState[] = [
     label: "A guess on a paired transfer (correcting it breaks the pair)",
     pieces: ["Budget review"],
     apply(store) {
-      const [row] = queue(store, 1, "internal", (x) => x.amount < 0);
-      row.isTransfer = true;
+      queue(store, 1, "internal", (x) => x.pairId !== null && x.amount < 0);
     },
   },
   {
@@ -126,7 +125,7 @@ export const review: MockState[] = [
     label: "260 rows to review (loads as you scroll)",
     pieces: ["Budget review"],
     apply(store) {
-      store.txns.filter((x) => x.source === "cash" && !x.isTransfer).slice(0, 260)
+      store.txns.filter((x) => x.source === "cash" && x.pairId === null).slice(0, 260)
         .forEach((x, i) => queueForReview(x, x.categoryId, x.categoryId ? (0.45 + (i % 5) * 0.04).toFixed(2) : null));
     },
   },
@@ -163,10 +162,10 @@ export const transactions: MockState[] = [
     label: "A transfer whose other half was filed elsewhere (unpaired)",
     pieces: ["Budget transactions"],
     apply(store) {
-      const out = store.txns.find((x) => x.isTransfer && x.description === "VIR VERS LIVRET A")!;
-      const back = store.txns.find((x) => x.isTransfer && x.description === "VIR DEPUIS COMPTE COURANT" && x.t > out.t)!;
-      Object.assign(out, { isTransfer: false, categoryId: cat(store.categories, "shopping"), categorySource: "user" });
-      Object.assign(back, { isTransfer: false, isOrphanTransfer: true });
+      const out = store.txns.find((x) => x.pairId !== null && x.description === "VIR VERS LIVRET A")!;
+      const back = store.txns.find((x) => x.id === out.pairId)!;
+      Object.assign(out, { pairId: null, categoryId: cat(store.categories, "shopping"), categorySource: "user" });
+      back.pairId = null;
     },
   },
   {
