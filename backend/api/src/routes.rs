@@ -1,6 +1,6 @@
 //! The API's routes as data: one entry per method and path, from which the
-//! router is built. Each entry also carries the JSON body its handler takes
-//! and the answer it sends, read off the handler's signature, so
+//! router is built. Each entry also carries the JSON body and query its
+//! handler takes and the answer it sends, read off the handler's signature, so
 //! `frontend/src/api/routes.ts` lists every route with its types and the
 //! review mock is checked against it.
 
@@ -83,7 +83,7 @@ impl Routes {
         })
     }
 
-    /// Declares every route's body and answer types, and what they use.
+    /// Declares every route's body, query and answer types, and what they use.
     pub(crate) fn visit_types(&self, types: &mut Types) {
         for route in &self.0 {
             (route.types.visit)(types);
@@ -91,9 +91,9 @@ impl Routes {
     }
 }
 
-/// A body or an answer as the TypeScript route map names it.
+/// A body, query or answer as the TypeScript route map names it.
 pub(crate) trait Wire {
-    /// No JSON at all: a route map entry leaves out an absent body.
+    /// Nothing sent: a route map entry leaves out an absent body or query.
     const NONE: bool = false;
     fn name(cfg: &Config) -> String;
     fn visit(v: &mut impl TypeVisitor);
@@ -108,10 +108,10 @@ impl<T: TS + 'static> Wire for T {
     }
 }
 
-/// No JSON body: a route that takes none, or answers with a status alone.
-pub(crate) enum NoBody {}
+/// Nothing sent: no body or query taken, or an answer that is a status alone.
+pub(crate) enum Absent {}
 
-impl Wire for NoBody {
+impl Wire for Absent {
     const NONE: bool = true;
     fn name(_: &Config) -> String {
         "void".into()
@@ -129,32 +129,42 @@ impl Wire for RawBody {
     fn visit(_: &mut impl TypeVisitor) {}
 }
 
-/// What a handler's last argument says of the request body: axum reads the
-/// body only there, so the other arguments are never asked.
+/// What a handler argument reads of the request.
 pub(crate) trait Arg {
+    /// The body it reads. axum reads the body only in the last argument, so
+    /// only the last one's counts.
     type Body: Wire + 'static;
+    /// The query string it reads.
+    type Query: Wire + 'static;
 }
 
 impl<T: TS + 'static> Arg for Json<T> {
     type Body = T;
+    type Query = Absent;
 }
 
 impl Arg for axum::body::Bytes {
     type Body = RawBody;
+    type Query = Absent;
 }
 
-macro_rules! no_body {
+impl<Q: TS + 'static> Arg for Query<Q> {
+    type Body = Absent;
+    type Query = Q;
+}
+
+macro_rules! reads_nothing {
     ($($ty:ty $(=> $($param:ident),*)?;)*) => {$(
         impl$(<$($param),*>)? Arg for $ty {
-            type Body = NoBody;
+            type Body = Absent;
+            type Query = Absent;
         }
     )*};
 }
 
-no_body! {
+reads_nothing! {
     State<S> => S;
     Path<P> => P;
-    Query<Q> => Q;
     AuthUser;
     AdminUser;
     Client;
@@ -172,7 +182,7 @@ impl<T: TS + 'static> Reply for Json<T> {
 }
 
 impl Reply for StatusCode {
-    type Res = NoBody;
+    type Res = Absent;
 }
 
 impl<R: Reply> Reply for (StatusCode, R) {
@@ -187,34 +197,22 @@ impl<R: Reply> Reply for Result<R, ApiError> {
     type Res = R::Res;
 }
 
-/// The body and answer types of a handler, from its signature.
+/// The body, query and answer types of a handler, from its signature.
 pub(crate) trait Typed<A> {
     fn types() -> RouteTypes;
 }
 
 pub(crate) struct RouteTypes {
     body: fn(&Config) -> Option<String>,
+    query: fn(&Config) -> Option<String>,
     res: fn(&Config) -> String,
     visit: fn(&mut Types),
     imports: fn(&mut Imports),
 }
 
-impl RouteTypes {
-    fn of<B: Wire + 'static, R: Wire + 'static>() -> Self {
-        fn body<B: Wire + 'static>(cfg: &Config) -> Option<String> {
-            (!B::NONE).then(|| B::name(cfg))
-        }
-        fn visit<B: Wire, R: Wire, V: TypeVisitor>(v: &mut V) {
-            B::visit(v);
-            R::visit(v);
-        }
-        RouteTypes {
-            body: body::<B>,
-            res: R::name,
-            visit: visit::<B, R, Types>,
-            imports: visit::<B, R, Imports>,
-        }
-    }
+/// A wire type's name, `None` when nothing is sent.
+fn named<W: Wire>(cfg: &Config) -> Option<String> {
+    (!W::NONE).then(|| W::name(cfg))
 }
 
 macro_rules! typed {
@@ -224,13 +222,24 @@ macro_rules! typed {
             F: FnOnce($($arg),*) -> Fut,
             Fut: Future,
             Fut::Output: Reply,
-            typed!(@last $($arg),*): Arg,
+            $($arg: Arg,)*
         {
             fn types() -> RouteTypes {
-                RouteTypes::of::<
-                    <typed!(@last $($arg),*) as Arg>::Body,
-                    <Fut::Output as Reply>::Res,
-                >()
+                fn query<$($arg: Arg),*>(_cfg: &Config) -> Option<String> {
+                    None$(.or_else(|| named::<<$arg as Arg>::Query>(_cfg)))*
+                }
+                fn visit<$($arg: Arg,)* R: Wire, V: TypeVisitor>(v: &mut V) {
+                    <<typed!(@last $($arg),*) as Arg>::Body as Wire>::visit(v);
+                    $(<<$arg as Arg>::Query as Wire>::visit(v);)*
+                    <R as Wire>::visit(v);
+                }
+                RouteTypes {
+                    body: named::<<typed!(@last $($arg),*) as Arg>::Body>,
+                    query: query::<$($arg),*>,
+                    res: <<Fut::Output as Reply>::Res as Wire>::name,
+                    visit: visit::<$($arg,)* <Fut::Output as Reply>::Res, Types>,
+                    imports: visit::<$($arg,)* <Fut::Output as Reply>::Res, Imports>,
+                }
             }
         }
     };
@@ -243,7 +252,8 @@ macro_rules! typed {
 pub(crate) enum NoArgs {}
 
 impl Arg for NoArgs {
-    type Body = NoBody;
+    type Body = Absent;
+    type Query = Absent;
 }
 
 typed!();
@@ -276,8 +286,8 @@ pub const PATH: &str = concat!(
     "/../../frontend/src/api/routes.ts"
 );
 
-/// Every route under `/api` as `METHOD /path/:param`, with the body it takes
-/// and the answer it sends, sorted by path so the file is stable.
+/// Every route under `/api` as `METHOD /path/:param`, with the body and query
+/// it takes and the answer it sends, sorted by path so the file is stable.
 pub fn render() -> String {
     let cfg = crate::wire_ts::config();
     let routes = crate::api_routes();
@@ -320,16 +330,20 @@ pub fn render() -> String {
     }
     out.push_str(
         "] as const;\n\nexport type Route = (typeof ROUTES)[number];\n\n\
-         /** The JSON body each route takes (none when absent) and the answer it\n \
-         * sends (`void`: none), as its handler declares them. */\n\
+         /** The JSON body and query parameters each route takes (none when\n \
+         * absent) and the answer it sends (`void`: none), as its handler\n \
+         * declares them. */\n\
          export type Api = {\n",
     );
     for (path, method, types) in &entries {
         let body = (types.body)(&cfg)
             .map(|body| format!("body: {body}; "))
             .unwrap_or_default();
+        let query = (types.query)(&cfg)
+            .map(|query| format!("query: {query}; "))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "  \"{method} {path}\": {{ {body}res: {} }};\n",
+            "  \"{method} {path}\": {{ {body}{query}res: {} }};\n",
             (types.res)(&cfg)
         ));
     }

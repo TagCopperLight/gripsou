@@ -1,5 +1,5 @@
 import { fail, reply, type Failure, type Router } from "../router.ts";
-import { RANGES, type Range } from "../../src/api/wire.ts";
+import { DEFAULT_RANGE, RANGES, type Range } from "../../src/api/wire.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";
@@ -8,7 +8,7 @@ import en from "../../src/i18n/en.json" with { type: "json" };
 /** A chart's `range` parameter, as the server's `RangeParams` reads it. */
 function rangeParam(query: URLSearchParams): Range | Failure {
   const range = query.get("range");
-  if (range === null) return "6mo";
+  if (range === null) return DEFAULT_RANGE;
   return RANGES.find((r) => r === range)
     ?? fail(400, `Failed to deserialize query string: range: unknown variant \`${range}\`, expected one of ${RANGES.map((r) => `\`${r}\``).join(", ")}`);
 }

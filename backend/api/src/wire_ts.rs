@@ -10,7 +10,7 @@ use std::fmt::Write;
 
 use ts_rs::{Config, TS, TypeVisitor};
 
-use crate::{auth, budget, wire};
+use crate::{auth, wire};
 use gripsou_core::repo::prefs;
 
 /// The command that writes the file, named in its header.
@@ -53,13 +53,9 @@ pub(crate) struct Types {
 }
 
 impl Types {
-    /// Every route's body and answer, and the query parameters the frontend
-    /// builds.
+    /// Every route's body, query and answer.
     fn roots(&mut self) {
         crate::api_routes().visit_types(self);
-        self.visit::<budget::dto::SummaryParams>();
-        self.visit::<budget::dto::TrendParams>();
-        self.visit::<wire::Range>();
     }
 }
 
@@ -149,6 +145,30 @@ fn constants() -> String {
         &format!(
             "[{}] as const satisfies readonly Range[]",
             ranges.join(", ")
+        ),
+    );
+    line(
+        "DEFAULT_RANGE",
+        "The range a chart's query means when it names none.",
+        &format!(
+            "{} satisfies Range",
+            serde_json::to_string(&wire::Range::default()).expect("a range serializes")
+        ),
+    );
+    let days_back: Vec<String> = wire::Range::ALL
+        .iter()
+        .map(|r| {
+            let key = serde_json::to_string(r).expect("a range serializes");
+            let days = r.days_back().map_or("null".to_string(), |d| d.to_string());
+            format!("{key}: {days}")
+        })
+        .collect();
+    line(
+        "RANGE_DAYS_BACK",
+        "How many days before today each range's window starts; null for `ytd`, which starts on January 1st.",
+        &format!(
+            "{{ {} }} as const satisfies Record<Range, number | null>",
+            days_back.join(", ")
         ),
     );
     writeln!(

@@ -52,23 +52,34 @@ impl Range {
         Self::Max,
     ];
 
+    /// How many days before today the window starts; `None` for the one
+    /// that starts on January 1st.
+    pub const fn days_back(self) -> Option<i64> {
+        match self {
+            Range::Week => Some(7),
+            Range::Month => Some(30),
+            Range::HalfYear => Some(182),
+            Range::Year => Some(365),
+            Range::YearToDate => None,
+            Range::Max => Some(4000),
+        }
+    }
+
     /// Inclusive calendar days ending on `today`.
     pub fn window(self, today: NaiveDate) -> (NaiveDate, NaiveDate) {
-        let from = match self {
-            Range::Week => today - Duration::days(7),
-            Range::Month => today - Duration::days(30),
-            Range::HalfYear => today - Duration::days(182),
-            Range::Year => today - Duration::days(365),
-            Range::YearToDate => NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap(),
-            Range::Max => today - Duration::days(4000),
+        let from = match self.days_back() {
+            Some(days) => today - Duration::days(days),
+            None => NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap(),
         };
         (from, today)
     }
 }
 
-#[derive(Deserialize)]
+/// A chart's query: an absent range is `Range::default()`.
+#[derive(Deserialize, ts_rs::TS)]
 pub struct RangeParams {
     #[serde(default)]
+    #[ts(optional, as = "Option<Range>")]
     pub range: Range,
 }
 

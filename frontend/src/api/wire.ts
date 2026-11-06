@@ -368,6 +368,11 @@ export type ProviderGroup = { providerKey: string, providerName: string, connect
  */
 export type Range = "7d" | "1mo" | "6mo" | "1y" | "ytd" | "max";
 
+/**
+ * A chart's query: an absent range is `Range::default()`.
+ */
+export type RangeParams = { range?: Range, };
+
 export type ReauthReq = { password: string, };
 
 export type ReauthResponse = { reauth: string, };
@@ -741,6 +746,10 @@ export const BUDGET_AI_THRESHOLD_MIN = 50;
 export const BUDGET_AI_THRESHOLD_MAX = 95;
 /** Every chart range, in the order the range selector lists them. */
 export const RANGES = ["7d", "1mo", "6mo", "1y", "ytd", "max"] as const satisfies readonly Range[];
+/** The range a chart's query means when it names none. */
+export const DEFAULT_RANGE = "6mo" satisfies Range;
+/** How many days before today each range's window starts; null for `ytd`, which starts on January 1st. */
+export const RANGE_DAYS_BACK = { "7d": 7, "1mo": 30, "6mo": 182, "1y": 365, "ytd": null, "max": 4000 } as const satisfies Record<Range, number | null>;
 /** What a new user's preferences read as, shown before anyone signs in. */
 export const DEFAULT_PREFS: UserPrefs = {
   "uiLanguage": "en",

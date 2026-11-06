@@ -46,6 +46,7 @@ import type {
   PricePoint,
   Provider,
   ProviderGroup,
+  RangeParams,
   ReauthReq,
   ReauthResponse,
   ReauthTokenReq,
@@ -62,6 +63,7 @@ import type {
   SetBudgetAiSettingsReq,
   SetProviderReq,
   SetRoleReq,
+  SummaryParams,
   SyncAllResp,
   TagBody,
   TokenInfo,
@@ -69,7 +71,9 @@ import type {
   TotpSetup,
   Transaction,
   TransactionCounts,
+  TransactionParams,
   TransactionPatch,
+  TrendParams,
   UndoReviewReq,
   UpdateAccountReq,
   UpdatePrefsReq,
@@ -168,13 +172,14 @@ export const ROUTES = [
 
 export type Route = (typeof ROUTES)[number];
 
-/** The JSON body each route takes (none when absent) and the answer it
- * sends (`void`: none), as its handler declares them. */
+/** The JSON body and query parameters each route takes (none when
+ * absent) and the answer it sends (`void`: none), as its handler
+ * declares them. */
 export type Api = {
   "GET /account-types": { res: Array<string> };
   "GET /accounts": { res: Array<Account> };
   "PATCH /accounts/:id": { body: UpdateAccountReq; res: UpdatedAccount };
-  "GET /accounts/series": { res: AccountSeries };
+  "GET /accounts/series": { query: RangeParams; res: AccountSeries };
   "DELETE /auth/account": { body: DeleteAccountReq; res: void };
   "POST /auth/change-password": { body: ChangePasswordReq; res: void };
   "POST /auth/invite/:token/redeem": { body: RedeemInviteReq; res: SessionResponse };
@@ -211,26 +216,26 @@ export type Api = {
   "GET /budget/categorize/status": { res: AiStatus };
   "POST /budget/review/:id/accept": { res: AcceptReviewResponse };
   "POST /budget/review/:id/undo": { body: UndoReviewReq; res: void };
-  "GET /budget/summary": { res: BudgetSummary };
+  "GET /budget/summary": { query: SummaryParams; res: BudgetSummary };
   "GET /budget/tags": { res: Array<BudgetTag> };
   "POST /budget/tags": { body: TagBody; res: BudgetTag };
   "DELETE /budget/tags/:id": { res: void };
   "PATCH /budget/tags/:id": { body: TagBody; res: BudgetTag };
-  "GET /budget/trend": { res: BudgetTrend };
+  "GET /budget/trend": { query: TrendParams; res: BudgetTrend };
   "GET /connections": { res: Array<ProviderGroup> };
   "DELETE /connections/:id": { res: void };
   "POST /connections/:id/manage": { res: ManageResp };
   "POST /connections/:id/sync": { res: ConnectionState };
   "POST /connections/complete": { body: CompleteConnectionReq; res: void };
   "POST /connections/init": { body: InitConnectionReq; res: InitConnectionResp };
-  "GET /dashboard/net-worth": { res: NetWorthResponse };
+  "GET /dashboard/net-worth": { query: RangeParams; res: NetWorthResponse };
   "GET /health": { res: Health };
   "GET /holdings": { res: Array<Holding> };
   "GET /holdings/:id/lots": { res: Array<Lot> };
   "PUT /holdings/:id/lots": { body: SaveLotsReq; res: void };
   "POST /holdings/:id/lots/preview": { body: PreviewLotsReq; res: BasisPreview };
   "GET /holdings/:id/lots/suggestions": { res: Array<LotSuggestion> };
-  "GET /holdings/:id/prices": { res: Array<PricePoint> };
+  "GET /holdings/:id/prices": { query: RangeParams; res: Array<PricePoint> };
   "GET /investments/returns": { res: InvestmentReturns };
   "POST /invites": { res: InviteLinkResp };
   "GET /providers": { res: Array<Provider> };
@@ -244,11 +249,11 @@ export type Api = {
   "PUT /settings/budget-ai/prices": { body: { [key in string]: BudgetAiPriceReq }; res: void };
   "GET /settings/budget-ai/usage": { res: BudgetAiUsage };
   "POST /sync": { res: SyncAllResp };
-  "GET /transactions": { res: Array<Transaction> };
+  "GET /transactions": { query: TransactionParams; res: Array<Transaction> };
   "PATCH /transactions/:id": { body: TransactionPatch; res: PatchResult };
   "POST /transactions/:id/apply-to-description": { body: ApplyToDescriptionBody; res: WriteResult };
   "POST /transactions/bulk": { body: BulkBody; res: WriteResult };
-  "GET /transactions/counts": { res: TransactionCounts };
+  "GET /transactions/counts": { query: TransactionParams; res: TransactionCounts };
   "GET /users": { res: Array<User> };
   "DELETE /users/:id": { body: DeleteUserReq; res: void };
   "PATCH /users/:id": { body: SetRoleReq; res: void };

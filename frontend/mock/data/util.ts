@@ -1,6 +1,6 @@
 // Deterministic helpers for the fake dataset: the same data on every reset.
 
-import type { Range } from "../../src/api/wire.ts";
+import { RANGE_DAYS_BACK, type Range } from "../../src/api/wire.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -42,15 +42,6 @@ export const EUR_PER_USD = 0.92;
 
 /** Days back of a chart range, as the backend's `Range::window`. */
 export function rangeDays(range: Range): number {
-  switch (range) {
-    case "7d": return 7;
-    case "1mo": return 30;
-    case "6mo": return 182;
-    case "1y": return 365;
-    case "ytd": {
-      const now = new Date(TODAY);
-      return Math.round((TODAY - Date.UTC(now.getUTCFullYear(), 0, 1)) / DAY_MS);
-    }
-    case "max": return 4000;
-  }
+  return RANGE_DAYS_BACK[range]
+    ?? Math.round((TODAY - Date.UTC(new Date(TODAY).getUTCFullYear(), 0, 1)) / DAY_MS);
 }
