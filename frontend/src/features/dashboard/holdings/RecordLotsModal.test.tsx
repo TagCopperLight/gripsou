@@ -391,7 +391,9 @@ describe("RecordLotsModal", () => {
   });
 
   it("reads a French decimal comma", async () => {
-    await i18n.changeLanguage("fr");
+    await act(async () => {
+      await i18n.changeLanguage("fr");
+    });
     const user = userEvent.setup();
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /ajouter une opération/i }));
@@ -463,7 +465,9 @@ describe("RecordLotsModal", () => {
   });
 
   it("does not treat a retyped equivalent French decimal as a change", async () => {
-    await i18n.changeLanguage("fr");
+    await act(async () => {
+      await i18n.changeLanguage("fr");
+    });
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10.00", "16.030")];
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);

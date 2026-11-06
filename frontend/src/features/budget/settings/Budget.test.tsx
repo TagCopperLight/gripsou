@@ -241,7 +241,9 @@ describe("SettingsBudget page", () => {
     });
 
     it("translates headings and seeded rows while keeping user-created names verbatim", async () => {
-      await i18n.changeLanguage("fr");
+      await act(async () => {
+        await i18n.changeLanguage("fr");
+      });
       const server = makeServer(SEED);
       stubFetch(server.fetch);
       renderPage();

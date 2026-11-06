@@ -18,6 +18,12 @@ export default defineConfig(async ({ mode }) => ({
       '/api': 'http://localhost:8080',
     },
   },
+  build: {
+    // Pages load on demand (`lazyRouteComponent` in router.tsx). The largest
+    // chunk left is ECharts, already trimmed to the parts `lib/echarts.ts`
+    // registers (about 615 kB), and loaded only with pages that draw a chart.
+    chunkSizeWarningLimit: 650,
+  },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}', 'mock/**/*.test.{ts,tsx}'],

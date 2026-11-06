@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { act, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
   RouterProvider,
@@ -29,6 +29,16 @@ function renderAt(path: string, auth: AuthValue) {
   renderWithApp(<RouterProvider router={router} context={{ auth }} />, { auth: "provider" });
   return router;
 }
+
+// Pages load on demand. Load them all first, so a test waits on the router,
+// not on the first import of a page (slow when the whole suite runs).
+beforeAll(async () => {
+  await Promise.all(
+    Object.values(appRouter.routesById).map((route) =>
+      (route.options.component as { preload?: () => Promise<void> } | undefined)?.preload?.(),
+    ),
+  );
+});
 
 const unauth = signedOut();
 

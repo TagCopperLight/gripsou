@@ -2,30 +2,12 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   redirect,
   Outlet,
 } from "@tanstack/react-router";
 import { RootLayout } from "./shell/RootLayout";
 import { CrashPage } from "./shell/CrashPage";
-import { Dashboard } from "./features/dashboard/Dashboard";
-import { Accounts } from "./features/accounts/Accounts";
-import { Investments } from "./features/investments/Investments";
-import { Budget } from "./features/budget/Budget";
-import { BudgetOverview } from "./features/budget/overview/Overview";
-import { TransactionsMode } from "./features/budget/transactions/TransactionsMode";
-import { ReviewMode } from "./features/budget/review/ReviewMode";
-import { Login } from "./features/auth/Login";
-import { SettingsLayout } from "./features/settings/SettingsLayout";
-import { SettingsGeneral } from "./features/settings/general/General";
-import { SettingsAccount } from "./features/settings/account/Account";
-import { SettingsConnections } from "./features/connections/Connections";
-import { SettingsBudget } from "./features/budget/settings/Budget";
-import { SettingsUsers } from "./features/settings/users/Users";
-import { SettingsServer } from "./features/settings/server/Server";
-import { ConnectionCallback } from "./features/connections/ConnectionCallback";
-import { Invite } from "./features/auth/Invite";
-import { Reset } from "./features/auth/Reset";
-import { Welcome } from "./features/welcome/Welcome";
 import type { AuthValue } from "./auth/context";
 import { scrollRestorationOptions } from "./lib/scroll";
 
@@ -46,7 +28,7 @@ const loginRoute = createRoute({
       throw redirect({ to: "/" });
     }
   },
-  component: Login,
+  component: lazyRouteComponent(() => import("./features/auth/Login"), "Login"),
 });
 
 // Pathless layout for every page that needs a session. A user who hasn't
@@ -88,25 +70,25 @@ const appRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  component: Dashboard,
+  component: lazyRouteComponent(() => import("./features/dashboard/Dashboard"), "Dashboard"),
 });
 
 const accountsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/accounts",
-  component: Accounts,
+  component: lazyRouteComponent(() => import("./features/accounts/Accounts"), "Accounts"),
 });
 
 const investmentsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/investments",
-  component: Investments,
+  component: lazyRouteComponent(() => import("./features/investments/Investments"), "Investments"),
 });
 
 const budgetRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/budget",
-  component: Budget,
+  component: lazyRouteComponent(() => import("./features/budget/Budget"), "Budget"),
 });
 
 // Overview is the landing mode: the analysis is what the page is for, and the
@@ -122,19 +104,19 @@ const budgetIndexRoute = createRoute({
 const budgetOverviewRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "overview",
-  component: BudgetOverview,
+  component: lazyRouteComponent(() => import("./features/budget/overview/Overview"), "BudgetOverview"),
 });
 
 const budgetTransactionsRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "transactions",
-  component: TransactionsMode,
+  component: lazyRouteComponent(() => import("./features/budget/transactions/TransactionsMode"), "TransactionsMode"),
 });
 
 const budgetReviewRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "review",
-  component: ReviewMode,
+  component: lazyRouteComponent(() => import("./features/budget/review/ReviewMode"), "ReviewMode"),
 });
 
 // Bookmarks of /transactions land on the budget's transactions page.
@@ -149,7 +131,7 @@ const transactionsRedirectRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: SettingsLayout,
+  component: lazyRouteComponent(() => import("./features/settings/SettingsLayout"), "SettingsLayout"),
 });
 
 const settingsIndexRoute = createRoute({
@@ -163,58 +145,58 @@ const settingsIndexRoute = createRoute({
 const settingsGeneralRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "general",
-  component: SettingsGeneral,
+  component: lazyRouteComponent(() => import("./features/settings/general/General"), "SettingsGeneral"),
 });
 
 const settingsAccountRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "account",
-  component: SettingsAccount,
+  component: lazyRouteComponent(() => import("./features/settings/account/Account"), "SettingsAccount"),
 });
 
 const settingsConnectionsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "connections",
-  component: SettingsConnections,
+  component: lazyRouteComponent(() => import("./features/connections/Connections"), "SettingsConnections"),
 });
 
 const settingsBudgetRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "budget",
-  component: SettingsBudget,
+  component: lazyRouteComponent(() => import("./features/budget/settings/Budget"), "SettingsBudget"),
 });
 
 const settingsUsersRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "users",
   staticData: { adminOnly: true },
-  component: SettingsUsers,
+  component: lazyRouteComponent(() => import("./features/settings/users/Users"), "SettingsUsers"),
 });
 
 const settingsServerRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "server",
   staticData: { adminOnly: true },
-  component: SettingsServer,
+  component: lazyRouteComponent(() => import("./features/settings/server/Server"), "SettingsServer"),
 });
 
 // Full page outside the app chrome.
 const connectionsCallbackRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/connections/callback",
-  component: ConnectionCallback,
+  component: lazyRouteComponent(() => import("./features/connections/ConnectionCallback"), "ConnectionCallback"),
 });
 
 const inviteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/invite/$token",
-  component: Invite,
+  component: lazyRouteComponent(() => import("./features/auth/Invite"), "Invite"),
 });
 
 const resetRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reset/$token",
-  component: Reset,
+  component: lazyRouteComponent(() => import("./features/auth/Reset"), "Reset"),
 });
 
 // Full page outside the app chrome, like login and invite.
@@ -225,7 +207,7 @@ const welcomeRoute = createRoute({
     ...(search.step === "bank" ? { step: "bank" as const } : {}),
     ...(typeof search.callback === "string" ? { callback: search.callback } : {}),
   }),
-  component: Welcome,
+  component: lazyRouteComponent(() => import("./features/welcome/Welcome"), "Welcome"),
 });
 
 const settingsRouteWithChildren = settingsRoute.addChildren([
