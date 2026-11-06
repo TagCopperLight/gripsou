@@ -10,7 +10,13 @@ import { DEFAULT_PREFS } from "../../lib/prefs";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
-vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
+const chart = vi.hoisted(() => ({ option: null as null | { series: { data: unknown[] }[] } }));
+vi.mock("../../ui/EChart", () => ({
+  default: (props: { option: typeof chart.option }) => {
+    chart.option = props.option;
+    return <div data-testid="chart" />;
+  },
+}));
 
 // What the server sends while the user has no accounts.
 const NO_ACCOUNTS: NetWorthResponse = {
@@ -83,6 +89,25 @@ describe("NetWorthCard with no accounts", () => {
     expect(await screen.findByText("No accounts found")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Manage connections" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" });
+  });
+});
+
+describe("NetWorthCard with a day the reader's currency has no rate", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("leaves a gap there instead of plotting zero", async () => {
+    const body: NetWorthResponse = {
+      points: [{ t: 0, netWorth: null, invested: null }, { t: 1, netWorth: "100", invested: "90" }],
+      summary: { netWorth: "100", invested: "90", gainAbs: "0", gainPct: "0", fxMissing: false },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body)));
+    renderCard();
+
+    await screen.findByTestId("chart");
+    expect(chart.option?.series.map((s) => s.data)).toEqual([
+      [[0, null], [1, 90]],
+      [[0, null], [1, 100]],
+    ]);
   });
 });
 

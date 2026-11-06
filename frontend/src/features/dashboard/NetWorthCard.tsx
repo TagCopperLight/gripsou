@@ -18,7 +18,7 @@ import { usePrefs } from "../../auth/context";
 import { currencySymbol } from "../../lib/currency";
 import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
 import { rangeOptions, type Range } from "../../lib/ranges";
-import { legendItems, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
+import { legendItems, numberOrNull, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
@@ -52,8 +52,8 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   // off the plotted series, so it turns red with the line.
   const points = data?.points ?? [];
   const series: ChartSeries[] = [
-    { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, Number(p.invested)]), color: FG_FAINT, dashed: true },
-    { name: t("dashboard.netWorth.netWorth"), data: points.map((p) => [p.t, Number(p.netWorth)]), color: GREEN, area: true },
+    { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, numberOrNull(p.invested)]), color: FG_FAINT, dashed: true },
+    { name: t("dashboard.netWorth.netWorth"), data: points.map((p) => [p.t, numberOrNull(p.netWorth)]), color: GREEN, area: true },
   ];
   const legend = legendItems(plotSeries(series, unit, t("common.return")));
 

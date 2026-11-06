@@ -54,14 +54,14 @@ pub struct ConnectionAccountRow {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub value: Decimal,
+    /// Null when the reader's currency has no rate today.
+    pub value: Option<Decimal>,
     pub last_sync_at: Option<DateTime<Utc>>,
 }
 
 /// Every account under a user's connections, valued today in the reader's
 /// currency like the accounts grid (`holding_day_values`), with the parent
-/// connection's last sync time. Zero when it has nothing valued yet, or when a
-/// rate is missing.
+/// connection's last sync time. Zero when it has nothing valued yet.
 pub async fn list_connection_accounts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -70,7 +70,7 @@ pub async fn list_connection_accounts(
         ConnectionAccountRow,
         r#"
         with v as (
-            select v.account_id, fx_convert(sum(v.value), 1, v.reporting_rate) as value
+            select v.account_id, sum(v.value) as value, v.reporting_rate
             from holding_day_values($1, array[user_today($1)]) v
             group by v.account_id, v.reporting_rate
         )
@@ -79,7 +79,8 @@ pub async fn list_connection_accounts(
                a.name                  as "name!",
                a.color                 as "color",
                a.type_key              as "type_key!",
-               coalesce(v.value, 0)    as "value!",
+               case when v.account_id is null then 0
+                    else fx_convert(v.value, 1, v.reporting_rate) end as "value?",
                c.last_sync_at,
                a.provider_meta as "provider_meta!"
         from account a

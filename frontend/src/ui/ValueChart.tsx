@@ -12,7 +12,7 @@ export type { ChartSeries, ChartUnit };
 type TooltipParam = {
   axisValue: number;
   seriesName: string;
-  value: [number, number];
+  value: [number, number | null];
   color: string;
 };
 
@@ -72,7 +72,7 @@ export function ValueChart({
           tooltipRow(
             colorByName.get(it.seriesName) ?? it.color,
             it.seriesName,
-            fmt(it.value[1], percent ? { signed: true } : undefined),
+            it.value[1] === null ? "—" : fmt(it.value[1], percent ? { signed: true } : undefined),
           ),
         );
       return tooltipCard(formatDay(items[0].axisValue), rows);

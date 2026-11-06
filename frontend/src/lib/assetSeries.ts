@@ -6,13 +6,17 @@ import type { PricePoint } from "../api/types";
 // not time-weighted — a big deposit late in the window still flatters it
 // slightly. Swap for TWR if that ever matters.
 export function windowReturn(
-  values: [number, number][],
-  invested: [number, number][],
-): [number, number][] {
+  values: [number, number | null][],
+  invested: [number, number | null][],
+): [number, number | null][] {
   const investedAt = new Map(invested);
-  const v0 = values[0]?.[1] ?? 0;
-  const inv0 = investedAt.get(values[0]?.[0]) ?? 0;
+  // A day without a value (no rate) stays a gap, and the window starts at
+  // the first day with one.
+  const start = values.find(([, v]) => v !== null);
+  const v0 = start?.[1] ?? 0;
+  const inv0 = (start && investedAt.get(start[0])) ?? 0;
   return values.map(([t, v]) => {
+    if (v === null) return [t, null];
     const inv = investedAt.get(t) ?? inv0;
     const gain = v - inv - (v0 - inv0);
     const base = v0 + (inv - inv0);

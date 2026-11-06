@@ -361,8 +361,8 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
         out.push_str(&format!(
             "{:>5} {} {} {}\n",
             (today - r.as_of).num_days(),
-            r.net_worth,
-            r.invested,
+            r.net_worth.expect("the scenario has rates"),
+            r.invested.expect("the scenario has rates"),
             r.fx_missing
         ));
     }
@@ -399,7 +399,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
             "{:>5} {} {}\n",
             (today - r.as_of).num_days(),
             r.name,
-            r.value
+            r.value.expect("the scenario has rates")
         ));
     }
     assert_golden("account_series", &out);

@@ -12,11 +12,12 @@ export type StackedSeries = {
   key?: string;
   name: string;
   color: string;
-  /** [epoch-ms, value] points; all series share the same timestamps. */
-  data: [number, number][];
+  /** [epoch-ms, value] points; all series share the same timestamps. A
+   *  `null` value (no rate that day) is a gap. */
+  data: [number, number | null][];
 };
 
-type TooltipParam = { axisValue: number; seriesName: string; value: [number, number] };
+type TooltipParam = { axisValue: number; seriesName: string; value: [number, number | null] };
 
 type StackedAreaChartProps = {
   series: StackedSeries[];
@@ -36,12 +37,12 @@ export function StackedAreaChart({ series, highlight = null, height = 320, class
     grid: AXIS_GRID,
     tooltip: chartTooltip("axis", (params) => {
       const items = params as unknown as TooltipParam[];
-      let total = 0;
-      const rows = items.map((it) => {
-        total += it.value[1];
-        return tooltipRow(colorByName.get(it.seriesName) ?? FG_FAINT, it.seriesName, formatMoney(it.value[1]));
-      });
-      return tooltipCard(formatDay(items[0].axisValue), rows, { label: t("common.total"), value: formatMoney(total) });
+      const rows = items.map((it) =>
+        tooltipRow(colorByName.get(it.seriesName) ?? FG_FAINT, it.seriesName, it.value[1] === null ? "—" : formatMoney(it.value[1])),
+      );
+      const valued = items.map((it) => it.value[1]).filter((v) => v !== null);
+      const total = valued.length > 0 ? formatMoney(valued.reduce((sum, v) => sum + v, 0)) : "—";
+      return tooltipCard(formatDay(items[0].axisValue), rows, { label: t("common.total"), value: total });
     }),
     xAxis: timeAxis((value) => formatDay(value)),
     yAxis: valueAxis((v) => formatMoney(v, { fractionDigits: 0 }), { min: 0 }),

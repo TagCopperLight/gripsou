@@ -5,7 +5,8 @@ import type { UserPrefs } from "../lib/prefs";
 
 export type HoldingKind = "cash" | "etf" | "equity";
 
-export type NetWorthPoint = { t: number; netWorth: string; invested: string };
+/** `null`: the reader's currency has no rate that day, drawn as a gap. */
+export type NetWorthPoint = { t: number; netWorth: string | null; invested: string | null };
 export type NetWorthSummary = {
   netWorth: string;
   invested: string;
@@ -132,7 +133,8 @@ export type Account = {
 
 export type AccountSeries = {
   accounts: { id: string; name: string; color: string }[];
-  points: { t: number; values: Record<string, string> }[];
+  /** A `null` value: the reader's currency has no rate that day. */
+  points: { t: number; values: Record<string, string | null> }[];
 };
 
 export type User = {
@@ -183,7 +185,8 @@ export type SyncAccount = {
   name: string;
   color: string;
   typeKey: string;
-  value: string;
+  /** `null`: the reader's currency has no rate today. */
+  value: string | null;
   lastSyncAt: number | null;
 };
 

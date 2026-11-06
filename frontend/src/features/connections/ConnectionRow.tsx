@@ -18,6 +18,7 @@ import {
 } from "../../lib/connectionState";
 import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
+import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
 import type { SyncConnection } from "../../api/types";
 
 // Shared collapsible connection row used by the settings page and the sync
@@ -185,12 +186,16 @@ export function ConnectionRow({
                   <span title={t("settings.connections.health.bankUpdated")} className={`pl-3 pr-2 text-right text-[11px] whitespace-nowrap ${healthIssue(a.health) ? "text-amber" : "text-fg-faint"}`}>
                     {a.health?.lastUpdatedOn && formatDate(a.health.lastUpdatedOn)}
                   </span>
-                  <span className="text-right text-sm text-fg font-mono">
-                    {formatMoney(a.value)}
+                  <span className="relative text-right text-sm text-fg font-mono">
+                    {a.value === null ? "—" : formatMoney(a.value)}
+                    {a.value === null && <FxAsterisk />}
                   </span>
                 </li>
               ))}
             </ul>
+            {conn.accounts.some((a) => a.value === null) && (
+              <FxFootnote className="mt-2">{t("fx.excludesSome")}</FxFootnote>
+            )}
           </div>
           )}
 

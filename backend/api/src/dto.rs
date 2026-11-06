@@ -13,8 +13,9 @@ fn day_to_millis(d: NaiveDate) -> i64 {
 #[serde(rename_all = "camelCase")]
 pub struct NetWorthPoint {
     pub t: i64,
-    pub net_worth: String,
-    pub invested: String,
+    /// Null when the reader's currency has no rate that day: a gap, not a zero.
+    pub net_worth: Option<String>,
+    pub invested: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -34,34 +35,35 @@ pub struct NetWorthResponse {
 }
 
 impl NetWorthResponse {
-    /// Build from net-worth rows. `gain*` compares the last vs first point.
+    /// Build from net-worth rows. The headline is the last point; `gain*`
+    /// compares the first and last points that have a value.
     pub fn from_rows(rows: &[gripsou_core::repo::query::NetWorthRow]) -> Self {
         let points: Vec<NetWorthPoint> = rows
             .iter()
             .map(|r| NetWorthPoint {
                 t: day_to_millis(r.as_of),
-                net_worth: r.net_worth.to_string(),
-                invested: r.invested.to_string(),
+                net_worth: r.net_worth.map(|v| v.to_string()),
+                invested: r.invested.map(|v| v.to_string()),
             })
             .collect();
 
-        let (first, last) = match (rows.first(), rows.last()) {
-            (Some(f), Some(l)) => (f.net_worth, l.net_worth),
-            _ => (Decimal::ZERO, Decimal::ZERO),
-        };
-        let gain_abs = last - first;
+        let mut valued = rows.iter().filter_map(|r| r.net_worth);
+        let first = valued.next().unwrap_or(Decimal::ZERO);
+        let gain_abs = valued.next_back().unwrap_or(first) - first;
         let gain_pct = if first.is_zero() {
             Decimal::ZERO
         } else {
             (gain_abs / first).round_dp(4)
         };
-        let invested = rows.last().map(|r| r.invested).unwrap_or(Decimal::ZERO);
-        let fx_missing = rows.last().map(|r| r.fx_missing).unwrap_or(false);
+        let last = rows.last();
+        let net_worth = last.and_then(|r| r.net_worth).unwrap_or(Decimal::ZERO);
+        let invested = last.and_then(|r| r.invested).unwrap_or(Decimal::ZERO);
+        let fx_missing = last.is_some_and(|r| r.fx_missing);
 
         NetWorthResponse {
             points,
             summary: NetWorthSummary {
-                net_worth: last.to_string(),
+                net_worth: net_worth.to_string(),
                 invested: invested.to_string(),
                 gain_abs: gain_abs.to_string(),
                 gain_pct: gain_pct.to_string(),
@@ -509,8 +511,9 @@ pub struct SeriesAccount {
 #[derive(Serialize)]
 pub struct SeriesPoint {
     pub t: i64,
-    /// account id -> value (decimal string).
-    pub values: std::collections::HashMap<String, String>,
+    /// account id -> value (decimal string); null when the reader's currency
+    /// has no rate that day.
+    pub values: std::collections::HashMap<String, Option<String>>,
 }
 
 #[derive(Serialize)]
@@ -534,7 +537,7 @@ impl AccountSeriesResponse {
         let mut idx_by_t: HashMap<i64, usize> = HashMap::new();
         // Rows arrive day-ascending, so the last value seen per account is its
         // most recent value within the window.
-        let mut latest_value: HashMap<String, Decimal> = HashMap::new();
+        let mut latest_value: HashMap<String, Option<Decimal>> = HashMap::new();
 
         for r in rows {
             let id = r.account_id.to_string();
@@ -558,13 +561,23 @@ impl AccountSeriesResponse {
                     points.len() - 1
                 }
             };
-            points[pos].values.insert(id, r.value.to_string());
+            points[pos]
+                .values
+                .insert(id, r.value.map(|v| v.to_string()));
         }
 
         // Largest latest value first; tie-break on id keeps the order stable.
         accounts.sort_by(|a, b| {
-            let av = latest_value.get(&a.id).copied().unwrap_or_default();
-            let bv = latest_value.get(&b.id).copied().unwrap_or_default();
+            let av = latest_value
+                .get(&a.id)
+                .copied()
+                .flatten()
+                .unwrap_or_default();
+            let bv = latest_value
+                .get(&b.id)
+                .copied()
+                .flatten()
+                .unwrap_or_default();
             bv.cmp(&av).then_with(|| a.id.cmp(&b.id))
         });
 
@@ -580,7 +593,8 @@ pub struct SyncAccount {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    pub value: String,
+    /// Null when the reader's currency has no rate today.
+    pub value: Option<String>,
     pub last_sync_at: Option<i64>,
 }
 
@@ -630,7 +644,7 @@ impl ProviderGroup {
                     name: a.name,
                     color: a.color,
                     type_key: a.type_key,
-                    value: a.value.to_string(),
+                    value: a.value.map(|v| v.to_string()),
                     last_sync_at: a.last_sync_at.map(|d| d.timestamp_millis()),
                 });
         }
@@ -1157,7 +1171,7 @@ mod tests {
             name: format!("acct-{day}"),
             color: "#888888".into(),
             as_of: NaiveDate::from_ymd_opt(2026, 1, day).unwrap(),
-            value: Decimal::from(value),
+            value: Some(Decimal::from(value)),
         }
     }
 
@@ -1173,6 +1187,23 @@ mod tests {
 
         let order: Vec<String> = resp.accounts.iter().map(|x| x.id.clone()).collect();
         assert_eq!(order, vec![a.to_string(), b.to_string()]);
+    }
+
+    #[test]
+    fn a_day_without_a_rate_is_a_gap_and_left_out_of_the_gain() {
+        use gripsou_core::repo::query::NetWorthRow;
+        let day = |d: u32, v: Option<i64>| NetWorthRow {
+            as_of: NaiveDate::from_ymd_opt(2026, 1, d).unwrap(),
+            net_worth: v.map(Decimal::from),
+            invested: v.map(Decimal::from),
+            fx_missing: v.is_none(),
+        };
+        let resp =
+            NetWorthResponse::from_rows(&[day(1, None), day(2, Some(100)), day(3, Some(150))]);
+
+        assert_eq!(resp.points[0].net_worth, None);
+        assert_eq!(resp.summary.gain_abs, "50");
+        assert_eq!(resp.summary.gain_pct, "0.50");
     }
 
     use gripsou_core::repo::connection::ConnectionListRow;

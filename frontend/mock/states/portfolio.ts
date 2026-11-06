@@ -261,6 +261,26 @@ export const dashboard: MockState[] = [
     },
   },
   {
+    id: "dashboard-reporting-rate-late",
+    label: "The reader's currency has a rate only for the last 15 days",
+    pieces: ["Net worth chart", "Accounts chart"],
+    group: "Reporting rate",
+    option: "Last 15 days",
+    apply(store) {
+      store.fx.reportingFrom = HISTORY_DAYS - 15;
+    },
+  },
+  {
+    id: "dashboard-reporting-rate-none",
+    label: "The reader's currency has no rate at all",
+    pieces: ["Net worth chart", "Accounts chart", "Accounts list", "Settings · Connections"],
+    group: "Reporting rate",
+    option: "None",
+    apply(store) {
+      store.fx.reportingFrom = HISTORY_DAYS;
+    },
+  },
+  {
     id: "dashboard-lots-short",
     label: "Lots explain 3 shares fewer than CW8 holds",
     pieces: ["Investments", "Holdings", "Asset window", "Record purchases"],

@@ -123,7 +123,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
     assert_eq!(query::accounts(&pool, user).await?[0].value, Decimal::TEN);
     assert_eq!(
         query::net_worth_series(&pool, user, today, today).await?[0].net_worth,
-        Decimal::TEN
+        Some(Decimal::TEN)
     );
     Ok(())
 }

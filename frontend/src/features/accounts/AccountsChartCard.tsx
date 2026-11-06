@@ -14,6 +14,7 @@ import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useNetWorth, useAccountSeries } from "../../api/accounts";
 import { rangeOptions, type Range } from "../../lib/ranges";
 import { bySize, legendAccounts } from "../../lib/accounts";
+import { numberOrNull } from "../../lib/valueChart";
 
 type AccountsChartCardProps = {
   /** The account hovered here or in the list below: its band comes forward. */
@@ -45,7 +46,8 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
     key: a.id,
     name: a.name,
     color: a.color,
-    data: points.map((p) => [p.t, Number(p.values[a.id] ?? 0)] as [number, number]),
+    // Absent: nothing held that day. Null: no rate that day, a gap.
+    data: points.map((p) => [p.t, numberOrNull(p.values[a.id] ?? "0")] as [number, number | null]),
   }));
   // The biggest accounts by name, then "+N others": with many accounts a full
   // legend took over the header. The list below names them all.

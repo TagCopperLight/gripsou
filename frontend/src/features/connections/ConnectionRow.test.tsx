@@ -30,6 +30,14 @@ beforeEach(() => { syncSpy.mockReset(); manageSpy.mockReset(); vi.restoreAllMock
 describe("ConnectionRow", () => {
 
 
+  it("marks an account whose value has no rate today instead of showing 0", () => {
+    render(<ConnectionRow conn={{ ...conn, accounts: [{ ...conn.accounts[0], value: null }] }} />);
+    expand();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText(/0,00/)).toBeNull();
+    expect(screen.getByText(/no exchange rate yet/)).toBeInTheDocument();
+  });
+
   it("keeps the actions hidden until the row is expanded", () => {
     render(<ConnectionRow conn={conn} onDelete={() => {}} />);
     // Only the (desktop) icon buttons exist while collapsed.

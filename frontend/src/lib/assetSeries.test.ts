@@ -29,4 +29,11 @@ describe("windowReturn", () => {
     const r = windowReturn([[1, 100], [2, 200]], [[1, 50], [2, 150]]);
     expect(r[1][1]).toBe(0);
   });
+
+  it("keeps a day without a rate a gap and starts the window at the first valued day", () => {
+    const r = windowReturn([[1, null], [2, 100], [3, 110]], [[1, null], [2, 50], [3, 50]]);
+    expect(r[0][1]).toBeNull();
+    expect(r[1][1]).toBe(0);
+    expect(r[2][1]).toBeCloseTo(0.1, 10);
+  });
 });

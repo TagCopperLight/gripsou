@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select a.id    as \"account_id!\",\n               a.name  as \"name!\",\n               a.color as \"color\",\n               v.as_of as \"as_of!\",\n               coalesce(fx_convert(sum(v.value), 1, v.reporting_rate), 0) as \"value!\",\n               coalesce(fx_convert(sum(v.invested), 1, v.reporting_rate), 0) as \"invested!\",\n               coalesce(bool_or(v.fx_missing), false) as \"fx_missing!\"\n        from holding_day_values($1, $2) v\n        join account a on a.id = v.account_id\n        group by v.as_of, a.id, a.name, a.color, v.reporting_rate\n        order by v.as_of, a.id\n        ",
+  "query": "\n        select a.id    as \"account_id!\",\n               a.name  as \"name!\",\n               a.color as \"color\",\n               v.as_of as \"as_of!\",\n               fx_convert(sum(v.value), 1, v.reporting_rate) as \"value?\",\n               fx_convert(sum(v.invested), 1, v.reporting_rate) as \"invested?\",\n               coalesce(bool_or(v.fx_missing), false) as \"fx_missing!\"\n        from holding_day_values($1, $2) v\n        join account a on a.id = v.account_id\n        group by v.as_of, a.id, a.name, a.color, v.reporting_rate\n        order by v.as_of, a.id\n        ",
   "describe": {
     "columns": [
       {
@@ -44,13 +44,13 @@
       },
       {
         "ordinal": 4,
-        "name": "value!",
+        "name": "value?",
         "type_info": "Numeric",
         "origin": "Expression"
       },
       {
         "ordinal": 5,
-        "name": "invested!",
+        "name": "invested?",
         "type_info": "Numeric",
         "origin": "Expression"
       },
@@ -77,5 +77,5 @@
       null
     ]
   },
-  "hash": "fb59ca7442d5ba5c298aa3c967e3f412b322345336c821983b40a03324509190"
+  "hash": "443b8d6e79fea90d77ba8078b0d601150e7b6fa513e61005dc9ae3c7139cd4e5"
 }

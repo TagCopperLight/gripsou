@@ -99,6 +99,10 @@ function accountDaily(store: Store): { value: Daily; invested: Daily } {
   return { value, invested };
 }
 
+function hasReportingRate(store: Store, day: number): boolean {
+  return day >= store.fx.reportingFrom;
+}
+
 function dayT(i: number): number {
   return TODAY - (HISTORY_DAYS - 1 - i) * DAY_MS;
 }
@@ -119,20 +123,27 @@ export function netWorth(store: Store, range: string): NetWorthResponse {
   const ids = store.accounts.map((a) => a.id);
   const points = [];
   for (let i = firstIndex(range); i < HISTORY_DAYS; i++) {
+    if (!hasReportingRate(store, i)) {
+      points.push({ t: dayT(i), netWorth: null, invested: null });
+      continue;
+    }
     const nw = ids.reduce((s, id) => s + value[id][i], 0);
     const inv = ids.reduce((s, id) => s + invested[id][i], 0);
     points.push({ t: dayT(i), netWorth: money(nw), invested: money(inv) });
   }
-  const first = Number(points[0].netWorth);
-  const last = Number(points[points.length - 1].netWorth);
+  // Like the server: the gain spans the days with a value, the headline is today.
+  const valued = points.filter((p) => p.netWorth !== null).map((p) => Number(p.netWorth));
+  const first = valued[0] ?? 0;
+  const last = valued.at(-1) ?? 0;
+  const today = points[points.length - 1];
   return {
     points,
     summary: {
-      netWorth: money(last),
-      invested: points[points.length - 1].invested,
+      netWorth: today.netWorth ?? "0",
+      invested: today.invested ?? "0",
       gainAbs: money(last - first),
       gainPct: first === 0 ? "0" : ((last - first) / first).toFixed(4),
-      fxMissing: store.fx.missing.length > 0,
+      fxMissing: store.fx.missing.length > 0 || today.netWorth === null,
     },
   };
 }
@@ -141,7 +152,8 @@ export function accountSeries(store: Store, range: string): AccountSeries {
   const { value } = accountDaily(store);
   const points = [];
   for (let i = firstIndex(range); i < HISTORY_DAYS; i++) {
-    points.push({ t: dayT(i), values: Object.fromEntries(store.accounts.map((a) => [a.id, money(value[a.id][i])])) });
+    const rated = hasReportingRate(store, i);
+    points.push({ t: dayT(i), values: Object.fromEntries(store.accounts.map((a) => [a.id, rated ? money(value[a.id][i]) : null])) });
   }
   return { accounts: store.accounts.map(({ id, name, color }) => ({ id, name, color })), points };
 }
@@ -152,12 +164,13 @@ function lastSyncOf(store: Store, connectionId: string): number | null {
 
 export function accounts(store: Store): Account[] {
   const { value } = accountDaily(store);
+  const rated = hasReportingRate(store, HISTORY_DAYS - 1);
   return store.accounts.map((a) => ({
     ...a,
-    value: money(value[a.id][HISTORY_DAYS - 1]),
+    value: rated ? money(value[a.id][HISTORY_DAYS - 1]) : "0",
     valueNative: null,
     lastSyncAt: lastSyncOf(store, a.connectionId),
-    fxMissing: store.securities.some((s) => s.accountId === a.id && store.fx.missing.includes(s.id)),
+    fxMissing: !rated || store.securities.some((s) => s.accountId === a.id && store.fx.missing.includes(s.id)),
   })).sort((x, y) => Number(y.value) - Number(x.value)); // as the server sends them
 }
 
@@ -188,7 +201,11 @@ export function connections(store: Store): ProviderGroup[] {
       ...conn,
       accounts: accs
         .filter((a) => a.connectionId === c.id)
-        .map((a) => ({ id: a.id, name: a.name, color: a.color, typeKey: a.typeKey, value: a.value, lastSyncAt: a.lastSyncAt, health: store.accountHealth[a.id] ?? c.health })),
+        .map((a) => ({
+          id: a.id, name: a.name, color: a.color, typeKey: a.typeKey,
+          value: hasReportingRate(store, HISTORY_DAYS - 1) ? a.value : null,
+          lastSyncAt: a.lastSyncAt, health: store.accountHealth[a.id] ?? c.health,
+        })),
     });
   }
   return groups;

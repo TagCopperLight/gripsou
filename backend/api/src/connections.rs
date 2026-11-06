@@ -389,7 +389,10 @@ mod tests {
         assert_eq!(groups[0].connections[0].display_name, "My bank");
         // Account with no snapshots still appears, valued "0".
         assert_eq!(groups[0].connections[0].accounts.len(), 1);
-        assert_eq!(groups[0].connections[0].accounts[0].value, "0");
+        assert_eq!(
+            groups[0].connections[0].accounts[0].value.as_deref(),
+            Some("0")
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]

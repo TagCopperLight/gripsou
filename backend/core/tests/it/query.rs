@@ -73,9 +73,9 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].as_of, d1);
-    assert_eq!(rows[0].net_worth, Decimal::new(700, 0));
-    assert_eq!(rows[0].invested, Decimal::new(550, 0));
-    assert_eq!(rows[1].net_worth, Decimal::new(730, 0));
+    assert_eq!(rows[0].net_worth, Some(Decimal::new(700, 0)));
+    assert_eq!(rows[0].invested, Some(Decimal::new(550, 0)));
+    assert_eq!(rows[1].net_worth, Some(Decimal::new(730, 0)));
     Ok(())
 }
 
@@ -149,20 +149,24 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     assert_eq!(rows[0].as_of, d0);
     assert_eq!(
         rows[0].net_worth,
-        Decimal::new(100, 0),
+        Some(Decimal::new(100, 0)),
         "d0: cash only; equity not yet acquired must not appear"
     );
     assert_eq!(
         rows[0].invested,
-        Decimal::new(100, 0),
+        Some(Decimal::new(100, 0)),
         "d0: only cash cost basis"
     );
     assert_eq!(
         rows[1].net_worth,
-        Decimal::new(730, 0),
+        Some(Decimal::new(730, 0)),
         "d1: cash 100 + equity 3*210 (price-driven, not snapshot.value 600)"
     );
-    assert_eq!(rows[1].invested, Decimal::new(550, 0), "d1: 100 + 450");
+    assert_eq!(
+        rows[1].invested,
+        Some(Decimal::new(550, 0)),
+        "d1: 100 + 450"
+    );
     Ok(())
 }
 
@@ -670,7 +674,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
     let rows = query::account_series(&pool, user_id, day, day).await?;
 
     assert_eq!(rows.len(), 2, "one row per (account, day)");
-    let total: Decimal = rows.iter().map(|r| r.value).sum();
+    let total: Decimal = rows.iter().filter_map(|r| r.value).sum();
     assert_eq!(total, Decimal::new(300, 0));
     let distinct: std::collections::HashSet<_> = rows.iter().map(|r| r.account_id).collect();
     assert_eq!(distinct.len(), 2, "grouped per account");
@@ -761,7 +765,11 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     // No rate yet: the holding is worth zero and the day is flagged.
     let rows =
         query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
-    assert_eq!(rows[0].net_worth, Decimal::ZERO, "no rate → not counted");
+    assert_eq!(
+        rows[0].net_worth,
+        Some(Decimal::ZERO),
+        "no rate → not counted"
+    );
     assert!(rows[0].fx_missing, "and the UI must be told");
 
     // With a rate, 1000 CNY is 120 EUR.
@@ -773,7 +781,7 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
 
     let rows =
         query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
-    assert_eq!(rows[0].net_worth, "120.00".parse()?);
+    assert_eq!(rows[0].net_worth, Some("120.00".parse()?));
     assert!(!rows[0].fx_missing);
     Ok(())
 }
@@ -811,7 +819,7 @@ async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
         query::net_worth_series(&pool, user_id, today - chrono::Duration::days(1), today).await?;
     assert_eq!(rows.len(), 2, "yesterday is derived, today is the snapshot");
     for row in rows {
-        assert_eq!(row.net_worth, Decimal::ZERO, "{}", row.as_of);
+        assert_eq!(row.net_worth, Some(Decimal::ZERO), "{}", row.as_of);
         assert!(row.fx_missing, "{}", row.as_of);
     }
     Ok(())
@@ -846,7 +854,7 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
 
     let today = chrono::Utc::now().date_naive();
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert_eq!(rows[0].net_worth, "125".parse()?);
+    assert_eq!(rows[0].net_worth, Some("125".parse()?));
     Ok(())
 }
 
@@ -1078,7 +1086,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         .map(|r| r.value)
         .sum();
     let net_worth_rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    let net_worth_total = net_worth_rows[0].net_worth;
+    let net_worth_total = net_worth_rows[0].net_worth.unwrap();
 
     assert_eq!(holdings_total, accounts_total, "holdings vs accounts");
     assert_eq!(
@@ -1329,7 +1337,7 @@ async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(75, 0),
+        Some(Decimal::new(75, 0)),
         "derived quantity drives the point"
     );
     Ok(())
@@ -1383,7 +1391,7 @@ async fn a_priceless_security_keeps_its_valuation_on_derived_days(
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(1200, 0),
+        Some(Decimal::new(1200, 0)),
         "the anchor's unit valuation is carried flat backward, not zeroed"
     );
     assert!(
@@ -1420,7 +1428,7 @@ async fn a_priced_security_is_valued_from_the_price_on_derived_days(
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(1000, 0),
+        Some(Decimal::new(1000, 0)),
         "the price wins over the carried valuation"
     );
     Ok(())
@@ -1495,7 +1503,7 @@ async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(1200, 0),
+        Some(Decimal::new(1200, 0)),
         "the last valued snapshot's unit value is carried forward into the held window"
     );
     assert!(
@@ -1528,7 +1536,7 @@ async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(1000, 0),
+        Some(Decimal::new(1000, 0)),
         "with no market value available the row falls back to holding.cost_basis"
     );
     assert!(
@@ -1601,7 +1609,7 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
         .expect("row for the derived day");
     assert_eq!(
         on_derived.net_worth,
-        Decimal::new(200, 0),
+        Some(Decimal::new(200, 0)),
         "the derived row wins over the older snapshot carried forward"
     );
     Ok(())
@@ -1973,7 +1981,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
     assert_eq!(rows.len(), 1, "one row per day, not one per holding");
     assert_eq!(
         rows[0].net_worth,
-        Decimal::new(100, 0),
+        Some(Decimal::new(100, 0)),
         "40 + 60, counted once each"
     );
     Ok(())
@@ -2211,7 +2219,7 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
         .unwrap();
     let table = query::holdings(&pool, user_id).await.unwrap();
 
-    let chart_invested = series.last().unwrap().invested;
+    let chart_invested = series.last().unwrap().invested.unwrap();
     let table_invested: Decimal = table.iter().map(|h| h.invested).sum();
     assert_eq!(chart_invested, table_invested);
     assert_eq!(
@@ -2250,10 +2258,10 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     assert_eq!(series.len(), 2);
     assert_eq!(
         series[0].invested,
-        dec("100"),
+        Some(dec("100")),
         "yesterday's balance, not today's"
     );
-    assert_eq!(series[1].invested, dec("120"));
+    assert_eq!(series[1].invested, Some(dec("120")));
     for p in &series {
         assert_eq!(
             p.invested, p.net_worth,
@@ -2290,11 +2298,18 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
         .await?;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(
-        rows[0].net_worth,
-        Decimal::ZERO,
-        "not 100 euros read as dollars"
+        rows[0].net_worth, None,
+        "a gap in the chart, not 100 euros read as dollars"
     );
+    assert_eq!(rows[0].invested, None);
     assert!(rows[0].fx_missing);
+    let listed = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
+    assert_eq!(
+        listed[0].value, None,
+        "the connections list says the rate is missing"
+    );
+    let series = query::account_series(&pool, user_id, today, today).await?;
+    assert_eq!(series[0].value, None);
     let accounts = query::accounts(&pool, user_id).await?;
     assert_eq!(accounts[0].value, Decimal::ZERO);
     assert!(accounts[0].fx_missing);
@@ -2311,10 +2326,10 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     .await?;
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert_eq!(rows[0].net_worth, "125".parse()?);
+    assert_eq!(rows[0].net_worth, Some("125".parse()?));
     // The connections list shows the same converted figure, not the account's euros.
     let listed = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
-    assert_eq!(listed[0].value, "125".parse()?);
+    assert_eq!(listed[0].value, Some("125".parse()?));
     Ok(())
 }
 
@@ -2360,8 +2375,16 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     let today = chrono::Utc::now().date_naive();
 
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert_eq!(rows[0].net_worth, "1350".parse()?, "priced, so counted");
-    assert_eq!(rows[0].invested, Decimal::ZERO, "no CNY rate to convert it");
+    assert_eq!(
+        rows[0].net_worth,
+        Some("1350".parse()?),
+        "priced, so counted"
+    );
+    assert_eq!(
+        rows[0].invested,
+        Some(Decimal::ZERO),
+        "no CNY rate to convert it"
+    );
     assert!(
         rows[0].fx_missing,
         "the gap between the two lines is not a gain and must not read as one"
@@ -2383,7 +2406,7 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     .await?;
     insert_price_on(&pool, cny, chrono::Utc::now(), "0.12".parse()?).await;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert_eq!(rows[0].invested, "72.00".parse()?, "600 CNY at 0.12");
+    assert_eq!(rows[0].invested, Some("72.00".parse()?), "600 CNY at 0.12");
     assert!(!rows[0].fx_missing);
     Ok(())
 }

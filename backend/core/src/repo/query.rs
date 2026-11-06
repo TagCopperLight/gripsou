@@ -9,8 +9,10 @@ use crate::error::CoreError;
 
 pub struct NetWorthRow {
     pub as_of: NaiveDate,
-    pub net_worth: Decimal,
-    pub invested: Decimal,
+    /// Null when the reader's currency has no rate that day.
+    pub net_worth: Option<Decimal>,
+    /// Null when the reader's currency has no rate that day.
+    pub invested: Option<Decimal>,
     /// Something on this day was left out for want of a rate: a holding
     /// valued at zero, a basis missing from `invested`, or, when the reader's
     /// currency had no rate, the whole day.
@@ -59,8 +61,8 @@ pub async fn net_worth_series_with_target(
     for r in account_day_values(pool, user_id, &days).await? {
         match rows.last_mut() {
             Some(day) if day.as_of == r.as_of => {
-                day.net_worth += r.value;
-                day.invested += r.invested;
+                day.net_worth = day.net_worth.zip(r.value).map(|(a, b)| a + b);
+                day.invested = day.invested.zip(r.invested).map(|(a, b)| a + b);
                 day.fx_missing |= r.fx_missing;
             }
             _ => rows.push(NetWorthRow {
@@ -81,8 +83,8 @@ struct AccountDayRow {
     name: String,
     color: String,
     as_of: NaiveDate,
-    value: Decimal,
-    invested: Decimal,
+    value: Option<Decimal>,
+    invested: Option<Decimal>,
     fx_missing: bool,
 }
 
@@ -103,8 +105,8 @@ async fn account_day_values(
                a.name  as "name!",
                a.color as "color",
                v.as_of as "as_of!",
-               coalesce(fx_convert(sum(v.value), 1, v.reporting_rate), 0) as "value!",
-               coalesce(fx_convert(sum(v.invested), 1, v.reporting_rate), 0) as "invested!",
+               fx_convert(sum(v.value), 1, v.reporting_rate) as "value?",
+               fx_convert(sum(v.invested), 1, v.reporting_rate) as "invested?",
                coalesce(bool_or(v.fx_missing), false) as "fx_missing!"
         from holding_day_values($1, $2) v
         join account a on a.id = v.account_id
@@ -514,7 +516,8 @@ pub struct AccountSeriesRow {
     pub name: String,
     pub color: String,
     pub as_of: NaiveDate,
-    pub value: Decimal,
+    /// Null when the reader's currency has no rate that day.
+    pub value: Option<Decimal>,
 }
 
 /// Stacked-area source: each account's value per day over a window, from the
