@@ -206,9 +206,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         -- from the holding's current quantity and its latest snapshot. The
         -- snapshot lateral is LEFT because a holding ingested before its first
         -- snapshot must still list (it just has no provider valuation).
-        with today as (select user_today($1) as d),
-        grid as materialized (
-            select * from valuation_grid($1, array[(select d from today)]::date[])
+        --
+        -- Today is `user_today($1)` in each call, never a sub-select: Postgres
+        -- does not inline a SQL function given a sub-select argument, and the
+        -- opaque calls' cost estimate turns on JIT, which takes a second.
+        with grid as materialized (
+            select * from valuation_grid($1, array[user_today($1)])
         ),
         fx as materialized (select currency, unit_value from grid where kind = 'cash'),
         rep as materialized (
@@ -265,7 +268,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             select p.unit_price, p.currency
             from price p
             where p.instrument_id = i.id
-              and p.ts < (((select d from today) + 1)::timestamp at time zone 'UTC')
+              and p.ts < ((user_today($1) + 1)::timestamp at time zone 'UTC')
             order by p.ts desc
             limit 1
         ) px on true
@@ -282,7 +285,7 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                         else b.mean_price end as mean_price,
                    b.explained_qty,
                    b.basis
-            from lot_basis(array[h.id], array[(select d from today)]) b
+            from lot_basis(array[h.id], array[user_today($1)]) b
         ) lot on true
         left join grid uv on uv.instrument_id = i.id
         left join fx afx  on afx.currency = a.currency
@@ -390,21 +393,21 @@ pub async fn holding_prices(
         r#"
         with pts as materialized (
             select p.ts, p.unit_price, p.currency as quote, a.currency as acct,
-                   (p.ts at time zone 'utc')::date as day
+                   u.currency as rep, (p.ts at time zone 'utc')::date as day
             from price p
             join holding h    on h.instrument_id = p.instrument_id
             join account a    on a.id = h.account_id
             join connection c on c.id = a.connection_id
+            join users u      on u.id = c.user_id
             where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
         ),
-        reporting as (select currency as code from users where id = $2),
         rates as materialized (
             select as_of, currency, rate
             from fx_grid(
                 array(select distinct day from pts),
                 array(select quote from pts
                       union select acct from pts
-                      union select code from reporting)
+                      union select rep from pts)
             )
         ),
         lots as (
@@ -426,7 +429,7 @@ pub async fn holding_prices(
         from pts
         left join rates q  on q.currency = pts.quote and q.as_of = pts.day
         left join rates ac on ac.currency = pts.acct and ac.as_of = pts.day
-        left join rates rp on rp.currency = (select code from reporting) and rp.as_of = pts.day
+        left join rates rp on rp.currency = pts.rep and rp.as_of = pts.day
         cross join lots
         left join basis b on b.as_of = pts.day
         -- No position before the first lot. A holding with no lot at all (a
