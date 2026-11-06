@@ -1,5 +1,5 @@
 //! Per-connection ETF-composition pass. Runs after `price_sync`. Reads the
-//! cached Boursorama symbol from `meta` (resolving on first sight), scrapes the
+//! provider's cached symbol from `meta` (resolving on first sight), scrapes the
 //! composition, and stores it. Best-effort: every per-instrument error is
 //! logged and the pass continues. Composition changes slowly, so the
 //! eligibility query already excludes rows fresher than 30 days.
@@ -8,9 +8,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::provider::CompositionProvider;
-use crate::repo::instrument::{
-    InstrumentRow, mark_composition_none, set_boursorama_symbol, set_composition,
-};
+use crate::repo::instrument::{InstrumentRow, mark_composition_none, set_composition, set_symbol};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct CompositionSyncSummary {
@@ -34,11 +32,11 @@ pub async fn fetch_composition_for_connection(
         let iref = row.instrument_ref();
 
         // Resolve (or reuse cached) symbol.
-        let symbol = match row.meta.get("boursorama_symbol").and_then(|v| v.as_str()) {
+        let symbol = match row.provider_symbol(provider.key()) {
             Some(s) => s.to_string(),
             None => match provider.resolve_symbol(&iref).await {
                 Ok(Some(s)) => {
-                    set_boursorama_symbol(&mut conn, row.id, &s).await?;
+                    set_symbol(&mut conn, row.id, provider.key(), &s).await?;
                     summary.resolved += 1;
                     s
                 }

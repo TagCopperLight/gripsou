@@ -5,17 +5,6 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Insert a cash instrument for a currency and return its id.
-async fn cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
-    sqlx::query_scalar(
-        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
-    )
-    .bind(currency)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
-
 fn day(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
 }
@@ -39,7 +28,7 @@ async fn fx_asof_is_one_for_the_pivot(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn fx_asof_is_null_when_no_rate_is_known(pool: PgPool) -> anyhow::Result<()> {
-    cash_instrument(&pool, "CNY").await;
+    testkit::seed_cash_instrument(&pool, "CNY").await;
     let rate: Option<Decimal> = sqlx::query_scalar("select fx_asof('CNY', $1)")
         .bind(day(2026, 8, 14))
         .fetch_one(&pool)
@@ -50,7 +39,7 @@ async fn fx_asof_is_null_when_no_rate_is_known(pool: PgPool) -> anyhow::Result<(
 
 #[sqlx::test(migrations = "../migrations")]
 async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> anyhow::Result<()> {
-    let cny = cash_instrument(&pool, "CNY").await;
+    let cny = testkit::seed_cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
     for (d, rate) in [("2026-08-10", "0.10"), ("2026-08-12", "0.12")] {
         gripsou_core::testkit::insert_price(
@@ -84,7 +73,7 @@ async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> any
 
 #[sqlx::test(migrations = "../migrations")]
 async fn unit_value_asof_of_cash_is_the_fx_rate(pool: PgPool) -> anyhow::Result<()> {
-    let cny = cash_instrument(&pool, "CNY").await;
+    let cny = testkit::seed_cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
     gripsou_core::testkit::insert_price(
         &mut conn,
@@ -110,7 +99,7 @@ async fn unit_value_asof_converts_using_the_price_rows_own_currency(
 ) -> anyhow::Result<()> {
     // The instrument claims EUR (as Powens sometimes does) but Yahoo quotes it
     // in USD. The price row's currency must win.
-    let usd = cash_instrument(&pool, "USD").await;
+    let usd = testkit::seed_cash_instrument(&pool, "USD").await;
     let equity: Uuid = sqlx::query_scalar(
         "insert into instrument (kind, symbol, name, currency) \
          values ('equity', 'AAPL', 'Apple Inc.', 'EUR') returning id",
@@ -188,7 +177,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_is_null_without_a_rate(
     assert_eq!(d, Some(Decimal::ONE));
 
     // Reporting in USD with a known rate → that rate.
-    let usd = cash_instrument(&pool, "USD").await;
+    let usd = testkit::seed_cash_instrument(&pool, "USD").await;
     let mut conn = pool.acquire().await?;
     gripsou_core::testkit::insert_price(
         &mut conn,

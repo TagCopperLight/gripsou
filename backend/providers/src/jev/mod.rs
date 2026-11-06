@@ -38,6 +38,7 @@ pub const KIND: CategorizerKind = CategorizerKind {
 };
 
 const IN_FLIGHT: usize = 8;
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct JevCategorizer {
     api_key: String,
@@ -54,10 +55,7 @@ impl JevCategorizer {
             api_key,
             model,
             base_url: "https://api.typesafe.ai".to_string(),
-            http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .unwrap_or_default(),
+            http: reqwest::Client::new(),
         }
     }
 
@@ -160,30 +158,39 @@ impl Categorizer for JevCategorizer {
     }
 
     async fn models(&self) -> Result<Vec<String>, CategorizeError> {
-        let resp = self
-            .http
-            .get(format!("{}/v1/models", self.base_url))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .map_err(|e| {
-                CategorizeError::Other(format!(
-                    "jev request failed: {}",
-                    gripsou_core::logs::error_chain(&e)
-                ))
-            })?;
-        let status = resp.status();
-        if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
-            let text: String = text.chars().take(300).collect();
-            return Err(CategorizeError::Other(format!("jev {status}: {text}")));
-        }
+        let resp = send(
+            self.http
+                .get(format!("{}/v1/models", self.base_url))
+                .bearer_auth(&self.api_key),
+        )
+        .await?;
         let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
         let mut models = map::parse_models(&body);
         models.sort();
         models.dedup();
         Ok(models)
     }
+}
+
+/// Sends `req`, refusing a non-success status.
+async fn send(req: reqwest::RequestBuilder) -> Result<reqwest::Response, CategorizeError> {
+    let resp = req.timeout(TIMEOUT).send().await.map_err(|e| {
+        CategorizeError::Other(format!(
+            "jev request failed: {}",
+            gripsou_core::logs::error_chain(&e)
+        ))
+    })?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(CategorizeError::RateLimited);
+    }
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        // Bounded: the body can echo the prompt, and this text reaches the run row.
+        let text: String = text.chars().take(300).collect();
+        return Err(CategorizeError::Other(format!("jev {status}: {text}")));
+    }
+    Ok(resp)
 }
 
 /// One item's request. `Ok(None)` is a body that could not be read: the item
@@ -194,28 +201,7 @@ async fn ask(
     key: &str,
     body: &serde_json::Value,
 ) -> Result<Option<serde_json::Value>, CategorizeError> {
-    let resp = http
-        .post(url)
-        .bearer_auth(key)
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| {
-            CategorizeError::Other(format!(
-                "jev request failed: {}",
-                gripsou_core::logs::error_chain(&e)
-            ))
-        })?;
-    let status = resp.status();
-    if status.as_u16() == 429 {
-        return Err(CategorizeError::RateLimited);
-    }
-    if !status.is_success() {
-        let text = resp.text().await.unwrap_or_default();
-        // Bounded: the body can echo the prompt, and this text reaches the run row.
-        let text: String = text.chars().take(300).collect();
-        return Err(CategorizeError::Other(format!("jev {status}: {text}")));
-    }
+    let resp = send(http.post(url).bearer_auth(key).json(body)).await?;
     match resp.json().await {
         Ok(v) => Ok(Some(v)),
         Err(e) => {

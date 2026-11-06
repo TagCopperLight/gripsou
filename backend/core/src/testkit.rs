@@ -101,6 +101,7 @@ pub fn checking_account(external_id: &str) -> CanonicalAccount {
         type_key: "checking".to_string(),
         currency: "EUR".to_string(),
         meta: serde_json::json!({}),
+        health: None,
         balance_as_of: None,
     }
 }
@@ -355,15 +356,13 @@ pub async fn seed_one_equity(pool: &PgPool) -> Uuid {
     conn_id
 }
 
-/// Insert a cash instrument for a currency and return its id.
+/// The cash instrument of a currency.
 pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
-    sqlx::query_scalar(
-        "insert into instrument (kind, name, currency) values ('cash', $1, $1) returning id",
-    )
-    .bind(currency)
-    .fetch_one(pool)
-    .await
-    .unwrap()
+    let mut conn = pool.acquire().await.unwrap();
+    crate::repo::instrument::ensure_cash(&mut conn, currency)
+        .await
+        .unwrap()
+        .id
 }
 
 /// One rate for one currency on one day.

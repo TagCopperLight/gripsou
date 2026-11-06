@@ -5,7 +5,9 @@ use std::time::Duration;
 use gripsou_core::budget::ai::RunOutcome;
 use gripsou_core::crypto::EncryptionKey;
 use gripsou_core::db::Db;
-use gripsou_core::provider::{AccountProvider, CompositionProvider, PriceProvider, ProviderError};
+use gripsou_core::provider::{
+    AccountProvider, CompositionProvider, PriceProvider, ProviderError, Refresh, RefreshMode,
+};
 use gripsou_core::provider_config::ProviderConfig;
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
@@ -875,16 +877,9 @@ pub async fn request_sync(
         return Ok(BeginSync::NotFound);
     };
 
-    let has_external_id = conn
-        .provider_meta
-        .get("external_connection_id")
-        .and_then(|v| v.as_str())
-        .is_some_and(|s| !s.is_empty());
     let webhook = deps
         .account(conn.provider_key.as_str())
-        .map(|a| a.webhooks_enabled())
-        .unwrap_or(false)
-        && has_external_id;
+        .is_some_and(|a| a.refresh_mode(&conn.provider_meta) == RefreshMode::Webhook);
 
     let claim = if webhook {
         connection::begin_await(&db, user_id, id).await?
@@ -961,11 +956,10 @@ async fn do_request_refresh(
     match adapter.request_refresh(&creds, &conn.provider_meta).await {
         // On success the connection stays 'awaiting'; the webhook (or the
         // awaiting-timeout reaper) drives the fetch.
-        Ok(()) => {}
-        // Provider says the connection is already up to date (no webhook will
-        // come). Don't error — fall back to a direct full-fetch immediately
-        // rather than waiting for the awaiting-timeout reaper.
-        Err(ProviderError::Conflict) => {
+        Ok(Refresh::Requested) => {}
+        // No webhook will come: fetch now rather than wait for the
+        // awaiting-timeout reaper.
+        Ok(Refresh::AlreadyFresh) => {
             tracing::info!(connection_id = %id, "refresh refused as already up to date");
             match connection::begin_sync(&db, user_id, id).await {
                 Ok(BeginSync::Started(_)) => {
@@ -1104,13 +1098,7 @@ async fn finish_connection(
         .account(provider_key.as_str())
         .ok_or_else(|| CompleteError::Internal(format!("no adapter for '{provider_key}'")))?;
 
-    let query: String = params
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("&");
-
-    let completed = adapter.complete_connect(&query).await?;
+    let completed = adapter.complete_connect(params).await?;
     let encrypted =
         encrypt_credentials(&deps.key, &completed.credentials).map_err(CompleteError::Internal)?;
 

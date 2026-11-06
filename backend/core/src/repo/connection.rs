@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::dto::SyncHealth;
 use crate::error::CoreError;
 use crate::text_enum::text_enum;
 
@@ -29,7 +30,7 @@ pub struct ConnectionListRow {
     pub status: ConnectionStatus,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
-    pub provider_meta: serde_json::Value,
+    pub health: Option<SyncHealth>,
 }
 
 /// All of a user's connections, ordered so that connections of the same
@@ -38,8 +39,7 @@ pub async fn list_connections(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Vec<ConnectionListRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        ConnectionListRow,
+    let rows = sqlx::query!(
         r#"
         select c.id           as "id!",
                c.provider_key  as "provider_key!",
@@ -58,11 +58,24 @@ pub async fn list_connections(
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|r| ConnectionListRow {
+            health: SyncHealth::from_meta(&r.provider_meta),
+            id: r.id,
+            provider_key: r.provider_key,
+            display_name: r.display_name,
+            institution_name: r.institution_name,
+            institution_key: r.institution_key,
+            status: r.status,
+            last_sync_at: r.last_sync_at,
+            last_error: r.last_error,
+        })
+        .collect())
 }
 
 pub struct ConnectionAccountRow {
-    pub provider_meta: serde_json::Value,
+    pub health: Option<SyncHealth>,
     pub connection_id: Uuid,
     pub account_id: Uuid,
     pub name: String,
@@ -80,8 +93,7 @@ pub async fn list_connection_accounts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Vec<ConnectionAccountRow>, CoreError> {
-    let rows = sqlx::query_as!(
-        ConnectionAccountRow,
+    let rows = sqlx::query!(
         r#"
         with v as (
             select v.account_id, sum(v.value) as value, v.reporting_rate
@@ -107,7 +119,19 @@ pub async fn list_connection_accounts(
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows)
+    Ok(rows
+        .into_iter()
+        .map(|r| ConnectionAccountRow {
+            health: SyncHealth::from_meta(&r.provider_meta),
+            connection_id: r.connection_id,
+            account_id: r.account_id,
+            name: r.name,
+            color: r.color,
+            type_key: r.type_key,
+            value: r.value,
+            last_sync_at: r.last_sync_at,
+        })
+        .collect())
 }
 
 pub struct ConnectionState {
@@ -222,17 +246,17 @@ pub async fn user_id(db: impl sqlx::PgExecutor<'_>, id: Uuid) -> Result<Option<U
     Ok(row)
 }
 
-/// Merges a sync's provider observations into the connection's
-/// `provider_meta`, key by key.
-pub async fn merge_provider_meta(
+/// Records the connection's health as of this sync, beside its native ids
+/// in `provider_meta`.
+pub async fn set_health(
     db: impl sqlx::PgExecutor<'_>,
     id: Uuid,
-    meta: &serde_json::Value,
+    health: Option<&SyncHealth>,
 ) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection set provider_meta = provider_meta || $2 where id = $1",
         id,
-        meta,
+        SyncHealth::into_meta(health, serde_json::json!({})),
     )
     .execute(db)
     .await?;

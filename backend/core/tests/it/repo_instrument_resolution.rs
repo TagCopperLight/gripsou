@@ -1,6 +1,6 @@
 use gripsou_core::dto::{Allocation, Composition, InstrumentRef};
 use gripsou_core::repo::instrument::{
-    mark_symbol_unresolved, resolve_instrument, set_composition, set_resolved_symbol,
+    mark_unresolved, resolve_instrument, set_composition, set_symbol,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -19,7 +19,7 @@ async fn isin_instrument(pool: &PgPool, isin: &str) -> Uuid {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn set_resolved_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool) {
+async fn set_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool) {
     let id = Uuid::new_v4();
     sqlx::query(
         "insert into instrument (id, kind, symbol, name, currency) \
@@ -31,7 +31,7 @@ async fn set_resolved_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool)
     .unwrap();
     let mut conn = pool.acquire().await.unwrap();
 
-    set_resolved_symbol(&mut conn, id, "PUST.PA").await.unwrap();
+    set_symbol(&mut conn, id, "yahoo", "PUST.PA").await.unwrap();
 
     let (kind, symbol, meta): (String, Option<String>, serde_json::Value) =
         sqlx::query_as("select kind, symbol, meta from instrument where id = $1")
@@ -46,7 +46,7 @@ async fn set_resolved_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn set_resolved_symbol_leaves_cash_symbol_null(pool: PgPool) {
+async fn set_symbol_leaves_cash_symbol_null(pool: PgPool) {
     let id = Uuid::new_v4();
     sqlx::query("insert into instrument (id, kind, name, currency) values ($1,'cash','CNY','CNY')")
         .bind(id)
@@ -55,7 +55,7 @@ async fn set_resolved_symbol_leaves_cash_symbol_null(pool: PgPool) {
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
 
-    set_resolved_symbol(&mut conn, id, "CNYEUR=X")
+    set_symbol(&mut conn, id, "yahoo", "CNYEUR=X")
         .await
         .unwrap();
 
@@ -91,7 +91,7 @@ async fn symbol_only_instrument_survives_resolution_and_composition(pool: PgPool
         .await
         .unwrap();
 
-    set_resolved_symbol(&mut conn, first, "PUST.PA")
+    set_symbol(&mut conn, first, "yahoo", "PUST.PA")
         .await
         .unwrap();
     set_composition(
@@ -121,11 +121,11 @@ async fn symbol_only_instrument_survives_resolution_and_composition(pool: PgPool
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn mark_symbol_unresolved_writes_meta(pool: PgPool) {
+async fn mark_unresolved_writes_meta(pool: PgPool) {
     let id = isin_instrument(&pool, "FR0000121014").await;
     let mut conn = pool.acquire().await.unwrap();
 
-    mark_symbol_unresolved(&mut conn, id).await.unwrap();
+    mark_unresolved(&mut conn, id, "yahoo").await.unwrap();
 
     let meta: serde_json::Value = sqlx::query_scalar("select meta from instrument where id = $1")
         .bind(id)

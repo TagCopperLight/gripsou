@@ -33,7 +33,10 @@ impl AccountProvider for FakeBank {
     async fn connect(&self) -> Result<ConnectInit, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
-    async fn complete_connect(&self, _: &str) -> Result<CompleteConnect, ProviderError> {
+    async fn complete_connect(
+        &self,
+        _: &HashMap<String, String>,
+    ) -> Result<CompleteConnect, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
     async fn sync(&self, _: &Value) -> Result<SyncResult, ProviderError> {

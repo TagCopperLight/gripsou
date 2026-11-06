@@ -11,7 +11,11 @@ pub struct CanonicalAccount {
     /// Maps onto `account_type.key` (e.g. `checking`, `pea`).
     pub type_key: String,
     pub currency: String,
+    /// Provider specifics, stored in `account.provider_meta`.
     pub meta: Value,
+    /// What the provider reports of its last read at the bank. `None` when
+    /// it reports nothing.
+    pub health: Option<SyncHealth>,
     /// The day the provider last read this account at the bank, which is the
     /// day its holdings are true on. `None` means today. A provider that can't
     /// reach the bank keeps returning old balances: dating them today would
@@ -95,8 +99,11 @@ pub struct SkippedCounts {
     pub transactions: usize,
 }
 
-/// Provider calendar dates are labels, not timezone-qualified instants.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// How a provider last reached the bank, for one account or a whole
+/// connection. Stored as `sync_health` in their `provider_meta`, in this
+/// serde shape (rows already hold it). Provider calendar dates are labels,
+/// not timezone-qualified instants.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncHealth {
     pub verified: bool,
@@ -106,11 +113,36 @@ pub struct SyncHealth {
     pub next_retry_on: Option<chrono::NaiveDate>,
 }
 
+impl SyncHealth {
+    /// `meta` with `health` kept as its `sync_health` (null when unknown).
+    pub fn into_meta(health: Option<&SyncHealth>, mut meta: Value) -> Value {
+        if !meta.is_object() {
+            meta = Value::Object(Default::default());
+        }
+        meta["sync_health"] = serde_json::to_value(health).unwrap_or(Value::Null);
+        meta
+    }
+
+    /// The `sync_health` kept in a `provider_meta`. Absent, null or
+    /// unreadable reads as unknown.
+    pub fn from_meta(meta: &Value) -> Option<SyncHealth> {
+        let stored = meta.get("sync_health").filter(|v| !v.is_null())?;
+        match serde_json::from_value(stored.clone()) {
+            Ok(h) => Some(h),
+            Err(e) => {
+                tracing::warn!(error = %e, "stored sync health unreadable");
+                None
+            }
+        }
+    }
+}
+
 /// What an `AccountProvider::sync` returns for one connection.
 #[derive(Debug, Clone, Default)]
 pub struct SyncResult {
-    /// Normalized provider observations; merged without replacing native ids.
-    pub provider_meta: serde_json::Value,
+    /// The connection's health as a whole. `None` when the provider can't
+    /// tell (it is then stored as unknown).
+    pub health: Option<SyncHealth>,
     pub institution: Institution,
     pub accounts: Vec<CanonicalAccount>,
     pub holdings: Vec<CanonicalHolding>,

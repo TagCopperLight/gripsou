@@ -1,12 +1,26 @@
 mod institutions;
-pub mod map;
-pub mod model;
+mod map;
+mod model;
 
+/// The mapping and wire models, for the adapter's tests.
+#[cfg(feature = "test-util")]
+pub mod testing {
+    pub mod map {
+        pub use crate::powens::map::*;
+    }
+    pub mod model {
+        pub use crate::powens::model::*;
+    }
+}
+
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;
-use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
+use gripsou_core::provider::{
+    AccountProvider, CompleteConnect, ConnectInit, ProviderError, Refresh, RefreshMode,
+};
 use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 
 use crate::registry::{About, AccountKind, Context};
@@ -60,6 +74,43 @@ impl ListPage for model::InvestmentsResponse {
     }
 }
 
+/// The webview's base address, the same for every domain.
+const WEBVIEW: &str = "https://webview.powens.com/en";
+
+/// What a Powens connection stores: its permanent user token.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Credentials {
+    auth_token: String,
+}
+
+impl Credentials {
+    fn parse(stored: &serde_json::Value) -> Result<Self, ProviderError> {
+        // The value is a secret: never quoted in the error.
+        serde_json::from_value(stored.clone())
+            .map_err(|_| ProviderError::Other("missing Powens auth token in credentials".into()))
+    }
+}
+
+/// Sends `req`, refusing a non-success status. `what` names the call in errors.
+async fn send(
+    req: reqwest::RequestBuilder,
+    what: &str,
+) -> Result<reqwest::Response, ProviderError> {
+    let resp = req.send().await.map_err(|e| {
+        ProviderError::Other(format!(
+            "{what} failed: {}",
+            gripsou_core::logs::error_chain(&e)
+        ))
+    })?;
+    if !resp.status().is_success() {
+        return Err(ProviderError::Other(format!(
+            "{what} failed: {}",
+            resp.status()
+        )));
+    }
+    Ok(resp)
+}
+
 /// A response body decoded as JSON, its decode error without the value.
 async fn read_json<T: serde::de::DeserializeOwned>(
     resp: reqwest::Response,
@@ -71,6 +122,13 @@ async fn read_json<T: serde::de::DeserializeOwned>(
         .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
     serde_json::from_str(&body)
         .map_err(|e| ProviderError::Other(crate::json_decode_error(what, &e)))
+}
+
+async fn send_json<T: serde::de::DeserializeOwned>(
+    req: reqwest::RequestBuilder,
+    what: &str,
+) -> Result<T, ProviderError> {
+    read_json(send(req, what).await?, what).await
 }
 
 pub const KIND: AccountKind = AccountKind {
@@ -133,11 +191,8 @@ impl PowensProvider {
         format!("{}/2.0/{}", self.origin, path.trim_start_matches('/'))
     }
 
-    /// Test-only constructor pointing the REST API base at a mock server.
-    /// Not `#[cfg(test)]`-gated because integration tests in `providers/tests/`
-    /// build against this crate as an ordinary dependency, where `cfg(test)`
-    /// items don't exist at all.
-    #[doc(hidden)]
+    /// An adapter whose REST API is `base_url` (a mock server).
+    #[cfg(any(test, feature = "test-util"))]
     pub fn for_test(base_url: &str) -> Self {
         Self {
             client_id: "test-client".into(),
@@ -150,7 +205,7 @@ impl PowensProvider {
         }
     }
 
-    #[doc(hidden)]
+    #[cfg(any(test, feature = "test-util"))]
     pub fn for_test_with_secret(base_url: &str, secret: &str) -> Self {
         let mut p = Self::for_test(base_url);
         p.webhook_secret = Some(secret.to_string());
@@ -178,30 +233,8 @@ impl PowensProvider {
         let mut all: Vec<P::Item> = Vec::new();
 
         for _ in 0..MAX_PAGES {
-            let resp = self
-                .http
-                .get(&url)
-                .bearer_auth(auth_token)
-                .send()
-                .await
-                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-            if !resp.status().is_success() {
-                return Err(ProviderError::Other(format!(
-                    "GET {endpoint} failed: {}",
-                    resp.status()
-                )));
-            }
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-            let page: P = match serde_json::from_str(&body) {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(ProviderError::Other(crate::json_decode_error(endpoint, &e)));
-                }
-            };
-
+            let req = self.http.get(&url).bearer_auth(auth_token);
+            let page: P = send_json(req, &format!("GET {endpoint}")).await?;
             let (items, next) = page.into_parts();
             let full_page = items.len() >= PAGE_LIMIT;
             all.extend(items);
@@ -218,31 +251,50 @@ impl PowensProvider {
             all.len()
         )))
     }
+
+    /// The token's connections with their bank and sources, which carry the
+    /// institution and the health. Never fatal to a sync: on any failure the
+    /// sync goes on with none, so the institution keeps its last value and
+    /// the health reads as unknown.
+    async fn connections_for_sync(&self, auth_token: &str) -> Vec<model::Connection> {
+        let req = self
+            .http
+            .get(self.api_url("/users/me/connections?expand=connector,sources"))
+            .bearer_auth(auth_token);
+        match send_json::<model::ConnectionsResponse>(req, "GET /users/me/connections").await {
+            Ok(r) => r.connections,
+            Err(e) => {
+                tracing::warn!(
+                    error = %gripsou_core::logs::error_chain(&e),
+                    "institution lookup failed"
+                );
+                Vec::new()
+            }
+        }
+    }
 }
 
 #[async_trait]
 impl AccountProvider for PowensProvider {
-    /// Build the Powens webview URL. The webview is always at webview.powens.com —
-    /// no API call needed here. Powens creates an anonymous user on its side and
-    /// returns a one-time `code` in the callback for us to exchange.
+    /// Powens creates an anonymous user on its side and returns a one-time
+    /// `code` in the callback for us to exchange.
     async fn connect(&self) -> Result<ConnectInit, ProviderError> {
-        let webview_url = format!(
-            "https://webview.powens.com/en/connect\
-             ?domain={domain}\
-             &client_id={client_id}\
-             &redirect_uri={redirect_uri}",
-            domain = urlencoding::encode(&self.domain),
-            client_id = urlencoding::encode(&self.client_id),
-            redirect_uri = urlencoding::encode(&self.redirect_uri),
-        );
+        let mut url = reqwest::Url::parse(&format!("{WEBVIEW}/connect")).expect("static URL");
+        url.query_pairs_mut().extend_pairs([
+            ("domain", self.domain.as_str()),
+            ("client_id", self.client_id.as_str()),
+            ("redirect_uri", self.redirect_uri.as_str()),
+        ]);
         Ok(ConnectInit {
-            redirect_url: Some(webview_url),
+            redirect_url: Some(url.to_string()),
         })
     }
 
-    /// Exchange the `code` Powens returns in its callback for a permanent access token.
-    /// `callback` is the raw query string from the redirect, e.g. `"code=X&connection_id=Y"`.
-    async fn complete_connect(&self, callback: &str) -> Result<CompleteConnect, ProviderError> {
+    /// Exchanges the callback's `code` for a permanent user token.
+    async fn complete_connect(
+        &self,
+        params: &HashMap<String, String>,
+    ) -> Result<CompleteConnect, ProviderError> {
         #[derive(serde::Deserialize)]
         struct TokenAccessResponse {
             access_token: String,
@@ -253,108 +305,53 @@ impl AccountProvider for PowensProvider {
             id: i64,
         }
 
-        let code = callback
-            .split('&')
-            .find_map(|pair| {
-                let (k, v) = pair.split_once('=')?;
-                (k == "code").then(|| v.to_string())
-            })
+        let code = params
+            .get("code")
             .ok_or_else(|| ProviderError::Other("missing 'code' in Powens callback".into()))?;
 
-        let resp = self
-            .http
-            .post(self.api_url("/auth/token/access"))
-            .form(&[
+        let token: TokenAccessResponse = send_json(
+            self.http.post(self.api_url("/auth/token/access")).form(&[
                 ("grant_type", "authorization_code"),
                 ("client_id", &self.client_id),
                 ("client_secret", &self.client_secret),
-                ("code", &code),
-            ])
-            .send()
-            .await
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
+                ("code", code),
+            ]),
+            "POST /auth/token/access",
+        )
+        .await?;
 
-        if !resp.status().is_success() {
-            return Err(ProviderError::Other(format!(
-                "POST /auth/token/access failed: {}",
-                resp.status()
-            )));
-        }
-
-        let token_resp: TokenAccessResponse = read_json(resp, "/auth/token/access").await?;
-
-        let me_resp = self
-            .http
-            .get(self.api_url("/users/me"))
-            .bearer_auth(&token_resp.access_token)
-            .send()
-            .await
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-
-        if !me_resp.status().is_success() {
-            return Err(ProviderError::Other(format!(
-                "GET /users/me failed: {}",
-                me_resp.status()
-            )));
-        }
-
-        let me: Me = read_json(me_resp, "/users/me").await?;
-
-        let connection_id = callback.split('&').find_map(|pair| {
-            let (k, v) = pair.split_once('=')?;
-            (k == "connection_id").then(|| v.to_string())
-        });
+        let me: Me = send_json(
+            self.http
+                .get(self.api_url("/users/me"))
+                .bearer_auth(&token.access_token),
+            "GET /users/me",
+        )
+        .await?;
 
         let mut provider_meta = serde_json::json!({ "powens_user_id": me.id.to_string() });
-        if let Some(cid) = connection_id {
-            provider_meta["external_connection_id"] = serde_json::Value::String(cid);
+        if let Some(cid) = params.get("connection_id") {
+            provider_meta["external_connection_id"] = serde_json::Value::String(cid.clone());
         }
 
         Ok(CompleteConnect {
-            credentials: serde_json::json!({ "auth_token": token_resp.access_token }),
+            credentials: serde_json::to_value(Credentials {
+                auth_token: token.access_token,
+            })
+            .expect("plain struct"),
             provider_meta,
         })
     }
 
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError> {
-        let auth_token = credentials["auth_token"]
-            .as_str()
-            .ok_or_else(|| ProviderError::Other("missing auth_token in credentials".into()))?;
+        let Credentials { auth_token } = Credentials::parse(credentials)?;
 
         let accounts = self
-            .fetch_all::<model::AccountsResponse>(auth_token, "/users/me/accounts")
+            .fetch_all::<model::AccountsResponse>(&auth_token, "/users/me/accounts")
             .await?;
         let investments = self
-            .fetch_all::<model::InvestmentsResponse>(auth_token, "/users/me/investments")
+            .fetch_all::<model::InvestmentsResponse>(&auth_token, "/users/me/investments")
             .await?;
-
-        // Connections carry the institution (one connector per connection).
-        // Failure here is non-fatal: leave institution empty rather than fail
-        // the whole sync (the ingest guard won't clobber a prior good value).
-        let connections = {
-            let resp = self
-                .http
-                .get(self.api_url("/users/me/connections?expand=connector,sources"))
-                .bearer_auth(auth_token)
-                .send()
-                .await
-                .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-            if resp.status().is_success() {
-                match read_json::<model::ConnectionsResponse>(resp, "/users/me/connections").await {
-                    Ok(r) => r.connections,
-                    Err(e) => {
-                        tracing::warn!(
-                            error = %gripsou_core::logs::error_chain(&e),
-                            "institution lookup failed"
-                        );
-                        Vec::new()
-                    }
-                }
-            } else {
-                tracing::warn!(status = resp.status().as_u16(), "institution lookup failed");
-                Vec::new()
-            }
-        };
+        let connections = self.connections_for_sync(&auth_token).await;
 
         // Full history, every sync. Powens' `last_update` filter returns only
         // rows edited since a timestamp and therefore cannot backfill, so
@@ -364,13 +361,15 @@ impl AccountProvider for PowensProvider {
         // ponytail: fetches the whole history; add a min_date window if
         // payloads grow past a few thousand rows (largest observed: 2,111).
         let transactions = self
-            .fetch_all::<model::TransactionsResponse>(auth_token, "/users/me/transactions")
+            .fetch_all::<model::TransactionsResponse>(&auth_token, "/users/me/transactions")
             .await?;
 
-        let mut result = map::map_sync(&accounts, &investments, &transactions);
-        result.institution = map::map_institution(&connections);
-        map::apply_health(&mut result, &accounts, &connections);
-        Ok(result)
+        Ok(map::map_sync(
+            &accounts,
+            &investments,
+            &transactions,
+            &connections,
+        ))
     }
 
     fn supports_manage(&self) -> bool {
@@ -382,22 +381,14 @@ impl AccountProvider for PowensProvider {
         credentials: &serde_json::Value,
         provider_meta: &serde_json::Value,
     ) -> Result<ConnectInit, ProviderError> {
-        let token = credentials["auth_token"]
-            .as_str()
-            .ok_or_else(|| ProviderError::Other("missing Powens credentials".into()))?;
-        let response = self
-            .http
-            .get(self.api_url("/users/me/connections"))
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(|_| ProviderError::Other("Powens connection lookup failed".into()))?;
-        if !response.status().is_success() {
-            return Err(ProviderError::Other(
-                "Powens connection lookup failed".into(),
-            ));
-        }
-        let connections: model::ConnectionsResponse = read_json(response, "connections").await?;
+        let Credentials { auth_token } = Credentials::parse(credentials)?;
+        let connections: model::ConnectionsResponse = send_json(
+            self.http
+                .get(self.api_url("/users/me/connections"))
+                .bearer_auth(&auth_token),
+            "GET /users/me/connections",
+        )
+        .await?;
         // A connection with no stored external id resolves only when the token
         // holds exactly one connection; never choose an arbitrary bank.
         let stored_id = provider_meta["external_connection_id"].as_str();
@@ -412,26 +403,19 @@ impl AccountProvider for PowensProvider {
         .ok_or_else(|| {
             ProviderError::Other("unable to identify the Powens connection to manage".into())
         })?;
-        let response = self
-            .http
-            .get(self.api_url("/auth/token/code"))
-            .query(&[("type", "singleAccess")])
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(|_| ProviderError::Other("Powens temporary access failed".into()))?;
-        if !response.status().is_success() {
-            return Err(ProviderError::Other(
-                "Powens temporary access failed".into(),
-            ));
-        }
         #[derive(serde::Deserialize)]
         struct AccessCode {
             code: String,
         }
-        let code: AccessCode = read_json(response, "temporary access").await?;
-        let mut url =
-            reqwest::Url::parse("https://webview.powens.com/en/manage").expect("static URL");
+        let code: AccessCode = send_json(
+            self.http
+                .get(self.api_url("/auth/token/code"))
+                .query(&[("type", "singleAccess")])
+                .bearer_auth(&auth_token),
+            "GET /auth/token/code",
+        )
+        .await?;
+        let mut url = reqwest::Url::parse(&format!("{WEBVIEW}/manage")).expect("static URL");
         url.query_pairs_mut().extend_pairs([
             ("domain", self.domain.as_str()),
             ("client_id", self.client_id.as_str()),
@@ -445,48 +429,60 @@ impl AccountProvider for PowensProvider {
         })
     }
 
-    fn webhooks_enabled(&self) -> bool {
-        self.webhook_secret.is_some()
+    /// Webhook-driven once a webhook secret is set, for a connection whose
+    /// Powens id is known (the webhook names it).
+    fn refresh_mode(&self, provider_meta: &serde_json::Value) -> RefreshMode {
+        let known = provider_meta["external_connection_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty());
+        if self.webhook_secret.is_some() && known {
+            RefreshMode::Webhook
+        } else {
+            RefreshMode::Direct
+        }
     }
 
     async fn request_refresh(
         &self,
         credentials: &serde_json::Value,
         provider_meta: &serde_json::Value,
-    ) -> Result<(), ProviderError> {
-        let token = credentials["auth_token"]
-            .as_str()
-            .ok_or_else(|| ProviderError::Other("missing auth_token".into()))?;
+    ) -> Result<Refresh, ProviderError> {
+        let Credentials { auth_token } = Credentials::parse(credentials)?;
         let cid = provider_meta["external_connection_id"]
             .as_str()
             .ok_or_else(|| ProviderError::Other("missing external_connection_id".into()))?;
+        let what = "PUT /users/me/connections";
         let resp = self
             .http
             .put(self.api_url(&format!("/users/me/connections/{cid}")))
-            .bearer_auth(token)
+            .bearer_auth(&auth_token)
             .query(&[("psu_requested", "false")])
             .send()
             .await
-            .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-        // 409: Powens considers the connection already up to date (or a sync is
-        // already running) and won't emit a webhook — signal a benign conflict so
-        // the caller can fall back to a direct fetch instead of erroring.
+            .map_err(|e| {
+                ProviderError::Other(format!(
+                    "{what} failed: {}",
+                    gripsou_core::logs::error_chain(&e)
+                ))
+            })?;
+        // 409: Powens considers the connection up to date (or a sync is
+        // already running) and sends no webhook.
         if resp.status() == reqwest::StatusCode::CONFLICT {
-            return Err(ProviderError::Conflict);
+            return Ok(Refresh::AlreadyFresh);
         }
         if !resp.status().is_success() {
             return Err(ProviderError::Other(format!(
-                "PUT connection refresh failed: {}",
+                "{what} failed: {}",
                 resp.status()
             )));
         }
-        Ok(())
+        Ok(Refresh::Requested)
     }
 
     fn verify_webhook(
         &self,
         path: &str,
-        headers: &std::collections::HashMap<String, String>,
+        headers: &HashMap<String, String>,
         body: &[u8],
     ) -> Result<Option<gripsou_core::provider::WebhookSignal>, ProviderError> {
         use base64::{Engine, engine::general_purpose::STANDARD};
@@ -543,7 +539,15 @@ mod tests {
         let p = PowensProvider::from_config(&c, &ctx("https://g.example/")).unwrap();
         assert_eq!(p.redirect_uri, "https://g.example/connections/callback");
         assert_eq!(p.origin, "https://x.biapi.pro");
-        assert!(!p.webhooks_enabled());
+        let meta = serde_json::json!({ "external_connection_id": "7" });
+        assert_eq!(p.refresh_mode(&meta), RefreshMode::Direct);
+        c.set("powens", "webhook_secret", Some("w".into()));
+        let p = PowensProvider::from_config(&c, &ctx("https://g.example")).unwrap();
+        assert_eq!(p.refresh_mode(&meta), RefreshMode::Webhook);
+        assert_eq!(
+            p.refresh_mode(&serde_json::json!({ "external_connection_id": "" })),
+            RefreshMode::Direct
+        );
     }
 
     use super::*;
@@ -552,6 +556,13 @@ mod tests {
     use sha2::Sha256;
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn params(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
 
     fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -597,7 +608,10 @@ mod tests {
 
         let p = PowensProvider::for_test(&server.uri());
         let out = p
-            .complete_connect("code=exchange-code-123&connection_id=99")
+            .complete_connect(&params(&[
+                ("code", "exchange-code-123"),
+                ("connection_id", "99"),
+            ]))
             .await
             .unwrap();
         assert_eq!(out.credentials["auth_token"], "perm-abc");
@@ -609,7 +623,11 @@ mod tests {
     async fn complete_connect_errors_without_code() {
         let server = MockServer::start().await;
         let p = PowensProvider::for_test(&server.uri());
-        assert!(p.complete_connect("no_code_here=x").await.is_err());
+        assert!(
+            p.complete_connect(&params(&[("no_code_here", "x")]))
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -622,7 +640,11 @@ mod tests {
             .await;
 
         let p = PowensProvider::for_test(&server.uri());
-        assert!(p.complete_connect("code=bad").await.is_err());
+        assert!(
+            p.complete_connect(&params(&[("code", "bad")]))
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -643,7 +665,10 @@ mod tests {
             .await;
 
         let p = PowensProvider::for_test(&server.uri());
-        let out = p.complete_connect("code=exchange-code-123").await.unwrap();
+        let out = p
+            .complete_connect(&params(&[("code", "exchange-code-123")]))
+            .await
+            .unwrap();
         assert!(
             out.provider_meta.get("external_connection_id").is_none(),
             "external_connection_id should not be present"
@@ -716,7 +741,7 @@ mod tests {
         let path = "/api/webhooks/powens";
         let date = "2022-06-27T11:08:52.577831Z";
         let body = r#"{"connection":{"id":99}}"#;
-        let mut h = std::collections::HashMap::new();
+        let mut h = HashMap::new();
         h.insert("bi-signature-date".into(), date.into());
         h.insert("bi-signature".into(), sign("shh", path, date, body));
         let sig = p
@@ -729,7 +754,7 @@ mod tests {
     #[test]
     fn verify_webhook_rejects_bad_signature() {
         let p = PowensProvider::for_test_with_secret("http://x", "shh");
-        let mut h = std::collections::HashMap::new();
+        let mut h = HashMap::new();
         h.insert("bi-signature-date".into(), "d".into());
         h.insert("bi-signature".into(), "not-the-right-sig".into());
         assert!(p.verify_webhook("/api/webhooks/powens", &h, b"{}").is_err());
@@ -741,7 +766,7 @@ mod tests {
         let path = "/api/webhooks/powens";
         let date = "d";
         let body = r#"{"user":{"id":1}}"#;
-        let mut h = std::collections::HashMap::new();
+        let mut h = HashMap::new();
         h.insert("bi-signature-date".into(), date.into());
         h.insert("bi-signature".into(), sign("shh", path, date, body));
         assert!(
@@ -803,6 +828,9 @@ mod tests {
         let p = PowensProvider::for_test(&server.uri());
         let creds = serde_json::json!({ "auth_token": "live" });
         let meta = serde_json::json!({ "external_connection_id": "99" });
-        p.request_refresh(&creds, &meta).await.unwrap();
+        assert_eq!(
+            p.request_refresh(&creds, &meta).await.unwrap(),
+            Refresh::Requested
+        );
     }
 }

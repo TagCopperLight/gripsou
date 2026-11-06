@@ -211,6 +211,7 @@ pub(crate) async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
         type_key: "pea".into(),
         currency: "EUR".into(),
         meta: serde_json::json!({}),
+        health: None,
         balance_as_of: None,
     };
     let account_id = upsert_account(&mut conn, conn_id, &account).await.unwrap();

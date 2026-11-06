@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::provider::PriceProvider;
-use crate::repo::instrument::{InstrumentRow, mark_symbol_unresolved, set_resolved_symbol};
+use crate::repo::instrument::{InstrumentRow, ensure_cash, mark_unresolved, set_symbol};
 use crate::repo::price::{has_fx_rate, insert_prices, latest_price_ts, market_today};
 
 /// How far back of already-stored history each pass re-requests.
@@ -50,17 +50,15 @@ async fn ensure_cash_instruments_for_held_currencies(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
 ) -> Result<(), CoreError> {
-    sqlx::query!(
-        r#"
-        insert into instrument (kind, symbol, isin, name, currency)
-        select 'cash', null, null, cur, cur
-        from connection_fx_currencies($1) cur
-        on conflict (currency) where kind = 'cash' do nothing
-        "#,
+    let currencies = sqlx::query_scalar!(
+        r#"select cur as "cur!" from connection_fx_currencies($1) cur"#,
         connection_id,
     )
-    .execute(&mut *conn)
+    .fetch_all(&mut *conn)
     .await?;
+    for currency in currencies {
+        ensure_cash(conn, &currency).await?;
+    }
     Ok(())
 }
 
@@ -148,26 +146,7 @@ pub async fn ensure_fx_rate(
         return Ok(true);
     }
     let mut conn = pool.acquire().await?;
-    let row = sqlx::query_as!(
-        InstrumentRow,
-        r#"
-        with ins as (
-            insert into instrument (kind, symbol, isin, name, currency)
-            values ('cash', null, null, $1, $1)
-            on conflict (currency) where kind = 'cash' do nothing
-            returning id, kind, symbol, isin, name, currency, meta
-        )
-        select id as "id!", kind as "kind!", symbol, isin, name as "name!",
-               currency as "currency!", meta as "meta!"
-        from ins
-        union all
-        select id, kind, symbol, isin, name, currency, meta
-        from instrument where kind = 'cash' and currency = $1
-        "#,
-        currency,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
+    let row = ensure_cash(&mut conn, currency).await?;
     let mut summary = PriceSyncSummary::default();
     fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
     has_fx_rate(&mut *conn, currency).await
@@ -196,20 +175,20 @@ async fn fetch_instrument(
     }
 
     // Resolve (or reuse cached) symbol.
-    let symbol = match row.meta.get("yahoo_symbol").and_then(|v| v.as_str()) {
+    let symbol = match row.provider_symbol(provider.key()) {
         Some(s) => s.to_string(),
         None => {
-            if row.meta.get("yahoo_resolution").and_then(|v| v.as_str()) == Some("unresolved") {
+            if row.unresolved_by(provider.key()) {
                 return Ok(());
             }
             match provider.resolve_symbol(&iref).await {
                 Ok(Some(s)) => {
-                    set_resolved_symbol(conn, row.id, &s).await?;
+                    set_symbol(conn, row.id, provider.key(), &s).await?;
                     summary.resolved += 1;
                     s
                 }
                 Ok(None) => {
-                    mark_symbol_unresolved(conn, row.id).await?;
+                    mark_unresolved(conn, row.id, provider.key()).await?;
                     summary.unresolved += 1;
                     return Ok(());
                 }

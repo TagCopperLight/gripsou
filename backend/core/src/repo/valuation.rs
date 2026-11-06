@@ -166,6 +166,27 @@ pub struct HoldingRow {
     pub mean_price: Decimal,
 }
 
+impl HoldingRow {
+    /// The kind shown for the holding.
+    ///
+    /// `instrument.kind` is whatever the provider said and is never rewritten:
+    /// it is half the natural key the next sync re-resolves the row by. Powens
+    /// cannot tell an ETF from a share and reports every security as `equity`,
+    /// so a tracker is recognised by its scraped composition, which only ever
+    /// exists for one (anything else is marked `composition_status = "none"`).
+    /// An ETF whose scrape has not landed yet reads as `equity`.
+    pub fn display_kind(&self) -> &str {
+        display_kind(&self.kind, self.composition.is_some())
+    }
+}
+
+fn display_kind(kind: &str, has_composition: bool) -> &str {
+    match (kind, has_composition) {
+        ("equity", true) => "etf",
+        _ => kind,
+    }
+}
+
 pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingRow>, CoreError> {
     struct Base {
         holding_id: Uuid,
@@ -531,4 +552,16 @@ pub async fn account_series(
         })
         .collect();
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn display_kind_promotes_only_an_equity_with_a_composition() {
+        use super::display_kind;
+        assert_eq!(display_kind("equity", true), "etf");
+        assert_eq!(display_kind("equity", false), "equity");
+        assert_eq!(display_kind("cash", true), "cash");
+        assert_eq!(display_kind("etf", false), "etf");
+    }
 }

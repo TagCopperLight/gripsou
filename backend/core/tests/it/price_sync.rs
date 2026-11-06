@@ -78,7 +78,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(meta["yahoo_symbol"].as_str(), Some("MC.PA"));
+    assert_eq!(meta["mock_symbol"].as_str(), Some("MC.PA"));
     assert_eq!(symbol, None, "ISIN path keeps symbol null");
     assert_eq!(kind, "equity");
 
@@ -118,7 +118,7 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(meta["yahoo_resolution"].as_str(), Some("unresolved"));
+    assert_eq!(meta["mock_resolution"].as_str(), Some("unresolved"));
 }
 
 #[sqlx::test(migrations = "../migrations")]

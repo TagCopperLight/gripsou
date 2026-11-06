@@ -119,26 +119,10 @@ pub struct Holding {
     pub mean_price: String,
 }
 
-/// Display kind for a holding.
-///
-/// `instrument.kind` is whatever the provider said and is never rewritten — it
-/// is half the natural key the next sync re-resolves the row by. Powens cannot
-/// tell an ETF from a share and reports every security as `equity`, so the
-/// tracker/share distinction is inferred here instead: a scraped composition
-/// only ever exists for a tracker (the scraper writes `composition_status =
-/// "none"` and no `composition` key for anything else). An ETF whose scrape has
-/// not landed yet therefore reads as `equity`, which is the honest answer.
-fn display_kind(kind: &str, has_composition: bool) -> String {
-    match (kind, has_composition) {
-        ("equity", true) => "etf".to_string(),
-        _ => kind.to_string(),
-    }
-}
-
 impl Holding {
     pub fn from_row(r: gripsou_core::repo::valuation::HoldingRow, logos: &Logos) -> Self {
         let is_cash = r.kind == "cash";
-        let kind = display_kind(&r.kind, r.composition.is_some());
+        let kind = r.display_kind().to_string();
         // Unit price is native to the instrument. A unit of cash is worth one
         // unit of its own currency by definition — its `price` row holds an FX
         // rate, which is not what this field means.
@@ -593,10 +577,33 @@ impl AccountSeriesResponse {
     }
 }
 
+/// How the provider last reached the bank (`SyncHealth`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncHealthDto {
+    pub verified: bool,
+    pub last_updated_on: Option<NaiveDate>,
+    pub state: Option<String>,
+    pub error_message: Option<String>,
+    pub next_retry_on: Option<NaiveDate>,
+}
+
+impl SyncHealthDto {
+    fn new(h: gripsou_core::dto::SyncHealth) -> Self {
+        SyncHealthDto {
+            verified: h.verified,
+            last_updated_on: h.last_updated_on,
+            state: h.state,
+            error_message: h.error_message,
+            next_retry_on: h.next_retry_on,
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncAccount {
-    pub health: Option<gripsou_core::dto::SyncHealth>,
+    pub health: Option<SyncHealthDto>,
     pub id: String,
     pub name: String,
     pub color: String,
@@ -610,7 +617,7 @@ pub struct SyncAccount {
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnection {
     pub can_manage: bool,
-    pub health: Option<gripsou_core::dto::SyncHealth>,
+    pub health: Option<SyncHealthDto>,
     pub id: String,
     pub display_name: String,
     pub status: gripsou_core::repo::connection::ConnectionStatus,
@@ -644,10 +651,7 @@ impl ProviderGroup {
                 .entry(a.connection_id)
                 .or_default()
                 .push(SyncAccount {
-                    health: a
-                        .provider_meta
-                        .get("sync_health")
-                        .and_then(|h| serde_json::from_value(h.clone()).ok()),
+                    health: a.health.map(SyncHealthDto::new),
                     id: a.account_id.to_string(),
                     name: a.name,
                     color: a.color,
@@ -660,10 +664,7 @@ impl ProviderGroup {
         for c in conns {
             let conn = SyncConnection {
                 can_manage: providers.supports_manage(&c.provider_key),
-                health: c
-                    .provider_meta
-                    .get("sync_health")
-                    .and_then(|h| serde_json::from_value(h.clone()).ok()),
+                health: c.health.map(SyncHealthDto::new),
                 id: c.id.to_string(),
                 logo: providers
                     .logos()
@@ -1147,15 +1148,6 @@ mod tests {
     use gripsou_core::repo::valuation::AccountSeriesRow;
     use uuid::Uuid;
 
-    #[test]
-    fn display_kind_promotes_only_an_equity_with_a_composition() {
-        assert_eq!(display_kind("equity", true), "etf");
-        assert_eq!(display_kind("equity", false), "equity");
-        // A scrape never lands on these, but be explicit: nothing else moves.
-        assert_eq!(display_kind("cash", true), "cash");
-        assert_eq!(display_kind("etf", false), "etf");
-    }
-
     fn row(id: Uuid, day: u32, value: i64) -> AccountSeriesRow {
         AccountSeriesRow {
             account_id: id,
@@ -1202,7 +1194,7 @@ mod tests {
     fn conn_row(institution_key: Option<&str>) -> ConnectionListRow {
         ConnectionListRow {
             id: Uuid::from_u128(1),
-            provider_meta: serde_json::json!({}),
+            health: None,
             provider_key: "powens".into(),
             display_name: "My bank".into(),
             institution_key: institution_key.map(|s| s.to_string()),

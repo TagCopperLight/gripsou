@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
@@ -13,7 +15,27 @@ pub struct CompleteConnect {
     /// Secrets to encrypt + store in connection.credentials.
     pub credentials: serde_json::Value,
     /// Provider-native ids for correlation; stored in connection.provider_meta.
+    /// A webhook's [`WebhookSignal`] is matched on its `external_connection_id`.
     pub provider_meta: serde_json::Value,
+}
+
+/// How a connection's sync is started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshMode {
+    /// Fetch now.
+    Direct,
+    /// Ask the provider to refresh ([`AccountProvider::request_refresh`]) and
+    /// fetch when its webhook says it is done.
+    Webhook,
+}
+
+/// What the provider made of a refresh request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refresh {
+    /// A refresh started: its webhook will follow.
+    Requested,
+    /// The provider holds the latest data already and sends no webhook.
+    AlreadyFresh,
 }
 
 /// What a verified incoming webhook tells us: which provider-native connection
@@ -27,8 +49,6 @@ pub struct WebhookSignal {
 pub enum ProviderError {
     #[error("provider not implemented")]
     NotImplemented,
-    #[error("provider refresh conflict (already up to date)")]
-    Conflict,
     #[error("provider error: {0}")]
     Other(String),
 }
@@ -39,7 +59,11 @@ pub trait AccountProvider: Send + Sync {
     async fn connect(&self) -> Result<ConnectInit, ProviderError>;
 
     /// Finish an external auth round-trip, yielding credentials to persist.
-    async fn complete_connect(&self, callback: &str) -> Result<CompleteConnect, ProviderError>;
+    /// `params` is the callback's query, decoded.
+    async fn complete_connect(
+        &self,
+        params: &HashMap<String, String>,
+    ) -> Result<CompleteConnect, ProviderError>;
 
     /// Pull canonical accounts / holdings / transactions for a connection.
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError>;
@@ -57,9 +81,9 @@ pub trait AccountProvider: Send + Sync {
         Err(ProviderError::NotImplemented)
     }
 
-    /// True when this provider drives sync via webhooks (and is configured for it).
-    fn webhooks_enabled(&self) -> bool {
-        false
+    /// How a sync of the connection with this `provider_meta` starts.
+    fn refresh_mode(&self, _provider_meta: &serde_json::Value) -> RefreshMode {
+        RefreshMode::Direct
     }
 
     /// Ask the provider to force a fresh pull for one connection. Called before
@@ -68,7 +92,7 @@ pub trait AccountProvider: Send + Sync {
         &self,
         _credentials: &serde_json::Value,
         _provider_meta: &serde_json::Value,
-    ) -> Result<(), ProviderError> {
+    ) -> Result<Refresh, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
 
@@ -78,7 +102,7 @@ pub trait AccountProvider: Send + Sync {
     fn verify_webhook(
         &self,
         _path: &str,
-        _headers: &std::collections::HashMap<String, String>,
+        _headers: &HashMap<String, String>,
         _body: &[u8],
     ) -> Result<Option<WebhookSignal>, ProviderError> {
         Err(ProviderError::NotImplemented)

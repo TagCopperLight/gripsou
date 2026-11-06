@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use uuid::Uuid;
 
-use crate::dto::CanonicalAccount;
+use crate::dto::{CanonicalAccount, SyncHealth};
 use crate::error::CoreError;
 
 /// Single source of truth shared with the frontend (`shared/account-palette.json`).
@@ -26,6 +26,10 @@ pub async fn upsert_account(
     connection_id: Uuid,
     acct: &CanonicalAccount,
 ) -> Result<Uuid, CoreError> {
+    let meta = match &acct.health {
+        Some(h) => SyncHealth::into_meta(Some(h), acct.meta.clone()),
+        None => acct.meta.clone(),
+    };
     let id = sqlx::query_scalar!(
         r#"
         insert into account (connection_id, name, currency, type_key, provider_meta, external_id, color)
@@ -41,7 +45,7 @@ pub async fn upsert_account(
         acct.name,
         acct.currency,
         acct.type_key,
-        acct.meta,
+        meta,
         acct.external_id,
         account_palette(),
     )

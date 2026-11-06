@@ -145,9 +145,7 @@ pub async fn ingest(
         }
     }
 
-    if sync.provider_meta.is_object() {
-        connection::merge_provider_meta(&mut *tx, connection_id, &sync.provider_meta).await?;
-    }
+    connection::set_health(&mut *tx, connection_id, sync.health.as_ref()).await?;
 
     // Guarded so a provider that momentarily reports nothing can't clobber a
     // previously-good value.

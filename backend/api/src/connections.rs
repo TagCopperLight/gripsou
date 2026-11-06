@@ -108,9 +108,14 @@ pub async fn manage_connection(
     }
     let init = gripsou_jobs::manage_connection(&jobs, &conn)
         .await
-        .map_err(|_| {
-            // The temporary access URL and provider response must never enter logs.
-            tracing::warn!(connection_id = %id, "connection management failed");
+        .map_err(|e| {
+            // The temporary access URL and provider response must never enter
+            // logs: the error names the failed call only.
+            tracing::warn!(
+                connection_id = %id,
+                error = %gripsou_core::logs::error_chain(&e),
+                "connection management failed"
+            );
             ApiError::BadGateway("Unable to open connection management. Please try again.".into())
         })?;
     let mut headers = HeaderMap::new();
@@ -243,8 +248,15 @@ mod tests {
                 redirect_url: Some("https://webview.powens.com/en/connect?x=1".into()),
             })
         }
-        async fn complete_connect(&self, _: &str) -> Result<CompleteConnect, ProviderError> {
-            Err(ProviderError::NotImplemented)
+        /// Keeps the callback's params as the connection's provider meta.
+        async fn complete_connect(
+            &self,
+            params: &std::collections::HashMap<String, String>,
+        ) -> Result<CompleteConnect, ProviderError> {
+            Ok(CompleteConnect {
+                credentials: serde_json::json!({}),
+                provider_meta: serde_json::json!(params),
+            })
         }
         async fn sync(
             &self,
@@ -586,5 +598,48 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(left, vec![active]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn complete_connection_hands_the_provider_the_params_unchanged(pool: PgPool) {
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
+        let deps = crate::testkit::deps();
+        deps.set_accounts(
+            [(
+                "powens".to_string(),
+                std::sync::Arc::new(FakeBank) as std::sync::Arc<dyn AccountProvider>,
+            )]
+            .into(),
+        );
+        let id = gripsou_core::repo::connection::insert_pending(&pool, user, "powens", "Bank")
+            .await
+            .unwrap();
+        let params: std::collections::HashMap<String, String> = [
+            ("code".to_string(), "a&b=c".to_string()),
+            ("connection_id".to_string(), "7".to_string()),
+        ]
+        .into();
+        complete_connection(
+            State(pool.clone()),
+            State(deps),
+            auth::AuthUser {
+                user_id: user,
+                session_id: Uuid::new_v4(),
+            },
+            Json(dto::CompleteConnectionReq {
+                connection_id: id.to_string(),
+                params: params.clone(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        let meta: serde_json::Value =
+            sqlx::query_scalar("select provider_meta from connection where id = $1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(meta, serde_json::json!(params));
     }
 }
