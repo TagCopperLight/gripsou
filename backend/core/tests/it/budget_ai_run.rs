@@ -458,7 +458,7 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
     let written = gripsou_core::repo::budget::ai::write_decisions(
         &pool,
         bob,
-        &[gripsou_core::budget::ai::Decision {
+        &[gripsou_core::repo::budget::ai::Decision {
             txn_id: ids[0],
             category_id: None,
             confidence: None,

@@ -1,9 +1,7 @@
 use chrono::NaiveDate;
-use gripsou_core::budget::overview::{
-    BreakdownEntry, Month, Slice, baseline, baseline_figures, breakdown, figures, rows_in, sankey,
-    trend,
+use gripsou_core::budget::overview::calc::{
+    DayCategoryRow, Month, Period, Slice, Trend, breakdown, figures, sankey, summarise, trend,
 };
-use gripsou_core::repo::budget::summary::DayCategoryRow;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -320,22 +318,9 @@ fn month_bounds_cover_the_whole_month() {
 #[test]
 fn stepping_back_crosses_the_year_boundary() {
     let jan = Month::parse("2026-01").unwrap();
-    assert_eq!(jan.prev().label(), "2025-12");
+    assert_eq!(jan.minus(1).label(), "2025-12");
     assert_eq!(jan.minus(12).label(), "2025-01");
     assert_eq!(jan.minus(0).label(), "2026-01");
-}
-
-#[test]
-fn rows_in_is_inclusive_at_both_edges() {
-    let rows = vec![
-        row(day(2026, 2, 28), None, None, eur(-1)),
-        row(day(2026, 3, 1), None, None, eur(-2)),
-        row(day(2026, 3, 31), None, None, eur(-3)),
-        row(day(2026, 4, 1), None, None, eur(-4)),
-    ];
-    let got = rows_in(&rows, day(2026, 3, 1), day(2026, 3, 31));
-    assert_eq!(got.len(), 2);
-    assert_eq!(got.iter().map(|r| r.amount).sum::<Decimal>(), eur(-5));
 }
 
 #[test]
@@ -348,7 +333,7 @@ fn the_breakdown_is_expense_side_only() {
         row(day(2026, 3, 1), Some(salary), Some("income"), eur(3000)),
         row(day(2026, 3, 5), Some(rent), Some("expense"), eur(-900)),
     ];
-    let b = breakdown(&rows, None);
+    let b = breakdown(&rows);
     assert_eq!(b.len(), 1);
     assert_eq!(b[0].slice, Slice::Category(rent));
     assert_eq!(b[0].amount, eur(900));
@@ -360,7 +345,7 @@ fn the_breakdown_includes_uncategorised_outflows() {
         row(day(2026, 3, 1), None, None, eur(-120)),
         row(day(2026, 3, 5), None, None, eur(400)),
     ];
-    let b = breakdown(&rows, None);
+    let b = breakdown(&rows);
     assert_eq!(b.len(), 1, "the inflow is not a breakdown row");
     assert_eq!(b[0].slice, Slice::Uncategorised);
     assert_eq!(b[0].amount, eur(120));
@@ -377,7 +362,7 @@ fn the_breakdown_keeps_seven_then_rolls_up() {
             eur(-i * 10),
         ));
     }
-    let b = breakdown(&rows, None);
+    let b = breakdown(&rows);
     assert_eq!(b.len(), 8, "7 plus Other");
     assert_eq!(b[7].slice, Slice::Other);
     // The three smallest: 10 + 20 + 30.
@@ -399,7 +384,7 @@ fn breakdown_rows_carry_their_transaction_count() {
             ..row(day(2026, 3, 5), Some(rent), Some("expense"), eur(-50))
         },
     ];
-    let b = breakdown(&rows, None);
+    let b = breakdown(&rows);
     assert_eq!(b[0].txn_count, 5);
 }
 
@@ -422,8 +407,7 @@ fn the_baseline_excludes_the_selected_month() {
         eur(-1000),
     ));
 
-    let b = baseline(&rows, Month::parse("2026-09").unwrap()).unwrap();
-    let f = baseline_figures(&b);
+    let f = avg12(&rows, "2026-09").unwrap();
     assert_eq!(f.expenses, eur(100), "the spike is not in its own baseline");
 }
 
@@ -435,13 +419,13 @@ fn the_baseline_needs_three_months_of_history() {
         row(day(2026, 8, 5), Some(rent), Some("expense"), eur(-100)),
     ];
     assert!(
-        baseline(&rows, Month::parse("2026-09").unwrap()).is_none(),
+        avg12(&rows, "2026-09").is_none(),
         "two months is noise dressed as a comparison"
     );
 
     let mut three = rows.clone();
     three.push(row(day(2026, 6, 5), Some(rent), Some("expense"), eur(-100)));
-    assert!(baseline(&three, Month::parse("2026-09").unwrap()).is_some());
+    assert!(avg12(&three, "2026-09").is_some());
 }
 
 #[test]
@@ -452,8 +436,7 @@ fn a_short_baseline_averages_over_what_exists() {
     for m in 4..=8u32 {
         rows.push(row(day(2026, m, 5), Some(rent), Some("expense"), eur(-100)));
     }
-    let b = baseline(&rows, Month::parse("2026-09").unwrap()).unwrap();
-    assert_eq!(baseline_figures(&b).expenses, eur(100));
+    assert_eq!(avg12(&rows, "2026-09").unwrap().expenses, eur(100));
 }
 
 #[test]
@@ -465,8 +448,11 @@ fn a_month_with_no_rows_still_counts_as_a_month() {
     for m in [5u32, 6, 8] {
         rows.push(row(day(2026, m, 5), Some(rent), Some("expense"), eur(-120)));
     }
-    let b = baseline(&rows, Month::parse("2026-09").unwrap()).unwrap();
-    assert_eq!(baseline_figures(&b).expenses, eur(90), "360 over 4 months");
+    assert_eq!(
+        avg12(&rows, "2026-09").unwrap().expenses,
+        eur(90),
+        "360 over 4 months"
+    );
 }
 
 #[test]
@@ -476,13 +462,9 @@ fn breakdown_rows_carry_their_category_baseline() {
     for m in 3..=8u32 {
         rows.push(row(day(2026, m, 5), Some(rent), Some("expense"), eur(-60)));
     }
-    let selected = Month::parse("2026-09").unwrap();
-    let b = baseline(&rows, selected).unwrap();
     rows.push(row(day(2026, 9, 5), Some(rent), Some("expense"), eur(-90)));
 
-    let (from, to) = selected.bounds();
-    let period: Vec<DayCategoryRow> = rows_in(&rows, from, to).into_iter().cloned().collect();
-    let entries: Vec<BreakdownEntry> = breakdown(&period, Some(&b));
+    let entries = summarise(&rows, Period::Month(Month::parse("2026-09").unwrap())).breakdown;
     assert_eq!(entries[0].amount, eur(90));
     assert_eq!(entries[0].avg12, Some(eur(60)));
 }
@@ -491,7 +473,7 @@ fn breakdown_rows_carry_their_category_baseline() {
 fn the_trend_ends_at_the_anchor_month() {
     // 12 bars ending at the selected month unlike the
     // baseline, which excludes it.
-    let (months, _) = trend(&[], Month::parse("2026-09").unwrap(), 12, None);
+    let Trend { months, .. } = trend(&[], Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(months.len(), 12);
     assert_eq!(months[11].label(), "2026-09");
     assert_eq!(months[0].label(), "2025-10");
@@ -504,7 +486,7 @@ fn every_trend_series_has_one_value_per_month() {
         row(day(2026, 8, 5), Some(rent), Some("expense"), eur(-100)),
         row(day(2026, 9, 5), Some(rent), Some("expense"), eur(-120)),
     ];
-    let (months, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    let Trend { months, series } = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(series.len(), 1);
     assert_eq!(series[0].values.len(), months.len(), "zeros included");
     assert_eq!(series[0].values[10], eur(100));
@@ -525,7 +507,7 @@ fn the_trend_keeps_the_top_eight_across_the_whole_window() {
             eur(-i * 10),
         ));
     }
-    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    let Trend { series, .. } = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(series.len(), 9, "8 plus Other");
     assert_eq!(series[8].slice, Slice::Other);
     // The three smallest: 10 + 20 + 30.
@@ -546,7 +528,7 @@ fn the_anchor_months_largest_are_kept_over_bigger_window_totals() {
         let amount = eur(-(40 - 10 * i as i64));
         rows.push(row(day(2026, 9, 5), Some(*id), Some("expense"), amount));
     }
-    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    let Trend { series, .. } = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     let slices: Vec<Slice> = series.iter().map(|s| s.slice).collect();
     assert_eq!(slices.len(), 9, "8 plus Other");
     for id in &recent[..3] {
@@ -585,7 +567,7 @@ fn the_folded_category_always_goes_into_other() {
         ),
         row(day(2026, 9, 6), Some(rent), Some("expense"), eur(-100)),
     ];
-    let (_, series) = trend(
+    let Trend { series, .. } = trend(
         &rows,
         Month::parse("2026-09").unwrap(),
         12,
@@ -610,7 +592,7 @@ fn a_category_big_in_one_month_only_still_makes_the_top_eight() {
         let (y, mm) = if m <= 9 { (2026, m) } else { (2025, m) };
         rows.push(row(day(y, mm, 5), Some(steady), Some("expense"), eur(-10)));
     }
-    let (_, series) = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
+    let Trend { series, .. } = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(
         series[0].slice,
         Slice::Category(spike),
@@ -626,14 +608,10 @@ fn a_category_big_in_one_month_only_still_makes_the_top_eight() {
 #[test]
 fn summary_breakdown_and_trend_agree_on_a_shared_month() {
     // /summary and /trend must never disagree about a month they
-    // both cover. Both reduce through `expense_side_amounts` today, so this
-    // holds by construction — this test pins that fact so a future change
-    // that breaks the invariant fails here, not as a support ticket about
-    // two numbers on one page that don't match.
+    // both cover.
     let rent = Uuid::new_v4();
     let groceries = Uuid::new_v4();
     let month = Month::parse("2026-09").unwrap();
-    let (from, to) = month.bounds();
     let rows = vec![
         row(day(2026, 9, 3), Some(rent), Some("expense"), eur(-900)),
         row(
@@ -648,10 +626,9 @@ fn summary_breakdown_and_trend_agree_on_a_shared_month() {
     // Few enough slices that neither breakdown's top-7 cap nor trend's
     // top-8 cap rolls anything into `Other` — so the two slice sets are
     // identical and every entry has a like-for-like value to compare.
-    let period: Vec<DayCategoryRow> = rows_in(&rows, from, to).into_iter().cloned().collect();
-    let breakdown_rows = breakdown(&period, None);
+    let breakdown_rows = summarise(&rows, Period::Month(month)).breakdown;
 
-    let (months, series) = trend(&rows, month, 1, None);
+    let Trend { months, series } = trend(&rows, month, 1, None);
     assert_eq!(months, vec![month]);
     let last = months.len() - 1;
 
@@ -672,4 +649,14 @@ fn summary_breakdown_and_trend_agree_on_a_shared_month() {
             entry.slice
         );
     }
+}
+
+/// The baseline's mean month, as the summary of `month` reports it.
+fn avg12(
+    rows: &[DayCategoryRow],
+    month: &str,
+) -> Option<gripsou_core::budget::overview::calc::Figures> {
+    summarise(rows, Period::Month(Month::parse(month).unwrap()))
+        .comparison
+        .map(|c| c.avg12)
 }

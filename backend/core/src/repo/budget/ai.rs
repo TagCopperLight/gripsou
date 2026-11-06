@@ -6,7 +6,6 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::budget::ai::Decision;
 use crate::categorize::{CategoryOption, Example, Usage};
 use crate::error::CoreError;
 
@@ -59,6 +58,16 @@ pub async fn active_categories(
             hint: r.hint,
         })
         .collect())
+}
+
+/// What gets written for one answered transaction. `category_id: None` is an
+/// abstention, which lands in the review queue as "no guess" and
+/// is never sent again.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decision {
+    pub txn_id: Uuid,
+    pub category_id: Option<Uuid>,
+    pub confidence: Option<Decimal>,
 }
 
 pub struct WorkRow {

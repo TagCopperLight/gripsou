@@ -20,12 +20,10 @@ use gripsou_core::repo::budget::{ai as ai_repo, assign, category, review, tag};
 use crate::error::ApiError;
 use chrono::NaiveDate;
 use gripsou_core::budget::overview::{
-    BASELINE_MONTHS, Baseline, BreakdownEntry, Figures, Month, Slice, baseline_figures,
-    baseline_in, breakdown, by_month, figures, month_rows, sankey,
+    self,
+    calc::{Figures, Month, Period, Slice, SliceAmount},
 };
-use std::collections::BTreeMap;
-
-use gripsou_core::repo::budget::summary::{DayCategoryRow, day_category_totals};
+use std::collections::HashMap;
 
 // ── Categories ──────────────────────────────────────────────────────────────
 
@@ -366,20 +364,12 @@ pub struct SummaryParams {
     pub to: Option<NaiveDate>,
 }
 
-/// The period, and whether it is comparable against neighbouring months.
-///
-/// `from`/`to` alone cannot express the distinction: "September 2026" and "a
-/// custom range that happens to run 1-30 September" are the same two dates and
-/// must produce different payloads.
-fn period_from(p: &SummaryParams) -> Result<(NaiveDate, NaiveDate, Option<Month>), ApiError> {
+fn period_from(p: &SummaryParams) -> Result<Period, ApiError> {
     match (&p.month, p.from, p.to) {
-        (Some(m), None, None) => {
-            let month =
-                Month::parse(m).ok_or(ApiError::BadRequest(format!("invalid month: {m}")))?;
-            let (from, to) = month.bounds();
-            Ok((from, to, Some(month)))
-        }
-        (None, Some(from), Some(to)) if from <= to => Ok((from, to, None)),
+        (Some(m), None, None) => Month::parse(m)
+            .map(Period::Month)
+            .ok_or(ApiError::BadRequest(format!("invalid month: {m}"))),
+        (None, Some(from), Some(to)) if from <= to => Ok(Period::Range { from, to }),
         (None, Some(from), Some(to)) => Err(ApiError::BadRequest(format!(
             "from {from} is after to {to}"
         ))),
@@ -391,34 +381,40 @@ fn period_from(p: &SummaryParams) -> Result<(NaiveDate, NaiveDate, Option<Month>
     }
 }
 
-/// Build the chip payload for a slice. Categories the user has since deleted
-/// cannot appear — the column is `on delete set null`, so their rows are
-/// already uncategorised by the time they are read.
-fn slice_dto(slice: Slice, refs: &[CategoryRefDto]) -> SliceDto {
+/// The user's categories by id, as chips.
+async fn category_refs(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<HashMap<Uuid, CategoryRefDto>, ApiError> {
+    let rows = category::category_refs(pool, user_id).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let dto = CategoryRefDto {
+                id: r.id.to_string(),
+                name: r.name,
+                default_key: r.default_key,
+                color: r.color,
+                icon: r.icon,
+            };
+            (r.id, dto)
+        })
+        .collect())
+}
+
+/// The chip payload for a slice. A category deleted since the rows were read
+/// shows as uncategorised, which is what its rows are.
+fn slice_dto(slice: Slice, refs: &HashMap<Uuid, CategoryRefDto>) -> SliceDto {
     match slice {
         Slice::Uncategorised => SliceDto::Uncategorised,
         Slice::Other => SliceDto::Other,
-        Slice::Category(id) => match refs.iter().find(|r| r.id == id.to_string()) {
+        Slice::Category(id) => match refs.get(&id) {
             Some(r) => SliceDto::Category {
                 category: r.clone(),
             },
             None => SliceDto::Uncategorised,
         },
     }
-}
-
-async fn category_refs(pool: &PgPool, user_id: Uuid) -> Result<Vec<CategoryRefDto>, ApiError> {
-    let rows = category::category_refs(pool, user_id).await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| CategoryRefDto {
-            id: r.id.to_string(),
-            name: r.name,
-            default_key: r.default_key,
-            color: r.color,
-            icon: r.icon,
-        })
-        .collect())
 }
 
 /// A twelve-month mean, to the cent: dividing by the month count otherwise
@@ -436,83 +432,55 @@ fn figure(amount: Decimal, prev: Option<Decimal>, avg: Option<Decimal>) -> Figur
     }
 }
 
+fn slice_amounts(
+    slices: &[SliceAmount],
+    refs: &HashMap<Uuid, CategoryRefDto>,
+) -> Vec<SliceAmountDto> {
+    slices
+        .iter()
+        .map(|x| SliceAmountDto {
+            slice: slice_dto(x.slice, refs),
+            amount: x.amount.to_string(),
+        })
+        .collect()
+}
+
 pub async fn summary(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<SummaryParams>,
 ) -> Result<Json<SummaryDto>, ApiError> {
-    let (from, to, month) = period_from(&p)?;
-
-    // One fetch wide enough for the period AND its baseline, so nothing here
-    // can disagree with anything else on the page. The baseline is the twelve
-    // months before the selected one, hence `minus(12)`.
-    let window_from = match month {
-        Some(m) => m.minus(BASELINE_MONTHS).bounds().0,
-        None => from,
-    };
-    let all = day_category_totals(&pool, user_id, window_from, to).await?;
-
-    // A month period reads its rows, its previous month and its baseline off
-    // one grouping of the window. A custom range fetched exactly its own
-    // days, so the window is the period.
-    let buckets: Option<BTreeMap<Month, Vec<DayCategoryRow>>> = month.map(|_| by_month(&all));
-    let period: &[DayCategoryRow] = match (month, &buckets) {
-        (Some(m), Some(b)) => month_rows(b, m),
-        _ => &all,
-    };
-    let f = figures(period);
+    let period = period_from(&p)?;
+    let s = overview::summary(&pool, user_id, period).await?;
     let refs = category_refs(&pool, user_id).await?;
 
-    // Comparisons exist only for a month period with enough history behind it.
-    let base: Option<Baseline> = month
-        .zip(buckets.as_ref())
-        .and_then(|(m, b)| baseline_in(b, m));
-    let base_f: Option<Figures> = base.as_ref().map(baseline_figures);
-    let prev_f: Option<Figures> = month
-        .zip(buckets.as_ref())
-        .filter(|_| base.is_some())
-        .map(|(m, b)| figures(month_rows(b, m.prev())));
-
-    // `sankey()` computes `figures(rows)` internally for the balancing
-    // remainder — it takes only the rows, never a caller-supplied total.
-    let s = sankey(period);
-    let rows = breakdown(period, base.as_ref());
-
+    let prev = s.comparison.map(|c| c.prev_month);
+    let avg = s.comparison.map(|c| c.avg12);
+    let pick = |field: fn(&Figures) -> Decimal| {
+        figure(
+            field(&s.figures),
+            prev.as_ref().map(field),
+            avg.as_ref().map(field),
+        )
+    };
     Ok(Json(SummaryDto {
-        txn_count: period.iter().map(|r| r.txn_count).sum(),
-        fx_missing: period.iter().any(|r| r.fx_missing),
+        txn_count: s.txn_count,
+        fx_missing: s.fx_missing,
         figures: FiguresDto {
-            income: figure(f.income, prev_f.map(|x| x.income), base_f.map(|x| x.income)),
-            expenses: figure(
-                f.expenses,
-                prev_f.map(|x| x.expenses),
-                base_f.map(|x| x.expenses),
-            ),
-            net: figure(f.net, prev_f.map(|x| x.net), base_f.map(|x| x.net)),
+            income: pick(|f| f.income),
+            expenses: pick(|f| f.expenses),
+            net: pick(|f| f.net),
         },
         sankey: SankeyDto {
-            sources: s
-                .sources
-                .iter()
-                .map(|x| SliceAmountDto {
-                    slice: slice_dto(x.slice, &refs),
-                    amount: x.amount.to_string(),
-                })
-                .collect(),
-            destinations: s
-                .destinations
-                .iter()
-                .map(|x| SliceAmountDto {
-                    slice: slice_dto(x.slice, &refs),
-                    amount: x.amount.to_string(),
-                })
-                .collect(),
-            not_spent: s.not_spent.map(|d| d.to_string()),
-            drawn_from_savings: s.drawn_from_savings.map(|d| d.to_string()),
+            sources: slice_amounts(&s.sankey.sources, &refs),
+            destinations: slice_amounts(&s.sankey.destinations, &refs),
+            not_spent: s.sankey.not_spent.map(|d| d.to_string()),
+            drawn_from_savings: s.sankey.drawn_from_savings.map(|d| d.to_string()),
         },
-        breakdown: rows
+        breakdown: s
+            .breakdown
             .into_iter()
-            .map(|e: BreakdownEntry| BreakdownRowDto {
+            .map(|e| BreakdownRowDto {
                 slice: slice_dto(e.slice, &refs),
                 amount: e.amount.to_string(),
                 txn_count: e.txn_count,
@@ -549,13 +517,10 @@ pub struct TrendParams {
 /// More than this and the chart is unreadable and the window pointlessly wide.
 const MAX_TREND_MONTHS: u32 = 24;
 
-/// The trend chart's own default width, deliberately not `BASELINE_MONTHS`
-/// even though both happen to be 12 today: the chart and the baseline are
-/// different windows on purpose — the chart's default bars end
-/// with the anchor month included, while the baseline that `summary()` mixes
-/// in explicitly excludes it. Sharing one constant would make that
-/// distinction a coincidence instead of a rule, and the two must be free to
-/// diverge without one silently dragging the other along.
+/// The trend chart's own default width, deliberately not the summary's
+/// baseline length even though both are 12: the chart's bars end with the
+/// anchor month included, while the baseline excludes the selected month. The
+/// two are free to diverge.
 const TREND_DEFAULT_MONTHS: u32 = 12;
 
 pub async fn trend_handler(
@@ -574,21 +539,13 @@ pub async fn trend_handler(
         )));
     }
 
-    let from = anchor.minus(months - 1).bounds().0;
-    let to = anchor.bounds().1;
-    let rows = day_category_totals(&pool, user_id, from, to).await?;
-
+    let trend = overview::trend_for(&pool, user_id, anchor, months).await?;
     let refs = category_refs(&pool, user_id).await?;
-    // By its seeded key, not its name: the user may rename it.
-    let fold = refs
-        .iter()
-        .find(|r| r.default_key.as_deref() == Some("other_expense"))
-        .and_then(|r| r.id.parse().ok());
-    let (axis, series) = gripsou_core::budget::overview::trend(&rows, anchor, months, fold);
 
     Ok(Json(TrendDto {
-        months: axis.iter().map(|m| m.label()).collect(),
-        series: series
+        months: trend.months.iter().map(|m| m.label()).collect(),
+        series: trend
+            .series
             .into_iter()
             .map(|s| TrendSeriesDto {
                 slice: slice_dto(s.slice, &refs),

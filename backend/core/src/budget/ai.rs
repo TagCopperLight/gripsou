@@ -11,16 +11,7 @@ use crate::categorize::{CategorizeError, CategorizeItem, CategorizeRequest, Cate
 use crate::categorize::{CategoryOption, Guess};
 use crate::error::CoreError;
 use crate::repo::budget::ai as repo;
-
-/// What gets written for one answered transaction. `category_id: None` is an
-/// abstention, which lands in the review queue as "no guess" and
-/// is never sent again.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Decision {
-    pub txn_id: Uuid,
-    pub category_id: Option<Uuid>,
-    pub confidence: Option<Decimal>,
-}
+use crate::repo::budget::ai::Decision;
 
 /// The ids an item may be given, by the sign of its amount: money out may
 /// be an expense, money in an income, and either may be neutral.

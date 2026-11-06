@@ -247,7 +247,7 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     assert_eq!(rows[0].category_id, None);
     assert_eq!(rows[0].category_kind, None);
     assert_eq!(rows[0].amount, eur(-500));
-    let f = gripsou_core::budget::overview::figures(&rows);
+    let f = gripsou_core::budget::overview::calc::figures(&rows);
     assert_eq!(f.expenses, eur(500));
     Ok(())
 }
@@ -716,4 +716,65 @@ async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
     let paired = pair_internal_transfers(&mut tx).await?;
     tx.commit().await?;
     Ok(paired)
+}
+
+/// The user's catch-all is folded into the trend's Other series by what it
+/// was seeded as, so renaming it does not put two "Other"s in the legend.
+#[sqlx::test(migrations = "../migrations")]
+async fn a_renamed_catch_all_still_folds_into_other(pool: PgPool) -> anyhow::Result<()> {
+    use gripsou_core::budget::overview::{
+        calc::{Month, Slice},
+        trend_for,
+    };
+    use gripsou_core::repo::budget::category::{CategoryPatch, update_category};
+
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    for (ext, amount) in [("t1", eur(-500)), ("t2", eur(-100))] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", amount)
+                .on(day(2026, 9, 5))
+                .described("SHOP"),
+        )
+        .await?;
+    }
+    drop(conn);
+    let other = cat(&pool, user_id, "other_expense").await;
+    let groceries = cat(&pool, user_id, "groceries").await;
+    let id = |ext: &'static str| {
+        sqlx::query_scalar::<_, Uuid>("select id from transaction where external_id = $1")
+            .bind(ext)
+            .fetch_one(&pool)
+    };
+    set_category(&pool, user_id, id("t1").await?, Some(other)).await;
+    set_category(&pool, user_id, id("t2").await?, Some(groceries)).await;
+
+    let renamed = update_category(
+        &pool,
+        user_id,
+        other,
+        &CategoryPatch {
+            name: "Misc",
+            color: "#10c4cb",
+            icon: None,
+            hint: None,
+            kind: "expense",
+            archived: false,
+        },
+    )
+    .await?
+    .unwrap();
+    assert_eq!(
+        renamed.default_key, None,
+        "a rename clears the translation key"
+    );
+
+    let trend = trend_for(&pool, user_id, Month::parse("2026-09").unwrap(), 12).await?;
+    let slices: Vec<Slice> = trend.series.iter().map(|s| s.slice).collect();
+    assert_eq!(slices, vec![Slice::Category(groceries), Slice::Other]);
+    assert_eq!(trend.series[1].values[11], eur(500));
+    Ok(())
 }

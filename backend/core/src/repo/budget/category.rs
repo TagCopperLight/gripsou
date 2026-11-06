@@ -107,6 +107,20 @@ pub async fn category_refs(
     Ok(rows)
 }
 
+/// The user's catch-all expense category (seeded as "Other"), whatever it is
+/// called now.
+pub async fn catch_all_expense(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+) -> Result<Option<Uuid>, CoreError> {
+    Ok(sqlx::query_scalar!(
+        "select id from budget_category where user_id = $1 and seed_key = 'other_expense'",
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// The next position within the kind is read and written under a lock on
 /// the user's row, so two categories created at once never share a number.
 pub async fn create_category(

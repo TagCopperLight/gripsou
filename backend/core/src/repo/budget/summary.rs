@@ -2,33 +2,15 @@
 //!
 //! Day grain, not month grain, for three reasons: a calendar month and an
 //! arbitrary custom range become the same code path (a month is a day filter);
-//! month bucketing moves into `core::budget::overview`, where the boundary rule
+//! month bucketing happens in `budget::overview::calc`, where the boundary rule
 //! is a readable, testable function rather than a `date_trunc`; and the volume
 //! is trivial, because only days carrying transactions produce rows.
 
 use chrono::NaiveDate;
-use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::overview::calc::DayCategoryRow;
 use crate::error::CoreError;
-
-/// One (day, category) bucket, already in the reader's reporting currency.
-#[derive(Debug, Clone)]
-pub struct DayCategoryRow {
-    pub day: NaiveDate,
-    /// `None` is the Uncategorised slice — on day one, most of them.
-    pub category_id: Option<Uuid>,
-    /// `expense` | `income`. Never `neutral`: those rows are dropped by
-    /// the query. `None` when `category_id` is.
-    pub category_kind: Option<String>,
-    /// Signed, in the reporting currency, converted at `day`'s rates. A row
-    /// with no rate on its day is left out — see `fx_missing`.
-    pub amount: Decimal,
-    pub txn_count: i64,
-    /// At least one row in this bucket had no rate on its day, for its
-    /// account's currency or the reader's, and is left out of `amount`.
-    pub fx_missing: bool,
-}
 
 /// Every (day, category) bucket between `from` and `to` inclusive.
 ///
