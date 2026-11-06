@@ -12,8 +12,8 @@ import {
   useBudgetCategories,
   useReorderBudgetCategories,
   useUpdateBudgetCategory,
+  categoryBody,
   type BudgetCategory,
-  type CategoryBody,
 } from "../../../api/budget";
 import {
   categoryLabel, categoryNeighbour, categoryOrderAfterMove, safeBudgetColor, sortCategories,
@@ -22,6 +22,7 @@ import { withAlpha } from "../../../lib/color";
 import { CategoryModal } from "./CategoryModal";
 import { DeleteCategoryModal } from "./DeleteCategoryModal";
 import { CategoryIcon } from "../CategoryIcon";
+import { HEAD_TEXT } from "../../../ui/gridTable";
 
 const KIND_BADGE: Record<BudgetCategory["kind"], string> = {
   expense: "text-red-light bg-red-light/14",
@@ -60,17 +61,6 @@ const ACTION_BTN =
 
 const DELETE_BTN =
   "p-1.5 rounded-lg text-red hover:bg-surface-3 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
-
-function archiveBody(c: BudgetCategory): CategoryBody {
-  return {
-    name: c.name,
-    color: c.color,
-    icon: c.icon,
-    hint: c.hint,
-    kind: c.kind,
-    archived: !c.archived,
-  };
-}
 
 /** Sized like `ACTION_BTN` so a locked slot keeps the column aligned. */
 function SystemLock({ testId, title }: { testId: string; title: string }) {
@@ -147,7 +137,7 @@ export function CategoriesSurface() {
     // before A settles overwrites A's onSettled with B's, so A's write would
     // clear *B*'s pending flag. The returned promise is per-call and immune
     // to that, which is what lets each row wait only on its own write.
-    update.mutateAsync({ id: c.id, body: archiveBody(c) }).then(
+    update.mutateAsync({ id: c.id, body: categoryBody(c, { archived: !c.archived }) }).then(
       () => {},
       () => setActionError(true),
     ).finally(() =>
@@ -190,7 +180,7 @@ export function CategoriesSurface() {
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm border-separate border-spacing-y-0.5">
                   <thead>
-                    <tr className="text-left text-[11px] font-medium text-fg-faint">
+                    <tr className={`text-left ${HEAD_TEXT}`}>
                       <th className="pb-2 pl-1.5 pr-3" />
                       <th className={`pb-2 ${GAP_NAME} whitespace-nowrap`}>
                         {t("settings.budget.categories.colCategory")}

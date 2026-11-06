@@ -28,9 +28,10 @@ export function FxFootnote({ children, className = "" }: { children: ReactNode; 
   );
 }
 
-/** The footnote of a total that leaves `count` holdings out. Zero is
- *  "some amounts": the holdings list hasn't loaded, so how many is unknown. */
-export function ExcludedNote({ count }: { count: number }) {
+/** The footnote of a total that leaves `count` holdings out for want of a
+ *  rate. Zero is "some amounts": the holdings list hasn't loaded, so how many
+ *  is unknown. */
+export function ExcludedFootnote({ count, className = "" }: { count: number; className?: string }) {
   const { t } = useTranslation();
-  return <>{count > 0 ? t("fx.excludes", { count }) : t("fx.excludesSome")}</>;
+  return <FxFootnote className={className}>{count > 0 ? t("fx.excludes", { count }) : t("fx.excludesSome")}</FxFootnote>;
 }

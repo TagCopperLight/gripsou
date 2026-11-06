@@ -31,8 +31,6 @@ export function BreakPairModal({ count, busy = false, onConfirm, onClose }: Brea
       busy={busy}
       onConfirm={onConfirm}
       onClose={onClose}
-      data-testid="break-pair-modal"
-      confirmTestId="break-pair-confirm"
     />
   );
 }

@@ -1,18 +1,18 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
-import { LabeledField } from "../../../ui/FieldError";
+import { Field } from "../../../ui/Field";
 import { TextInput } from "../../../ui/TextInput";
-import { ApiError } from "../../../api/client";
 import { useChangePassword } from "../../../api/auth";
-import { throttleMinutes } from "../../../auth/throttle";
+import { passwordError } from "../../../auth/throttle";
 import { passwordLengthOk } from "../../../lib/password";
 
 export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const { t } = useTranslation();
+  const id = useId();
   const [current, setCurrent] = useState("");
   const [next, setNextValue] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -25,10 +25,8 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   };
   const change = useChangePassword();
 
-  // The server answers 400 for a wrong current password (the length rule is
-  // checked here first); anything else is not the user's typing.
-  const wrongCurrent = change.error instanceof ApiError && change.error.status === 400;
-  const minutes = throttleMinutes(change.error);
+  // The length rule is checked here first, so a 400 is the current password.
+  const currentError = passwordError(t, change.error, "settings.account.currentPasswordIncorrect");
   const mismatch = confirm !== "" && next !== confirm;
   const canUpdate = current !== "" && next !== "" && next === confirm && !change.isPending;
 
@@ -46,10 +44,8 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
     });
   };
 
-  const currentError =
-    minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : wrongCurrent ? t("settings.account.currentPasswordIncorrect") : null;
-
   const input = (
+    name: string,
     label: string,
     value: string,
     onChange: (v: string) => void,
@@ -57,18 +53,19 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
     error: string | null,
     invalid = error !== null,
   ) => (
-    <LabeledField label={label} error={error}>
+    <Field label={label} error={error} htmlFor={`${id}-${name}`}>
       <TextInput
+        id={`${id}-${name}`}
         type="password"
         autoComplete={autoComplete}
         invalid={invalid}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </LabeledField>
+    </Field>
   );
 
-  useErrorToast(change.isError && minutes === null && !wrongCurrent && t("settings.account.passwordUpdateFailed"));
+  useErrorToast(change.isError && currentError === null && t("settings.account.passwordUpdateFailed"));
 
   return (
     <Dialog
@@ -90,6 +87,7 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
         }}
       >
         {input(
+          "current",
           t("settings.account.currentPassword"),
           current,
           (v) => {
@@ -100,6 +98,7 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
           currentError,
         )}
         {input(
+          "new",
           t("settings.account.newPassword"),
           next,
           setNext,
@@ -108,6 +107,7 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
           lengthError || mismatch,
         )}
         {input(
+          "confirm",
           t("settings.account.confirmNewPassword"),
           confirm,
           setConfirm,

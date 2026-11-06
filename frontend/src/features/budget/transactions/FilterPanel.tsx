@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 
@@ -10,13 +10,15 @@ import { TagChip } from "../TagChip";
 import { useBudgetCategories, useBudgetTags } from "../../../api/budget";
 import { categoryLabel } from "../../../lib/budget";
 import { OTHER_FLAGS, TYPE_BUCKETS } from "../budgetIcons";
+import { usePopover } from "../../../ui/usePopover";
+import { HEAD_TEXT } from "../../../ui/gridTable";
 
 function Column({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {/* The same head treatment as the transactions table: 11px mono, faint,
        *  wide-tracked — a column heading reads as a heading in both places. */}
-      <p className="font-mono text-[11px] font-medium tracking-wide text-fg-faint">{title}</p>
+      <p className={HEAD_TEXT}>{title}</p>
       {children}
     </div>
   );
@@ -26,17 +28,7 @@ function Column({ title, children }: { title: string; children: ReactNode }) {
 export function FilterPanel() {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
-  // The chooser hangs under the control that opened it, so the "+" that was
-  // clicked is kept alongside the open state.
-  const [open, setOpen] = useState<"categories" | "tags" | null>(null);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-
-  const openChooser = (which: "categories" | "tags") => (e: React.MouseEvent<HTMLElement>) => {
-    setAnchor(e.currentTarget);
-    // A second click on the same "+" closes it: `Popover` exempts its anchor
-    // from the outside-click close, so the toggle has to live here.
-    setOpen((prev) => (prev === which ? null : which));
-  };
+  const chooser = usePopover<"categories" | "tags">();
   const categories = useBudgetCategories().data ?? [];
   const tags = useBudgetTags().data ?? [];
 
@@ -91,9 +83,9 @@ export function FilterPanel() {
               type="button"
               data-testid="add-category-filter"
               aria-haspopup="dialog"
-              aria-expanded={open === "categories"}
+              aria-expanded={chooser.key === "categories"}
               aria-label={t("budget.transactions.filterByCategory")}
-              onClick={openChooser("categories")}
+              onClick={(e) => chooser.toggle("categories", e.currentTarget)}
               className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
             >
               <Plus className="size-3.5" />
@@ -124,9 +116,9 @@ export function FilterPanel() {
               type="button"
               data-testid="add-tag-filter"
               aria-haspopup="dialog"
-              aria-expanded={open === "tags"}
+              aria-expanded={chooser.key === "tags"}
               aria-label={t("budget.transactions.filterByTag")}
-              onClick={openChooser("tags")}
+              onClick={(e) => chooser.toggle("tags", e.currentTarget)}
               className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
             >
               <Plus className="size-3.5" />
@@ -185,21 +177,21 @@ export function FilterPanel() {
         </Column>
       </div>
 
-      {open === "categories" && (
+      {chooser.key === "categories" && (
         <CategoryChooser
           mode="multi"
           selectedIds={filters.categoryIds}
           onToggle={toggleCategory}
-          onClose={() => setOpen(null)}
-          anchor={anchor}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
         />
       )}
-      {open === "tags" && (
+      {chooser.key === "tags" && (
         <TagChooser
           selectedIds={filters.tagIds}
           onToggle={toggleTag}
-          onClose={() => setOpen(null)}
-          anchor={anchor}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
         />
       )}
     </div>

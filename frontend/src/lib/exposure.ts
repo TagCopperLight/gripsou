@@ -28,8 +28,8 @@ export type Region = "northAmerica" | "europe" | "asiaPacific" | typeof OTHER;
 
 /** Breakdowns keep their largest entries and fold the rest into OTHER, so a
  *  long tail of slivers doesn't crowd the donut and its legend. */
-export const TOP_SECTORS = 6;
-export const TOP_COUNTRIES_PER_REGION = 5;
+const TOP_SECTORS = 6;
+const TOP_COUNTRIES_PER_REGION = 5;
 
 export type Slice = {
   key: string;

@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "../lib/errorToasts";
 
-import { ApiError } from "../api/client";
 import { useReauth } from "../api/auth";
-import { throttleMinutes } from "./throttle";
+import { passwordError } from "./throttle";
 
 /** The password check before a sensitive change. `check()` trades the password
  *  for a reauth token, or shows why it can't (throttled, wrong password, or
@@ -20,11 +19,10 @@ export function useReauthStep() {
     try {
       return (await reauth.mutateAsync(password)).reauth;
     } catch (err) {
-      const minutes = throttleMinutes(err);
       // Throttled or a wrong password: the user's to fix, next to the field.
       // Anything else failed on the server's side.
-      if (minutes !== null) setError(t("auth.tooManyAttempts", { count: minutes }));
-      else if (err instanceof ApiError && err.status === 400) setError(t("twoFactor.wrongPassword"));
+      const typed = passwordError(t, err);
+      if (typed) setError(typed);
       else showError(t("auth.reauthFailed"));
       return null;
     }

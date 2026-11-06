@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
-import { LabeledField } from "../../ui/FieldError";
+import { Field } from "../../ui/Field";
 import { showError } from "../../lib/errorToasts";
 import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
@@ -16,6 +16,7 @@ const route = getRouteApi("/invite/$token");
 
 export function Invite() {
   const { t } = useTranslation();
+  const id = useId();
   const { adoptSession } = useAuth();
   const navigate = useNavigate();
   const { token } = route.useParams();
@@ -74,58 +75,58 @@ export function Invite() {
         className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
       >
         <div className="pb-1 text-lg font-semibold text-fg">{t("auth.createAccount")}</div>
-        <LabeledField
+        <Field
           label={t("auth.email")}
           labelClassName="text-fg-dim"
           error={error?.field === "email" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-email`}>
+          <TextInput id={`${id}-email`}
             type="email"
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             invalid={error?.field === "email"}
           />
-        </LabeledField>
-        <LabeledField
+        </Field>
+        <Field
           label={t("auth.name")}
           labelClassName="text-fg-dim"
           error={error?.field === "name" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-name`}>
+          <TextInput id={`${id}-name`}
             type="text"
             autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             invalid={error?.field === "name"}
           />
-        </LabeledField>
-        <LabeledField
+        </Field>
+        <Field
           label={t("auth.password")}
           labelClassName="text-fg-dim"
           error={error?.field === "password" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-password`}>
+          <TextInput id={`${id}-password`}
             type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             invalid={error?.field === "password" || error?.field === "confirm"}
           />
-        </LabeledField>
-        <LabeledField
+        </Field>
+        <Field
           label={t("auth.confirmPassword")}
           labelClassName="text-fg-dim"
           error={error?.field === "confirm" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-confirm`}>
+          <TextInput id={`${id}-confirm`}
             type="password"
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             invalid={error?.field === "confirm"}
           />
-        </LabeledField>
+        </Field>
         <Button type="submit" disabled={pending} className="mt-1">
           {t("auth.createAccountButton")}
         </Button>

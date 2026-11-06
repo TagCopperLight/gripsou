@@ -1,8 +1,9 @@
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Search } from "lucide-react";
 
 import { Popover } from "../../ui/Popover";
+import { HEAD_TEXT } from "../../ui/gridTable";
 
 /** One line of an `EntityChooser`. `label` is what the search box matches and
  *  what the keyboard reads; `render` is what the line draws (a chip). */
@@ -45,6 +46,7 @@ export function EntityChooser(props: EntityChooserProps) {
   const { title, items, groups, mode, selectedIds, onClose, anchor, footer } = props;
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  const search = useRef<HTMLInputElement>(null);
   // `active` is where Enter would land — it is 0 from the start so a bare
   // Enter applies the first line. `navigated` is whether the user has *aimed*
   // at anything yet (an arrow key, or the pointer over a line): until then
@@ -136,7 +138,7 @@ export function EntityChooser(props: EntityChooserProps) {
   };
 
   return (
-    <Popover title={title} anchor={anchor} onClose={onClose}>
+    <Popover title={title} anchor={anchor} onClose={onClose} initialFocus={search}>
       <div className="flex flex-col">
         {/* Set into the top of the panel rather than floating on it: the field
          *  carries no surface of its own, its top edge *is* the panel's, and
@@ -145,7 +147,7 @@ export function EntityChooser(props: EntityChooserProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-fg-faint" />
           <input
             type="search"
-            data-autofocus
+            ref={search}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -199,7 +201,7 @@ export function EntityChooser(props: EntityChooserProps) {
                   <div key={g.key} className="flex flex-col gap-0.5">
                     <p
                       data-testid="chooser-group"
-                      className="px-2 pb-1 pt-2 font-mono text-[11px] font-medium tracking-wide text-fg-faint"
+                      className={`px-2 pb-1 pt-2 ${HEAD_TEXT}`}
                     >
                       {g.label}
                     </p>

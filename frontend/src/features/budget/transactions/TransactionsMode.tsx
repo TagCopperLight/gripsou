@@ -5,12 +5,14 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
-import { PrivacyEye } from "../../../ui/PrivateMoney";
+import { CardTitle } from "../../../ui/CardTitle";
 import { usePrivacy } from "../../../auth/usePrivacy";
 import { BreakPairModal } from "../BreakPairModal";
 import { Dialog } from "../../../ui/Dialog";
+import { usePopover } from "../../../ui/usePopover";
 import { SearchSurface } from "./SearchSurface";
 import { TransactionsTable } from "./TransactionsTable";
+import { TransactionRow } from "./TransactionRow";
 import { SelectionBar } from "./SelectionBar";
 import { CategoryChooser } from "../CategoryChooser";
 import { TagChooser } from "../TagChooser";
@@ -56,11 +58,8 @@ export function TransactionsMode() {
   // every render. A frozen `Transaction` goes stale after the first write —
   // a second tag toggle would rebuild `tagIds` from the stale set and undo the
   // first.
-  const [categoryForId, setCategoryForId] = useState<string | null>(null);
-  const [tagsForId, setTagsForId] = useState<string | null>(null);
-  // The control each chooser hangs under — captured at click time, since the
-  // chooser is a popover anchored to its trigger rather than a modal.
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const chooser = usePopover<`category:${string}` | `tags:${string}`>();
+  const [chooserKind, chooserId] = chooser.key?.split(":") ?? [];
   const [applyOffer, setApplyOffer] = useState<{ id: string; categoryId: string | null; count: number } | null>(null);
   const writes = useBudgetWrites();
   const { start: startWrite, fail: onWriteError } = writes;
@@ -83,8 +82,9 @@ export function TransactionsMode() {
     selection.mode === "allShown"
       ? Boolean(counts.data?.fxMissing)
       : rows.some((r) => selection.ids.has(r.id) && r.amountReporting === null);
-  const categoryFor = categoryForId ? (rows.find((r) => r.id === categoryForId) ?? null) : null;
-  const tagsFor = tagsForId ? (rows.find((r) => r.id === tagsForId) ?? null) : null;
+  const chosen = chooserId ? (rows.find((r) => r.id === chooserId) ?? null) : null;
+  const categoryFor = chooserKind === "category" ? chosen : null;
+  const tagsFor = chooserKind === "tags" ? chosen : null;
 
   const assignToRow = (tx: Transaction, categoryId: string | null) => {
     writes.write<PatchResult>(
@@ -147,18 +147,15 @@ export function TransactionsMode() {
   const onLoadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
   const onClearFilters = useCallback(() => setFilters({ ...EMPTY_FILTERS }), [setFilters]);
   const onConnect = useCallback(() => void navigate({ to: "/settings/connections" }), [navigate]);
-  // Clicking the same control again puts its chooser away: `Popover` exempts
-  // its anchor from the outside-click close.
-  const onOpenCategory = useCallback((tx: Transaction, el: HTMLElement) => {
-    setAnchor(el);
-    setTagsForId(null);
-    setCategoryForId((prev) => (prev === tx.id ? null : tx.id));
-  }, []);
-  const onOpenTags = useCallback((tx: Transaction, el: HTMLElement) => {
-    setAnchor(el);
-    setCategoryForId(null);
-    setTagsForId((prev) => (prev === tx.id ? null : tx.id));
-  }, []);
+  const { toggle: toggleChooser } = chooser;
+  const onOpenCategory = useCallback(
+    (tx: Transaction, el: HTMLElement) => toggleChooser(`category:${tx.id}`, el),
+    [toggleChooser],
+  );
+  const onOpenTags = useCallback(
+    (tx: Transaction, el: HTMLElement) => toggleChooser(`tags:${tx.id}`, el),
+    [toggleChooser],
+  );
   const onToggleChecked = useCallback(
     (tx: Transaction) => {
       startWrite();
@@ -174,14 +171,9 @@ export function TransactionsMode() {
     <div className="flex min-h-full flex-col gap-4">
       <Surface className="flex flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-fg">
+          <CardTitle size="lg" privacy={privacy}>
             {t("budget.transactions.title")}
-            {privacy.enabled && (
-              <span className="ml-3 inline-flex align-middle">
-                <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-              </span>
-            )}
-          </h2>
+          </CardTitle>
           <Button
             variant="ghostStrong"
             data-testid="select-all-shown"
@@ -202,7 +194,6 @@ export function TransactionsMode() {
         <TransactionsTable
           rows={rows}
           showChecked={prefs.showChecked}
-          masked={privacy.masked}
           counts={counts.data}
           filtered={isFiltered(filters)}
           loading={list.isPending}
@@ -213,12 +204,22 @@ export function TransactionsMode() {
           onLoadMore={onLoadMore}
           onClearFilters={onClearFilters}
           onConnect={onConnect}
-          isSelected={isSelected}
-          anySelected={anySelected}
-          onToggleSelect={toggleRow}
-          onOpenCategory={onOpenCategory}
-          onOpenTags={onOpenTags}
-          onToggleChecked={onToggleChecked}
+          renderRow={(row) => (
+            <TransactionRow
+              key={row.id}
+              tx={row}
+              showChecked={prefs.showChecked}
+              masked={privacy.masked}
+              // "All shown" covers the cash rows only: a buy or sale is never
+              // in a selection, so never lit as one.
+              selected={row.source !== "lot" && isSelected(row.id)}
+              anySelected={anySelected}
+              onToggleSelect={toggleRow}
+              onOpenCategory={onOpenCategory}
+              onOpenTags={onOpenTags}
+              onToggleChecked={onToggleChecked}
+            />
+          )}
         />
 
       </Surface>
@@ -240,8 +241,8 @@ export function TransactionsMode() {
           mode="pick"
           selectedIds={categoryFor.categoryId ? [categoryFor.categoryId] : []}
           onPick={(id) => assignToRow(categoryFor, id)}
-          onClose={() => setCategoryForId(null)}
-          anchor={anchor}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
         />
       )}
 
@@ -262,8 +263,8 @@ export function TransactionsMode() {
               { onError: onWriteError },
             );
           }}
-          onClose={() => setTagsForId(null)}
-          anchor={anchor}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
         />
       )}
 

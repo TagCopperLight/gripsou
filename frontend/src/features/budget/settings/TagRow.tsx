@@ -1,22 +1,18 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldError } from "../../../ui/FieldError";
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { TagChip } from "../TagChip";
-import { ColorPicker } from "../../../ui/ColorPicker";
+import { ColorSwatchGrid } from "../../../ui/ColorSwatchGrid";
+import { TextInput } from "../../../ui/TextInput";
 import { useUpdateBudgetTag, type BudgetTag, type TagBody } from "../../../api/budget";
-import { BUDGET_PALETTE } from "../../../lib/palette";
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 
 type TagRowProps = {
   tag: BudgetTag;
   onDelete: () => void;
 };
-
-/** The swatch grid from the category modal, shrunk to sit inline on a row. */
-const SWATCH =
-  "size-4.5 rounded-md flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 disabled:cursor-not-allowed";
 
 /** Sized and padded like the category table's action buttons, so the bin at
  *  the end of the row lands on the same column as the table's. */
@@ -32,29 +28,10 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
   const [draft, setDraft] = useState(tag.name);
   const update = useUpdateBudgetTag();
   const pending = update.isPending;
-  // The picker swatch stands in for "a colour off the palette", so it only
-  // reads as selected when the stored colour is not one of the presets.
-  // While the picker is being dragged, the colour lives here and only
-  // previews: it reports every step, and saving each one would send a request
-  // and refetch the tags dozens of times a second. Saved when it closes.
-  const [colorDraft, setColorDraft] = useState<string | null>(null);
-  const shownColor = colorDraft ?? tag.color;
-  const customColor = shownColor !== null && !BUDGET_PALETTE.includes(shownColor);
-
   // Every write is a full body, so a colour change carries the stored name and
   // a rename carries the current colour.
   const save = (body: TagBody, opts?: { onSuccess?: () => void }) =>
     update.mutate({ id: tag.id, body }, opts);
-
-  // The pencil swatch while the picker hangs under it, null while it is closed.
-  const [pickerAnchor, setPickerAnchor] = useState<HTMLButtonElement | null>(null);
-  const closePicker = () => {
-    setPickerAnchor(null);
-    setColorDraft(null);
-    if (colorDraft && colorDraft.toLowerCase() !== tag.color?.toLowerCase()) {
-      save({ name: tag.name, color: colorDraft });
-    }
-  };
 
   const startEdit = () => {
     setDraft(tag.name);
@@ -80,11 +57,12 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-2 pr-3">
         {editing ? (
-          <input
+          <TextInput
+            inputSize="sm"
             autoFocus
             value={draft}
             disabled={pending}
-            aria-invalid={failure === "duplicate" || undefined}
+            invalid={failure === "duplicate"}
             onChange={(e) => {
               setDraft(e.target.value);
               if (failure === "duplicate") update.reset();
@@ -93,9 +71,6 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
               if (e.key === "Enter") submitRename();
               if (e.key === "Escape") cancelEdit();
             }}
-            className={`bg-surface-2 rounded-lg px-2.5 py-1 text-sm text-fg outline-none ring-inset disabled:opacity-60 ${
-              failure === "duplicate" ? "ring-1 ring-red" : "focus:ring-1 focus:ring-green"
-            }`}
           />
         ) : (
           <TagChip tag={tag} />
@@ -112,59 +87,20 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
           <div
             role="group"
             aria-label={t("settings.budget.tags.colorLabel", { name: tag.name })}
-            className="flex items-center gap-1"
           >
-            {/* "No colour" leads the line, drawn as an empty square struck
-                through — the absence of a colour still needs a swatch to sit
-                in, otherwise the row's colours start at a different x. */}
-            <button
-              type="button"
+            {/* Every pick is a write, so the picker saves once, when it closes:
+                saving each step of a drag would send a request and refetch the
+                tags dozens of times a second. */}
+            <ColorSwatchGrid
+              size="inline"
+              live={false}
+              value={tag.color}
+              onChange={(color) => save({ name: tag.name, color })}
               disabled={pending}
-              aria-label={t("settings.budget.tags.clearColor")}
-              aria-pressed={tag.color === null}
-              onClick={() => save({ name: tag.name, color: null })}
-              className={`${SWATCH} bg-surface-3 ${
-                tag.color === null ? "ring-2 ring-fg" : "hover:scale-105"
-              }`}
-            >
-              <svg viewBox="0 0 12 12" aria-hidden className="size-full">
-                <line x1="1.5" y1="10.5" x2="10.5" y2="1.5" stroke="currentColor"
-                  strokeWidth="1" className="text-fg-faint" />
-              </svg>
-            </button>
-            {BUDGET_PALETTE.map((c) => (
-              <button
-                key={c}
-                type="button"
-                disabled={pending}
-                aria-label={t("settings.budget.tags.paletteLabel", { color: c })}
-                aria-pressed={c === tag.color}
-                onClick={() => save({ name: tag.name, color: c })}
-                className={`${SWATCH} ${c === tag.color ? "ring-2 ring-fg" : "hover:scale-105"}`}
-                style={{ background: c }}
-              >
-                {c === tag.color && <Check className="size-3 text-black/80" />}
-              </button>
-            ))}
-            <button
-              type="button"
-              disabled={pending}
-              aria-label={t("settings.budget.tags.customColor")}
-              aria-expanded={pickerAnchor !== null}
-              onClick={(e) => (pickerAnchor ? closePicker() : setPickerAnchor(e.currentTarget))}
-              className={`${SWATCH} ${customColor || pickerAnchor ? "ring-2 ring-fg" : "bg-surface-2 hover:scale-105"} disabled:opacity-40`}
-              style={{ background: customColor ? shownColor! : undefined }}
-            >
-              <Pencil className={`size-3 ${customColor ? "text-black/80" : "text-fg-faint"}`} />
-            </button>
-            {pickerAnchor && (
-              <ColorPicker
-                value={shownColor ?? "#000000"}
-                onChange={setColorDraft}
-                anchor={pickerAnchor}
-                onClose={closePicker}
-              />
-            )}
+              clearLabel={t("settings.budget.tags.clearColor")}
+              swatchLabel={(color) => t("settings.budget.tags.paletteLabel", { color })}
+              customLabel={t("settings.budget.tags.customColor")}
+            />
           </div>
 
           <div className="flex items-center gap-1">

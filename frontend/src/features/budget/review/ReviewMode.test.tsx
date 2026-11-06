@@ -193,11 +193,11 @@ describe("Review mode", () => {
     renderMode();
     fireEvent.click(within(await screen.findByTestId("review-line-t1")).getByRole("button", { name: "Accept" }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 other" }));
-    fireEvent.click(await screen.findByTestId("break-pair-confirm"));
+    fireEvent.click(await screen.findByRole("button", { name: "Break pairing" }));
 
     expect(await screen.findByTestId("resolved-line-t3")).toBeVisible();
     expect(server.calls.at(-1)?.body).toEqual({ categoryId: "c1", scope: "review", confirmBreakPairs: true });
-    expect(screen.queryByTestId("break-pair-modal")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Break the transfer pairing?" })).toBeNull();
   });
 
   it("puts an accepted line back and says so when the save fails", async () => {
@@ -249,16 +249,16 @@ describe("Review mode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-c2"));
 
     // Refused, nothing written: the line is pending again while we ask.
-    expect(await screen.findByTestId("break-pair-modal")).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Break the transfer pairing?" })).toBeVisible();
     expect(screen.getByTestId("review-line-t2")).toBeVisible();
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     expect(await screen.findByTestId("resolved-line-t2")).toBeVisible();
     expect(server.calls.at(-1)).toEqual({
       url: expect.stringContaining("/transactions/t2"),
       body: { categoryId: "c2", offerScope: "review", confirmBreakPairs: true },
     });
-    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Break the transfer pairing?" })).toBeNull());
   });
 
   it("asks before sending a correction of a row it shows as paired, as the transactions list does", async () => {
@@ -268,11 +268,11 @@ describe("Review mode", () => {
     fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
     fireEvent.click(await screen.findByTestId("chooser-option-c3"));
 
-    expect(await screen.findByTestId("break-pair-modal")).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Break the transfer pairing?" })).toBeVisible();
     expect(server.calls).toEqual([]);
     expect(screen.getByTestId("review-line-t2")).toBeVisible();
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     expect(await screen.findByTestId("resolved-line-t2")).toBeVisible();
     expect(server.calls).toEqual([{
       url: expect.stringContaining("/transactions/t2"),

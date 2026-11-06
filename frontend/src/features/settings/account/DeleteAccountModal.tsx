@@ -4,9 +4,8 @@ import { useErrorToast } from "../../../lib/errorToasts";
 
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
 import { PasswordField } from "../../../ui/PasswordField";
-import { ApiError } from "../../../api/client";
 import { useDeleteAccount } from "../../../api/auth";
-import { throttleMinutes } from "../../../auth/throttle";
+import { passwordError } from "../../../auth/throttle";
 
 type DeleteAccountModalProps = {
   onClose: () => void;
@@ -27,10 +26,7 @@ export function DeleteAccountModal({
     remove.mutate(password, { onSuccess: onDeleted });
   };
 
-  const minutes = throttleMinutes(remove.error);
-  const wrongPassword = remove.error instanceof ApiError && remove.error.status === 400;
-  const error =
-    minutes !== null ? t("auth.tooManyAttempts", { count: minutes }) : wrongPassword ? t("twoFactor.wrongPassword") : null;
+  const error = passwordError(t, remove.error);
   useErrorToast(remove.isError && error === null && t("settings.account.deleteAccountError"));
 
   return (

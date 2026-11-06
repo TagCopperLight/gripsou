@@ -23,8 +23,6 @@ type ConfirmDialogProps = {
   large?: boolean;
   onConfirm: () => void;
   onClose: () => void;
-  "data-testid"?: string;
-  confirmTestId?: string;
 };
 
 /** "Are you sure?" as one component: a sentence, Cancel, and one action.
@@ -32,7 +30,7 @@ type ConfirmDialogProps = {
  *  confirming; with a field to fill (`children`), the field takes it. */
 export function ConfirmDialog({
   title, body, confirmLabel, tone = "danger", busy = false, children, confirmDisabled = false, large = false,
-  onConfirm, onClose, confirmTestId, ...rest
+  onConfirm, onClose,
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 
@@ -50,7 +48,6 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant={tone === "danger" ? "danger" : "primary"}
-            data-testid={confirmTestId}
             onClick={() => {
               if (!busy && !confirmDisabled) onConfirm();
             }}
@@ -62,7 +59,7 @@ export function ConfirmDialog({
       }
     >
       <div className="flex flex-col gap-3">
-        <p data-testid={rest["data-testid"]} className="text-sm text-fg-dim">
+        <p className="text-sm text-fg-dim">
           {body}
         </p>
         {children}

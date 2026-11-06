@@ -290,10 +290,7 @@ describe("TransactionsMode", () => {
     const client = renderMode();
     await screen.findByText("ALDI");
     // Before the write, the row is uncategorised.
-    expect(screen.getAllByTestId("category-chip")[0]).toHaveAttribute(
-      "data-variant",
-      "uncategorized",
-    );
+    expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised");
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     // The request was actually sent (and rejected)...
@@ -302,10 +299,7 @@ describe("TransactionsMode", () => {
     // ...and once the failed mutation has settled, the chip is back to
     // uncategorised rather than stuck on the optimistic "Groceries" value —
     // the user must never be shown a write that the server rejected.
-    expect(screen.getAllByTestId("category-chip")[0]).toHaveAttribute(
-      "data-variant",
-      "uncategorized",
-    );
+    expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised");
   });
 
   it("does not offer it when no other row shares the description", async () => {
@@ -480,10 +474,10 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
 
-    await screen.findByTestId("break-pair-modal");
+    await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(patchBodies).toEqual([]);
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro", confirmBreakPairs: true }]));
     await settle(client);
   });
@@ -498,7 +492,7 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-sav"));
 
     await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "sav" }]));
-    expect(screen.queryByTestId("break-pair-modal")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Break the transfer pairing?" })).toBeNull();
     expect(screen.getByTestId("tx-transfer-note")).toBeVisible();
     await settle(client);
   });
@@ -512,17 +506,17 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
 
-    await screen.findByTestId("break-pair-modal");
+    await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(patchBodies).toEqual([{ categoryId: "gro" }]);
     // Refused means unwritten: the chip goes back while the question is open.
     await waitFor(() =>
-      expect(screen.getAllByTestId("category-chip")[0]).toHaveAttribute("data-variant", "uncategorized"),
+      expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised"),
     );
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     await waitFor(() => expect(patchBodies).toHaveLength(2));
     expect(patchBodies[1]).toEqual({ categoryId: "gro", confirmBreakPairs: true });
-    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Break the transfer pairing?" })).toBeNull());
     await settle(client);
   });
 
@@ -532,10 +526,10 @@ describe("TransactionsMode", () => {
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
-    await screen.findByTestId("break-pair-modal");
+    await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Break the transfer pairing?" })).toBeNull());
     await settle(client);
     expect(patchBodies).toEqual([]);
   });
@@ -549,11 +543,11 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
 
     // The first attempt came back refused, not applied.
-    const modal = await screen.findByTestId("break-pair-modal");
+    const modal = await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(modal).toHaveTextContent("3");
     expect(bulkBodies).toEqual([{ ids: ["t1"], categoryId: "gro" }]);
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     await waitFor(() => expect(bulkBodies).toHaveLength(2));
     expect(bulkBodies[1]).toEqual({ ids: ["t1"], categoryId: "gro", confirmBreakPairs: true });
     await settle(client);
@@ -566,7 +560,7 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getAllByTestId("tx-select")[0]);
     fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
-    await screen.findByTestId("break-pair-modal");
+    await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
 
     expect(screen.queryByTestId("done-toast")).toBeNull();
     await settle(client);
@@ -581,10 +575,10 @@ describe("TransactionsMode", () => {
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     fireEvent.click(await screen.findByTestId("apply-to-all-confirm"));
 
-    const modal = await screen.findByTestId("break-pair-modal");
+    const modal = await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(modal).toHaveTextContent("2");
 
-    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    fireEvent.click(screen.getByRole("button", { name: "Break pairing" }));
     await waitFor(() => expect(applyBodies).toHaveLength(2));
     expect(applyBodies[1]).toEqual({ categoryId: "gro", confirmBreakPairs: true });
     await settle(client);

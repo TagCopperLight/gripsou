@@ -4,6 +4,7 @@ import type { BasisPreview, Holding, InvestmentReturns, Lot, LotSuggestion, Pric
 import { keys } from "./keys";
 import { afterLotsSaved } from "./invalidate";
 import { PORTFOLIO_STALE_MS } from "./accounts";
+import { fxExcludedCount } from "../lib/holdings";
 
 export function useHoldings() {
   return useQuery({
@@ -11,6 +12,13 @@ export function useHoldings() {
     staleTime: PORTFOLIO_STALE_MS,
     queryFn: ({ signal }) => getJson<Holding[]>(`/holdings`, { signal }),
   });
+}
+
+/** How many holdings (of `accountIds`, else all) the converted totals leave
+ *  out for want of a rate; 0 until the holdings have loaded. */
+export function useFxExcludedCount(accountIds?: ReadonlySet<string>): number {
+  const { data } = useHoldings();
+  return fxExcludedCount((data ?? []).filter((h) => !accountIds || accountIds.has(h.accountId)));
 }
 
 export function useInvestmentReturns() {

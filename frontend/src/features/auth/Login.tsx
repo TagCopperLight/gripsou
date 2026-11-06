@@ -9,7 +9,7 @@ import { FieldError } from "../../ui/FieldError";
 import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { ApiError } from "../../api/client";
-import { throttleMinutes } from "../../auth/throttle";
+import { throttledError } from "../../auth/throttle";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
@@ -30,10 +30,6 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const tooMany = (err: unknown) => {
-    const minutes = throttleMinutes(err);
-    return minutes === null ? null : t("auth.tooManyAttempts", { count: minutes });
-  };
 
   const backToPassword = (message: string | null = null) => {
     setStep("password");
@@ -60,7 +56,7 @@ export function Login() {
       // 401 is the server's answer to a wrong email or password; anything
       // else failed on its side, and must not blame what was typed.
       setError(
-        tooMany(err) ??
+        throttledError(t, err) ??
           (err instanceof ApiError && err.status === 401 ? t("auth.invalidCredentials") : t("auth.mfa.failed")),
       );
     } finally {
@@ -83,7 +79,7 @@ export function Login() {
       // 410: the sign-in's challenge expired while the browser window was open.
       if (err instanceof ApiError) {
         setError(
-          tooMany(err) ??
+          throttledError(t, err) ??
             (err.status === 400 || err.status === 410 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
         );
       }
@@ -104,7 +100,7 @@ export function Login() {
       }
       setCode("");
       setError(
-        tooMany(err) ??
+        throttledError(t, err) ??
           (err instanceof ApiError && err.status === 400 ? t("auth.mfa.wrongCode") : t("auth.mfa.failed")),
       );
     } finally {

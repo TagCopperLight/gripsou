@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
-import { FieldError, LabeledField } from "../../ui/FieldError";
+import { FieldError } from "../../ui/FieldError";
+import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { useTokenGuard } from "../../auth/useTokenGuard";
@@ -16,6 +17,7 @@ const route = getRouteApi("/reset/$token");
 
 export function Reset() {
   const { t } = useTranslation();
+  const id = useId();
   const { adoptSession } = useAuth();
   const navigate = useNavigate();
   const { token } = route.useParams();
@@ -70,32 +72,32 @@ export function Reset() {
             which saved login to update. */}
         <div className="truncate rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-fg-dim">{email}</div>
         <input type="email" autoComplete="username" value={email} readOnly hidden />
-        <LabeledField
+        <Field
           label={t("auth.newPassword")}
           labelClassName="text-fg-dim"
           error={error?.field === "password" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-password`}>
+          <TextInput id={`${id}-password`}
             type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             invalid={error?.field === "password" || error?.field === "confirm"}
           />
-        </LabeledField>
-        <LabeledField
+        </Field>
+        <Field
           label={t("auth.confirmPassword")}
           labelClassName="text-fg-dim"
           error={error?.field === "confirm" && error.text}
-        >
-          <TextInput
+         htmlFor={`${id}-confirm`}>
+          <TextInput id={`${id}-confirm`}
             type="password"
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             invalid={error?.field === "confirm"}
           />
-        </LabeledField>
+        </Field>
         {error?.field === null && <FieldError>{error.text}</FieldError>}
         <Button type="submit" disabled={pending} className="mt-1">
           {t("auth.updatePasswordButton")}

@@ -16,6 +16,7 @@ import {
   isSyncing,
   issuesSummaryKey,
 } from "../../lib/connectionState";
+import { POWENS_MANAGE_BLOCKED, POWENS_MANAGE_FAILED } from "../../lib/powens";
 import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
 import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
@@ -50,7 +51,7 @@ export function ConnectionRow({
     setManageError(null);
     // Open synchronously during the click so browsers do not block the tab.
     const tab = window.open("about:blank", "_blank");
-    if (!tab) { setManageError(t("settings.connections.manageBlocked")); return; }
+    if (!tab) { setManageError(t(POWENS_MANAGE_BLOCKED)); return; }
     tab.opener = null;
     try {
       const { redirectUrl } = await manage.mutateAsync(conn.id);
@@ -66,7 +67,7 @@ export function ConnectionRow({
       window.addEventListener("focus", onReturn, { once: true });
     } catch {
       tab.close();
-      showError(t("settings.connections.manageFailed"));
+      showError(t(POWENS_MANAGE_FAILED));
     }
   };
   const issues = connectionIssues(conn);

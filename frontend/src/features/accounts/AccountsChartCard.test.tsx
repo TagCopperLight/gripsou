@@ -24,7 +24,7 @@ describe("AccountsChartCard with no accounts", () => {
       "fetch",
       vi.fn(async (url: string) => {
         const u = String(url);
-        const body = u.includes("/connections") ? [] : u.includes("/accounts/series") ? { accounts: [], points: [] } : NO_ACCOUNTS;
+        const body = u.includes("/connections") || u.includes("/holdings") ? [] : u.includes("/accounts/series") ? { accounts: [], points: [] } : NO_ACCOUNTS;
         return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
       }),
     );

@@ -5,7 +5,7 @@ import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { RangeModal } from "./RangeModal";
 import { useBudget } from "../budgetContext";
 import { monthLabel, periodLabel, type Period } from "../../../lib/period";
-import { PrivacyEye } from "../../../ui/PrivateMoney";
+import { PrivacyEye } from "../../../ui/MaskedMoney";
 import type { Privacy } from "../../../auth/usePrivacy";
 
 type PeriodLineProps = {
@@ -105,7 +105,7 @@ export function PeriodLine({
         {t("budget.overview.range")}
       </button>
 
-      {privacy.enabled && <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />}
+      {privacy.enabled && <PrivacyEye masked={privacy.masked} toggle={privacy.toggle} />}
       {end}
 
       {rangeOpen && (

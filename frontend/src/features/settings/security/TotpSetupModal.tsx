@@ -8,9 +8,10 @@ import { Button } from "../../../ui/Button";
 import { ApiError } from "../../../api/client";
 import { useTotpConfirm, useTotpSetup } from "../../../api/auth";
 import type { TotpSetup } from "../../../api/types";
-import { throttleMinutes } from "../../../auth/throttle";
+import { throttledError } from "../../../auth/throttle";
 import { CodeInput } from "../../../ui/CodeInput";
 import { BackupCodes } from "./BackupCodes";
+import { useCopy } from "../../../lib/useCopy";
 import { FieldError } from "../../../ui/FieldError";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
@@ -31,7 +32,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [code, setCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
-  const [keyCopied, setKeyCopied] = useState(false);
+  const { copied: keyCopied, copy: copyKey } = useCopy();
 
   const start = useTotpSetup();
   const confirm = useTotpConfirm();
@@ -40,9 +41,8 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   /** Throttled, or `typed` (what the user typed was wrong), next to the
    *  field; anything else failed on the server's side. */
   const fail = (err: unknown, typed: string | null = null) => {
-    const minutes = throttleMinutes(err);
-    if (minutes !== null) setError(t("auth.tooManyAttempts", { count: minutes }));
-    else if (typed) setError(typed);
+    const shown = throttledError(t, err) ?? typed;
+    if (shown) setError(shown);
     else showError(t("twoFactor.setupFailed"));
   };
 
@@ -78,12 +78,6 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
       setCode("");
       fail(err, err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : null);
     }
-  };
-
-  const copyKey = async (secret: string) => {
-    await navigator.clipboard.writeText(secret);
-    setKeyCopied(true);
-    setTimeout(() => setKeyCopied(false), 1500);
   };
 
   const index = STEPS.indexOf(step);

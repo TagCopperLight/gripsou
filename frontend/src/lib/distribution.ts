@@ -22,6 +22,11 @@ export function distribution(accounts: Account[]): DistributionRow[] {
     });
 }
 
+/** Each account's share (see `distribution`), by account id. */
+export function sharesById(accounts: Account[]): Map<string, number | null> {
+  return new Map(distribution(accounts).map((r) => [r.account.id, r.share]));
+}
+
 /** Shares up to this one are too thin to draw: the ring and the bar leave
  *  them out (the others fill the space, being proportions of what's drawn),
  *  and the lists still name them with their real share. */

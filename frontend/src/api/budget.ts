@@ -55,6 +55,11 @@ export type CategoryBody = Pick<
 >;
 export type TagBody = Pick<BudgetTag, "name" | "color">;
 
+/** The whole body that re-sends what `c` holds, with `patch` over it. */
+export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {}): CategoryBody {
+  return { name: c.name, color: c.color, icon: c.icon, hint: c.hint, kind: c.kind, archived: c.archived, ...patch };
+}
+
 export function useBudgetCategories() {
   return useQuery({
     queryKey: keys.budgetCategories(),

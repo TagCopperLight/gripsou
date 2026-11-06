@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
-import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
+import { MaskedMoney } from "../../ui/MaskedMoney";
+import { CardTitle } from "../../ui/CardTitle";
 import { Percent } from "../../ui/Percent";
 import { ReturnSpan } from "./ReturnSpan";
 import { leavesOut, mutedToneClass, toneClass } from "../../lib/returns";
@@ -30,14 +31,9 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
       <div className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-5 md:flex-row md:items-baseline-last md:justify-between">
           <div className="flex flex-col gap-1">
-            <p className="text-fg font-semibold text-sm">
+            <CardTitle privacy={privacy}>
               {t("investments.annualised.title")}
-              {privacy.enabled && (
-                <span className="ml-3 inline-flex align-middle">
-                  <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-                </span>
-              )}
-            </p>
+            </CardTitle>
             {total.annualised === null ? (
               <span className="relative w-fit text-[32px] font-semibold tracking-tight text-fg-faint md:text-[40px]">
                 —

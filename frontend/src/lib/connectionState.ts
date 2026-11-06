@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import type { ProviderGroup, SyncConnection, SyncHealth, SyncStatus } from "../api/types";
 import { formatDate, zonedDay } from "./date";
+import { powensStateText } from "./powens";
 
 export function flattenConnections(groups: ProviderGroup[] | undefined): SyncConnection[] {
   return (groups ?? []).flatMap((g) => g.connections);
@@ -13,7 +14,7 @@ export function isSyncing(status: SyncStatus): boolean {
 
 /** No result to judge yet: a sync in flight, or a connection still being set
  *  up (listed, but not a bank yet). */
-export function isUnsettled(status: SyncStatus): boolean {
+function isUnsettled(status: SyncStatus): boolean {
   return isSyncing(status) || status === "pending";
 }
 
@@ -35,7 +36,7 @@ export function syncFinished(prev: ProviderGroup[], next: ProviderGroup[]): bool
 
 // A freshness warning is a heuristic, separate from confirmed provider errors.
 // Allow three calendar days for weekends and slower bank connectors.
-export const STALE_AFTER_DAYS = 3;
+const STALE_AFTER_DAYS = 3;
 export type HealthIssue = { kind: "error" | "stale" | "unknown"; health: SyncHealth; accounts: string[] };
 
 export function healthIssue(health?: SyncHealth | null, today = zonedDay()): HealthIssue["kind"] | null {
@@ -114,7 +115,7 @@ export function connectionProblems(
       severity: "warning",
       accounts: issue.accounts,
       text: issue.kind === "error"
-        ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
+        ? issue.health.errorMessage || powensStateText(t, issue.health.state)
         : issue.kind === "stale"
           ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
           : t("settings.connections.health.unknownMessage"),

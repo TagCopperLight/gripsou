@@ -114,9 +114,8 @@ function FilterProbe() {
   );
 }
 
-// FiguresSurface renders amounts through PrivateMoney, which calls useAuth —
-// mirroring PrivateMoney.test.tsx's wrapper rather than the plain provider
-// the brief's own snippet used, which throws outside an AuthProvider.
+// FiguresSurface's privacy mask reads useAuth, which throws outside an
+// AuthContext.Provider.
 const authValue: AuthValue = {
   isAuthenticated: true,
   user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },

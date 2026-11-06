@@ -2,10 +2,11 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { Select } from "../../../ui/Select";
 import { CardState } from "../../../ui/CardState";
+import { TextInput } from "../../../ui/TextInput";
 import {
   useBudgetAiModels,
   useBudgetAiSettings,
@@ -80,9 +81,9 @@ export function AiServerSurface() {
           <div className="flex items-center gap-3 text-sm text-fg">
             <label htmlFor={modelId} onClick={(e) => e.preventDefault()}>{t("settings.server.budgetAiModel")}</label>
             {models.isError || models.data?.length === 0 ? (
-              <input
+              <TextInput
                 id={modelId}
-                className="rounded-xl bg-surface-2 px-3.5 py-2 font-mono text-sm text-fg"
+                className="max-w-72 font-mono"
                 value={shownModel}
                 onChange={(e) => setDraft({ base: settings.model, value: e.target.value })}
                 onBlur={commitModel}
@@ -119,10 +120,8 @@ export function AiServerSurface() {
   useErrorToast(save.isError && t("settings.server.budgetAiSaveError"));
 
   return (
-    <Surface className="p-6">
-      <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.budgetAi")}</h2>
-      <p className="mb-5 text-xs text-fg-faint">{t("settings.server.budgetAiHint")}</p>
+    <SettingsSurface title={t("settings.server.budgetAi")} hint={t("settings.server.budgetAiHint")}>
       {body}
-    </Surface>
+    </SettingsSurface>
   );
 }

@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
-import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
+import { MaskedMoney } from "../../ui/MaskedMoney";
+import { CardTitle } from "../../ui/CardTitle";
 import { Percent } from "../../ui/Percent";
 import { ReturnSpan } from "./ReturnSpan";
 import { leavesOut, mutedToneClass, toneClass } from "../../lib/returns";
@@ -9,6 +10,7 @@ import { FxAsterisk } from "../../ui/FxNote";
 import { ExcludedNotes } from "./ExcludedNotes";
 import type { InvestmentReturns, ReturnAccount } from "../../api/types";
 import { usePrivacy } from "../../auth/usePrivacy";
+import { HEAD_TEXT } from "../../ui/gridTable";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
 // The figure columns get a wide left gutter so they don't run together.
@@ -28,7 +30,7 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
 
   const head = (key: string, desktopOnly = false, left = false) => (
     <th
-      className={`pb-2 text-[11px] font-medium tracking-wide font-mono whitespace-nowrap text-fg-faint ${
+      className={`pb-2 whitespace-nowrap ${HEAD_TEXT} ${
         left ? `text-left ${PAD_TEXT}` : `text-right ${PAD_FIGURE}`
       } ${desktopOnly ? HIDDEN_ON_PHONE : ""}`}
     >
@@ -39,14 +41,9 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
-        <p className="text-fg font-semibold text-sm">
+        <CardTitle privacy={privacy}>
           {t("investments.returns.title")}
-          {privacy.enabled && (
-            <span className="ml-3 inline-flex align-middle">
-              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-            </span>
-          )}
-        </p>
+        </CardTitle>
         <table className="mt-4 w-full border-separate border-spacing-0">
           <thead>
             <tr>

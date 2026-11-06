@@ -3,10 +3,8 @@ import { useTranslation } from "react-i18next";
 import { CardState } from "../../ui/CardState";
 import { ExposureDonut } from "../exposure/ExposureDonut";
 import { useAccounts } from "../../api/accounts";
-import { useHoldings } from "../../api/holdings";
-import { ExcludedNote } from "../../ui/FxNote";
+import { useFxExcludedCount } from "../../api/holdings";
 import { MIN_DRAWN_SHARE, distribution } from "../../lib/distribution";
-import { usePrivacy } from "../../auth/usePrivacy";
 
 type DistributionCardProps = {
   className?: string;
@@ -15,10 +13,8 @@ type DistributionCardProps = {
 export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { t } = useTranslation();
   const { data, isError, refetch } = useAccounts();
-  const holdings = useHoldings();
-  const privacy = usePrivacy();
+  const excluded = useFxExcludedCount();
   const accounts = data ?? [];
-  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
   // The middle shows the net worth, overdrafts included; the ring shows how
   // what is owned is spread (`distribution`).
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
@@ -30,9 +26,6 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
     value: a.value,
     fxMissing: a.fxMissing,
   }));
-  const fxFootnote = excluded > 0 || accounts.some((a) => a.fxMissing)
-    ? <ExcludedNote count={excluded} />
-    : undefined;
 
   return (
     <ExposureDonut
@@ -41,8 +34,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       centerLabel={t("common.total")}
       items={items}
       total={total}
-      fxFootnote={fxFootnote}
-      privacy={privacy}
+      fxExcluded={excluded > 0 || accounts.some((a) => a.fxMissing) ? excluded : undefined}
       minSlice={MIN_DRAWN_SHARE}
       placeholder={
         data === undefined ? (

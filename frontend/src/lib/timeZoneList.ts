@@ -1,7 +1,7 @@
 /** The main zones: the big cities, about one per offset, and France's
  *  overseas departments and territories. Not every zone the browser knows:
  *  four hundred names, most of them the same hour, made the list unusable. */
-export const TIME_ZONES = [
+const TIME_ZONES = [
   "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver",
   "America/Chicago", "America/Mexico_City", "America/New_York", "America/Toronto",
   "America/Bogota", "America/Halifax", "America/Guadeloupe", "America/Martinique",

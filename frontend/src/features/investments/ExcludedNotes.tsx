@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { FxFootnote } from "../../ui/FxNote";
+import { ExcludedFootnote, FxFootnote } from "../../ui/FxNote";
 import type { ReturnFigures } from "../../api/types";
 import { leavesOut } from "../../lib/returns";
 
@@ -14,7 +14,7 @@ export function ExcludedNotes({ figures, className = "" }: { figures: ReturnFigu
       {figures.excludedHistory > 0 && (
         <FxFootnote>{t("investments.excludedHistory", { count: figures.excludedHistory })}</FxFootnote>
       )}
-      {figures.excludedRate > 0 && <FxFootnote>{t("fx.excludes", { count: figures.excludedRate })}</FxFootnote>}
+      {figures.excludedRate > 0 && <ExcludedFootnote count={figures.excludedRate} />}
     </div>
   );
 }

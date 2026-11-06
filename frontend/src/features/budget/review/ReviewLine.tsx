@@ -4,11 +4,11 @@ import { TransactionAvatar } from "../TransactionAvatar";
 import { CategoryChip } from "../CategoryChip";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
-import { usePrefs } from "../../../auth/context";
 import { Button } from "../../../ui/Button";
 import { formatDay } from "../../../lib/date";
 import { categoryOfTransaction } from "../../../lib/budget";
 import type { Transaction } from "../../../api/types";
+import { AMOUNT_COL, CHIP_COL, CONFIDENCE_COL, REVIEW_ROW } from "./reviewColumns";
 
 type Props = {
   tx: Transaction;
@@ -23,12 +23,11 @@ type Props = {
  *  goes, so the line adds no warning (user's call). */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
   const { t } = useTranslation();
-  const readerCurrency = usePrefs().currency;
   const category = categoryOfTransaction(tx);
   const confidence = tx.categoryConfidence === null ? null : Math.round(Number(tx.categoryConfidence) * 100);
 
   return (
-    <div data-testid={`review-line-${tx.id}`} className="flex items-center gap-4 rounded-xl bg-surface-2 px-4 py-3">
+    <div data-testid={`review-line-${tx.id}`} className={REVIEW_ROW}>
       <TransactionAvatar tx={tx} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium uppercase text-fg">{tx.description}</p>
@@ -38,18 +37,15 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
           <span className="truncate">{tx.accountName}</span>
         </p>
       </div>
-      {/* Fixed-width columns, so amounts, chips and buttons line up down the
-          list whatever the chip's label or whether a guess exists. */}
-      <span className="w-28 shrink-0 text-right">
-        <MoneyHint hint={tx.currency !== readerCurrency && tx.amountReporting !== null
-          ? <Money value={tx.amountReporting} signed /> : null}>
+      <span className={`${AMOUNT_COL} text-right`}>
+        <MoneyHint currency={tx.currency} converted={tx.amountReporting} signed>
           <Money value={tx.amount} currency={tx.currency} signed className="text-fg" />
         </MoneyHint>
       </span>
-      <div className="flex w-40 shrink-0">
+      <div className={CHIP_COL}>
         <CategoryChip category={category} needsReview={category !== null} />
       </div>
-      <span className="w-12 shrink-0 text-right font-mono text-sm text-fg-dim">
+      <span className={`${CONFIDENCE_COL} text-right font-mono text-sm text-fg-dim`}>
         {confidence === null ? "—" : `${confidence}%`}
       </span>
       {/* A "no guess" row has nothing to accept: keep the button's slot, hidden,

@@ -5,6 +5,7 @@ import { showError } from "../../../lib/errorToasts";
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { LinkModal } from "./LinkModal";
+import { resetLink } from "../../../lib/authLinks";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
 import { useCreateResetLink } from "../../../api/admin";
@@ -36,8 +37,7 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
         title={t("settings.users.reset.title")}
         subtitle={t("settings.users.reset.heading")}
         body={t("settings.users.reset.body", { name: user.name })}
-        link={`${window.location.origin}/reset/${token}`}
-        error={false}
+        link={resetLink(token)}
         onClose={onClose}
       />
     );

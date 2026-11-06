@@ -10,6 +10,7 @@ import { useBudgetTags, useCreateBudgetTag, type BudgetTag } from "../../../api/
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 import { TagRow } from "./TagRow";
 import { DeleteTagModal } from "./DeleteTagModal";
+import { TextInput } from "../../../ui/TextInput";
 
 export function TagsSurface() {
   const { t } = useTranslation();
@@ -55,15 +56,15 @@ export function TagsSurface() {
                 </div>
               )}
 
-              <div className="mt-4 flex flex-wrap items-center gap-4">
-                <input
+              <div className="mt-4 flex items-center gap-4">
+                <TextInput
                   id="new-tag-name"
                   type="text"
                   value={draft}
                   aria-label={t("settings.budget.tags.nameLabel")}
                   placeholder={t("settings.budget.tags.nameLabel")}
                   disabled={create.isPending}
-                  aria-invalid={failure === "duplicate" || undefined}
+                  invalid={failure === "duplicate"}
                   onChange={(e) => {
                     setDraft(e.target.value);
                     if (failure === "duplicate") create.reset();
@@ -71,9 +72,7 @@ export function TagsSurface() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") submit();
                   }}
-                  className={`w-112 max-w-full bg-surface-2 rounded-xl px-3 py-2 text-sm text-fg outline-none ring-inset disabled:opacity-60 ${
-                    failure === "duplicate" ? "ring-1 ring-red" : "focus:ring-1 focus:ring-green"
-                  }`}
+                  className="max-w-112"
                 />
                 {/* The same primary action as the category table's Add; the
                     padding matches the field beside it, so the two share a
@@ -82,7 +81,7 @@ export function TagsSurface() {
                   onClick={submit}
                   disabled={!draft.trim() || create.isPending}
                   padded={false}
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3.5 py-2.25"
                 >
                   <Plus className="size-4" />
                   {t("settings.budget.tags.add")}

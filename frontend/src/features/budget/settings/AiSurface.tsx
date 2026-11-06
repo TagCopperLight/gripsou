@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
 import { useAiStatus } from "../../../api/budget";
@@ -24,8 +24,7 @@ export function AiSurface() {
   };
 
   return (
-    <Surface className="p-6">
-      <h2 className="mb-5 text-lg font-semibold text-fg">{t("settings.budget.ai.title")}</h2>
+    <SettingsSurface title={t("settings.budget.ai.title")}>
       {!configured && <p className="mb-4 text-sm text-amber">{t("settings.budget.ai.notConfigured")}</p>}
       <div className="flex items-center justify-between gap-6">
         <div>
@@ -61,6 +60,6 @@ export function AiSurface() {
           <span className="w-10 text-right font-mono text-sm text-fg">{threshold}%</span>
         </div>
       </div>
-    </Surface>
+    </SettingsSurface>
   );
 }

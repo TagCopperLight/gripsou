@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { Select } from "../../../ui/Select";
 import { Toggle } from "../../../ui/Toggle";
@@ -45,10 +45,7 @@ export function SettingsGeneral() {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      <Surface className="p-6 md:mt-13">
-        <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.general.localization")}
-        </h2>
+      <SettingsSurface className="md:mt-13" title={t("settings.general.localization")}>
         <div className="flex flex-col gap-5">
           <Setting label={t("settings.general.language")} hint={t("settings.general.interfaceLanguage")}>
             <SegmentedControl
@@ -88,12 +85,9 @@ export function SettingsGeneral() {
             />
           </Setting>
         </div>
-      </Surface>
+      </SettingsSurface>
 
-      <Surface className="p-6">
-        <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.general.numbersCurrency")}
-        </h2>
+      <SettingsSurface title={t("settings.general.numbersCurrency")}>
         <div className="flex flex-col gap-5">
           <Setting
             label={t("settings.general.currency")}
@@ -156,12 +150,9 @@ export function SettingsGeneral() {
             </div>
           </div>
         </div>
-      </Surface>
+      </SettingsSurface>
 
-      <Surface className="p-6">
-        <h2 className="mb-5 text-lg font-semibold text-fg">
-          {t("settings.general.privacy")}
-        </h2>
+      <SettingsSurface title={t("settings.general.privacy")}>
         <Setting
           label={t("settings.general.privateMode")}
           hint={t("settings.general.privateModeHint")}
@@ -172,7 +163,7 @@ export function SettingsGeneral() {
             aria-label={t("settings.general.privateMode")}
           />
         </Setting>
-      </Surface>
+      </SettingsSurface>
     </div>
   );
 }

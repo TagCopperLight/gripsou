@@ -2,12 +2,12 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
-import { ExcludedNote, FxAsterisk, FxFootnote } from "../../ui/FxNote";
+import { ExcludedFootnote, FxAsterisk } from "../../ui/FxNote";
 import { useConnections } from "../../api/connections";
-import { useHoldings } from "../../api/holdings";
+import { useFxExcludedCount } from "../../api/holdings";
 import { AlertDot } from "../connections/AlertDot";
 import { Money } from "../../ui/Money";
-import { MaskedMoney } from "../../ui/PrivateMoney";
+import { MaskedMoney } from "../../ui/MaskedMoney";
 import { MoneyHint } from "../../ui/MoneyHint";
 import { usePrefs } from "../../auth/context";
 import { HoldingBadge } from "../../ui/HoldingBadge";
@@ -19,8 +19,8 @@ import type { Account } from "../../api/types";
 
 type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
-  /** What every account owns together (overdrafts left out), for each row's share. */
-  owned: number;
+  /** Each account's share of what the accounts own (`sharesById`). */
+  shares: ReadonlyMap<string, number | null>;
   /** The longest type tag on the page, in characters: the tag column's width. */
   tagCh: number;
   /** Private mode, revealed by the summary card's eye. */
@@ -32,16 +32,14 @@ type ConnectionAccountsCardProps = {
 /** One bank connection: its subtotal, a dot on its logo when it has a
  * problem (as in the sync window), then a row per account.
  * Clicking a row opens the account's edit modal. */
-export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, className = "" }: ConnectionAccountsCardProps) {
+export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const readerCurrency = usePrefs().currency;
   const [editing, setEditing] = useState<Account | null>(null);
   const name = group.sourceName ?? t("account.unknownSource");
-  const holdings = useHoldings();
-  const ids = new Set(group.accounts.map((a) => a.id));
   const connections = useConnections();
   const conn = flattenConnections(connections.data ?? []).find((c) => c.id === group.connectionId);
-  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing && ids.has(h.accountId)).length;
+  const excluded = useFxExcludedCount(new Set(group.accounts.map((a) => a.id)));
 
   return (
     <Surface className={`p-4 pb-3.5 md:p-5 md:pb-4.5 ${className}`}>
@@ -62,7 +60,7 @@ export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, c
           line while the values stay flush with the bank's subtotal. */}
       <ul className="-mx-2">
         {group.accounts.map((a) => {
-          const share = Number(a.value) > 0 ? Number(a.value) / owned : null;
+          const share = shares.get(a.id) ?? null;
           // A foreign account reads in its own currency, the converted value on hover.
           const native = a.currency !== readerCurrency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
           return (
@@ -100,7 +98,7 @@ export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, c
                   {masked ? (
                     <MaskedMoney masked value={native ?? a.value} currency={native !== null ? a.currency : undefined} className="text-fg text-[13px] whitespace-nowrap" />
                   ) : native !== null ? (
-                    <MoneyHint hint={<Money value={a.value} />}>
+                    <MoneyHint currency={a.currency} converted={a.value}>
                       <Money value={native} currency={a.currency} className="text-fg text-[13px] whitespace-nowrap" />
                     </MoneyHint>
                   ) : (
@@ -113,11 +111,7 @@ export function ConnectionAccountsCard({ group, owned, tagCh, masked, onHover, c
           );
         })}
       </ul>
-      {group.accounts.some((a) => a.fxMissing) && (
-        <FxFootnote className="mt-2 px-0.5">
-          <ExcludedNote count={excluded} />
-        </FxFootnote>
-      )}
+      {group.accounts.some((a) => a.fxMissing) && <ExcludedFootnote count={excluded} className="mt-2 px-0.5" />}
 
       {editing && <EditAccountModal account={editing} onClose={() => setEditing(null)} />}
     </Surface>

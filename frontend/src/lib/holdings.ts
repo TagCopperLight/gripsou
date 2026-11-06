@@ -111,6 +111,12 @@ function compare(a: HoldingLine, b: HoldingLine, sort: HoldingSort): number {
   }
 }
 
+/** How many of `holdings` a converted total leaves out for want of an
+ *  exchange rate (they are worth zero in it). */
+export function fxExcludedCount(holdings: Holding[]): number {
+  return holdings.filter((h) => h.fxMissing).length;
+}
+
 /** The account types to filter by, read off the holdings themselves. */
 export function holdingAccountTypes(holdings: Holding[]): string[] {
   return [...new Set(holdings.map((h) => h.accountType))];

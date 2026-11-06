@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
 
@@ -11,10 +11,7 @@ export function ListPrefsSurface() {
   const { prefs, updatePrefs } = useAuth();
 
   return (
-    <Surface className="p-6">
-      <h2 className="mb-5 text-lg font-semibold text-fg">
-        {t("settings.budget.listPrefs.title")}
-      </h2>
+    <SettingsSurface title={t("settings.budget.listPrefs.title")}>
       <div className="flex items-center justify-between gap-6">
         <div>
           <p className="text-sm font-medium text-fg">
@@ -30,6 +27,6 @@ export function ListPrefsSurface() {
           aria-label={t("settings.budget.listPrefs.showChecked")}
         />
       </div>
-    </Surface>
+    </SettingsSurface>
   );
 }

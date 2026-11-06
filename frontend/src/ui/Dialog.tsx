@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
@@ -30,12 +30,17 @@ export function Dialog({
   title, heading, subtitle, onClose, children, footer, icon, busy = false, large = false, wide = false, aside,
 }: DialogProps) {
   const { t } = useTranslation();
+  const body = useRef<HTMLDivElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
 
   return (
     <Modal
       label={title}
       onClose={onClose}
       busy={busy}
+      // The first field of the body, else the first action (a confirmation's
+      // Cancel).
+      focusWithin={[body, actions]}
       className={`relative ${wide ? "w-170" : large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col`}
     >
       <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-2">
@@ -59,9 +64,9 @@ export function Dialog({
           </button>
         </div>
       </div>
-      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
       {footer && (
-        <div data-modal-footer className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-2">
+        <div ref={actions} className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-2">
           {footer}
         </div>
       )}

@@ -10,6 +10,7 @@ import { ReviewLine } from "./ReviewLine";
 import { ResolvedLine } from "./ResolvedLine";
 import { ReviewProgress } from "./ReviewProgress";
 import { ReviewSkeleton } from "./ReviewSkeleton";
+import { usePopover } from "../../../ui/usePopover";
 import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
 import { CardState } from "../../../ui/CardState";
 import { BreakPairModal } from "../BreakPairModal";
@@ -46,7 +47,8 @@ export function ReviewMode() {
   const pending: Transaction[] = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
   const [state, setState] = useState<ReviewState>(initialReview);
   const [snapshots, setSnapshots] = useState<Record<string, Transaction>>({});
-  const [correcting, setCorrecting] = useState<{ tx: Transaction; anchor: HTMLElement } | null>(null);
+  // The line whose Correct opened the chooser, by id.
+  const chooser = usePopover<string>();
   // A failed write puts its line back the way it was and says so, as the
   // transactions list does.
   const writes = useBudgetWrites();
@@ -66,6 +68,9 @@ export function ReviewMode() {
     });
     setState((s) => syncPending(s, pending));
   }
+
+  const lineTx = (id: string) => pending.find((p) => p.id === id) ?? snapshots[id];
+  const correcting = chooser.key === null ? null : lineTx(chooser.key);
 
   const busy = accept.isPending || undo.isPending || patch.isPending || applyToDescription.isPending;
   const resolvedCount = Object.keys(state.resolved).length;
@@ -117,8 +122,8 @@ export function ReviewMode() {
 
   const onPick = (id: string | null) => {
     if (!correcting || !id) return;
-    correct(correcting.tx, id);
-    setCorrecting(null);
+    correct(correcting, id);
+    chooser.close();
   };
 
   /** Widens a resolved line's category to the rows sharing its description
@@ -210,18 +215,14 @@ export function ReviewMode() {
                 />
               );
             }
-            const tx = pending.find((p) => p.id === id) ?? snapshots[id];
+            const tx = lineTx(id);
             return (
               <ReviewLine
                 key={id}
                 tx={tx}
                 busy={busy}
                 onAccept={() => onAccept(tx)}
-                // The popover ignores clicks on its own anchor, so a second
-                // click on Correct has to close it here.
-                onCorrect={(anchor) =>
-                  setCorrecting((c) => (c?.anchor === anchor ? null : { tx, anchor }))
-                }
+                onCorrect={(anchor) => chooser.toggle(id, anchor)}
               />
             );
           })}
@@ -232,10 +233,10 @@ export function ReviewMode() {
         <CategoryChooser
           mode="pick"
           allowNone={false}
-          selectedIds={correcting.tx.categoryId ? [correcting.tx.categoryId] : []}
+          selectedIds={correcting.categoryId ? [correcting.categoryId] : []}
           onPick={onPick}
-          onClose={() => setCorrecting(null)}
-          anchor={correcting.anchor}
+          onClose={chooser.close}
+          anchor={chooser.anchor}
         />
       )}
       {writes.breakPair && (

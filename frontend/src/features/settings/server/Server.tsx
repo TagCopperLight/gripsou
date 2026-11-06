@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { CardState } from "../../../ui/CardState";
 import { ApiKeysSurface } from "./ApiKeysSurface";
@@ -19,20 +19,15 @@ export function SettingsServer() {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      <Surface className="p-6 md:mt-13">
-        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.about")}</h2>
-        <div className="flex items-center gap-3 pt-4">
+      <SettingsSurface className="md:mt-13" title={t("settings.server.about")}>
+        <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-fg">{t("settings.server.version")}</span>
           {/* select-all so it is one click to paste into a bug report */}
           <span className="select-all text-sm text-fg-faint">{version ?? "—"}</span>
         </div>
-      </Surface>
+      </SettingsSurface>
       <ApiKeysSurface />
-      <Surface className="p-6">
-        <h2 className="mb-1 text-lg font-semibold text-fg">
-          {t("settings.server.providers")}
-        </h2>
-        <p className="mb-5 text-xs text-fg-faint">{t("settings.server.providersHint")}</p>
+      <SettingsSurface title={t("settings.server.providers")} hint={t("settings.server.providersHint")}>
         {!providersReady ? (
           <CardState
             variant={providersIsError ? "error" : "loading"}
@@ -59,7 +54,7 @@ export function SettingsServer() {
             ))}
           </div>
         )}
-      </Surface>
+      </SettingsSurface>
       <AiServerSurface />
       <AiCostSurface />
     </div>

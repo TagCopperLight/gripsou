@@ -32,7 +32,6 @@ export function CategoryChip({
   return (
     <span
       data-testid="category-chip"
-      data-variant={category ? "category" : "uncategorized"}
       title={label}
       style={{
         color,

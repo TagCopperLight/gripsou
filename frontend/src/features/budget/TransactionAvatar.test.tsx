@@ -24,14 +24,14 @@ describe("TransactionAvatar", () => {
         tx={tx({ categoryId: "c1", categoryIcon: "shopping-cart", categoryColor: "#9bb06b" })}
       />,
     );
-    const el = screen.getByTestId("tx-avatar");
-    expect(el).toHaveAttribute("data-variant", "category");
-    expect(el.style.color).toBe("rgb(155, 176, 107)");
+    expect(screen.getByTestId("tx-avatar").style.color).toBe("rgb(155, 176, 107)");
   });
 
   it("falls back to a generic glyph when there is no category", () => {
     render(<TransactionAvatar tx={tx({})} />);
-    expect(screen.getByTestId("tx-avatar")).toHaveAttribute("data-variant", "generic");
+    const el = screen.getByTestId("tx-avatar");
+    expect(el.style.color).toBe("");
+    expect(el.querySelector("svg")).not.toBeNull();
   });
 
   it("ignores an unsafe colour rather than putting it in a style attribute", () => {
@@ -45,9 +45,7 @@ describe("TransactionAvatar", () => {
 
   it("draws a category without an icon as its coloured dot, not the uncategorised glyph", () => {
     render(<TransactionAvatar tx={tx({ categoryId: "c1", categoryIcon: null, categoryColor: "#9bb06b" })} />);
-    const el = screen.getByTestId("tx-avatar");
-    expect(el).toHaveAttribute("data-variant", "category");
-    expect(el.style.color).toBe("rgb(155, 176, 107)");
+    expect(screen.getByTestId("tx-avatar").style.color).toBe("rgb(155, 176, 107)");
   });
 
   it("draws a lot as its instrument's logo", () => {
@@ -56,13 +54,13 @@ describe("TransactionAvatar", () => {
         tx={tx({ source: "lot", ticker: "SPCX", logo: "https://cdn.brandfetch.io/isin/US84615Q1031" })}
       />,
     );
-    const el = screen.getByTestId("tx-avatar");
-    expect(el).toHaveAttribute("data-variant", "logo");
-    expect(el.style.backgroundImage).toContain("US84615Q1031");
+    expect(screen.getByTestId("tx-avatar").style.backgroundImage).toContain("US84615Q1031");
   });
 
   it("keeps the generic lot glyph when the instrument has no logo", () => {
     render(<TransactionAvatar tx={tx({ source: "lot", ticker: "SPCX", logo: null })} />);
-    expect(screen.getByTestId("tx-avatar")).toHaveAttribute("data-variant", "generic");
+    const el = screen.getByTestId("tx-avatar");
+    expect(el.style.backgroundImage).toBe("");
+    expect(el.querySelector("svg")).not.toBeNull();
   });
 });

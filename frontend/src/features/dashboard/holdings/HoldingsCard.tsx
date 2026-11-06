@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
-import { GridTable, TableEmpty } from "../../../ui/GridTable";
-import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../../ui/gridTable";
+import { GridTable, SortHeader, TableEmpty } from "../../../ui/GridTable";
+import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { FxAsterisk, FxFootnote } from "../../../ui/FxNote";
-import { MaskedMoney, PrivacyEye } from "../../../ui/PrivateMoney";
+import { MaskedMoney } from "../../../ui/MaskedMoney";
+import { CardTitle } from "../../../ui/CardTitle";
 import { Percent } from "../../../ui/Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
@@ -31,7 +32,7 @@ type Column = {
   align: "left" | "right";
   sort?: HoldingSortKey;
   /** The column's grid track (see `gridTable.ts`). */
-  track: string;
+  track: Track;
   /** Its gutter: every cell pays for the space on its right. */
   pad: string;
 };
@@ -40,17 +41,16 @@ type Column = {
 // ceilings, truncating past them), so searching or filtering never moves a
 // column. Below the sum of the floors the table scrolls sideways.
 const COLUMNS: Column[] = [
-  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: "minmax(220px, 3fr)", pad: "pl-3 pr-4" },
-  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: "minmax(96px, max-content)", pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.account", align: "left", track: "minmax(110px, 180px)", pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.accountType", align: "left", track: "minmax(110px, 150px)", pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value", track: "minmax(7rem, max-content)", pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl", track: "minmax(7rem, max-content)", pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", track: "108px", pad: "pr-3" },
+  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: { min: "220px", max: "3fr" }, pad: "pl-3 pr-4" },
+  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: { min: "96px", max: "max-content" }, pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.account", align: "left", track: { min: "110px", max: "180px" }, pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.accountType", align: "left", track: { min: "110px", max: "150px" }, pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value", track: { min: "7rem", max: "max-content" }, pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl", track: { min: "7rem", max: "max-content" }, pad: "pr-4" },
+  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", track: { min: "108px" }, pad: "pr-3" },
 ];
-const TRACKS = COLUMNS.map((c) => c.track).join(" ");
+const TRACKS = COLUMNS.map((c) => c.track);
 const PAD = COLUMNS.map((c) => c.pad);
-const MIN_WIDTH = "55rem";
 
 type HoldingsCardProps = {
   className?: string;
@@ -79,14 +79,9 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <h2 className="text-fg font-semibold text-sm">
+          <CardTitle privacy={ready && privacy}>
             {t("dashboard.holdings.title")}
-            {ready && privacy.enabled && (
-              <span className="ml-3 inline-flex align-middle">
-                <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-              </span>
-            )}
-          </h2>
+          </CardTitle>
           <label className="flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 md:w-64">
             <Search className="size-4 text-fg-faint shrink-0" />
             <input
@@ -141,8 +136,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         ) : (
         <div className="mt-4">
         <GridTable
-          columns={TRACKS}
-          minWidth={MIN_WIDTH}
+          tracks={TRACKS}
           head={COLUMNS.map((col) => {
             const active = col.sort && sort?.key === col.sort;
             return (
@@ -152,21 +146,13 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 className={`${HEAD_CELL} whitespace-nowrap ${col.pad} ${col.align === "right" ? "justify-end" : ""}`}
               >
                 {col.sort ? (
-                  <button
-                    type="button"
+                  <SortHeader
+                    label={t(col.labelKey)}
+                    active={Boolean(active)}
+                    asc={sort?.dir === "asc"}
+                    right={col.align === "right"}
                     onClick={() => toggleSort(col.sort!)}
-                    className={`inline-flex h-4 items-center gap-1 cursor-pointer uppercase transition-colors duration-140 ${
-                      col.align === "right" ? "flex-row-reverse" : ""
-                    } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
-                  >
-                    {t(col.labelKey)}
-                    {active &&
-                      (sort.dir === "asc" ? (
-                        <ChevronUp className="size-3.5" />
-                      ) : (
-                        <ChevronDown className="size-3.5" />
-                      ))}
-                  </button>
+                  />
                 ) : (
                   t(col.labelKey)
                 )}

@@ -1,5 +1,5 @@
 import { formatDate, zonedDay } from "../../../lib/date";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { Lock, Trash2, X } from "lucide-react";
@@ -11,8 +11,6 @@ import { Modal } from "../../../ui/Modal";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
-import { usePrefs } from "../../../auth/context";
-import type { ReactNode } from "react";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/holdings";
 import { formatMoney, formatQuantity } from "../../../lib/money";
 import {
@@ -20,6 +18,8 @@ import {
   recordedQuantity, rowFromLot, rowFromSuggestion, type FoundLot, type LotRow,
 } from "../../../lib/lots";
 import type { BasisPreview, Holding } from "../../../api/types";
+import { TextInput } from "../../../ui/TextInput";
+import { HEAD_TEXT } from "../../../ui/gridTable";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
 // quantities, unit prices, and everything the preview endpoint derives from
@@ -55,9 +55,10 @@ export function RecordLotsModal({
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const readerCurrency = usePrefs().currency;
   const { data, isError, refetch } = useHoldingLots(holding.id);
   const saveLots = useSaveLots(holding.id);
+  const body = useRef<HTMLDivElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
   const preview = useLotsPreview(holding.id);
   const suggestions = useLotSuggestions(holding.id);
 
@@ -175,9 +176,6 @@ export function RecordLotsModal({
   };
 
   const currency = holding.accountCurrency;
-  // The same figure in the reader's currency, only when it differs from the account's.
-  const reportingHint = (v: string | null | undefined, signed = false): ReactNode | null =>
-    v != null && currency !== readerCurrency ? <Money value={v} signed={signed} /> : null;
 
   useErrorToast(failed && t("dashboard.holdings.gap.saveError"), t("dashboard.holdings.gap.saveErrorDetail"));
 
@@ -186,6 +184,7 @@ export function RecordLotsModal({
       label={t("dashboard.holdings.gap.title")}
       onClose={onClose}
       busy={saveLots.isPending}
+      focusWithin={[body, actions]}
       className="relative w-208 max-w-[90vw] max-h-[85vh] bg-surface rounded-3xl flex flex-col"
     >
       <HoldingModalHeader holding={holding}>
@@ -228,7 +227,7 @@ export function RecordLotsModal({
         <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
       )}
 
-      <div data-modal-body className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
         {/* Table — no surface, deliberately: it is the working area, not a card. */}
         {rows === null ? (
           <CardState
@@ -242,12 +241,12 @@ export function RecordLotsModal({
           <table className="w-full table-fixed border-separate border-spacing-0">
             <LotColumns />
             <thead>
-              <tr className="text-[11px] font-mono text-fg-faint">
+              <tr className={HEAD_TEXT}>
                 <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.type")}</th>
-                <th className={`${TH} text-left pl-3`}>{t("dashboard.holdings.gap.columns.date")}</th>
-                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.quantity")}</th>
-                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.unitPrice")}</th>
-                <th className={`${TH} text-right pr-5`}>{t("dashboard.holdings.gap.columns.fee")}</th>
+                <th className={`${TH} text-left pl-3.5`}>{t("dashboard.holdings.gap.columns.date")}</th>
+                <th className={`${TH} text-right pr-5.5`}>{t("dashboard.holdings.gap.columns.quantity")}</th>
+                <th className={`${TH} text-right pr-5.5`}>{t("dashboard.holdings.gap.columns.unitPrice")}</th>
+                <th className={`${TH} text-right pr-5.5`}>{t("dashboard.holdings.gap.columns.fee")}</th>
                 <th className={`${TH} text-right pr-2`}>{t("dashboard.holdings.gap.columns.total")}</th>
                 <th className={TH} />
               </tr>
@@ -255,9 +254,6 @@ export function RecordLotsModal({
             <tbody>
               {list.map((r, i) => {
                 const p = lotEntry(r, language);
-                const ring = "ring-1 ring-red";
-                const input =
-                  "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none ring-inset focus:ring-1 focus:ring-green";
                 const cell = "py-1.5 pr-2 border-t border-surface-2";
                 // Text cells line their text up with the inputs' text (input padding + cell gap).
                 const lockedCell = "py-1.5 border-t border-surface-2";
@@ -266,10 +262,10 @@ export function RecordLotsModal({
                   return (
                     <tr key={r.key} data-testid="lot-row" className="text-sm text-fg-dim">
                       <td className={`${lockedCell} pl-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
-                      <td className={`${lockedCell} pl-3 font-mono`}>{formatDate(r.date)}</td>
-                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
-                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
-                      <td className={`${lockedCell} pr-5 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
+                      <td className={`${lockedCell} pl-3.5 font-mono`}>{formatDate(r.date)}</td>
+                      <td className={`${lockedCell} pr-5.5 text-right font-mono`}>{formatQuantity(r.quantity)}</td>
+                      <td className={`${lockedCell} pr-5.5 text-right font-mono`}>{formatMoney(r.unitPrice, { currency })}</td>
+                      <td className={`${lockedCell} pr-5.5 text-right font-mono`}>{formatMoney(r.fee, { currency })}</td>
                       <td className={`${cell} text-right font-mono whitespace-nowrap`}>
                         {p === null ? "—" : formatMoney(lotCashAmount(p.type, p.quantity, p.unitPrice, p.fee), { currency })}
                       </td>
@@ -294,40 +290,43 @@ export function RecordLotsModal({
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <input
+                      <TextInput
                         type="date"
                         data-testid="lot-date"
                         value={r.date}
                         onChange={(e) => set(i, { date: e.target.value })}
                         onBlur={sortRows}
-                        className={`${input} ${r.date === "" ? ring : ""}`}
+                        invalid={r.date === ""}
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <input
+                      <TextInput
                         inputMode="decimal"
                         data-testid="lot-quantity"
                         value={r.quantity}
                         onChange={(e) => set(i, { quantity: e.target.value })}
-                        className={`${input} text-right ${badQuantity(r.quantity, language) ? ring : ""}`}
+                        invalid={badQuantity(r.quantity, language)}
+                        className="text-right"
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <input
+                      <TextInput
                         inputMode="decimal"
                         data-testid="lot-unitPrice"
                         value={r.unitPrice}
                         onChange={(e) => set(i, { unitPrice: e.target.value })}
-                        className={`${input} text-right ${badUnitPrice(r.unitPrice, language) ? ring : ""}`}
+                        invalid={badUnitPrice(r.unitPrice, language)}
+                        className="text-right"
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <input
+                      <TextInput
                         inputMode="decimal"
                         data-testid="lot-fee"
                         value={r.fee}
                         onChange={(e) => set(i, { fee: e.target.value })}
-                        className={`${input} text-right ${badFee(r.fee, language) ? ring : ""}`}
+                        invalid={badFee(r.fee, language)}
+                        className="text-right"
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
@@ -373,26 +372,28 @@ export function RecordLotsModal({
           </span>
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
             <Figure
-              hint={reportingHint(figures?.reporting?.invested)}
+              currency={currency}
+              converted={figures?.reporting?.invested}
               testId="figure-invested"
               label={t("dashboard.holdings.gap.capitalInvested")}
               value={figures ? formatMoney(figures.invested, { currency }) : "—"}
             />
             <Figure
-              hint={reportingHint(figures?.reporting?.meanPrice)}
+              currency={currency}
+              converted={figures?.reporting?.meanPrice}
               testId="figure-meanPrice"
               label={t("dashboard.holdings.gap.meanPricePerShare")}
               value={figures ? formatMoney(figures.meanPrice, { currency }) : "—"}
             />
             <SignedFigure
-              hint={reportingHint(figures?.reporting?.realised, true)}
+              converted={figures?.reporting?.realised}
               testId="figure-realised"
               label={t("dashboard.holdings.gap.realisedPnl")}
               value={figures ? Number(figures.realised) : null}
               currency={currency}
             />
             <SignedFigure
-              hint={reportingHint(figures?.reporting?.unrealised, true)}
+              converted={figures?.reporting?.unrealised}
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
               value={figures?.unrealised == null ? null : Number(figures.unrealised)}
@@ -402,7 +403,7 @@ export function RecordLotsModal({
         </div>
       </div>
 
-      <div data-modal-footer className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
+      <div ref={actions} className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
         <Button variant="ghost" onClick={onClose} disabled={saveLots.isPending}>
           {t("dashboard.holdings.gap.cancel")}
         </Button>
@@ -416,12 +417,19 @@ export function RecordLotsModal({
   );
 }
 
-function Figure({ testId, label, value, hint }: { testId: string; label: string; value: string; hint: ReactNode | null }) {
+function Figure({ testId, label, value, currency, converted }: {
+  testId: string;
+  label: string;
+  value: string;
+  currency: string;
+  /** The figure in the reader's currency, shown on hover. */
+  converted: string | null | undefined;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-fg-faint text-xs">{label}</span>
       <span className="self-start">
-        <MoneyHint side="right" hint={hint}>
+        <MoneyHint side="right" currency={currency} converted={converted}>
           <span data-testid={testId} className="text-fg font-mono font-semibold text-sm">
             {value}
           </span>
@@ -436,9 +444,9 @@ function SignedFigure({
   label,
   value,
   currency,
-  hint,
+  converted,
 }: {
-  hint: ReactNode | null;
+  converted: string | null | undefined;
   testId: string;
   label: string;
   value: number | null;
@@ -450,7 +458,7 @@ function SignedFigure({
       {/* `Money` renders only its own span and does not forward arbitrary
           props, so the test hook goes on a wrapper. */}
       <span className="self-start">
-        <MoneyHint side="right" hint={hint}>
+        <MoneyHint side="right" currency={currency} converted={converted} signed>
           <span data-testid={testId}>
             {value === null ? (
               <span className="text-fg-faint font-mono font-semibold text-sm">—</span>

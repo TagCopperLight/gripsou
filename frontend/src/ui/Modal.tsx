@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 type ModalProps = {
   /** The dialog's accessible name. */
@@ -7,6 +7,10 @@ type ModalProps = {
   busy?: boolean;
   /** The panel's size, shape and layout; the backdrop and centring are given. */
   className: string;
+  /** Where focus lands on open, in order: the first control of the first of
+   *  these that has one (the body, then the footer's actions), else the first
+   *  control at all. A field with `autoFocus` overrides it. */
+  focusWithin?: RefObject<HTMLElement | null>[];
   children: ReactNode;
 };
 
@@ -18,7 +22,7 @@ const FOCUSABLE =
  *  Inert while `busy`, so a write in flight cannot be abandoned half-way.
  *  [`Dialog`](./Dialog.tsx) adds the standard header and footer; a modal with
  *  its own layout uses this directly. */
-export function Modal({ label, onClose, busy = false, className, children }: ModalProps) {
+export function Modal({ label, onClose, busy = false, className, focusWithin = [], children }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   // `busy` and `onClose` are read through refs so the trap is installed once,
   // for the modal's whole life, and still sees the current values. Callers
@@ -37,20 +41,23 @@ export function Modal({ label, onClose, busy = false, className, children }: Mod
     onCloseRef.current = onClose;
   }, [busy, onClose]);
 
+  // Read before the first commit: by its effects, a field's `autoFocus` has
+  // already moved focus inside.
+  const [previouslyFocused] = useState(() => document.activeElement as HTMLElement | null);
+  const focusWithinRef = useRef(focusWithin);
+
   useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
     const node = ref.current;
-    // Focus lands where the work starts: the first field of the body, else the
-    // first footer action (a confirmation's Cancel), and only then anything
-    // at all — the header's close button is the last resort, not the default.
-    const first =
-      node?.querySelector<HTMLElement>("[data-autofocus]") ??
-      node?.querySelector<HTMLElement>(`[data-modal-body] :is(${FOCUSABLE})`) ??
-      node?.querySelector<HTMLElement>(`[data-modal-footer] :is(${FOCUSABLE})`) ??
-      node?.querySelector<HTMLElement>(FOCUSABLE);
-    // Fall back to the modal itself (tabIndex -1) when nothing inside can take
-    // focus, so focus never escapes to the page behind.
-    (first ?? node)?.focus();
+    // Focus lands where the work starts (the header's close button is the
+    // last resort, not the default), unless a field already took it.
+    if (!node?.contains(document.activeElement)) {
+      const first =
+        focusWithinRef.current.map((r) => r.current?.querySelector<HTMLElement>(FOCUSABLE)).find(Boolean) ??
+        node?.querySelector<HTMLElement>(FOCUSABLE);
+      // Fall back to the modal itself (tabIndex -1) when nothing inside can
+      // take focus, so focus never escapes to the page behind.
+      (first ?? node)?.focus();
+    }
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !busyRef.current) {
@@ -83,7 +90,7 @@ export function Modal({ label, onClose, busy = false, className, children }: Mod
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
-  }, []);
+  }, [previouslyFocused]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

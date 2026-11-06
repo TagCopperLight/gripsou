@@ -39,7 +39,6 @@ export function CodeInput({ value, onChange, ariaLabel, autoFocus, invalid = fal
         inputMode="numeric"
         autoComplete="one-time-code"
         autoFocus={autoFocus}
-        data-autofocus={autoFocus ? "" : undefined}
         // No maxLength: the browser would cut a pasted "123 456" to "123 45"
         // before sixDigits could drop the space. sixDigits caps it at six.
         value={value}

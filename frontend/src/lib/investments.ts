@@ -1,5 +1,6 @@
 import type { Holding, InvestmentReturns } from "../api/types";
 import type { ExposureHolding } from "./exposure";
+import { fxExcludedCount } from "./holdings";
 
 /** What the Investments page reads off the holdings: the securities it is
  *  about (cash never counts here), how many of them are left out of the
@@ -14,7 +15,7 @@ export function investmentsView(holdings: Holding[], returns: InvestmentReturns)
   }));
   return {
     held,
-    excluded: securities.filter((h) => h.fxMissing).length,
+    excluded: fxExcludedCount(securities),
     empty: held.length === 0 && returns.accounts.length === 0,
   };
 }

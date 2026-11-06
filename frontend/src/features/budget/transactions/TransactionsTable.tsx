@@ -1,10 +1,10 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Filter, Inbox } from "lucide-react";
 
-import { TransactionRow } from "./TransactionRow";
 import { CardState } from "../../../ui/CardState";
 import { Button } from "../../../ui/Button";
-import { COL_PAD, MIN_TABLE_WIDTH, gridTemplate } from "./transactionsGrid";
+import { COL_PAD, gridTracks } from "./transactionsGrid";
 import { GridTable, TableEmpty } from "../../../ui/GridTable";
 import { HEAD_CELL } from "../../../ui/gridTable";
 import type { Transaction, TransactionCounts } from "../../../api/types";
@@ -13,8 +13,6 @@ import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
 type TransactionsTableProps = {
   rows: Transaction[];
   showChecked: boolean;
-  /** Private mode: every amount hidden. */
-  masked?: boolean;
   /** undefined while the counts are still loading. */
   counts?: TransactionCounts;
   filtered: boolean;
@@ -27,12 +25,8 @@ type TransactionsTableProps = {
   onClearFilters: () => void;
   /** Where "Connect a bank" goes, on an empty ledger. */
   onConnect: () => void;
-  isSelected: (id: string) => boolean;
-  anySelected: boolean;
-  onToggleSelect: (id: string) => void;
-  onOpenCategory: (tx: Transaction, anchor: HTMLElement) => void;
-  onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
-  onToggleChecked: (tx: Transaction) => void;
+  /** Draws one row (a `TransactionRow`, keyed by its id). */
+  renderRow: (tx: Transaction) => ReactNode;
 };
 
 /** Nothing shifts when a filter changes the content: the column tracks
@@ -43,8 +37,8 @@ type TransactionsTableProps = {
 export function TransactionsTable(props: TransactionsTableProps) {
   const { t } = useTranslation();
   const {
-    rows, showChecked, masked = false, counts, filtered, loading, error, onRetry,
-    hasNextPage, fetchingNextPage, onLoadMore, onClearFilters, onConnect,
+    rows, showChecked, counts, filtered, loading, error, onRetry,
+    hasNextPage, fetchingNextPage, onLoadMore, onClearFilters, onConnect, renderRow,
   } = props;
   // Infinite scroll. The button below stays as the accessible fallback
   // and is what most tests drive, since jsdom has no IntersectionObserver.
@@ -96,8 +90,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
           `overflow-x` would make it the sentinel's scroll parent and quietly
           undo the preloading margin. */}
       <GridTable
-        columns={gridTemplate(showChecked)}
-        minWidth={MIN_TABLE_WIDTH}
+        tracks={gridTracks(showChecked)}
         head={
           <>
             <th role="columnheader" className={`${HEAD_CELL} ${COL_PAD.transaction}`}>
@@ -130,22 +123,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
           </>
         }
       >
-        {rows.map((row) => (
-          <TransactionRow
-            key={row.id}
-            tx={row}
-            showChecked={showChecked}
-            masked={masked}
-            // "All shown" covers the cash rows only: a buy or sale is never
-            // in a selection, so never lit as one.
-            selected={row.source !== "lot" && props.isSelected(row.id)}
-            anySelected={props.anySelected}
-            onToggleSelect={props.onToggleSelect}
-            onOpenCategory={props.onOpenCategory}
-            onOpenTags={props.onOpenTags}
-            onToggleChecked={props.onToggleChecked}
-          />
-        ))}
+        {rows.map(renderRow)}
       </GridTable>
       <div ref={sentinel} className="h-px" />
       {hasNextPage && (

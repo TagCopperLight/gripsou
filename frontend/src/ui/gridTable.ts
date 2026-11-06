@@ -41,10 +41,25 @@ export const ROW_CELLS = [
 /** The hover fill of a row that does something when clicked or hovered. */
 export const ROW_HOVER = "hover:[&>td]:bg-hover";
 
-/** The header row: 11px uppercase mono, faint, wide-tracked, the same head
- *  treatment as every table in the app. */
-export const HEAD_ROW =
-  "col-span-full grid grid-cols-subgrid text-left text-[11px] font-mono uppercase tracking-wide text-fg-faint";
+/** A column's track: at least `min`, growing to `max` (a length, `Nfr`,
+ *  `max-content`, `auto`); exactly `min` without one. */
+export type Track = { min: string; max?: string };
+
+/** The grid's `grid-template-columns`, and the width below which it scrolls
+ *  sideways: the sum of the tracks' minimums. */
+export function gridColumns(tracks: Track[]): { template: string; minWidth: string } {
+  return {
+    template: tracks.map((t) => (t.max ? `minmax(${t.min}, ${t.max})` : t.min)).join(" "),
+    minWidth: `calc(${tracks.map((t) => t.min).join(" + ")})`,
+  };
+}
+
+/** The type of every table head and list group heading: 11px mono, faint,
+ *  wide-tracked. */
+export const HEAD_TEXT = "font-mono text-[11px] font-medium tracking-wide text-fg-faint";
+
+/** The header row: `HEAD_TEXT`, uppercase. */
+export const HEAD_ROW = `col-span-full grid grid-cols-subgrid text-left uppercase ${HEAD_TEXT}`;
 
 /** A header cell; add the column's padding and alignment. */
 export const HEAD_CELL = "flex items-center py-2 font-medium";

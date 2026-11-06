@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Calendar } from "lucide-react";
 
-import { Dialog as BudgetDialog } from "../../../ui/Dialog";
+import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { presetRange, type RangePreset } from "../../../lib/period";
+import { TextInput } from "../../../ui/TextInput";
 
 type RangeModalProps = {
   onApply: (range: { from: string; to: string }) => void;
@@ -21,7 +22,7 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
   const customValid = from !== "" && to !== "" && from <= to;
 
   return (
-    <BudgetDialog
+    <Dialog
       title={t("budget.overview.customRange")}
       icon={<Calendar className="size-4" />}
       onClose={onClose}
@@ -47,23 +48,21 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
           {t("budget.overview.from")}
-          <input
+          <TextInput
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="w-full rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
           {t("budget.overview.to")}
-          <input
+          <TextInput
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="w-full rounded-lg bg-surface-2 px-2.5 py-1.5 text-sm text-fg"
           />
         </label>
       </div>
-    </BudgetDialog>
+    </Dialog>
   );
 }

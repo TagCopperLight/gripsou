@@ -4,6 +4,7 @@ import { STRIPE_CSS } from "../../exposure/exposureColors";
 import { localizeCountry, localizeSector } from "../../../lib/composition-i18n";
 import { allocationPercents } from "../../../lib/composition";
 import type { Allocation, Composition } from "../../../api/types";
+import { ColorSquare } from "../../../ui/ColorSquare";
 
 // "Other", the remainder, is striped like the leftover slice of the
 // Investments donuts.
@@ -47,10 +48,7 @@ function AllocationBar({
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1">
         {slices.map((s) => (
           <span key={s.name} className="flex items-center gap-1.5 text-xs">
-            <span
-              className="size-2.5 rounded-sm shrink-0"
-              style={{ background: s.color }}
-            />
+            <ColorSquare color={s.color} />
             <span className="text-fg-dim">{s.name}</span>
             <span className="font-mono text-fg-faint">{s.percent}%</span>
           </span>

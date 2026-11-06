@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
-import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
+import { MaskedMoney } from "../../ui/MaskedMoney";
+import { CardTitle } from "../../ui/CardTitle";
 import { Percent } from "../../ui/Percent";
 import type { Account } from "../../api/types";
-import { distribution, isDrawn } from "../../lib/distribution";
+import { isDrawn, sharesById } from "../../lib/distribution";
 import type { Privacy } from "../../auth/usePrivacy";
 
 type AccountsSummaryCardProps = {
@@ -27,20 +28,15 @@ export function AccountsSummaryCard({ accounts, privacy, onHover, className = ""
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
   // Too thin to see (1 % or less of what's owned): left out of the bar, whose
   // other segments fill the space; the list below still shows them.
-  const drawn = new Set(distribution(accounts).filter((r) => isDrawn(r.share)).map((r) => r.account.id));
-  const shown = accounts.filter((a) => drawn.has(a.id));
+  const shares = sharesById(accounts);
+  const shown = accounts.filter((a) => isDrawn(shares.get(a.id) ?? null));
 
   return (
     <Surface className={`p-4 md:p-5 ${className}`}>
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-fg font-semibold text-sm">
+        <CardTitle privacy={privacy}>
           {t("account.allAccounts")}
-          {privacy.enabled && (
-            <span className="ml-3 inline-flex align-middle">
-              <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-            </span>
-          )}
-        </h2>
+        </CardTitle>
         <MaskedMoney masked={privacy.masked} value={total} className="text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
       {total > 0 && (
@@ -81,7 +77,7 @@ export function AccountsSummaryCard({ accounts, privacy, onHover, className = ""
                 <span className="text-fg-dim">{hover.account.name}</span>
               </span>
               <span aria-hidden className="text-fg-faint">·</span>
-              <Percent value={Number(hover.account.value) / total} fractionDigits={1} className="text-fg-faint" />
+              <Percent value={shares.get(hover.account.id) ?? 0} fractionDigits={1} className="text-fg-faint" />
               <span aria-hidden className="text-fg-faint">·</span>
               <MaskedMoney masked={privacy.masked} value={hover.account.value} className="text-fg font-semibold" />
             </div>

@@ -52,7 +52,7 @@ describe("TransactionRow", () => {
   it("shows the uncategorised chip and opens the chooser when it is clicked", () => {
     const h = renderRow();
     const chip = screen.getByTestId("category-chip");
-    expect(chip).toHaveAttribute("data-variant", "uncategorized");
+    expect(chip).toHaveTextContent("Uncategorised");
     fireEvent.click(chip);
     expect(h.onOpenCategory).toHaveBeenCalled();
   });

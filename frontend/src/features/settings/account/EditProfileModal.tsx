@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { Pencil } from "lucide-react";
@@ -6,9 +6,11 @@ import { Pencil } from "lucide-react";
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
-import { FieldError, LabeledField } from "../../../ui/FieldError";
+import { FieldError } from "../../../ui/FieldError";
+import { Field } from "../../../ui/Field";
 import { TextInput } from "../../../ui/TextInput";
 import { useUpdateProfile } from "../../../api/auth";
+import { ApiError } from "../../../api/client";
 import { useAuth } from "../../../auth/context";
 import { fileToAvatarDataUrl } from "../../../lib/avatar";
 
@@ -18,6 +20,7 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
  *  name and email on Save. */
 export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
+  const id = useId();
   const { user, prefs, updatePrefs } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user?.name ?? "");
@@ -42,7 +45,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const valid = name.trim() !== "" && EMAIL_RE.test(email);
   const canSave = dirty && valid && !updateProfile.isPending;
   // The handler returns 409 when the new email collides with another account.
-  const emailTaken = updateProfile.error?.message.includes(" 409") ?? false;
+  const emailTaken = updateProfile.error instanceof ApiError && updateProfile.error.status === 409;
 
   const save = () => {
     if (!canSave) return;
@@ -107,15 +110,15 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div className="flex flex-col gap-5">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm text-fg-faint">{t("settings.account.name")}</span>
+            <Field label={t("settings.account.name")} htmlFor={`${id}-name`}>
               <TextInput
+                id={`${id}-name`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </label>
-            <LabeledField label={t("settings.account.email")} error={emailTaken && t("settings.account.emailInUse")}>
-              <TextInput
+            </Field>
+            <Field label={t("settings.account.email")} error={emailTaken && t("settings.account.emailInUse")} htmlFor={`${id}-email`}>
+              <TextInput id={`${id}-email`}
                 type="email"
                 value={email}
                 invalid={emailTaken}
@@ -124,7 +127,7 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
                   if (emailTaken) updateProfile.reset();
                 }}
               />
-            </LabeledField>
+            </Field>
           </div>
         </div>
         {pictureError && <FieldError>{t("settings.account.pictureError")}</FieldError>}

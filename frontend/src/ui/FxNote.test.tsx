@@ -12,9 +12,8 @@ import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
 vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 
-// NetWorthCard's headline renders PrivateMoney, which reads useAuth() —
-// provide a minimal mock context (private mode off) rather than pulling in
-// the full AuthProvider bootstrap flow.
+// NetWorthCard's headline privacy mask reads useAuth(): a minimal context
+// with private mode off.
 const authValue: AuthValue = {
   isAuthenticated: false,
   user: null,

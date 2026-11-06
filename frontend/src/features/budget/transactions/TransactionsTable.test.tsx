@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import { TransactionsTable } from "./TransactionsTable";
+import { TransactionRow } from "./TransactionRow";
 import type { Transaction } from "../../../api/types";
 
 // Counts component renders: the table and every row call `useTranslation`
@@ -40,6 +41,8 @@ class NoopObserver {
   disconnect() {}
 }
 
+const noop = () => {};
+
 const BASE = {
   rows: [tx({})],
   showChecked: false,
@@ -53,12 +56,19 @@ const BASE = {
   onLoadMore: vi.fn(),
   onClearFilters: vi.fn(),
   onConnect: vi.fn(),
-  isSelected: () => false,
-  anySelected: false,
-  onToggleSelect: vi.fn(),
-  onOpenCategory: vi.fn(),
-  onOpenTags: vi.fn(),
-  onToggleChecked: vi.fn(),
+  renderRow: (row: Transaction) => (
+    <TransactionRow
+      key={row.id}
+      tx={row}
+      showChecked={false}
+      selected={false}
+      anySelected={false}
+      onToggleSelect={noop}
+      onOpenCategory={noop}
+      onOpenTags={noop}
+      onToggleChecked={noop}
+    />
+  ),
 };
 
 describe("TransactionsTable", () => {
@@ -151,14 +161,14 @@ describe("TransactionsTable", () => {
     // same rows, and a fresh-but-equivalent selection test. Only the table
     // itself runs again.
     translations.calls = 0;
-    rerender(<TransactionsTable {...BASE} rows={[...rows]} isSelected={() => false} />);
+    rerender(<TransactionsTable {...BASE} rows={[...rows]} />);
     expect(translations.calls).toBe(1);
 
     // An optimistic edit replaces one row object: that row runs again, its
     // neighbours do not (table + row + the row's category chip).
     translations.calls = 0;
     const edited = [rows[0], { ...rows[1], checked: true }, rows[2]];
-    rerender(<TransactionsTable {...BASE} rows={edited} isSelected={() => false} />);
+    rerender(<TransactionsTable {...BASE} rows={edited} />);
     expect(translations.calls).toBeLessThanOrEqual(3);
   });
 
@@ -193,7 +203,7 @@ describe("TransactionsTable", () => {
       const onLoadMore = vi.fn();
       const { rerender } = render(<TransactionsTable {...BASE} hasNextPage onLoadMore={onLoadMore} />);
       for (let i = 0; i < 5; i++) {
-        rerender(<TransactionsTable {...BASE} hasNextPage onLoadMore={() => onLoadMore()} isSelected={() => false} />);
+        rerender(<TransactionsTable {...BASE} hasNextPage onLoadMore={() => onLoadMore()} />);
       }
       expect(instances).toHaveLength(1);
       expect(onLoadMore).not.toHaveBeenCalled();
@@ -216,27 +226,5 @@ describe("TransactionsTable", () => {
       instances[0].fire(true);
       expect(onLoadMore).toHaveBeenCalledTimes(1);
     });
-  });
-
-  it("wires each row's isSelected/onToggleSelect to its own id, not a neighbour's", () => {
-    const onToggleSelect = vi.fn();
-    const isSelected = vi.fn((id: string) => id === "t2");
-    render(
-      <TransactionsTable
-        {...BASE}
-        rows={[tx({ id: "t1" }), tx({ id: "t2" })]}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-      />,
-    );
-    expect(isSelected).toHaveBeenCalledWith("t1");
-    expect(isSelected).toHaveBeenCalledWith("t2");
-
-    const checkboxes = screen.getAllByTestId("tx-select");
-    expect(checkboxes[1]).toBeChecked();
-    expect(checkboxes[0]).not.toBeChecked();
-
-    fireEvent.click(checkboxes[0]);
-    expect(onToggleSelect).toHaveBeenCalledWith("t1");
   });
 });

@@ -96,7 +96,6 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter") save();
             }}
-            className="disabled:opacity-60"
           />
         </Field>
 

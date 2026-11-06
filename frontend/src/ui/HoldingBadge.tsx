@@ -1,10 +1,5 @@
 import { colorForString } from "../lib/palette";
-
-/** A logo value is a real image only when it's an http(s) or root-relative URL;
- * otherwise it's treated as absent (we fall back to a colored initials swatch). */
-function isLogoUrl(logo: string | null | undefined): boolean {
-  return !!logo && (logo.startsWith("http") || logo.startsWith("/"));
-}
+import { logoUrl } from "../lib/logo";
 
 type Props = {
   logo: string | null;
@@ -19,17 +14,17 @@ type Props = {
 
 /** An instrument's logo, or a colored swatch with its initials. */
 export function HoldingBadge({ logo, ticker, fallbackText, color, className = "" }: Props) {
-  const hasLogo = isLogoUrl(logo);
+  const url = logoUrl(logo);
   return (
     <span
       className={`shrink-0 flex items-center justify-center font-mono font-semibold text-fg bg-cover bg-center ${className}`}
       style={
-        hasLogo
-          ? { backgroundImage: `url(${logo})` }
+        url
+          ? { backgroundImage: `url(${url})` }
           : { backgroundColor: color ?? colorForString(ticker) }
       }
     >
-      {!hasLogo && (fallbackText ?? ticker.slice(0, 2))}
+      {!url && (fallbackText ?? ticker.slice(0, 2))}
     </span>
   );
 }

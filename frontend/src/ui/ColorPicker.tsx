@@ -1,37 +1,32 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import { FloatingPanel } from "./FloatingPanel";
 import { hexToHsv, hsvToHex, type Hsv } from "../lib/color";
 
 const HEX6 = /^#[0-9a-f]{6}$/;
 const WIDTH = 240;
-const GAP = 8;
 
 type ColorPickerProps = {
   value: string;
   onChange: (color: string) => void;
-  /** The swatch that opened it: the panel hangs under it, right-aligned, and
-   *  a click on it doesn't count as a click outside. */
+  /** The swatch that opened it: the panel hangs under it, right-aligned. */
   anchor: HTMLElement;
   onClose: () => void;
 };
 
 /** A colour area, a hue slider and the hex code, in a small panel under the
- *  swatch that opened it (above it when the screen has no room below). Ours
- *  rather than the system's picker: that one is a separate window the page
- *  can't close, so it outlived the window it was opened from. Placed inside the dialog it belongs to (out of the scrolling
- *  body, so it's never cut off), which keeps it in the dialog's focus trap. */
+ *  swatch that opened it. Ours rather than the system's picker: that one is a
+ *  separate window the page can't close, so it outlived the window it was
+ *  opened from. */
 export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerProps) {
   const { t } = useTranslation();
   // Kept apart from `value`: a grey or black has no hue of its own, and the
   // slider must not jump back to red when the area reaches one.
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(HEX6.test(value) ? value : "#000000"));
   const [hex, setHex] = useState(value.replace("#", ""));
-  const ref = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const host = anchor.closest<HTMLElement>("[role=dialog]") ?? document.body;
+  const shade = useRef<HTMLDivElement>(null);
 
   const pick = (next: Hsv) => {
     setHsv(next);
@@ -60,46 +55,6 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
     ctx.fillRect(0, 0, width, height);
   }, [hsv.h]);
 
-  useLayoutEffect(() => {
-    const place = () => {
-      const a = anchor.getBoundingClientRect();
-      const h = host.getBoundingClientRect();
-      // Above the swatch when the screen has no room for it below.
-      const height = ref.current?.offsetHeight ?? 0;
-      const below = a.bottom + GAP + height <= window.innerHeight - GAP || a.top < height + 2 * GAP;
-      setPos({
-        top: (below ? a.bottom + GAP : a.top - GAP - height) - h.top,
-        left: Math.max(GAP, a.right - h.left - WIDTH),
-      });
-    };
-    place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
-    };
-  }, [anchor, host]);
-
-  const onCloseRef = useRef(onClose);
-  useLayoutEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-  useEffect(() => {
-    const onPointerDown = (e: globalThis.PointerEvent) => {
-      const target = e.target as Node;
-      if (ref.current?.contains(target) || anchor.contains(target)) return;
-      onCloseRef.current();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [anchor]);
-
-  const placed = pos !== null;
-  useEffect(() => {
-    if (placed) ref.current?.querySelector<HTMLElement>("[role=slider]")?.focus();
-  }, [placed]);
-
   /** Follows the pointer from a press until it's released, even outside. */
   const track = (apply: (x: number, y: number) => void) => (e: PointerEvent<HTMLElement>) => {
     const el = e.currentTarget;
@@ -126,22 +81,17 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
   };
   const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
-  return createPortal(
-    <div
-      ref={ref}
-      // Escape closes the picker, not the window under it.
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          e.nativeEvent.stopImmediatePropagation();
-          onClose();
-          anchor.focus();
-        }
-      }}
-      style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: WIDTH, visibility: pos ? "visible" : "hidden" }}
-      className="absolute z-10 flex flex-col gap-2.5 rounded-2xl bg-surface-2 p-3 shadow-lg"
+  return (
+    <FloatingPanel
+      anchor={anchor}
+      onClose={onClose}
+      align="end"
+      initialFocus={shade}
+      style={{ width: WIDTH }}
+      className="flex flex-col gap-2.5 rounded-2xl bg-surface-2 p-3 shadow-lg"
     >
       <div
+        ref={shade}
         role="slider"
         tabIndex={0}
         aria-label={t("common.colorPicker.shade")}
@@ -192,7 +142,6 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
           className="w-full bg-transparent text-fg outline-none"
         />
       </label>
-    </div>,
-    host,
+    </FloatingPanel>
   );
 }

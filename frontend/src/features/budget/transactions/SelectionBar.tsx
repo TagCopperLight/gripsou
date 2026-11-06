@@ -6,8 +6,9 @@ import { useBudget } from "../budgetContext";
 import { CategoryChooser } from "../CategoryChooser";
 import { TagChooser } from "../TagChooser";
 import { Button } from "../../../ui/Button";
-import { MaskedMoney } from "../../../ui/PrivateMoney";
+import { MaskedMoney } from "../../../ui/MaskedMoney";
 import { FxAsterisk } from "../../../ui/FxNote";
+import { usePopover } from "../../../ui/usePopover";
 
 type SelectionBarProps = {
   /** The server's `selectable` count — what "all shown" actually covers:
@@ -55,10 +56,10 @@ export function SelectionBar({
 }: SelectionBarProps) {
   const { t } = useTranslation();
   const { selection, anySelected, clearSelection } = useBudget();
-  const [open, setOpen] = useState<"categories" | "tags" | null>(null);
-  // See `FilterPanel`: the chooser is a popover under the button that opened it.
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [pendingTags, setPendingTags] = useState<string[]>([]);
+  // Closing the tag chooser, by any way, abandons what was ticked: a bulk tag
+  // write can touch the whole ledger, so it happens on Save and nowhere else.
+  const chooser = usePopover<"categories" | "tags">(() => setPendingTags([]));
 
   if (!anySelected) return null;
 
@@ -66,16 +67,9 @@ export function SelectionBar({
   // is the honest number, and with no filter set that is the whole ledger.
   const count = selection.mode === "allShown" ? matching : selection.ids.size;
 
-  // Dismissing the chooser abandons what was ticked: a bulk tag write can
-  // touch the whole ledger, so it happens on Save and nowhere else.
-  const closeTags = () => {
-    setPendingTags([]);
-    setOpen(null);
-  };
-
   const saveTags = () => {
     if (pendingTags.length) onAddTags(pendingTags);
-    closeTags();
+    chooser.close();
   };
 
   return (
@@ -109,31 +103,16 @@ export function SelectionBar({
           label={t("budget.transactions.assignCategory")}
           disabled={busy}
           aria-haspopup="dialog"
-          aria-expanded={open === "categories"}
-          onClick={(e) => {
-            setAnchor(e.currentTarget);
-            // A second click on the control that opened it puts it away —
-            // `Popover` exempts its anchor from the outside-click close, so
-            // the toggle has to live here.
-            setOpen((prev) => (prev === "categories" ? null : "categories"));
-          }}
+          aria-expanded={chooser.key === "categories"}
+          onClick={(e) => chooser.toggle("categories", e.currentTarget)}
         />
         <IconAction
           icon={Tag}
           label={t("budget.transactions.addTags")}
           disabled={busy}
           aria-haspopup="dialog"
-          aria-expanded={open === "tags"}
-          onClick={(e) => {
-            setAnchor(e.currentTarget);
-            // Closing by the button discards the pending tags, exactly as
-            // clicking away does — only Save writes.
-            if (open === "tags") {
-              closeTags();
-              return;
-            }
-            setOpen("tags");
-          }}
+          aria-expanded={chooser.key === "tags"}
+          onClick={(e) => chooser.toggle("tags", e.currentTarget)}
         />
         {showChecked && (
           <IconAction
@@ -156,7 +135,7 @@ export function SelectionBar({
           {t("budget.transactions.clear")}
         </Button>
 
-        {open === "categories" && (
+        {chooser.key === "categories" && (
           <CategoryChooser
             mode="pick"
             selectedIds={[]}
@@ -167,11 +146,11 @@ export function SelectionBar({
             // must not exist at all here.
             allowNone={false}
             onPick={(id) => onAssignCategory(id)}
-            onClose={() => setOpen(null)}
-            anchor={anchor}
+            onClose={chooser.close}
+            anchor={chooser.anchor}
           />
         )}
-        {open === "tags" && (
+        {chooser.key === "tags" && (
           <TagChooser
             selectedIds={pendingTags}
             onToggle={(id) =>
@@ -179,8 +158,8 @@ export function SelectionBar({
                 prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
               )
             }
-            onClose={closeTags}
-            anchor={anchor}
+            onClose={chooser.close}
+            anchor={chooser.anchor}
             footer={
               <Button
                 data-testid="chooser-save"

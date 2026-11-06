@@ -12,6 +12,7 @@ import { Select } from "../../../ui/Select";
 import {
   useCreateBudgetCategory,
   useUpdateBudgetCategory,
+  categoryBody,
   type BudgetCategory,
   type BudgetKind,
   type CategoryBody,
@@ -53,7 +54,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
     Boolean(category?.defaultKey) &&
     (trimmed === initialDisplayName || trimmed === categoryLabel(t, category!));
   const storedName = category && unchanged ? category.name : trimmed;
-  const body: CategoryBody = {
+  const fields = {
     name: storedName,
     color,
     icon,
@@ -61,8 +62,8 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
     // The system row's kind is fixed; the select is disabled, and the body
     // re-sends what the backend already holds.
     kind: category?.systemKey ? category.kind : kind,
-    archived: category?.archived ?? false,
   };
+  const body: CategoryBody = category ? categoryBody(category, fields) : { ...fields, archived: false };
 
   const dirty =
     !category ||
@@ -143,7 +144,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            className="disabled:opacity-60"
           />
         </Field>
 

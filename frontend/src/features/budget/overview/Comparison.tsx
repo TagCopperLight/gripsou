@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Dot } from "lucide-react";
 
-import { MaskedMoney } from "../../../ui/PrivateMoney";
+import { MaskedMoney } from "../../../ui/MaskedMoney";
 import { Percent } from "../../../ui/Percent";
 import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 

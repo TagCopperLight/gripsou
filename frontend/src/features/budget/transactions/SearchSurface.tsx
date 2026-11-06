@@ -9,6 +9,7 @@ import { Select } from "../../../ui/Select";
 import { useAccounts } from "../../../api/accounts";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../../lib/budgetFilters";
 import type { TransactionCounts } from "../../../api/types";
+import { TextInput } from "../../../ui/TextInput";
 
 /** The Transactions search surface: three parts, each rendered only when it has
  *  something to show.
@@ -93,19 +94,21 @@ export function SearchSurface({ counts, onSubmitSearch }: {
 
       {filters.timeFrame === "custom" && (
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <input
+          <TextInput
             type="date"
+            tone="sunken"
             aria-label={t("budget.transactions.from")}
             value={filters.from}
             onChange={(e) => patchFilters({ from: e.target.value, period: undefined })}
-            className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
+            className="max-w-40"
           />
-          <input
+          <TextInput
             type="date"
+            tone="sunken"
             aria-label={t("budget.transactions.to")}
             value={filters.to}
             onChange={(e) => patchFilters({ to: e.target.value, period: undefined })}
-            className="rounded-xl bg-surface px-3 py-2 text-sm text-fg outline-none"
+            className="max-w-40"
           />
         </div>
       )}

@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownRight, ArrowUpRight, TrendingDown, TrendingUp, X } from "lucide-react";
+import { TrendingDown, TrendingUp, X } from "lucide-react";
 
-import { MaskedMoney, PrivacyEye } from "../../../ui/PrivateMoney";
+import { MaskedMoney, PrivacyEye } from "../../../ui/MaskedMoney";
 import { FxAsterisk, FxFootnote } from "../../../ui/FxNote";
 import { GridTable } from "../../../ui/GridTable";
-import { HEAD_CELL, ROW_CELLS } from "../../../ui/gridTable";
+import { HEAD_CELL, ROW_CELLS, type Track } from "../../../ui/gridTable";
 import { Percent } from "../../../ui/Percent";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
+import { RangeSelector } from "../../../ui/RangeSelector";
+import { GainPill } from "../../../ui/GainPill";
 import { ChartLegend } from "../../../ui/ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "../../../ui/ValueChart";
 import { CardState } from "../../../ui/CardState";
@@ -27,9 +29,10 @@ import { usePrivacy } from "../../../auth/usePrivacy";
 import { reportingOffered } from "../../../lib/reportingUnit";
 import { currencySymbol } from "../../../lib/currency";
 import { usePrefs } from "../../../auth/context";
-import { rangeOptions, type Range } from "../../../lib/ranges";
+import type { Range } from "../../../lib/ranges";
 import { legendItems, plotSeries } from "../../../lib/valueChart";
 import { FG_FAINT, GREEN } from "../../../lib/theme";
+import { ColorSquare } from "../../../ui/ColorSquare";
 
 // This modal shows THREE currency domains on screen, plus a fourth behind the chart's unit
 // switch. They are distinct and must
@@ -82,6 +85,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const [unit, setUnit] = useState<ChartUnit>("value");
   const privacy = usePrivacy();
   const masked = privacy.masked;
+  const body = useRef<HTMLDivElement>(null);
 
   const { data: priceData, isError: pricesError, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
@@ -130,18 +134,18 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     };
   }, [holding, mode, prices, inReporting, t]);
 
-  const gainUp = gainAbs >= 0;
   const chartUnit: ChartUnit = inReporting ? "value" : shownUnit;
 
   return (
     <Modal
       label={holding.name}
       onClose={onClose}
+      focusWithin={[body]}
       className="absolute inset-0 flex flex-col overflow-hidden bg-surface md:inset-[5%] md:rounded-3xl"
     >
       <HoldingModalHeader
         holding={holding}
-        afterName={privacy.enabled && <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />}
+        afterName={privacy.enabled && <PrivacyEye masked={masked} toggle={privacy.toggle} />}
       >
         <SegmentedControl
           value={mode}
@@ -162,7 +166,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       </HoldingModalHeader>
 
       {/* Body */}
-      <div data-modal-body className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
+      <div ref={body} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
         {/* Side by side from xl (a chart of at least ~580 px beside the 512 px
             column); below, the chart on top and the stats under it. */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
@@ -180,26 +184,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
                 currency={shownCurrency}
                 className="text-fg text-2xl font-semibold tracking-tight"
               />
-              <div
-                className={`flex self-start items-center gap-1 py-1 px-2 rounded-lg text-sm ${
-                  gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"
-                }`}
-              >
-                {gainUp ? (
-                  <ArrowUpRight className="size-4" />
-                ) : (
-                  <ArrowDownRight className="size-4" />
-                )}
-                <MaskedMoney
-                  masked={masked && mode === "purchases"}
-                  value={gainAbs}
-                  currency={shownCurrency}
-                  signed
-                />
-                <span className="font-mono ml-2">
-                  (<Percent value={gainPct} signed />)
-                </span>
-              </div>
+              <GainPill value={gainAbs} pct={gainPct} masked={masked && mode === "purchases"} currency={shownCurrency} />
             </div>
             <div className="flex flex-col items-end gap-3">
               {!percentOnly && (
@@ -231,11 +216,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           )}
 
           <div className="mt-3 flex justify-center overflow-x-auto">
-            <SegmentedControl
-              value={range}
-              onChange={(v) => setRange(v as Range)}
-              options={rangeOptions(t)}
-            />
+            <RangeSelector value={range} onChange={setRange} />
           </div>
         </div>
 
@@ -374,10 +355,7 @@ function AboutSurface({
         <AboutRow label={t("dashboard.assetModal.type")}>{t(KIND_LABEL_KEY[holding.kind])}</AboutRow>
         <AboutRow label={t("dashboard.assetModal.account")}>
           <span className="flex min-w-0 items-center gap-2">
-            <span
-              className="size-2.5 shrink-0 rounded-sm"
-              style={{ background: holding.accountColor }}
-            />
+            <ColorSquare color={holding.accountColor} />
             <span className="truncate">{holding.accountName}</span>
           </span>
         </AboutRow>
@@ -400,7 +378,12 @@ function AboutSurface({
 
 // The purchase history's columns: date with the side, quantity, unit price,
 // cash amount. Fixed tracks like every grid table (see `gridTable.ts`).
-const HISTORY_TRACKS = "minmax(150px, 1fr) minmax(64px, max-content) minmax(96px, max-content) minmax(108px, max-content)";
+const HISTORY_TRACKS: Track[] = [
+  { min: "150px", max: "1fr" },
+  { min: "64px", max: "max-content" },
+  { min: "96px", max: "max-content" },
+  { min: "108px", max: "max-content" },
+];
 
 /// `currency` is the ACCOUNT's currency: transaction.amount and
 /// transaction.unit_price are amount-domain, not price-domain.
@@ -434,8 +417,7 @@ function PurchaseHistorySurface({
       ) : (
         <div className="mt-3 -mx-3">
           <GridTable
-            columns={HISTORY_TRACKS}
-            minWidth="26rem"
+            tracks={HISTORY_TRACKS}
             head={
               <>
                 <th role="columnheader" className={`${HEAD_CELL} pl-3 pr-4`}>{t("dashboard.assetModal.columns.date")}</th>

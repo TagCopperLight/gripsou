@@ -1,20 +1,14 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Download } from "lucide-react";
 
 import { Button } from "../../../ui/Button";
+import { useCopy } from "../../../lib/useCopy";
 
 /** Freshly issued backup codes, with Copy and Download. Shown once: the
  *  server only keeps their hashes. */
 export function BackupCodes({ codes }: { codes: string[] }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(codes.join("\n"));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  const { copied, copy } = useCopy();
 
   const download = () => {
     const blob = new Blob([`gripsou backup codes\n\n${codes.join("\n")}\n`], { type: "text/plain" });
@@ -36,7 +30,7 @@ export function BackupCodes({ codes }: { codes: string[] }) {
         ))}
       </div>
       <div className="flex gap-2">
-        <Button variant="ghost" className="flex items-center gap-2 bg-surface-2" onClick={() => void copy()}>
+        <Button variant="ghost" className="flex items-center gap-2 bg-surface-2" onClick={() => void copy(codes.join("\n"))}>
           {copied ? <Check className="size-4 text-green" /> : <Copy className="size-4" />}
           {copied ? t("twoFactor.copied") : t("twoFactor.copy")}
         </Button>

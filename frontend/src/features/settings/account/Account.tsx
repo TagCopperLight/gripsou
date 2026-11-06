@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Fingerprint, KeyRound, Loader2, Monitor, Plus, Settings, ShieldCheck, Smartphone } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
 import { Toggle } from "../../../ui/Toggle";
@@ -67,8 +68,7 @@ export function SettingsAccount() {
         </Button>
       </Surface>
 
-      <Surface className="p-6">
-        <h2 className="mb-5 text-lg font-semibold text-fg">{t("settings.account.security")}</h2>
+      <SettingsSurface title={t("settings.account.security")}>
         <div className="flex flex-col gap-3">
           <SecurityRow
             icon={<KeyRound className="size-4.5" strokeWidth={2} />}
@@ -160,22 +160,21 @@ export function SettingsAccount() {
             }
           />
         </div>
-      </Surface>
+      </SettingsSurface>
 
-      <Surface className="p-6">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold text-fg">{t("settings.account.sessions")}</h2>
-          {hasOthers && (
-            <Button
-              variant="ghost"
-              onClick={() => revokeOthers.mutate()}
-              disabled={revokeOthers.isPending}
-              className="-my-2 text-red hover:bg-red/12 hover:text-red"
-            >
-              {t("settings.account.logOutOtherSessions")}
-            </Button>
-          )}
-        </div>
+      <SettingsSurface
+        title={t("settings.account.sessions")}
+        action={hasOthers && (
+          <Button
+            variant="ghost"
+            onClick={() => revokeOthers.mutate()}
+            disabled={revokeOthers.isPending}
+            className="-my-2 text-red hover:bg-red/12 hover:text-red"
+          >
+            {t("settings.account.logOutOtherSessions")}
+          </Button>
+        )}
+      >
         {/* Not an empty list while it loads or when it can't: there is always
             at least this session. */}
         {!sessionsQuery.data && (
@@ -260,7 +259,7 @@ export function SettingsAccount() {
             ))}
           </div>
         )}
-      </Surface>
+      </SettingsSurface>
 
       <Surface className="p-6 ring-1 ring-inset ring-red/30">
         <h2 className="mb-1 text-lg font-semibold text-red">

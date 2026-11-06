@@ -1,14 +1,22 @@
 import type { ReactNode } from "react";
 
-/** An amount with a second figure that shows only while the amount itself is
- *  hovered, in a small bubble beside it; the hand cursor says there is one. CSS-only (no state), so a long list
- *  of rows pays no re-render for it. No hint, no bubble. */
-export function MoneyHint({ hint, side = "left", children }: {
-  hint: ReactNode | null;
+import { Money } from "./Money";
+import { usePrefs } from "../auth/context";
+
+/** An amount in `currency`, with the same figure in the reader's currency
+ *  (`converted`) in a small bubble beside it while it is hovered; the hand
+ *  cursor says there is one. No bubble when the amount already is in the
+ *  reader's currency, or when there is no converted figure. CSS-only (no
+ *  state), so a long list of rows pays no re-render for it. */
+export function MoneyHint({ currency, converted, signed = false, side = "left", children }: {
+  currency: string;
+  converted: string | number | null | undefined;
+  signed?: boolean;
   side?: "left" | "right";
   children: ReactNode;
 }) {
-  if (hint === null) return children;
+  const reader = usePrefs().currency;
+  if (converted == null || currency === reader) return children;
   return (
     <span className="group/hint relative cursor-pointer">
       {children}
@@ -18,7 +26,7 @@ export function MoneyHint({ hint, side = "left", children }: {
           side === "left" ? "right-full mr-2.5" : "left-full ml-2.5"
         }`}
       >
-        {hint}
+        <Money value={converted} signed={signed} />
       </span>
     </span>
   );

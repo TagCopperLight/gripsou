@@ -38,7 +38,7 @@ export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
 }
 
 /** How many accounts the chart's legend names before "+N others". */
-export const LEGEND_MAX = 5;
+const LEGEND_MAX = 5;
 
 /** The chart's accounts, biggest first at the range's end: the stack's
  *  bottom band, the tooltip's first line, the legend's first name. One at

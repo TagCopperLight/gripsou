@@ -225,8 +225,10 @@
       "title": "Read-only",
       "bodyOne": "gripsou gets your accounts and transactions through {{provider}}, a licensed provider, and keeps a copy. It can't move money.",
       "body": "gripsou gets your accounts and transactions through a licensed provider, and keeps a copy. It can't move money."
-    },
-    "powens": {
+    }
+  },
+  "powens": {
+    "guide": {
       "psd2": {
         "title": "Your bank's official access first",
         "body": "You approve access (PSD2) on your bank's site or app."
@@ -235,7 +237,17 @@
         "title": "Then maybe your bank login",
         "body": "Official access misses some accounts, often a PEA or life insurance. Powens may ask for your login and password to get them, never sent to gripsou. You can decline; those accounts will just be missing."
       }
-    }
+    },
+    "issue": "Powens reports an issue ({{state}}).",
+    "states": {
+      "bug": "Powens ran into a problem with this bank.",
+      "wrongpass": "The bank rejected your credentials. Select Manage to sign in again.",
+      "SCARequired": "The bank asks you to confirm your identity. Select Manage to continue.",
+      "webauthRequired": "The bank requires approval. Select Manage to continue.",
+      "decoupled": "Approval is pending in your bank app."
+    },
+    "manageBlocked": "Your browser blocked the Powens window: allow pop-ups for this site.",
+    "manageFailed": "Couldn't open Powens"
   },
   "welcome": {
     "title": "Welcome, {{name}}",
@@ -512,21 +524,11 @@
         "stale": "Outdated data",
         "attention": "Needs attention",
         "bankUpdated": "Last update from the bank",
-        "providerError": "Powens reports an issue ({{state}}).",
         "staleMessage": "No new data from the bank since {{date}}.",
         "unknownMessage": "Can’t tell when the bank last updated this data. Try syncing again.",
-        "retry": "Automatic retry on {{date}}.",
-        "states": {
-          "bug": "Powens ran into a problem with this bank.",
-          "wrongpass": "The bank rejected your credentials. Select Manage to sign in again.",
-          "SCARequired": "The bank asks you to confirm your identity. Select Manage to continue.",
-          "webauthRequired": "The bank requires approval. Select Manage to continue.",
-          "decoupled": "Approval is pending in your bank app."
-        }
+        "retry": "Automatic retry on {{date}}."
       },
-      "manage": "Manage",
-      "manageBlocked": "Your browser blocked the Powens window: allow pop-ups for this site.",
-      "manageFailed": "Couldn't open Powens"
+      "manage": "Manage"
     },
     "budget": {
       "title": "Budget",

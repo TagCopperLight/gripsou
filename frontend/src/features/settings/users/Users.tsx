@@ -9,18 +9,23 @@ import { CardState } from "../../../ui/CardState";
 import { useUsers, useCreateInvite, useSetUserRole } from "../../../api/admin";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { GridTable } from "../../../ui/GridTable";
-import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../../ui/gridTable";
+import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { LinkModal } from "./LinkModal";
 import { ResetLinkModal } from "./ResetLinkModal";
 import { DeleteUserModal } from "./DeleteUserModal";
 import { UserDetailModal } from "./UserDetailModal";
 import { formatDate } from "../../../lib/date";
+import { inviteLink } from "../../../lib/authLinks";
 import type { User } from "../../../api/types";
 
 type Role = "admin" | "user";
 // Member, role, joined, then the actions (no title: a column of icons).
-const TRACKS = "minmax(14rem, 1fr) minmax(6.5rem, auto) minmax(7rem, auto) minmax(5.5rem, auto)";
-const MIN_WIDTH = "33rem";
+const TRACKS: Track[] = [
+  { min: "14rem", max: "1fr" },
+  { min: "6.5rem", max: "auto" },
+  { min: "7rem", max: "auto" },
+  { min: "5.5rem", max: "auto" },
+];
 
 export function SettingsUsers() {
   const { t } = useTranslation();
@@ -38,8 +43,6 @@ export function SettingsUsers() {
     setInviteOpen(true);
     invite.mutate();
   };
-  const linkFor = (path: string, token?: string) =>
-    token ? `${window.location.origin}${path}/${token}` : null;
 
   // Saved on the server; the list refetches. Never on your own row (the
   // server refuses it too), and never the last admin.
@@ -99,8 +102,7 @@ export function SettingsUsers() {
 
             <div className="mt-4 hidden md:block">
               <GridTable
-                columns={TRACKS}
-                minWidth={MIN_WIDTH}
+                tracks={TRACKS}
                 head={
                   <>
                     <th role="columnheader" className={`${HEAD_CELL} px-3`}>{t("settings.users.columns.member")}</th>
@@ -194,7 +196,7 @@ export function SettingsUsers() {
           title={t("settings.users.invite.title")}
           subtitle={t("settings.users.invite.heading")}
           body={t("settings.users.invite.body")}
-          link={linkFor("/invite", invite.data?.token)}
+          link={invite.data ? inviteLink(invite.data.token) : null}
           error={invite.isError}
           onClose={() => {
             setInviteOpen(false);

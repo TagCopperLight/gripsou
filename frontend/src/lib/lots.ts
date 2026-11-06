@@ -83,7 +83,7 @@ function sameAmount(a: string, b: string): boolean {
 }
 
 /** A saved row whose values no longer match what it was loaded with. */
-export function isRowChanged(r: LotRow): boolean {
+function isRowChanged(r: LotRow): boolean {
   const p = r.pristine;
   return (
     p !== undefined &&

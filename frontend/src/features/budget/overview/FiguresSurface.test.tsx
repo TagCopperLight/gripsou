@@ -21,10 +21,8 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
   };
 }
 
-// FigureCell renders `PrivateMoney`, which reads `useAuth()` — there is no
-// default AuthProvider bootstrap in a bare render, so every test needs an
-// AuthContext.Provider (mirrors PrivateMoney.test.tsx's own mechanism,
-// rather than inventing a second one around the lib/prefs singleton).
+// The figures' privacy mask reads `useAuth()`, so every render needs an
+// AuthContext.Provider.
 function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
   const authValue: AuthValue = {
     isAuthenticated: true,

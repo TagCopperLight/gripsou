@@ -37,9 +37,9 @@ describe("Select", () => {
     // Portalled to the body, so a scrolling dialog cannot clip it.
     expect(container.contains(option)).toBe(false);
     // A click on the menu itself is not "outside".
-    fireEvent.mouseDown(option);
+    fireEvent.pointerDown(option);
     expect(screen.getByText("Savings")).toBeInTheDocument();
-    fireEvent.mouseDown(document.body);
+    fireEvent.pointerDown(document.body);
     expect(screen.queryByText("Savings")).not.toBeInTheDocument();
   });
 });

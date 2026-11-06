@@ -4,13 +4,14 @@ import ReactECharts from "../../ui/EChart";
 import type { EChartsOption } from "echarts";
 
 import { Surface } from "../../ui/Surface";
-import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
-import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
+import { MaskedMoney } from "../../ui/MaskedMoney";
+import { CardTitle } from "../../ui/CardTitle";
+import { ExcludedFootnote, FxAsterisk } from "../../ui/FxNote";
 import { SURFACE, SURFACE_3 } from "../../lib/theme";
 import { CHART_BASE } from "../../lib/chartTheme";
 import { formatShare } from "../../lib/distribution";
 import { formatMoney } from "../../lib/money";
-import type { Privacy } from "../../auth/usePrivacy";
+import { usePrivacy } from "../../auth/usePrivacy";
 import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 
 type ExposureDonutProps = {
@@ -25,14 +26,12 @@ type ExposureDonutProps = {
   centerLabel?: string;
   /** Shown under the title instead of the chart (loading, error). */
   placeholder?: ReactNode;
-  /** Why holdings are left out of `total` for want of an exchange rate:
-   *  an asterisk on the total, and this under the card. */
-  fxFootnote?: ReactNode;
-  /** Private mode: the amounts are masked (the shares stay), and an eye by
-   *  the title reveals them. */
-  privacy?: Privacy;
-  /** False when a heading above several donuts carries their shared eye. */
-  eye?: boolean;
+  /** Set when `total` leaves holdings out for want of an exchange rate: how
+   *  many (0 when unknown). An asterisk on the total, a footnote under the card. */
+  fxExcluded?: number;
+  /** Private mode masks the amounts (the shares stay). Given, they follow an
+   *  eye above several donuts; left out, the card carries its own eye. */
+  masked?: boolean;
   /** Slices up to this share stay out of the ring (still in the legend). */
   minSlice?: number;
   className?: string;
@@ -57,16 +56,17 @@ export function ExposureDonut({
   wide = false,
   centerLabel,
   placeholder,
-  fxFootnote,
-  privacy,
-  eye = true,
+  fxExcluded,
+  masked: sharedMask,
   minSlice = 0,
   className = "",
 }: ExposureDonutProps) {
   const { t } = useTranslation();
   const [active, setActive] = useState<string | null>(null);
   const nested = items.some((i) => i.children && i.children.length > 0);
-  const masked = privacy?.masked ?? false;
+  const privacy = usePrivacy();
+  const ownEye = sharedMask === undefined;
+  const masked = ownEye ? privacy.masked : sharedMask;
   // The hole's diameter, as a share of the chart's width.
   const hole = nested ? 0.5 : 0.62;
   // Nothing has a share (every account at zero or below): a plain grey ring,
@@ -187,14 +187,9 @@ export function ExposureDonut({
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
-        <p className="text-fg font-semibold text-sm">
+        <CardTitle privacy={ownEye && !placeholder && privacy}>
           {title}
-          {eye && privacy?.enabled && !placeholder && (
-            <span className="ml-3 inline-flex align-middle">
-              <PrivacyEye size="sm" masked={masked} toggle={privacy.toggle} />
-            </span>
-          )}
-        </p>
+        </CardTitle>
         {placeholder ?? (
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
@@ -219,7 +214,7 @@ export function ExposureDonut({
                   <span className="text-fg-faint text-xs">{centerLabel ?? t("investments.exposure.center")}</span>
                   <span className="relative whitespace-nowrap">
                     <MaskedMoney masked={masked} value={total} fractionDigits={0} className="text-fg text-lg font-semibold tracking-tight" />
-                    {fxFootnote && <FxAsterisk size="md" />}
+                    {fxExcluded !== undefined && <FxAsterisk size="md" />}
                   </span>
                 </>
               )}
@@ -236,7 +231,7 @@ export function ExposureDonut({
           </div>
         </div>
         )}
-        {!placeholder && fxFootnote && <FxFootnote className="mt-4">{fxFootnote}</FxFootnote>}
+        {!placeholder && fxExcluded !== undefined && <ExcludedFootnote count={fxExcluded} className="mt-4" />}
       </div>
     </Surface>
   );

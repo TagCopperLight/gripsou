@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2 } from "lucide-react";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { CardState } from "../../../ui/CardState";
 import { Button } from "../../../ui/Button";
 import { Field } from "../../../ui/Field";
@@ -38,8 +38,7 @@ export function ApiKeysSurface() {
   useErrorToast(save.isError && t("settings.server.apiKeys.saveError"));
 
   return (
-    <Surface className="p-6">
-      <h2 className="mb-5 text-lg font-semibold text-fg">{t("settings.server.apiKeys.title")}</h2>
+    <SettingsSurface title={t("settings.server.apiKeys.title")}>
       {!query.data ? (
         <CardState
           variant={query.isError ? "error" : "loading"}
@@ -61,7 +60,7 @@ export function ApiKeysSurface() {
           ))}
         </div>
       )}
-    </Surface>
+    </SettingsSurface>
   );
 }
 

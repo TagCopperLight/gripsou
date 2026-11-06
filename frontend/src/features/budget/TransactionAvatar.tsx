@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Repeat, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 
 import { safeBudgetColor } from "../../lib/budget";
+import { logoUrl } from "../../lib/logo";
 import { tint } from "../../lib/color";
 import { CategoryIcon } from "./CategoryIcon";
 import type { Transaction } from "../../api/types";
@@ -29,12 +30,12 @@ function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
  *  the category colour. Only a row with no category falls back to a neutral
  *  glyph for its kind of movement. */
 export function TransactionAvatar({ tx }: { tx: Transaction }) {
-  if (tx.source === "lot" && tx.logo?.startsWith("http")) {
+  const logo = tx.source === "lot" ? logoUrl(tx.logo) : null;
+  if (logo) {
     return (
       <span
         data-testid="tx-avatar"
-        data-variant="logo"
-        style={{ backgroundImage: `url(${tx.logo})` }}
+        style={{ backgroundImage: `url(${logo})` }}
         className="inline-flex size-8 shrink-0 rounded-lg bg-cover bg-center"
       />
     );
@@ -44,7 +45,6 @@ export function TransactionAvatar({ tx }: { tx: Transaction }) {
     return (
       <span
         data-testid="tx-avatar"
-        data-variant="category"
         style={{ color, backgroundColor: tint(color, 0.18) }}
         className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg"
       >
@@ -56,7 +56,6 @@ export function TransactionAvatar({ tx }: { tx: Transaction }) {
   return (
     <span
       data-testid="tx-avatar"
-      data-variant="generic"
       // No colour to speak for it, so it sits on the neutral surface with the
       // faint foreground.
       className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-faint"

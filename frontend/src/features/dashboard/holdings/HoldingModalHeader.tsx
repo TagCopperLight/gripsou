@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { HoldingBadge } from "../../../ui/HoldingBadge";
 import type { Holding } from "../../../api/types";
 import { accountTypeLabel } from "../../../lib/accounts";
+import { ColorSquare } from "../../../ui/ColorSquare";
 
 /** The identity bar shared by `AssetModal` and `RecordLotsModal`. One of them
  *  opens the other, so any difference between the two reads as a glitch. */
@@ -37,10 +38,7 @@ export function HoldingModalHeader({
             </span>
             <span className="font-mono text-fg-faint"> · </span>
             <span className="flex min-w-0 items-center gap-1.5 text-fg-dim">
-              <span
-                className="size-2.5 shrink-0 rounded-sm"
-                style={{ background: holding.accountColor }}
-              />
+              <ColorSquare color={holding.accountColor} />
               <span className="truncate">{holding.accountName}</span>
             </span>
           </div>

@@ -1,23 +1,23 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 import { Surface } from "../../ui/Surface";
-import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
+import { CardTitle } from "../../ui/CardTitle";
 import { usePrivacy } from "../../auth/usePrivacy";
-import { Percent } from "../../ui/Percent";
 import { SegmentedControl } from "../../ui/SegmentedControl";
+import { PhoneRangeRow, RangeSelector } from "../../ui/RangeSelector";
+import { NetWorthHeadline } from "./NetWorthHeadline";
 import { ValueChart } from "../../ui/ValueChart";
 import { ChartLegend } from "../../ui/ChartLegend";
 import { CardState } from "../../ui/CardState";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
-import { useHoldings } from "../../api/holdings";
+import { useFxExcludedCount } from "../../api/holdings";
 import { useNetWorth } from "../../api/accounts";
-import { ExcludedNote, FxAsterisk, FxFootnote } from "../../ui/FxNote";
+import { ExcludedFootnote } from "../../ui/FxNote";
 import { usePrefs } from "../../auth/context";
 import { currencySymbol } from "../../lib/currency";
 import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
-import { rangeOptions, type Range } from "../../lib/ranges";
+import type { Range } from "../../lib/ranges";
 import { legendItems, numberOrNull, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
@@ -29,7 +29,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isError, refetch } = useNetWorth(range);
   // Counts what the headline leaves out; shares the holdings card's query.
-  const holdings = useHoldings();
+  const excluded = useFxExcludedCount();
   const ready = data !== undefined;
   // No points means no accounts (the server sends none then): a 0 €
   // headline, a gain pill and a flat line would only look like data.
@@ -46,8 +46,6 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
     { value: "percent", label: "%" },
   ];
 
-  const RANGE_OPTIONS = rangeOptions(t);
-
   // Net worth (green area) over capital invested (dashed). The legend is read
   // off the plotted series, so it turns red with the line.
   const points = data?.points ?? [];
@@ -57,25 +55,15 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   ];
   const legend = legendItems(plotSeries(series, unit, t("common.return")));
 
-  const summary = data?.summary;
-  const fxMissing = summary?.fxMissing ?? false;
-  const excluded = (holdings.data ?? []).filter((h) => h.fxMissing).length;
-  const gainUp = summary ? Number(summary.gainAbs) >= 0 : true;
-
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-fg font-semibold text-sm">
+              <CardTitle privacy={ready && !empty && privacy}>
                 {t("dashboard.netWorth.title")}
-                {ready && !empty && privacy.enabled && (
-                  <span className="ml-3 inline-flex align-middle">
-                    <PrivacyEye size="sm" masked={privacy.masked} toggle={privacy.toggle} />
-                  </span>
-                )}
-              </p>
+              </CardTitle>
               {!empty && (
                 <SegmentedControl
                   options={UNIT_OPTIONS_SHORT}
@@ -85,45 +73,19 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                 />
               )}
             </div>
-            {ready && !empty && (
-              <>
-                <span className="flex items-baseline gap-2">
-                  <span className="relative w-fit">
-                    <MaskedMoney
-                      masked={privacy.masked}
-                      value={summary?.netWorth ?? "0"}
-                      className="whitespace-nowrap text-[32px] font-semibold tracking-tight md:text-[40px]"
-                    />
-                    {fxMissing && <FxAsterisk size="lg" />}
-                  </span>
-                </span>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <div className={`flex self-start items-center gap-1 whitespace-nowrap py-1 px-2 rounded-lg text-sm ${gainUp ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>
-                    {gainUp ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
-                    <MaskedMoney masked={privacy.masked} value={summary?.gainAbs ?? "0"} signed />
-                    <span className="font-mono ml-2">(<Percent value={summary?.gainPct ?? "0"} signed />)</span>
-                  </div>
-                  <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>
-                </div>
-              </>
-            )}
+            {ready && !empty && <NetWorthHeadline summary={data.summary} range={range} masked={privacy.masked} />}
           </div>
           {!empty && (
             <div className="flex flex-col gap-2 md:gap-3">
               <div className="hidden items-center gap-6 md:flex">
-                <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} />
+                <RangeSelector value={range} onChange={setRange} />
                 <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={(v) => setUnit(v as ChartUnit)} />
               </div>
               <ChartLegend items={legend} className="md:self-end" />
             </div>
           )}
         </div>
-        {/* Phone: the seven ranges scroll on their own row under the chart. */}
-        {!empty && (
-          <div className="order-last -mx-1 mt-3 flex justify-center-safe overflow-x-auto px-1 md:hidden">
-            <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as Range)} className="w-max" />
-          </div>
-        )}
+        {!empty && <PhoneRangeRow value={range} onChange={setRange} />}
         {empty ? (
           <NetWorthEmpty className="mt-4 h-80" />
         ) : ready ? (
@@ -142,11 +104,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
           />
         )}
         {/* Last, after the phone's range row too. */}
-        {ready && !empty && fxMissing && (
-          <FxFootnote className="order-last mt-3">
-            <ExcludedNote count={excluded} />
-          </FxFootnote>
-        )}
+        {ready && !empty && data.summary.fxMissing && <ExcludedFootnote count={excluded} className="order-last mt-3" />}
       </div>
     </Surface>
   );

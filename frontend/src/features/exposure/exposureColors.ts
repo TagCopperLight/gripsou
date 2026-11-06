@@ -33,7 +33,7 @@ const colorAt = (i: number) => {
 };
 
 /** Slices as donut items, coloured in order, OTHER in grey. */
-export function flatItems(slices: Slice[], label: (s: Slice) => string): DonutItem[] {
+function flatItems(slices: Slice[], label: (s: Slice) => string): DonutItem[] {
   return slices.map((s, i) => ({
     key: s.key,
     label: label(s),

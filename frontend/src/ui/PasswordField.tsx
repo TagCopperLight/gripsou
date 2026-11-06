@@ -1,6 +1,7 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { LabeledField } from "./FieldError";
+import { Field } from "./Field";
 import { TextInput } from "./TextInput";
 
 /** The signed-in user's current password, asked before a sensitive change.
@@ -23,9 +24,10 @@ export function PasswordField({
   error?: string | null;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   return (
-    <LabeledField label={label ?? t("settings.account.currentPassword")} error={error}>
-      <TextInput
+    <Field label={label ?? t("settings.account.currentPassword")} error={error} htmlFor={`${id}-password`}>
+      <TextInput id={`${id}-password`}
         type="password"
         autoComplete="current-password"
         autoFocus={autoFocus}
@@ -34,6 +36,6 @@ export function PasswordField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </LabeledField>
+    </Field>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { CardState } from "../../../ui/CardState";
 import {
   useBudgetAiUsage,
@@ -12,6 +12,7 @@ import {
 } from "../../../api/budget";
 import { formatMoney } from "../../../lib/money";
 import { DECIMAL_RE, normaliseDecimal } from "../../../lib/decimal";
+import { TextInput } from "../../../ui/TextInput";
 
 type Side = "in" | "out";
 
@@ -30,14 +31,13 @@ export function AiCostSurface() {
   useErrorToast(save.isError && t("settings.server.budgetAiPriceSaveError"));
   if (!usage) {
     return (
-      <Surface className="p-6">
-        <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.budgetAiCost")}</h2>
+      <SettingsSurface title={t("settings.server.budgetAiCost")} hint={t("settings.server.budgetAiCostHint")}>
         <CardState
           variant={query.isError ? "error" : "loading"}
           onRetry={() => void query.refetch()}
           className="h-24"
         />
-      </Surface>
+      </SettingsSurface>
     );
   }
 
@@ -83,7 +83,7 @@ export function AiCostSurface() {
   const priceInput = (m: BudgetAiModelUsage, side: Side) => {
     const key = draftKey(m.model, side);
     return (
-      <input
+      <TextInput
         inputMode="decimal"
         aria-label={t(side === "in" ? "settings.server.budgetAiCostPriceInFor" : "settings.server.budgetAiCostPriceOutFor", { model: m.model })}
         value={drafts[key] ?? current(m, side) ?? ""}
@@ -92,7 +92,7 @@ export function AiCostSurface() {
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
-        className="w-24 bg-surface-2 rounded-xl px-3 py-1.5 text-fg text-sm text-right tabular-nums outline-none ring-inset focus:ring-1 focus:ring-green"
+        className="max-w-24 text-right tabular-nums"
       />
     );
   };
@@ -100,9 +100,7 @@ export function AiCostSurface() {
   const th = "pb-2 font-medium text-fg-faint";
 
   return (
-    <Surface className="p-6">
-      <h2 className="mb-1 text-lg font-semibold text-fg">{t("settings.server.budgetAiCost")}</h2>
-      <p className="mb-5 text-xs text-fg-faint">{t("settings.server.budgetAiCostHint")}</p>
+    <SettingsSurface title={t("settings.server.budgetAiCost")} hint={t("settings.server.budgetAiCostHint")}>
       {usage.models.length === 0 ? (
         <p className="text-sm text-fg-faint">{t("settings.server.budgetAiCostEmpty")}</p>
       ) : (
@@ -156,6 +154,6 @@ export function AiCostSurface() {
           </div>
         </>
       )}
-    </Surface>
+    </SettingsSurface>
   );
 }
