@@ -106,9 +106,10 @@ frontend-lint() {
   step "build"   bash -c 'cd frontend; bun run typecheck & p=$!; bun run bundle; r=$?; wait $p && exit $r'
 }
 
+# $@: vitest's arguments, such as `--shard=1/2`.
 frontend-test() {
   step "install" bash -c 'cd frontend && bun install --frozen-lockfile'
-  step "ftest"   bash -c 'cd frontend && bun run test'
+  step "ftest"   bash -c 'cd frontend && bun run test "$@"' _ "$@"
 }
 
 frontend() {
@@ -122,6 +123,8 @@ for job in "${jobs[@]}"; do
   case $job in
     backend | backend-lint | backend-test | backend-test-core | backend-test-rest \
       | frontend | frontend-lint | frontend-test) $job ;;
+    # A part of the frontend tests: `frontend-test/1/2` is the first half.
+    frontend-test/*) frontend-test --shard="${job#frontend-test/}" ;;
     *) echo "unknown job: $job"; exit 2 ;;
   esac
 done

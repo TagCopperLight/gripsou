@@ -55,10 +55,14 @@ jobs:
       - run: ./ci.sh frontend-lint
 
   frontend-test:
+    strategy:
+      matrix:
+        shard: [1/2, 2/2]
+    name: frontend-test-${{ matrix.shard }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: frontend/package.json
-      - run: ./ci.sh frontend-test
+      - run: ./ci.sh frontend-test/${{ matrix.shard }}
