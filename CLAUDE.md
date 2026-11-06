@@ -66,7 +66,7 @@ Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_
 - Everything owned is a `holding` of an `instrument`. A checking account holds the `EUR` cash instrument (quantity = balance, price = 1). Cash is never special-cased.
 - An FX rate is a `price` of a cash instrument. Prices are stored in the listing's currency and converted at read time from the price row's currency (`unit_value_asof` / `fx_asof`).
 - Sums are computed in the pivot `app_settings.base_currency`, then divided once into the reader's `users.currency`.
-- One SQL surface (migration 0052): `holding_valuation` is the valuation rule, `holding_day_values` values every holding over a day grid, `fx_convert` is every conversion, `fx_grid`/`fx_asof` look rates up. Readers call them, never restate them.
+- One SQL surface: `holding_valuation` is the valuation rule, `holding_day_values` values every holding over a day grid, `fx_convert` is every conversion, `fx_grid`/`fx_asof` look rates up. Readers call them, never restate them.
 - A figure with no rate on its day (either leg) is left out and flagged (`fx_missing`), never shown in the pivot under the chosen currency's symbol. A currency change fetches that rate before saving, and is refused if no rate can be had (`update_prefs`, `price_sync::ensure_fx_rate`).
 - `instrument` and `price` are global. Everything else belongs to a user through `connection.user_id`.
 
