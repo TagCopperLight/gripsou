@@ -48,7 +48,7 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
     data: points.map((p) => [p.t, numberOrNull(p.values[a.id] ?? "0")] as [number, number | null]),
   }));
   // The biggest accounts by name, then "+N others": with many accounts a full
-  // legend took over the header. The list below names them all.
+  // legend would take over the header. The list below names them all.
   const legend = legendAccounts(series.data ?? { accounts: [], points: [] });
   const legendItems = [
     ...legend.shown.map((a) => ({ key: a.id, label: a.name, color: a.color })),

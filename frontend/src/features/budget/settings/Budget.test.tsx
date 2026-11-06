@@ -123,7 +123,6 @@ describe("SettingsBudget page", () => {
     renderPage();
     await screen.findByText("Groceries");
 
-    // Create.
     fireEvent.click(screen.getByRole("button", { name: "Add category" }));
     const nameInput = await screen.findByLabelText("Name");
     fireEvent.change(nameInput, { target: { value: "Coffee" } });
@@ -131,7 +130,6 @@ describe("SettingsBudget page", () => {
     await screen.findByText("Coffee", { selector: '[data-testid="category-name"]' });
     expect(server.state.categories.find((c) => c.name === "Coffee")).toBeTruthy();
 
-    // Edit (give it a hint).
     fireEvent.click(screen.getByRole("button", { name: "Modify Coffee" }));
     const hintInput = await screen.findByLabelText("Hint for the AI");
     fireEvent.change(hintInput, { target: { value: "Coffee shops" } });
@@ -151,12 +149,10 @@ describe("SettingsBudget page", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show archived/ }));
     await screen.findByText("Coffee", { selector: '[data-testid="category-name"]' });
 
-    // Restore.
     fireEvent.click(screen.getByRole("button", { name: "Restore Coffee" }));
     await waitFor(() => expect(server.state.categories.find((c) => c.name === "Coffee")?.archived).toBe(false));
     await screen.findByText("Coffee", { selector: '[data-testid="category-name"]' });
 
-    // Delete.
     fireEvent.click(screen.getByRole("button", { name: "Delete Coffee" }));
     expect(await screen.findByRole("dialog", { name: "Delete category" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
@@ -170,27 +166,23 @@ describe("SettingsBudget page", () => {
     renderPage();
     await screen.findByText("Holiday");
 
-    // Create.
     fireEvent.change(screen.getByLabelText("Tag name"), { target: { value: "Trip" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     await screen.findByText("Trip");
     expect(server.state.tags.find((t) => t.name === "Trip")).toBeTruthy();
 
-    // Rename.
     fireEvent.click(screen.getByRole("button", { name: "Modify Trip" }));
     fireEvent.change(screen.getByDisplayValue("Trip"), { target: { value: "Roadtrip" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(server.state.tags.find((t) => t.id !== "t1")?.name).toBe("Roadtrip"));
     await screen.findByText("Roadtrip");
 
-    // Recolour.
     const roadtripRow = screen.getByText("Roadtrip").closest<HTMLElement>("div.flex.flex-col")!;
     fireEvent.click(within(roadtripRow).getByRole("button", { name: "Colour #4dd0b1" }));
     await waitFor(() =>
       expect(server.state.tags.find((t) => t.name === "Roadtrip")?.color).toBe("#4dd0b1"),
     );
 
-    // Delete.
     fireEvent.click(screen.getByRole("button", { name: "Delete Roadtrip" }));
     expect(await screen.findByRole("dialog", { name: "Delete tag" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Delete tag" }));

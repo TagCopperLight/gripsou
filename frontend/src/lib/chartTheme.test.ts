@@ -14,7 +14,7 @@ describe("escapeHtml", () => {
 describe("tooltipRow", () => {
   it("escapes an attacker-controlled label instead of injecting it into the tooltip's HTML", () => {
     // ECharts renders a tooltip formatter's return value as innerHTML — a
-    // category or tag name is user-editable text, not markup (I3).
+    // category or tag name is user-editable text, not markup.
     const row = tooltipRow("#e0605f", `<img src=x onerror=alert(1)>`, "12,00 €");
     expect(row).toContain("&lt;img");
     expect(row).not.toContain("<img");

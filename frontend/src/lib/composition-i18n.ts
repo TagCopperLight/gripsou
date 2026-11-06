@@ -45,22 +45,22 @@ const COUNTRY_CODE: Record<string, string> = {
   "Arabie Saoudite": "SA",
 };
 
-/// French country name (from Boursorama) → ISO-3166 alpha-2, or null when the
-/// country isn't in the hand-maintained set.
+/** French country name (from Boursorama) → ISO-3166 alpha-2, or null when the
+ *  country isn't in the hand-maintained set. */
 export function countryCode(name: string): string | null {
   return COUNTRY_CODE[name] ?? null;
 }
 
-/// French country name (from Boursorama) → name in the given UI language, via
-/// the native Intl.DisplayNames. Unmapped countries pass through unchanged.
+/** French country name (from Boursorama) → name in the given UI language, via
+ *  the native Intl.DisplayNames. Unmapped countries pass through unchanged. */
 export function localizeCountry(name: string, lang: string): string {
   const code = COUNTRY_CODE[name];
   if (!code) return name;
   return new Intl.DisplayNames([lang], { type: "region" }).of(code) ?? name;
 }
 
-/// Sectors have no Intl equivalent: translate via i18n keyed on the French
-/// source string (fr is identity), falling back to the raw name.
+/** Sectors have no Intl equivalent: translate via i18n keyed on the French
+ *  source string (fr is identity), falling back to the raw name. */
 export function localizeSector(name: string, t: TFunction): string {
   return t(`sectors.${name}`, { defaultValue: name });
 }

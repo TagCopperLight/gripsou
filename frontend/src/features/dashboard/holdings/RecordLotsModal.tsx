@@ -202,7 +202,6 @@ export function RecordLotsModal({
       {/* Fixed above the scrolling table: the shares bar, then the found band
           when there is one. Its bottom rule, or this one, separates them from the table. */}
       <div className={`shrink-0 px-6 pb-4 ${found.length > 0 && !dismissed ? "" : "border-b border-surface-2"}`}>
-        {/* Accounted bar */}
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           <span className="text-fg-dim text-sm">
             <Trans

@@ -1,6 +1,6 @@
 // The budget readers over the store: the transactions list and its counts,
 // categories and tags with their row counts, and the Overview's figures. A
-// simplified copy of the server's rules (core/src/budget/overview.rs), close
+// simplified copy of the server's rules (core/src/budget/overview/calc.rs), close
 // enough to review the screens with.
 
 import type { BreakdownRow, BudgetCategory, BudgetSummary, BudgetTag, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount, Transaction, TransactionCounts, TransactionParams, TypeBucket } from "../../src/api/wire.ts";
@@ -165,8 +165,6 @@ export function counts(store: Store, q: URLSearchParams): TransactionCounts {
     fxMissing: cash.some((x) => reporting(store, x) === null),
   };
 }
-
-// ── Overview ────────────────────────────────────────────────────────────────
 
 type Month = string; // "YYYY-MM"
 

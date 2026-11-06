@@ -53,7 +53,7 @@ describe("AiServerSurface", () => {
     expect(model).toHaveTextContent("jev-retired");
 
     fireEvent.click(model);
-    // The saved model is no longer offered, but stays listed beside the others.
+    // The provider doesn't offer the saved model, but it stays listed beside the others.
     expect(screen.getByRole("button", { name: "jev-retired" })).toBeVisible();
     expect(screen.getByRole("button", { name: "jev-latest" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "jev-2" }));

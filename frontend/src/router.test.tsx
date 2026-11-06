@@ -121,7 +121,7 @@ describe("scroll reset on navigation", () => {
 
   // Regression: the app scrolls inside <main>, which belongs to the pathless
   // `app` route and so survives navigation. Without the router's scroll
-  // restoration naming it, the previous page's scrollTop carried over.
+  // restoration naming it, the previous page's scrollTop would carry over.
   it("scrolls the main container back to the top when navigating to a new page", async () => {
     const router = renderAt("/settings/budget", authedUser);
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/budget"));

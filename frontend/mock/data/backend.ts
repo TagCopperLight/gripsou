@@ -40,8 +40,9 @@ export const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kin
   ["Ignore", "ignore", "#777471", "eye-off", "neutral", null, "Rows to leave out of every total: duplicates, corrections and anything that should not count."],
 ];
 
-/** `CONFIG_PROVIDERS` (backend/jobs/src/lib.rs) with each provider's
- *  `CONFIG_FIELDS` (providers/src/powens, providers/src/jev, core/src/logo.rs). */
+/** The providers with API keys, in the registry's order
+ *  (backend/providers/src/registry.rs), each with its `fields`
+ *  (providers/src/powens, providers/src/jev, providers/src/brandfetch.rs). */
 export const CONFIG_PROVIDERS: { key: string; displayName: string; fields: { key: string; label: string; secret: boolean }[] }[] = [
   {
     key: "powens",
@@ -57,7 +58,7 @@ export const CONFIG_PROVIDERS: { key: string; displayName: string; fields: { key
   { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", label: "Client ID", secret: false }] },
 ];
 
-// The Overview's rules (backend/core/src/budget/overview.rs).
+// The Overview's rules (backend/core/src/budget/overview/calc.rs).
 /** A Sankey side keeps slices of at least this share of the period's expenses... */
 export const SANKEY_MIN_SHARE = 0.02;
 /** ...and at most this many, Other excluded. */
@@ -69,5 +70,5 @@ export const BASELINE_MONTHS = 12;
 export const TREND_KEEP = SANKEY_MAX_SLICES;
 /** The anchor month's largest slices the trend always keeps. */
 export const TREND_ANCHOR_KEEP = 3;
-/** The seeded category the trend folds into Other (backend/api/src/budget.rs). */
+/** The seeded category the trend folds into Other (backend/core/src/budget/overview/mod.rs). */
 export const TREND_FOLD_KEY = "other_expense";

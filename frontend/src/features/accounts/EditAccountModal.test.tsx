@@ -29,7 +29,6 @@ describe("EditAccountModal", () => {
         if (typeof url === "string" && url.endsWith("/api/account-types")) {
           return jsonResponse(["checking", "savings"]);
         }
-        // PATCH
         return new Response(JSON.stringify({ id: "a1" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },

@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# --- Stage 1: build the SPA ---
 FROM oven/bun:1.4.3 AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
@@ -9,7 +8,6 @@ COPY frontend/ ./
 COPY shared/ ../shared/
 RUN bun run build
 
-# --- Stage 2: build the Rust binary ---
 FROM rust:1-bookworm AS backend
 # The version shown in the UI. The image has no .git (a partial copy of the
 # tree would always look dirty), so the host passes it in: scripts/build-image.sh
@@ -21,7 +19,6 @@ COPY backend/ ./
 COPY shared/ ../shared/
 RUN cargo build --release --bin gripsou
 
-# --- Stage 3: runtime ---
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libssl3 \

@@ -66,13 +66,11 @@ test("stored token → /auth/me returns 401 → unauthenticated, token cleared",
 test("stored token → /auth/me network error → token preserved", async () => {
   setAuthToken("good-tok", true);
 
-  // Simulate a network error
   stubFetch(async () => Promise.reject(new TypeError("Failed to fetch")));
 
   renderWithApp(<Probe />, { auth: "provider" });
   await waitFor(() => expect(screen.getByText("out")).toBeInTheDocument());
 
-  // Token should NOT be wiped from localStorage.
   expect(client.getAuthToken()).toBe("good-tok");
 });
 

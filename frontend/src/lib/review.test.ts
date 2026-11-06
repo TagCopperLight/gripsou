@@ -17,7 +17,7 @@ describe("review queue state", () => {
   it("keeps a resolved line in place, and Undo brings it back", () => {
     let s = syncPending(initialReview, [tx("a"), tx("b")]);
     s = resolve(s, { tx: tx("a"), outcome: "kept", categoryId: "c1", categoryName: "Groceries" });
-    s = syncPending(s, [tx("b")]); // the server no longer lists `a`
+    s = syncPending(s, [tx("b")]); // the server stops listing `a`
     expect(s.order).toEqual(["a", "b"]);
     expect(Object.keys(s.resolved)).toEqual(["a"]);
     s = unresolve(s, "a");

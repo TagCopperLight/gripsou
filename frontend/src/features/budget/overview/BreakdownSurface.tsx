@@ -124,12 +124,8 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen, masked = false }
                           }}
                         />
                       </span>
-                      {/* fractionDigits=1, not 0: at 0 decimals, 61.86%
-                       *  rounds to "62%" and the "computes share" test
-                       *  (which checks for "61") fails. One decimal keeps
-                       *  the label compact and independent of the user's
-                       *  percentDecimals pref while matching the brief's
-                       *  own worked example (61,9 %). */}
+                      {/* One decimal whatever the percentDecimals pref:
+                       *  compact, and 61.86 % doesn't read as 62 %. */}
                       <span data-testid="share" className="text-xs text-fg-faint">
                         <Percent value={share} fractionDigits={1} />
                       </span>

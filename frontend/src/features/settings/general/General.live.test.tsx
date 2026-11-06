@@ -37,7 +37,6 @@ test("preview updates live (no refresh) when prefs change", async () => {
   // Bootstrap applied the user's £ prefs — preview reflects it.
   await screen.findByText("1 234 567,89 £");
 
-  // Change currency GBP -> USD via the custom Select.
   fireEvent.click(screen.getByText("GBP (£)"));
   fireEvent.click(screen.getByText("USD ($)"));
 

@@ -10,8 +10,8 @@ import {
   sumDecimals,
 } from "./decimal";
 
-/** Cash impact of a single lot, matching the backend's convention exactly
- *  (`query.rs`, transactions view): a buy is `-(qty x price + fee)` — money
+/** Cash impact of a single lot, matching the backend's `lot_cash_amount` SQL
+ *  function exactly: a buy is `-(qty x price + fee)` — money
  *  out, fee included; a sale is `+(qty x price - fee)` — money in, net of
  *  fee. Plain cash arithmetic, not the cost-basis rule, but every screen that
  *  shows a lot's amount must use this one function, or two screens can show

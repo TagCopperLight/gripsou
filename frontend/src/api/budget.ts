@@ -46,8 +46,8 @@ import type {
   WriteResult,
 } from "./wire";
 
-/** The whole body that re-sends what `c` holds, with `patch` over it. */
-/** The server has no partial update: every write re-sends the whole row. */
+/** The whole body that re-sends what `c` holds, with `patch` over it: the
+ *  server has no partial update, so every write re-sends the whole row. */
 export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {}): CategoryBody {
   return { name: c.name, color: c.color, icon: c.icon, hint: c.hint, kind: c.kind, archived: c.archived, ...patch };
 }

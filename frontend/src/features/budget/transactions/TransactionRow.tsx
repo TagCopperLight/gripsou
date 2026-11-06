@@ -78,9 +78,9 @@ export const TransactionRow = memo(function TransactionRow({
             // focus the checkbox even on the very first row, before anything
             // is selected.
             // The focus condition is `:focus-visible`, not plain focus: a
-            // mouse click leaves the checkbox focused, and plain focus kept
-            // the row stuck showing an empty checkbox after the pointer moved
-            // away — a click does not match `:focus-visible`, a Tab does.
+            // mouse click leaves the checkbox focused, so plain focus would
+            // keep an empty checkbox showing after the pointer moved away.
+            // A click does not match `:focus-visible`, a Tab does.
             <span className="relative inline-flex size-8 shrink-0 items-center justify-center">
               {!anySelected && (
                 <span className="absolute inset-0 flex items-center justify-center opacity-100 transition-opacity group-hover:opacity-0 group-has-[:focus-visible]:opacity-0">

@@ -17,7 +17,7 @@ type ColorPickerProps = {
 
 /** A colour area, a hue slider and the hex code, in a small panel under the
  *  swatch that opened it. Ours rather than the system's picker: that one is a
- *  separate window the page can't close, so it outlived the window it was
+ *  separate window the page can't close, so it would outlive the window it was
  *  opened from. */
 export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerProps) {
   const { t } = useTranslation();

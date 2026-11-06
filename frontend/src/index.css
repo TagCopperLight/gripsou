@@ -4,19 +4,16 @@
 @import "@fontsource-variable/unbounded";
 
 @theme {
-  /* Surfaces */
   --color-bg: #080706;
   --color-surface: #13110f;
   --color-surface-2: #1c1916;
   --color-surface-3: #262321;
   --color-hover: #181513;
 
-  /* Text */
   --color-fg: #f4f1ef;
   --color-fg-dim: #aeaaa7;
   --color-fg-faint: #777471;
 
-  /* Accents */
   --color-green: #34d399;
   --color-red: #f87171;
   --color-amber: #f0b35b;
@@ -28,7 +25,6 @@
   --color-green-light: #6ee7b7;
   --color-blue-light: #9cc0f7;
 
-  /* Semi transparents */
   --color-green-soft: rgba(52, 211, 153, 0.16);
   --color-red-soft: rgba(248, 113, 113, 0.16);
   --color-amber-soft: rgba(240, 179, 91, 0.15);

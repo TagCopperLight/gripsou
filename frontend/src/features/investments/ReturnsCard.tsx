@@ -82,7 +82,6 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
 
   return (
     <tr>
-      {/* ACCOUNT */}
       <td className={`${row} ${PAD_TEXT} max-w-0 w-full`}>
         <div className="flex items-center gap-3">
           <span className="relative shrink-0">
@@ -102,7 +101,6 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
           </div>
         </div>
       </td>
-      {/* ANNUALISED */}
       <td className={`${cell} text-right whitespace-nowrap align-top md:align-middle`}>
         {a.annualised === null ? (
           <div className="flex flex-col items-end">
@@ -127,19 +125,15 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
           </div>
         )}
       </td>
-      {/* INVESTED */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
         {money(a.invested, "text-sm text-fg-dim")}
       </td>
-      {/* RECEIVED */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
         {money(a.received, "text-sm text-fg-dim")}
       </td>
-      {/* VALUE */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
         {money(a.value, "text-sm text-fg")}
       </td>
-      {/* GAIN */}
       <td className={`${cell} text-right whitespace-nowrap ${HIDDEN_ON_PHONE}`}>
         {empty || a.gain === null || a.gainPct === null ? none : (
           <div className={`flex flex-col items-end ${toneClass(a.gain)}`}>

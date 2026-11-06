@@ -13,13 +13,9 @@ import { renderWithApp, stubFetch } from "../../../test/kit";
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
-// The page mounts two ECharts widgets (Sankey + Trend) at once. jsdom has no
-// real canvas 2D context, and disposing/recreating two chart instances side
-// by side inside the same act() batch flakes on that stub (a bare
-// `TypeError: null.clearRect` from zrender's teardown) — the same reason
-// router.test.tsx stubs the Dashboard's chart cards outright. TrendSurface's
-// own test mocks this module for the same reason; mirror it here rather than
-// let an environment limitation flake the page assembly's tests.
+// The page mounts two ECharts widgets (Sankey + Trend). jsdom has no real
+// canvas 2D context, and tearing two charts down in one act() batch throws
+// from zrender's teardown (`TypeError: null.clearRect`).
 vi.mock("../../../ui/EChart", () => ({
   default: () => <div data-testid="chart-stub" />,
 }));
@@ -254,7 +250,7 @@ describe("BudgetOverview", () => {
   it("does not let a stale slice filter from an earlier deep link survive a later one", async () => {
     // Uncategorised first (sets uncategorized:true, bucket:"out"), then a
     // category row: without a reset, patchFilters' merge would leave BOTH
-    // set, which the backend ANDs into an always-empty list (I1).
+    // set, which the backend ANDs into an always-empty list.
     stubApi({
       ...SUMMARY,
       breakdown: [

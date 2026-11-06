@@ -4,12 +4,9 @@ import type { ProviderGroup } from "./wire";
 import { anySyncing } from "../lib/connectionState";
 import type { PrefsPatch } from "../lib/prefsPatch";
 
-// What each domain event makes stale, named once.
-//
-// A mutation should call one of these rather than listing keys itself — the
-// list is the thing that kept drifting. Adding a new
-// screen means adding its key to the groups it belongs to, here, not auditing
-// every mutation.
+// What each domain event makes stale, named once. A mutation calls one of
+// these rather than listing keys itself, so a screen's key is added to the
+// groups it belongs to here, not to every mutation.
 
 function invalidateAll(qc: QueryClient, groups: readonly (readonly unknown[])[]) {
   return Promise.all(groups.map(async (queryKey) => {

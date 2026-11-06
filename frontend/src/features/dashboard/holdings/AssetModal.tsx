@@ -165,12 +165,10 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         </button>
       </HoldingModalHeader>
 
-      {/* Body */}
       <div ref={body} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
         {/* Side by side from xl (a chart of at least ~580 px beside the 512 px
             column); below, the chart on top and the stats under it. */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        {/* Left column */}
         <div className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 xl:flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
@@ -220,7 +218,6 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           </div>
         </div>
 
-        {/* Right column */}
         <div className="flex w-full flex-col gap-4 xl:w-lg xl:shrink-0">
           <StatsSurface
             holding={holding}
@@ -385,8 +382,8 @@ const HISTORY_TRACKS: Track[] = [
   { min: "108px", max: "max-content" },
 ];
 
-/// `currency` is the ACCOUNT's currency: transaction.amount and
-/// transaction.unit_price are amount-domain, not price-domain.
+/** `currency` is the ACCOUNT's currency: transaction.amount and
+ *  transaction.unit_price are amount-domain, not price-domain. */
 function PurchaseHistorySurface({
   purchases,
   currency,

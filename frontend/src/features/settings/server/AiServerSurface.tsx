@@ -99,8 +99,8 @@ export function AiServerSurface() {
                 onChange={(m) => {
                   if (m !== shownModel) save.mutate({ provider: settings.provider, model: m });
                 }}
-                // The saved model stays listed even when the provider no
-                // longer offers it, so the control never shows a blank.
+                // The saved model stays listed even when the provider doesn't
+                // offer it, so the control never shows a blank.
                 options={[...new Set([shownModel, ...(models.data ?? [])])]
                   .filter(Boolean)
                   .sort()

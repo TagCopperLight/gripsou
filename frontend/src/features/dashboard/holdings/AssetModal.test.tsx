@@ -6,7 +6,7 @@ import type { Holding } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
-// the chart mid-test — stub it out, as FxNote.test.tsx does.
+// the chart mid-test.
 vi.mock("../../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
@@ -26,8 +26,8 @@ const BASE: Holding = {
 // different: the instrument is quoted in EUR (Powens' label), its price rows
 // come from a GBP listing, and it sits in a USD account. The unit price is
 // GBP-labelled; mean price per share — investedNative / qty, a cost-basis
-// figure — is USD-labelled. Labelling either with `holding.currency` (EUR), as
-// the code used to, silently misreports both.
+// figure — is USD-labelled. Labelling either with `holding.currency` (EUR)
+// silently misreports both.
 describe("AssetModal currency domains", () => {
   beforeEach(() => {
     stubFetch(async () => jsonResponse([]));

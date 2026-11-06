@@ -12,7 +12,6 @@ const json = ({ status, body, headers }: Reply) =>
 
 /** Answers per path; a path given a list answers its items in turn. */
 function stubApi(routes: Record<string, Reply | Reply[]>) {
-  // Typed with `init` so the tests can read the sent body.
   const fetchMock = stubFetch(async (url) => {
     const path = url.replace(/^\/api/, "");
     const route = routes[path];

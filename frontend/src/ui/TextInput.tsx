@@ -10,8 +10,8 @@ const SIZES = {
 /** The app's text field: a filled box, green ring on focus (red when `danger`),
  *  and a red ring that stays while `invalid` (what was typed was refused).
  *  `sunken` is for a field on an already-lighter panel, as for `Select`. The
- *  ring is drawn inside the box: outside it, the box's own rounded edge showed
- *  through it at the corners. */
+ *  ring is drawn inside the box: outside it, the box's own rounded edge would
+ *  show through it at the corners. */
 export function TextInput({
   className = "",
   danger = false,

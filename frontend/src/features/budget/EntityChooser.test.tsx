@@ -151,8 +151,8 @@ describe("CategoryChooser", () => {
       const { onPick } = renderChooser({ mode: "pick", allowNone: false });
       await screen.findByText("Groceries");
       expect(screen.queryByTestId("chooser-option-none")).toBeNull();
-      // With the none-line gone, the sequence indices shift back by one: a
-      // bare Enter (no arrow presses) now lands on the first real item.
+      // Without the none-line, a bare Enter (no arrow presses) lands on the
+      // first real item.
       const list = screen.getByRole("listbox");
       fireEvent.keyDown(list, { key: "Enter" });
       expect(onPick).toHaveBeenCalledWith("gro");

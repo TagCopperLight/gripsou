@@ -40,7 +40,7 @@ export function money(n: number, decimals = 2): string {
 /** Euros per dollar, the dataset's one exchange rate. */
 export const EUR_PER_USD = 0.92;
 
-/** Days back of a chart range, as the backend's `range_window`; an unknown
+/** Days back of a chart range, as the backend's `Range::window`; an unknown
  *  range is the whole history. */
 export function rangeDays(range: string): number {
   const r: Range = RANGES.find((x) => x === range) ?? "max";

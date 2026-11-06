@@ -70,12 +70,12 @@ export const otherFlag = (key: "uncategorized" | "needsReview" | "transfers") =>
 export const typeBucket = (key: TypeBucket) =>
   TYPE_BUCKETS.find((b) => b.key === key) ?? TYPE_BUCKETS[0];
 
-/** The page/sidebar glyph, named once so Settings and later phases agree. */
+/** The page/sidebar glyph, named once so every place showing it agrees. */
 export const BudgetIcon: LucideIcon = ReceiptEuro;
 
-/** Every icon the seed in `0028_budget.sql` uses plus the rest of the pickable
- *  set, statically imported —
- *  lucide's dynamic index would pull the whole icon set into the bundle. */
+/** Every icon the category seed uses plus the rest of the pickable set,
+ *  statically imported: lucide's dynamic index would pull the whole icon set
+ *  into the bundle. */
 export const BUDGET_ICONS: Record<string, LucideIcon> = {
   activity: Activity,
   "arrow-left-right": ArrowLeftRight,

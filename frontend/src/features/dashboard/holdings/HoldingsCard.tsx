@@ -175,7 +175,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   onClick={hasPnl ? () => setSelected(h) : undefined}
                   className={`${ROW_CELLS} ${hasPnl ? `cursor-pointer ${ROW_HOVER}` : ""}`}
                 >
-                  {/* ASSET */}
                   <td role="cell" className={`py-2.25 ${PAD[0]}`}>
                     <div className="flex min-w-0 items-center gap-3">
                       {Number(h.unexplainedQty) !== 0 ? (
@@ -225,7 +224,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       </div>
                     </div>
                   </td>
-                  {/* QUANTITY */}
                   <td role="cell" className={`justify-end ${PAD[1]}`}>
                     {hasPnl ? (
                       <span className="text-fg-dim font-mono">{formatQuantity(h.qty)}</span>
@@ -233,14 +231,12 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       <span className="text-fg-faint">-</span>
                     )}
                   </td>
-                  {/* ACCOUNT */}
                   <td role="cell" className={PAD[2]}>
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="inline-block size-3 shrink-0 rounded" style={{ background: line.account?.color ?? CASH_COLOR }} />
                       <span className="truncate text-fg-dim" title={accountName}>{accountName}</span>
                     </span>
                   </td>
-                  {/* ACCOUNT TYPE */}
                   <td role="cell" className={PAD[3]}>
                     <span className="truncate whitespace-nowrap rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-faint">
                       {line.accountType === null
@@ -248,7 +244,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         : accountTypeLabel(t, line.accountType)}
                     </span>
                   </td>
-                  {/* VALUE */}
                   <td role="cell" className={`justify-end whitespace-nowrap ${PAD[4]}`}>
                     {line.fxMissing ? (
                       <span className="relative">
@@ -263,7 +258,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       <MaskedMoney masked={privacy.masked} value={line.value} className="text-fg" />
                     )}
                   </td>
-                  {/* UNREALIZED P/L */}
                   <td role="cell" className={`justify-end whitespace-nowrap ${PAD[5]}`}>
                     {showPnl ? (
                       <div className="flex flex-col items-end">
@@ -284,7 +278,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       <span className="text-fg-faint">-</span>
                     )}
                   </td>
-                  {/* 30D */}
                   <td role="cell" className={`justify-end ${PAD[6]}`}>
                     {h.spark ? (
                       <Sparkline data={h.spark.map(Number)} />

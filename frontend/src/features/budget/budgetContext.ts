@@ -17,9 +17,9 @@ type BudgetContextValue = {
     patch: Partial<BudgetFilters> | ((prev: BudgetFilters) => Partial<BudgetFilters>),
   ) => void;
   /** Overview's period. Beside the filters, not in the URL, so it survives a
-   *  mode switch within a visit and resets on leaving. */
-  /** `null` until the reader picks one: the Overview then shows the latest
-   *  month that has transactions, which only the server knows. */
+   *  mode switch within a visit and resets on leaving. `null` until the
+   *  reader picks one: the Overview then shows the latest month that has
+   *  transactions, which only the server knows. */
   period: Period | null;
   setPeriod: (p: Period | null) => void;
   selection: Selection;

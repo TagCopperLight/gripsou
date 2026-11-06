@@ -58,7 +58,7 @@ let patchPendingPairBreaks = 0;
 // Forces the row-patch endpoint to fail, to exercise `usePatchTransaction`'s
 // rollback — every other test in this file only ever sees a 200.
 let patchShouldFail = false;
-// Forces the bulk endpoint to fail, to exercise the inline error banner.
+// Forces the bulk endpoint to fail, to exercise the error toast.
 let bulkShouldFail = false;
 // Mutable server-side state for `t1`'s tags, kept in sync with accepted
 // PATCHes so a post-mutation refetch (`onSettled` invalidation) returns what
@@ -421,14 +421,10 @@ describe("TransactionsMode", () => {
     expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
-  // -------------------------------------------------------------------------
-  // Breaking an internal-transfer pair
-  //
   // Recategorising half of an auto-paired transfer dissolves the pair on both
   // sides. That is destructive enough to confirm, and the count can only come
   // from the server for a bulk write, whose target set the client may never
   // have loaded.
-  // -------------------------------------------------------------------------
 
   it("confirms before recategorising half of an auto-paired transfer", async () => {
     serverRowsState = [tx({ id: "t1", isTransfer: true })];
