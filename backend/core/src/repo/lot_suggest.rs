@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::repo::holding::{OwnedHolding, owned_holding};
-use crate::repo::lot::LOT_DECIMAL_PLACES;
+use crate::repo::lot::{LOT_DECIMAL_PLACES, LotSide};
 
 /// A buy/sell transaction whose day and amount fit a jump.
 #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ pub struct Jump {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
     pub holding_id: Uuid,
-    pub side: &'static str,
+    pub side: LotSide,
     pub date: NaiveDate,
     pub quantity: Decimal,
     pub unit_price: Decimal,
@@ -83,7 +83,11 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
                 .normalize();
             Some(Suggestion {
                 holding_id: j.holding_id,
-                side: if j.dq > Decimal::ZERO { "buy" } else { "sell" },
+                side: if j.dq > Decimal::ZERO {
+                    LotSide::Buy
+                } else {
+                    LotSide::Sell
+                },
                 date: c.day,
                 quantity: quantity.normalize(),
                 unit_price,
@@ -264,7 +268,7 @@ mod tests {
             got,
             vec![Suggestion {
                 holding_id: Uuid::from_u128(1),
-                side: "buy",
+                side: LotSide::Buy,
                 date: day(8),
                 quantity: dec("23"),
                 unit_price: dec("6.35521739"),
@@ -277,14 +281,14 @@ mod tests {
     fn the_sign_of_the_amount_is_ignored() {
         // A mirrored row: positive amount for a purchase.
         let got = pick(&[jump(1, "2", vec![cand(10, 8, "100")])]);
-        assert_eq!(got[0].side, "buy");
+        assert_eq!(got[0].side, LotSide::Buy);
         assert_eq!(got[0].unit_price, dec("50"));
     }
 
     #[test]
     fn a_sale_has_a_positive_quantity_and_price() {
         let got = pick(&[jump(1, "-10", vec![cand(10, 8, "63.60")])]);
-        assert_eq!(got[0].side, "sell");
+        assert_eq!(got[0].side, LotSide::Sell);
         assert_eq!(got[0].quantity, dec("10"));
         assert_eq!(got[0].unit_price, dec("6.36"));
     }

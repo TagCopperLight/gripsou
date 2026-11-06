@@ -206,7 +206,8 @@ impl Holding {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LotEntry {
-    /// `buy` or `sell`. Named `kind` because `type` is a Rust keyword.
+    /// `buy` or `sell`, parsed by `NewLot::new` so an unknown side is a 400.
+    /// Named `kind` because `type` is a Rust keyword.
     #[serde(rename = "type")]
     pub kind: String,
     pub date: NaiveDate,
@@ -234,7 +235,7 @@ pub struct Lot {
     /// timestamp in this API. The stored value is a plain date — a lot has no
     /// time of day — and this is the wire representation of it.
     pub t: i64,
-    pub side: String,
+    pub side: gripsou_core::repo::lot::LotSide,
     pub qty: String,
     pub price: String,
     pub fee: String,
@@ -262,7 +263,7 @@ impl Lot {
 #[serde(rename_all = "camelCase")]
 pub struct LotSuggestion {
     #[serde(rename = "type")]
-    pub kind: String,
+    pub kind: gripsou_core::repo::lot::LotSide,
     pub date: NaiveDate,
     pub quantity: String,
     pub unit_price: String,
@@ -272,7 +273,7 @@ pub struct LotSuggestion {
 impl LotSuggestion {
     pub fn from_suggestion(s: gripsou_core::repo::lot_suggest::Suggestion) -> Self {
         LotSuggestion {
-            kind: s.side.to_string(),
+            kind: s.side,
             date: s.date,
             quantity: s.quantity.to_string(),
             unit_price: s.unit_price.to_string(),
@@ -393,8 +394,8 @@ pub struct Transaction {
     pub category_default_key: Option<String>,
     pub category_color: Option<String>,
     pub category_icon: Option<String>,
-    pub category_kind: Option<String>,
-    pub category_source: Option<String>,
+    pub category_kind: Option<gripsou_core::budget::vocab::CategoryKind>,
+    pub category_source: Option<gripsou_core::budget::vocab::CategorySource>,
     /// Decimal string, never a float.
     pub category_confidence: Option<String>,
     pub needs_review: bool,
@@ -609,7 +610,7 @@ pub struct SyncConnection {
     pub health: Option<gripsou_core::dto::SyncHealth>,
     pub id: String,
     pub display_name: String,
-    pub status: String,
+    pub status: gripsou_core::repo::connection::ConnectionStatus,
     pub last_sync_at: Option<i64>,
     pub last_error: Option<String>,
     pub accounts: Vec<SyncAccount>,
@@ -687,7 +688,7 @@ impl ProviderGroup {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionState {
     pub id: String,
-    pub status: String,
+    pub status: gripsou_core::repo::connection::ConnectionStatus,
     pub last_sync_at: Option<i64>,
     pub last_error: Option<String>,
 }
@@ -737,7 +738,7 @@ pub struct User {
     pub id: String,
     pub name: String,
     pub email: String,
-    pub role: String,
+    pub role: gripsou_core::repo::user::Role,
     pub joined_at: i64,
     pub is_self: bool,
     pub avatar: Option<String>,
@@ -774,7 +775,7 @@ pub struct SessionUser {
     pub id: String,
     pub name: String,
     pub email: String,
-    pub role: String,
+    pub role: gripsou_core::repo::user::Role,
     pub prefs: gripsou_core::repo::prefs::UserPrefs,
     pub welcome_done: bool,
 }
@@ -785,7 +786,7 @@ impl SessionUser {
             id: p.id.to_string(),
             name: p.name.clone(),
             email: p.email.clone(),
-            role: p.role.clone(),
+            role: p.role,
             prefs: p.prefs.clone(),
             welcome_done: p.welcome_done,
         }
@@ -883,25 +884,9 @@ pub struct DeleteUserReq {
     pub email: String,
 }
 
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    Admin,
-    User,
-}
-
-impl Role {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Role::Admin => "admin",
-            Role::User => "user",
-        }
-    }
-}
-
 #[derive(Debug, Deserialize)]
 pub struct SetRoleReq {
-    pub role: Role,
+    pub role: gripsou_core::repo::user::Role,
 }
 
 #[derive(Debug, Serialize)]
@@ -1037,7 +1022,7 @@ pub struct InviteLinkResp {
 #[derive(Debug, Serialize)]
 pub struct TokenInfoResp {
     #[serde(rename = "type")]
-    pub token_type: String,
+    pub token_type: gripsou_core::repo::invite_token::TokenKind,
     pub email: Option<String>,
 }
 
@@ -1220,7 +1205,7 @@ mod tests {
             display_name: "My bank".into(),
             institution_key: institution_key.map(|s| s.to_string()),
             institution_name: Some("BNP Paribas".into()),
-            status: "ok".into(),
+            status: gripsou_core::repo::connection::ConnectionStatus::Ok,
             last_sync_at: None,
             last_error: None,
         }
@@ -1252,7 +1237,7 @@ mod tests {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiLastRunDto {
-    pub outcome: String,
+    pub outcome: gripsou_core::budget::vocab::AiRunOutcome,
     pub error: Option<String>,
     /// Identifies a completed run even when the browser missed it running.
     pub started_at: String,
@@ -1336,7 +1321,7 @@ mod budget_ai_contract_tests {
             remaining: 3,
             review_count: 2,
             last_run: Some(AiLastRunDto {
-                outcome: "ok".into(),
+                outcome: gripsou_core::budget::vocab::AiRunOutcome::Ok,
                 error: None,
                 started_at: "2026-10-09T00:00:00+00:00".into(),
             }),

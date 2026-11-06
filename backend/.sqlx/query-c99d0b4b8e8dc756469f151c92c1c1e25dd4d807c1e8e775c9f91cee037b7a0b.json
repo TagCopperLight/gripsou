@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select kind as \"kind: CategoryKind\"\n            from budget_category\n            where id = $1 and user_id = $2\n            for share\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: CategoryKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c99d0b4b8e8dc756469f151c92c1c1e25dd4d807c1e8e775c9f91cee037b7a0b"
+}

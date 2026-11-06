@@ -1,5 +1,6 @@
 use chrono::{Duration, NaiveDate, Utc};
 use gripsou_core::budget::pairing::pair_internal_transfers;
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::dto::CanonicalAccount;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::assign::{
@@ -954,7 +955,7 @@ async fn a_category(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
     Ok(list_categories(pool, user_id)
         .await?
         .into_iter()
-        .find(|c| c.system_key.is_none() && c.kind == "expense")
+        .find(|c| c.system_key.is_none() && c.kind == CategoryKind::Expense)
         .expect("the seed ships at least one non-system expense category")
         .id)
 }

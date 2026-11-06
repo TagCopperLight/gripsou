@@ -18,6 +18,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{CategoryKind, CategorySource, SystemKey};
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
@@ -107,11 +108,12 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
               -- pairing it hides nothing that was counted. This is what
               -- catches a real transfer the provider labels a deposit or a
               -- card payment, once the user has filed it.
-              or c.kind = 'neutral'
+              or c.kind = $2
           )
         order by t.spent_on
         "#,
         user_id,
+        CategoryKind::Neutral as CategoryKind,
     )
     .fetch_all(&mut **tx)
     .await?;
@@ -161,9 +163,9 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
         r#"
         update transaction t
            set transfer_pair_id = null,
-               budget_category_id = case when t.category_source = 'pair'
+               budget_category_id = case when t.category_source = $3
                                          then null else t.budget_category_id end,
-               category_source = case when t.category_source = 'pair'
+               category_source = case when t.category_source = $3
                                       then null else t.category_source end
          where t.id in (select id from user_transactions($1))
            and t.transfer_pair_id is not null
@@ -171,6 +173,7 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
         "#,
         user_id,
         &kept,
+        CategorySource::Pair as CategorySource,
     )
     .execute(&mut **tx)
     .await?;
@@ -193,7 +196,7 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
         update transaction t
            set transfer_pair_id = p.partner,
                budget_category_id = case when o.user_chose then t.budget_category_id else c.id end,
-               category_source = case when o.user_chose then t.category_source else 'pair' end,
+               category_source = case when o.user_chose then t.category_source else $4 end,
                category_confidence = case when o.user_chose then t.category_confidence end,
                category_reviewed_at = case when o.user_chose then t.category_reviewed_at end
           from unnest($1::uuid[], $2::uuid[]) as p(id, partner)
@@ -205,11 +208,13 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
                budget_category c
          where t.id = p.id
            and c.user_id = $3
-           and c.system_key = 'internal_transfer'
+           and c.system_key = $5
         "#,
         &ids,
         &partners,
         user_id,
+        CategorySource::Pair as CategorySource,
+        SystemKey::InternalTransfer as SystemKey,
     )
     .execute(&mut **tx)
     .await?;

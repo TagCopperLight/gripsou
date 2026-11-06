@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::error::ApiError;
+use gripsou_core::repo::user::Role;
 
 pub async fn me(
     State(pool): State<PgPool>,
@@ -148,7 +149,7 @@ pub async fn delete_account(
         .ok_or(ApiError::Unauthorized)?;
     // Refuse to delete the last admin: doing so would lock everyone out of the
     // admin-only settings (user management, server config) for good.
-    if profile.role == "admin" && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
+    if profile.role == Role::Admin && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
         return Err(ApiError::Conflict("cannot delete the last admin"));
     }
     gripsou_core::repo::user::delete_user(&pool, user_id).await?;
@@ -330,7 +331,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_requires_the_password(pool: PgPool) {
         // A non-admin user, so the last-admin guard is not in play here.
-        seed_user_with_password(&pool, "a@t.local", "hunter2", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "hunter2", Role::User).await;
         let token = login_token(&pool, "a@t.local", "hunter2").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -398,7 +399,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_account_refuses_last_admin(pool: PgPool) {
-        seed_user_with_password(&pool, "boss@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "boss@t.local", "pw", Role::Admin).await;
         let token = login_token(&pool, "boss@t.local", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -435,7 +436,7 @@ mod tests {
         );
 
         // With a second admin present, the first admin can delete itself.
-        seed_user_with_password(&pool, "boss2@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "boss2@t.local", "pw", Role::Admin).await;
         delete_account(
             State(pool.clone()),
             no_throttle(),
@@ -461,8 +462,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_profile_persists_and_rejects_duplicate_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
-        seed_user_with_password(&pool, "taken@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        seed_user_with_password(&pool, "taken@t.local", "pw", Role::User).await;
         let token = login_token(&pool, "a@t.local", "pw").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -567,7 +568,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_is_throttled_like_login(pool: PgPool) {
-        seed_user_with_password(&pool, "c@t.local", "old-password", "user").await;
+        seed_user_with_password(&pool, "c@t.local", "old-password", Role::User).await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;
         let throttle = Arc::new(LoginThrottle::default());
         let attempt = |current: &str| {
@@ -600,7 +601,7 @@ mod tests {
     /// "Sign out everywhere else" keeps the caller's own session alive.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_keeps_current(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
         let current = principal_for(&pool, "a@t.local", "pw").await;
         principal_for(&pool, "a@t.local", "pw").await;
         let session_id = current.session_id;
@@ -615,7 +616,7 @@ mod tests {
     /// "Sign out everywhere else" revokes the caller's other sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
         let current = principal_for(&pool, "a@t.local", "pw").await;
         let other = principal_for(&pool, "a@t.local", "pw").await;
 
@@ -628,8 +629,8 @@ mod tests {
     /// "Sign out everywhere else" never touches another user's sessions.
     #[sqlx::test(migrations = "../migrations")]
     async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
-        seed_user_with_password(&pool, "b@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
+        seed_user_with_password(&pool, "b@t.local", "pw", Role::User).await;
         let a = principal_for(&pool, "a@t.local", "pw").await;
         let b = principal_for(&pool, "b@t.local", "pw").await;
 
@@ -641,7 +642,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn change_password_refuses_a_short_password(pool: PgPool) {
-        seed_user_with_password(&pool, "c@t.local", "old-password", "user").await;
+        seed_user_with_password(&pool, "c@t.local", "old-password", Role::User).await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;
         let err = change_password(
             State(pool.clone()),

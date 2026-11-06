@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{AiRunOutcome, CategoryKind};
 use crate::categorize::{CategorizeError, CategorizeItem, CategorizeRequest, Categorizer};
 use crate::categorize::{CategoryOption, Guess};
 use crate::error::CoreError;
@@ -18,15 +19,15 @@ use crate::repo::budget::ai::Decision;
 /// `categories` is already the non-archived list. A zero amount gets none.
 pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uuid> {
     let side = if amount < Decimal::ZERO {
-        "expense"
+        CategoryKind::Expense
     } else if amount > Decimal::ZERO {
-        "income"
+        CategoryKind::Income
     } else {
         return vec![];
     };
     categories
         .iter()
-        .filter(|c| c.kind == side || c.kind == "neutral")
+        .filter(|c| c.kind == side || c.kind == CategoryKind::Neutral)
         .map(|c| c.id)
         .collect()
 }
@@ -78,9 +79,9 @@ const SHARED_EXAMPLES: i64 = 10;
 pub enum RunOutcome {
     /// Nothing was uncategorised; no run row written.
     Nothing,
-    /// `outcome` is `ok` | `partial` | `error`, as written to `budget_ai_run`.
+    /// Never [`AiRunOutcome::Running`].
     Finished {
-        outcome: String,
+        outcome: AiRunOutcome,
         items: i32,
         batches: i32,
     },
@@ -137,10 +138,12 @@ pub async fn run_for_user(
     tracing::info!("ai run started");
     let result = run_chunks(pool, user_id, categorizer, first, batch, &mut tally).await;
     let (outcome, error) = match &result {
-        Ok(None) => ("ok", None),
-        Ok(Some(CategorizeError::RateLimited)) => ("partial", Some("rate limited".to_string())),
-        Ok(Some(CategorizeError::Other(msg))) => ("error", Some(msg.clone())),
-        Err(e) => ("error", Some(e.to_string())),
+        Ok(None) => (AiRunOutcome::Ok, None),
+        Ok(Some(CategorizeError::RateLimited)) => {
+            (AiRunOutcome::Partial, Some("rate limited".to_string()))
+        }
+        Ok(Some(CategorizeError::Other(msg))) => (AiRunOutcome::Error, Some(msg.clone())),
+        Err(e) => (AiRunOutcome::Error, Some(e.to_string())),
     };
     let closed = repo::finish_run(pool, tally.run_id, outcome, error.as_deref()).await;
     match (result, closed) {
@@ -155,7 +158,7 @@ pub async fn run_for_user(
             Err(e)
         }
         (Ok(_), Ok(())) => Ok(RunOutcome::Finished {
-            outcome: outcome.to_string(),
+            outcome,
             items: tally.items,
             batches: tally.batches,
         }),
@@ -229,11 +232,11 @@ mod tests {
     use rust_decimal::Decimal;
     use uuid::Uuid;
 
-    fn cat(kind: &str) -> CategoryOption {
+    fn cat(kind: CategoryKind) -> CategoryOption {
         CategoryOption {
             id: Uuid::new_v4(),
-            name: kind.into(),
-            kind: kind.into(),
+            name: kind.to_string(),
+            kind,
             hint: None,
         }
     }
@@ -261,21 +264,29 @@ mod tests {
 
     #[test]
     fn money_out_sees_expense_and_neutral() {
-        let cats = [cat("expense"), cat("income"), cat("neutral")];
+        let cats = [
+            cat(CategoryKind::Expense),
+            cat(CategoryKind::Income),
+            cat(CategoryKind::Neutral),
+        ];
         let ids = candidates_for(Decimal::new(-500, 2), &cats);
         assert_eq!(ids, vec![cats[0].id, cats[2].id]);
     }
 
     #[test]
     fn money_in_sees_income_and_neutral() {
-        let cats = [cat("expense"), cat("income"), cat("neutral")];
+        let cats = [
+            cat(CategoryKind::Expense),
+            cat(CategoryKind::Income),
+            cat(CategoryKind::Neutral),
+        ];
         let ids = candidates_for(Decimal::new(500, 2), &cats);
         assert_eq!(ids, vec![cats[1].id, cats[2].id]);
     }
 
     #[test]
     fn zero_amount_has_no_candidates() {
-        let cats = [cat("expense"), cat("income")];
+        let cats = [cat(CategoryKind::Expense), cat(CategoryKind::Income)];
         assert!(candidates_for(Decimal::ZERO, &cats).is_empty());
     }
 

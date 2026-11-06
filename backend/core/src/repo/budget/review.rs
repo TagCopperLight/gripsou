@@ -4,6 +4,7 @@
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::CategorySource;
 use crate::error::CoreError;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,12 +55,13 @@ pub async fn accept(
         update transaction t set category_reviewed_at = now()
          where t.id = $1
            and t.id in (select id from user_transactions($2))
-           and t.category_source = 'ai'
+           and t.category_source = $3
            and t.budget_category_id is not null
            and t.category_reviewed_at is null
         "#,
         txn_id,
-        user_id
+        user_id,
+        CategorySource::Ai as CategorySource,
     )
     .execute(&mut *tx)
     .await?
@@ -94,13 +96,13 @@ pub async fn undo(
         r#"
         update transaction t
            set budget_category_id = $3,
-               category_source = 'ai',
+               category_source = $5,
                category_confidence = $4,
                category_reviewed_at = null
          where t.id = $1
            and t.id in (select id from user_transactions($2))
            and t.category_reviewed_at is not null
-           and t.category_source in ('ai', 'user')
+           and t.category_source in ($5, $6)
            and t.transfer_pair_id is null
            and ($3::uuid is null
                 or exists (select 1 from budget_category c
@@ -110,6 +112,8 @@ pub async fn undo(
         user_id,
         category_id,
         confidence,
+        CategorySource::Ai as CategorySource,
+        CategorySource::User as CategorySource,
     )
     .execute(&mut *tx)
     .await?

@@ -6,6 +6,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{CategoryKind, CategorySource};
 use crate::error::CoreError;
 
 /// Calls a sqlx query macro with `budget_transaction_matches`' twelve
@@ -72,8 +73,8 @@ pub struct TransactionListRow {
     pub category_default_key: Option<String>,
     pub category_color: Option<String>,
     pub category_icon: Option<String>,
-    pub category_kind: Option<String>,
-    pub category_source: Option<String>,
+    pub category_kind: Option<CategoryKind>,
+    pub category_source: Option<CategorySource>,
     pub category_confidence: Option<Decimal>,
     /// Derived, never stored: an unreviewed AI guess that is under the reader's threshold, has no category, or sits in an internal/excluded category.
     pub needs_review: bool,
@@ -211,7 +212,8 @@ pub async fn transactions(
                account_id as "account_id!", account_name as "account_name!",
                account_color as "account_color!", account_currency as "account_currency!",
                filtered.category_id, category_name, category_default_key, category_color,
-               category_icon, category_kind, category_source, category_confidence,
+               category_icon, category_kind as "category_kind: CategoryKind",
+               category_source as "category_source: CategorySource", category_confidence,
                needs_review as "needs_review!", checked as "checked!",
                is_transfer as "is_transfer!",
                is_orphan_transfer as "is_orphan_transfer!"

@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::auth::{self};
 use crate::dto;
 use crate::error::ApiError;
+use gripsou_core::repo::login_challenge::ChallengeKind;
 
 pub(crate) fn user_agent(headers: &HeaderMap) -> &str {
     headers
@@ -76,7 +77,7 @@ pub async fn login(
             &pool,
             &auth::hash_token(&token),
             Some(creds.id),
-            "mfa",
+            ChallengeKind::Mfa,
             serde_json::json!({ "remember": body.remember }),
         )
         .await?;
@@ -110,7 +111,7 @@ pub async fn login_verify(
     let user_agent = user_agent(&headers);
     let ip = client_ip(&headers, peer);
     let challenge_hash = auth::hash_token(&body.challenge);
-    let challenge = login_challenge::find_valid(&pool, &challenge_hash, "mfa")
+    let challenge = login_challenge::find_valid(&pool, &challenge_hash, ChallengeKind::Mfa)
         .await?
         .ok_or_else(expired)?;
     let user_id = challenge.user_id.ok_or_else(expired)?;
@@ -145,7 +146,7 @@ pub async fn login_verify(
     // loses the race for the challenge (a parallel one won) rolls back and
     // leaves its code unspent, and a wrong code leaves the challenge usable.
     let mut tx = pool.begin().await?;
-    let challenge = login_challenge::consume(&mut *tx, &challenge_hash, "mfa")
+    let challenge = login_challenge::consume(&mut *tx, &challenge_hash, ChallengeKind::Mfa)
         .await?
         .ok_or_else(expired)?;
     let method = match (totp_step, &body.recovery_code) {
@@ -567,7 +568,7 @@ mod tests {
             &pool,
             &auth::hash_token("re"),
             Some(uid),
-            "reauth",
+            ChallengeKind::Reauth,
             serde_json::json!({}),
         )
         .await
@@ -609,7 +610,7 @@ mod tests {
             &pool,
             &auth::hash_token("ch"),
             Some(uid),
-            "mfa",
+            ChallengeKind::Mfa,
             serde_json::json!({}),
         )
         .await
@@ -682,7 +683,7 @@ mod tests {
         // A parallel request holds the challenge, not yet committed.
         let mut winner = pool.begin().await.unwrap();
         assert!(
-            login_challenge::consume(&mut *winner, &auth::hash_token(&ch), "mfa")
+            login_challenge::consume(&mut *winner, &auth::hash_token(&ch), ChallengeKind::Mfa)
                 .await
                 .unwrap()
                 .is_some()

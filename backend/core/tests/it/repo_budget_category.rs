@@ -1,3 +1,4 @@
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::ai;
 use gripsou_core::repo::budget::category::{
@@ -65,7 +66,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
             color: "#5b9bf0",
             icon: Some("cat"),
             hint: Some("kibble"),
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
@@ -85,7 +86,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
             color: "#4dd0b1",
             icon: Some("cat"),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: true,
         },
     )
@@ -119,7 +120,7 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
             color: "#f0b952",
             icon: groceries.icon.as_deref(),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: false,
         },
     )
@@ -136,7 +137,7 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
             color: "#f0b952",
             icon: groceries.icon.as_deref(),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: false,
         },
     )
@@ -166,14 +167,18 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
             color: "#5b9bf0",
             icon: Some("arrow-left-right"),
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: true,
         },
     )
     .await?
     .unwrap();
     assert_eq!(renamed.name, "Virement interne");
-    assert_eq!(renamed.kind, "neutral", "kind is locked on a system row");
+    assert_eq!(
+        renamed.kind,
+        CategoryKind::Neutral,
+        "kind is locked on a system row"
+    );
     assert!(!renamed.archived, "a system row cannot be archived either");
 
     assert_eq!(
@@ -207,7 +212,7 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
             color: "#5b9bf0",
             icon: None,
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
@@ -258,7 +263,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
             color: "#5b9bf0",
             icon: None,
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
         },
     )
     .await?;
@@ -273,7 +278,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
                 color: "#000000",
                 icon: None,
                 hint: None,
-                kind: "expense",
+                kind: CategoryKind::Expense,
                 archived: false
             },
         )
@@ -301,12 +306,12 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
     let rows = list_categories(&pool, user_id).await?;
     let expenses: Vec<Uuid> = rows
         .iter()
-        .filter(|r| r.kind == "expense")
+        .filter(|r| r.kind == CategoryKind::Expense)
         .map(|r| r.id)
         .collect();
     let incomes: Vec<Uuid> = rows
         .iter()
-        .filter(|r| r.kind == "income")
+        .filter(|r| r.kind == CategoryKind::Income)
         .map(|r| r.id)
         .collect();
 
@@ -319,7 +324,7 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
     assert_eq!(after[0].id, *expenses.last().unwrap(), "moved to the top");
     let income_order: Vec<Uuid> = after
         .iter()
-        .filter(|r| r.kind == "income")
+        .filter(|r| r.kind == CategoryKind::Income)
         .map(|r| r.id)
         .take(2)
         .collect();
@@ -364,7 +369,7 @@ async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Resu
                     color: "#000000",
                     icon: None,
                     hint: None,
-                    kind: "expense",
+                    kind: CategoryKind::Expense,
                 },
             )
             .await

@@ -12,6 +12,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::repo::budget::transactions::{
     TypeBucket, matching_transaction_ids, transaction_counts,
 };
@@ -38,7 +39,7 @@ pub struct CategoryDto {
     pub color: String,
     pub icon: Option<String>,
     pub hint: Option<String>,
-    pub kind: String,
+    pub kind: CategoryKind,
     /// Non-null means the row is a system category: undeletable, kind locked.
     pub system_key: Option<String>,
     pub archived: bool,
@@ -69,12 +70,20 @@ pub struct CategoryBody {
     pub color: String,
     pub icon: Option<String>,
     pub hint: Option<String>,
+    /// Parsed in the handler, so an unknown kind is a 400 like a blank name.
     pub kind: String,
     #[serde(default)]
     pub archived: bool,
 }
 
-const KINDS: [&str; 3] = ["expense", "income", "neutral"];
+impl CategoryBody {
+    fn checked_kind(&self) -> Result<CategoryKind, ApiError> {
+        match CategoryKind::parse(&self.kind) {
+            Some(kind) if !self.name.trim().is_empty() => Ok(kind),
+            _ => Err(ApiError::bad_request("invalid name or kind")),
+        }
+    }
+}
 
 pub async fn list_categories(
     State(pool): State<PgPool>,
@@ -89,9 +98,7 @@ pub async fn create_category(
     AuthUser { user_id, .. }: AuthUser,
     Json(b): Json<CategoryBody>,
 ) -> Result<(StatusCode, Json<CategoryDto>), ApiError> {
-    if b.name.trim().is_empty() || !KINDS.contains(&b.kind.as_str()) {
-        return Err(ApiError::bad_request("invalid name or kind"));
-    }
+    let kind = b.checked_kind()?;
     let row = category::create_category(
         &pool,
         user_id,
@@ -100,7 +107,7 @@ pub async fn create_category(
             color: &b.color,
             icon: b.icon.as_deref(),
             hint: b.hint.as_deref().filter(|h| !h.trim().is_empty()),
-            kind: &b.kind,
+            kind,
         },
     )
     .await
@@ -116,9 +123,7 @@ pub async fn update_category(
     Path(id): Path<Uuid>,
     Json(b): Json<CategoryBody>,
 ) -> Result<Json<CategoryDto>, ApiError> {
-    if b.name.trim().is_empty() || !KINDS.contains(&b.kind.as_str()) {
-        return Err(ApiError::bad_request("invalid name or kind"));
-    }
+    let kind = b.checked_kind()?;
     let row = category::update_category(
         &pool,
         user_id,
@@ -128,7 +133,7 @@ pub async fn update_category(
             color: &b.color,
             icon: b.icon.as_deref(),
             hint: b.hint.as_deref().filter(|h| !h.trim().is_empty()),
-            kind: &b.kind,
+            kind,
             archived: b.archived,
         },
     )

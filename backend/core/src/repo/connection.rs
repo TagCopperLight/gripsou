@@ -5,6 +5,20 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::error::CoreError;
+use crate::text_enum::text_enum;
+
+text_enum! {
+    /// `connection.status`. `syncing` is the per-connection sync lock.
+    pub enum ConnectionStatus {
+        /// Created, its provider round-trip not done yet.
+        Pending = "pending",
+        Ok = "ok",
+        Syncing = "syncing",
+        Error = "error",
+        /// A refresh was asked of the provider; its webhook has not come.
+        Awaiting = "awaiting",
+    }
+}
 
 pub struct ConnectionListRow {
     pub id: Uuid,
@@ -12,7 +26,7 @@ pub struct ConnectionListRow {
     pub display_name: String,
     pub institution_name: Option<String>,
     pub institution_key: Option<String>,
-    pub status: String,
+    pub status: ConnectionStatus,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub provider_meta: serde_json::Value,
@@ -32,7 +46,7 @@ pub async fn list_connections(
                c.display_name  as "display_name!",
                c.institution_name,
                c.institution_key,
-               c.status        as "status!",
+               c.status        as "status!: ConnectionStatus",
                c.last_sync_at,
                c.last_error,
                c.provider_meta as "provider_meta!"
@@ -98,14 +112,14 @@ pub async fn list_connection_accounts(
 
 pub struct ConnectionState {
     pub id: Uuid,
-    pub status: String,
+    pub status: ConnectionStatus,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
 }
 
 /// Outcome of attempting to claim a connection for syncing.
 pub enum BeginSync {
-    /// Claimed: status flipped to 'syncing'. Carries the new state.
+    /// Claimed: status flipped to `syncing`. Carries the new state.
     Started(ConnectionState),
     /// Owned by the user but already syncing — caller should 409.
     AlreadySyncing,
@@ -113,7 +127,7 @@ pub enum BeginSync {
     NotFound,
 }
 
-/// Atomically claim a connection for syncing: flip status→'syncing' only if it
+/// Atomically claim a connection for syncing: flip status to `syncing` only if it
 /// is owned by `user_id` and not already syncing. This is the per-connection
 /// lock that prevents double runs. A sync always releases it: it ends, fails,
 /// panics or hits its time limit, and a restart clears it at boot.
@@ -126,12 +140,13 @@ pub async fn begin_sync(
         ConnectionState,
         r#"
         update connection
-           set status = 'syncing'
-         where id = $1 and user_id = $2 and status <> 'syncing'
-        returning id as "id!", status as "status!", last_sync_at, last_error
+           set status = $3
+         where id = $1 and user_id = $2 and status <> $3
+        returning id as "id!", status as "status!: ConnectionStatus", last_sync_at, last_error
         "#,
         id,
         user_id,
+        ConnectionStatus::Syncing as ConnectionStatus,
     )
     .fetch_optional(pool)
     .await?;
@@ -168,9 +183,10 @@ async fn claim_outcome(
 pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection
-            set status='ok', last_sync_at=now(), last_error=null
-          where id=$1",
+            set status = $2, last_sync_at = now(), last_error = null
+          where id = $1",
         id,
+        ConnectionStatus::Ok as ConnectionStatus,
     )
     .execute(pool)
     .await?;
@@ -180,9 +196,10 @@ pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreErr
 /// Mark a finished sync as failed, recording the message.
 pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
     sqlx::query!(
-        "update connection set status='error', last_error=$2 where id=$1",
+        "update connection set status = $3, last_error = $2 where id = $1",
         id,
         msg,
+        ConnectionStatus::Error as ConnectionStatus,
     )
     .execute(pool)
     .await?;
@@ -275,16 +292,18 @@ pub async fn connections_needing_sync(
         r#"
         select id as "id!", user_id as "user_id!"
         from connection
-        where status in ('ok', 'error')
+        where status in ($1, $2)
           and (last_sync_at is null or last_sync_at < now() - interval '23 hours')
-        "#
+        "#,
+        ConnectionStatus::Ok as ConnectionStatus,
+        ConnectionStatus::Error as ConnectionStatus,
     )
     .fetch_all(pool)
     .await?;
     Ok(rows)
 }
 
-/// 'awaiting' connections whose force-refresh has not produced a webhook within
+/// `awaiting` connections whose force-refresh has not produced a webhook within
 /// `minutes` — candidates for the direct-fetch fallback.
 pub async fn connections_awaiting_timeout(
     pool: &sqlx::PgPool,
@@ -295,10 +314,11 @@ pub async fn connections_awaiting_timeout(
         r#"
         select id as "id!", user_id as "user_id!"
         from connection
-        where status='awaiting'
+        where status = $2
           and sync_requested_at < now() - make_interval(mins => $1)
         "#,
         minutes,
+        ConnectionStatus::Awaiting as ConnectionStatus,
     )
     .fetch_all(pool)
     .await?;
@@ -307,35 +327,38 @@ pub async fn connections_awaiting_timeout(
 
 /// Boot sweep: release every sync lock. The process that claimed them is
 /// gone, so the syncs behind them will never finish or report. They are marked
-/// 'error' rather than 'ok': a user looking at the connection must see that
+/// `error` rather than `ok`: a user looking at the connection must see that
 /// the sync did not complete. Returns the number of rows released.
 pub async fn clear_syncing(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "update connection
-            set status='error',
-                last_error='sync interrupted (the server restarted)'
-          where status='syncing'",
+            set status = $1,
+                last_error = 'sync interrupted (the server restarted)'
+          where status = $2",
+        ConnectionStatus::Error as ConnectionStatus,
+        ConnectionStatus::Syncing as ConnectionStatus,
     )
     .execute(pool)
     .await?;
     Ok(res.rows_affected())
 }
 
-/// Delete 'pending' connections older than `minutes` — webview flows the user
+/// Delete `pending` connections older than `minutes` — webview flows the user
 /// abandoned (closed the tab) so the callback never ran to clean them up.
 /// Returns the number of rows deleted.
 pub async fn delete_stale_pending(pool: &sqlx::PgPool, minutes: i32) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "delete from connection
-         where status='pending' and created_at < now() - make_interval(mins => $1)",
+         where status = $2 and created_at < now() - make_interval(mins => $1)",
         minutes,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .execute(pool)
     .await?;
     Ok(res.rows_affected())
 }
 
-/// Insert a new connection in 'pending' state (OAuth round-trip not yet done).
+/// Insert a new connection in `pending` state (OAuth round-trip not yet done).
 /// Returns the new connection id.
 pub async fn insert_pending(
     pool: &sqlx::PgPool,
@@ -346,19 +369,20 @@ pub async fn insert_pending(
     let id = sqlx::query_scalar!(
         r#"
         insert into connection (user_id, provider_key, display_name, status)
-        values ($1, $2, $3, 'pending')
+        values ($1, $2, $3, $4)
         returning id as "id!"
         "#,
         user_id,
         provider_key,
         display_name,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .fetch_one(pool)
     .await?;
     Ok(id)
 }
 
-/// Store credentials and flip a pending connection to 'ok'.
+/// Store credentials and flip a pending connection to `ok`.
 /// Returns true if the connection was found and owned by `user_id`.
 pub async fn finish_connect(
     pool: &sqlx::PgPool,
@@ -370,13 +394,14 @@ pub async fn finish_connect(
     let n = sqlx::query!(
         r#"
         update connection
-           set credentials = $3, provider_meta = $4, status = 'ok'
+           set credentials = $3, provider_meta = $4, status = $5
          where id = $1 and user_id = $2
         "#,
         id,
         user_id,
         credentials,
         provider_meta,
+        ConnectionStatus::Ok as ConnectionStatus,
     )
     .execute(pool)
     .await?
@@ -412,8 +437,8 @@ pub async fn connection_for_sync(
     }))
 }
 
-/// Atomically transition an owned connection to 'awaiting' (force-refresh
-/// requested). Rejects if already 'syncing' or 'awaiting'.
+/// Atomically transition an owned connection to `awaiting` (force-refresh
+/// requested). Rejects if already `syncing` or `awaiting`.
 pub async fn begin_await(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -423,12 +448,14 @@ pub async fn begin_await(
         ConnectionState,
         r#"
         update connection
-           set status='awaiting', sync_requested_at=now(), last_error=null
-         where id=$1 and user_id=$2 and status not in ('syncing','awaiting')
-        returning id as "id!", status as "status!", last_sync_at, last_error
+           set status = $3, sync_requested_at = now(), last_error = null
+         where id = $1 and user_id = $2 and status not in ($3, $4)
+        returning id as "id!", status as "status!: ConnectionStatus", last_sync_at, last_error
         "#,
         id,
         user_id,
+        ConnectionStatus::Awaiting as ConnectionStatus,
+        ConnectionStatus::Syncing as ConnectionStatus,
     )
     .fetch_optional(pool)
     .await?;
@@ -453,7 +480,7 @@ pub async fn find_by_external_connection_id(
     Ok(row.map(|r| (r.id, r.user_id)))
 }
 
-/// Delete `user_id`'s connection `id` if it is still 'pending': a connect
+/// Delete `user_id`'s connection `id` if it is still `pending`: a connect
 /// that failed or was cancelled. An active connection is never touched.
 pub async fn delete_pending(
     pool: &sqlx::PgPool,
@@ -461,9 +488,10 @@ pub async fn delete_pending(
     id: Uuid,
 ) -> Result<bool, CoreError> {
     let n = sqlx::query!(
-        "delete from connection where id = $1 and user_id = $2 and status = 'pending'",
+        "delete from connection where id = $1 and user_id = $2 and status = $3",
         id,
         user_id,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .execute(pool)
     .await?

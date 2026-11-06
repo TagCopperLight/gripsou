@@ -5,6 +5,7 @@
 
 use uuid::Uuid;
 
+use crate::budget::vocab::{CategoryKind, SeedKey};
 use crate::error::CoreError;
 
 #[derive(Debug, Clone)]
@@ -16,7 +17,7 @@ pub struct BudgetCategoryRow {
     pub color: String,
     pub icon: Option<String>,
     pub hint: Option<String>,
-    pub kind: String,
+    pub kind: CategoryKind,
     pub system_key: Option<String>,
     pub archived: bool,
     /// How many of this user's transactions carry the category, all-time.
@@ -28,7 +29,7 @@ pub struct NewCategory<'a> {
     pub color: &'a str,
     pub icon: Option<&'a str>,
     pub hint: Option<&'a str>,
-    pub kind: &'a str,
+    pub kind: CategoryKind,
 }
 
 pub struct CategoryPatch<'a> {
@@ -36,7 +37,7 @@ pub struct CategoryPatch<'a> {
     pub color: &'a str,
     pub icon: Option<&'a str>,
     pub hint: Option<&'a str>,
-    pub kind: &'a str,
+    pub kind: CategoryKind,
     pub archived: bool,
 }
 
@@ -53,7 +54,7 @@ pub async fn list_categories(
                c.color       as "color!",
                c.icon,
                c.hint,
-               c.kind        as "kind!",
+               c.kind        as "kind!: CategoryKind",
                c.system_key,
                (c.archived_at is not null) as "archived!",
                coalesce(n.cnt, 0) as "tx_count!"
@@ -64,14 +65,10 @@ pub async fn list_categories(
             group by t.budget_category_id
         ) n on n.cid = c.id
         where c.user_id = $1
-        order by case c.kind
-                     when 'expense' then 0
-                     when 'income' then 1
-                     else 2
-                 end,
-                 c.sort_order, lower(c.name)
+        order by array_position($2, c.kind), c.sort_order, lower(c.name)
         "#,
         user_id,
+        CategoryKind::ALL as &[CategoryKind],
     )
     .fetch_all(pool)
     .await?;
@@ -114,8 +111,9 @@ pub async fn catch_all_expense(
     user_id: Uuid,
 ) -> Result<Option<Uuid>, CoreError> {
     Ok(sqlx::query_scalar!(
-        "select id from budget_category where user_id = $1 and seed_key = 'other_expense'",
+        "select id from budget_category where user_id = $1 and seed_key = $2",
         user_id,
+        SeedKey::OtherExpense as SeedKey,
     )
     .fetch_optional(pool)
     .await?)
@@ -150,7 +148,7 @@ pub async fn create_category(
                   color     as "color!",
                   icon,
                   hint,
-                  kind      as "kind!",
+                  kind      as "kind!: CategoryKind",
                   system_key,
                   (archived_at is not null) as "archived!",
                   0::bigint as "tx_count!"
@@ -160,7 +158,7 @@ pub async fn create_category(
         new.color,
         new.icon,
         new.hint,
-        new.kind,
+        new.kind as CategoryKind,
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -198,7 +196,7 @@ pub async fn update_category(
                   c.color     as "color!",
                   c.icon,
                   c.hint,
-                  c.kind      as "kind!",
+                  c.kind      as "kind!: CategoryKind",
                   c.system_key,
                   (c.archived_at is not null) as "archived!",
                   (select count(*)
@@ -211,7 +209,7 @@ pub async fn update_category(
         patch.color,
         patch.icon,
         patch.hint,
-        patch.kind,
+        patch.kind as CategoryKind,
         patch.archived,
     )
     .fetch_optional(pool)

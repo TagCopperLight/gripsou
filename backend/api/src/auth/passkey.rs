@@ -22,6 +22,7 @@ use crate::auth::throttle::{Blocked, LoginThrottle};
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::error::ApiError;
+use gripsou_core::repo::login_challenge::ChallengeKind;
 
 /// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
 /// to start without a usable address. Every saved passkey is bound to its
@@ -68,8 +69,6 @@ impl Passkeys {
     }
 }
 
-const REGISTER_KIND: &str = "passkey_register";
-const LOGIN_KIND: &str = "passkey_login";
 const MAX_NAME_CHARS: usize = 64;
 
 fn not_accepted() -> ApiError {
@@ -118,7 +117,7 @@ pub async fn register_options(
         &pool,
         &auth::hash_token(&token),
         Some(user_id),
-        REGISTER_KIND,
+        ChallengeKind::PasskeyRegister,
         serde_json::json!({ "reg": reg }),
     )
     .await?;
@@ -142,11 +141,14 @@ pub async fn register(
     Json(body): Json<dto::PasskeyRegisterReq>,
 ) -> Result<Json<dto::PasskeyInfo>, ApiError> {
     let mut tx = pool.begin().await?;
-    let challenge =
-        login_challenge::consume(&mut *tx, &auth::hash_token(&body.challenge), REGISTER_KIND)
-            .await?
-            .filter(|c| c.user_id == Some(user_id))
-            .ok_or(ApiError::ChallengeExpired)?;
+    let challenge = login_challenge::consume(
+        &mut *tx,
+        &auth::hash_token(&body.challenge),
+        ChallengeKind::PasskeyRegister,
+    )
+    .await?
+    .filter(|c| c.user_id == Some(user_id))
+    .ok_or(ApiError::ChallengeExpired)?;
     require_reauth(&mut *tx, user_id, &body.reauth).await?;
     let reg: PasskeyRegistration = serde_json::from_value(challenge.state["reg"].clone())?;
     let passkey =
@@ -231,7 +233,7 @@ pub async fn sign_in_options(
         &pool,
         &auth::hash_token(&token),
         None,
-        LOGIN_KIND,
+        ChallengeKind::PasskeyLogin,
         serde_json::json!({ "auth": state }),
     )
     .await?;
@@ -254,9 +256,13 @@ pub async fn sign_in(
     Json(body): Json<dto::PasskeySignInReq>,
 ) -> Result<Json<dto::LoginResponse>, ApiError> {
     let ip = client_ip(&headers, peer);
-    let challenge = login_challenge::consume(&pool, &auth::hash_token(&body.challenge), LOGIN_KIND)
-        .await?
-        .ok_or(ApiError::ChallengeExpired)?;
+    let challenge = login_challenge::consume(
+        &pool,
+        &auth::hash_token(&body.challenge),
+        ChallengeKind::PasskeyLogin,
+    )
+    .await?
+    .ok_or(ApiError::ChallengeExpired)?;
     let refuse = |reason: &str| {
         tracing::warn!(ip = %ip, user_agent = user_agent(&headers), reason, "passkey login failed");
         not_accepted()
@@ -846,7 +852,7 @@ pub(crate) mod tests {
         // Refused before storing anything: no challenge row for it.
         let stored: i64 =
             sqlx::query_scalar("select count(*) from login_challenge where kind = $1")
-                .bind(LOGIN_KIND)
+                .bind(ChallengeKind::PasskeyLogin)
                 .fetch_one(&pool)
                 .await
                 .unwrap();

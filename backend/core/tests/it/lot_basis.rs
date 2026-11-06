@@ -2,6 +2,7 @@ use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
+use gripsou_core::repo::lot::LotSide;
 use gripsou_core::testkit::{self, Lot, checking_account, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -25,7 +26,7 @@ async fn add_lot(
     fee: &str,
 ) {
     let lot = Lot {
-        side,
+        side: LotSide::parse(side).unwrap(),
         ..Lot::buy(day(on), dec(quantity), dec(unit_price)).fee(dec(fee))
     };
     testkit::seed_lot(pool, holding_id, lot).await;

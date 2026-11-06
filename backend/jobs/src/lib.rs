@@ -1475,7 +1475,10 @@ mod categorize_run_tests {
             .await
             .unwrap()
             .expect("the dead run is reported");
-        assert_eq!(run.outcome, "error");
+        assert_eq!(
+            run.outcome,
+            gripsou_core::budget::vocab::AiRunOutcome::Error
+        );
 
         writer.flush(&pool).await;
         let f: serde_json::Value =

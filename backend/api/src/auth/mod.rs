@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use gripsou_core::repo::user::Role;
 
 /// Only re-touch a session at most this often, so we don't write on every request.
 pub const TOUCH_THROTTLE_SECS: i64 = 5 * 60;
@@ -203,7 +204,7 @@ where
         let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
             .await?
             .ok_or(ApiError::Unauthorized)?;
-        if profile.role != "admin" {
+        if profile.role != Role::Admin {
             return Err(ApiError::Forbidden("admin access required"));
         }
         Ok(AdminUser { user_id })

@@ -1,3 +1,4 @@
+use gripsou_core::repo::user::Role;
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../migrations")]
@@ -24,7 +25,7 @@ async fn lists_users_oldest_first(pool: PgPool) -> anyhow::Result<()> {
     let users = gripsou_core::repo::user::list(&pool).await?;
     assert_eq!(users.len(), 3, "all three users returned");
     assert_eq!(users[0].email, "admin@t.local", "oldest (admin) first");
-    assert_eq!(users[0].role, "admin");
+    assert_eq!(users[0].role, Role::Admin);
     assert_eq!(users[2].email, "m2@t.local", "newest last");
     Ok(())
 }

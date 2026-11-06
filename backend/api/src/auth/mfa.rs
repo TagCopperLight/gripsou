@@ -17,8 +17,7 @@ use crate::auth::throttle::{LoginThrottle, SecondFactorThrottle};
 use crate::auth::{self, AuthUser};
 use crate::dto;
 use crate::error::ApiError;
-
-const REAUTH_KIND: &str = "reauth";
+use gripsou_core::repo::login_challenge::ChallengeKind;
 
 /// Consume a reauth token. Single use either way: a token that belongs to
 /// someone else is burnt and refused. Runs on a pool or in a transaction.
@@ -27,7 +26,8 @@ pub(crate) async fn require_reauth(
     user_id: Uuid,
     token: &str,
 ) -> Result<(), ApiError> {
-    let challenge = login_challenge::consume(db, &auth::hash_token(token), REAUTH_KIND).await?;
+    let challenge =
+        login_challenge::consume(db, &auth::hash_token(token), ChallengeKind::Reauth).await?;
     match challenge {
         Some(c) if c.user_id == Some(user_id) => Ok(()),
         _ => Err(ApiError::ReauthRequired),
@@ -41,7 +41,8 @@ pub(crate) async fn check_reauth(
     user_id: Uuid,
     token: &str,
 ) -> Result<(), ApiError> {
-    match login_challenge::find_valid(pool, &auth::hash_token(token), REAUTH_KIND).await? {
+    match login_challenge::find_valid(pool, &auth::hash_token(token), ChallengeKind::Reauth).await?
+    {
         Some(c) if c.user_id == Some(user_id) => Ok(()),
         _ => Err(ApiError::ReauthRequired),
     }
@@ -96,7 +97,7 @@ pub async fn reauth(
         &pool,
         &auth::hash_token(&token),
         Some(user_id),
-        REAUTH_KIND,
+        ChallengeKind::Reauth,
         serde_json::json!({}),
     )
     .await?;
@@ -323,7 +324,7 @@ pub(crate) mod tests {
     }
 
     async fn reauth_valid(pool: &PgPool, token: &str) -> bool {
-        login_challenge::find_valid(pool, &auth::hash_token(token), "reauth")
+        login_challenge::find_valid(pool, &auth::hash_token(token), ChallengeKind::Reauth)
             .await
             .unwrap()
             .is_some()
@@ -570,7 +571,7 @@ pub(crate) mod tests {
         );
         // Refused, and burnt.
         assert!(
-            login_challenge::find_valid(&pool, &auth::hash_token(&theirs), "reauth")
+            login_challenge::find_valid(&pool, &auth::hash_token(&theirs), ChallengeKind::Reauth)
                 .await
                 .unwrap()
                 .is_none()

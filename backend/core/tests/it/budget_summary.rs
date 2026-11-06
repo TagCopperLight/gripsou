@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::budget::pairing::pair_internal_transfers;
+use gripsou_core::budget::vocab::CategoryKind;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::summary::day_category_totals;
@@ -73,7 +74,7 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
     assert!(rows.iter().all(|r| r.category_id == Some(groceries)));
     assert!(
         rows.iter()
-            .all(|r| r.category_kind.as_deref() == Some("expense"))
+            .all(|r| r.category_kind == Some(CategoryKind::Expense))
     );
     assert_eq!(rows.iter().map(|r| r.txn_count).sum::<i64>(), 2);
     assert!(rows.iter().all(|r| !r.fx_missing));
@@ -761,7 +762,7 @@ async fn a_renamed_catch_all_still_folds_into_other(pool: PgPool) -> anyhow::Res
             color: "#10c4cb",
             icon: None,
             hint: None,
-            kind: "expense",
+            kind: CategoryKind::Expense,
             archived: false,
         },
     )

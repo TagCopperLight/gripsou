@@ -1,3 +1,4 @@
+use gripsou_core::repo::connection::ConnectionStatus;
 use gripsou_core::repo::connection::{
     BeginSync, begin_sync, clear_syncing, insert_pending, mark_synced_error, mark_synced_ok,
 };
@@ -11,7 +12,7 @@ async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
 
     // First claim succeeds and flips to 'syncing'.
     match begin_sync(&pool, user_id, conn).await? {
-        BeginSync::Started(s) => assert_eq!(s.status, "syncing"),
+        BeginSync::Started(s) => assert_eq!(s.status, ConnectionStatus::Syncing),
         _ => panic!("expected Started"),
     }
     // Second claim while syncing → AlreadySyncing.
@@ -181,13 +182,13 @@ async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> 
     .await?;
 
     let row = sqlx::query!(
-        r#"select status as "status!", sync_requested_at from connection where id=$1"#,
+        r#"select status as "status!: ConnectionStatus", sync_requested_at from connection where id=$1"#,
         id
     )
     .fetch_one(&pool)
     .await?;
 
-    assert_eq!(row.status, "awaiting");
+    assert_eq!(row.status, ConnectionStatus::Awaiting);
     assert!(row.sync_requested_at.is_some());
     Ok(())
 }

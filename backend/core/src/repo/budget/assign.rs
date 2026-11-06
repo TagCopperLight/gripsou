@@ -28,6 +28,7 @@
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{CategoryKind, CategorySource};
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
@@ -119,9 +120,9 @@ impl CategoryWrite {
         let Some(id) = category_id else {
             return Ok(Some(Self::clear()));
         };
-        let neutral = sqlx::query_scalar!(
+        let kind = sqlx::query_scalar!(
             r#"
-            select kind = 'neutral' as "neutral!"
+            select kind as "kind: CategoryKind"
             from budget_category
             where id = $1 and user_id = $2
             for share
@@ -131,9 +132,9 @@ impl CategoryWrite {
         )
         .fetch_optional(&mut **tx)
         .await?;
-        Ok(neutral.map(|keeps_pairs| CategoryWrite {
+        Ok(kind.map(|kind| CategoryWrite {
             category_id: Some(id),
-            keeps_pairs,
+            keeps_pairs: kind == CategoryKind::Neutral,
         }))
     }
 
@@ -146,13 +147,14 @@ impl CategoryWrite {
             r#"
             update transaction t
                set budget_category_id = $2,
-                   category_source = case when $2::uuid is null then null else 'user' end,
+                   category_source = $3,
                    category_confidence = null,
                    category_reviewed_at = case when $2::uuid is null then null else now() end
              where t.id = any($1)
             "#,
             &ids,
             self.category_id,
+            self.category_id.map(|_| CategorySource::User) as Option<CategorySource>,
         )
         .execute(&mut **tx)
         .await?;

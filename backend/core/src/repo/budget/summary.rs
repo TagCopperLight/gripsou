@@ -10,6 +10,7 @@ use chrono::NaiveDate;
 use uuid::Uuid;
 
 use crate::budget::overview::calc::DayCategoryRow;
+use crate::budget::vocab::CategoryKind;
 use crate::error::CoreError;
 
 /// Every (day, category) bucket between `from` and `to` inclusive.
@@ -71,7 +72,7 @@ pub async fn day_category_totals(
               -- Ignore) counts toward nothing. Except an orphaned `pair` row:
               -- it is read above as uncategorised, so it must not be dropped
               -- with its old category.
-              and (r.is_orphan_transfer or coalesce(r.category_kind, '') <> 'neutral')
+              and (r.is_orphan_transfer or r.category_kind is distinct from $4)
         ),
         grid as materialized (
             select as_of, currency, rate
@@ -92,7 +93,7 @@ pub async fn day_category_totals(
         )
         select b.day as "day!",
                b.category_id as "category_id?",
-               b.category_kind as "category_kind?",
+               b.category_kind as "category_kind?: CategoryKind",
                coalesce(sum(b.reporting_amount), 0) as "amount!",
                count(*) as "txn_count!",
                coalesce(bool_or(b.reporting_amount is null), false) as "fx_missing!"
@@ -103,6 +104,7 @@ pub async fn day_category_totals(
         user_id,
         from,
         to,
+        CategoryKind::Neutral as CategoryKind,
     )
     .fetch_all(pool)
     .await?;

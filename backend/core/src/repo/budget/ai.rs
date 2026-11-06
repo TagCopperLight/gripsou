@@ -6,6 +6,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::{AiRunOutcome, CategoryKind, CategorySource};
 use crate::categorize::{CategoryOption, Example, Usage};
 use crate::error::CoreError;
 
@@ -23,11 +24,13 @@ pub async fn close_abandoned_runs(
     Ok(sqlx::query!(
         r#"
         update budget_ai_run
-           set outcome = 'error', error = 'the run stopped before finishing'
-         where outcome = 'running'
+           set outcome = $2, error = 'the run stopped before finishing'
+         where outcome = $3
            and ($1::uuid is null or user_id = $1)
         "#,
         user_id as Option<Uuid>,
+        AiRunOutcome::Error as AiRunOutcome,
+        AiRunOutcome::Running as AiRunOutcome,
     )
     .execute(pool)
     .await?
@@ -38,26 +41,19 @@ pub async fn active_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Vec<CategoryOption>, CoreError> {
-    let rows = sqlx::query!(
+    Ok(sqlx::query_as!(
+        CategoryOption,
         r#"
-        select id, name, kind, hint
+        select id, name, kind as "kind: CategoryKind", hint
         from budget_category
         where user_id = $1 and archived_at is null
-        order by kind, sort_order, name
+        order by array_position($2, kind), sort_order, name
         "#,
-        user_id
+        user_id,
+        CategoryKind::ALL as &[CategoryKind],
     )
     .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| CategoryOption {
-            id: r.id,
-            name: r.name,
-            kind: r.kind,
-            hint: r.hint,
-        })
-        .collect())
+    .await?)
 }
 
 /// What gets written for one answered transaction. `category_id: None` is an
@@ -246,7 +242,7 @@ pub async fn write_decisions(
         r#"
         update transaction t
            set budget_category_id   = c.id,
-               category_source      = 'ai',
+               category_source      = $5,
                category_confidence  = case when c.id is not null then d.confidence end,
                category_reviewed_at = null
           from unnest($2::uuid[], $3::uuid[], $4::numeric[]) as d (txn_id, category_id, confidence)
@@ -259,6 +255,7 @@ pub async fn write_decisions(
         &txn_ids,
         &categories as &[Option<Uuid>],
         &confidences as &[Option<Decimal>],
+        CategorySource::Ai as CategorySource,
     )
     .execute(&mut *tx)
     .await?
@@ -302,17 +299,16 @@ pub async fn record_usage(
     Ok(())
 }
 
-/// Closes the run: `ok` | `partial` | `error`.
 pub async fn finish_run(
     pool: &sqlx::PgPool,
     run_id: Uuid,
-    outcome: &str,
+    outcome: AiRunOutcome,
     error: Option<&str>,
 ) -> Result<(), CoreError> {
     sqlx::query!(
         "update budget_ai_run set outcome = $2, error = $3 where id = $1",
         run_id,
-        outcome,
+        outcome as AiRunOutcome,
         error,
     )
     .execute(pool)
@@ -321,7 +317,7 @@ pub async fn finish_run(
 }
 
 pub struct LastRun {
-    pub outcome: String,
+    pub outcome: AiRunOutcome,
     pub error: Option<String>,
     pub started_at: DateTime<Utc>,
 }
@@ -331,13 +327,14 @@ pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastR
     Ok(sqlx::query_as!(
         LastRun,
         r#"
-        select outcome, error, started_at
+        select outcome as "outcome: AiRunOutcome", error, started_at
         from budget_ai_run
-        where user_id = $1 and outcome <> 'running'
+        where user_id = $1 and outcome <> $2
         order by started_at desc
         limit 1
         "#,
-        user_id
+        user_id,
+        AiRunOutcome::Running as AiRunOutcome,
     )
     .fetch_optional(pool)
     .await?)

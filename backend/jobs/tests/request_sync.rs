@@ -6,6 +6,7 @@
 //! race to call `mark_synced_error`; in practice the status check runs before
 //! the HTTP call resolves, but this is not guaranteed.
 
+use gripsou_core::repo::connection::ConnectionStatus;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -99,7 +100,8 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "syncing",
+            state.status,
+            ConnectionStatus::Syncing,
             "direct path: status should be 'syncing'"
         );
     } else {
@@ -136,7 +138,8 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     // Assert on the returned state synchronously captured before the spawn.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "awaiting",
+            state.status,
+            ConnectionStatus::Awaiting,
             "webhook path: status should be 'awaiting'"
         );
     } else {
@@ -185,7 +188,8 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     // Must take the DIRECT path → status 'syncing', not 'awaiting'.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
-            state.status, "syncing",
+            state.status,
+            ConnectionStatus::Syncing,
             "no external_connection_id: must fall back to direct path (status 'syncing')"
         );
     } else {

@@ -6,12 +6,23 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::repo::mfa::{self, Cleared};
+use crate::repo::user::Role;
 
 use crate::error::CoreError;
+use crate::text_enum::text_enum;
+
+text_enum! {
+    /// `invite_token.type`.
+    pub enum TokenKind {
+        Invite = "invite",
+        /// A password reset for an existing user's email.
+        Reset = "reset",
+    }
+}
 
 /// A token that is currently redeemable: row exists, unused, unexpired.
 pub struct ValidToken {
-    pub token_type: String,
+    pub token_type: TokenKind,
     pub email: Option<String>,
 }
 
@@ -23,7 +34,7 @@ pub async fn find_valid(
 ) -> Result<Option<ValidToken>, CoreError> {
     let row = sqlx::query_as!(
         ValidToken,
-        r#"select type as "token_type!", email
+        r#"select type as "token_type!: TokenKind", email
              from invite_token
             where token = $1 and used_at is null and expires_at > now()"#,
         token_hash,
@@ -49,10 +60,11 @@ pub async fn redeem_invite(
     // FOR UPDATE locks the row so two concurrent redeems can't both succeed.
     let valid = sqlx::query_scalar!(
         r#"select 1 from invite_token
-            where token = $1 and type = 'invite'
+            where token = $1 and type = $2
               and used_at is null and expires_at > now()
             for update"#,
         token_hash,
+        TokenKind::Invite as TokenKind,
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -61,10 +73,11 @@ pub async fn redeem_invite(
     }
     let user_id = sqlx::query_scalar!(
         r#"insert into users (email, name, password_hash, role)
-           values ($1, $2, $3, 'user') returning id"#,
+           values ($1, $2, $3, $4) returning id"#,
         email,
         name,
         password_hash,
+        Role::User as Role,
     )
     .fetch_one(&mut *tx)
     .await?; // unique-email violation propagates → rollback, token untouched.
@@ -90,10 +103,11 @@ pub async fn redeem_reset(
     let mut tx = pool.begin().await?;
     let email = sqlx::query_scalar!(
         r#"select email from invite_token
-            where token = $1 and type = 'reset'
+            where token = $1 and type = $2
               and used_at is null and expires_at > now()
             for update"#,
         token_hash,
+        TokenKind::Reset as TokenKind,
     )
     .fetch_optional(&mut *tx)
     .await?
@@ -127,11 +141,11 @@ pub async fn redeem_reset(
     Ok(Some((user_id, cleared)))
 }
 
-/// Insert a one-time token. `kind` is `"invite"` or `"reset"`; `email` is the
-/// target user's email for resets, `None` for invites (the invitee chooses it).
+/// Insert a one-time token. `email` is the target user's email for resets,
+/// `None` for invites (the invitee chooses it).
 pub async fn create(
     pool: &sqlx::PgPool,
-    kind: &str,
+    kind: TokenKind,
     email: Option<&str>,
     created_by: Uuid,
     token: &str,
@@ -141,7 +155,7 @@ pub async fn create(
         r#"insert into invite_token (token, type, email, created_by, expires_at)
            values ($1, $2, $3, $4, $5)"#,
         token,
-        kind,
+        kind as TokenKind,
         email,
         created_by,
         expires_at,
@@ -158,7 +172,7 @@ mod tests {
     use sqlx::PgPool;
 
     async fn seed_admin(pool: &PgPool) -> Uuid {
-        crate::testkit::seed_user_as(pool, "a@t.local", "admin", "x").await
+        crate::testkit::seed_user_as(pool, "a@t.local", Role::Admin, "x").await
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -166,7 +180,7 @@ mod tests {
         let admin = seed_admin(&pool).await;
         create(
             &pool,
-            "reset",
+            TokenKind::Reset,
             Some("u@t.local"),
             admin,
             "tok-ok",
@@ -175,14 +189,14 @@ mod tests {
         .await
         .unwrap();
         let found = find_valid(&pool, "tok-ok").await.unwrap().unwrap();
-        assert_eq!(found.token_type, "reset");
+        assert_eq!(found.token_type, TokenKind::Reset);
         assert_eq!(found.email.as_deref(), Some("u@t.local"));
 
         // Unknown, expired, and used tokens all read as None.
         assert!(find_valid(&pool, "nope").await.unwrap().is_none());
         create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             "tok-exp",
@@ -203,7 +217,7 @@ mod tests {
         let admin = seed_admin(&pool).await;
         create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             "inv-3",
@@ -242,7 +256,7 @@ mod tests {
         }
         create(
             &pool,
-            "reset",
+            TokenKind::Reset,
             Some("a@t.local"),
             admin,
             "rst-2",

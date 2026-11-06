@@ -5,6 +5,15 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::repo::prefs::{self, UserPrefs};
+use crate::text_enum::text_enum;
+
+text_enum! {
+    /// `users.role`. Admins configure the server and manage users.
+    pub enum Role {
+        Admin = "admin",
+        User = "user",
+    }
+}
 
 /// What a password login checks: the hash, and whose it is.
 #[derive(Debug)]
@@ -43,7 +52,7 @@ pub struct UserProfile {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-    pub role: String,
+    pub role: Role,
     pub prefs: UserPrefs,
     /// False until the user finished or skipped the post-invite welcome screen.
     pub welcome_done: bool,
@@ -54,7 +63,7 @@ pub async fn profile_by_id(
     user_id: Uuid,
 ) -> Result<Option<UserProfile>, CoreError> {
     let Some(row) = sqlx::query!(
-        r#"select id, name, email, role, welcomed_at is not null as "welcome_done!"
+        r#"select id, name, email, role as "role: Role", welcomed_at is not null as "welcome_done!"
            from users where id = $1"#,
         user_id,
     )
@@ -80,7 +89,7 @@ pub struct UserRow {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-    pub role: String,
+    pub role: Role,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub avatar: Option<String>,
 }
@@ -91,7 +100,7 @@ pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     let rows = sqlx::query_as!(
         UserRow,
         r#"
-        select id, name, email, role, created_at, prefs->>'avatar' as avatar
+        select id, name, email, role as "role: Role", created_at, prefs->>'avatar' as avatar
         from users
         order by created_at
         "#,
@@ -104,24 +113,28 @@ pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
 /// Number of users with the `admin` role. Used to refuse deleting the last
 /// admin, which would lock everyone out of admin-only settings.
 pub async fn count_admins(pool: &sqlx::PgPool) -> Result<i64, CoreError> {
-    let n = sqlx::query_scalar!(r#"select count(*) from users where role = 'admin'"#)
-        .fetch_one(pool)
-        .await?;
+    let n = sqlx::query_scalar!(
+        "select count(*) from users where role = $1",
+        Role::Admin as Role,
+    )
+    .fetch_one(pool)
+    .await?;
     Ok(n.unwrap_or(0))
 }
 
 /// Set a user's role, unless that would leave no admin: the check and the
 /// write are one statement, so two admins demoting each other at once can't
 /// both succeed. False when refused, or when the user doesn't exist.
-pub async fn set_role(pool: &sqlx::PgPool, user_id: Uuid, role: &str) -> Result<bool, CoreError> {
+pub async fn set_role(pool: &sqlx::PgPool, user_id: Uuid, role: Role) -> Result<bool, CoreError> {
     let res = sqlx::query!(
         r#"
         update users set role = $2
         where id = $1
-          and ($2 = 'admin' or exists (select 1 from users where role = 'admin' and id <> $1))
+          and ($2 = $3 or exists (select 1 from users where role = $3 and id <> $1))
         "#,
         user_id,
-        role,
+        role as Role,
+        Role::Admin as Role,
     )
     .execute(pool)
     .await?;
@@ -193,7 +206,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn lookup_update_roundtrip(pool: PgPool) -> anyhow::Result<()> {
-        let id = crate::testkit::seed_user_as(&pool, "a@t.local", "admin", "hash-1").await;
+        let id = crate::testkit::seed_user_as(&pool, "a@t.local", Role::Admin, "hash-1").await;
 
         let creds = credentials_by_email(&pool, "a@t.local").await?.unwrap();
         assert_eq!(creds.id, id);
@@ -213,7 +226,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn profile_returns_default_prefs_for_empty_jsonb(pool: PgPool) -> anyhow::Result<()> {
-        let id = crate::testkit::seed_user_as(&pool, "p@t.local", "user", "hash").await;
+        let id = crate::testkit::seed_user_as(&pool, "p@t.local", Role::User, "hash").await;
 
         let profile = profile_by_id(&pool, id).await?.unwrap();
         assert_eq!(profile.prefs.display.ui_language, "en");
@@ -229,7 +242,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn update_profile_roundtrip_and_conflict(pool: PgPool) -> anyhow::Result<()> {
-        let id = crate::testkit::seed_user_as(&pool, "a@t.local", "admin", "hash").await;
+        let id = crate::testkit::seed_user_as(&pool, "a@t.local", Role::Admin, "hash").await;
         // A second user whose email we must not be able to collide with.
         crate::testkit::seed_user_email(&pool, "taken@t.local").await;
 

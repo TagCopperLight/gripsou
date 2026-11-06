@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select l.id as \"id!\", l.side as \"side!: LotSide\", l.acquired_on as \"acquired_on!\",\n               l.quantity as \"quantity!\", l.unit_price as \"unit_price!\", l.fee as \"fee!\",\n               (l.source = $3) as \"manual!\"\n        from lot l\n        join holding h    on h.id = l.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where l.holding_id = $1 and c.user_id = $2\n        order by l.acquired_on, l.created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "side!: LotSide",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "side"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "acquired_on!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "acquired_on"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "quantity!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "unit_price"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "fee!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "lot",
+            "name": "fee"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "manual!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "4a60b8da6c1e416033d9306b1233efca9a2b22071e0074b768a07c01566a5935"
+}

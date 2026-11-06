@@ -13,19 +13,36 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 use crate::repo::holding::{OwnedHolding, owned_holding};
+use crate::text_enum::text_enum;
+
+text_enum! {
+    pub enum LotSide {
+        Buy = "buy",
+        Sell = "sell",
+    }
+}
+
+text_enum! {
+    /// Who recorded a lot. Users may delete only their own (`manual`) ones;
+    /// a provider's come back at the next sync.
+    pub enum LotSource {
+        Manual = "manual",
+        Provider = "provider",
+    }
+}
 
 /// Decimal places a lot's quantity, unit price and fee may carry.
 pub const LOT_DECIMAL_PLACES: u32 = 8;
 
 pub struct LotRow {
     pub id: Uuid,
-    pub side: String,
+    pub side: LotSide,
     pub acquired_on: NaiveDate,
     pub quantity: Decimal,
     pub unit_price: Decimal,
     pub fee: Decimal,
-    /// `source = 'manual'` — a row the user entered, and the only kind the
-    /// record-lots modal may delete.
+    /// A row the user entered, the only kind the record-lots modal may
+    /// delete.
     pub manual: bool,
 }
 
@@ -37,9 +54,9 @@ pub async fn list_lots(
     let rows = sqlx::query_as!(
         LotRow,
         r#"
-        select l.id as "id!", l.side as "side!", l.acquired_on as "acquired_on!",
+        select l.id as "id!", l.side as "side!: LotSide", l.acquired_on as "acquired_on!",
                l.quantity as "quantity!", l.unit_price as "unit_price!", l.fee as "fee!",
-               (l.source = 'manual') as "manual!"
+               (l.source = $3) as "manual!"
         from lot l
         join holding h    on h.id = l.holding_id
         join account a    on a.id = h.account_id
@@ -49,6 +66,7 @@ pub async fn list_lots(
         "#,
         holding_id,
         user_id,
+        LotSource::Manual as LotSource,
     )
     .fetch_all(pool)
     .await?;
@@ -57,7 +75,7 @@ pub async fn list_lots(
 
 /// A lot the user enters, checked so every read of its holding can value it.
 pub struct NewLot {
-    side: &'static str,
+    side: LotSide,
     acquired_on: NaiveDate,
     quantity: Decimal,
     unit_price: Decimal,
@@ -73,10 +91,8 @@ impl NewLot {
         unit_price: Decimal,
         fee: Decimal,
     ) -> Result<Self, &'static str> {
-        let side = match side {
-            "buy" => "buy",
-            "sell" => "sell",
-            _ => return Err("type must be buy or sell"),
+        let Some(side) = LotSide::parse(side) else {
+            return Err("type must be buy or sell");
         };
         if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
             return Err("quantity must be positive and unitPrice must not be negative");
@@ -154,10 +170,11 @@ async fn apply(
             let deleted = sqlx::query!(
                 r#"
                 delete from lot
-                where holding_id = $1 and source = 'manual' and id = any($2)
+                where holding_id = $1 and source = $3 and id = any($2)
                 "#,
                 holding.id,
                 &ids,
+                LotSource::Manual as LotSource,
             )
             .execute(&mut *conn)
             .await?
@@ -168,8 +185,9 @@ async fn apply(
         }
         Removes::AllManual => {
             sqlx::query!(
-                "delete from lot where holding_id = $1 and source = 'manual'",
+                "delete from lot where holding_id = $1 and source = $2",
                 holding.id,
+                LotSource::Manual as LotSource,
             )
             .execute(&mut *conn)
             .await?;
@@ -178,21 +196,22 @@ async fn apply(
 
     if !changes.adds.is_empty() {
         let column = |f: fn(&NewLot) -> Decimal| changes.adds.iter().map(f).collect::<Vec<_>>();
-        let sides: Vec<String> = changes.adds.iter().map(|a| a.side.to_owned()).collect();
+        let sides: Vec<LotSide> = changes.adds.iter().map(|a| a.side).collect();
         let days: Vec<NaiveDate> = changes.adds.iter().map(|a| a.acquired_on).collect();
         sqlx::query!(
             r#"
             insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source)
-            select $1, a.side, a.day, a.quantity, a.unit_price, a.fee, 'manual'
+            select $1, a.side, a.day, a.quantity, a.unit_price, a.fee, $7
             from unnest($2::text[], $3::date[], $4::numeric[], $5::numeric[], $6::numeric[])
                  as a(side, day, quantity, unit_price, fee)
             "#,
             holding.id,
-            &sides,
+            &sides as &[LotSide],
             &days,
             &column(|a| a.quantity),
             &column(|a| a.unit_price),
             &column(|a| a.fee),
+            LotSource::Manual as LotSource,
         )
         .execute(&mut *conn)
         .await?;

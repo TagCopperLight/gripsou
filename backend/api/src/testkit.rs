@@ -8,6 +8,7 @@ use crate::dto::{self, LoginReq};
 use axum::Json;
 use axum::extract::State;
 use gripsou_core::repo::session;
+pub(crate) use gripsou_core::repo::user::Role;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -28,7 +29,7 @@ pub(crate) const PASSWORD: &str = "hunter22";
 
 /// A user who can log in with `PASSWORD`.
 pub(crate) async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
-    seed_user_with_password(pool, email, PASSWORD, "user").await
+    seed_user_with_password(pool, email, PASSWORD, Role::User).await
 }
 
 /// A user who can log in with `password`.
@@ -36,7 +37,7 @@ pub(crate) async fn seed_user_with_password(
     pool: &PgPool,
     email: &str,
     password: &str,
-    role: &str,
+    role: Role,
 ) -> Uuid {
     let hash = auth::hash_password(password).unwrap();
     gripsou_core::testkit::seed_user_as(pool, email, role, &hash).await
@@ -132,13 +133,13 @@ pub(crate) async fn login_outcome(
 }
 
 /// Seed an admin user and return their id — mirrors what `seed_user` does for
-/// the existing tests (role "admin", email "a@t.local").
+/// the existing tests (email "a@t.local").
 pub(crate) async fn seed_admin_user(pool: &PgPool) -> Uuid {
     seed_admin(pool, "a@t.local", "hunter2").await
 }
 
 pub(crate) async fn seed_admin(pool: &PgPool, email: &str, password: &str) -> Uuid {
-    seed_user_with_password(pool, email, password, "admin").await
+    seed_user_with_password(pool, email, password, Role::Admin).await
 }
 
 pub(crate) async fn login_token(pool: &PgPool, email: &str, pw: &str) -> String {
@@ -174,7 +175,7 @@ pub(crate) async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth:
 /// core's `common::seed_connection`, but this crate can't import that
 /// test-only module across crates).
 pub(crate) async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
-    let user_id = seed_user_with_password(pool, email, "hunter2", "user").await;
+    let user_id = seed_user_with_password(pool, email, "hunter2", Role::User).await;
     let conn_id = Uuid::new_v4();
     sqlx::query(
         "insert into connection (id, user_id, provider_key, display_name) \

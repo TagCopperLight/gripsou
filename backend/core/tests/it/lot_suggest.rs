@@ -1,3 +1,4 @@
+use gripsou_core::repo::lot::LotSide;
 use gripsou_core::testkit::{self, Lot};
 
 use chrono::NaiveDate;
@@ -68,7 +69,7 @@ async fn txn(pool: &PgPool, account: Uuid, id: &str, kind: &str, amount: &str, d
 
 async fn lot(pool: &PgPool, holding: Uuid, side: &'static str, on: NaiveDate, qty: &str) {
     let lot = Lot {
-        side,
+        side: LotSide::parse(side).unwrap(),
         ..Lot::buy(on, dec(qty), Decimal::from(5))
     };
     testkit::seed_lot(pool, holding, lot).await;
@@ -97,7 +98,7 @@ async fn a_rise_with_one_matching_buy_is_suggested(pool: PgPool) {
 
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "buy");
+    assert_eq!(got[0].side, LotSide::Buy);
     assert_eq!(got[0].date, oct(8));
     assert_eq!(got[0].quantity, dec("23"));
     assert_eq!(got[0].unit_price, dec("6.35521739"));
@@ -129,7 +130,7 @@ async fn the_wording_and_the_sign_do_not_matter(pool: PgPool) {
     txn(&pool, fx.account, "t1", "sell", "146.17", 7).await;
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "buy");
+    assert_eq!(got[0].side, LotSide::Buy);
     assert_eq!(got[0].date, oct(7));
 }
 
@@ -192,7 +193,7 @@ async fn a_sale_down_to_zero_is_suggested(pool: PgPool) {
 
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert_eq!(got.len(), 1);
-    assert_eq!(got[0].side, "sell");
+    assert_eq!(got[0].side, LotSide::Sell);
     assert_eq!(got[0].quantity, dec("10"));
     assert_eq!(got[0].unit_price, dec("6.36"));
 }

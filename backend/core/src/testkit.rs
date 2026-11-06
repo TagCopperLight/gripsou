@@ -12,26 +12,28 @@ use crate::crypto::EncryptionKey;
 use crate::dto::{CanonicalAccount, CanonicalHolding, CanonicalTransaction, InstrumentRef};
 use crate::error::CoreError;
 use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transaction};
+use crate::repo::lot::{LotSide, LotSource};
+use crate::repo::user::Role;
 
 /// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
     EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()
 }
 
-/// Insert a user with a unique email, role `user` and a password hash that
+/// Insert a user with a unique email, the user role and a password hash that
 /// matches nothing. Every other column keeps its default.
 pub async fn seed_user(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
-    seed_user_with_id(pool, id, &format!("u-{id}@test.local"), "user", "x").await
+    seed_user_with_id(pool, id, &format!("u-{id}@test.local"), Role::User, "x").await
 }
 
 /// Same, with a chosen email.
 pub async fn seed_user_email(pool: &PgPool, email: &str) -> Uuid {
-    seed_user_as(pool, email, "user", "x").await
+    seed_user_as(pool, email, Role::User, "x").await
 }
 
 /// Insert a user with a chosen email, role and password hash.
-pub async fn seed_user_as(pool: &PgPool, email: &str, role: &str, password_hash: &str) -> Uuid {
+pub async fn seed_user_as(pool: &PgPool, email: &str, role: Role, password_hash: &str) -> Uuid {
     seed_user_with_id(pool, Uuid::new_v4(), email, role, password_hash).await
 }
 
@@ -39,7 +41,7 @@ async fn seed_user_with_id(
     pool: &PgPool,
     id: Uuid,
     email: &str,
-    role: &str,
+    role: Role,
     password_hash: &str,
 ) -> Uuid {
     sqlx::query(
@@ -267,29 +269,29 @@ pub async fn seed_equity_holding(
 /// A purchase or sale as a test records it: entered by hand, no fee.
 #[derive(Debug, Clone, Copy)]
 pub struct Lot {
-    pub side: &'static str,
+    pub side: LotSide,
     pub on: NaiveDate,
     pub quantity: Decimal,
     pub unit_price: Decimal,
     pub fee: Decimal,
-    pub source: &'static str,
+    pub source: LotSource,
 }
 
 impl Lot {
     pub fn buy(on: NaiveDate, quantity: Decimal, unit_price: Decimal) -> Self {
         Self {
-            side: "buy",
+            side: LotSide::Buy,
             on,
             quantity,
             unit_price,
             fee: Decimal::ZERO,
-            source: "manual",
+            source: LotSource::Manual,
         }
     }
 
     pub fn sell(on: NaiveDate, quantity: Decimal, unit_price: Decimal) -> Self {
         Self {
-            side: "sell",
+            side: LotSide::Sell,
             ..Self::buy(on, quantity, unit_price)
         }
     }
@@ -301,7 +303,7 @@ impl Lot {
     /// A lot the provider reported, which the user may not delete.
     pub fn from_provider(self) -> Self {
         Self {
-            source: "provider",
+            source: LotSource::Provider,
             ..self
         }
     }

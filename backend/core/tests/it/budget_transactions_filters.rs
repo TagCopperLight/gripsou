@@ -1,4 +1,6 @@
 use chrono::NaiveDate;
+use gripsou_core::budget::vocab::CategoryKind;
+use gripsou_core::budget::vocab::CategorySource;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
@@ -76,8 +78,8 @@ async fn rows_carry_their_category(pool: PgPool) -> anyhow::Result<()> {
         leclerc.category_color.as_deref(),
         Some(groceries.color.as_str())
     );
-    assert_eq!(leclerc.category_kind.as_deref(), Some("expense"));
-    assert_eq!(leclerc.category_source.as_deref(), Some("user"));
+    assert_eq!(leclerc.category_kind, Some(CategoryKind::Expense));
+    assert_eq!(leclerc.category_source, Some(CategorySource::User));
     assert!(!leclerc.needs_review);
     assert!(!leclerc.checked);
     assert!(!leclerc.is_transfer);

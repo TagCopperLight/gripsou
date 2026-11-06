@@ -85,6 +85,7 @@ mod tests {
     use crate::testkit::*;
     use axum::http::StatusCode;
     use chrono::{Duration, Utc};
+    use gripsou_core::repo::invite_token::TokenKind;
     use sqlx::PgPool;
     use uuid::Uuid;
 
@@ -93,7 +94,7 @@ mod tests {
         let admin = seed_admin_user(&pool).await;
         gripsou_core::repo::invite_token::create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             &auth::hash_token_str("raw-invite"),
@@ -117,7 +118,7 @@ mod tests {
         .expect("redeem ok");
         assert!(!resp.0.token.is_empty());
         assert_eq!(resp.0.user.email, "new@t.local");
-        assert_eq!(resp.0.user.role, "user");
+        assert_eq!(resp.0.user.role, Role::User);
         // Token consumed.
         assert!(
             gripsou_core::repo::invite_token::find_valid(
@@ -135,7 +136,7 @@ mod tests {
         let admin = seed_admin_user(&pool).await;
         gripsou_core::repo::invite_token::create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             &auth::hash_token_str("raw-invite"),
@@ -183,7 +184,7 @@ mod tests {
         let admin = seed_admin_user(&pool).await; // creates a@t.local
         gripsou_core::repo::invite_token::create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             &auth::hash_token_str("raw-invite"),
@@ -230,10 +231,10 @@ mod tests {
     /// address can't collide with a test's own users.
     async fn mint_reset(pool: &PgPool, raw: &str, email: &str, expires_in: Duration) {
         let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
-        let admin = seed_user_with_password(pool, &issuer, "pw", "admin").await;
+        let admin = seed_user_with_password(pool, &issuer, "pw", Role::Admin).await;
         gripsou_core::repo::invite_token::create(
             pool,
-            "reset",
+            TokenKind::Reset,
             Some(email),
             admin,
             &auth::hash_token_str(raw),
@@ -264,7 +265,7 @@ mod tests {
     /// every old session and logs the user in.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
@@ -289,7 +290,7 @@ mod tests {
     /// password chosen with it.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_token_is_single_use(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
         assert!(
             call_redeem_reset(&pool, "raw-reset", "first-pw")
@@ -309,7 +310,7 @@ mod tests {
     /// An unknown reset token is a 404 and changes no password.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let err = call_redeem_reset(&pool, "never-minted", "new-password")
             .await
             .expect_err("unknown token must fail");
@@ -320,7 +321,7 @@ mod tests {
     /// An expired reset link is a 404 and changes no password.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_expired_token_is_404(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(-1)).await;
 
         let err = call_redeem_reset(&pool, "raw-reset", "new-password")
@@ -332,7 +333,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn reset_refuses_a_short_password(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-password", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-password", Role::User).await;
         mint_reset(&pool, "raw-short", "t@t.local", Duration::hours(1)).await;
         let err = call_redeem_reset(&pool, "raw-short", "1234567")
             .await
@@ -351,7 +352,7 @@ mod tests {
         let admin = seed_admin_user(&pool).await;
         gripsou_core::repo::invite_token::create(
             &pool,
-            "invite",
+            TokenKind::Invite,
             None,
             admin,
             &auth::hash_token_str("raw-invite"),
@@ -379,7 +380,7 @@ mod tests {
     /// can retry with a real one.
     #[sqlx::test(migrations = "../migrations")]
     async fn redeem_reset_rejects_empty_password(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", "user").await;
+        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         mint_reset(&pool, "raw-reset", "t@t.local", Duration::hours(1)).await;
 
         let err = call_redeem_reset(&pool, "raw-reset", "")

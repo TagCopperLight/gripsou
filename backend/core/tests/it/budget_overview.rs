@@ -2,6 +2,7 @@ use chrono::NaiveDate;
 use gripsou_core::budget::overview::calc::{
     DayCategoryRow, Month, Period, Slice, Trend, breakdown, figures, sankey, summarise, trend,
 };
+use gripsou_core::budget::vocab::CategoryKind;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -18,7 +19,7 @@ fn row(d: NaiveDate, cat: Option<Uuid>, kind: Option<&str>, amount: Decimal) -> 
     DayCategoryRow {
         day: d,
         category_id: cat,
-        category_kind: kind.map(str::to_string),
+        category_kind: kind.map(|k| CategoryKind::parse(k).unwrap()),
         amount,
         txn_count: 1,
         fx_missing: false,

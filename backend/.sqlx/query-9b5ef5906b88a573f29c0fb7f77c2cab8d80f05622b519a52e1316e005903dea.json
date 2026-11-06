@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update connection\n            set status = $1,\n                last_error = 'sync interrupted (the server restarted)'\n          where status = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9b5ef5906b88a573f29c0fb7f77c2cab8d80f05622b519a52e1316e005903dea"
+}

@@ -5,11 +5,24 @@
 use uuid::Uuid;
 
 use crate::error::CoreError;
+use crate::text_enum::text_enum;
+
+text_enum! {
+    /// What a challenge proves, once used: `login_challenge.kind`.
+    pub enum ChallengeKind {
+        /// The second step of a password login.
+        Mfa = "mfa",
+        PasskeyLogin = "passkey_login",
+        PasskeyRegister = "passkey_register",
+        /// A fresh re-authentication before a sensitive change.
+        Reauth = "reauth",
+    }
+}
 
 pub struct Challenge {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
-    pub kind: String,
+    pub kind: ChallengeKind,
     pub state: serde_json::Value,
 }
 
@@ -19,7 +32,7 @@ pub async fn create(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
     user_id: Option<Uuid>,
-    kind: &str,
+    kind: ChallengeKind,
     state: serde_json::Value,
 ) -> Result<(), CoreError> {
     sqlx::query!(
@@ -27,7 +40,7 @@ pub async fn create(
            values ($1, $2, $3, $4, now() + interval '5 minutes')"#,
         token_hash,
         user_id,
-        kind,
+        kind as ChallengeKind,
         state,
     )
     .execute(pool)
@@ -40,15 +53,15 @@ pub async fn create(
 pub async fn find_valid(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
-    kind: &str,
+    kind: ChallengeKind,
 ) -> Result<Option<Challenge>, CoreError> {
     let row = sqlx::query_as!(
         Challenge,
-        r#"select id, user_id, kind, state
+        r#"select id, user_id, kind as "kind: ChallengeKind", state
            from login_challenge
            where token_hash = $1 and kind = $2 and expires_at > now()"#,
         token_hash,
-        kind,
+        kind as ChallengeKind,
     )
     .fetch_optional(pool)
     .await?;
@@ -62,15 +75,15 @@ pub async fn find_valid(
 pub async fn consume(
     db: impl sqlx::PgExecutor<'_>,
     token_hash: &[u8],
-    kind: &str,
+    kind: ChallengeKind,
 ) -> Result<Option<Challenge>, CoreError> {
     let row = sqlx::query_as!(
         Challenge,
         r#"delete from login_challenge
            where token_hash = $1 and kind = $2 and expires_at > now()
-           returning id, user_id, kind, state"#,
+           returning id, user_id, kind as "kind: ChallengeKind", state"#,
         token_hash,
-        kind,
+        kind as ChallengeKind,
     )
     .fetch_optional(db)
     .await?;
@@ -93,7 +106,7 @@ mod tests {
 
     use crate::testkit::seed_user;
 
-    async fn insert_expired(pool: &PgPool, hash: &[u8], kind: &str) {
+    async fn insert_expired(pool: &PgPool, hash: &[u8], kind: ChallengeKind) {
         sqlx::query(
             "insert into login_challenge (token_hash, kind, expires_at) \
              values ($1, $2, now() - interval '1 minute')",
@@ -108,34 +121,62 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn find_valid_checks_kind(pool: PgPool) {
         let user = seed_user(&pool).await;
-        create(&pool, &[1], Some(user), "mfa", serde_json::json!({"a": 1}))
+        create(
+            &pool,
+            &[1],
+            Some(user),
+            ChallengeKind::Mfa,
+            serde_json::json!({"a": 1}),
+        )
+        .await
+        .unwrap();
+        let c = find_valid(&pool, &[1], ChallengeKind::Mfa)
             .await
+            .unwrap()
             .unwrap();
-        let c = find_valid(&pool, &[1], "mfa").await.unwrap().unwrap();
         assert_eq!(c.user_id, Some(user));
-        assert_eq!(c.kind, "mfa");
+        assert_eq!(c.kind, ChallengeKind::Mfa);
         assert_eq!(c.state, serde_json::json!({"a": 1}));
-        assert!(find_valid(&pool, &[1], "reauth").await.unwrap().is_none());
-        assert!(find_valid(&pool, &[2], "mfa").await.unwrap().is_none());
+        assert!(
+            find_valid(&pool, &[1], ChallengeKind::Reauth)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            find_valid(&pool, &[2], ChallengeKind::Mfa)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn consume_is_single_use(pool: PgPool) {
-        create(&pool, &[1], None, "passkey_login", serde_json::json!({}))
-            .await
-            .unwrap();
+        create(
+            &pool,
+            &[1],
+            None,
+            ChallengeKind::PasskeyLogin,
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
         assert!(
-            consume(&pool, &[1], "mfa").await.unwrap().is_none(),
+            consume(&pool, &[1], ChallengeKind::Mfa)
+                .await
+                .unwrap()
+                .is_none(),
             "wrong kind must not consume"
         );
         assert!(
-            consume(&pool, &[1], "passkey_login")
+            consume(&pool, &[1], ChallengeKind::PasskeyLogin)
                 .await
                 .unwrap()
                 .is_some()
         );
         assert!(
-            consume(&pool, &[1], "passkey_login")
+            consume(&pool, &[1], ChallengeKind::PasskeyLogin)
                 .await
                 .unwrap()
                 .is_none()
@@ -144,18 +185,33 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn expired_is_invisible(pool: PgPool) {
-        insert_expired(&pool, &[1], "mfa").await;
-        assert!(find_valid(&pool, &[1], "mfa").await.unwrap().is_none());
-        assert!(consume(&pool, &[1], "mfa").await.unwrap().is_none());
+        insert_expired(&pool, &[1], ChallengeKind::Mfa).await;
+        assert!(
+            find_valid(&pool, &[1], ChallengeKind::Mfa)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            consume(&pool, &[1], ChallengeKind::Mfa)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_expired_removes_only_expired(pool: PgPool) {
-        insert_expired(&pool, &[1], "mfa").await;
-        create(&pool, &[2], None, "mfa", serde_json::json!({}))
+        insert_expired(&pool, &[1], ChallengeKind::Mfa).await;
+        create(&pool, &[2], None, ChallengeKind::Mfa, serde_json::json!({}))
             .await
             .unwrap();
         assert_eq!(delete_expired(&pool).await.unwrap(), 1);
-        assert!(find_valid(&pool, &[2], "mfa").await.unwrap().is_some());
+        assert!(
+            find_valid(&pool, &[2], ChallengeKind::Mfa)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 }

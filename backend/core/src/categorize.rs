@@ -17,8 +17,7 @@ use uuid::Uuid;
 pub struct CategoryOption {
     pub id: Uuid,
     pub name: String,
-    /// `expense` | `income` | `neutral`.
-    pub kind: String,
+    pub kind: crate::budget::vocab::CategoryKind,
     /// The user's steering text (Settings → Budget → "Hint for the AI").
     pub hint: Option<String>,
 }

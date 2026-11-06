@@ -9,15 +9,17 @@ use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::budget::vocab::CategoryKind;
+
 /// One (day, category) bucket, already in the reader's reporting currency.
 #[derive(Debug, Clone)]
 pub struct DayCategoryRow {
     pub day: NaiveDate,
     /// `None` is the Uncategorised slice — on day one, most of them.
     pub category_id: Option<Uuid>,
-    /// `expense` | `income`. Never `neutral`: those rows are dropped by
-    /// the query. `None` when `category_id` is.
-    pub category_kind: Option<String>,
+    /// Never neutral: those rows are dropped by the query. `None` when
+    /// `category_id` is.
+    pub category_kind: Option<CategoryKind>,
     /// Signed, in the reporting currency, converted at `day`'s rates. A row
     /// with no rate on its day is left out — see `fx_missing`.
     pub amount: Decimal,
@@ -78,12 +80,9 @@ const SANKEY_MAX_SLICES: usize = 8;
 /// Shared by `figures()` and `side()` so a category whose refunds exceed its
 /// spending (or vice versa) cannot make the headline figure and the diagram
 /// disagree about which side it belongs on — both read the same net.
-fn category_net_amounts(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
+fn category_net_amounts(rows: &[DayCategoryRow], kind: CategoryKind) -> Vec<(Uuid, Decimal)> {
     let mut by_category: Vec<(Uuid, Decimal)> = vec![];
-    for r in rows
-        .iter()
-        .filter(|r| r.category_kind.as_deref() == Some(kind))
-    {
+    for r in rows.iter().filter(|r| r.category_kind == Some(kind)) {
         let Some(id) = r.category_id else { continue };
         match by_category.iter_mut().find(|(c, _)| *c == id) {
             Some((_, total)) => *total += r.amount,
@@ -98,7 +97,7 @@ fn category_net_amounts(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decim
 /// negative: a month where savings were drawn down is not a month of
 /// negative saving, and a category whose refunds outran its spending is not
 /// negative spending — it is simply not represented on this side.
-fn net_outflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
+fn net_outflows(rows: &[DayCategoryRow], kind: CategoryKind) -> Vec<(Uuid, Decimal)> {
     category_net_amounts(rows, kind)
         .into_iter()
         .map(|(id, total)| (id, -total))
@@ -108,7 +107,7 @@ fn net_outflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
 
 /// Categories of `kind` that net inward (money arrived), as positive
 /// magnitudes. The inward counterpart of `net_outflows`.
-fn net_inflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
+fn net_inflows(rows: &[DayCategoryRow], kind: CategoryKind) -> Vec<(Uuid, Decimal)> {
     category_net_amounts(rows, kind)
         .into_iter()
         .filter(|(_, total)| *total > Decimal::ZERO)
@@ -118,8 +117,14 @@ fn net_inflows(rows: &[DayCategoryRow], kind: &str) -> Vec<(Uuid, Decimal)> {
 /// The three headline numbers: income, expenses and net. Net is the saving:
 /// moving money between the user's own accounts is neutral.
 pub fn figures(rows: &[DayCategoryRow]) -> Figures {
-    let income_categorised: Decimal = net_inflows(rows, "income").iter().map(|(_, v)| *v).sum();
-    let expenses_categorised: Decimal = net_outflows(rows, "expense").iter().map(|(_, v)| *v).sum();
+    let income_categorised: Decimal = net_inflows(rows, CategoryKind::Income)
+        .iter()
+        .map(|(_, v)| *v)
+        .sum();
+    let expenses_categorised: Decimal = net_outflows(rows, CategoryKind::Expense)
+        .iter()
+        .map(|(_, v)| *v)
+        .sum();
 
     // No category to net within, so the sign of each row stands in for its
     // kind. Without this a freshly synced Overview shows
@@ -149,9 +154,9 @@ pub fn figures(rows: &[DayCategoryRow]) -> Figures {
 /// magnitudes, sorted largest first.
 fn side(rows: &[DayCategoryRow], want_income_side: bool) -> Vec<SliceAmount> {
     let mut out: Vec<SliceAmount> = if want_income_side {
-        net_inflows(rows, "income")
+        net_inflows(rows, CategoryKind::Income)
     } else {
-        net_outflows(rows, "expense")
+        net_outflows(rows, CategoryKind::Expense)
     }
     .into_iter()
     .map(|(id, amount)| SliceAmount {
@@ -411,8 +416,8 @@ fn breakdown_against(rows: &[DayCategoryRow], baseline: Option<&Baseline>) -> Ve
 
     let mut counts: Vec<(Slice, i64)> = vec![];
     for r in rows {
-        let slice = match (r.category_kind.as_deref(), r.category_id) {
-            (Some("expense"), Some(id)) => Slice::Category(id),
+        let slice = match (r.category_kind, r.category_id) {
+            (Some(CategoryKind::Expense), Some(id)) => Slice::Category(id),
             (None, _) if r.amount < Decimal::ZERO => Slice::Uncategorised,
             _ => continue,
         };

@@ -226,7 +226,7 @@ pub async fn delete_connection(
 mod tests {
     use super::*;
     use crate::auth;
-    use crate::testkit::seed_user_with_password;
+    use crate::testkit::{Role, seed_user_with_password};
     use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
     use sqlx::PgPool;
 
@@ -256,8 +256,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
-        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", "user").await;
-        let other = seed_user_with_password(&pool, "other@t.local", "pw", "user").await;
+        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", Role::User).await;
+        let other = seed_user_with_password(&pool, "other@t.local", "pw", Role::User).await;
         let id = gripsou_core::repo::connection::insert_pending(&pool, owner, "powens", "Bank")
             .await
             .unwrap();
@@ -287,7 +287,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn sync_connection_guards_and_orchestrator_errors(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
         let conn = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -351,7 +351,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn connections_returns_provider_tree(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "a@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "a@t.local", "pw", Role::User).await;
         let conn = Uuid::new_v4();
         sqlx::query(
             "insert into connection (id, user_id, provider_key, display_name) \
@@ -398,7 +398,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
         // Seed: powens is enabled via migration 0002.
-        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
         let rows = enabled_providers(
             State(pool.clone()),
             auth::AuthUser {
@@ -424,7 +424,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn init_connection_rejects_unknown_provider(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
         let err = init_connection(
             State(pool.clone()),
             State(crate::testkit::deps()),
@@ -443,7 +443,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn init_connection_returns_redirect_url(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
         let deps = crate::testkit::deps();
         deps.set_accounts(
             [(
@@ -478,8 +478,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_connection_guards_ownership(pool: PgPool) {
-        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", "user").await;
-        let other = seed_user_with_password(&pool, "other@t.local", "pw", "user").await;
+        let owner = seed_user_with_password(&pool, "owner@t.local", "pw", Role::User).await;
+        let other = seed_user_with_password(&pool, "other@t.local", "pw", Role::User).await;
 
         let conn_id = Uuid::new_v4();
         sqlx::query(
@@ -529,7 +529,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn complete_connection_unknown_id_is_not_found(pool: PgPool) {
-        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
         let err = complete_connection(
             State(pool.clone()),
             State(crate::testkit::deps()),
@@ -550,7 +550,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn a_failed_complete_deletes_the_pending_connection_only(pool: PgPool) {
         use gripsou_core::repo::connection;
-        let user = seed_user_with_password(&pool, "u@t.local", "pw", "user").await;
+        let user = seed_user_with_password(&pool, "u@t.local", "pw", Role::User).await;
         let pending = connection::insert_pending(&pool, user, "powens", "Bank")
             .await
             .unwrap();

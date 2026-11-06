@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update users set role = $2\n        where id = $1\n          and ($2 = $3 or exists (select 1 from users where role = $3 and id <> $1))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35c80f2b12da2330118eec7f30c27fa2322d9b6b1141e2b30f6acf3300fb278a"
+}

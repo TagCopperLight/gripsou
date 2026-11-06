@@ -12,6 +12,8 @@ use uuid::Uuid;
 use crate::auth::{self, AdminUser};
 use crate::dto;
 use crate::error::ApiError;
+use gripsou_core::repo::invite_token::TokenKind;
+use gripsou_core::repo::user::Role;
 
 pub async fn providers(
     State(pool): State<PgPool>,
@@ -247,8 +249,15 @@ pub async fn create_invite(
     let raw = auth::generate_token();
     let stored = auth::hash_token_str(&raw);
     let expires_at = Utc::now() + Duration::hours(24);
-    gripsou_core::repo::invite_token::create(&pool, "invite", None, user_id, &stored, expires_at)
-        .await?;
+    gripsou_core::repo::invite_token::create(
+        &pool,
+        TokenKind::Invite,
+        None,
+        user_id,
+        &stored,
+        expires_at,
+    )
+    .await?;
     tracing::info!(by = %user_id, "invite created");
     Ok((
         StatusCode::CREATED,
@@ -279,7 +288,7 @@ pub async fn create_reset_link(
     let expires_at = Utc::now() + Duration::hours(24);
     gripsou_core::repo::invite_token::create(
         &pool,
-        "reset",
+        TokenKind::Reset,
         Some(&target.email),
         user_id,
         &stored,
@@ -307,10 +316,10 @@ pub async fn set_role(
     gripsou_core::repo::user::profile_by_id(&pool, id)
         .await?
         .ok_or(ApiError::NotFound("user not found"))?;
-    if !gripsou_core::repo::user::set_role(&pool, id, body.role.as_str()).await? {
+    if !gripsou_core::repo::user::set_role(&pool, id, body.role).await? {
         return Err(ApiError::Conflict("cannot demote the last admin"));
     }
-    tracing::info!(by = %user_id, target_user_id = %id, role = body.role.as_str(), "user role changed");
+    tracing::info!(by = %user_id, target_user_id = %id, role = %body.role, "user role changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -328,7 +337,7 @@ pub async fn delete_user(
         return Err(ApiError::bad_request("email does not match user"));
     }
     // Refuse to delete the last admin: it would lock everyone out of admin-only settings.
-    if target.role == "admin" && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
+    if target.role == Role::Admin && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
         return Err(ApiError::Conflict("cannot delete the last admin"));
     }
     gripsou_core::repo::user::delete_user(&pool, id).await?;
@@ -397,7 +406,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn providers_lists_account_providers_with_enabled_flag(pool: PgPool) {
         // powens is enabled via seed.
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
         let principal = AdminUser { user_id: admin };
 
         let list = providers(State(pool.clone()), principal)
@@ -414,7 +423,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
         let principal = || AdminUser { user_id: admin };
 
         // Disable powens (seeded enabled).
@@ -458,7 +467,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "admin@t.local", "pw", Role::Admin).await;
         // 'yahoo' is a price provider, not an account provider: not found.
         for key in ["nope", "yahoo"] {
             let err = set_provider(
@@ -475,7 +484,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_invite_writes_invite_row(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
         let resp = create_invite(
             State(pool.clone()),
@@ -508,8 +517,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_reset_link_stores_target_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         let reauth = crate::auth::mfa::tests::reauth_token(&pool, &who, "pw").await;
@@ -543,8 +552,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn create_reset_link_needs_a_reauth_and_another_user(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
         let create = |id, reauth: &str| {
             create_reset_link(
@@ -574,8 +583,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_rejects_mismatched_email(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         let err = delete_user(
@@ -601,8 +610,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_role_promotes_and_demotes_another_user(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_with_password(&pool, "b@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let target = seed_user_with_password(&pool, "b@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
         let set = |role| {
             set_role(
@@ -622,16 +631,16 @@ mod tests {
                 .role
         };
 
-        assert_eq!(set(dto::Role::Admin).await.unwrap(), StatusCode::NO_CONTENT);
-        assert_eq!(role_of().await, "admin");
-        assert_eq!(set(dto::Role::User).await.unwrap(), StatusCode::NO_CONTENT);
-        assert_eq!(role_of().await, "user");
+        assert_eq!(set(Role::Admin).await.unwrap(), StatusCode::NO_CONTENT);
+        assert_eq!(role_of().await, Role::Admin);
+        assert_eq!(set(Role::User).await.unwrap(), StatusCode::NO_CONTENT);
+        assert_eq!(role_of().await, Role::User);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn set_role_refuses_your_own(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        seed_user_with_password(&pool, "b@t.local", "pw", "admin").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        seed_user_with_password(&pool, "b@t.local", "pw", Role::Admin).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
         let err = set_role(
             State(pool.clone()),
@@ -639,9 +648,7 @@ mod tests {
                 user_id: who.user_id,
             },
             Path(who.user_id),
-            Json(dto::SetRoleReq {
-                role: dto::Role::User,
-            }),
+            Json(dto::SetRoleReq { role: Role::User }),
         )
         .await
         .unwrap_err();
@@ -652,9 +659,9 @@ mod tests {
     async fn set_role_never_leaves_no_admin(pool: PgPool) {
         // Reached when two admins demote each other at once; called directly,
         // as the handler's own-role rule hides it otherwise.
-        let only = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let only = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         assert!(
-            !gripsou_core::repo::user::set_role(&pool, only, "user")
+            !gripsou_core::repo::user::set_role(&pool, only, Role::User)
                 .await
                 .unwrap()
         );
@@ -663,12 +670,12 @@ mod tests {
             .unwrap()
             .unwrap()
             .role;
-        assert_eq!(role, "admin");
+        assert_eq!(role, Role::Admin);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_refuses_last_admin(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "boss@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "boss@t.local", "pw", Role::Admin).await;
         let who = principal_for(&pool, "boss@t.local", "pw").await;
 
         let err = delete_user(
@@ -688,8 +695,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_user_removes_target(pool: PgPool) {
-        seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
-        let target = seed_user_with_password(&pool, "target@t.local", "pw", "user").await;
+        seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
+        let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
         // Case-insensitive email match succeeds.
@@ -716,7 +723,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         let err = budget_ai_models(AdminUser { user_id: admin }, Path("nope".into()))
             .await
             .expect_err("not found");
@@ -726,7 +733,7 @@ mod tests {
     /// An admin's budget AI choice persists (trimmed) and reads back as written.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         let key = gripsou_jobs::categorizer_keys()[0];
 
         let status = set_budget_ai_settings(
@@ -753,7 +760,7 @@ mod tests {
     /// provider named "" that the scheduler would then try to look up.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         let key = gripsou_jobs::categorizer_keys()[0];
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -779,7 +786,7 @@ mod tests {
     /// choice in place, so a typo cannot silently disable categorisation.
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
-        let admin = seed_user_with_password(&pool, "a@t.local", "pw", "admin").await;
+        let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
         let key = gripsou_jobs::categorizer_keys()[0];
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
@@ -807,7 +814,7 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    async fn seed(pool: &PgPool, role: &str) -> Uuid {
+    async fn seed(pool: &PgPool, role: Role) -> Uuid {
         let email = format!("{}@t.local", Uuid::new_v4());
         gripsou_core::testkit::seed_user_as(pool, &email, role, "x").await
     }
@@ -825,7 +832,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn prices_then_usage(pool: PgPool) {
-        let admin = seed(&pool, "admin").await;
+        let admin = seed(&pool, Role::Admin).await;
         for (tin, tout, complete) in [(9_495_459_i64, 4_484_808_i64, true), (0, 0, false)] {
             sqlx::query(
                 "insert into budget_ai_run \
@@ -888,7 +895,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn usage_with_no_runs_totals_zero(pool: PgPool) {
-        let admin = seed(&pool, "admin").await;
+        let admin = seed(&pool, Role::Admin).await;
         let v = serde_json::to_value(
             budget_ai_usage(State(pool.clone()), who(admin))
                 .await
@@ -904,7 +911,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn bad_prices_are_a_400_and_change_nothing(pool: PgPool) {
-        let admin = seed(&pool, "admin").await;
+        let admin = seed(&pool, Role::Admin).await;
         for (i, o) in [
             ("-1", "0"),
             ("0", "-0.1"),

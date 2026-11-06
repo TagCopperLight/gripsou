@@ -1,0 +1,127 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select c.id          as \"id!\",\n               c.name        as \"name!\",\n               c.default_key,\n               c.color       as \"color!\",\n               c.icon,\n               c.hint,\n               c.kind        as \"kind!: CategoryKind\",\n               c.system_key,\n               (c.archived_at is not null) as \"archived!\",\n               coalesce(n.cnt, 0) as \"tx_count!\"\n        from budget_category c\n        left join (\n            select t.budget_category_id as cid, count(*) as cnt\n            from user_transactions($1) t\n            group by t.budget_category_id\n        ) n on n.cid = c.id\n        where c.user_id = $1\n        order by array_position($2, c.kind), c.sort_order, lower(c.name)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "default_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "default_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "color!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "icon",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "icon"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "hint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "hint"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "kind!: CategoryKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "system_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "budget_category",
+            "name": "system_key"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "archived!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "tx_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "15cac8ee83047bbfcc1f501525bf57f83983fd605af1c4a776affb174d258bf4"
+}
