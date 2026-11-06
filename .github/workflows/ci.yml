@@ -37,11 +37,20 @@ jobs:
           workspaces: backend
       - run: ./ci.sh backend-test
 
-  frontend:
+  frontend-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: frontend/package.json
-      - run: ./ci.sh frontend
+      - run: ./ci.sh frontend-lint
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: frontend/package.json
+      - run: ./ci.sh frontend-test

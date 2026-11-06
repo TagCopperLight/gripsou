@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The CI checks. `./ci.sh` runs them all; `./ci.sh <job>...` runs some:
-# `backend` is `backend-lint` and `backend-test`, `frontend` is the SPA's. GitHub
-# runs `backend-lint`, `backend-test` and `frontend` as parallel jobs. Every
+# `backend` is `backend-lint` and `backend-test`, `frontend` is `frontend-lint`
+# and `frontend-test`. GitHub runs those four as parallel jobs. Every
 # step runs even after a failure, and the exit status says whether any failed.
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -89,20 +89,29 @@ same_bun() {
     || { echo "docker/Dockerfile must build with bun $version, as frontend/package.json pins"; return 1; }
 }
 
-frontend() {
+frontend-lint() {
   step "bun version" same_bun
   step "install" bash -c 'cd frontend && bun install --frozen-lockfile'
   step "lint"    bash -c 'cd frontend && bun run lint'
+  step "build"   bash -c 'cd frontend; bun run typecheck & p=$!; bun run bundle; r=$?; wait $p && exit $r'
+}
+
+frontend-test() {
+  step "install" bash -c 'cd frontend && bun install --frozen-lockfile'
   step "ftest"   bash -c 'cd frontend && bun run test'
-  step "build"   bash -c 'cd frontend && bun run build'
+}
+
+frontend() {
+  frontend-lint
+  frontend-test
 }
 
 jobs=("$@")
 [ ${#jobs[@]} -eq 0 ] && jobs=(backend frontend)
 for job in "${jobs[@]}"; do
   case $job in
-    backend | backend-lint | backend-test | frontend) $job ;;
-    *) echo "unknown job: $job (backend, backend-lint, backend-test or frontend)"; exit 2 ;;
+    backend | backend-lint | backend-test | frontend | frontend-lint | frontend-test) $job ;;
+    *) echo "unknown job: $job"; exit 2 ;;
   esac
 done
 

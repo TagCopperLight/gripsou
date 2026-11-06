@@ -7,8 +7,10 @@
   "scripts": {
     "dev": "vite",
     "dev:mock": "vite --mode mock",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "bundle": "vite build",
+    "build": "bun run typecheck && bun run bundle",
+    "lint": "eslint . --concurrency auto",
     "preview": "vite preview",
     "test": "vitest run"
   },
