@@ -59,9 +59,11 @@ fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
 async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uuid {
     let conn_id = Uuid::new_v4();
     let meta = serde_json::json!({ "external_connection_id": ext_conn_id });
-    let plaintext = serde_json::to_vec(&serde_json::json!({ "auth_token": "test" })).unwrap();
-    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
-    let credentials = serde_json::json!({ "v": 1, "ct": ct });
+    let credentials = gripsou_jobs::credentials::seal(
+        &testkit::encryption_key(),
+        &serde_json::json!({ "auth_token": "test" }),
+    )
+    .unwrap();
     sqlx::query(
         "insert into connection \
          (id, user_id, provider_key, display_name, status, credentials, provider_meta) \

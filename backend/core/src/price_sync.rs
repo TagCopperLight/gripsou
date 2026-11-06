@@ -135,14 +135,16 @@ pub async fn price_eligible_instruments_for_connection(
 /// Makes sure a rate into `currency` is stored, fetching it now rather than at
 /// the next sync. For a reader switching their currency: their figures are
 /// converted at read time, and with no rate they are left out. True when a
-/// rate is stored afterwards (the pivot needs none); a provider failure is
-/// logged and reads as false, so the caller decides.
+/// rate is stored afterwards (`pivot`, the currency rates are stored in,
+/// needs none); a provider failure is logged and reads as false, so the
+/// caller decides.
 pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,
     providers: &[Box<dyn PriceProvider>],
+    pivot: &str,
     currency: &str,
 ) -> Result<bool, CoreError> {
-    if currency == crate::repo::settings::base_currency(pool).await? {
+    if currency == pivot {
         return Ok(true);
     }
     let mut conn = pool.acquire().await?;

@@ -1164,6 +1164,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "gripsou-core",
+ "gripsou-jobs",
  "gripsou-providers",
  "hmac 0.12.1",
  "serde_json",

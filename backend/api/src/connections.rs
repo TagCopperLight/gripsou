@@ -343,14 +343,22 @@ mod tests {
         .unwrap_err();
         assert_eq!(busy.status(), StatusCode::CONFLICT);
 
-        // Reset, then run the orchestrator directly (deterministic — no spawn):
-        // the stub adapter returns NotImplemented, so status becomes 'error'.
+        // Reset, then run the sync to the end: the connection has no
+        // credentials, so status becomes 'error'.
         sqlx::query("update connection set status='ok' where id=$1")
             .bind(conn)
             .execute(&pool)
             .await
             .unwrap();
-        gripsou_jobs::sync_connection(pool.clone(), crate::testkit::deps(), conn).await;
+        gripsou_jobs::testing::sync(
+            pool.clone(),
+            crate::testkit::deps(),
+            user,
+            conn,
+            gripsou_jobs::Trigger::Manual,
+        )
+        .await
+        .expect("claimed");
         let (status, err): (String, Option<String>) =
             sqlx::query_as("select status, last_error from connection where id=$1")
                 .bind(conn)

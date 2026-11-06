@@ -12,7 +12,11 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[features]
+test-util = []
+
 [dev-dependencies]
+gripsou-jobs = { path = ".", features = ["test-util"] }
 gripsou-providers = { path = "../providers", features = ["test-util"] }
 gripsou-core = { path = "../core", features = ["test-util"] }
 sqlx.workspace = true

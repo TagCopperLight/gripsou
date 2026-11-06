@@ -46,11 +46,8 @@ fn powens_with_webhooks() -> Arc<Deps> {
     )])
 }
 
-/// Encrypt `creds` with the test key and return the blob stored in the DB.
 fn make_encrypted_creds(creds: serde_json::Value) -> serde_json::Value {
-    let plaintext = serde_json::to_vec(&creds).unwrap();
-    let ct = testkit::encryption_key().encrypt(&plaintext).unwrap();
-    serde_json::json!({ "v": 1, "ct": ct })
+    gripsou_jobs::credentials::seal(&testkit::encryption_key(), &creds).unwrap()
 }
 
 /// Insert a connection in 'ok' status with encrypted credentials and provider_meta.

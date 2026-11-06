@@ -70,7 +70,7 @@ async fn fetch_reporting_rate(
     user_id: Uuid,
     currency: &str,
 ) -> Result<(), ApiError> {
-    let fetch = gripsou_core::price_sync::ensure_fx_rate(pool, &jobs.prices, currency);
+    let fetch = gripsou_core::price_sync::ensure_fx_rate(pool, &jobs.prices, &jobs.pivot, currency);
     if let Ok(ready) = tokio::time::timeout(RATE_FETCH_LIMIT, fetch).await
         && ready?
     {

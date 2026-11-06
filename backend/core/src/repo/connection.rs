@@ -279,16 +279,22 @@ pub async fn set_institution(
     Ok(())
 }
 
-/// Fetch the encrypted credentials blob for a connection.
-/// Returns `None` if the connection does not exist or has no credentials yet.
-pub async fn get_credentials(
-    pool: &sqlx::PgPool,
-    id: Uuid,
-) -> Result<Option<serde_json::Value>, CoreError> {
-    let row = sqlx::query!("select credentials from connection where id = $1", id)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.map(|r| r.credentials))
+/// What a sync reads of its connection: the provider and the sealed
+/// credentials.
+pub struct SyncSource {
+    pub provider_key: String,
+    pub credentials: serde_json::Value,
+}
+
+pub async fn sync_source(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<SyncSource>, CoreError> {
+    let row = sqlx::query_as!(
+        SyncSource,
+        "select provider_key, credentials from connection where id = $1",
+        id
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
 }
 
 /// All connection ids for a user (for "sync all").
@@ -307,9 +313,10 @@ pub struct ActiveConnection {
     pub user_id: Uuid,
 }
 
-/// Connections that haven't been synced in the last 23 hours (for daily sync job).
+/// Connections not synced in the last `hours` (for the daily sync job).
 pub async fn connections_needing_sync(
     pool: &sqlx::PgPool,
+    hours: i32,
 ) -> Result<Vec<ActiveConnection>, CoreError> {
     let rows = sqlx::query_as!(
         ActiveConnection,
@@ -317,10 +324,11 @@ pub async fn connections_needing_sync(
         select id as "id!", user_id as "user_id!"
         from connection
         where status in ($1, $2)
-          and (last_sync_at is null or last_sync_at < now() - interval '23 hours')
+          and (last_sync_at is null or last_sync_at < now() - make_interval(hours => $3))
         "#,
         ConnectionStatus::Ok as ConnectionStatus,
         ConnectionStatus::Error as ConnectionStatus,
+        hours,
     )
     .fetch_all(pool)
     .await?;
