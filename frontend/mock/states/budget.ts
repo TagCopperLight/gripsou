@@ -142,7 +142,7 @@ export const transactions: MockState[] = [
   },
   {
     id: "transactions-dollar",
-    label: "A dollar account: 4 rows in $, the € value on hover",
+    label: "A dollar account: rows in $, the € value on hover",
     pieces: ["Budget transactions", "Exchange rates"],
     apply(store) {
       const accountId = addAccount(store, BANK, 0, { name: "Wise USD", color: "#9da3fa", typeKey: "checking", currency: "USD" });
@@ -159,7 +159,7 @@ export const transactions: MockState[] = [
   },
   {
     id: "transactions-orphan",
-    label: "A transfer whose other half was filed elsewhere (unpaired)",
+    label: "A transfer whose other half was filed elsewhere (unpaired; turn on Internal transfers)",
     pieces: ["Budget transactions"],
     apply(store) {
       const out = store.txns.find((x) => x.pairId !== null && x.description === "VIR VERS LIVRET A")!;

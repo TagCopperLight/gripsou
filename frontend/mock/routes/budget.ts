@@ -71,9 +71,14 @@ export function budgetRoutes(r: Router<Store>): void {
   });
   r.route("POST /transactions/bulk", ({ store, body: b }) => {
     const ids = b.ids;
-    const f = ids ? null : v.parseTransactionFilter(b.filter ?? {});
+    if (ids && b.filter) return fail(400, "send ids or filter, not both");
+    if (!ids && !b.filter) return fail(400, "ids or filter required");
+    const f = ids ? null : v.parseTransactionFilter(b.filter!);
     if (typeof f === "string") return fail(400, f);
-    const rows = ids ? store.txns.filter((x) => ids.includes(x.id)) : v.matching(store, f!);
+    // A filter selects what "select all shown" covers: the cash rows only.
+    const rows = ids
+      ? store.txns.filter((x) => ids.includes(x.id))
+      : v.matching(store, f!).filter((x) => x.source === "cash");
     const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
     for (const x of rows) {
