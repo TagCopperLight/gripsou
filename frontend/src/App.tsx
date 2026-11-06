@@ -3,7 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { router } from "./router";
 import { useAuth } from "./auth/context";
 import { setUnauthorizedHandler } from "./api/client";
-import { ErrorToasts } from "./components/ErrorToasts";
+import { ErrorToasts } from "./shell/ErrorToasts";
 
 function InnerApp() {
   const auth = useAuth();

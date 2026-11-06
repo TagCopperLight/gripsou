@@ -16,7 +16,7 @@ import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
 
 // The dashboard mounts ECharts cards that don't render in jsdom; for routing
 // tests we only care that we *land* on it, so stub it to a sentinel.
-vi.mock("./pages/Dashboard", () => ({
+vi.mock("./features/dashboard/Dashboard", () => ({
   Dashboard: () => <div>dashboard-page</div>,
 }));
 

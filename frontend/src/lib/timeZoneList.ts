@@ -1,4 +1,4 @@
-import type { SelectOption } from "../components/Select";
+import type { SelectOption } from "../ui/Select";
 
 /** The main zones: the big cities, about one per offset, and France's
  *  overseas departments and territories. Not every zone the browser knows:

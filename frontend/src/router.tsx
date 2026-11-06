@@ -5,27 +5,27 @@ import {
   redirect,
   Outlet,
 } from "@tanstack/react-router";
-import { RootLayout } from "./components/RootLayout";
-import { CrashPage } from "./components/CrashPage";
-import { Dashboard } from "./pages/Dashboard";
-import { Accounts } from "./pages/Accounts";
-import { Investments } from "./pages/Investments";
-import { Budget } from "./pages/Budget";
-import { BudgetOverview } from "./pages/budget/Overview";
-import { TransactionsMode } from "./pages/budget/TransactionsMode";
-import { ReviewMode } from "./pages/budget/ReviewMode";
-import { Login } from "./pages/Login";
-import { SettingsLayout } from "./components/SettingsLayout";
-import { SettingsGeneral } from "./pages/settings/General";
-import { SettingsAccount } from "./pages/settings/Account";
-import { SettingsConnections } from "./pages/settings/Connections";
-import { SettingsBudget } from "./pages/settings/Budget";
-import { SettingsUsers } from "./pages/settings/Users";
-import { SettingsServer } from "./pages/settings/Server";
-import { ConnectionCallback } from "./pages/ConnectionCallback";
-import { Invite } from "./pages/Invite";
-import { Reset } from "./pages/Reset";
-import { Welcome } from "./pages/Welcome";
+import { RootLayout } from "./shell/RootLayout";
+import { CrashPage } from "./shell/CrashPage";
+import { Dashboard } from "./features/dashboard/Dashboard";
+import { Accounts } from "./features/accounts/Accounts";
+import { Investments } from "./features/investments/Investments";
+import { Budget } from "./features/budget/Budget";
+import { BudgetOverview } from "./features/budget/overview/Overview";
+import { TransactionsMode } from "./features/budget/transactions/TransactionsMode";
+import { ReviewMode } from "./features/budget/review/ReviewMode";
+import { Login } from "./features/auth/Login";
+import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { SettingsGeneral } from "./features/settings/general/General";
+import { SettingsAccount } from "./features/settings/account/Account";
+import { SettingsConnections } from "./features/connections/Connections";
+import { SettingsBudget } from "./features/budget/settings/Budget";
+import { SettingsUsers } from "./features/settings/users/Users";
+import { SettingsServer } from "./features/settings/server/Server";
+import { ConnectionCallback } from "./features/connections/ConnectionCallback";
+import { Invite } from "./features/auth/Invite";
+import { Reset } from "./features/auth/Reset";
+import { Welcome } from "./features/welcome/Welcome";
 import type { AuthValue } from "./auth/context";
 import { scrollRestorationOptions } from "./lib/scroll";
 

@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import { createElement } from "react";
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
-import { ErrorToasts } from "../components/ErrorToasts";
+import { ErrorToasts } from "../shell/ErrorToasts";
 import { clearErrors } from "../lib/errorToasts";
 import { i18nReady } from "../i18n";
 
