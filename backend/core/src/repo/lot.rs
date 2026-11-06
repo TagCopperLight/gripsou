@@ -82,33 +82,76 @@ pub struct NewLot {
     fee: Decimal,
 }
 
+/// Why a lot is refused; the message is what the API answers with. The
+/// frontend's `validateLot` and these rules are checked against the same
+/// cases (`shared/lot-cases.json`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidLot {
+    /// Names the field.
+    #[error("{0} is not a decimal")]
+    NotADecimal(&'static str),
+    #[error("quantity must be positive and unitPrice must not be negative")]
+    NonPositiveQuantity,
+    #[error("quantity must be positive and unitPrice must not be negative")]
+    NegativeUnitPrice,
+    #[error("fee must not be negative")]
+    NegativeFee,
+    #[error("quantity, unitPrice and fee support at most 8 decimal places")]
+    TooPrecise,
+    #[error("quantity, unitPrice and fee must be below 10^12")]
+    TooLarge,
+    #[error("quantity * unitPrice does not fit in a decimal")]
+    Overflow,
+}
+
 impl NewLot {
-    /// The error is the message the API answers with.
+    /// A lot from the decimal strings the API receives; an absent fee is zero.
+    pub fn parse(
+        side: LotSide,
+        acquired_on: NaiveDate,
+        quantity: &str,
+        unit_price: &str,
+        fee: Option<&str>,
+    ) -> Result<Self, InvalidLot> {
+        let decimal = |value: &str, field| {
+            value
+                .parse::<Decimal>()
+                .map_err(|_| InvalidLot::NotADecimal(field))
+        };
+        let quantity = decimal(quantity, "quantity")?;
+        let unit_price = decimal(unit_price, "unitPrice")?;
+        let fee = fee.map_or(Ok(Decimal::ZERO), |fee| decimal(fee, "fee"))?;
+        Self::new(side, acquired_on, quantity, unit_price, fee)
+    }
+
     pub fn new(
         side: LotSide,
         acquired_on: NaiveDate,
         quantity: Decimal,
         unit_price: Decimal,
         fee: Decimal,
-    ) -> Result<Self, &'static str> {
-        if quantity <= Decimal::ZERO || unit_price < Decimal::ZERO {
-            return Err("quantity must be positive and unitPrice must not be negative");
+    ) -> Result<Self, InvalidLot> {
+        if quantity <= Decimal::ZERO {
+            return Err(InvalidLot::NonPositiveQuantity);
+        }
+        if unit_price < Decimal::ZERO {
+            return Err(InvalidLot::NegativeUnitPrice);
         }
         if fee < Decimal::ZERO {
-            return Err("fee must not be negative");
+            return Err(InvalidLot::NegativeFee);
         }
         // A lot that doesn't fit a `Decimal` would make every read of its holding fail.
         let figures = [quantity, unit_price, fee];
         if figures.iter().any(|f| f.scale() > LOT_DECIMAL_PLACES) {
-            return Err("quantity, unitPrice and fee support at most 8 decimal places");
+            return Err(InvalidLot::TooPrecise);
         }
         let max_magnitude = Decimal::from(1_000_000_000_000i64);
         if figures.iter().any(|f| f.abs() >= max_magnitude) {
-            return Err("quantity, unitPrice and fee must be below 10^12");
+            return Err(InvalidLot::TooLarge);
         }
         match quantity.checked_mul(unit_price) {
             Some(gross) if gross.scale() <= 28 => {}
-            _ => return Err("quantity * unitPrice does not fit in a decimal"),
+            _ => return Err(InvalidLot::Overflow),
         }
         Ok(NewLot {
             side,

@@ -6,7 +6,6 @@ use crate::error::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use gripsou_core::repo::lot::{self, LotChanges, NewLot};
-use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -95,22 +94,10 @@ pub async fn holding_prices(
 /// number shown while editing and the number accepted on save reject the same
 /// inputs.
 fn parse_lot_adds(adds: &[dto::LotEntry]) -> Result<Vec<NewLot>, ApiError> {
-    let bad = ApiError::bad_request;
     adds.iter()
         .map(|a| {
-            let quantity: Decimal = a
-                .quantity
-                .parse()
-                .map_err(|_| bad("quantity is not a decimal"))?;
-            let unit_price: Decimal = a
-                .unit_price
-                .parse()
-                .map_err(|_| bad("unitPrice is not a decimal"))?;
-            let fee: Decimal = match &a.fee {
-                Some(f) => f.parse().map_err(|_| bad("fee is not a decimal"))?,
-                None => Decimal::ZERO,
-            };
-            NewLot::new(a.kind, a.date, quantity, unit_price, fee).map_err(bad)
+            NewLot::parse(a.kind, a.date, &a.quantity, &a.unit_price, a.fee.as_deref())
+                .map_err(|e| ApiError::bad_request(e.to_string()))
         })
         .collect()
 }
@@ -180,6 +167,7 @@ mod tests {
     use crate::auth;
     use crate::testkit::*;
     use chrono::{Datelike, Duration, NaiveDate};
+    use rust_decimal::Decimal;
     use sqlx::PgPool;
 
     #[sqlx::test(migrations = "../migrations")]

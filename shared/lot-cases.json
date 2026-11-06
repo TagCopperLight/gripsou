@@ -1,0 +1,33 @@
+{
+  "cashAmount": [
+    { "case": "a buy pays the price and the fee", "side": "buy", "quantity": "20", "unitPrice": "15.617", "fee": "1.99", "amount": "-314.33" },
+    { "case": "a sale receives the price net of the fee", "side": "sell", "quantity": "20", "unitPrice": "15.617", "fee": "1.99", "amount": "310.35" },
+    { "case": "a buy with no fee", "side": "buy", "quantity": "4", "unitPrice": "250", "fee": null, "amount": "-1000" },
+    { "case": "a sale with no fee", "side": "sell", "quantity": "4", "unitPrice": "250", "fee": null, "amount": "1000" },
+    { "case": "a zero fee is no fee", "side": "buy", "quantity": "4", "unitPrice": "250", "fee": "0", "amount": "-1000" },
+    { "case": "exact where binary floats are not (3 x 0.1 + 0.2)", "side": "buy", "quantity": "3", "unitPrice": "0.1", "fee": "0.2", "amount": "-0.5" },
+    { "case": "a sale exact where binary floats are not", "side": "sell", "quantity": "3", "unitPrice": "0.1", "fee": "0.2", "amount": "0.1" },
+    { "case": "every decimal place kept, none rounded", "side": "buy", "quantity": "0.12345678", "unitPrice": "123.45678901", "fee": "0.00000001", "amount": "-15.2415776503139878" },
+    { "case": "a sale whose fee exceeds the proceeds is money out", "side": "sell", "quantity": "1", "unitPrice": "0.5", "fee": "2", "amount": "-1.5" },
+    { "case": "a free buy (zero price) still pays its fee", "side": "buy", "quantity": "10", "unitPrice": "0", "fee": "1", "amount": "-1" }
+  ],
+  "validation": [
+    { "case": "a well-formed lot", "quantity": "20", "unitPrice": "15.617", "fee": null, "refused": null },
+    { "case": "a zero unit price is allowed (a free share)", "quantity": "1", "unitPrice": "0", "fee": null, "refused": null },
+    { "case": "a zero fee is allowed", "quantity": "1", "unitPrice": "10", "fee": "0", "refused": null },
+    { "case": "the smallest quantity", "quantity": "0.00000001", "unitPrice": "10", "fee": null, "refused": null },
+    { "case": "a zero quantity", "quantity": "0", "unitPrice": "10", "fee": null, "refused": "nonPositiveQuantity" },
+    { "case": "a negative quantity", "quantity": "-1", "unitPrice": "10", "fee": null, "refused": "nonPositiveQuantity" },
+    { "case": "a negative zero quantity", "quantity": "-0", "unitPrice": "10", "fee": null, "refused": "nonPositiveQuantity" },
+    { "case": "the quantity is checked before the price", "quantity": "0", "unitPrice": "-1", "fee": null, "refused": "nonPositiveQuantity" },
+    { "case": "a negative unit price", "quantity": "1", "unitPrice": "-1", "fee": null, "refused": "negativeUnitPrice" },
+    { "case": "the smallest negative unit price", "quantity": "1", "unitPrice": "-0.00000001", "fee": null, "refused": "negativeUnitPrice" },
+    { "case": "a negative fee", "quantity": "1", "unitPrice": "10", "fee": "-1", "refused": "negativeFee" },
+    { "case": "the smallest negative fee", "quantity": "1", "unitPrice": "10", "fee": "-0.00000001", "refused": "negativeFee" },
+    { "case": "an unparsable quantity", "quantity": "abc", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
+    { "case": "a grouped number", "quantity": "1,234", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
+    { "case": "an empty unit price", "quantity": "1", "unitPrice": "", "fee": null, "refused": "invalidNumber" },
+    { "case": "an unparsable fee", "quantity": "1", "unitPrice": "10", "fee": "abc", "refused": "invalidNumber" },
+    { "case": "a number is checked before any sign", "quantity": "-1", "unitPrice": "abc", "fee": null, "refused": "invalidNumber" }
+  ]
+}

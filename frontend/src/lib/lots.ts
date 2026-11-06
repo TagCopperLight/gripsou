@@ -10,12 +10,11 @@ import {
   sumDecimals,
 } from "./decimal";
 
-/** Cash impact of a single lot, matching the backend's `lot_cash_amount` SQL
- *  function exactly: a buy is `-(qty x price + fee)` — money
- *  out, fee included; a sale is `+(qty x price - fee)` — money in, net of
- *  fee. Plain cash arithmetic, not the cost-basis rule, but every screen that
- *  shows a lot's amount must use this one function, or two screens can show
- *  two different numbers for the same row. */
+/** Cash impact of a single lot: a buy is money out, fee included; a sale is
+ *  money in, net of fee. The backend's `lot_cash_amount` SQL function is the
+ *  same rule, and both are checked against `shared/lot-cases.json`. Every
+ *  screen that shows a lot's amount must use this one function, or two
+ *  screens can show two different numbers for the same row. */
 export function lotCashAmount(side: LotSide, qty: string, price: string, fee?: string | null): string {
   const gross = multiplyDecimals(qty, price);
   fee ??= "0";
@@ -24,7 +23,8 @@ export function lotCashAmount(side: LotSide, qty: string, price: string, fee?: s
 
 export type LotValidationError = "invalidNumber" | "nonPositiveQuantity" | "negativeUnitPrice" | "negativeFee";
 
-/** The server's rules for one lot, so a malformed row is caught with a
+/** The server's rules for one lot (`NewLot::parse`), checked against the same
+ *  cases (`shared/lot-cases.json`), so a malformed row is caught with a
  *  specific message instead of a 400 once it round-trips to the API. Inputs
  *  are already normalised (`normaliseDecimal`). */
 export function validateLot(quantity: string, unitPrice: string, fee = "0"): LotValidationError | null {

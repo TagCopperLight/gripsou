@@ -18,6 +18,7 @@ mod golden;
 mod ingest;
 mod logs;
 mod lot_basis;
+mod lot_cases;
 mod lot_suggest;
 mod price_eligible;
 mod price_sync;
