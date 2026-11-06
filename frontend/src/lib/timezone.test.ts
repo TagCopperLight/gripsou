@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { DEFAULT_PREFS, setPrefs } from "./prefs";
-import { currentMonth, isoDay, presetRange, addMonths, periodLabel } from "./period";
+import { currentMonth, isoDay, presetRange, periodLabel } from "./period";
+import { addMonths } from "./month";
 import { formatDate, formatDay, calendarDay } from "./date";
 
 afterEach(() => setPrefs(DEFAULT_PREFS));

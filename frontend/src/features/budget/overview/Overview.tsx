@@ -13,7 +13,8 @@ import { useBudget } from "../budgetContext";
 import {
   useBudgetSummary, useBudgetTrend, useLatestDataMonth,
 } from "../../../api/overview";
-import { addMonths, anchorMonth, currentMonth, periodBounds, type Period } from "../../../lib/period";
+import { anchorMonth, currentMonth, periodBounds, type Period } from "../../../lib/period";
+import { addMonths } from "../../../lib/month";
 import { hasFlow } from "../../../lib/sankeyGraph";
 import type { Slice } from "../../../api/overview";
 import { usePrivacy } from "../../../auth/usePrivacy";

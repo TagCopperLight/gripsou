@@ -17,8 +17,9 @@ import {
   TREND_KEEP,
 } from "../data/backend.ts";
 import type { CategoryRow, TxnRow } from "../data/rows.ts";
-import { DAY_MS, EUR_PER_USD, dayOf, isoDay, money } from "../data/util.ts";
+import { EUR_PER_USD, dayOf, isoDay, money } from "../data/util.ts";
 import type { Store } from "../store.ts";
+import { addMonths, monthBounds } from "../../src/lib/month.ts";
 
 /** The AI's guess waiting for review (`categoryId` null: it abstained). */
 export function queueForReview(row: TxnRow, categoryId: string | null, confidence: string | null): TxnRow {
@@ -172,17 +173,6 @@ type Month = string; // "YYYY-MM"
 
 function monthOf(t: number): Month {
   return isoDay(t).slice(0, 7);
-}
-
-// Not src/lib/period.ts's: it imports i18n, which Vite's config loader would
-// then bundle into the mock plugin.
-function addMonths(m: Month, n: number): Month {
-  const [y, mo] = m.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1 + n, 1)).toISOString().slice(0, 7);
-}
-
-function monthBounds(m: Month): { from: string; to: string } {
-  return { from: `${m}-01`, to: isoDay(dayOf(`${addMonths(m, 1)}-01`) - DAY_MS) };
 }
 
 function ref(c: CategoryRow): CategoryRef {

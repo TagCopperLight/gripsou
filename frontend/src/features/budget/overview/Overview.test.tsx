@@ -6,7 +6,8 @@ import { BudgetOverview } from "./Overview";
 import { BudgetProvider } from "../BudgetProvider";
 import { useBudget } from "../budgetContext";
 import { DEFAULT_PREFS } from "../../../lib/prefs";
-import { addMonths, currentMonth, monthLabel } from "../../../lib/period";
+import { currentMonth, monthLabel } from "../../../lib/period";
+import { addMonths } from "../../../lib/month";
 import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();

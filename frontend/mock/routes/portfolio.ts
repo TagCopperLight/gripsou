@@ -3,6 +3,7 @@ import type { SaveLotAdd, SaveLotsInput } from "../../src/api/holdings.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";
+import en from "../../src/i18n/en.json" with { type: "json" };
 
 export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
@@ -15,7 +16,8 @@ export function portfolioRoutes(r: Router<Store>): void {
     Object.assign(account, { name, typeKey, color });
     return reply(204);
   });
-  r.route("GET", "/account-types", () => ["checking", "savings", "pea", "brokerage", "life_insurance", "retirement"]);
+  // The labelled types are the frontend's copy of the seeded `account_type` keys.
+  r.route("GET", "/account-types", () => Object.keys(en.accountTypes));
   r.route("GET", "/connections", ({ store }) => v.connections(store));
   r.route("POST", "/sync", ({ store }) => {
     for (const c of store.connections) if (c.status !== "pending") v.syncConnection(store, c.id);
