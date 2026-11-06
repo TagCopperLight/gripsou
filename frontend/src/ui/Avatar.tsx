@@ -16,7 +16,7 @@ function colorForName(name: string): string {
 type AvatarProps = {
   name: string;
   color?: string;
-  src?: string;
+  src?: string | null;
   className?: string;
 };
 

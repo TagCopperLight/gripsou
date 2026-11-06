@@ -1,13 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
-import {
-  useAiStatus,
-  useRequestCategorize,
-  useSetBudgetAiSettings,
-  useUndoReview,
-  type AiStatus,
-} from "./budget";
+import { useAiStatus, useRequestCategorize, useSetBudgetAiSettings, useUndoReview } from "./budget";
+import type { AiStatus } from "./wire";
 import { keys } from "./keys";
 import { appWrapper, stubFetch } from "../test/kit";
 

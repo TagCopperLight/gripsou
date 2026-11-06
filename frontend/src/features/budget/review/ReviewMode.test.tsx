@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 import { ReviewMode } from "./ReviewMode";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { DEFAULT_PREFS } from "../../../api/wire";
 import { authValue, renderWithApp, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();

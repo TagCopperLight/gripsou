@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { ConnectionAccountsCard } from "./ConnectionAccountsCard";
 import type { ConnectionGroup } from "../../lib/accounts";
-import type { Account } from "../../api/types";
+import type { Account } from "../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const ACCOUNT: Account = {

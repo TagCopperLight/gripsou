@@ -10,7 +10,7 @@ import {
 import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
 import { watchQuery } from "./watch";
-import { transactionFilterFields } from "./filter";
+import { transactionFilterFields, type TransactionFilterQuery } from "./filter";
 import {
   afterAiRunFinished,
   afterAiRunProgress,
@@ -26,36 +26,28 @@ import {
   afterReviewChange,
   afterTransactionChange,
 } from "./invalidate";
-import type { Transaction, TransactionFilterQuery } from "./types";
-
-export type BudgetKind = "expense" | "income" | "neutral";
-
-/** One row of the user's own taxonomy. `defaultKey` survives only until the
- *  user renames the row, which is what makes a seeded name translatable and a
- *  renamed one verbatim. `systemKey` marks the undeletable pairing target. */
-export type BudgetCategory = {
-  id: string;
-  name: string;
-  defaultKey: string | null;
-  color: string;
-  icon: string | null;
-  hint: string | null;
-  kind: BudgetKind;
-  systemKey: string | null;
-  archived: boolean;
-  txCount: number;
-};
-
-export type BudgetTag = { id: string; name: string; color: string | null; txCount: number };
-
-/** The backend has no partial update: every write re-sends the whole row. */
-export type CategoryBody = Pick<
+import type {
+  AcceptReviewResponse,
+  ApplyToDescriptionBody,
+  AiStatus,
+  BudgetAiPriceReq,
+  BudgetAiSettings,
+  BudgetAiUsage,
   BudgetCategory,
-  "name" | "color" | "icon" | "hint" | "kind" | "archived"
->;
-export type TagBody = Pick<BudgetTag, "name" | "color">;
+  BudgetTag,
+  BulkBody,
+  CategoryBody,
+  PatchResult,
+  SetBudgetAiSettingsReq,
+  TagBody,
+  Transaction,
+  TransactionPatch,
+  UndoReviewReq,
+  WriteResult,
+} from "./wire";
 
 /** The whole body that re-sends what `c` holds, with `patch` over it. */
+/** The server has no partial update: every write re-sends the whole row. */
 export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {}): CategoryBody {
   return { name: c.name, color: c.color, icon: c.icon, hint: c.hint, kind: c.kind, archived: c.archived, ...patch };
 }
@@ -152,47 +144,9 @@ export function useDeleteBudgetTag() {
   });
 }
 
-type TransactionPatch = {
-  /** `null` clears the category. Omit the key to leave it untouched. */
-  categoryId?: string | null;
-  /** FULL REPLACE of the row's tag set — the server has no add/remove split,
-   *  so a caller toggling one tag sends the complete resulting list. */
-  tagIds?: string[];
-  checked?: boolean;
-  /** See `BulkBody.confirmBreakPairs`: recategorising a paired transfer is
-   *  refused until the caller confirms dissolving the pair. */
-  confirmBreakPairs?: boolean;
-  /** Which rows the returned `sameDescriptionCount` counts; see `SameDescriptionScope`. */
-  offerScope?: SameDescriptionScope;
-};
-
-/** Which rows sharing a description an "apply to all" reaches: every one, or
- *  — from the review queue — only those still in review. */
-export type SameDescriptionScope = "all" | "review";
-
-/** Every write that can unlink internal-transfer pairs answers this way: a
- *  set `pendingPairBreaks` means the server refused it, wrote nothing, and
- *  reports how many pairs it would unlink. Kept distinct from `updated: 0`:
- *  "wrote no rows" and "awaiting your confirmation" are different answers. */
-export type PairBreakAnswer = { pendingPairBreaks?: number | null };
-
-export type PatchResult = PairBreakAnswer & { sameDescriptionCount: number };
-
-/** `ids` comes back from apply-to-description only: the rows it wrote. */
-export type WriteResult = PairBreakAnswer & { updated: number; ids?: string[] };
-
-export type BulkBody = {
-  /** Explicit rows. Omit and pass `filter` for "select all shown". */
-  ids?: string[];
-  filter?: TransactionFilterQuery;
-  categoryId?: string | null;
-  addTagIds?: string[];
-  checked?: boolean;
-  /** The caller has seen how many internal-transfer pairs this write would
-   *  unlink and wants it applied anyway. Without it, the server refuses such
-   *  a write and reports the count instead of applying it. */
-  confirmBreakPairs?: boolean;
-};
+/** A bulk write as the list makes it: `filter` is the list's own filter,
+ *  encoded on the way out. */
+export type BulkInput = Omit<BulkBody, "filter"> & { filter?: TransactionFilterQuery };
 
 /** The flag goes on the wire only when set. */
 function withConfirm<B extends { confirmBreakPairs?: boolean }>({ confirmBreakPairs, ...rest }: B) {
@@ -200,13 +154,8 @@ function withConfirm<B extends { confirmBreakPairs?: boolean }>({ confirmBreakPa
 }
 
 /** A write that only ticks or unticks ✓ touches nothing but the rows. */
-function onlyChecked(body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked"> & { tagIds?: string[] }) {
-  return (
-    body.checked !== undefined &&
-    body.categoryId === undefined &&
-    body.tagIds === undefined &&
-    body.addTagIds === undefined
-  );
+function onlyChecked(body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked"> & { tagIds?: string[] | null }) {
+  return body.checked != null && body.categoryId === undefined && body.tagIds == null && body.addTagIds == null;
 }
 
 /** A tag's place in the catalog; unknown tags sort after every known one. */
@@ -250,7 +199,7 @@ function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Tr
       )
       .sort((a, b) => catalogRank(catalog, a.id) - catalogRank(catalog, b.id));
   }
-  if (body.checked !== undefined) next.checked = body.checked;
+  if (body.checked != null) next.checked = body.checked;
   return next;
 }
 
@@ -294,15 +243,8 @@ export function usePatchTransaction() {
 export function useApplyToDescription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      ...body
-    }: {
-      id: string;
-      categoryId: string | null;
-      scope?: SameDescriptionScope;
-      confirmBreakPairs?: boolean;
-    }) => postJson<WriteResult>(`/transactions/${id}/apply-to-description`, withConfirm(body)),
+    mutationFn: ({ id, ...body }: ApplyToDescriptionBody & { id: string }) =>
+      postJson<WriteResult>(`/transactions/${id}/apply-to-description`, withConfirm(body)),
     onSuccess: () => afterTransactionChange(qc),
   });
 }
@@ -314,8 +256,8 @@ export function useApplyToDescription() {
 export function useBulkTransactions() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: BulkBody) => {
-      const wire: Omit<BulkBody, "filter"> & { filter?: Record<string, unknown> } = {
+    mutationFn: (body: BulkInput) => {
+      const wire: BulkBody = {
         ...withConfirm(body),
         filter: body.filter ? transactionFilterFields(body.filter) : undefined,
       };
@@ -326,49 +268,8 @@ export function useBulkTransactions() {
   });
 }
 
-export type AiRunOutcome = "ok" | "partial" | "error";
-
-/** GET /budget/categorize/status. `configured`: the server has a provider with
- *  its key. The review threshold is the reader's own pref, not part of this. */
-export type AiStatus = {
-  configured: boolean;
-  running: boolean;
-  remaining: number;
-  reviewCount: number;
-  lastRun: { outcome: AiRunOutcome; error: string | null; startedAt: string } | null;
-};
-
-export type BudgetAiProvider = "jev";
-
-export type BudgetAiSettings = {
-  provider: BudgetAiProvider | null;
-  model: string | null;
-  available: BudgetAiProvider[];
-  defaults: Record<BudgetAiProvider, string>;
-};
-
-/** One model's spend: token counts are numbers, prices (per million tokens)
- *  and costs are decimal strings; `cost` is null until the model is priced. */
-export type BudgetAiModelUsage = {
-  model: string;
-  runs: number;
-  runsWithoutUsage: number;
-  tokensIn: number;
-  tokensOut: number;
-  priceIn: string | null;
-  priceOut: string | null;
-  cost: string | null;
-};
-
-export type BudgetAiUsage = {
-  currency: string;
-  models: BudgetAiModelUsage[];
-  /** Sum of the priced models only. */
-  totalCost: string;
-};
-
 /** Full replacement map of every model's prices, per million tokens. */
-export type BudgetAiPrices = Record<string, { in: string; out: string }>;
+export type BudgetAiPrices = Record<string, BudgetAiPriceReq>;
 
 /** A finished run has a durable timestamp, so a short run missed between
  *  polls still refreshes its dependent queries. */
@@ -405,7 +306,7 @@ export function useAcceptReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      postJson<{ sameDescriptionCount: number }>(`/budget/review/${id}/accept`, {}),
+      postJson<AcceptReviewResponse>(`/budget/review/${id}/accept`, {}),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -413,15 +314,8 @@ export function useAcceptReview() {
 export function useUndoReview() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      categoryId,
-      confidence,
-    }: {
-      id: string;
-      categoryId: string | null;
-      confidence: string | null;
-    }) => postJson<void>(`/budget/review/${id}/undo`, { categoryId, confidence }),
+    mutationFn: ({ id, ...body }: UndoReviewReq & { id: string }) =>
+      postJson<void>(`/budget/review/${id}/undo`, body),
     onSettled: () => afterReviewChange(qc),
   });
 }
@@ -436,7 +330,7 @@ export function useBudgetAiSettings() {
 export function useSetBudgetAiSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { provider: BudgetAiProvider | null; model: string | null }) =>
+    mutationFn: (body: SetBudgetAiSettingsReq) =>
       patchJson<void>("/settings/budget-ai", body),
     onSettled: () => afterBudgetAiSettingsChange(qc),
   });
@@ -444,7 +338,7 @@ export function useSetBudgetAiSettings() {
 
 /** The models the provider offers, asked of the provider itself. Not
  *  retried: a failure falls back to typing the name. */
-export function useBudgetAiModels(provider: BudgetAiProvider | null) {
+export function useBudgetAiModels(provider: string | null) {
   return useQuery({
     queryKey: keys.budgetAiModels(provider ?? ""),
     queryFn: ({ signal }) => getJson<string[]>(`/settings/budget-ai/models/${provider}`, { signal }),

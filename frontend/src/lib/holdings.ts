@@ -1,13 +1,14 @@
-import type { Holding, HoldingKind } from "../api/types";
+import type { TFunction } from "i18next";
+import type { Holding } from "../api/wire";
 import { currencySymbol } from "./currency";
 import { sumDecimals } from "./decimal";
 import { ACCOUNT_PALETTE } from "./palette";
 
-export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
-  cash: "holdingKind.cash",
-  etf: "holdingKind.etf",
-  equity: "holdingKind.equity",
-};
+/** An instrument kind's label. The server's kinds are open-ended text, so
+ *  one this build has no label for shows as sent. */
+export function kindLabel(t: TFunction, kind: string): string {
+  return t(`holdingKind.${kind}`, { defaultValue: kind });
+}
 
 /** A line of the holdings table: one holding, or the cash of one currency
  *  held in several accounts. Cash is the same instrument in every account (a

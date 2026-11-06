@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import type { ProviderGroup, SyncConnection, SyncHealth, SyncStatus } from "../api/types";
+import type { ProviderGroup, SyncConnection, SyncHealth, ConnectionStatus } from "../api/wire";
 import { formatDate, zonedDay } from "./date";
 import { powensStateText } from "./powens";
 
@@ -8,13 +8,13 @@ export function flattenConnections(groups: ProviderGroup[] | undefined): SyncCon
 }
 
 /** A sync is in flight: the icon spins and the list polls fast. */
-export function isSyncing(status: SyncStatus): boolean {
+export function isSyncing(status: ConnectionStatus): boolean {
   return status === "syncing" || status === "awaiting";
 }
 
 /** No result to judge yet: a sync in flight, or a connection still being set
  *  up (listed, but not a bank yet). */
-function isUnsettled(status: SyncStatus): boolean {
+function isUnsettled(status: ConnectionStatus): boolean {
   return isSyncing(status) || status === "pending";
 }
 

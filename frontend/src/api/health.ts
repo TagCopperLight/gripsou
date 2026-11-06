@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
 import { keys } from "./keys";
-
-export type Health = { status: string; version: string };
+import type { Health } from "./wire";
 
 export function useHealth() {
   return useQuery({

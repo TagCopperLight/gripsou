@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 import { CategoryModal } from "./CategoryModal";
 import { DeleteCategoryModal } from "./DeleteCategoryModal";
-import type { BudgetCategory } from "../../../api/budget";
+import type { BudgetCategory } from "../../../api/wire";
 import i18n from "../../../i18n";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 

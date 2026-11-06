@@ -4,12 +4,8 @@ import { useErrorToast } from "../../../lib/errorToasts";
 
 import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { CardState } from "../../../ui/CardState";
-import {
-  useBudgetAiUsage,
-  useSetBudgetAiPrices,
-  type BudgetAiModelUsage,
-  type BudgetAiPrices,
-} from "../../../api/budget";
+import { useBudgetAiUsage, useSetBudgetAiPrices, type BudgetAiPrices } from "../../../api/budget";
+import type { BudgetAiModelUsage } from "../../../api/wire";
 import { formatMoney } from "../../../lib/money";
 import { DECIMAL_RE, normaliseDecimal } from "../../../lib/decimal";
 import { TextInput } from "../../../ui/TextInput";

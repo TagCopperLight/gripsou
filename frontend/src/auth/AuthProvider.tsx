@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, getAuthToken, setAuthToken } from "../api/client";
 import { authApi, type SecondFactor } from "../api/auth";
-import type { SessionUser } from "../api/types";
+import type { SessionUser } from "../api/wire";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { AuthContext, isCurrencyRefused, type AuthValue } from "./context";
 import i18n from "../i18n";
 import { showError } from "../lib/errorToasts";
-import { DEFAULT_PREFS, setPrefs, withPatch, type PrefsPatch } from "../lib/prefs";
+import { setPrefs } from "../lib/prefs";
+import { withPatch, type PrefsPatch } from "../lib/prefsPatch";
+import { DEFAULT_PREFS } from "../api/wire";
 import { afterPrefsSaved } from "../api/invalidate";
 
 export function AuthProvider({ children }: { children: ReactNode }) {

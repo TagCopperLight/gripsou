@@ -1,7 +1,15 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteJson, getJson, postJson } from "./client";
-import type { EnabledProvider, ProviderGroup } from "./types";
+import type {
+  CompleteConnectionReq,
+  ConnectionState,
+  EnabledProvider,
+  InitConnectionResp,
+  ManageResp,
+  ProviderGroup,
+  SyncAllResp,
+} from "./wire";
 import { keys } from "./keys";
 import { watchQuery } from "./watch";
 import {
@@ -33,21 +41,21 @@ export function useConnections() {
 export function useSyncConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => postJson<void>(`/connections/${id}/sync`, {}),
+    mutationFn: (id: string) => postJson<ConnectionState>(`/connections/${id}/sync`, {}),
     onSuccess: () => afterSyncRequested(qc),
   });
 }
 
 export function useManageConnection() {
   return useMutation({
-    mutationFn: (id: string) => postJson<{ redirectUrl: string }>(`/connections/${id}/manage`, {}),
+    mutationFn: (id: string) => postJson<ManageResp>(`/connections/${id}/manage`, {}),
   });
 }
 
 export function useSyncAll() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => postJson<void>("/sync", {}),
+    mutationFn: () => postJson<SyncAllResp>("/sync", {}),
     onSuccess: () => afterSyncRequested(qc),
   });
 }
@@ -62,7 +70,7 @@ export function useEnabledProviders() {
 export function useInitConnection() {
   return useMutation({
     mutationFn: (providerKey: string) =>
-      postJson<{ connectionId: string; redirectUrl: string | null }>(
+      postJson<InitConnectionResp>(
         "/connections/init",
         { providerKey },
       ),
@@ -72,13 +80,8 @@ export function useInitConnection() {
 export function useCompleteConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      connectionId,
-      params,
-    }: {
-      connectionId: string;
-      params: Record<string, string>;
-    }) => postJson<void>("/connections/complete", { connectionId, params }),
+    mutationFn: ({ connectionId, params }: CompleteConnectionReq) =>
+      postJson<void>("/connections/complete", { connectionId, params }),
     // A completed connect kicks an initial sync server-side, so the poll that
     // `afterSyncRequested` starts is what eventually refreshes the data views.
     onSuccess: () => afterSyncRequested(qc),

@@ -8,7 +8,7 @@ import { ActiveFilterChips } from "./ActiveFilterChips";
 import { Select } from "../../../ui/Select";
 import { useAccounts } from "../../../api/accounts";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../../lib/budgetFilters";
-import type { TransactionCounts } from "../../../api/types";
+import type { TransactionCounts } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
 
 /** The Transactions search surface: three parts, each rendered only when it has

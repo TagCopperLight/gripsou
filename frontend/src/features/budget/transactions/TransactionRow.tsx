@@ -13,7 +13,7 @@ import { formatQuantity } from "../../../lib/money";
 import { categoryOfTransaction } from "../../../lib/budget";
 import { COL_PAD } from "./transactionsGrid";
 import { ROW_CELLS, ROW_HOVER } from "../../../ui/gridTable";
-import type { Transaction } from "../../../api/types";
+import type { Transaction } from "../../../api/wire";
 
 type TransactionRowProps = {
   tx: Transaction;

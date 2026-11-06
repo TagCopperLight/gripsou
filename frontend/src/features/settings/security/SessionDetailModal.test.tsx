@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import type { Session } from "../../../api/types";
+import type { Session } from "../../../api/wire";
 import { SessionDetailModal } from "./SessionDetailModal";
 
 const session: Session = {

@@ -9,14 +9,8 @@ import { Button } from "../../../ui/Button";
 import { Field } from "../../../ui/Field";
 import { TextInput } from "../../../ui/TextInput";
 import { Select } from "../../../ui/Select";
-import {
-  useCreateBudgetCategory,
-  useUpdateBudgetCategory,
-  categoryBody,
-  type BudgetCategory,
-  type BudgetKind,
-  type CategoryBody,
-} from "../../../api/budget";
+import { useCreateBudgetCategory, useUpdateBudgetCategory, categoryBody } from "../../../api/budget";
+import type { BudgetCategory, CategoryBody, CategoryKind } from "../../../api/wire";
 import { BUDGET_KINDS, categoryLabel, safeBudgetColor } from "../../../lib/budget";
 import { BUDGET_ICONS, BUDGET_ICON_NAMES } from "../budgetIcons";
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
@@ -40,7 +34,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   // renamed one.
   const [initialDisplayName] = useState(() => (category ? categoryLabel(t, category) : ""));
   const [name, setName] = useState(initialDisplayName);
-  const [kind, setKind] = useState<BudgetKind>(category?.kind ?? "expense");
+  const [kind, setKind] = useState<CategoryKind>(category?.kind ?? "expense");
   const [color, setColor] = useState(category?.color ?? ACCOUNT_PALETTE[0]);
   const [icon, setIcon] = useState<string | null>(category?.icon ?? null);
   const [hint, setHint] = useState(category?.hint ?? "");
@@ -152,7 +146,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             id="category-kind"
             value={kind}
             disabled={busy || locked}
-            onChange={(v) => setKind(v as BudgetKind)}
+            onChange={(v) => setKind(v as CategoryKind)}
             options={BUDGET_KINDS.map((k) => ({ value: k, label: t(`budget.kinds.${k}`) }))}
           />
           {locked && (

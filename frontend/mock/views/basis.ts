@@ -2,7 +2,7 @@
 // (backend/migrations/0022_lot_basis.sql, redefined in 0025): every screen's
 // basis comes from here, as on the server.
 
-import type { Lot } from "../../src/api/types.ts";
+import type { Lot } from "../../src/api/wire.ts";
 
 export type Basis = {
   /** Null with no buy. */

@@ -76,7 +76,6 @@
     "legendOthers_one": "+{{count}} other",
     "legendOthers_other": "+{{count}} others",
     "allAccounts": "All accounts",
-    "unknownSource": "Other",
     "edit": {
       "title": "Edit account",
       "accountName": "Account name",

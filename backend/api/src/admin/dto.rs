@@ -2,8 +2,9 @@
 
 use gripsou_providers::registry::{About, AccountKind};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: String,
@@ -29,17 +30,17 @@ impl User {
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, TS)]
 pub struct DeleteUserReq {
     pub email: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
 pub struct SetRoleReq {
     pub role: gripsou_core::repo::user::Role,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Provider {
     pub key: String,
@@ -59,14 +60,14 @@ impl Provider {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
 pub struct SetProviderReq {
     pub enabled: bool,
 }
 
 /// One provider's keys for Settings → Server. A secret's value never leaves
 /// the server: only whether it is set.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeyProvider {
     pub key: String,
@@ -75,18 +76,20 @@ pub struct ApiKeyProvider {
 }
 
 /// `secret` tells the frontend which of the two shapes it is.
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq, Eq, TS)]
 #[serde(untagged)]
 pub enum ApiKeyField {
     Plain {
         key: String,
         label: String,
+        #[ts(type = "false")]
         secret: bool,
         value: Option<String>,
     },
     Secret {
         key: String,
         label: String,
+        #[ts(type = "true")]
         secret: bool,
         set: bool,
     },
@@ -124,20 +127,22 @@ impl ApiKeyProvider {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 pub struct SetApiKeyReq {
     pub field: String,
     pub value: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InviteLinkResp {
     pub token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "BudgetAiSettings")]
 pub struct BudgetAiSettingsDto {
     pub provider: Option<String>,
     pub model: Option<String>,
@@ -145,24 +150,27 @@ pub struct BudgetAiSettingsDto {
     pub defaults: std::collections::BTreeMap<&'static str, &'static str>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields = nullable)]
 pub struct SetBudgetAiSettingsReq {
     pub provider: Option<String>,
     pub model: Option<String>,
 }
 
 /// AI spend for Settings → Server. Token counts are numbers; money is strings.
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "BudgetAiUsage")]
 pub struct BudgetAiUsageDto {
     pub currency: &'static str,
     pub models: Vec<BudgetAiModelUsageDto>,
     pub total_cost: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "BudgetAiModelUsage")]
 pub struct BudgetAiModelUsageDto {
     pub model: String,
     pub runs: i64,
@@ -177,7 +185,7 @@ pub struct BudgetAiModelUsageDto {
 
 /// One entry of the `PUT /settings/budget-ai/prices` map, USD per million
 /// tokens as decimal strings. Parsed by the handler so bad values are a 400.
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 pub struct BudgetAiPriceReq {
     #[serde(rename = "in")]
     pub input: String,

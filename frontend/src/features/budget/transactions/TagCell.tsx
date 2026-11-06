@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { TagChip } from "../TagChip";
-import type { BudgetTag } from "../../../api/budget";
+import type { BudgetTag } from "../../../api/wire";
 
 type TagCellProps = {
   tags: Pick<BudgetTag, "id" | "name" | "color">[];

@@ -4,6 +4,8 @@ use argon2::password_hash::rand_core::{OsRng, RngCore};
 use totp_rs::{Builder, Secret};
 
 pub const TOTP_STEP_SECS: u64 = 30;
+/// The length of a TOTP code: totp-rs's default, and what the otpauth URI announces.
+pub const TOTP_DIGITS: usize = 6;
 pub const RECOVERY_CODE_COUNT: usize = 10;
 const RECOVERY_ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
 
@@ -24,7 +26,7 @@ pub fn base32_secret(secret: &[u8]) -> String {
 
 pub fn otpauth_uri(secret: &[u8], email: &str) -> String {
     format!(
-        "otpauth://totp/gripsou:{}?secret={}&issuer=gripsou&algorithm=SHA1&digits=6&period={TOTP_STEP_SECS}",
+        "otpauth://totp/gripsou:{}?secret={}&issuer=gripsou&algorithm=SHA1&digits={TOTP_DIGITS}&period={TOTP_STEP_SECS}",
         // The label is a path segment: authenticator apps read `+` there literally.
         url::form_urlencoded::byte_serialize(email.as_bytes())
             .collect::<String>()
@@ -45,7 +47,7 @@ pub fn current_step(unix_secs: u64) -> u64 {
     unix_secs / TOTP_STEP_SECS
 }
 
-/// The 6-digit code for a step (HMAC-SHA1, RFC 6238).
+/// The [`TOTP_DIGITS`]-digit code for a step (HMAC-SHA1, RFC 6238).
 pub fn totp_code(secret: &[u8], step: u64) -> String {
     let totp = Builder::new()
         .with_secret(secret.to_vec())

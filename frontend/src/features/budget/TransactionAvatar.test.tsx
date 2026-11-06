@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { TransactionAvatar } from "./TransactionAvatar";
-import type { Transaction } from "../../api/types";
+import type { Transaction } from "../../api/wire";
 
 function tx(over: Partial<Transaction> = {}): Transaction {
   return {

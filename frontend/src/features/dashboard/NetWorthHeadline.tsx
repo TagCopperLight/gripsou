@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { MaskedMoney } from "../../ui/MaskedMoney";
 import { GainPill } from "../../ui/GainPill";
 import { FxAsterisk } from "../../ui/FxNote";
-import type { NetWorthSummary } from "../../api/types";
-import type { Range } from "../../lib/ranges";
+import type { NetWorthSummary } from "../../api/wire";
+import type { Range } from "../../api/wire";
 
 /** The net worth in large, its gain over the range in a pill, and the range
  *  in words. Asterisked when it leaves holdings out for want of a rate: its

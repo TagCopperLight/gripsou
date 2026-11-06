@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { getAuthToken, setAuthToken } from "../../src/api/client.ts";
 import { CURRENCIES } from "../../src/lib/currency.ts";
-import type { UserPrefs } from "../../src/lib/prefs.ts";
+import type { UserPrefs } from "../../src/api/wire.ts";
 import type { ControlInfo } from "../control.ts";
 import type { OverrideMode } from "../faults.ts";
 

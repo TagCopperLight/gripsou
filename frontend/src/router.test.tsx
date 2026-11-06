@@ -9,7 +9,7 @@ import { routeTree, router as appRouter } from "./router";
 import { App } from "./App";
 import { setAuthToken } from "./api/client";
 import type { AuthValue } from "./auth/context";
-import { DEFAULT_PREFS } from "./lib/prefs";
+import { DEFAULT_PREFS } from "./api/wire";
 import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
 import { authValue, signedOut, testUser, renderWithApp, jsonResponse, stubFetch } from "./test/kit";
 

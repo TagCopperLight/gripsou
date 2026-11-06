@@ -258,7 +258,7 @@ async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let rows = transactions(&pool, user_id, &all()).await.unwrap();
     let lot = rows
         .iter()
-        .find(|r| r.source == "lot")
+        .find(|r| r.source == gripsou_core::budget::vocab::RowSource::Lot)
         .expect("the lot must be listed");
     assert_eq!(lot.ticker.as_deref(), Some("PUST"));
     assert_eq!(lot.quantity, Some(dec("2")));

@@ -4,8 +4,9 @@ import { QueryObserver } from "@tanstack/react-query";
 import { useAuth } from "./context";
 import * as api from "../api/client";
 import { keys } from "../api/keys";
-import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
-import type { SessionUser } from "../api/types";
+import { setPrefs } from "../lib/prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import type { SessionUser } from "../api/wire";
 import { appWrapper } from "../test/kit";
 
 const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true };

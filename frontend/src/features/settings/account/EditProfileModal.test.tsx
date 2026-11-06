@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { EditProfileModal } from "./EditProfileModal";
-import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
+import { DEFAULT_PREFS, type UserPrefs } from "../../../api/wire";
 import { fileToAvatarDataUrl } from "../../../lib/avatar";
 import { authValue, testUser, renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 

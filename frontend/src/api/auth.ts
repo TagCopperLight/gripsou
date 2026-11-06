@@ -6,49 +6,58 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
 import { deleteJson, getJson, patchJson, postJson } from "./client";
-import type { MfaRequired, MfaStatus, Passkey, Session, SessionUser, TotpSetup } from "./types";
-import type { PrefsPatch } from "../lib/prefs";
+import type {
+  ChangePasswordReq,
+  LoginOutcome,
+  LoginVerifyReq,
+  MfaStatus,
+  Passkey,
+  PasskeyOptions,
+  PasskeyRegisterReq,
+  ReauthResponse,
+  RecoveryCodes,
+  RedeemInviteReq,
+  Session,
+  SessionResponse,
+  SessionUser,
+  TokenInfo,
+  TotpSetup,
+  UpdateProfileReq,
+} from "./wire";
+import type { PrefsPatch } from "../lib/prefsPatch";
 import { keys } from "./keys";
 import { afterMfaChange, afterSessionChange, afterUserChange } from "./invalidate";
 import { useAuth } from "../auth/context";
 
-/** A signed-in session: the token to send and whose it is. */
-export type SessionResponse = { token: string; user: SessionUser };
-export type SecondFactor = { totp: string } | { recoveryCode: string };
-export type TokenInfo = { type: "invite" | "reset"; email: string | null };
+export type SecondFactor = Omit<LoginVerifyReq, "challenge">;
 
 /** The session calls, made by the auth state and the sign-in pages outside
  *  any query: what they return becomes the signed-in user. */
 export const authApi = {
   me: () => getJson<SessionUser>("/auth/me"),
   login: (email: string, password: string, remember: boolean) =>
-    postJson<SessionResponse | MfaRequired>("/auth/login", { email, password, remember }),
+    postJson<LoginOutcome>("/auth/login", { email, password, remember }),
   verifyLogin: (challenge: string, code: SecondFactor) =>
     postJson<SessionResponse>("/auth/login/verify", { challenge, ...code }),
   passkeyOptions: () =>
-    postJson<{ challenge: string; options: PublicKeyCredentialRequestOptionsJSON }>("/auth/passkey/options", {}),
+    postJson<PasskeyOptions & { options: PublicKeyCredentialRequestOptionsJSON }>("/auth/passkey/options", {}),
   loginWithPasskey: (challenge: string, credential: AuthenticationResponseJSON, remember: boolean) =>
     postJson<SessionResponse>("/auth/passkey", { challenge, credential, remember }),
   logout: () => postJson<void>("/auth/logout", {}),
   savePrefs: (patch: PrefsPatch) => patchJson<SessionUser>("/auth/prefs", patch),
   finishWelcome: () => postJson<void>("/auth/welcome", {}),
   tokenInfo: (token: string) => getJson<TokenInfo>(`/auth/token/${token}`),
-  redeemInvite: (token: string, body: { email: string; name: string; password: string }) =>
+  redeemInvite: (token: string, body: RedeemInviteReq) =>
     postJson<SessionResponse>(`/auth/invite/${token}/redeem`, body),
   redeemReset: (token: string, password: string) =>
     postJson<SessionResponse>(`/auth/reset/${token}/redeem`, { password }),
-};
-
-export type UpdateProfileInput = {
-  name: string;
-  email: string;
 };
 
 export function useUpdateProfile() {
   const qc = useQueryClient();
   const { updateUser } = useAuth();
   return useMutation({
-    mutationFn: ({ name, email }: UpdateProfileInput) =>
+    mutationFn: ({ name, email }: UpdateProfileReq) =>
       patchJson<SessionUser>("/auth/me", { name, email }),
     onSuccess: (updated) => {
       updateUser(updated);
@@ -58,15 +67,10 @@ export function useUpdateProfile() {
   });
 }
 
-export type ChangePasswordInput = {
-  currentPassword: string;
-  newPassword: string;
-};
-
 export function useChangePassword() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ currentPassword, newPassword }: ChangePasswordInput) =>
+    mutationFn: ({ currentPassword, newPassword }: ChangePasswordReq) =>
       postJson<void>("/auth/change-password", { currentPassword, newPassword }),
     onSuccess: () => {
       // Changing the password revokes all other sessions server-side; refresh
@@ -117,7 +121,7 @@ export function useMfaStatus() {
 export function useReauth() {
   return useMutation({
     mutationFn: (password: string) =>
-      postJson<{ reauth: string }>("/auth/reauth", { password }),
+      postJson<ReauthResponse>("/auth/reauth", { password }),
   });
 }
 
@@ -132,7 +136,7 @@ export function useTotpConfirm() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (code: string) =>
-      postJson<{ recoveryCodes: string[] }>("/auth/mfa/totp/confirm", { code }),
+      postJson<RecoveryCodes>("/auth/mfa/totp/confirm", { code }),
     onSuccess: () => afterMfaChange(qc),
   });
 }
@@ -150,7 +154,7 @@ export function useRegenerateRecovery() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reauth: string) =>
-      postJson<{ recoveryCodes: string[] }>(
+      postJson<RecoveryCodes>(
         "/auth/mfa/recovery/regenerate",
         { reauth },
       ),
@@ -164,7 +168,7 @@ export function useRegenerateRecovery() {
 export function usePasskeyRegisterOptions() {
   return useMutation({
     mutationFn: (reauth: string) =>
-      postJson<{ challenge: string; options: PublicKeyCredentialCreationOptionsJSON }>(
+      postJson<PasskeyOptions & { options: PublicKeyCredentialCreationOptionsJSON }>(
         "/auth/mfa/passkeys/register/options",
         { reauth },
       ),
@@ -174,7 +178,7 @@ export function usePasskeyRegisterOptions() {
 export function useRegisterPasskey() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { reauth: string; challenge: string; credential: RegistrationResponseJSON }) =>
+    mutationFn: (body: PasskeyRegisterReq & { credential: RegistrationResponseJSON }) =>
       postJson<Passkey>("/auth/mfa/passkeys/register", body),
     onSuccess: () => afterMfaChange(qc),
   });

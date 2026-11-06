@@ -5,8 +5,8 @@ import { act } from "react";
 
 import { TransactionsMode } from "./TransactionsMode";
 import { BudgetProvider } from "../BudgetProvider";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
-import type { Transaction } from "../../../api/types";
+import { DEFAULT_PREFS } from "../../../api/wire";
+import type { Transaction } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();

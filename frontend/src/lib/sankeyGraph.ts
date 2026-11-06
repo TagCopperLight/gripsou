@@ -1,4 +1,4 @@
-import type { Sankey, Slice } from "../api/overview";
+import type { Sankey, Slice } from "../api/wire";
 import { sliceColor, sliceKey } from "./slice";
 import { sumDecimals } from "./decimal";
 import { FG_FAINT } from "./theme";

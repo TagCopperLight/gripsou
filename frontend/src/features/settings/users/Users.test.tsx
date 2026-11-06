@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { SettingsUsers } from "./Users";
-import type { User } from "../../../api/types";
+import type { User } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const USERS: User[] = [
-  { id: "u1", name: "Jules Bernard", email: "jules@gripsou.local", role: "admin", joinedAt: 1_700_000_000_000, isSelf: true },
-  { id: "u2", name: "Marie Laurent", email: "marie@gripsou.local", role: "user", joinedAt: 1_710_000_000_000, isSelf: false },
-  { id: "u3", name: "Thomas Caron", email: "thomas@gripsou.local", role: "user", joinedAt: 1_720_000_000_000, isSelf: false },
+  { id: "u1", name: "Jules Bernard", email: "jules@gripsou.local", role: "admin", joinedAt: 1_700_000_000_000, isSelf: true, avatar: null },
+  { id: "u2", name: "Marie Laurent", email: "marie@gripsou.local", role: "user", joinedAt: 1_710_000_000_000, isSelf: false, avatar: null },
+  { id: "u3", name: "Thomas Caron", email: "thomas@gripsou.local", role: "user", joinedAt: 1_720_000_000_000, isSelf: false, avatar: null },
 ];
 
 describe("SettingsUsers", () => {

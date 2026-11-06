@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import type { EChartsOption } from "echarts";
 
 import { TrendSurface } from "./TrendSurface";
-import type { BudgetTrend } from "../../../api/overview";
+import type { BudgetTrend } from "../../../api/wire";
 
 // The raw option (functions included — `JSON.stringify` below drops them) so
 // the decimal-string tooltip test can invoke the tooltip formatter directly.

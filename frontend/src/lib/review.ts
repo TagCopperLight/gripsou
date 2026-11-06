@@ -1,4 +1,4 @@
-import type { Transaction } from "../api/types";
+import type { Transaction } from "../api/wire";
 
 export type Resolution = {
   tx: Transaction;            // the row as it was when pending — the guess to restore on Undo

@@ -3,8 +3,8 @@ import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
 import { type AuthValue } from "../../auth/context";
-import { DEFAULT_PREFS } from "../../lib/prefs";
-import type { SessionUser } from "../../api/types";
+import { DEFAULT_PREFS } from "../../api/wire";
+import type { SessionUser } from "../../api/wire";
 import { ApiError } from "../../api/client";
 import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 

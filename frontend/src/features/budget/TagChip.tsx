@@ -1,6 +1,6 @@
 import { Tag, X } from "lucide-react";
 
-import type { BudgetTag } from "../../api/budget";
+import type { BudgetTag } from "../../api/wire";
 import { safeBudgetColor } from "../../lib/budget";
 import { tint } from "../../lib/color";
 

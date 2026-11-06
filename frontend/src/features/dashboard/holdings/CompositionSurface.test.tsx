@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { CompositionSurface } from "./CompositionSurface";
-import type { Composition } from "../../../api/types";
+import type { Composition } from "../../../api/wire";
 
 const COMP: Composition = {
   countries: [

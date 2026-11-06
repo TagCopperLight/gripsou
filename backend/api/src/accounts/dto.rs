@@ -3,11 +3,12 @@
 use gripsou_providers::brandfetch::Logos;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::connections::dto::provider_name;
 use crate::wire::{day_to_millis, ratio};
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NetWorthPoint {
     pub t: i64,
@@ -16,7 +17,7 @@ pub struct NetWorthPoint {
     pub invested: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NetWorthSummary {
     pub net_worth: String,
@@ -26,7 +27,7 @@ pub struct NetWorthSummary {
     pub fx_missing: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 pub struct NetWorthResponse {
     pub points: Vec<NetWorthPoint>,
     pub summary: NetWorthSummary,
@@ -67,7 +68,7 @@ impl NetWorthResponse {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: String,
@@ -104,7 +105,7 @@ impl Account {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SeriesAccount {
     pub id: String,
@@ -112,7 +113,7 @@ pub struct SeriesAccount {
     pub color: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 pub struct SeriesPoint {
     pub t: i64,
     /// account id -> value (decimal string); null when the reader's currency
@@ -120,7 +121,8 @@ pub struct SeriesPoint {
     pub values: std::collections::HashMap<String, Option<String>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
+#[ts(rename = "AccountSeries")]
 pub struct AccountSeriesResponse {
     pub accounts: Vec<SeriesAccount>,
     pub points: Vec<SeriesPoint>,
@@ -189,7 +191,7 @@ impl AccountSeriesResponse {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAccountReq {
     pub name: String,
@@ -197,7 +199,7 @@ pub struct UpdateAccountReq {
     pub color: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatedAccount {
     pub id: String,

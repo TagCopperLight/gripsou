@@ -5,6 +5,7 @@ import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
 import { useAiStatus } from "../../../api/budget";
+import { BUDGET_AI_THRESHOLD_MAX, BUDGET_AI_THRESHOLD_MIN } from "../../../api/wire";
 
 /** Settings → Budget: the per-user half of AI categorisation: opt-in and threshold. The
  *  provider, model and key are the operator's (Settings → Server). */
@@ -46,8 +47,8 @@ export function AiSurface() {
         <div className="flex w-64 items-center gap-3">
           <input
             type="range"
-            min={50}
-            max={95}
+            min={BUDGET_AI_THRESHOLD_MIN}
+            max={BUDGET_AI_THRESHOLD_MAX}
             step={5}
             value={threshold}
             disabled={!configured}

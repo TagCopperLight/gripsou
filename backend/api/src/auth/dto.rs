@@ -1,19 +1,21 @@
 //! What the sign-in, account and second-factor endpoints send and accept.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginReq {
     pub email: String,
     pub password: String,
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub remember: bool,
 }
 
 /// The authenticated user's own profile (no `isSelf`/`joinedAt` — that's the
 /// admin user-list shape). Returned by login.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionUser {
     pub id: String,
@@ -37,8 +39,9 @@ impl SessionUser {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "Session")]
 pub struct SessionDto {
     pub id: String,
     /// Friendly device label parsed from the stored User-Agent.
@@ -69,7 +72,8 @@ impl SessionDto {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(rename = "SessionResponse")]
 pub struct LoginResponse {
     pub token: String,
     pub user: SessionUser,
@@ -77,7 +81,7 @@ pub struct LoginResponse {
 
 /// What `/auth/login` answers: a session, or (second factor enrolled) a
 /// short-lived challenge to turn into one at `/auth/login/verify`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(untagged)]
 // Built once per login and serialized at once: boxing would only add noise.
 #[allow(clippy::large_enum_variant)]
@@ -86,50 +90,53 @@ pub enum LoginOutcome {
     Mfa(MfaRequired),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaRequired {
     /// Always true; lets the client tell this shape from a session.
+    #[ts(type = "true")]
     pub mfa_required: bool,
     pub challenge: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields = nullable)]
 pub struct LoginVerifyReq {
     pub challenge: String,
     pub totp: Option<String>,
     pub recovery_code: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProfileReq {
     pub name: String,
     pub email: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangePasswordReq {
     pub current_password: String,
     pub new_password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAccountReq {
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(rename = "TokenInfo")]
 pub struct TokenInfoResp {
     #[serde(rename = "type")]
     pub token_type: gripsou_core::repo::invite_token::TokenKind,
     pub email: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RedeemInviteReq {
     pub email: String,
@@ -137,28 +144,28 @@ pub struct RedeemInviteReq {
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RedeemResetReq {
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 pub struct ReauthReq {
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 pub struct ReauthResponse {
     pub reauth: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 pub struct ReauthTokenReq {
     pub reauth: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaStatus {
     pub totp: bool,
@@ -166,8 +173,9 @@ pub struct MfaStatus {
     pub passkeys: Vec<PasskeyInfo>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "Passkey")]
 pub struct PasskeyInfo {
     pub id: uuid::Uuid,
     pub name: String,
@@ -188,49 +196,53 @@ impl From<gripsou_core::repo::passkey::PasskeyRow> for PasskeyInfo {
 
 /// A WebAuthn ceremony to run in the browser: `options` is the
 /// `publicKey` member, as `@simplewebauthn/browser` takes it.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PasskeyOptions {
     pub challenge: String,
+    #[ts(type = "unknown")]
     pub options: serde_json::Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PasskeyRegisterReq {
     pub reauth: String,
     pub challenge: String,
+    #[ts(type = "unknown")]
     pub credential: webauthn_rs::prelude::RegisterPublicKeyCredential,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 pub struct RenamePasskeyReq {
     pub name: String,
 }
 
 /// Finish a passwordless sign-in.
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PasskeySignInReq {
     pub challenge: String,
+    #[ts(type = "unknown")]
     pub credential: webauthn_rs::prelude::PublicKeyCredential,
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub remember: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TotpSetup {
     pub secret: String,
     pub qr_svg: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 pub struct TotpConfirmReq {
     pub code: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryCodes {
     pub recovery_codes: Vec<String>,

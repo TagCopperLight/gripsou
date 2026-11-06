@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiCostSurface } from "./AiCostSurface";
 import { formatMoney } from "../../../lib/money";
-import type { BudgetAiUsage } from "../../../api/budget";
+import type { BudgetAiUsage } from "../../../api/wire";
 import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const USAGE: BudgetAiUsage = {

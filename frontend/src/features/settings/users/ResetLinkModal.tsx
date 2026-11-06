@@ -9,7 +9,7 @@ import { resetLink } from "../../../lib/authLinks";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
 import { useCreateResetLink } from "../../../api/admin";
-import type { User } from "../../../api/types";
+import type { User } from "../../../api/wire";
 
 /** A reset link for another user: the admin's password first (redeeming the
  *  link clears the user's second factors), then the link to share. */

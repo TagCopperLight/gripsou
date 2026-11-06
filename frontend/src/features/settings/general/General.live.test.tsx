@@ -3,7 +3,8 @@ import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "../../../i18n";
 import * as client from "../../../api/client";
-import { DEFAULT_PREFS, setPrefs } from "../../../lib/prefs";
+import { setPrefs } from "../../../lib/prefs";
+import { DEFAULT_PREFS } from "../../../api/wire";
 import { SettingsGeneral } from "./General";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 

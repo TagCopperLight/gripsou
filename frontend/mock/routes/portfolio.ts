@@ -1,5 +1,5 @@
 import { reply, type Router } from "../router.ts";
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/holdings.ts";
+import type { LotEntry, SaveLotsReq } from "../../src/api/wire.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";
@@ -57,9 +57,9 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET", "/holdings/:id/lots", ({ store, params }) => v.lotsOf(store, params.id));
   r.route("GET", "/holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
   r.route("POST", "/holdings/:id/lots/preview", ({ store, params, body }) =>
-    v.previewLots(store, params.id, (body as { rows: SaveLotAdd[] }).rows));
+    v.previewLots(store, params.id, (body as { rows: LotEntry[] }).rows));
   r.route("PUT", "/holdings/:id/lots", ({ store, params, body }) => {
-    v.saveLots(store, params.id, body as SaveLotsInput);
+    v.saveLots(store, params.id, body as SaveLotsReq);
     return reply(204);
   });
 }

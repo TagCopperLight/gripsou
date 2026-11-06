@@ -73,7 +73,7 @@ impl Passkeys {
     }
 }
 
-const MAX_NAME_CHARS: usize = 64;
+pub const MAX_NAME_CHARS: usize = 64;
 
 fn not_accepted() -> ApiError {
     ApiError::bad_request("passkey not accepted")

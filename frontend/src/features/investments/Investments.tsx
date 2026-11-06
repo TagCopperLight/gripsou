@@ -9,7 +9,7 @@ import { ExposureDonut } from "../exposure/ExposureDonut";
 import { InvestmentsEmpty } from "./InvestmentsEmpty";
 import { indexItems, regionItems, sectorItems } from "../exposure/exposureColors";
 import { useHoldings, useInvestmentReturns } from "../../api/holdings";
-import type { InvestmentReturns } from "../../api/types";
+import type { InvestmentReturns } from "../../api/wire";
 import { exposure, type ExposureHolding } from "../../lib/exposure";
 import { investmentsView } from "../../lib/investments";
 import { CardTitle } from "../../ui/CardTitle";

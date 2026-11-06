@@ -3,10 +3,12 @@
 use chrono::NaiveDate;
 use gripsou_providers::registry::{self, AccountKind, Providers};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// How the provider last reached the bank (`SyncHealth`).
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "SyncHealth")]
 pub struct SyncHealthDto {
     pub verified: bool,
     pub last_updated_on: Option<NaiveDate>,
@@ -27,7 +29,7 @@ impl SyncHealthDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncAccount {
     pub health: Option<SyncHealthDto>,
@@ -40,7 +42,7 @@ pub struct SyncAccount {
     pub last_sync_at: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnection {
     pub can_manage: bool,
@@ -54,7 +56,7 @@ pub struct SyncConnection {
     pub logo: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderGroup {
     pub provider_key: String,
@@ -117,7 +119,7 @@ impl ProviderGroup {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionState {
     pub id: String,
@@ -137,7 +139,7 @@ impl ConnectionState {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EnabledProvider {
     pub key: String,
@@ -160,31 +162,31 @@ pub fn provider_name(key: &str) -> &str {
     registry::account_kind(key).map_or(key, |k| k.about.display_name)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InitConnectionReq {
     pub provider_key: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InitConnectionResp {
     pub connection_id: String,
     pub redirect_url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 pub struct SyncAllResp {
     pub started: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ManageResp {
     pub redirect_url: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CompleteConnectionReq {
     pub connection_id: uuid::Uuid,

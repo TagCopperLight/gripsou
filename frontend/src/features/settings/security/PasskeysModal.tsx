@@ -6,10 +6,8 @@ import { Fingerprint, Pencil, Trash2 } from "lucide-react";
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { useDeletePasskey, useMfaStatus, useRenamePasskey } from "../../../api/auth";
-import type { Passkey } from "../../../api/types";
+import { PASSKEY_NAME_MAX_CHARS, type Passkey } from "../../../api/wire";
 import { formatDate, formatRelative } from "../../../lib/date";
-
-const MAX_NAME = 64;
 
 /** The saved passkeys: rename in place, delete after a confirmation asked in
  *  the row, and the way to add another. Closes itself when the last one is deleted. */
@@ -76,7 +74,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                     autoFocus
                     aria-label={t("passkeys.nameLabel")}
                     value={draft}
-                    maxLength={MAX_NAME}
+                    maxLength={PASSKEY_NAME_MAX_CHARS}
                     onChange={(e) => setDraft(e.target.value)}
                     onFocus={(e) => e.currentTarget.select()}
                     onBlur={() => void saveRename(p)}

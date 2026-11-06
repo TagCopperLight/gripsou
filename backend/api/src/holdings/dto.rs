@@ -3,10 +3,11 @@
 use chrono::NaiveDate;
 use gripsou_providers::brandfetch::Logos;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::wire::{day_to_millis, ratio};
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Holding {
     pub id: String,
@@ -92,8 +93,9 @@ impl Holding {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields = nullable)]
 pub struct LotEntry {
     #[serde(rename = "type")]
     pub kind: gripsou_core::repo::lot::LotSide,
@@ -105,16 +107,18 @@ pub struct LotEntry {
     pub fee: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveLotsReq {
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub adds: Vec<LotEntry>,
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub deletes: Vec<uuid::Uuid>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Lot {
     pub id: String,
@@ -146,7 +150,7 @@ impl Lot {
 
 /// A lot inferred from a quantity change and its one matching transaction,
 /// shaped like `LotEntry` so the form can save it unchanged.
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LotSuggestion {
     #[serde(rename = "type")]
@@ -169,13 +173,13 @@ impl LotSuggestion {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewLotsReq {
     pub rows: Vec<LotEntry>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisPreview {
     /// In the account's currency.
@@ -195,7 +199,7 @@ impl BasisPreview {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisFigures {
     pub mean_price: String,
@@ -216,7 +220,7 @@ impl BasisFigures {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PricePoint {
     pub t: i64,
@@ -248,7 +252,7 @@ impl PricePoint {
 /// invested and `gain_pct` its ratio to `invested`: the money the return
 /// annualises. Each is null when a rate is missing for a flow it needs. Every
 /// figure leaves out the same holdings, counted by reason.
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnFigures {
     pub annualised: Option<String>,
@@ -282,13 +286,13 @@ impl ReturnFigures {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 pub struct MissingHolding {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnAccount {
     pub id: String,
@@ -303,7 +307,7 @@ pub struct ReturnAccount {
     pub figures: ReturnFigures,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 pub struct InvestmentReturns {
     /// The user's today, which `since` periods run up to.
     pub today: String,

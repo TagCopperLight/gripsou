@@ -20,7 +20,7 @@ import { POWENS_MANAGE_BLOCKED, POWENS_MANAGE_FAILED } from "../../lib/powens";
 import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
 import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
-import type { SyncConnection } from "../../api/types";
+import type { SyncConnection } from "../../api/wire";
 
 // Shared collapsible connection row used by the settings page and the sync
 // modal. `onDelete` is optional — the delete icon renders only when provided
@@ -55,6 +55,7 @@ export function ConnectionRow({
     tab.opener = null;
     try {
       const { redirectUrl } = await manage.mutateAsync(conn.id);
+      if (!redirectUrl) throw new Error("no management link");
       if (!mounted.current) { tab.close(); return; }
       tab.location.href = redirectUrl;
       if (returnListener.current) window.removeEventListener("focus", returnListener.current);

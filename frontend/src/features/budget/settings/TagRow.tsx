@@ -6,7 +6,8 @@ import { Pencil, Trash2 } from "lucide-react";
 import { TagChip } from "../TagChip";
 import { ColorSwatchGrid } from "../../../ui/ColorSwatchGrid";
 import { TextInput } from "../../../ui/TextInput";
-import { useUpdateBudgetTag, type BudgetTag, type TagBody } from "../../../api/budget";
+import { useUpdateBudgetTag } from "../../../api/budget";
+import type { BudgetTag, TagBody } from "../../../api/wire";
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 
 type TagRowProps = {

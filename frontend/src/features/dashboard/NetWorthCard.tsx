@@ -17,7 +17,7 @@ import { ExcludedFootnote } from "../../ui/FxNote";
 import { usePrefs } from "../../auth/context";
 import { currencySymbol } from "../../lib/currency";
 import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
-import type { Range } from "../../lib/ranges";
+import type { Range } from "../../api/wire";
 import { legendItems, numberOrNull, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
 
 export function NetWorthCard({ className = "" }: { className?: string }) {

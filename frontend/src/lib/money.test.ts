@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { DEFAULT_PREFS, setPrefs } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { setPrefs } from "./prefs";
 import { formatMoney, formatPercent, formatQuantity } from "./money";
 
 describe("formatMoney (prefs-driven)", () => {

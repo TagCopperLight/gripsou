@@ -3,8 +3,9 @@ import { screen } from "@testing-library/react";
 import { NetWorthCard } from "../features/dashboard/NetWorthCard";
 import { DistributionCard } from "../features/dashboard/DistributionCard";
 import { HoldingsCard } from "../features/dashboard/holdings/HoldingsCard";
-import type { Account, Holding, NetWorthResponse } from "../api/types";
-import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
+import type { Account, Holding, NetWorthResponse } from "../api/wire";
+import { setPrefs } from "../lib/prefs";
+import { DEFAULT_PREFS } from "../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../test/kit";
 
 vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
@@ -35,7 +36,7 @@ const unconverted = (id: string, name: string): Holding => ({
 const account = (fxMissing: boolean): Account => ({
   id: "a1", connectionId: "c1", name: "Brokerage account", typeKey: "pea", color: "#6ea8fe",
   value: "1000", currency: "EUR", valueNative: null, lastSyncAt: null,
-  sourceName: null, sourceLogo: null, fxMissing,
+  sourceName: "Bank", sourceLogo: null, fxMissing,
 });
 
 describe("missing exchange rate", () => {

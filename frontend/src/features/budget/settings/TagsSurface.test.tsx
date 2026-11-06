@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 import { TagsSurface } from "./TagsSurface";
-import type { BudgetTag } from "../../../api/budget";
+import type { BudgetTag } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const TAGS: BudgetTag[] = [

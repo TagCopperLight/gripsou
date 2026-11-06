@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { DEFAULT_PREFS } from "../../api/wire";
 import { AnnualisedReturnCard } from "./AnnualisedReturnCard";
 import { renderWithApp } from "../../test/kit";
 

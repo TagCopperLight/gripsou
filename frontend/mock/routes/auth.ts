@@ -1,4 +1,4 @@
-import { withPatch, type PrefsPatch } from "../../src/lib/prefs.ts";
+import { withPatch, type PrefsPatch } from "../../src/lib/prefsPatch.ts";
 import { reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
 

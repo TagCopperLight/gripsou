@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { User } from "../../../api/types";
+import type { User } from "../../../api/wire";
 import { UserDetailModal } from "./UserDetailModal";
 
 const user: User = {
@@ -10,6 +10,7 @@ const user: User = {
   role: "user",
   joinedAt: Date.UTC(2026, 5, 20),
   isSelf: false,
+  avatar: null,
 };
 
 describe("UserDetailModal", () => {

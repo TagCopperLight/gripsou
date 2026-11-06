@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { SettingsServer } from "./Server";
-import type { Provider } from "../../../api/types";
+import type { Provider } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const PROVIDERS: Provider[] = [

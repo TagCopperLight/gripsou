@@ -1,4 +1,4 @@
-import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/budget.ts";
+import type { BulkBody, CategoryBody, SameDescriptionScope, TagBody } from "../../src/api/wire.ts";
 import type { TxnRow } from "../data/rows.ts";
 import { reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
@@ -65,7 +65,7 @@ export function budgetRoutes(r: Router<Store>): void {
     for (const x of rows) {
       if (b.categoryId !== undefined) file(x, b.categoryId);
       if (b.addTagIds) x.tagIds = [...new Set([...x.tagIds, ...b.addTagIds])];
-      if (b.checked !== undefined) x.checked = b.checked;
+      if (b.checked != null) x.checked = b.checked;
     }
     return { updated: rows.length };
   });
@@ -88,7 +88,7 @@ export function budgetRoutes(r: Router<Store>): void {
   r.route("POST", "/budget/categories", ({ store, body }) => {
     const b = body as CategoryBody;
     if (taken(store.categories, b.name)) return reply(409, { error: "duplicate name" });
-    const row = { ...b, id: store.ids.next("category"), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
+    const row = { ...b, archived: b.archived ?? false, id: store.ids.next("category"), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
     store.categories.push(row);
     return { ...row, txCount: 0 };
   });

@@ -108,9 +108,9 @@ export const users: MockState[] = [
     pieces: ["Settings · Users"],
     apply(store) {
       store.users.push(
-        { id: store.ids.next("user"), name: "Jules", email: "jules@example.com", role: "user", joinedAt: daysAgo(30), isSelf: false },
-        { id: store.ids.next("user"), name: "Marie-Charlotte de La Fontaine-Beaumont", email: "marie-charlotte.delafontaine-beaumont@example.com", role: "admin", joinedAt: daysAgo(400), isSelf: false },
-        { id: store.ids.next("user"), name: "Sam", email: "sam@example.com", role: "user", joinedAt: daysAgo(2), isSelf: false },
+        { id: store.ids.next("user"), name: "Jules", email: "jules@example.com", role: "user", joinedAt: daysAgo(30), isSelf: false, avatar: null },
+        { id: store.ids.next("user"), name: "Marie-Charlotte de La Fontaine-Beaumont", email: "marie-charlotte.delafontaine-beaumont@example.com", role: "admin", joinedAt: daysAgo(400), isSelf: false, avatar: null },
+        { id: store.ids.next("user"), name: "Sam", email: "sam@example.com", role: "user", joinedAt: daysAgo(2), isSelf: false, avatar: null },
       );
     },
   },

@@ -4,7 +4,7 @@ import { Button } from "../../ui/Button";
 import { CardState } from "../../ui/CardState";
 import { Dialog } from "../../ui/Dialog";
 import { useStartConnection } from "./useStartConnection";
-import type { EnabledProvider } from "../../api/types";
+import type { EnabledProvider } from "../../api/wire";
 
 type AddConnectionModalProps = {
   onClose: () => void;

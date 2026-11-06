@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../../ui/Button";
 import { Dialog } from "../../../ui/Dialog";
 import { formatDate, formatRelative } from "../../../lib/date";
-import type { Session } from "../../../api/types";
+import type { Session } from "../../../api/wire";
 
 type SessionDetailModalProps = {
   session: Session;

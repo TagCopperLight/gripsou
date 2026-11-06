@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { BudgetCategory, PairBreakAnswer } from "../../api/budget";
-import type { Transaction } from "../../api/types";
+import type { BudgetCategory, Transaction, WriteResult } from "../../api/wire";
 import { budgetErrorKey, useBudgetErrorToast, type BudgetErrorKey } from "./budgetErrors";
 
 type Callbacks<R> = { onSuccess: (res: R) => void; onError: (err: unknown) => void };
@@ -44,7 +43,7 @@ export function useBudgetWrites() {
   const fail = useCallback((err: unknown) => setFailure(budgetErrorKey(err)), []);
   const dismissBreakPair = useCallback(() => setBreakPair(null), []);
 
-  const write = <R extends PairBreakAnswer>(send: Send<R>, opts: WriteOptions<R> = {}) => {
+  const write = <R extends Pick<WriteResult, "pendingPairBreaks">>(send: Send<R>, opts: WriteOptions<R> = {}) => {
     const attempt = (confirm: boolean) => {
       opts.onSend?.();
       send(confirm, {

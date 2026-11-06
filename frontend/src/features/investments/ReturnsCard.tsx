@@ -8,7 +8,7 @@ import { ReturnSpan } from "./ReturnSpan";
 import { leavesOut, mutedToneClass, toneClass } from "../../lib/returns";
 import { FxAsterisk } from "../../ui/FxNote";
 import { ExcludedNotes } from "./ExcludedNotes";
-import type { InvestmentReturns, ReturnAccount } from "../../api/types";
+import type { InvestmentReturns, ReturnAccount } from "../../api/wire";
 import { usePrivacy } from "../../auth/usePrivacy";
 import { HEAD_TEXT } from "../../ui/gridTable";
 

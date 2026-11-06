@@ -1,5 +1,4 @@
-import type { Lot, LotSuggestion } from "../api/types";
-import type { SaveLotAdd } from "../api/holdings";
+import type { Lot, LotEntry, LotSide, LotSuggestion } from "../api/wire";
 import { calendarDay } from "./date";
 import {
   DECIMAL_RE,
@@ -11,16 +10,15 @@ import {
   sumDecimals,
 } from "./decimal";
 
-export type LotSide = "buy" | "sell";
-
 /** Cash impact of a single lot, matching the backend's convention exactly
  *  (`query.rs`, transactions view): a buy is `-(qty x price + fee)` — money
  *  out, fee included; a sale is `+(qty x price - fee)` — money in, net of
  *  fee. Plain cash arithmetic, not the cost-basis rule, but every screen that
  *  shows a lot's amount must use this one function, or two screens can show
  *  two different numbers for the same row. */
-export function lotCashAmount(side: LotSide, qty: string, price: string, fee = "0"): string {
+export function lotCashAmount(side: LotSide, qty: string, price: string, fee?: string | null): string {
   const gross = multiplyDecimals(qty, price);
+  fee ??= "0";
   return side === "buy" ? negateDecimal(sumDecimals([gross, fee])) : subtractDecimals(gross, fee);
 }
 
@@ -113,7 +111,7 @@ export function badFee(raw: string, language: string): boolean {
  *  numbers failing `validateLot`. An invalid row counts nowhere, so a
  *  half-typed number never makes the bar or the figures jump. An empty fee
  *  means zero. */
-export function lotEntry(r: LotRow, language: string): SaveLotAdd | null {
+export function lotEntry(r: LotRow, language: string): LotEntry | null {
   if (r.date === "") return null;
   const quantity = normaliseDecimal(r.quantity, language);
   const unitPrice = normaliseDecimal(r.unitPrice, language);

@@ -11,7 +11,6 @@ import {
   useBudgetAiModels,
   useBudgetAiSettings,
   useSetBudgetAiSettings,
-  type BudgetAiProvider,
 } from "../../../api/budget";
 
 /** Settings → Server: which provider categorises transactions for the whole
@@ -46,7 +45,7 @@ export function AiServerSurface() {
       typed ?? settings.model ?? (settings.provider ? settings.defaults[settings.provider] : "");
 
     const pickProvider = (value: string) => {
-      const next = (value || null) as BudgetAiProvider | null;
+      const next = value || null;
       const nextModel = next ? settings.defaults[next] : null;
       setDraft(null);
       save.mutate({ provider: next, model: nextModel });

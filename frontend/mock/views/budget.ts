@@ -3,9 +3,8 @@
 // simplified copy of the server's rules (core/src/budget/overview.rs), close
 // enough to review the screens with.
 
-import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
-import type { BreakdownRow, BudgetSummary, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount } from "../../src/api/overview.ts";
-import type { Transaction, TransactionCounts, TransactionFilterQuery, TypeBucket } from "../../src/api/types.ts";
+import type { BreakdownRow, BudgetCategory, BudgetSummary, BudgetTag, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount, Transaction, TransactionCounts, TypeBucket } from "../../src/api/wire.ts";
+import type { TransactionFilterQuery } from "../../src/api/filter.ts";
 import {
   BASELINE_MONTHS,
   BREAKDOWN_KEEP,

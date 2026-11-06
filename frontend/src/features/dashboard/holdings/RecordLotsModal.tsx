@@ -17,7 +17,7 @@ import {
   accounted, badFee, badQuantity, badUnitPrice, byDate, lotCashAmount, lotChanges, lotEntry,
   recordedQuantity, rowFromLot, rowFromSuggestion, type FoundLot, type LotRow,
 } from "../../../lib/lots";
-import type { BasisPreview, Holding } from "../../../api/types";
+import type { BasisPreview, Holding } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
 import { HEAD_TEXT } from "../../../ui/gridTable";
 

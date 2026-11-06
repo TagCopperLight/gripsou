@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiSurface } from "./AiSurface";
-import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
+import { DEFAULT_PREFS, type UserPrefs } from "../../../api/wire";
 import { authValue, renderWithApp, stubFetch } from "../../../test/kit";
 
 function renderWith(prefs: UserPrefs, configured: boolean) {

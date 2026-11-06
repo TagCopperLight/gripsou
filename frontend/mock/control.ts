@@ -1,7 +1,7 @@
 // What the review panel drives: the live store, the active per-screen states,
 // and per-request overrides that keep a request loading or make it fail.
 
-import type { UserPrefs } from "../src/lib/prefs.ts";
+import type { Role, UserPrefs } from "../src/api/wire.ts";
 import { injected, requestKey, type OverrideMode } from "./faults.ts";
 import type { Reply } from "./router.ts";
 import { router } from "./routes/index.ts";
@@ -9,7 +9,7 @@ import type { MockState, Piece } from "./states/pieces.ts";
 import { createStore } from "./store.ts";
 
 /** The panel's own App settings: kept across state changes, Reset and restarts. */
-export type AppSettings = { role: "admin" | "user"; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
+export type AppSettings = { role: Role; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
 
 /** What survives a dev-server restart. */
 export type Saved = { active: string[]; app: AppSettings | null };

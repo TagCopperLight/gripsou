@@ -771,7 +771,7 @@ async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyho
         let mut target = matching_transaction_ids(&pool, user_id, f).await?;
         let mut cash: Vec<Uuid> = listed
             .iter()
-            .filter(|r| r.source == "cash")
+            .filter(|r| r.source == gripsou_core::budget::vocab::RowSource::Cash)
             .map(|r| r.id)
             .collect();
         target.sort();

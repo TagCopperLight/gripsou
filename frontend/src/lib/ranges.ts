@@ -3,9 +3,7 @@
 // (the "over 6 months" next to a gain).
 
 import type { TFunction } from "i18next";
-
-export const RANGES = ["7d", "1mo", "6mo", "1y", "ytd", "max"] as const;
-export type Range = (typeof RANGES)[number];
+import { RANGES, type Range } from "../api/wire";
 
 export function rangeOptions(t: TFunction): { value: Range; label: string }[] {
   return RANGES.map((r) => ({ value: r, label: t(`range.short.${r}`) }));

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { formatRelative, formatDate } from "./date";
-import { DEFAULT_PREFS, setPrefs } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { setPrefs } from "./prefs";
 
 const NOW = new Date("2026-06-15T12:00:00Z").getTime();
 const ago = (ms: number) => NOW - ms;

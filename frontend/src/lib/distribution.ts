@@ -1,4 +1,4 @@
-import type { Account } from "../api/types";
+import type { Account } from "../api/wire";
 import { formatPercent } from "./money";
 
 export type DistributionRow = {

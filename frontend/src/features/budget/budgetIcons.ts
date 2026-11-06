@@ -6,7 +6,7 @@ import {
   Shirt, ShoppingBag, ShoppingCart, Smartphone, Sparkles, TrainFront, TrendingUp, Undo2,
   Utensils, Wallet, Zap, type LucideIcon
 } from "lucide-react";
-import type { TypeBucket } from "../../api/types";
+import type { TypeBucket } from "../../api/wire";
 
 /** The TYPE control, shared with the active-filter chips so a bucket looks the
  *  same wherever it appears.

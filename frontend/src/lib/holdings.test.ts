@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { holdingLines } from "./holdings";
-import type { Holding } from "../api/types";
+import type { Holding } from "../api/wire";
 
 function cash(
   id: string,

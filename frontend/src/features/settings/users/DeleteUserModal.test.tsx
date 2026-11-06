@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { DeleteUserModal } from "./DeleteUserModal";
-import type { User } from "../../../api/types";
+import type { User } from "../../../api/wire";
 import { renderWithApp } from "../../../test/kit";
 
 const USER: User = {
@@ -11,6 +11,7 @@ const USER: User = {
   role: "user",
   joinedAt: 1_710_000_000_000,
   isSelf: false,
+  avatar: null,
 };
 
 describe("DeleteUserModal", () => {

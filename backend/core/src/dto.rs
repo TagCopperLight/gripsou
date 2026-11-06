@@ -153,14 +153,14 @@ pub struct SyncResult {
 
 /// One slice of an ETF allocation breakdown. `weight` is a display ratio in
 /// 0..1 (not money), so it is an f64 and serializes as a JSON number.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
 pub struct Allocation {
     pub name: String,
     pub weight: f64,
 }
 
 /// An ETF's country and sector breakdowns, as scraped from a composition source.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, ts_rs::TS)]
 pub struct Composition {
     pub countries: Vec<Allocation>,
     pub sectors: Vec<Allocation>,

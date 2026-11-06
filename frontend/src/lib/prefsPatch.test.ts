@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_PREFS, withPatch } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { withPatch } from "./prefsPatch";
 
 describe("withPatch", () => {
   it("removes the avatar on null", () => {

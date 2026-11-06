@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { sixDigits } from "../lib/mfa";
+import { TOTP_DIGITS } from "../api/wire";
+import { codeDigits } from "../lib/mfa";
 
 type CodeInputProps = {
   value: string;
@@ -11,18 +12,18 @@ type CodeInputProps = {
   invalid?: boolean;
 };
 
-/** A 6-digit code shown one digit per box. It is a single real input laid
+/** An authenticator code shown one digit per box. It is a single real input laid
  *  invisibly over the boxes, so typing, pasting, autofill (one-time-code) and
  *  screen readers all treat it as one field. */
 export function CodeInput({ value, onChange, ariaLabel, autoFocus, invalid = false }: CodeInputProps) {
   const [focused, setFocused] = useState(false);
-  // The box the next digit goes into; the last one once all six are typed.
-  const active = Math.min(value.length, 5);
+  // The box the next digit goes into; the last one once all are typed.
+  const active = Math.min(value.length, TOTP_DIGITS - 1);
 
   return (
     <div className="relative">
       <div className="flex justify-between gap-2" aria-hidden="true">
-        {Array.from({ length: 6 }, (_, i) => (
+        {Array.from({ length: TOTP_DIGITS }, (_, i) => (
           <span
             key={i}
             className={`flex h-14 flex-1 items-center justify-center rounded-xl bg-surface-2 font-mono text-2xl text-fg transition-shadow duration-140 ${
@@ -40,14 +41,14 @@ export function CodeInput({ value, onChange, ariaLabel, autoFocus, invalid = fal
         autoComplete="one-time-code"
         autoFocus={autoFocus}
         // No maxLength: the browser would cut a pasted "123 456" to "123 45"
-        // before sixDigits could drop the space. sixDigits caps it at six.
+        // before codeDigits could drop the space. codeDigits caps its length.
         value={value}
-        onChange={(e) => onChange(sixDigits(e.target.value))}
+        onChange={(e) => onChange(codeDigits(e.target.value))}
         // A pasted whole code replaces what was there: the caret is pinned to
         // the end, so it would otherwise be appended and cut off.
         onPaste={(e) => {
-          const pasted = sixDigits(e.clipboardData.getData("text"));
-          if (pasted.length === 6) {
+          const pasted = codeDigits(e.clipboardData.getData("text"));
+          if (pasted.length === TOTP_DIGITS) {
             e.preventDefault();
             onChange(pasted);
           }

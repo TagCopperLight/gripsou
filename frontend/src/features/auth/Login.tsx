@@ -10,6 +10,7 @@ import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { ApiError } from "../../api/client";
 import { throttledError } from "../../auth/throttle";
+import { TOTP_DIGITS } from "../../api/wire";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
@@ -182,7 +183,7 @@ export function Login() {
             onChange={(digits) => {
               setCode(digits);
               setError(null);
-              if (digits.length === 6) void verify({ totp: digits });
+              if (digits.length === TOTP_DIGITS) void verify({ totp: digits });
             }}
           />
           {errorLine}

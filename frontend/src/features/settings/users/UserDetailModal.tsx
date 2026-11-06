@@ -5,12 +5,12 @@ import { Avatar } from "../../../ui/Avatar";
 import { Button } from "../../../ui/Button";
 import { Dialog } from "../../../ui/Dialog";
 import { formatDate } from "../../../lib/date";
-import type { User } from "../../../api/types";
+import type { Role, User } from "../../../api/wire";
 
 type UserDetailModalProps = {
   user: User;
   /** The member's role; `onToggleRole` saves the other one. */
-  role: "admin" | "user";
+  role: Role;
   onToggleRole: () => void;
   /** Both omitted for yourself — you can't reset or delete your own account here. */
   onReset?: () => void;

@@ -48,3 +48,13 @@ text_enum! {
         Error = "error",
     }
 }
+
+text_enum! {
+    /// Which table a Transactions-list row comes from (`budget_transaction_rows`).
+    pub enum RowSource {
+        /// A `transaction` row: the cash ledger.
+        Cash = "cash",
+        /// A `lot` row: a purchase or sale.
+        Lot = "lot",
+    }
+}

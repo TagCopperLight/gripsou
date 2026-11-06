@@ -15,17 +15,15 @@ import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
 import { CardState } from "../../../ui/CardState";
 import { BreakPairModal } from "../BreakPairModal";
 import { useTransactions } from "../../../api/transactions";
-import {
-  useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction,
-  useUndoReview, type PatchResult, type WriteResult,
-} from "../../../api/budget";
+import { useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction, useUndoReview } from "../../../api/budget";
 import { categoryLabel, categoryOfTransaction } from "../../../lib/budget";
 import { breaksKnownPair, useBudgetWrites } from "../useBudgetWrites";
 import {
   applyToSame, clearResolved, initialReview, offerSame, resolve, syncPending, unresolve,
   type Resolution, type ReviewState,
 } from "../../../lib/review";
-import type { Transaction, TransactionFilterQuery } from "../../../api/types";
+import type { PatchResult, Transaction, WriteResult } from "../../../api/wire";
+import type { TransactionFilterQuery } from "../../../api/filter";
 
 /** The queue is all-time and includes internal transfers, which a guess can
  *  land in — the list hides them by default. */
@@ -95,7 +93,7 @@ export function ReviewMode() {
     writes.start();
     setState((s) => resolve(s, r));
     accept.mutate(tx.id, {
-      onSuccess: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount)),
+      onSuccess: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount ?? 0)),
       onError: (err) => {
         rollBack(r);
         writes.fail(err);
@@ -115,7 +113,7 @@ export function ReviewMode() {
         askFirst: breaksKnownPair(tx, cat) ? 1 : 0,
         onSend: () => setState((s) => resolve(s, r)),
         onUnwritten: () => rollBack(r),
-        onDone: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount)),
+        onDone: (res) => setState((s) => offerSame(s, tx.id, res.sameDescriptionCount ?? 0)),
       },
     );
   };

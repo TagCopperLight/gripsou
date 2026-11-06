@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getJson, patchJson } from "./client";
-import type { Account, AccountSeries, NetWorthResponse } from "./types";
+import type { Account, AccountSeries, NetWorthResponse, UpdateAccountReq, UpdatedAccount } from "./wire";
 import { keys } from "./keys";
 import { afterAccountEdit } from "./invalidate";
 
@@ -41,18 +41,11 @@ export function useAccountTypes() {
   });
 }
 
-export type UpdateAccountInput = {
-  id: string;
-  name: string;
-  typeKey: string;
-  color: string;
-};
-
 export function useUpdateAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, name, typeKey, color }: UpdateAccountInput) =>
-      patchJson(`/accounts/${id}`, { name, typeKey, color }),
+    mutationFn: ({ id, name, typeKey, color }: UpdateAccountReq & { id: string }) =>
+      patchJson<UpdatedAccount>(`/accounts/${id}`, { name, typeKey, color }),
     onSuccess: () => afterAccountEdit(qc),
   });
 }

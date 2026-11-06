@@ -1,4 +1,23 @@
-import type { TransactionFilterQuery } from "./types";
+import type { TransactionParams, TypeBucket } from "./wire";
+
+/** The filter set the user picks on the transactions list, which is also what
+ *  its query key is built from. Pagination belongs to the infinite query. */
+export type TransactionFilterQuery = {
+  search?: string;
+  accountId?: string;
+  bucket?: TypeBucket;
+  from?: string;
+  to?: string;
+  /** Several ids mean *either* of them (OR), server-side. */
+  categoryIds?: string[];
+  /** Several ids mean *all* of them (AND), server-side. */
+  tagIds?: string[];
+  uncategorized?: boolean;
+  needsReview?: boolean;
+  /** Internal transfers are hidden unless this is set — the only filter here
+   *  whose absence means *less* than everything. */
+  includeTransfers?: boolean;
+};
 
 /** The one place a transaction filter becomes request fields, shared by the
  *  list, the counts and the bulk write so "select all shown" writes exactly the
@@ -10,10 +29,8 @@ import type { TransactionFilterQuery } from "./types";
  *  list as "no filter", but an omitted one keeps the request — and the cache —
  *  from splitting. Ids stay comma-joined strings, which is what the server's
  *  `parse_ids` reads in both places. */
-export function transactionFilterFields(
-  q: TransactionFilterQuery,
-): Record<string, string | boolean> {
-  const f: Record<string, string | boolean> = {};
+export function transactionFilterFields(q: TransactionFilterQuery): TransactionParams {
+  const f: TransactionParams = {};
   if (q.search) f.search = q.search;
   if (q.accountId) f.accountId = q.accountId;
   if (q.bucket && q.bucket !== "all") f.bucket = q.bucket;

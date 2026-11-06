@@ -34,6 +34,7 @@ qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 webauthn-rs = { version = "0.5.5", features = ["conditional-ui", "danger-allow-state-serialisation"] }
 webauthn-rs-proto = "=0.5.5"
 url = "2"
+ts-rs.workspace = true
 
 [dev-dependencies]
 gripsou-jobs = { path = "../jobs", features = ["test-util"] }

@@ -2,10 +2,11 @@
 
 use gripsou_providers::brandfetch::Logos;
 use serde::Serialize;
+use ts_rs::TS;
 
 use crate::wire::day_to_millis;
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: String,
@@ -26,7 +27,7 @@ pub struct Transaction {
     pub account_color: String,
     /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale. The
     /// frontend picks its rendering (and i18n) off this discriminator.
-    pub source: String,
+    pub source: gripsou_core::budget::vocab::RowSource,
     pub ticker: Option<String>,
     /// The instrument's logo on a lot row; null on a cash row.
     pub logo: Option<String>,
@@ -58,7 +59,7 @@ pub struct Transaction {
     pub tags: Vec<TransactionTag>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionTag {
     pub id: String,
@@ -119,8 +120,9 @@ impl Transaction {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(rename = "TransactionCounts")]
 pub struct CountsDto {
     pub matching: i64,
     pub total: i64,

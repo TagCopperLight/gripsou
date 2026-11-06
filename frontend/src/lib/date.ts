@@ -1,5 +1,6 @@
 import i18n from "../i18n";
-import { getPrefs, type UserPrefs } from "./prefs";
+import type { UserPrefs } from "../api/wire";
+import { getPrefs } from "./prefs";
 
 export type DateFormatOptions = {
   /** Token pattern. Supports YYYY, YY, MM, DD. Defaults to the user's prefs. */

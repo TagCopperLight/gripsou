@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { CategoryChip } from "./CategoryChip";
-import type { BudgetCategory } from "../../api/budget";
+import type { BudgetCategory } from "../../api/wire";
 import "../../i18n";
 
 const GROCERIES: BudgetCategory = {

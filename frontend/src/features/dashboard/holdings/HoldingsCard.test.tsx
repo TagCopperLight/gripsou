@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HoldingsCard } from "./HoldingsCard";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { DEFAULT_PREFS } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const HOLDING = {

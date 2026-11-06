@@ -11,7 +11,7 @@ import { TextInput } from "../../ui/TextInput";
 import { withAlpha } from "../../lib/color";
 import { safeBudgetColor } from "../../lib/budget";
 import { useAccountTypes, useUpdateAccount } from "../../api/accounts";
-import type { Account } from "../../api/types";
+import type { Account } from "../../api/wire";
 import { accountTypeLabel } from "../../lib/accounts";
 
 type EditAccountModalProps = {
@@ -61,7 +61,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
           <span data-testid="account-preview" className="truncate">
             {trimmed || t("account.edit.title")}
           </span>
-          <span className="truncate text-sm font-medium text-fg-faint">{account.sourceName ?? t("account.unknownSource")}</span>
+          <span className="truncate text-sm font-medium text-fg-faint">{account.sourceName}</span>
         </span>
       }
       onClose={onClose}

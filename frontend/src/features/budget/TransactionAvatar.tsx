@@ -4,7 +4,7 @@ import { safeBudgetColor } from "../../lib/budget";
 import { logoUrl } from "../../lib/logo";
 import { tint } from "../../lib/color";
 import { CategoryIcon } from "./CategoryIcon";
-import type { Transaction } from "../../api/types";
+import type { Transaction } from "../../api/wire";
 
 /** Last resort glyphs, keyed by kind of movement — a static record, indexed
  *  (not called), so the icon resolution stays lint-clean under

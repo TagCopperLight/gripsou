@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::budget::vocab::{CategoryKind, CategorySource};
+use crate::budget::vocab::{CategoryKind, CategorySource, RowSource};
 use crate::error::CoreError;
 
 /// Calls a sqlx query macro with `budget_transaction_matches`' twelve
@@ -45,10 +45,9 @@ pub struct TransactionListRow {
     /// selection can be totalled without a round trip.
     /// `None` when the account's or the reader's currency has no rate that day.
     pub amount_reporting: Option<Decimal>,
-    /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale (a `lot`
-    /// row). Structured, not a pre-built sentence: the frontend's i18n and
+    /// Structured, not a pre-built sentence: the frontend's i18n and
     /// per-user number formatting render the lot fields.
-    pub source: String,
+    pub source: RowSource,
     pub ticker: Option<String>,
     /// What a lot row's logo is built from (`Logos::instrument` in `providers`);
     /// null on a cash row.
@@ -94,36 +93,16 @@ pub struct TransactionListRow {
     pub is_orphan_transfer: bool,
 }
 
-/// The TYPE control on the filter panel: one value, always one selected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum TypeBucket {
-    #[default]
-    All,
-    MoneyIn,
-    MoneyOut,
-    Lots,
-}
-
-impl TypeBucket {
-    const ALL: [Self; 4] = [Self::All, Self::MoneyIn, Self::MoneyOut, Self::Lots];
-
-    /// Wire form, as the API query parameter and the SQL function spell it.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::All => "all",
-            Self::MoneyIn => "in",
-            Self::MoneyOut => "out",
-            Self::Lots => "lots",
-        }
-    }
-
-    /// The bucket a query parameter names; a blank one means the default.
-    /// `None` for anything else: an unknown bucket must never widen to `all`.
-    pub fn parse(s: &str) -> Option<Self> {
-        if s.trim().is_empty() {
-            return Some(Self::default());
-        }
-        Self::ALL.into_iter().find(|b| b.as_str() == s)
+crate::text_enum::text_enum! {
+    /// The TYPE control on the filter panel: one value, always one selected.
+    /// Spelled as the API query parameter and the SQL function spell it.
+    #[derive(Default)]
+    pub enum TypeBucket {
+        #[default]
+        All = "all",
+        MoneyIn = "in",
+        MoneyOut = "out",
+        Lots = "lots",
     }
 }
 
@@ -207,7 +186,7 @@ pub async fn transactions(
         )
         select id as "id!", day as "day!", kind as "kind!", description, amount as "amount!",
                fx_convert(filtered.amount, afx.rate, rfx.rate) as "amount_reporting?",
-               source as "source!", ticker, instrument_kind, instrument_isin,
+               source as "source!: RowSource", ticker, instrument_kind, instrument_isin,
                instrument_symbol, quantity, unit_price, fee,
                account_id as "account_id!", account_name as "account_name!",
                account_color as "account_color!", account_currency as "account_currency!",

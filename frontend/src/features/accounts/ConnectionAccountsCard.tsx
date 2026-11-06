@@ -15,7 +15,7 @@ import { EditAccountModal } from "./EditAccountModal";
 import { formatShare } from "../../lib/distribution";
 import { connectionAlert, flattenConnections } from "../../lib/connectionState";
 import { accountTypeLabel, type ConnectionGroup } from "../../lib/accounts";
-import type { Account } from "../../api/types";
+import type { Account } from "../../api/wire";
 
 type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
@@ -36,7 +36,7 @@ export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, 
   const { t } = useTranslation();
   const readerCurrency = usePrefs().currency;
   const [editing, setEditing] = useState<Account | null>(null);
-  const name = group.sourceName ?? t("account.unknownSource");
+  const name = group.sourceName;
   const connections = useConnections();
   const conn = flattenConnections(connections.data ?? []).find((c) => c.id === group.connectionId);
   const excluded = useFxExcludedCount(new Set(group.accounts.map((a) => a.id)));

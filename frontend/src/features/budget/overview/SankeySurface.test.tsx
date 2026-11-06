@@ -4,7 +4,7 @@ import type { EChartsOption } from "echarts";
 
 import { SankeySurface } from "./SankeySurface";
 import { sankeyGraph } from "../../../lib/sankeyGraph";
-import type { Sankey } from "../../../api/overview";
+import type { Sankey } from "../../../api/wire";
 
 // Stands in for the chart so a test can read the option it was handed: jsdom
 // cannot draw it, and the labels and tooltips are what is under test.

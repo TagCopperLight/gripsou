@@ -3,18 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 
 import { ApiError } from "./client";
 import { keys } from "./keys";
-import {
-  useCreateBudgetCategory,
-  useUpdateBudgetCategory,
-  useDeleteBudgetCategory,
-  useReorderBudgetCategories,
-  useCreateBudgetTag,
-  useDeleteBudgetTag,
-  type BudgetCategory,
-  type BudgetTag,
-  type CategoryBody,
-  type TagBody,
-} from "./budget";
+import { useCreateBudgetCategory, useUpdateBudgetCategory, useDeleteBudgetCategory, useReorderBudgetCategories, useCreateBudgetTag, useDeleteBudgetTag } from "./budget";
+import type { BudgetCategory, BudgetTag, CategoryBody, TagBody } from "./wire";
 import { appWrapper, jsonResponse, stubFetch } from "../test/kit";
 
 const GROCERIES: BudgetCategory = {

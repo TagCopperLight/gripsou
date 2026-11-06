@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { authApi, type TokenInfo } from "../api/auth";
+import { authApi } from "../api/auth";
+import type { TokenInfo } from "../api/wire";
 
 type Guard = { status: "loading" | "valid"; info: TokenInfo | null };
 

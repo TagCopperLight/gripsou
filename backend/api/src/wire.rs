@@ -4,7 +4,7 @@
 
 use chrono::{Datelike, Duration, NaiveDate};
 use rust_decimal::Decimal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -24,7 +24,7 @@ pub fn ratio(part: Decimal, whole: Decimal) -> Decimal {
 }
 
 /// A chart's window, as the range selector names it.
-#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, ts_rs::TS)]
 pub enum Range {
     #[serde(rename = "7d")]
     Week,
@@ -42,6 +42,16 @@ pub enum Range {
 }
 
 impl Range {
+    /// In the order the range selector lists them.
+    pub const ALL: [Self; 6] = [
+        Self::Week,
+        Self::Month,
+        Self::HalfYear,
+        Self::Year,
+        Self::YearToDate,
+        Self::Max,
+    ];
+
     /// Inclusive calendar days ending on `today`.
     pub fn window(self, today: NaiveDate) -> (NaiveDate, NaiveDate) {
         let from = match self {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { act, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Login } from "./Login";
 import { useAuth, type AuthValue } from "../../auth/context";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { DEFAULT_PREFS } from "../../api/wire";
 import { ApiError, getAuthToken, setAuthToken } from "../../api/client";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";

@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
-import type { Transaction, TransactionCounts, TransactionFilterQuery } from "./types";
-import { transactionFilterParams } from "./filter";
+import type { Transaction, TransactionCounts } from "./wire";
+import { transactionFilterParams, type TransactionFilterQuery } from "./filter";
 import { keys } from "./keys";
 
 // A page shorter than the page size is the last one.

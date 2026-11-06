@@ -18,6 +18,7 @@ base64.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
+ts-rs.workspace = true
 
 [features]
 # Seeders and fixtures for the tests of every crate (`testkit`).

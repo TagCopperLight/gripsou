@@ -3,18 +3,16 @@
 // Cash never enters here, and a holding with no composition data is left out
 // of the sector and region breakdowns (but still counts in "by index").
 
-import type { HoldingKind } from "../api/types";
+import type { Allocation, Composition } from "../api/wire";
 import { countryCode } from "./composition-i18n";
 import { trackedIndex } from "./indices";
 
-export type Allocation = { name: string; weight: number };
-
 export type ExposureHolding = {
   name: string;
-  kind: HoldingKind;
+  kind: string;
   /** Current value, in the reporting currency. */
   value: number;
-  composition: { countries: Allocation[]; sectors: Allocation[] } | null;
+  composition: Composition | null;
 };
 
 /** The leftover of a fund that lists only its top countries or sectors, and

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { ApiKeysSurface } from "./ApiKeysSurface";
-import type { ApiKeyProvider } from "../../../api/types";
+import type { ApiKeyProvider } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const KEYS: ApiKeyProvider[] = [

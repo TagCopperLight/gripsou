@@ -1,8 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
-import type { ProviderGroup } from "./types";
+import type { ProviderGroup } from "./wire";
 import { anySyncing } from "../lib/connectionState";
-import type { PrefsPatch } from "../lib/prefs";
+import type { PrefsPatch } from "../lib/prefsPatch";
 
 // What each domain event makes stale, named once.
 //

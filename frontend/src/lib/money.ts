@@ -4,7 +4,8 @@
 // separators / currency symbol from prefs. This supports free-form combinations
 // (e.g. US dates + French separators + symbol-after) that a single locale can't.
 
-import { getPrefs, type UserPrefs } from "./prefs";
+import type { UserPrefs } from "../api/wire";
+import { getPrefs } from "./prefs";
 import { currencySymbol } from "./currency";
 
 type SignOption = {

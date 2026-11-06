@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
-import type { SyncConnection } from "../../api/types";
+import type { SyncConnection } from "../../api/wire";
 
 import { ConnectionRow } from "./ConnectionRow";
 import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../test/kit";
@@ -14,12 +14,14 @@ const manages = () => requestsTo(fetchMock, "/connections/c1/manage");
 const conn: SyncConnection = {
   id: "c1",
   displayName: "Caisse d'Épargne",
+  canManage: false,
+  health: null,
   status: "ok",
   lastSyncAt: null,
   lastError: null,
   logo: null,
   accounts: [
-    { id: "a1", name: "LIVRET A", typeKey: "savings", value: "6.87", color: "#4dd0b1", lastSyncAt: null },
+    { id: "a1", name: "LIVRET A", typeKey: "savings", value: "6.87", color: "#4dd0b1", lastSyncAt: null, health: null },
   ],
 };
 
@@ -139,6 +141,18 @@ it("handles blocked tabs and failed Manage requests", async () => {
   await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Couldn't open Powens"));
   expect(close).toHaveBeenCalled();
   expect(syncs()).toHaveLength(0);
+});
+
+it("closes the tab and says so when the server sends no management link", async () => {
+  const close=vi.fn();
+  const tab={opener:null,location:{href:"about:blank"},close};
+  vi.spyOn(window,"open").mockReturnValue(tab as unknown as Window);
+  manage = async () => jsonResponse({ redirectUrl: null });
+  renderWithApp(<ConnectionRow conn={{...conn,canManage:true}} />);
+  fireEvent.click(screen.getByRole("button",{name:"Manage"}));
+  await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Couldn't open Powens"));
+  expect(close).toHaveBeenCalled();
+  expect(tab.location.href).toBe("about:blank");
 });
 
 it("discards a delayed Manage response after leaving the page", async () => {

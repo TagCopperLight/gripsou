@@ -1,5 +1,6 @@
 import { reply, type Router } from "../router.ts";
 import type { Store } from "../store.ts";
+import type { SetRoleReq } from "../../src/api/wire.ts";
 
 export function settingsRoutes(r: Router<Store>): void {
   r.route("GET", "/health", () => ({ status: "ok", version: "0.0.0-mock" }));
@@ -9,7 +10,7 @@ export function settingsRoutes(r: Router<Store>): void {
   r.route("POST", "/users/:id/reset-link", () => ({ token: "mock-reset-token" }));
   // As the server: never your own role, never the last admin.
   r.route("PATCH", "/users/:id", ({ store, params, body }) => {
-    const { role } = body as { role: "admin" | "user" };
+    const { role } = body as SetRoleReq;
     const user = store.users.find((u) => u.id === params.id);
     if (!user) return reply(404, { error: "user not found" });
     if (user.isSelf) return reply(409, { error: "cannot change your own role" });

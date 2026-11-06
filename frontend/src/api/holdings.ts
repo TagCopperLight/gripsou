@@ -1,6 +1,15 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getJson, postJson, putJson } from "./client";
-import type { BasisPreview, Holding, InvestmentReturns, Lot, LotSuggestion, PricePoint } from "./types";
+import type {
+  BasisPreview,
+  Holding,
+  InvestmentReturns,
+  Lot,
+  LotEntry,
+  LotSuggestion,
+  PricePoint,
+  SaveLotsReq,
+} from "./wire";
 import { keys } from "./keys";
 import { afterLotsSaved } from "./invalidate";
 import { PORTFOLIO_STALE_MS } from "./accounts";
@@ -29,20 +38,9 @@ export function useInvestmentReturns() {
   });
 }
 
-export type SaveLotAdd = {
-  type: "buy" | "sell";
-  /** `YYYY-MM-DD`, straight from `<input type="date">`. */
-  date: string;
-  quantity: string;
-  unitPrice: string;
-  /** Decimal string, amount domain. Omitting it means zero. */
-  fee?: string;
-};
-export type SaveLotsInput = { adds: SaveLotAdd[]; deletes: string[] };
-
 export function useLotsPreview(id: string) {
   return useMutation({
-    mutationFn: (rows: SaveLotAdd[]) =>
+    mutationFn: (rows: LotEntry[]) =>
       postJson<BasisPreview>(`/holdings/${id}/lots/preview`, { rows }),
   });
 }
@@ -50,7 +48,7 @@ export function useLotsPreview(id: string) {
 export function useSaveLots(holdingId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (batch: SaveLotsInput) =>
+    mutationFn: (batch: SaveLotsReq) =>
       putJson<void>(`/holdings/${holdingId}/lots`, batch),
     onSuccess: () => afterLotsSaved(qc, holdingId),
   });

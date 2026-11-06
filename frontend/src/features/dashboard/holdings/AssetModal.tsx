@@ -21,15 +21,15 @@ import { formatQuantity } from "../../../lib/money";
 import { lotCashAmount } from "../../../lib/lots";
 import { formatDay } from "../../../lib/date";
 import { colorForString } from "../../../lib/palette";
-import type { Holding, Lot } from "../../../api/types";
-import { KIND_LABEL_KEY } from "../../../lib/holdings";
+import type { Holding, Lot } from "../../../api/wire";
+import { kindLabel } from "../../../lib/holdings";
 import { useHoldingLots, useHoldingPrices } from "../../../api/holdings";
 import { positionChart, priceChart } from "../../../lib/assetSeries";
 import { usePrivacy } from "../../../auth/usePrivacy";
 import { reportingOffered } from "../../../lib/reportingUnit";
 import { currencySymbol } from "../../../lib/currency";
 import { usePrefs } from "../../../auth/context";
-import type { Range } from "../../../lib/ranges";
+import type { Range } from "../../../api/wire";
 import { legendItems, plotSeries } from "../../../lib/valueChart";
 import { FG_FAINT, GREEN } from "../../../lib/theme";
 import { ColorSquare } from "../../../ui/ColorSquare";
@@ -352,7 +352,7 @@ function AboutSurface({
     <div className="bg-surface-2 rounded-2xl p-5">
       <span className="text-fg text-sm font-semibold">{t("dashboard.assetModal.about")}</span>
       <div className="mt-1 divide-y divide-surface-3">
-        <AboutRow label={t("dashboard.assetModal.type")}>{t(KIND_LABEL_KEY[holding.kind])}</AboutRow>
+        <AboutRow label={t("dashboard.assetModal.type")}>{kindLabel(t, holding.kind)}</AboutRow>
         <AboutRow label={t("dashboard.assetModal.account")}>
           <span className="flex min-w-0 items-center gap-2">
             <ColorSquare color={holding.accountColor} />

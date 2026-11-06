@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
-import type { ProviderGroup } from "../../api/types";
+import type { ProviderGroup } from "../../api/wire";
 
 const CONNECTIONS: ProviderGroup[] = [
   {
@@ -10,11 +10,13 @@ const CONNECTIONS: ProviderGroup[] = [
       {
         id: "c1",
         displayName: "My bank",
+        canManage: false,
+        health: null,
         status: "ok",
         lastSyncAt: null,
         lastError: null,
         accounts: [
-          { id: "a1", name: "Checking", typeKey: "savings", value: "10", lastSyncAt: null, color: "#4dd0b1" },
+          { id: "a1", name: "Checking", typeKey: "savings", value: "10", lastSyncAt: null, color: "#4dd0b1", health: null },
         ],
         logo: null,
       },

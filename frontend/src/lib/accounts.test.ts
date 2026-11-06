@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { groupByConnection, legendAccounts } from "./accounts";
-import type { Account } from "../api/types";
+import type { Account } from "../api/wire";
 
 function account(id: string, connectionId: string, value: string): Account {
   return {

@@ -16,12 +16,15 @@ use axum::Router;
 use axum::routing::get;
 use gripsou_core::repo::budget::transactions::{self as repo, TransactionFilters, TypeBucket};
 
-#[derive(Deserialize, Clone)]
+/// The list's query parameters; `BulkBody.filter` sends the same fields as JSON.
+#[derive(Deserialize, Clone, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
-    /// `all` | `in` | `out` | `lots` — the TYPE control on the filter panel.
+    /// Parsed by `parse_bucket`, so a blank one means the default.
+    #[ts(as = "Option<TypeBucket>")]
     pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
@@ -88,9 +91,12 @@ fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, ApiError> {
     }
 }
 
+/// A blank or absent bucket is the default one.
 fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, ApiError> {
-    let s = raw.unwrap_or_default();
-    TypeBucket::parse(s).ok_or(ApiError::BadRequest(format!("invalid bucket: {s}")))
+    match raw.unwrap_or_default() {
+        s if s.trim().is_empty() => Ok(TypeBucket::default()),
+        s => TypeBucket::parse(s).ok_or(ApiError::BadRequest(format!("invalid bucket: {s}"))),
+    }
 }
 
 pub async fn transactions(

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { HoldingBadge } from "../../../ui/HoldingBadge";
-import type { Holding } from "../../../api/types";
+import type { Holding } from "../../../api/wire";
 import { accountTypeLabel } from "../../../lib/accounts";
 import { ColorSquare } from "../../../ui/ColorSquare";
 

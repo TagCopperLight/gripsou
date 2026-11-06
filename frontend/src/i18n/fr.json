@@ -76,7 +76,6 @@
     "legendOthers_one": "+{{count}} autre",
     "legendOthers_other": "+{{count}} autres",
     "allAccounts": "Tous les comptes",
-    "unknownSource": "Autre",
     "edit": {
       "title": "Modifier le compte",
       "accountName": "Nom du compte",

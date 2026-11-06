@@ -26,7 +26,7 @@ macro_rules! text_enum {
         }
     ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, ts_rs::TS)]
         $vis enum $name {
             $( $(#[$vmeta])* #[serde(rename = $text)] $variant, )+
         }

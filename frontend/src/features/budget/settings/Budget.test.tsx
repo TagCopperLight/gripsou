@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor, within, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 
 import { SettingsBudget } from "./Budget";
-import type { BudgetCategory, BudgetTag } from "../../../api/budget";
+import type { BudgetCategory, BudgetTag } from "../../../api/wire";
 import i18n from "../../../i18n";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 

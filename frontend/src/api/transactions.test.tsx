@@ -3,7 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 
 import { useTransactions, useTransactionCounts } from "./transactions";
 import { usePatchTransaction, useApplyToDescription, useBulkTransactions } from "./budget";
-import type { TransactionFilterQuery } from "./types";
+import type { TransactionFilterQuery } from "./filter";
 import { keys } from "./keys";
 import { appWrapper, jsonResponse, stubFetch } from "../test/kit";
 

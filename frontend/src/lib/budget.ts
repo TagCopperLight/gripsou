@@ -1,11 +1,10 @@
 import type { TFunction } from "i18next";
 
-import type { BudgetCategory, BudgetKind } from "../api/budget";
-import type { Transaction } from "../api/types";
+import type { BudgetCategory, CategoryKind, Transaction } from "../api/wire";
 import { AMBER, FG_DIM } from "./theme";
 
 /** Display order of the three kinds; also the grouping order of every list. */
-export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "neutral"];
+export const BUDGET_KINDS: readonly CategoryKind[] = ["expense", "income", "neutral"];
 
 /** The fallback for a missing or unsafe colour. A colour reaches an inline
  *  `style`, so it is validated, not trusted. */

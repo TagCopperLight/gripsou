@@ -1,6 +1,6 @@
 // Deterministic helpers for the fake dataset: the same data on every reset.
 
-import { RANGES, type Range } from "../../src/lib/ranges.ts";
+import { RANGES, type Range } from "../../src/api/wire.ts";
 
 const DAY_MS = 86_400_000;
 

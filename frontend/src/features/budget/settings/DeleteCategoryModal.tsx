@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
-import { useDeleteBudgetCategory, type BudgetCategory } from "../../../api/budget";
+import { useDeleteBudgetCategory } from "../../../api/budget";
+import type { BudgetCategory } from "../../../api/wire";
 import { categoryLabel } from "../../../lib/budget";
 
 type DeleteCategoryModalProps = {

@@ -3,7 +3,7 @@ import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { STRIPE_CSS } from "../../exposure/exposureColors";
 import { localizeCountry, localizeSector } from "../../../lib/composition-i18n";
 import { allocationPercents } from "../../../lib/composition";
-import type { Allocation, Composition } from "../../../api/types";
+import type { Allocation, Composition } from "../../../api/wire";
 import { ColorSquare } from "../../../ui/ColorSquare";
 
 // "Other", the remainder, is striped like the leftover slice of the

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        -- The filter/sort/page cut happens before any conversion, so the grid\n        -- holds only the days this page needs.\n        with filtered as (\n            select *\n            from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            order by day desc, id\n            limit $13 offset $14\n        ),\n        grid as materialized (\n            select as_of, currency, rate\n            from fx_grid(array(select distinct day from filtered))\n        ),\n        reporting as (\n            select (select currency from users where id = $1) as code\n        )\n        select id as \"id!\", day as \"day!\", kind as \"kind!\", description, amount as \"amount!\",\n               fx_convert(filtered.amount, afx.rate, rfx.rate) as \"amount_reporting?\",\n               source as \"source!\", ticker, instrument_kind, instrument_isin,\n               instrument_symbol, quantity, unit_price, fee,\n               account_id as \"account_id!\", account_name as \"account_name!\",\n               account_color as \"account_color!\", account_currency as \"account_currency!\",\n               filtered.category_id, category_name, category_default_key, category_color,\n               category_icon, category_kind as \"category_kind: CategoryKind\",\n               category_source as \"category_source: CategorySource\", category_confidence,\n               needs_review as \"needs_review!\", checked as \"checked!\",\n               is_transfer as \"is_transfer!\",\n               is_orphan_transfer as \"is_orphan_transfer!\"\n        from filtered\n        left join grid afx on afx.as_of = filtered.day\n                          and afx.currency = filtered.account_currency\n        left join grid rfx on rfx.as_of = filtered.day\n                          and rfx.currency = (select code from reporting)\n        order by day desc, id\n        ",
+  "query": "\n        -- The filter/sort/page cut happens before any conversion, so the grid\n        -- holds only the days this page needs.\n        with filtered as (\n            select *\n            from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            order by day desc, id\n            limit $13 offset $14\n        ),\n        grid as materialized (\n            select as_of, currency, rate\n            from fx_grid(array(select distinct day from filtered))\n        ),\n        reporting as (\n            select (select currency from users where id = $1) as code\n        )\n        select id as \"id!\", day as \"day!\", kind as \"kind!\", description, amount as \"amount!\",\n               fx_convert(filtered.amount, afx.rate, rfx.rate) as \"amount_reporting?\",\n               source as \"source!: RowSource\", ticker, instrument_kind, instrument_isin,\n               instrument_symbol, quantity, unit_price, fee,\n               account_id as \"account_id!\", account_name as \"account_name!\",\n               account_color as \"account_color!\", account_currency as \"account_currency!\",\n               filtered.category_id, category_name, category_default_key, category_color,\n               category_icon, category_kind as \"category_kind: CategoryKind\",\n               category_source as \"category_source: CategorySource\", category_confidence,\n               needs_review as \"needs_review!\", checked as \"checked!\",\n               is_transfer as \"is_transfer!\",\n               is_orphan_transfer as \"is_orphan_transfer!\"\n        from filtered\n        left join grid afx on afx.as_of = filtered.day\n                          and afx.currency = filtered.account_currency\n        left join grid rfx on rfx.as_of = filtered.day\n                          and rfx.currency = (select code from reporting)\n        order by day desc, id\n        ",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,7 @@
       },
       {
         "ordinal": 6,
-        "name": "source!",
+        "name": "source!: RowSource",
         "type_info": "Text",
         "origin": "Expression"
       },
@@ -235,5 +235,5 @@
       null
     ]
   },
-  "hash": "02487112e3d7581a625d0733f7971d96f8aeae88c112634fc8e514c14d5f6cfc"
+  "hash": "91dc4ef06f1737660d4695d4a14b54a3f0b0d5b50131d6520962590f2a4cf8ee"
 }

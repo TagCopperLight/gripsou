@@ -1,5 +1,6 @@
 import { beforeEach, afterEach } from "vitest";
-import { DEFAULT_PREFS, setPrefs } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
+import { setPrefs } from "./prefs";
 
 // These calendar-arithmetic fixtures use local Date constructors.
 beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));

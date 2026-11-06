@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
-import { useDeleteBudgetTag, type BudgetTag } from "../../../api/budget";
+import { useDeleteBudgetTag } from "../../../api/budget";
+import type { BudgetTag } from "../../../api/wire";
 
 type DeleteTagModalProps = {
   tag: BudgetTag;

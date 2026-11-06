@@ -18,11 +18,10 @@ import { HoldingBadge } from "../../../ui/HoldingBadge";
 import { formatQuantity } from "../../../lib/money";
 import { sumDecimals } from "../../../lib/decimal";
 import {
-  CASH_COLOR, cashGlyph, holdingAccountTypes, shownHoldingLines, toggleHoldingSort,
+  CASH_COLOR, cashGlyph, holdingAccountTypes, kindLabel, shownHoldingLines, toggleHoldingSort,
   type HoldingSort, type HoldingSortKey,
 } from "../../../lib/holdings";
-import type { Holding } from "../../../api/types";
-import { KIND_LABEL_KEY } from "../../../lib/holdings";
+import type { Holding } from "../../../api/wire";
 import { accountTypeLabel } from "../../../lib/accounts";
 import { useHoldings } from "../../../api/holdings";
 import { usePrivacy } from "../../../auth/usePrivacy";
@@ -221,7 +220,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                           {h.name}
                         </span>
                         <span className="truncate text-xs text-fg-faint font-mono">
-                          {h.ticker} · {t(KIND_LABEL_KEY[h.kind])}
+                          {h.ticker} · {kindLabel(t, h.kind)}
                         </span>
                       </div>
                     </div>

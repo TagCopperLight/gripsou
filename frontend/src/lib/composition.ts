@@ -1,4 +1,4 @@
-import type { Allocation } from "../api/types";
+import type { Allocation } from "../api/wire";
 
 /** An allocation as whole percents, largest first, plus the remainder that
  *  takes it to exactly 100%: Boursorama lists only the top holdings, so the

@@ -1,0 +1,10 @@
+// Type-only imports: the mock server loads this file in the Vite config.
+import type { UserPrefs } from "../api/wire";
+
+/** The settings one save changes, the rest untouched. `avatar: null` removes it. */
+export type PrefsPatch = Partial<Omit<UserPrefs, "avatar">> & { avatar?: string | null };
+
+export function withPatch(prefs: UserPrefs, patch: PrefsPatch): UserPrefs {
+  const { avatar, ...rest } = { ...prefs, ...patch };
+  return avatar === null || avatar === undefined ? rest : { ...rest, avatar };
+}

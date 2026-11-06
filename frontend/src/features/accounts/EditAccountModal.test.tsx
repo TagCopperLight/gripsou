@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { EditAccountModal } from "./EditAccountModal";
-import type { Account } from "../../api/types";
+import type { Account } from "../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const ACCOUNT: Account = {
@@ -14,7 +14,7 @@ const ACCOUNT: Account = {
   currency: "EUR",
   valueNative: null,
   lastSyncAt: null,
-  sourceName: null,
+  sourceName: "Bank",
   sourceLogo: null,
   fxMissing: false,
 };

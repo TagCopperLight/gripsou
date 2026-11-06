@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 
 import { AccountsChartCard } from "./AccountsChartCard";
-import type { NetWorthResponse } from "../../api/types";
+import type { NetWorthResponse } from "../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));

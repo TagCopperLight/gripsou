@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { bannerVariant } from "./aiBanner";
-import type { AiStatus } from "../api/budget";
+import type { AiStatus } from "../api/wire";
 
 const s = (over: Partial<AiStatus>): AiStatus => ({
   configured: true, running: false, remaining: 0, reviewCount: 0, lastRun: null, ...over,

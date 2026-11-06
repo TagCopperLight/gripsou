@@ -7,7 +7,7 @@ import { MoneyHint } from "../../../ui/MoneyHint";
 import { Button } from "../../../ui/Button";
 import { formatDay } from "../../../lib/date";
 import { categoryOfTransaction } from "../../../lib/budget";
-import type { Transaction } from "../../../api/types";
+import type { Transaction } from "../../../api/wire";
 import { AMOUNT_COL, CHIP_COL, CONFIDENCE_COL, REVIEW_ROW } from "./reviewColumns";
 
 type Props = {

@@ -4,7 +4,7 @@ import { Comparison } from "./Comparison";
 import { Surface } from "../../../ui/Surface";
 import { MaskedMoney } from "../../../ui/MaskedMoney";
 import { FxAsterisk, FxFootnote } from "../../../ui/FxNote";
-import type { BudgetSummary, Figure } from "../../../api/overview";
+import type { BudgetSummary, Figure } from "../../../api/wire";
 
 type FigureKey = "income" | "expenses" | "net";
 

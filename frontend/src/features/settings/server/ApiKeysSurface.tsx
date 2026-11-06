@@ -9,7 +9,7 @@ import { Field } from "../../../ui/Field";
 import { TextInput } from "../../../ui/TextInput";
 import { showDone, useErrorToast } from "../../../lib/errorToasts";
 import { useApiKeys, useSetApiKey } from "../../../api/admin";
-import type { ApiKeyProvider } from "../../../api/types";
+import type { ApiKeyProvider } from "../../../api/wire";
 
 // A plain text field drawn as dots, rather than a password field: password
 // managers offer to save anything typed in one, and draw its placeholder in

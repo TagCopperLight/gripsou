@@ -5,8 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../../i18n";
 import { RecordLotsModal } from "./RecordLotsModal";
-import type { BasisPreview, Holding, Lot, LotSuggestion } from "../../../api/types";
-import type { SaveLotAdd } from "../../../api/holdings";
+import type { BasisPreview, Holding, Lot, LotEntry, LotSuggestion } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../../test/kit";
 
 let txns: Lot[] = [];
@@ -35,7 +34,7 @@ let fetchMock: ReturnType<typeof stubFetch>;
 function stubServer() {
   fetchMock = stubFetch(async (url, init) => {
     if (url.endsWith("/lots/preview")) {
-      const { rows } = JSON.parse(String(init?.body)) as { rows: SaveLotAdd[] };
+      const { rows } = JSON.parse(String(init?.body)) as { rows: LotEntry[] };
       // An empty holding previews zero without using up a sentinel.
       const result = rows.length === 0 ? ZERO : PREVIEW_RESULTS[Math.min(previewCallCount, PREVIEW_RESULTS.length - 1)];
       if (rows.length > 0) previewCallCount += 1;
@@ -53,7 +52,7 @@ function stubServer() {
 }
 
 /** The rows each preview request sent, oldest first. */
-const previews = () => requestsTo(fetchMock, "/lots/preview").map((r) => (r.body as { rows: SaveLotAdd[] }).rows);
+const previews = () => requestsTo(fetchMock, "/lots/preview").map((r) => (r.body as { rows: LotEntry[] }).rows);
 /** The bodies of the save requests. */
 const saves = () => requestsTo(fetchMock, "/holdings/h1/lots").filter((r) => r.method === "PUT").map((r) => r.body);
 

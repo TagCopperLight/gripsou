@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
-import type { EnabledProvider } from "../../api/types";
+import type { EnabledProvider } from "../../api/wire";
 import { goTo } from "../../lib/navigate";
 import { AddConnectionModal } from "./AddConnectionModal";
 import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../test/kit";

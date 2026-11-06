@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor, within, act } from "@testing-library/react"
 import { QueryClient } from "@tanstack/react-query";
 
 import { CategoriesSurface } from "./CategoriesSurface";
-import type { BudgetCategory } from "../../../api/budget";
+import type { BudgetCategory } from "../../../api/wire";
 import i18n from "../../../i18n";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 

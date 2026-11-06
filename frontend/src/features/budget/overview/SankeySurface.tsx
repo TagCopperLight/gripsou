@@ -10,7 +10,7 @@ import { sliceLabel } from "../../../lib/slice";
 import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
 import { FONT_MONO } from "../../../lib/theme";
 import { CHART_BASE, chartTooltip, tooltipRow } from "../../../lib/chartTheme";
-import type { Sankey } from "../../../api/overview";
+import type { Sankey } from "../../../api/wire";
 
 export function SankeySurface({
   sankey, onSeeTransactions, masked = false,

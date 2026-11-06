@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { SettingsConnections } from "./Connections";
-import type { EnabledProvider, ProviderGroup } from "../../api/types";
+import type { EnabledProvider, ProviderGroup } from "../../api/wire";
 import { goTo } from "../../lib/navigate";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
@@ -18,18 +18,22 @@ const GROUPS: ProviderGroup[] = [
       {
         id: "c1",
         displayName: "Boursorama",
+        canManage: false,
+        health: null,
         status: "ok",
         lastSyncAt: 1_700_000_000_000,
         lastError: null,
         accounts: [
-          { id: "a1", name: "Compte courant", color: "#3b82f6", typeKey: "checking", value: "1234.50", lastSyncAt: 1_700_000_000_000 },
-          { id: "a2", name: "Livret A", color: "#4dd0b1", typeKey: "savings", value: "8000.00", lastSyncAt: 1_700_000_000_000 },
+          { id: "a1", name: "Compte courant", color: "#3b82f6", typeKey: "checking", value: "1234.50", lastSyncAt: 1_700_000_000_000, health: null },
+          { id: "a2", name: "Livret A", color: "#4dd0b1", typeKey: "savings", value: "8000.00", lastSyncAt: 1_700_000_000_000, health: null },
         ],
         logo: null,
       },
       {
         id: "c2",
         displayName: "Example Broker",
+        canManage: false,
+        health: null,
         status: "error",
         lastSyncAt: null,
         lastError: "Credentials expired",
@@ -43,7 +47,7 @@ const GROUPS: ProviderGroup[] = [
 describe("SettingsConnections", () => {
   beforeEach(() => {
     vi.mocked(goTo).mockClear();
-    providers = [{ key: "powens", displayName: "Powens", description: null }];
+    providers = [{ key: "powens", displayName: "Powens", description: "" }];
     fetchMock = stubFetch(async (url) => {
       if (url === "/api/providers/enabled") return jsonResponse(providers);
       if (url === "/api/connections/init") return jsonResponse({ connectionId: "c3", redirectUrl: "https://provider.test/connect" });
@@ -147,7 +151,7 @@ describe("SettingsConnections", () => {
   });
 
   it("keeps the picker when several providers are enabled", async () => {
-    providers.push({ key: "other", displayName: "Other provider", description: null });
+    providers.push({ key: "other", displayName: "Other provider", description: "" });
     renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());

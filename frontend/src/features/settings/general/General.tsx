@@ -6,7 +6,7 @@ import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { Select } from "../../../ui/Select";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
-import type { UserPrefs } from "../../../lib/prefs";
+import type { UserPrefs } from "../../../api/wire";
 import { formatMoney } from "../../../lib/money";
 import { formatDate } from "../../../lib/date";
 import { CURRENCIES } from "../../../lib/currency";

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AssetModal } from "./AssetModal";
-import type { Holding } from "../../../api/types";
+import type { Holding } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders

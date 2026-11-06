@@ -9,7 +9,7 @@ import {
   safeBudgetColor,
   sortCategories,
 } from "./budget";
-import type { BudgetCategory } from "../api/budget";
+import type { BudgetCategory } from "../api/wire";
 
 // A private i18next instance: the app singleton's language must not leak
 // between test files.

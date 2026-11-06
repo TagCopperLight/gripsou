@@ -5,7 +5,7 @@ import { Surface } from "../../ui/Surface";
 import { MaskedMoney } from "../../ui/MaskedMoney";
 import { CardTitle } from "../../ui/CardTitle";
 import { Percent } from "../../ui/Percent";
-import type { Account } from "../../api/types";
+import type { Account } from "../../api/wire";
 import { isDrawn, sharesById } from "../../lib/distribution";
 import type { Privacy } from "../../auth/usePrivacy";
 

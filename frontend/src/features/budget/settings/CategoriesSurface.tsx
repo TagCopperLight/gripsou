@@ -8,13 +8,8 @@ import {
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
 import { CardState } from "../../../ui/CardState";
-import {
-  useBudgetCategories,
-  useReorderBudgetCategories,
-  useUpdateBudgetCategory,
-  categoryBody,
-  type BudgetCategory,
-} from "../../../api/budget";
+import { useBudgetCategories, useReorderBudgetCategories, useUpdateBudgetCategory, categoryBody } from "../../../api/budget";
+import type { BudgetCategory } from "../../../api/wire";
 import {
   categoryLabel, categoryNeighbour, categoryOrderAfterMove, safeBudgetColor, sortCategories,
 } from "../../../lib/budget";

@@ -13,7 +13,7 @@ import { CardState } from "../../ui/CardState";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useNetWorth, useAccountSeries } from "../../api/accounts";
 import { useFxExcludedCount } from "../../api/holdings";
-import type { Range } from "../../lib/ranges";
+import type { Range } from "../../api/wire";
 import { bySize, legendAccounts } from "../../lib/accounts";
 import { numberOrNull } from "../../lib/valueChart";
 

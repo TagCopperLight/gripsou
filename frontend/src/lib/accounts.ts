@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import type { Account, AccountSeries } from "../api/types";
+import type { Account, AccountSeries } from "../api/wire";
 
 // Account types are data-driven: the backend sends a stable key. A type added
 // to the database but not yet to the locale files shows its key.
@@ -9,7 +9,7 @@ export function accountTypeLabel(t: TFunction, key: string): string {
 
 export type ConnectionGroup = {
   connectionId: string;
-  sourceName: string | null;
+  sourceName: string;
   sourceLogo: string | null;
   total: number;
   accounts: Account[];

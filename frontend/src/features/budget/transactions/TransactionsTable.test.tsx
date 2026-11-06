@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 
 import { TransactionsTable } from "./TransactionsTable";
 import { TransactionRow } from "./TransactionRow";
-import type { Transaction } from "../../../api/types";
+import type { Transaction } from "../../../api/wire";
 
 // Counts component renders: the table and every row call `useTranslation`
 // once per render. (Counting a child such as the avatar would not do: the

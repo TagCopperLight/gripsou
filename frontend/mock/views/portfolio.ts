@@ -1,19 +1,7 @@
 // Valuations computed from the store, so a write (a lot, a transaction) shows
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/holdings.ts";
-import type {
-  Account,
-  BasisPreview,
-  AccountSeries,
-  Holding,
-  InvestmentReturns,
-  Lot,
-  NetWorthResponse,
-  PricePoint,
-  ProviderGroup,
-  ReturnFigures,
-} from "../../src/api/types.ts";
+import type { Account, AccountSeries, BasisPreview, Holding, InvestmentReturns, Lot, LotEntry, NetWorthResponse, PricePoint, ProviderGroup, ReturnFigures, SaveLotsReq } from "../../src/api/wire.ts";
 import { HISTORY_DAYS, dayIndex } from "../data/base.ts";
 import { healthy, type SecurityRow } from "../data/rows.ts";
 import { DAY_MS, EUR_PER_USD, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
@@ -38,7 +26,7 @@ export function lotsOf(store: Store, holdingId: string): Lot[] {
   return [...fromLedger, ...(store.manualLots[holdingId] ?? [])].sort((a, b) => a.t - b.t);
 }
 
-function toLot(r: SaveLotAdd, id: string): Lot {
+function toLot(r: LotEntry, id: string): Lot {
   return { id, t: Date.parse(`${r.date}T00:00:00Z`), side: r.type, qty: r.quantity, price: r.unitPrice, fee: r.fee ?? "0", manual: true };
 }
 
@@ -371,7 +359,7 @@ export function returns(store: Store): InvestmentReturns {
 
 /** The figures after saving `sent` in place of the user's lots (the
  *  provider's stay, as on the server). */
-export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[]): BasisPreview {
+export function previewLots(store: Store, holdingId: string, sent: LotEntry[]): BasisPreview {
   const lots = [...lotsOf(store, holdingId).filter((l) => !l.manual), ...sent.map((r) => toLot(r, ""))].sort((a, b) => a.t - b.t);
   const s = store.securities.find((x) => x.id === holdingId);
   const b = s ? securityBasis(store, s, lots) : lotBasis(lots, explainedQty(lots), 0);
@@ -381,8 +369,9 @@ export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[])
 }
 
 /** One batch, like the real endpoint: deletes manual lots, adds the new rows as manual lots. */
-export function saveLots(store: Store, holdingId: string, batch: SaveLotsInput): void {
-  store.deletedLots.push(...batch.deletes);
-  const kept = (store.manualLots[holdingId] ?? []).filter((l) => !batch.deletes.includes(l.id));
-  store.manualLots[holdingId] = [...kept, ...batch.adds.map((r) => toLot(r, store.ids.next("lot")))];
+export function saveLots(store: Store, holdingId: string, batch: SaveLotsReq): void {
+  const deletes = batch.deletes ?? [];
+  store.deletedLots.push(...deletes);
+  const kept = (store.manualLots[holdingId] ?? []).filter((l) => !deletes.includes(l.id));
+  store.manualLots[holdingId] = [...kept, ...(batch.adds ?? []).map((r) => toLot(r, store.ids.next("lot")))];
 }

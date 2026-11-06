@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { Invite } from "./Invite";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { DEFAULT_PREFS } from "../../api/wire";
 import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();

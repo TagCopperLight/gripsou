@@ -4,7 +4,7 @@ import { ConnectionGuide } from "./ConnectionGuide";
 
 describe("ConnectionGuide", () => {
   it("adds only the points of the providers that are enabled", () => {
-    render(<ConnectionGuide providers={[{ key: "other", displayName: "Other", description: null }]} />);
+    render(<ConnectionGuide providers={[{ key: "other", displayName: "Other", description: "" }]} />);
     expect(screen.getByText("Read-only")).toBeInTheDocument();
     expect(screen.queryByText("Then maybe your bank login")).not.toBeInTheDocument();
   });

@@ -6,14 +6,14 @@ import { useAccounts, useAccountSeries, useNetWorth } from "./accounts";
 import { useConnections, useSyncConnection } from "./connections";
 import { useHoldings, useInvestmentReturns } from "./holdings";
 import { useTransactions } from "./transactions";
-import { useAiStatus, type AiStatus } from "./budget";
+import { useAiStatus } from "./budget";
 import { setAuthToken } from "./client";
 import {
   afterAccountEdit, afterAiRunFinished, afterBudgetCategoryChange,
   afterReviewChange, afterSyncFinished, afterTransactionChange,
 } from "./invalidate";
 import { keys } from "./keys";
-import type { ProviderGroup, SyncStatus } from "./types";
+import type { AiStatus, ConnectionStatus, ProviderGroup } from "./wire";
 import { testQueryClient, appWrapper, stubFetch } from "../test/kit";
 
 afterEach(() => {
@@ -27,8 +27,8 @@ function setup() {
   return { qc, wrapper };
 }
 
-function connection(id: string, status: SyncStatus, lastSyncAt: number | null) {
-  return { id, status, lastSyncAt, displayName: id, lastError: null, accounts: [], logo: null };
+function connection(id: string, status: ConnectionStatus, lastSyncAt: number | null) {
+  return { id, status, lastSyncAt, displayName: id, canManage: false, health: null, lastError: null, accounts: [], logo: null };
 }
 
 function groups(...connections: ProviderGroup["connections"]): ProviderGroup[] {

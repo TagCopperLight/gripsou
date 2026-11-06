@@ -12,6 +12,7 @@ mod security_headers;
 mod testkit;
 mod transactions;
 mod wire;
+pub mod wire_ts;
 
 use axum::extract::FromRef;
 use axum::http::header::CACHE_CONTROL;
@@ -129,7 +130,7 @@ pub fn router(
         ))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
 struct Health {
     status: &'static str,
     version: &'static str,

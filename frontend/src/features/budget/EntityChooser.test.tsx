@@ -4,7 +4,7 @@ import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 
 import { CategoryChooser } from "./CategoryChooser";
-import type { BudgetCategory } from "../../api/budget";
+import type { BudgetCategory } from "../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {

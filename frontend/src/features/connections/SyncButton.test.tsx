@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
-import type { ProviderGroup, SyncStatus } from "../../api/types";
+import type { ProviderGroup, ConnectionStatus } from "../../api/wire";
 
 vi.mock("./SyncModal", () => ({ SyncModal: () => <div>modal</div> }));
 
 import { SyncButton } from "./SyncButton";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
-function groups(status: SyncStatus): ProviderGroup[] {
+function groups(status: ConnectionStatus): ProviderGroup[] {
   return [
     {
       providerKey: "p",
@@ -16,6 +16,8 @@ function groups(status: SyncStatus): ProviderGroup[] {
         {
           id: "1",
           displayName: "c",
+          canManage: false,
+          health: null,
           status,
           lastSyncAt: null,
           lastError: status === "error" ? "boom" : null,

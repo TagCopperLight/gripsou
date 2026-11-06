@@ -13,7 +13,7 @@ import { monthStart } from "../../../lib/month";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
 import { SURFACE } from "../../../lib/theme";
 import { AXIS_GRID, CHART_BASE, categoryAxis, chartTooltip, tooltipCard, tooltipRow, valueAxis } from "../../../lib/chartTheme";
-import type { BudgetTrend } from "../../../api/overview";
+import type { BudgetTrend } from "../../../api/wire";
 
 type TooltipParam = { dataIndex: number };
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 
 import { BreakdownSurface } from "./BreakdownSurface";
-import type { BreakdownRow } from "../../../api/overview";
+import type { BreakdownRow } from "../../../api/wire";
 
 function cat(id: string, name: string, color = "#8fd05f") {
   return {

@@ -7,7 +7,7 @@ import { Button } from "../../../ui/Button";
 import { COL_PAD, gridTracks } from "./transactionsGrid";
 import { GridTable, TableEmpty } from "../../../ui/GridTable";
 import { HEAD_CELL } from "../../../ui/gridTable";
-import type { Transaction, TransactionCounts } from "../../../api/types";
+import type { Transaction, TransactionCounts } from "../../../api/wire";
 import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
 
 type TransactionsTableProps = {

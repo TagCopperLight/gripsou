@@ -15,14 +15,14 @@ import { CurrencyChangeHint } from "../../auth/CurrencyChangeHint";
 import { authApi } from "../../api/auth";
 import { useConnections } from "../../api/connections";
 import { useAiStatus } from "../../api/budget";
-import type { SyncConnection, SyncStatus } from "../../api/types";
+import type { SyncConnection, ConnectionStatus } from "../../api/wire";
 import { useStartConnection } from "../connections/useStartConnection";
 import { useFinishConnection } from "../connections/useFinishConnection";
 import { flattenConnections } from "../../lib/connectionState";
 import { CURRENCIES } from "../../lib/currency";
 import { timeZoneOptions } from "../../lib/timeZoneList";
 import { prefillFromBrowser } from "../../lib/welcome";
-import type { PrefsPatch } from "../../lib/prefs";
+import type { PrefsPatch } from "../../lib/prefsPatch";
 
 type Step = 1 | 2 | 3;
 
@@ -311,7 +311,7 @@ function WelcomeStep({
   );
 }
 
-const BANK_STATE: Record<SyncStatus, "ok" | "error" | "syncing" | "connecting"> = {
+const BANK_STATE: Record<ConnectionStatus, "ok" | "error" | "syncing" | "connecting"> = {
   ok: "ok",
   error: "error",
   syncing: "syncing",

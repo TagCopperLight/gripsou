@@ -8,7 +8,7 @@ import {
   sliceLabel,
 } from "./slice";
 import { FALLBACK_COLOR, UNCATEGORISED_COLOR } from "./budget";
-import type { Slice } from "../api/overview";
+import type { Slice } from "../api/wire";
 
 const groceries: Slice = {
   kind: "category",

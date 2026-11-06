@@ -1,7 +1,7 @@
 // Copied from the backend: what the server seeds or declares that the mock
 // answers with too. Each block names its source; keep them in step.
 
-import type { BudgetCategory } from "../../src/api/budget.ts";
+import type { BudgetCategory } from "../../src/api/wire.ts";
 
 /** `seed_budget_categories` (backend/migrations/0033_budget_neutral_kind.sql):
  *  name, default key, colour, icon, kind, system key, hint. */

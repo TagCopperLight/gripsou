@@ -1,5 +1,5 @@
 import { browserLanguage } from "../i18n/browserLanguage";
-import { DEFAULT_PREFS, type UserPrefs } from "./prefs";
+import { DEFAULT_PREFS, type UserPrefs } from "../api/wire";
 
 /** Language and time zone as the browser reports them. Browsers expose no
  *  currency, so that one stays at its default (EUR). */

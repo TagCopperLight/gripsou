@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { browserPrefs, prefillFromBrowser } from "./welcome";
-import { DEFAULT_PREFS } from "./prefs";
+import { DEFAULT_PREFS } from "../api/wire";
 
 describe("browserPrefs", () => {
   it("picks French when French is the first supported language", () => {

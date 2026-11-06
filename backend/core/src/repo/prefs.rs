@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPrefs {
     #[serde(flatten)]
@@ -30,7 +30,7 @@ pub struct UserPrefs {
 /// Preferences only the frontend reads, stored as JSON in `users.prefs`. A
 /// missing field reads as its default, so an empty or partial object reads
 /// back whole.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DisplayPrefs {
     pub ui_language: String,
@@ -47,6 +47,7 @@ pub struct DisplayPrefs {
     /// pipeline never reads it.
     pub show_checked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub avatar: Option<String>,
 }
 
@@ -70,6 +71,21 @@ impl Default for DisplayPrefs {
 /// The review threshold a user who never moved the slider gets, in percent.
 /// Matches the column default.
 pub const DEFAULT_BUDGET_AI_THRESHOLD: u8 = 70;
+
+/// What a new user's preferences read as: the column defaults of `users`
+/// (pinned by `core/tests/it/value_sets.rs`) and `DisplayPrefs::default()`.
+/// The frontend shows these before anyone signs in.
+impl Default for UserPrefs {
+    fn default() -> Self {
+        Self {
+            display: DisplayPrefs::default(),
+            currency: "EUR".into(),
+            time_zone: "Europe/Paris".into(),
+            budget_ai_enabled: false,
+            budget_ai_threshold: DEFAULT_BUDGET_AI_THRESHOLD,
+        }
+    }
+}
 
 /// The review thresholds a user may pick, in percent. Matches the column's check.
 pub const BUDGET_AI_THRESHOLD_RANGE: std::ops::RangeInclusive<u8> = 50..=95;

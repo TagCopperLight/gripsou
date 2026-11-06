@@ -7,7 +7,7 @@ import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { ApiError } from "../../../api/client";
 import { useTotpConfirm, useTotpSetup } from "../../../api/auth";
-import type { TotpSetup } from "../../../api/types";
+import { TOTP_DIGITS, type TotpSetup } from "../../../api/wire";
 import { throttledError } from "../../../auth/throttle";
 import { CodeInput } from "../../../ui/CodeInput";
 import { BackupCodes } from "./BackupCodes";
@@ -147,7 +147,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
               setCode(digits);
               setError(null);
               // The sixth digit sends it; there is no button for it.
-              if (digits.length === 6) void submitCode(digits);
+              if (digits.length === TOTP_DIGITS) void submitCode(digits);
             }}
           />
           {error && <FieldError>{error}</FieldError>}

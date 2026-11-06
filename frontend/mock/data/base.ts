@@ -3,8 +3,8 @@
 // everyday spending with transfer pairs, the seeded categories, three tags.
 // Everything is generated from a fixed seed, anchored on today.
 
-import type { Composition, Lot, MfaStatus, Provider, Session, SessionUser, User } from "../../src/api/types.ts";
-import { DEFAULT_PREFS } from "../../src/lib/prefs.ts";
+import type { Composition, Lot, MfaStatus, Provider, Session, SessionUser, User } from "../../src/api/wire.ts";
+import { DEFAULT_PREFS } from "../../src/api/wire.ts";
 import { CATEGORY_SEED } from "./backend.ts";
 import { createIds, named, type Ids } from "./ids.ts";
 import {
@@ -258,8 +258,8 @@ export function baseData(): BaseData {
       welcomeDone: true,
     },
     users: [
-      { id: USER_ID, name: "Camille Martin", email: "camille@example.com", role: "admin", joinedAt: daysAgo(420), isSelf: true },
-      { id: ids.next("user"), name: "Alex Durand", email: "alex@example.com", role: "user", joinedAt: daysAgo(130), isSelf: false },
+      { id: USER_ID, name: "Camille Martin", email: "camille@example.com", role: "admin", joinedAt: daysAgo(420), isSelf: true, avatar: null },
+      { id: ids.next("user"), name: "Alex Durand", email: "alex@example.com", role: "user", joinedAt: daysAgo(130), isSelf: false, avatar: null },
     ],
     sessions: [
       { id: ids.next("session"), device: "Firefox on Linux", ip: "192.0.2.14", createdAt: daysAgo(12), lastActiveAt: Date.now(), remembered: true, current: true },

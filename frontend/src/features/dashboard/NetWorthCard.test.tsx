@@ -3,8 +3,8 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { NetWorthCard } from "./NetWorthCard";
-import type { NetWorthResponse, ProviderGroup, SyncStatus } from "../../api/types";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import type { NetWorthResponse, ProviderGroup, ConnectionStatus } from "../../api/wire";
+import { DEFAULT_PREFS } from "../../api/wire";
 import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();
@@ -23,12 +23,12 @@ const NO_ACCOUNTS: NetWorthResponse = {
   summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },
 };
 
-function connections(...statuses: SyncStatus[]): ProviderGroup[] {
+function connections(...statuses: ConnectionStatus[]): ProviderGroup[] {
   return [{
     providerKey: "powens",
     providerName: "Powens",
     connections: statuses.map((status, i) => ({
-      id: `c${i}`, displayName: "Bank", status, lastSyncAt: null, lastError: null, accounts: [], logo: null,
+      id: `c${i}`, displayName: "Bank", canManage: false, health: null, status, lastSyncAt: null, lastError: null, accounts: [], logo: null,
     })),
   }];
 }

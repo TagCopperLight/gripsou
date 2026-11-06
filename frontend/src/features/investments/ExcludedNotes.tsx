@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { ExcludedFootnote, FxFootnote } from "../../ui/FxNote";
-import type { ReturnFigures } from "../../api/types";
+import type { ReturnFigures } from "../../api/wire";
 import { leavesOut } from "../../lib/returns";
 
 /** The lines under a returns card saying which holdings its figures leave

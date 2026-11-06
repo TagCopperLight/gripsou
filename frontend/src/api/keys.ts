@@ -1,4 +1,4 @@
-import type { TransactionFilterQuery } from "./types";
+import type { TransactionFilterQuery } from "./filter";
 import type { Period } from "../lib/period";
 
 // The one definition of every react-query key.

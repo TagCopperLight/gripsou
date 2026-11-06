@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Eye, type LucideIcon } from "lucide-react";
-import type { EnabledProvider } from "../../api/types";
+import type { EnabledProvider } from "../../api/wire";
 import { PROVIDER_GUIDE } from "./connectionGuide";
 
 /** How a bank connection works, before the user is sent to the provider: what

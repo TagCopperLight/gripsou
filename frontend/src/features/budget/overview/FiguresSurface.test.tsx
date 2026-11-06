@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { screen } from "@testing-library/react";
 
 import { FiguresSurface } from "./FiguresSurface";
-import type { BudgetSummary } from "../../../api/overview";
-import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
+import type { BudgetSummary } from "../../../api/wire";
+import { DEFAULT_PREFS, type UserPrefs } from "../../../api/wire";
 import { renderWithApp } from "../../../test/kit";
 
 function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {

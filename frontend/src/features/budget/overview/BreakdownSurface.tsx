@@ -13,7 +13,7 @@ import {
   type BreakdownSort, type BreakdownSortKey,
 } from "../../../lib/slice";
 import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
-import type { BreakdownRow, Slice } from "../../../api/overview";
+import type { BreakdownRow, Slice } from "../../../api/wire";
 
 type ColKey = BreakdownSortKey | "share" | "avg12";
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyToSame, clearResolved, initialReview, offerSame, resolve, syncPending, unresolve,
 } from "./review";
-import type { Transaction } from "../api/types";
+import type { Transaction } from "../api/wire";
 
 const tx = (id: string) => ({ id }) as Transaction;
 

@@ -16,7 +16,7 @@ import {
 import { anchorMonth, currentMonth, periodBounds, type Period } from "../../../lib/period";
 import { addMonths } from "../../../lib/month";
 import { hasFlow } from "../../../lib/sankeyGraph";
-import type { Slice } from "../../../api/overview";
+import type { Slice } from "../../../api/wire";
 import { usePrivacy } from "../../../auth/usePrivacy";
 
 export function BudgetOverview() {

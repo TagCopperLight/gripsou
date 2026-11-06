@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { BreakdownRow, Slice } from "../api/overview";
+import type { BreakdownRow, Slice } from "../api/wire";
 import {
   FALLBACK_COLOR, UNCATEGORISED_COLOR, categoryLabel, safeBudgetColor, type CategoryLike,
 } from "./budget";

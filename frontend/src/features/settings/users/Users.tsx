@@ -16,9 +16,7 @@ import { DeleteUserModal } from "./DeleteUserModal";
 import { UserDetailModal } from "./UserDetailModal";
 import { formatDate } from "../../../lib/date";
 import { inviteLink } from "../../../lib/authLinks";
-import type { User } from "../../../api/types";
-
-type Role = "admin" | "user";
+import type { Role, User } from "../../../api/wire";
 // Member, role, joined, then the actions (no title: a column of icons).
 const TRACKS: Track[] = [
   { min: "14rem", max: "1fr" },

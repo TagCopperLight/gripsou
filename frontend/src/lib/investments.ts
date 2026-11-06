@@ -1,4 +1,4 @@
-import type { Holding, InvestmentReturns } from "../api/types";
+import type { Holding, InvestmentReturns } from "../api/wire";
 import type { ExposureHolding } from "./exposure";
 import { fxExcludedCount } from "./holdings";
 

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { BudgetOverview } from "./Overview";
 import { BudgetProvider } from "../BudgetProvider";
 import { useBudget } from "../budgetContext";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { DEFAULT_PREFS } from "../../../api/wire";
 import { currentMonth, monthLabel } from "../../../lib/period";
 import { addMonths } from "../../../lib/month";
 import { renderWithApp, stubFetch } from "../../../test/kit";

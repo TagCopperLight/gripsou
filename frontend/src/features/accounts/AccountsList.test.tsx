@@ -4,8 +4,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AccountsList } from "./AccountsList";
-import type { Account } from "../../api/types";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import type { Account } from "../../api/wire";
+import { DEFAULT_PREFS } from "../../api/wire";
 import { authValue, renderWithApp, stubFetch } from "../../test/kit";
 
 function account(id: string, connectionId: string, value: string): Account {

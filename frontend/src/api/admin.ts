@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteJson, getJson, patchJson, postJson } from "./client";
-import type { ApiKeyProvider, Provider, User } from "./types";
+import type { ApiKeyProvider, InviteLinkResp, Provider, Role, User } from "./wire";
 import { keys } from "./keys";
 import { afterApiKeyChange, afterProviderChange, afterUserChange } from "./invalidate";
 
@@ -13,21 +13,21 @@ export function useUsers() {
 
 export function useCreateInvite() {
   return useMutation({
-    mutationFn: () => postJson<{ token: string }>("/invites", {}),
+    mutationFn: () => postJson<InviteLinkResp>("/invites", {}),
   });
 }
 
 export function useCreateResetLink() {
   return useMutation({
     mutationFn: ({ id, reauth }: { id: string; reauth: string }) =>
-      postJson<{ token: string }>(`/users/${id}/reset-link`, { reauth }),
+      postJson<InviteLinkResp>(`/users/${id}/reset-link`, { reauth }),
   });
 }
 
 export function useSetUserRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, role }: { id: string; role: "admin" | "user" }) =>
+    mutationFn: ({ id, role }: { id: string; role: Role }) =>
       patchJson<void>(`/users/${id}`, { role }),
     onSuccess: () => afterUserChange(qc),
   });

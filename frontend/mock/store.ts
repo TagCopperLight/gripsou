@@ -1,8 +1,7 @@
 // The review mode's in-memory database: one base dataset, built fresh by
 // `createStore`. The control (control.ts) holds the live one.
 
-import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget.ts";
-import type { ApiKeyField, ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
+import type { AiStatus, ApiKeyField, ApiKeyProvider, BudgetAiSettings, BudgetAiUsage, LotSuggestion, SyncHealth } from "../src/api/wire.ts";
 import { baseData, type BaseData } from "./data/base.ts";
 import { CONFIG_PROVIDERS } from "./data/backend.ts";
 import type { Fault } from "./faults.ts";

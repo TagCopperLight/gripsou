@@ -1,4 +1,4 @@
-import type { PricePoint } from "../api/types";
+import type { PricePoint } from "../api/wire";
 
 // Return over the displayed window, rebased so the window starts at 0%:
 // profit made since the start, over the capital that was at work for it.

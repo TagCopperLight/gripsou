@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { SegmentedControl } from "./SegmentedControl";
-import { rangeOptions, type Range } from "../lib/ranges";
+import type { Range } from "../api/wire";
+import { rangeOptions } from "../lib/ranges";
 
 type RangeSelectorProps = { value: Range; onChange: (range: Range) => void; className?: string };
 

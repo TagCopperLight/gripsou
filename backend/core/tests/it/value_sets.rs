@@ -124,3 +124,18 @@ async fn seed_and_system_keys(pool: PgPool) {
     assert!(spelled(SeedKey::ALL).is_subset(&seeds), "{seeds:?}");
     assert_eq!(spelled(SystemKey::ALL), systems);
 }
+
+/// `UserPrefs::default()` is what the frontend shows before sign-in; a new
+/// user's row must read back the same.
+#[sqlx::test(migrations = "../migrations")]
+async fn new_user_prefs_are_the_defaults(pool: PgPool) {
+    let user = gripsou_core::testkit::seed_user(&pool).await;
+    let stored = gripsou_core::repo::prefs::get(&pool, user)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(stored).unwrap(),
+        serde_json::to_value(gripsou_core::repo::prefs::UserPrefs::default()).unwrap()
+    );
+}

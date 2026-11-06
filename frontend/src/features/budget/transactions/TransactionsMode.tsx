@@ -26,8 +26,7 @@ import { useDebouncedValue } from "../../../lib/useDebouncedValue";
 import { EMPTY_FILTERS, isFiltered, toQuery } from "../../../lib/budgetFilters";
 import { breaksKnownPair, useBudgetWrites } from "../useBudgetWrites";
 import { sumDecimals } from "../../../lib/decimal";
-import type { BulkBody, PatchResult, WriteResult } from "../../../api/budget";
-import type { Transaction } from "../../../api/types";
+import type { BulkBody, PatchResult, Transaction, WriteResult } from "../../../api/wire";
 
 export function TransactionsMode() {
   const { t } = useTranslation();
@@ -95,9 +94,8 @@ export function TransactionsMode() {
         // The row is saved; this only offers to widen the correction to the
         // rows that share the description.
         onDone: (res) => {
-          if (res.sameDescriptionCount > 0) {
-            setApplyOffer({ id: tx.id, categoryId, count: res.sameDescriptionCount });
-          }
+          const count = res.sameDescriptionCount ?? 0;
+          if (count > 0) setApplyOffer({ id: tx.id, categoryId, count });
         },
       },
     );

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { anySyncing, connectionIssues, flattenConnections, healthIssue, overallAlert } from "./connectionState";
-import type { ProviderGroup, SyncConnection, SyncHealth, SyncStatus } from "../api/types";
+import type { ProviderGroup, SyncConnection, SyncHealth, ConnectionStatus } from "../api/wire";
 const health: SyncHealth = { verified: true, lastUpdatedOn: "2026-10-10", state: null, errorMessage: null, nextRetryOn: null };
-const conn: SyncConnection = {id:"c",displayName:"Bank",status:"ok",lastSyncAt:Date.now(),lastError:null,logo:null,accounts:[]};
+const conn: SyncConnection = {id:"c",displayName:"Bank",canManage:false,health:null,status:"ok",lastSyncAt:Date.now(),lastError:null,logo:null,accounts:[]};
 describe("provider health", () => {
   it("uses calendar days with a weekend grace period, rather than local import time", () => {
     expect(healthIssue({...health,lastUpdatedOn:"2026-10-07"},"2026-10-10")).toBeNull();
@@ -20,7 +20,7 @@ describe("provider health", () => {
   });
 });
 
-function groups(...statuses: SyncStatus[]): ProviderGroup[] {
+function groups(...statuses: ConnectionStatus[]): ProviderGroup[] {
   return [{
     providerKey: "p",
     providerName: "P",

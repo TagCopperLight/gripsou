@@ -1,8 +1,7 @@
 // The rows the store holds, and one builder per row kind: a row's defaults
 // live here only, the base data and the states give what differs.
 
-import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
-import type { Account, Composition, SyncConnection, SyncHealth } from "../../src/api/types.ts";
+import type { Account, BudgetCategory, BudgetTag, Composition, SyncConnection, SyncHealth } from "../../src/api/wire.ts";
 import { TODAY, isoDay } from "./util.ts";
 
 /** A ledger or lot row as stored; the API view joins the category and account. */

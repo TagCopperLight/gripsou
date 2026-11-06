@@ -3,11 +3,11 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ResetLinkModal } from "./ResetLinkModal";
-import type { User } from "../../../api/types";
+import type { User } from "../../../api/wire";
 import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const MARIE: User = {
-  id: "u2", name: "Marie Laurent", email: "marie@gripsou.local", role: "user", joinedAt: 0, isSelf: false,
+  id: "u2", name: "Marie Laurent", email: "marie@gripsou.local", role: "user", joinedAt: 0, isSelf: false, avatar: null,
 };
 
 it("asks for the password, then shows the link made with the reauth token", async () => {

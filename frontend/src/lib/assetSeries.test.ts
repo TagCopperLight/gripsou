@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { positionChart, windowReturn } from "./assetSeries";
-import type { PricePoint } from "../api/types";
+import type { PricePoint } from "../api/wire";
 
 const pt = (t: number, over: Partial<PricePoint>): PricePoint => ({
   t, price: "10", accountPrice: "10", reportingPrice: "10", qty: "2", invested: "15", reportingInvested: "15", ...over,

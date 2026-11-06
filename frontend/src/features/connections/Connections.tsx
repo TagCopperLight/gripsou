@@ -12,7 +12,7 @@ import { Dialog } from "../../ui/Dialog";
 import { DeleteConnectionModal } from "./DeleteConnectionModal";
 import { useConnections } from "../../api/connections";
 import { useStartConnection } from "./useStartConnection";
-import type { SyncConnection } from "../../api/types";
+import type { SyncConnection } from "../../api/wire";
 
 export function SettingsConnections() {
   const { t } = useTranslation();

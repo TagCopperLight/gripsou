@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi, type Mock } from "vitest";
 import { AuthContext, type AuthValue } from "../auth/context";
 import { AuthProvider } from "../auth/AuthProvider";
-import { DEFAULT_PREFS, type UserPrefs } from "../lib/prefs";
-import type { SessionUser } from "../api/types";
+import { DEFAULT_PREFS, type UserPrefs } from "../api/wire";
+import type { SessionUser } from "../api/wire";
 
 export function testUser(overrides: Partial<SessionUser> = {}): SessionUser {
   return {
