@@ -25,7 +25,7 @@ Never create tags or releases: a release goes with a manual production update.
 
 ### Database from the host
 
-The compose postgres publishes no port, so `.env`'s `localhost:5432` only works inside containers. Use:
+The compose postgres publishes no port, so from the host `DATABASE_URL` names the container's address (as in `.env.example`). Use:
 
 ```sh
 export DATABASE_URL=postgres://gripsou:gripsou@$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gripsou-postgres-1):5432/gripsou
@@ -113,7 +113,7 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 
 - **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (Product decisions above are the exception: they exist to stop a removed thing from being rebuilt.)
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
-- **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices in `users.prefs`. Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
+- **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices on `users` (columns for what the server reads, `prefs` for display-only ones). Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Wire types are generated.** Every type a handler sends or accepts derives `ts_rs::TS` (closed value sets through `text_enum!`). Every route is added through `api/src/routes.rs`, which reads each handler's JSON body (its last argument) and answer (its return type) off its signature: a new extractor or return shape needs an `Arg` or `Reply` impl there. `cd backend && cargo run -p gripsou-api --example wire-types` writes those types and everything they use to `frontend/src/api/wire.ts` (with the query parameter types listed in `api/src/wire_ts.rs`, and the limits and defaults the frontend shares), and the route list with each route's body and answer (`Api`) to `frontend/src/api/routes.ts`. Both are checked in and never edited by hand; `./ci.sh backend` fails when they are stale. The frontend imports API shapes from them and keeps only its own view types.
 - **Frontend:** React 19, TanStack Router (code-based tree in `router.tsx`) + Query, ECharts, react-i18next. Pure logic lives in `src/lib/`, with tests beside it.
 - **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags. API key field labels are not translated: each provider declares them in its own words (`ConfigField.label`).

@@ -1,7 +1,7 @@
 # Calendar dates and timezones
 
 Each user chooses an IANA timezone in Settings → General. It defaults to
-`Europe/Paris` when the preferences have no `timeZone`. It stays fixed when the user travels or uses another browser.
+`Europe/Paris`. It stays fixed when the user travels or uses another browser.
 PostgreSQL and the browser apply the zone's daylight-saving rules.
 
 The current calendar day comes from `user_today(user_id)` on the server
