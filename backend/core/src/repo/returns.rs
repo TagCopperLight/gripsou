@@ -63,19 +63,17 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         fx_missing: false,
     }));
 
-    // Lots (fee-inclusive, buys negative) and dividends, each converted on its
-    // own day from the account's currency into the reporting currency (picked as
-    // `reporting_fx_asof` does, minus its fallback to 1). A NULL amount means a
-    // rate is missing for that day. A dividend's day is the day it reached the
+    // Lots and dividends, each converted on its own day from the account's
+    // currency into the reporting currency. A NULL amount means a rate is
+    // missing for that day. A dividend's day is the day it reached the
     // balance, as the backfill dates every cash move.
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",
                l.acquired_on as "day!", l.side = 'buy' as "buy!",
-               (case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
-                     else l.quantity * l.unit_price - l.fee end)
-                 * fx_asof(a.currency, l.acquired_on)
-                 / nullif(fx_asof((select currency from users where id = $1), l.acquired_on), 0) as "amount?"
+               fx_convert(lot_cash_amount(l.side, l.quantity, l.unit_price, l.fee),
+                          fx_asof(a.currency, l.acquired_on),
+                          reporting_fx_asof($1, l.acquired_on)) as "amount?"
         from lot l
         join holding h    on h.id = l.holding_id
         join account a    on a.id = h.account_id
@@ -84,8 +82,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         where c.user_id = $1 and i.kind <> 'cash'
         union all
         select null::uuid, t.account_id, d.day, false,
-               t.amount * fx_asof(a.currency, d.day)
-                 / nullif(fx_asof((select currency from users where id = $1), d.day), 0)
+               fx_convert(t.amount, fx_asof(a.currency, d.day), reporting_fx_asof($1, d.day))
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id

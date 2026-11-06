@@ -87,8 +87,7 @@ pub async fn fetch_prices_for_connection(
 
 /// Makes sure a rate into `currency` is stored, fetching it now rather than at
 /// the next sync. For a reader switching their currency: their figures are
-/// converted at read time, and with no rate they could only be shown in the
-/// pivot. True when a rate is stored afterwards (the pivot needs none); a
+/// converted at read time, and with no rate they are left out. True when a rate is stored afterwards (the pivot needs none); a
 /// provider failure is logged and reads as false, so the caller decides.
 pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,

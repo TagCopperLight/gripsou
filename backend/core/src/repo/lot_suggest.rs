@@ -168,8 +168,8 @@ async fn account_jumps(
             select t.id, t.spent_on as day, t.amount
             from transaction t
             cross join lateral (
-                select abs(oj.dq) * unit_value_asof(oj.instrument_id, t.spent_on)
-                       / nullif(fx_asof($2, t.spent_on), 0) as expected
+                select fx_convert(abs(oj.dq), unit_value_asof(oj.instrument_id, t.spent_on),
+                                  fx_asof($2, t.spent_on)) as expected
             ) e
             where t.account_id = $1
               and t.type in ('buy', 'sell')

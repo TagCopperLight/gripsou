@@ -275,8 +275,8 @@ async fn current_price(
 ) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
     let price = sqlx::query_scalar!(
         r#"
-        select unit_value_asof(h.instrument_id, user_today($2))
-               / nullif(fx_asof(a.currency, user_today($2)), 0)
+        select fx_convert(1, unit_value_asof(h.instrument_id, user_today($2)),
+                          fx_asof(a.currency, user_today($2)))
         from holding h
         join account a on a.id = h.account_id
         where h.id = $1
@@ -298,11 +298,9 @@ async fn account_to_reader_rate(
 ) -> Result<Option<Decimal>, gripsou_core::error::CoreError> {
     let rate = sqlx::query_scalar!(
         r#"
-        select fx_asof(a.currency, user_today($2))
-               / nullif(fx_asof(u.currency, user_today($2)), 0)
+        select fx_convert(1, fx_asof(a.currency, user_today($2)), reporting_fx_asof($2, user_today($2)))
         from holding h
         join account a on a.id = h.account_id
-        join users u on u.id = $2
         where h.id = $1
         "#,
         holding_id,

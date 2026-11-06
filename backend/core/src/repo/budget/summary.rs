@@ -21,12 +21,12 @@ pub struct DayCategoryRow {
     /// `expense` | `income`. Never `neutral`: those rows are dropped by
     /// the query. `None` when `category_id` is.
     pub category_kind: Option<String>,
-    /// Signed, in the reporting currency, converted at `day`'s rate. Zero when
-    /// the rate was unknown — see `fx_missing`.
+    /// Signed, in the reporting currency, converted at `day`'s rates. A row
+    /// with no rate on its day is left out — see `fx_missing`.
     pub amount: Decimal,
     pub txn_count: i64,
-    /// At least one row in this bucket could not be valued, so the bucket is
-    /// understated.
+    /// At least one row in this bucket had no rate on its day, for its
+    /// account's currency or the reader's, and is left out of `amount`.
     pub fx_missing: bool,
 }
 
@@ -91,36 +91,30 @@ pub async fn day_category_totals(
               -- with its old category.
               and (r.is_orphan_transfer or coalesce(r.category_kind, '') <> 'neutral')
         ),
-        -- The distinct days actually present, not every day in the window.
-        -- valuation_grid takes this list rather than a range, so the caller
-        -- and the grid unnest the same days: the join is on
-        -- equality of as_of, and a self-generated series that disagreed would
-        -- read zero rather than fail.
-        days as (select distinct day from base),
         grid as materialized (
-            select as_of, currency, unit_value
-            from valuation_grid($1, array(select day from days)::date[])
-            where kind = 'cash'
+            select as_of, currency, rate
+            from fx_grid(array(select distinct day from base))
         ),
         reporting as (
             select (select currency from users where id = $1) as code
+        ),
+        -- Both legs resolve at the transaction's own date: that is what
+        -- keeps budget totals and net worth from disagreeing about what a
+        -- euro was worth on a given day.
+        converted as (
+            select b.*, fx_convert(b.amount, afx.rate, rfx.rate) as reporting_amount
+            from base b
+            left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency
+            left join grid rfx on rfx.as_of = b.day
+                              and rfx.currency = (select code from reporting)
         )
         select b.day as "day!",
                b.category_id as "category_id?",
                b.category_kind as "category_kind?",
-               -- Both legs resolve at the transaction's own date: that is what
-               -- keeps budget totals and net worth from disagreeing about what
-               -- a euro was worth on a given day.
-               coalesce(sum(b.amount * afx.unit_value
-                            / coalesce(nullif(rfx.unit_value, 0), 1)), 0) as "amount!",
+               coalesce(sum(b.reporting_amount), 0) as "amount!",
                count(*) as "txn_count!",
-               -- Keyed on the account leg only: a reporting rate is stored
-               -- before a currency can be chosen (`update_prefs`).
-               coalesce(bool_or(afx.unit_value is null), false) as "fx_missing!"
-        from base b
-        left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency
-        left join grid rfx on rfx.as_of = b.day
-                          and rfx.currency = (select code from reporting)
+               coalesce(bool_or(b.reporting_amount is null), false) as "fx_missing!"
+        from converted b
         group by b.day, b.category_id, b.category_kind, b.uncategorised_sign
         order by b.day, b.category_id
         "#,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        with latest as (\n            select distinct on (hs.holding_id) h.account_id, hs.value\n            from holding_snapshot hs\n            join holding h on h.id = hs.holding_id\n            order by hs.holding_id, hs.as_of desc\n        )\n        select a.connection_id        as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               a.color                 as \"color\",\n               a.type_key              as \"type_key!\",\n               coalesce(sum(l.value), 0) as \"value!\",\n               c.last_sync_at,\n               a.provider_meta as \"provider_meta!\"\n        from account a\n        join connection c   on c.id = a.connection_id\n        left join latest l  on l.account_id = a.id\n        where c.user_id = $1 and a.connection_id is not null\n        group by a.connection_id, a.id, a.name, a.color, a.type_key, c.last_sync_at\n        order by a.name\n        ",
+  "query": "\n        with v as (\n            select v.account_id, fx_convert(sum(v.value), 1, v.reporting_rate) as value\n            from holding_day_values($1, array[user_today($1)]) v\n            group by v.account_id, v.reporting_rate\n        )\n        select a.connection_id         as \"connection_id!\",\n               a.id                    as \"account_id!\",\n               a.name                  as \"name!\",\n               a.color                 as \"color\",\n               a.type_key              as \"type_key!\",\n               coalesce(v.value, 0)    as \"value!\",\n               c.last_sync_at,\n               a.provider_meta as \"provider_meta!\"\n        from account a\n        join connection c on c.id = a.connection_id\n        left join v       on v.account_id = a.id\n        where c.user_id = $1\n        order by a.name\n        ",
   "describe": {
     "columns": [
       {
@@ -103,5 +103,5 @@
       false
     ]
   },
-  "hash": "8e396bf4c4baedd5f8bd276e66ed3505b3201e06f97f942024f025c4d0d73582"
+  "hash": "666ed01ac26929b214f803a34265cfce9fcc41dfe29b7c8256afc5b82442932b"
 }

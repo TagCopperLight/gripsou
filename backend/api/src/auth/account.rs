@@ -38,9 +38,9 @@ pub async fn finish_welcome(
 /// settings changed at once never overwrite each other.
 ///
 /// A new currency is only saved once a rate into it is stored: figures are
-/// converted at read time, so without one they could only be shown in the
-/// pivot. The rate is fetched now rather than at the next sync, and when it
-/// can't be had the change is refused and nothing in the body is saved.
+/// converted at read time, and without one they are left out. The rate is
+/// fetched now rather than at the next sync, and when it can't be had the
+/// change is refused and nothing in the body is saved.
 pub async fn update_prefs(
     State(pool): State<PgPool>,
     State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,

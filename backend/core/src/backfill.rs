@@ -120,8 +120,7 @@ pub async fn backfill_connection(
             -- cost basis alone would otherwise drain cash with no deposits to
             -- fund them.
             select p.holding_id, l.acquired_on as day,
-                   sum(case when l.side = 'buy' then -(l.quantity * l.unit_price + l.fee)
-                            else l.quantity * l.unit_price - l.fee end) as delta
+                   sum(lot_cash_amount(l.side, l.quantity, l.unit_price, l.fee)) as delta
             from prehistory p
             join holding h    on h.account_id = p.account_id
             join instrument i on i.id = h.instrument_id

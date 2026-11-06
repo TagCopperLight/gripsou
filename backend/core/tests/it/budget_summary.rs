@@ -515,13 +515,10 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
+async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // No rate at all for CHF: the fallback is "report in the pivot", not zero
-    // — a user whose reporting currency has no stored rate must still see
-    // their figures, just unconverted. (A currency change fetches its rate
-    // first, so this is only a guard against dividing by nothing.)
+    // No rate at all for CHF: the euros are not shown as francs.
     seed_cash_instrument(&pool, "CHF").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     set_reporting_currency(&pool, user_id, "CHF").await;
@@ -539,15 +536,61 @@ async fn a_missing_reporting_rate_falls_back_to_the_pivot_not_zero(
 
     let rows = day_category_totals(&pool, user_id, day(2026, 3, 1), day(2026, 3, 31)).await?;
     assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].amount, Decimal::ZERO);
+    assert!(rows[0].fx_missing, "the reporting leg had no rate");
+    Ok(())
+}
+
+/// The Overview and the Transactions list it deep-links into leave out the
+/// same rows when the reader's currency has no rate on their day.
+#[sqlx::test(migrations = "../migrations")]
+async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    use gripsou_core::repo::query::{TransactionFilters, transaction_counts, transactions};
+
+    let chf = seed_cash_instrument(&pool, "CHF").await;
+    rate_on(&pool, chf, day(2026, 3, 10), Decimal::new(125, 2)).await;
+    let (user_id, conn_id) = seed_user_and_connection(&pool).await;
+    set_reporting_currency(&pool, user_id, "CHF").await;
+    let mut conn = pool.acquire().await?;
+    let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
+    for (ext, d, amount) in [
+        ("before", day(2026, 3, 4), eur(-30)),
+        ("after", day(2026, 3, 12), eur(-50)),
+    ] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", amount)
+                .on(d)
+                .described("X"),
+        )
+        .await?;
+    }
+    drop(conn);
+
+    let (from, to) = (day(2026, 3, 1), day(2026, 3, 31));
+    let overview = day_category_totals(&pool, user_id, from, to).await?;
+    let overview_total: Decimal = overview.iter().map(|r| r.amount).sum();
     assert_eq!(
-        rows[0].amount,
-        eur(-30),
-        "falls back to the pivot figure, not zero"
+        overview_total,
+        Decimal::new(-40, 0),
+        "50 EUR / 1.25, the 30 left out"
     );
-    assert!(
-        !rows[0].fx_missing,
-        "the account leg (EUR, the pivot) was fine"
-    );
+    assert!(overview.iter().any(|r| r.fx_missing));
+
+    let f = TransactionFilters {
+        from: Some(from),
+        to: Some(to),
+        ..TransactionFilters::default()
+    };
+    let counts = transaction_counts(&pool, user_id, &f).await?;
+    assert_eq!(counts.matching_total, overview_total);
+    assert!(counts.fx_missing);
+    let rows = transactions(&pool, user_id, &f).await?;
+    let shown: Vec<Option<Decimal>> = rows.iter().map(|r| r.amount_reporting).collect();
+    assert_eq!(shown, vec![Some(Decimal::new(-40, 0)), None]);
     Ok(())
 }
 

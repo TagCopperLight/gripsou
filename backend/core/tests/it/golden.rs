@@ -558,8 +558,7 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// The accounts list (and the distribution pie drawn from it), valued through
-/// `valuation_grid` rather than the scalar per-holding functions. Same standard
+/// The accounts list (and the distribution pie drawn from it). Same standard
 /// as the series above: every figure must stay identical.
 ///
 /// The digest is ordered by account name, not by the query's own value-descending

@@ -118,8 +118,7 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
 
 /// The reporting currency is a divisor and nothing else — no holding,
 /// price or account carries it — so it would never become rate-eligible on its
-/// own, and `reporting_fx_asof` would fall back to the pivot forever while the
-/// UI wore the chosen currency's symbol.
+/// own, and every figure would stay left out for want of a rate.
 #[sqlx::test(migrations = "../migrations")]
 async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_it(
     pool: PgPool,

@@ -58,8 +58,10 @@ pub struct ConnectionAccountRow {
     pub last_sync_at: Option<DateTime<Utc>>,
 }
 
-/// Every account under a user's connections, with its latest-snapshot value
-/// (0 when it has no snapshots yet) and the parent connection's last sync time.
+/// Every account under a user's connections, valued today in the reader's
+/// currency like the accounts grid (`holding_day_values`), with the parent
+/// connection's last sync time. Zero when it has nothing valued yet, or when a
+/// rate is missing.
 pub async fn list_connection_accounts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -67,25 +69,23 @@ pub async fn list_connection_accounts(
     let rows = sqlx::query_as!(
         ConnectionAccountRow,
         r#"
-        with latest as (
-            select distinct on (hs.holding_id) h.account_id, hs.value
-            from holding_snapshot hs
-            join holding h on h.id = hs.holding_id
-            order by hs.holding_id, hs.as_of desc
+        with v as (
+            select v.account_id, fx_convert(sum(v.value), 1, v.reporting_rate) as value
+            from holding_day_values($1, array[user_today($1)]) v
+            group by v.account_id, v.reporting_rate
         )
-        select a.connection_id        as "connection_id!",
+        select a.connection_id         as "connection_id!",
                a.id                    as "account_id!",
                a.name                  as "name!",
                a.color                 as "color",
                a.type_key              as "type_key!",
-               coalesce(sum(l.value), 0) as "value!",
+               coalesce(v.value, 0)    as "value!",
                c.last_sync_at,
                a.provider_meta as "provider_meta!"
         from account a
-        join connection c   on c.id = a.connection_id
-        left join latest l  on l.account_id = a.id
-        where c.user_id = $1 and a.connection_id is not null
-        group by a.connection_id, a.id, a.name, a.color, a.type_key, c.last_sync_at
+        join connection c on c.id = a.connection_id
+        left join v       on v.account_id = a.id
+        where c.user_id = $1
         order by a.name
         "#,
         user_id,

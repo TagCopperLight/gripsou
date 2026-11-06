@@ -2168,11 +2168,10 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// A reporting currency with no rate falls back to the pivot rather than
-/// collapsing every figure to NULL. `update_prefs` fetches the rate before
-/// saving a currency, so this is a guard, not a state the reader sees.
+/// A reporting currency with no rate leaves the figure out and flags it,
+/// never shows the pivot figure under the reader's symbol.
 #[sqlx::test(migrations = "../migrations")]
-async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
+async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -2189,14 +2188,25 @@ async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
     .await?;
     let today = chrono::Utc::now().date_naive();
 
-    // Switch to a currency no rate exists for. The figure stays 100 euros.
+    // Switch to a currency no rate exists for.
     sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
         .await?;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
-    assert_eq!(rows[0].net_worth, Decimal::new(100, 0), "still the pivot");
-    assert!(!rows[0].fx_missing, "nothing is left out of the sum");
+    assert_eq!(
+        rows[0].net_worth,
+        Decimal::ZERO,
+        "not 100 euros read as dollars"
+    );
+    assert!(rows[0].fx_missing);
+    let accounts = query::accounts(&pool, user_id).await?;
+    assert_eq!(accounts[0].value, Decimal::ZERO);
+    assert!(accounts[0].fx_missing);
+    assert_eq!(accounts[0].value_native, Some(Decimal::new(100, 0)));
+    let holdings = query::holdings(&pool, user_id).await?;
+    assert_eq!(holdings[0].value, Decimal::ZERO);
+    assert!(holdings[0].fx_missing);
 
     // Once the rate lands the figure converts.
     let usd: uuid::Uuid = sqlx::query_scalar(
@@ -2207,6 +2217,9 @@ async fn reporting_in_a_currency_with_no_rate_falls_back_to_the_pivot(
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
     let rows = query::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, "125".parse()?);
+    // The connections list shows the same converted figure, not the account's euros.
+    let listed = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
+    assert_eq!(listed[0].value, "125".parse()?);
     Ok(())
 }
 
@@ -2257,6 +2270,11 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     assert!(
         rows[0].fx_missing,
         "the gap between the two lines is not a gain and must not read as one"
+    );
+    let accounts = query::accounts(&pool, user_id).await?;
+    assert!(
+        accounts[0].fx_missing,
+        "the accounts card flags the same basis"
     );
     let held = query::holdings(&pool, user_id).await?;
     assert_eq!(held[0].invested, Decimal::ZERO);

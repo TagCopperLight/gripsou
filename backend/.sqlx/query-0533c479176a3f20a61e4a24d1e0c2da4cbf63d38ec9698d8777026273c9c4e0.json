@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select fx_convert(1, unit_value_asof(h.instrument_id, user_today($2)),\n                          fx_asof(a.currency, user_today($2)))\n        from holding h\n        join account a on a.id = h.account_id\n        where h.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fx_convert",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0533c479176a3f20a61e4a24d1e0c2da4cbf63d38ec9698d8777026273c9c4e0"
+}
