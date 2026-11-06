@@ -249,7 +249,6 @@ pub async fn set_provider(
     Path(key): Path<String>,
     Json(body): Json<dto::SetProviderReq>,
 ) -> Result<Json<dto::Provider>, ApiError> {
-    // Reject unknown providers before mutating.
     let kind = registry::account_kind(&key).ok_or(ApiError::NotFound("provider not found"))?;
     gripsou_core::repo::settings::set_provider_enabled(&pool, &key, body.enabled).await?;
     tracing::info!(provider = %key, enabled = body.enabled, "provider enabled changed");
@@ -336,7 +335,6 @@ pub async fn delete_user(
     let target = gripsou_core::repo::user::profile_by_id(&pool, id)
         .await?
         .ok_or(ApiError::NotFound("user not found"))?;
-    // Confirm the typed email matches the user being deleted (case-insensitive).
     if body.email.trim().to_lowercase() != target.email.to_lowercase() {
         return Err(ApiError::bad_request("email does not match user"));
     }
@@ -824,8 +822,6 @@ mod tests {
         assert_eq!(s.provider.as_deref(), Some(key));
         assert_eq!(s.model.as_deref(), Some("m"));
     }
-
-    // ── AI usage and prices ─────────────────────────────────────────────────
 
     use std::collections::BTreeMap;
 

@@ -68,8 +68,6 @@ pub struct Sankey {
 }
 
 /// A side keeps slices at or above this share of the period's expenses (2%).
-/// A function rather than a `const` because `Decimal` construction is not
-/// const here — the same reason a `Decimal` threshold is built at runtime.
 fn sankey_min_share() -> Decimal {
     Decimal::new(2, 2)
 }
@@ -220,8 +218,8 @@ pub fn sankey(rows: &[DayCategoryRow]) -> Sankey {
     } else if remainder < Decimal::ZERO {
         // The deficit is carried by `drawn_from_savings` alone — it is never
         // pushed into `sources`, the mirror of `not_spent` never being pushed
-        // into `destinations`. Pushing it created a second `Slice::Other` key
-        // on the source side whenever `collapse` had already produced one.
+        // into `destinations`. Pushing it would add a second `Slice::Other` key
+        // on the source side whenever `collapse` already produced one.
         (None, Some(-remainder))
     } else {
         (None, None)
@@ -275,8 +273,7 @@ impl Month {
         format!("{:04}-{:02}", self.year, self.month)
     }
 
-    /// First and last day, inclusive. Day 1 of the next month minus one day —
-    /// which is right in February and in a leap year without a table.
+    /// First and last day, inclusive.
     pub fn bounds(&self) -> (NaiveDate, NaiveDate) {
         let first = NaiveDate::from_ymd_opt(self.year, self.month, 1).expect("valid month");
         let next = self.next();
@@ -464,8 +461,8 @@ fn breakdown_against(rows: &[DayCategoryRow], baseline: Option<&Baseline>) -> Ve
 /// cap, so the two surfaces give a category the same chance of its own colour.
 const TREND_KEEP: usize = SANKEY_MAX_SLICES;
 /// This many of the anchor month's largest slices are always kept, whatever
-/// their window total: ranking by total alone let old one-off spikes crowd
-/// the month being looked at into Other.
+/// their window total: ranking by total alone would let old one-off spikes
+/// crowd the month being looked at into Other.
 const TREND_ANCHOR_KEEP: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

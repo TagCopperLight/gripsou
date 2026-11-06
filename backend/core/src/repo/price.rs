@@ -59,7 +59,7 @@ pub async fn insert_prices(
 }
 
 /// The most recent price timestamp for an instrument, or `None` if it has no
-/// prices yet. Drives the incremental-fetch `since` and the same-day guard.
+/// prices yet. Drives the refetch window's start and the same-day guard.
 pub async fn latest_price_ts(
     conn: &mut sqlx::PgConnection,
     instrument_id: Uuid,

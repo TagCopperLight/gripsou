@@ -77,7 +77,6 @@ async fn fee_is_part_of_the_basis(pool: PgPool) {
     assert_eq!(mean_price, Some(dec("98.895")));
 }
 
-/// The headline cost-basis bug: a sale once reduced the basis by its proceeds.
 /// A sale must remove qty x mu from the basis, NEVER its proceeds — folding
 /// realised P/L into the basis makes the invested line move with the market.
 #[sqlx::test(migrations = "../migrations")]

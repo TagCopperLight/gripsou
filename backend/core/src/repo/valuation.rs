@@ -360,8 +360,8 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
         // label stops meaning 30D. A market instrument yields ~21 points here
         // (weekends have no price), which is the honest shape.
         //
-        // ponytail: no cap on the row count. A daily feed makes this ~30 rows;
-        // add a sample-down (repo::series) if an intraday feed ever lands here.
+        // No cap on the row count: a daily feed makes this ~30 rows. An
+        // intraday feed would need a sample-down (repo::series).
         let spark: Vec<Decimal> = if b.kind == "cash" {
             Vec::new()
         } else {

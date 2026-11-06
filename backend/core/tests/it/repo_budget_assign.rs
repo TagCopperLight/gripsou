@@ -437,15 +437,6 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Bulk writes and the pair-break guard
-//
-// A category write dissolves any internal-transfer pair it touches, and "select
-// all shown" can sweep up pairs the client has never loaded and so cannot
-// count. The caller therefore confirms: an unconfirmed call that would break
-// pairs writes *nothing* and reports the count instead.
-// ---------------------------------------------------------------------------
-
 /// Seeds a paired internal transfer across two accounts and returns
 /// `(user_id, groceries, outgoing, incoming)`.
 async fn paired_fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid, Uuid)> {
@@ -586,10 +577,6 @@ async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Resul
     assert_eq!(outcome, WriteOutcome::Done(1));
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// The checked writes the API calls: all or nothing, and pairs confirmed.
-// ---------------------------------------------------------------------------
 
 async fn row_state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64, Option<Uuid>) {
     sqlx::query_as(
@@ -943,14 +930,6 @@ async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow:
     );
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// A neutral category keeps the pair
-//
-// Savings or Investments instead of Internal transfer is a finer label for
-// the same movement: it counts toward nothing, as the pair does, so no total
-// changes and nothing needs confirming.
-// ---------------------------------------------------------------------------
 
 async fn savings(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
     Ok(list_categories(pool, user_id)

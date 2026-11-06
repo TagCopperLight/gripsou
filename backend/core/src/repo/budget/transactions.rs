@@ -64,7 +64,6 @@ pub struct TransactionListRow {
     /// the account's currency, as `lot_basis` and the holdings table assume.
     pub account_currency: String,
 
-    // ── Budget ──────────────────────────────────────────────────────────────
     // All null/false on a lot row: a purchase is an investment record, not a
     // budget item.
     pub category_id: Option<Uuid>,
@@ -75,7 +74,8 @@ pub struct TransactionListRow {
     pub category_kind: Option<CategoryKind>,
     pub category_source: Option<CategorySource>,
     pub category_confidence: Option<Decimal>,
-    /// Derived, never stored: an unreviewed AI guess that is under the reader's threshold, has no category, or sits in an internal/excluded category.
+    /// Derived, never stored: an unreviewed AI guess under the reader's
+    /// threshold, with no category, or in a neutral category.
     pub needs_review: bool,
     pub checked: bool,
     /// The row is one half of an auto-paired internal transfer.

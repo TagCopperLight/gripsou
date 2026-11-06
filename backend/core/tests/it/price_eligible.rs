@@ -96,10 +96,10 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
     )
     .await?;
 
-    // fetch_prices_for_connection backfills the missing USD cash instrument
-    // before running the eligibility query (that's the fix for the hole:
-    // a foreign security never causes a cash instrument in its own currency
-    // to exist on its own). No providers needed for that backfill step.
+    // fetch_prices_for_connection creates the missing USD cash instrument
+    // before running the eligibility query: a foreign security never makes a
+    // cash instrument in its own currency exist on its own. No providers are
+    // needed for that step.
     let providers: Vec<Box<dyn PriceProvider>> = vec![];
     fetch_prices_for_connection(&pool, conn_id, &providers).await?;
 

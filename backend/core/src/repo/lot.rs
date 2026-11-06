@@ -1,9 +1,9 @@
 //! Lots: purchases and sales as first-class records, separate from the cash
 //! ledger in `transaction`.
 //!
-//! The basis rule itself lives in the `lot_basis` SQL function (0022) and
-//! NOWHERE else — not here, not in `query.rs`, not in the frontend. Everything
-//! in this module either writes lot rows or asks that function a question.
+//! The basis rule itself lives in the `lot_basis` SQL function and NOWHERE
+//! else — not here, not in the frontend. Everything in this module either
+//! writes lot rows or asks that function a question.
 
 use std::collections::BTreeSet;
 

@@ -23,7 +23,7 @@ pub struct UserPrefs {
     /// The user's opt-in to AI categorisation.
     pub budget_ai_enabled: bool,
     /// Review threshold, as an integer percent. An AI guess below it goes to
-    /// the review queue. Always within [`BUDGET_AI_THRESHOLD_RANGE`].
+    /// the review queue. Always within the range the column's check allows.
     pub budget_ai_threshold: u8,
 }
 

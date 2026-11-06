@@ -9,7 +9,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 
 /// Inline styles stay allowed (React style props, ECharts); scripts get no
-/// exception. Logos come from Brandfetch's CDN (`core/src/logo.rs`). Vite
+/// exception. Logos come from Brandfetch's CDN (`providers/src/brandfetch.rs`). Vite
 /// inlines small fonts into the CSS as `data:` URLs.
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
 img-src 'self' data: blob: https://cdn.brandfetch.io; font-src 'self' data:; connect-src 'self'; \

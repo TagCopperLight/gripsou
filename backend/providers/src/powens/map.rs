@@ -13,7 +13,7 @@ use crate::powens::model::{BankAccount, Connection, Investment, PowensTransactio
 
 /// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
 /// `account_type` keys. `None` marks a liability (loan, card):
-/// gripsou tracks assets only for now, and mapping these onto an asset type
+/// gripsou tracks assets only, and mapping these onto an asset type
 /// would add their balance to net worth with the wrong sign.
 pub fn map_type_key(name: &str) -> Option<&'static str> {
     Some(match name {
@@ -47,9 +47,8 @@ pub fn is_liquidity(inv: &Investment) -> bool {
 }
 
 /// Extract the institution from the connections endpoint. With one connection
-/// per token the first connector is correct.
-// ponytail: takes the first connector; match by accounts' id_connection if a
-// single token ever carries multiple connections.
+/// per token the first connector is correct; a token carrying several would
+/// need matching by the accounts' `id_connection`.
 fn map_institution(connections: &[Connection]) -> Institution {
     connections
         .iter()

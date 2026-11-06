@@ -1,6 +1,6 @@
 //! ISIN → Yahoo symbol selection. Yahoo's search ranks the primary/home-market
-//! listing first; for v1 we take the top EQUITY/ETF candidate. (Currency-aware
-//! candidate selection is a deferred refinement — see the plan's notes.)
+//! listing first, so the top EQUITY/ETF candidate is taken, whatever its
+//! currency.
 
 /// One result row distilled from Yahoo's search response.
 pub(crate) struct Candidate {

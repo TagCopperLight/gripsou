@@ -66,10 +66,6 @@ pub struct UpdatedAccount {
 /// connection) so a user can only edit their own accounts. Returns `None` when
 /// the `(account_id, user_id)` pair matches no account (wrong owner / unknown
 /// id) or `type_key` is not a known account type — the join then yields no row.
-///
-/// Takes the pool (not a `&mut PgConnection` like the ingest helpers): this is a
-/// standalone, interactive mutation from the API, never part of a sync
-/// transaction.
 pub async fn update_account(
     pool: &sqlx::PgPool,
     user_id: Uuid,

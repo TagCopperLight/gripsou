@@ -203,7 +203,6 @@ async fn claim_outcome(
     })
 }
 
-/// Mark a finished sync as successful.
 pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection
@@ -230,7 +229,6 @@ pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Resu
     Ok(())
 }
 
-/// Provider key for a connection (for the orchestrator's adapter lookup).
 pub async fn provider_key(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, CoreError> {
     let key = sqlx::query_scalar!("select provider_key from connection where id = $1", id)
         .fetch_optional(pool)
@@ -297,7 +295,6 @@ pub async fn sync_source(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<SyncSou
     Ok(row)
 }
 
-/// All connection ids for a user (for "sync all").
 pub async fn ids_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"select id as "id!" from connection where user_id = $1"#,

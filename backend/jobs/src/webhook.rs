@@ -45,7 +45,6 @@ pub async fn handle_webhook(
     let signal = match adapter.verify_webhook(path, &headers, &body) {
         Ok(Some(s)) => s,
         Ok(None) => {
-            // valid, ignored
             tracing::info!(provider, outcome = "ignored", "webhook received");
             return WebhookOutcome::Accepted;
         }

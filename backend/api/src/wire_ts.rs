@@ -49,13 +49,11 @@ struct Types {
 
 impl Types {
     fn roots(&mut self) {
-        // accounts
         self.visit::<accounts::dto::NetWorthResponse>();
         self.visit::<accounts::dto::Account>();
         self.visit::<accounts::dto::AccountSeriesResponse>();
         self.visit::<accounts::dto::UpdateAccountReq>();
         self.visit::<accounts::dto::UpdatedAccount>();
-        // admin
         self.visit::<admin::dto::User>();
         self.visit::<admin::dto::DeleteUserReq>();
         self.visit::<admin::dto::SetRoleReq>();
@@ -68,7 +66,6 @@ impl Types {
         self.visit::<admin::dto::SetBudgetAiSettingsReq>();
         self.visit::<admin::dto::BudgetAiUsageDto>();
         self.visit::<admin::dto::BudgetAiPriceReq>();
-        // auth
         self.visit::<auth::dto::LoginReq>();
         self.visit::<auth::dto::LoginOutcome>();
         self.visit::<auth::dto::LoginVerifyReq>();
@@ -90,7 +87,6 @@ impl Types {
         self.visit::<auth::dto::TotpSetup>();
         self.visit::<auth::dto::TotpConfirmReq>();
         self.visit::<auth::dto::RecoveryCodes>();
-        // budget
         self.visit::<budget::dto::CategoryDto>();
         self.visit::<budget::dto::CategoryBody>();
         self.visit::<budget::dto::ReorderBody>();
@@ -108,7 +104,6 @@ impl Types {
         self.visit::<budget::dto::AcceptReviewResponse>();
         self.visit::<budget::dto::AiStatusDto>();
         self.visit::<budget::dto::UndoReviewReq>();
-        // connections
         self.visit::<connections::dto::ProviderGroup>();
         self.visit::<connections::dto::ConnectionState>();
         self.visit::<connections::dto::EnabledProvider>();
@@ -117,7 +112,6 @@ impl Types {
         self.visit::<connections::dto::SyncAllResp>();
         self.visit::<connections::dto::ManageResp>();
         self.visit::<connections::dto::CompleteConnectionReq>();
-        // holdings
         self.visit::<holdings::dto::Holding>();
         self.visit::<holdings::dto::SaveLotsReq>();
         self.visit::<holdings::dto::Lot>();
@@ -126,11 +120,9 @@ impl Types {
         self.visit::<holdings::dto::BasisPreview>();
         self.visit::<holdings::dto::PricePoint>();
         self.visit::<holdings::dto::InvestmentReturns>();
-        // transactions
         self.visit::<transactions::dto::Transaction>();
         self.visit::<transactions::dto::CountsDto>();
         self.visit::<transactions::TransactionParams>();
-        // everywhere
         self.visit::<wire::Range>();
         self.visit::<crate::Health>();
     }

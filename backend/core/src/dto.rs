@@ -41,8 +41,8 @@ pub struct CanonicalHolding {
     pub account_external_id: String,
     pub instrument: InstrumentRef,
     pub quantity: Decimal,
-    /// Total invested. When a provider only gives aggregate cost basis, this
-    /// carries it and the purchases-staircase degrades to a single step.
+    /// Total invested, as the provider reports it. Lots that explain the
+    /// position take precedence (`lot_basis`).
     pub cost_basis: Decimal,
     /// Provider-supplied valuation, if any (else valued from prices).
     pub valuation: Option<Decimal>,

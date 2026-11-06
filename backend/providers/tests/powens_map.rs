@@ -510,10 +510,10 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
     }
 }
 
-/// The mapping keys `ts` on `rdate` because it is 100% filled — but the *balance*
-/// follows the booking date, and the two disagree on 70% of real rows by up to
-/// five days. `ts` stays the day the card was tapped (what the user recognises
-/// on the list); `booked_on` carries the day the money actually moved, which is
+/// `spent_on` is `rdate`, 100% filled — but the *balance* follows the booking
+/// date, and the two disagree on 70% of real rows by up to five days.
+/// `spent_on` stays the day the card was tapped (what the user recognises on
+/// the list); `booked_on` carries the day the money actually moved, which is
 /// the only date the backward walk can honestly use.
 #[test]
 fn carries_both_the_spend_date_and_the_booking_date() {

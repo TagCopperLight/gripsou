@@ -4,7 +4,7 @@ use crate::text_enum::text_enum;
 
 text_enum! {
     /// Listed in display order: categories are shown grouped by kind in this
-    /// order (SQL binds `CategoryKind::ALL` and orders by `array_position`).
+    /// order (the SQL orders by each kind's position in this list).
     pub enum CategoryKind {
         Expense = "expense",
         Income = "income",

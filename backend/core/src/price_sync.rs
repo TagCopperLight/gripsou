@@ -13,12 +13,11 @@ use crate::repo::price::{has_fx_rate, insert_prices, latest_price_ts, market_tod
 
 /// How far back of already-stored history each pass re-requests.
 ///
-/// Asking Yahoo for strictly-newer-than-`max(ts)` looked like the obvious
-/// saving and was the bug behind permanently missing days: the tail of Yahoo's
-/// daily series is its least stable part, and a bar absent from the one
-/// response whose window covered it could never be asked for again — the next
-/// request already began after it. Two instances polling at the same instant
-/// got different responses and forked, permanently.
+/// Asking Yahoo only for bars newer than `max(ts)` loses days for good: the
+/// tail of Yahoo's daily series is its least stable part, and a bar absent
+/// from the one response whose window covered it would never be asked for
+/// again, since the next request begins after it. Two instances polling at the
+/// same instant get different responses and fork.
 ///
 /// Re-asking for a trailing window makes a dropped bar self-heal on the next
 /// pass, and `insert_prices` is an upsert, so a bar we already have costs
@@ -169,14 +168,12 @@ async fn fetch_instrument(
         return Ok(());
     };
 
-    // Freshness guard: already have today's point → nothing to do.
     let latest = latest_price_ts(conn, row.id).await?;
     if latest.map(|ts| ts.date_naive()) == Some(market_today()) {
         summary.skipped_fresh += 1;
         return Ok(());
     }
 
-    // Resolve (or reuse cached) symbol.
     let symbol = match row.provider_symbol(provider.key()) {
         Some(s) => s.to_string(),
         None => {
@@ -208,9 +205,7 @@ async fn fetch_instrument(
         }
     };
 
-    // Re-fetch the trailing window (or full history when no prices yet)
-    // and upsert. `latest` itself is deliberately not the start: see
-    // REFETCH_DAYS.
+    // `latest` itself is deliberately not the start: see REFETCH_DAYS.
     let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
     match provider.fetch_prices(&symbol, since).await {
         Ok(points) => {
@@ -236,8 +231,6 @@ async fn fetch_instrument(
             }
             let batch: Vec<(chrono::DateTime<chrono::Utc>, rust_decimal::Decimal)> =
                 points.iter().map(|p| (p.ts, p.unit_price)).collect();
-            // One batched upsert per instrument (a backfill can be hundreds of
-            // bars) instead of a round-trip per point.
             let written = insert_prices(conn, row.id, &batch, &currency).await?;
             summary.prices_inserted += written as usize;
         }

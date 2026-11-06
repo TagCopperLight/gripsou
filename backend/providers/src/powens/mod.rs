@@ -356,10 +356,8 @@ impl AccountProvider for PowensProvider {
         // Full history, every sync. Powens' `last_update` filter returns only
         // rows edited since a timestamp and therefore cannot backfill, so
         // incremental is unsafe; full-fetch + external_id dedup is idempotent
-        // instead.
-        //
-        // ponytail: fetches the whole history; add a min_date window if
-        // payloads grow past a few thousand rows (largest observed: 2,111).
+        // instead. The largest history seen is 2,111 rows; a `min_date` window
+        // would bound much larger ones.
         let transactions = self
             .fetch_all::<model::TransactionsResponse>(&auth_token, "/users/me/transactions")
             .await?;

@@ -294,8 +294,6 @@ fn a_twelve_month_mean_is_sent_to_the_cent() {
     assert_eq!(mean_to_string(Decimal::new(-5, 3)), "-0.01");
 }
 
-// ── Helpers for the tests below ─────────────────────────────────────────
-
 /// A cash row on a fixed date, so period tests do not depend on today.
 async fn seed_dated(
     pool: &PgPool,
@@ -464,8 +462,6 @@ async fn trend_of(
     .await
     .map(|j| j.0)
 }
-
-// ── Cross-user isolation ────────────────────────────────────────────────
 
 /// A category id is guessable from any shared link; the owner check is
 /// what stops another account renaming someone else's taxonomy.
@@ -676,8 +672,6 @@ async fn apply_to_description_sweeps_only_the_callers_rows(pool: PgPool) {
     );
 }
 
-// ── Validation and error mapping ────────────────────────────────────────
-
 /// Creating a category under an existing name is an ordinary UI mistake
 /// and must read as 409, not an opaque 500.
 #[sqlx::test(migrations = "../migrations")]
@@ -866,8 +860,6 @@ async fn accepting_a_row_not_in_review_is_409(pool: PgPool) {
         .unwrap();
     assert_eq!(err.status(), StatusCode::CONFLICT);
 }
-
-// ── Wiring ──────────────────────────────────────────────────────────────
 
 /// A tag created through the API is listed, renamed and deleted through
 /// it, and a second delete is a 404.

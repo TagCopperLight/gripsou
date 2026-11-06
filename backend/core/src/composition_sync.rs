@@ -31,7 +31,6 @@ pub async fn fetch_composition_for_connection(
     for row in instruments {
         let iref = row.instrument_ref();
 
-        // Resolve (or reuse cached) symbol.
         let symbol = match row.provider_symbol(provider.key()) {
             Some(s) => s.to_string(),
             None => match provider.resolve_symbol(&iref).await {
@@ -60,8 +59,8 @@ pub async fn fetch_composition_for_connection(
 
         match provider.fetch_composition(&symbol).await {
             // A resolved symbol whose page has no breakdown (an equity, or a
-            // tracker that reports none) must NOT be stamped `etf` with empty
-            // data — mark it `none` so it's excluded from future passes.
+            // tracker that reports none) is marked `none`, never stored as an
+            // empty composition, so it leaves future passes.
             Ok(comp) if comp.countries.is_empty() && comp.sectors.is_empty() => {
                 mark_composition_none(&mut conn, row.id).await?;
                 summary.unresolved += 1;
@@ -70,9 +69,9 @@ pub async fn fetch_composition_for_connection(
                 set_composition(&mut conn, row.id, &comp).await?;
                 summary.fetched += 1;
             }
-            // ponytail: a cached symbol that errors on fetch every sync is re-tried forever (one
-            // request/sync). Mirrors price_sync's transient-error handling; add a
-            // meta.composition_attempted_at backoff if this becomes costly.
+            // A cached symbol that errors on fetch every sync is retried forever
+            // (one request per sync), like price_sync's transient errors. A
+            // `meta.composition_attempted_at` backoff would bound it.
             Err(e) => {
                 tracing::warn!(
                     provider = provider.key(),

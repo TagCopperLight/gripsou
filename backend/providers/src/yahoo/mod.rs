@@ -57,9 +57,6 @@ impl PriceProvider for YahooPriceProvider {
             .await
             .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
-        // Distil the crate's result rows into our own minimal type, then apply
-        // the pure selection. NOTE: field names (`symbol`, `quote_type`) are the
-        // crate's; if they differ in 4.1.x the compiler will say so — adjust here.
         let candidates: Vec<Candidate> = res
             .quotes
             .iter()

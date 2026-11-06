@@ -18,7 +18,7 @@ const QUEUE_CAPACITY: usize = 10_000;
 ///
 /// Deliberately not `.init()`: that also installs the `log`-crate bridge, and
 /// with per-layer filters the bridge's "is this enabled?" checks (sqlx asks on
-/// every query) made tracing drop the next line from both outputs. Crates that
+/// every query) make tracing drop the next line from both outputs. Crates that
 /// log through `log` (sqlx, reqwest, rustls) go unbridged; at info they are
 /// silent anyway.
 pub fn install(terminal: tracing_subscriber::EnvFilter) -> LogWriter {

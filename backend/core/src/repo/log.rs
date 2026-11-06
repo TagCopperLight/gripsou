@@ -4,7 +4,6 @@
 use crate::error::CoreError;
 use crate::logs::LogLine;
 
-/// One multi-row insert for the whole batch.
 pub async fn insert_batch(db: &sqlx::PgPool, lines: &[LogLine]) -> Result<u64, CoreError> {
     if lines.is_empty() {
         return Ok(0);
@@ -28,7 +27,6 @@ pub async fn insert_batch(db: &sqlx::PgPool, lines: &[LogLine]) -> Result<u64, C
     Ok(r.rows_affected())
 }
 
-/// Delete rows older than `days`. Returns how many were deleted.
 pub async fn purge_older_than(db: &sqlx::PgPool, days: i32) -> Result<u64, CoreError> {
     let r = sqlx::query!(
         "delete from log where at < now() - make_interval(days => $1)",

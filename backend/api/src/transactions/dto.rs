@@ -38,7 +38,6 @@ pub struct Transaction {
     /// Decimal string, never a float.
     pub fee: Option<String>,
 
-    // ── Budget ──────────────────────────────────────────────────────────────
     pub category_id: Option<String>,
     pub category_name: Option<String>,
     /// Translate this when present; fall back to `category_name`.
@@ -129,8 +128,7 @@ pub struct CountsDto {
     pub uncategorized: i64,
     /// The cash rows among `matching`: what "select all shown" selects.
     pub selectable: i64,
-    /// Decimal as a string, per the project convention. The `selectable`
-    /// rows' sum.
+    /// The `selectable` rows' sum, a decimal string.
     pub matching_total: String,
     /// At least one matching row's account leg could not be valued, so
     /// `matchingTotal` is understated by whatever that row was worth. Same

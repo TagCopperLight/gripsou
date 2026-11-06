@@ -1,16 +1,4 @@
 //! Integration tests for `gripsou_jobs::handle_webhook`.
-//!
-//! Determinism note: `handle_webhook` awaits `begin_sync` *before* spawning
-//! `sync_connection`, so the 'syncing' status transition is committed
-//! synchronously. The test queries the DB immediately after `handle_webhook`
-//! returns. The spawned `sync_connection` will eventually overwrite the status
-//! to 'error' (missing credentials), but at the point the assertion runs the
-//! row is guaranteed to be 'syncing' because the spawn has not yet been
-//! polled. To avoid the race entirely the valid-signature test instead queries
-//! a field that `mark_synced_error` never touches (the status may become
-//! 'error', but begin_sync was called — we assert Accepted outcome plus that
-//! the connection exists, and rely on the synchronous begin_sync for the
-//! status check right after handle_webhook returns).
 
 use std::sync::Arc;
 
@@ -79,16 +67,8 @@ async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uui
     conn_id
 }
 
-// ── valid signature + known connection ───────────────────────────────────────
-
 /// A correctly-signed webhook with a known connection id claims the connection
-/// (status 'syncing') and returns Accepted.
-///
-/// The 'syncing' assertion is safe: `handle_webhook` awaits `begin_sync`
-/// synchronously before spawning `sync_connection`. The spawn is not polled
-/// until after this function returns, so the status is guaranteed 'syncing' at
-/// the assertion point. (The spawn will later flip it to 'error', since the
-/// fake Powens domain is unreachable, but that races after our check.)
+/// and returns Accepted.
 #[sqlx::test(migrations = "../migrations")]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -118,9 +98,8 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
         "expected Accepted for valid webhook"
     );
 
-    // begin_sync runs synchronously inside handle_webhook before the spawn. The
-    // spawned sync_connection may race and set status to 'error' before this query
-    // runs. Either way, the connection was claimed (status changed from 'ok').
+    // The spawned sync may already have failed against the unreachable server:
+    // either way the connection was claimed.
     let status: String = sqlx::query_scalar("select status from connection where id=$1")
         .bind(conn_id)
         .fetch_one(&pool)
@@ -132,8 +111,6 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
 
     Ok(())
 }
-
-// ── bad signature → Unauthorized ─────────────────────────────────────────────
 
 /// A webhook with a wrong signature is rejected with Unauthorized; the
 /// connection status is not touched.
@@ -199,8 +176,6 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-// ── valid signature, unknown connection → Accepted (no panic) ────────────────
-
 /// A valid signature whose connection.id matches no row returns Accepted
 /// (the provider should stop retrying) and does not panic.
 #[sqlx::test(migrations = "../migrations")]
@@ -231,8 +206,6 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
 
     Ok(())
 }
-
-// ── disabled provider → NotFound ─────────────────────────────────────────────
 
 /// A provider the admin turned off accepts no webhook, even correctly signed:
 /// its connections must not sync behind the admin's back.

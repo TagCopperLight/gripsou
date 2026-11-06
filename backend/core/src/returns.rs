@@ -151,8 +151,8 @@ pub struct Returns {
 /// Every figure covers the same positions: those whose lots explain what is
 /// held and that could be valued today. The others are left out of all of
 /// them and listed, so the page can say so: counted in the invested and value
-/// but not the return, they made the two disagree, and one valued at zero
-/// against its full cost showed a loss that didn't exist. The return covers
+/// but not the return, they would make the two disagree, and one valued at
+/// zero against its full cost would show a loss that doesn't exist. The return covers
 /// the counted positions' lots, the dividends of accounts whose positions in
 /// scope are all counted (from the account's first recorded purchase on), and
 /// today their current value. A missing rate among those flows leaves the

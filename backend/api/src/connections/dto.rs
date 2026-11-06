@@ -157,7 +157,7 @@ impl EnabledProvider {
     }
 }
 
-/// A provider's display name, or its key for one this build no longer knows.
+/// A provider's display name, or its key for one this build doesn't know.
 pub fn provider_name(key: &str) -> &str {
     registry::account_kind(key).map_or(key, |k| k.about.display_name)
 }

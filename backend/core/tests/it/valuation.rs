@@ -911,8 +911,8 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
         "10 * 200 USD * 0.90 = 1800 EUR"
     );
     // cost_basis is amount-domain: the provider denominated it in the ACCOUNT's
-    // currency (EUR), so it converts at 1 — multiplying it by the USD rate, as
-    // the code used to, understated invested by ~14% and inflated gain %.
+    // currency (EUR), so it converts at 1 — multiplying it by the USD rate
+    // would understate invested by ~14% and inflate gain %.
     assert_eq!(h.invested, "1500".parse()?, "1500 is already EUR");
     assert_eq!(h.invested_native, "1500".parse()?);
     assert!(!h.fx_missing);

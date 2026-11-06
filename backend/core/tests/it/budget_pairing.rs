@@ -343,9 +343,7 @@ async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result
 /// A `buy` row that is equal and opposite to a `deposit` within the window
 /// must never be filed as an internal transfer: it is a coincidence of
 /// amount, not a movement between the user's own accounts, and a PEA `buy`
-/// hidden this way would be uncorrectable through the transactions list. This
-/// would fail (pairing the two) if the candidate query's `t.type in
-/// ('deposit', 'withdrawal', 'transfer')` filter were reverted.
+/// hidden this way would be uncorrectable through the transactions list.
 #[sqlx::test(migrations = "../migrations")]
 async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -931,16 +929,6 @@ async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Dissolving a pair
-//
-// A user category outranks pairing, so a user may always overrule the
-// pairing heuristic — it is timid, but it can still false-match
-// two unrelated movements of the same amount. What must not survive that
-// correction is the link itself: a row pointing at a counterpart that is no
-// longer a transfer is a half-transfer that nets against nothing.
-// ---------------------------------------------------------------------------
-
 /// Seeds a paired transfer and returns `(user_id, outgoing, incoming)`.
 async fn seeded_pair(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid)> {
     let (user_id, a, b) = two_accounts(pool, "EUR").await?;
@@ -968,10 +956,6 @@ async fn row(pool: &PgPool, id: Uuid) -> anyhow::Result<PairedRow> {
     .fetch_one(pool)
     .await?)
 }
-
-// ---------------------------------------------------------------------------
-// From scratch on every run
-// ---------------------------------------------------------------------------
 
 /// Adds an arrival on the incoming half's account as far from the outgoing
 /// half as the incoming half is, on the other side: the outgoing half now
@@ -1165,14 +1149,6 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
     assert_eq!(row(&pool, inn).await?.1, None);
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Counting before writing
-//
-// "Select all shown" resolves server-side and may be years of rows the client
-// has never loaded, so it cannot count the pairs it is about to break. The
-// server counts them, and a caller that has not confirmed writes nothing.
-// ---------------------------------------------------------------------------
 
 /// A bulk category write over this selection, the way the Transactions page
 /// sends it.

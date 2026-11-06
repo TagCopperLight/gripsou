@@ -60,7 +60,6 @@ pub struct Suggestion {
 /// their transaction is never handed to another holding. Anything else is left
 /// to the user.
 pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
-    // How many jumps each transaction could explain, across the account.
     let mut claims: HashMap<Uuid, usize> = HashMap::new();
     for j in jumps {
         for c in &j.candidates {
@@ -98,7 +97,7 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
 }
 
 /// Every quantity jump of the account's non-cash holdings, with its
-/// candidate transactions. See the spec for each rule; in short:
+/// candidate transactions:
 /// - a jump is a snapshot whose quantity differs from the holding's previous
 ///   one, or a holding's first snapshot when the account already had an
 ///   earlier snapshot (a rise from 0);

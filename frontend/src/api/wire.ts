@@ -45,7 +45,7 @@ export type ApplyToDescriptionBody = { categoryId?: string | null,
 /**
  * The caller has seen how many internal-transfer pairs this write would
  * dissolve and wants it applied anyway. Without it, a write that would
- * break one is refused (see `UpdatedResponse::pending_pair_breaks`).
+ * break one is refused and answers `pendingPairBreaks`.
  */
 confirmBreakPairs?: boolean, 
 /**
@@ -139,20 +139,21 @@ series: Array<TrendSeries>, };
 
 export type BulkBody = { 
 /**
- * Explicit rows, at most [`MAX_BULK_IDS`]. Exactly one of `ids` and
+ * Explicit rows, at most `MAX_BULK_IDS`. Exactly one of `ids` and
  * `filter` is sent: `filter` targets every row the list shows under the
  * same parameters — that is what "select all shown" means with 3.5 years
  * behind an infinite scroll.
  */
 ids?: Array<string> | null, 
 /**
- * The list's own query parameters, decoded by the same
- * `TransactionParams::filters`, so an absent `includeTransfers` hides transfers
- * here exactly as it does in the list.
+ * The list's own query parameters, decoded as the list decodes them, so an
+ * absent `includeTransfers` hides transfers here exactly as it does in the
+ * list.
  */
 filter?: TransactionParams | null, categoryId?: string | null, addTagIds?: Array<string> | null, checked?: boolean | null, 
 /**
- * See `ApplyToDescriptionBody::confirm_break_pairs`.
+ * As on an apply-to-description: a write that would break pairs waits
+ * for it.
  */
 confirmBreakPairs?: boolean, };
 
@@ -160,7 +161,7 @@ export type CategoryBody = { name: string, color: string, icon: string | null, h
 
 /**
  * Listed in display order: categories are shown grouped by kind in this
- * order (SQL binds `CategoryKind::ALL` and orders by `array_position`).
+ * order (the SQL orders by each kind's position in this list).
  */
 export type CategoryKind = "expense" | "income" | "neutral";
 
@@ -349,8 +350,8 @@ export type PatchResult = {
  */
 sameDescriptionCount?: number, 
 /**
- * Same meaning as `UpdatedResponse::pending_pair_breaks`: non-null means
- * nothing was written.
+ * Non-null means nothing was written: the write would have dissolved
+ * this many internal-transfer pairs and the caller has not confirmed.
  */
 pendingPairBreaks?: number, };
 
@@ -590,8 +591,7 @@ export type TransactionCounts = { matching: number, total: number, uncategorized
  */
 selectable: number, 
 /**
- * Decimal as a string, per the project convention. The `selectable`
- * rows' sum.
+ * The `selectable` rows' sum, a decimal string.
  */
 matchingTotal: string, 
 /**
@@ -606,7 +606,7 @@ fxMissing: boolean, };
  */
 export type TransactionParams = { search?: string, accountId?: string, 
 /**
- * Parsed by `parse_bucket`, so a blank one means the default.
+ * A blank one means the default.
  */
 bucket?: TypeBucket, from?: string, to?: string, 
 /**
@@ -633,8 +633,8 @@ categoryId?: string | null,
  */
 tagIds?: Array<string> | null, checked?: boolean | null, 
 /**
- * See `ApplyToDescriptionBody::confirm_break_pairs`: a category change
- * on half of an internal transfer waits for it.
+ * As on an apply-to-description: a category change on half of an
+ * internal transfer waits for it.
  */
 confirmBreakPairs?: boolean, 
 /**
@@ -685,7 +685,7 @@ timeZone: string,
 budgetAiEnabled: boolean, 
 /**
  * Review threshold, as an integer percent. An AI guess below it goes to
- * the review queue. Always within [`BUDGET_AI_THRESHOLD_RANGE`].
+ * the review queue. Always within the range the column's check allows.
  */
 budgetAiThreshold: number, uiLanguage: string, dateFormat: string, numberGroupSep: string, numberDecimalSep: string, numberDecimals: number, currencyPosition: string, percentDecimals: number, 
 /**

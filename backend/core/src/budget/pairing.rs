@@ -22,10 +22,10 @@ use crate::budget::vocab::{CategoryKind, CategorySource, SystemKey};
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// How far apart the two halves may sit. Three days covered a weekend
-/// transfer that clears on Monday; five also catches a card top-up of another
-/// account that settles a few days after the top-up lands, and on real data
-/// let through no wrong pair the narrower window had kept out.
+/// How far apart the two halves may sit. Three days cover a weekend transfer
+/// that clears on Monday; five also catch a card top-up of another account
+/// that settles a few days after the top-up lands, and on real data let
+/// through no wrong pair that three days keep out.
 const WINDOW_DAYS: i64 = 5;
 
 struct Candidate {
@@ -150,7 +150,6 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
         pairs.extend(round);
     }
 
-    // Both directions of every pair: each row points at its partner.
     let links: Vec<(Uuid, Uuid)> = pairs.iter().flat_map(|&(o, i)| [(o, i), (i, o)]).collect();
     let kept: Vec<Uuid> = links.iter().map(|&(id, _)| id).collect();
 
@@ -178,7 +177,6 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
     .execute(&mut **tx)
     .await?;
 
-    // Only links that are new or moved get written.
     let (ids, partners): (Vec<Uuid>, Vec<Uuid>) = links
         .into_iter()
         .filter(|(id, partner)| current.get(id).copied().flatten() != Some(*partner))

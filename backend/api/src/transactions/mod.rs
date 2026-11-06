@@ -21,7 +21,7 @@ use gripsou_core::repo::budget::transactions::{self as repo, TransactionFilters,
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
-    /// Parsed by `parse_bucket`, so a blank one means the default.
+    /// A blank one means the default.
     #[ts(as = "Option<TypeBucket>")]
     pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
@@ -147,9 +147,7 @@ mod tests {
     use axum::http::StatusCode;
 
     /// A present-but-blank filter is the frontend's obvious way to clear one,
-    /// and means the same thing as the parameter being absent. Reverting the
-    /// `s.trim().is_empty()` guard in `parse_ids` would make this 400 again
-    /// with "invalid id: ".
+    /// and means the same thing as the parameter being absent.
     #[test]
     fn empty_ids_param_is_not_an_error() {
         assert_eq!(parse_ids(Some("")).unwrap(), Vec::<Uuid>::new());
@@ -176,9 +174,8 @@ mod tests {
         assert_eq!(parse_ids(Some(&format!("{a},{b}"))).unwrap(), vec![a, b]);
     }
 
-    /// Same guard, same reason, for the single `bucket` param: reverting it
-    /// would make `bucket=` a 400 ("invalid bucket: ") instead of falling
-    /// back to the default.
+    /// The same for the single `bucket` param: `bucket=` falls back to the
+    /// default.
     #[test]
     fn empty_bucket_param_is_not_an_error() {
         assert_eq!(parse_bucket(Some("")).unwrap(), TypeBucket::default());

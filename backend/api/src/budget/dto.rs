@@ -259,8 +259,8 @@ pub struct PatchTransactionBody {
     /// add/remove split.
     pub tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
-    /// See `ApplyToDescriptionBody::confirm_break_pairs`: a category change
-    /// on half of an internal transfer waits for it.
+    /// As on an apply-to-description: a category change on half of an
+    /// internal transfer waits for it.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,
@@ -300,8 +300,8 @@ pub struct PatchTransactionResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub same_description_count: Option<i64>,
-    /// Same meaning as `UpdatedResponse::pending_pair_breaks`: non-null means
-    /// nothing was written.
+    /// Non-null means nothing was written: the write would have dissolved
+    /// this many internal-transfer pairs and the caller has not confirmed.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub pending_pair_breaks: Option<i64>,
@@ -314,7 +314,7 @@ pub struct ApplyToDescriptionBody {
     pub category_id: Option<Uuid>,
     /// The caller has seen how many internal-transfer pairs this write would
     /// dissolve and wants it applied anyway. Without it, a write that would
-    /// break one is refused (see `UpdatedResponse::pending_pair_breaks`).
+    /// break one is refused and answers `pendingPairBreaks`.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,
@@ -371,21 +371,22 @@ impl UpdatedResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields = nullable)]
 pub struct BulkBody {
-    /// Explicit rows, at most [`MAX_BULK_IDS`]. Exactly one of `ids` and
+    /// Explicit rows, at most `MAX_BULK_IDS`. Exactly one of `ids` and
     /// `filter` is sent: `filter` targets every row the list shows under the
     /// same parameters — that is what "select all shown" means with 3.5 years
     /// behind an infinite scroll.
     pub ids: Option<Vec<Uuid>>,
-    /// The list's own query parameters, decoded by the same
-    /// `TransactionParams::filters`, so an absent `includeTransfers` hides transfers
-    /// here exactly as it does in the list.
+    /// The list's own query parameters, decoded as the list decodes them, so an
+    /// absent `includeTransfers` hides transfers here exactly as it does in the
+    /// list.
     pub filter: Option<crate::transactions::TransactionParams>,
     #[serde(default, deserialize_with = "double_option")]
     #[ts(as = "Option<Uuid>")]
     pub category_id: Option<Option<Uuid>>,
     pub add_tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
-    /// See `ApplyToDescriptionBody::confirm_break_pairs`.
+    /// As on an apply-to-description: a write that would break pairs waits
+    /// for it.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,

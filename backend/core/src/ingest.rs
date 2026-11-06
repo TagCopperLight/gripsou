@@ -57,7 +57,6 @@ pub async fn ingest(
 
     let today = crate::repo::prefs::today(&mut *tx, user_id).await?;
 
-    // Accounts first; map external_id -> account id for later lookups.
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();
     // The day each account's holdings are true on: when the provider last read
     // the bank. A provider that can't reach the bank keeps returning old
@@ -72,7 +71,6 @@ pub async fn ingest(
         account_currency.insert(id, acct.currency.as_str());
     }
 
-    // Holdings: resolve instrument, upsert holding, stamp its account's day.
     let mut snapshots = 0;
     let mut present: HashSet<Uuid> = HashSet::new();
     for holding in &sync.holdings {
@@ -156,8 +154,8 @@ pub async fn ingest(
     // Inside the same transaction, so a failed sync leaves no half-written history.
     let backfill_rows = crate::backfill::backfill_user(&mut tx).await? as usize;
 
-    // The budget pairing pass. Inside the same transaction as
-    // everything else, so a failed sync leaves no half-paired ledger. Scoped to
+    // Inside the same transaction as everything else, so a failed sync
+    // leaves no half-paired ledger. Scoped to
     // the connection's owner, because a transfer's two halves routinely live
     // under two different connections.
     let transfers_paired = crate::budget::pairing::pair_internal_transfers(&mut tx).await?;
