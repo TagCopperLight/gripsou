@@ -4,10 +4,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{ItemFn, parse_macro_input};
 
-/// A test on a fresh database, like `#[sqlx::test]`, for an
+/// A test on a fresh database (`gripsou_core::testkit::run_db_test`), for an
 /// `async fn(PgPool)` returning `()` or a `Result`. Its future is boxed, so
-/// every test shares one copy of the harness (`testkit::run_db_test`), where
-/// `#[sqlx::test]` compiles one per test.
+/// every test shares one copy of the harness, where `#[sqlx::test]` compiles
+/// one per test.
 #[proc_macro_attribute]
 pub fn db_test(args: TokenStream, item: TokenStream) -> TokenStream {
     let ItemFn {

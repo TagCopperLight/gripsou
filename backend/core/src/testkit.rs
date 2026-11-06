@@ -15,22 +15,13 @@ use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transact
 use crate::repo::lot::{LotSide, LotSource};
 use crate::repo::user::Role;
 
+mod harness;
+
 pub use gripsou_test_macros::db_test;
+pub use harness::{Outcome, run_db_test};
 
 /// The migrations every [`db_test`] database gets.
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../migrations");
-
-/// The body of every [`db_test`]: sqlx's own test harness, on a database
-/// migrated by [`MIGRATOR`].
-#[doc(hidden)]
-pub fn run_db_test<R: sqlx::testing::TestTermination>(
-    path: &'static str,
-    test: fn(PgPool) -> std::pin::Pin<Box<dyn std::future::Future<Output = R>>>,
-) -> R {
-    let mut args = sqlx::testing::TestArgs::new(path);
-    args.migrator(&MIGRATOR);
-    sqlx::testing::TestFn::run_test(test, args)
-}
 
 /// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
