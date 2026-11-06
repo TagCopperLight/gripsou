@@ -66,11 +66,9 @@ export type Holding = {
   /** Shares no recorded lot explains. "0" when the position is fully
    *  accounted for. A non-zero value drives the fill-in badge. */
   unexplainedQty: string;
-  /** Fee-inclusive mean buy price, amount domain. "0" with no recorded buys. */
+  /** Fee-inclusive mean buy price, amount domain; the basis over the
+   *  quantity when no buy is recorded. */
   meanPrice: string;
-  /** The part of the basis no lot explains, amount domain. "0" when the lots
-   *  account for the position exactly. */
-  unexplainedCost: string;
 };
 
 export type PricePoint = {
@@ -82,6 +80,13 @@ export type PricePoint = {
   accountPrice: string | null;
   /** The same price in the reader's currency; null when a rate is missing. */
   reportingPrice: string | null;
+  /** Shares held that day as the lots explain them (the current quantity
+   *  when the holding has no lot); null before the first lot. */
+  qty: string | null;
+  /** Cost basis that day, account's currency; null before the first lot. */
+  invested: string | null;
+  /** `invested` in the reader's currency; null when a rate is missing. */
+  reportingInvested: string | null;
 };
 
 export type Lot = {

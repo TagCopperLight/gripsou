@@ -224,8 +224,8 @@ export function holdings(store: Store): Holding[] {
       spark: null,
       composition: null,
       unexplainedQty: "0",
-      meanPrice: "0",
-      unexplainedCost: "0",
+      // As the server: with no buy, the basis over the quantity.
+      meanPrice: Number(v) === 0 ? "0" : "1",
     };
   });
   for (const s of store.securities) {
@@ -264,8 +264,7 @@ export function holdings(store: Store): Holding[] {
       spark: s.closes.slice(-30).map((p) => money(p)),
       composition: s.composition,
       unexplainedQty: String(qty - explained),
-      meanPrice: money(mean),
-      unexplainedCost: money(Math.max(0, qty - explained) * mean),
+      meanPrice: money(mean === 0 && qty !== 0 ? invested / qty : mean),
     });
   }
   return out;
@@ -274,10 +273,26 @@ export function holdings(store: Store): Holding[] {
 export function prices(store: Store, holdingId: string, range: string): PricePoint[] {
   const s = store.securities.find((x) => x.id === holdingId);
   if (!s) return [];
+  const h = holdings(store).find((x) => x.id === holdingId)!;
+  const lots = lotsOf(store, holdingId);
+  const buys = lots.filter((l) => l.side === "buy");
+  const boughtQty = buys.reduce((q, l) => q + Number(l.qty), 0);
+  const mean =
+    boughtQty === 0 ? null : buys.reduce((c, l) => c + Number(l.qty) * Number(l.price) + Number(l.fee), 0) / boughtQty;
+  // As `lot_basis`: the part of the basis no lot explains is carried flat.
+  const unexplained = mean === null ? 0 : Number(h.investedNative) - mean * lots.reduce((q, l) => q + lotQty(l), 0);
+  const firstLot = lots.length === 0 ? null : Math.min(...lots.map((l) => l.t));
+  const position = (t: number): { qty: string | null; invested: string | null } => {
+    if (firstLot === null) return { qty: h.qty, invested: h.investedNative };
+    if (t < firstLot) return { qty: null, invested: null };
+    const explained = lots.filter((l) => l.t <= t).reduce((q, l) => q + lotQty(l), 0);
+    return { qty: String(explained), invested: mean === null ? h.investedNative : money(mean * explained + unexplained) };
+  };
   const out: PricePoint[] = [];
   for (let i = Math.max(firstIndex(range), s.listedFrom ?? 0); i < HISTORY_DAYS; i++) {
     const p = money(s.closes[i]);
-    out.push({ t: dayT(i), price: p, accountPrice: p, reportingPrice: p });
+    const pos = position(dayT(i));
+    out.push({ t: dayT(i), price: p, accountPrice: p, reportingPrice: p, ...pos, reportingInvested: pos.invested });
   }
   return out;
 }

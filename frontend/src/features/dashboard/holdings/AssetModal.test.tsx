@@ -21,7 +21,7 @@ const BASE: Holding = {
   valueNative: "1000", fxMissing: false, spark: null,
   composition: { countries: [{ name: "United States", weight: 0.62 }], sectors: [] },
   unexplainedQty: "0",
-  meanPrice: "80", unexplainedCost: "0",
+  meanPrice: "80",
 };
 
 function withClient(children: ReactNode) {
@@ -110,7 +110,7 @@ describe("AssetModal purchases chart", () => {
   it("reads in the account's currency", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) =>
       new Response(JSON.stringify(
-        url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120" }] : [],
+        url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120", qty: "10", invested: "800" }] : [],
       ), { status: 200, headers: { "Content-Type": "application/json" } }),
     ));
     const user = userEvent.setup();
@@ -134,14 +134,15 @@ describe("AssetModal purchases gain", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) =>
       new Response(JSON.stringify(
         url.includes("/prices")
-          ? [{ t: 1, price: "100", accountPrice: "100" }, { t: 2, price: "100", accountPrice: "100" }]
-          : url.includes("/lots")
-            ? [1, 2].map((t) => ({ id: `l${t}`, t, side: "buy", qty: "5", price: "100", fee: "0", manual: true }))
-            : [],
+          ? [
+              { t: 1, price: "100", accountPrice: "100", qty: "5", invested: "500" },
+              { t: 2, price: "100", accountPrice: "100", qty: "10", invested: "1000" },
+            ]
+          : [],
       ), { status: 200, headers: { "Content-Type": "application/json" } }),
     ));
     const user = userEvent.setup();
-    render(withClient(<AssetModal holding={{ ...BASE, meanPrice: "100" }} netWorth={5000} onClose={() => {}} />));
+    render(withClient(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />));
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
     // Position value 1 000 €, gain zero, not +500 €.
     expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();

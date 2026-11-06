@@ -32,7 +32,6 @@ const FUND = {
   qty: "1", price: "110", currency: "EUR", priceCurrency: "EUR",
   accountCurrency: "EUR", invested: "100", investedNative: "100", value: "110", gl: "10",
   glPct: "0.1", fxMissing: false, spark: null, unexplainedQty: "0", meanPrice: "100",
-  unexplainedCost: "0",
   composition: { countries: [{ name: "Etats-Unis", weight: 1 }], sectors: [{ name: "Technologie", weight: 1 }] },
 };
 

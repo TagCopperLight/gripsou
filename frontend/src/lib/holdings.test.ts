@@ -34,7 +34,6 @@ function cash(
     composition: null,
     unexplainedQty: "0",
     meanPrice: "0",
-    unexplainedCost: "0",
   };
 }
 
@@ -65,7 +64,6 @@ function equity(id: string, value: string): Holding {
     composition: null,
     unexplainedQty: "0",
     meanPrice: "0",
-    unexplainedCost: "0",
   };
 }
 

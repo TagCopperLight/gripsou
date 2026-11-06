@@ -21,7 +21,7 @@ import { formatDay } from "../../../lib/date";
 import { colorForString } from "../../../lib/palette";
 import { KIND_LABEL_KEY, type Holding, type Lot } from "../../../api/types";
 import { useHoldingLots, useHoldingPrices } from "../../../api/hooks";
-import { positionChart, priceChart, shownMeanPrice } from "../../../lib/assetSeries";
+import { positionChart, priceChart } from "../../../lib/assetSeries";
 import { usePrivacy } from "../../../auth/usePrivacy";
 import { reportingOffered } from "../../../lib/reportingUnit";
 import { currencySymbol } from "../../../lib/currency";
@@ -46,7 +46,8 @@ import { FG_FAINT, GREEN } from "../../../lib/theme";
 //   NOT a market price), the purchase-history table's price/amount columns
 //   (`Lot.price`/`Lot.fee`, and the derived cash amount), and the
 //   purchases-mode chart, whose value line uses prices the server converted
-//   into the account's currency (`PricePoint.accountPrice`).
+//   into the account's currency (`PricePoint.accountPrice`) and whose
+//   invested line is each day's `lot_basis` (`PricePoint.invested`).
 //
 // - Reader's currency again, as a chart choice: only when the chart's own
 //   currency differs and a day converts, the switch's middle option redraws the
@@ -88,18 +89,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const prices = useMemo(() => priceData ?? [], [priceData]);
   const purchases = useMemo(() => txnData ?? [], [txnData]);
 
-  // The chart needs prices; in "purchases" mode it also folds in transactions.
-  const chartReady =
-    mode === "asset"
-      ? priceData !== undefined
-      : priceData !== undefined && txnData !== undefined;
-  const chartError = pricesError || (mode === "purchases" && txnError);
-  const retryChart = () => {
-    refetchPrices();
-    if (mode === "purchases") refetchTxn();
-  };
+  const chartReady = priceData !== undefined;
 
-  const meanPrice = shownMeanPrice(holding);
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
   const offered = reportingOffered(chartCurrency, reader, prices);
@@ -127,7 +118,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         chartLabel: t("dashboard.assetModal.unitPrice"),
       };
     }
-    const chart = positionChart(prices, purchases, holding, inReporting);
+    const chart = positionChart(prices, inReporting);
     return {
       ...chart,
       series: [
@@ -136,7 +127,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       ] satisfies ChartSeries[],
       chartLabel: t("dashboard.assetModal.positionValue"),
     };
-  }, [holding, mode, prices, purchases, inReporting, t]);
+  }, [holding, mode, prices, inReporting, t]);
 
   const gainUp = gainAbs >= 0;
   const chartUnit: ChartUnit = inReporting ? "value" : shownUnit;
@@ -232,8 +223,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             />
           ) : (
             <CardState
-              variant={chartError ? "error" : "loading"}
-              onRetry={retryChart}
+              variant={pricesError ? "error" : "loading"}
+              onRetry={() => refetchPrices()}
               className="mt-4 h-85"
             />
           )}
@@ -251,7 +242,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         <div className="flex w-full flex-col gap-4 xl:w-lg xl:shrink-0">
           <StatsSurface
             holding={holding}
-            meanPrice={meanPrice}
+            meanPrice={holding.meanPrice}
             up={up}
             masked={masked}
           />
@@ -300,7 +291,7 @@ function StatsSurface({
   masked,
 }: {
   holding: Holding;
-  meanPrice: string | number;
+  meanPrice: string;
   up: boolean;
   masked: boolean;
 }) {

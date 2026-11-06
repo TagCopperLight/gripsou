@@ -64,7 +64,7 @@ const unconverted = (id: string, name: string): Holding => ({
   qty: "10", price: "481.23", currency: "USD", priceCurrency: "USD", accountCurrency: "EUR",
   invested: "4000", investedNative: "4000", value: "0", valueNative: "4812.3",
   gl: "-4000", glPct: "-1", fxMissing: true, spark: null, composition: null,
-  unexplainedQty: "0", meanPrice: "400", unexplainedCost: "0",
+  unexplainedQty: "0", meanPrice: "400",
 });
 
 const account = (fxMissing: boolean): Account => ({
