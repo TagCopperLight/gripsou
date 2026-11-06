@@ -164,7 +164,12 @@ impl Categorizer for JevCategorizer {
                 .bearer_auth(&self.api_key),
         )
         .await?;
-        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| CategorizeError::Other(gripsou_core::logs::error_chain(&e)))?;
+        let body: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| CategorizeError::Other(crate::json_decode_error("jev models", &e)))?;
         let mut models = map::parse_models(&body);
         models.sort();
         models.dedup();

@@ -645,9 +645,9 @@ mod tests {
         assert_eq!(status, StatusCode::NO_CONTENT);
     }
 
-    /// Another user's lots are not listed through their holding id.
+    /// Another user's holding is a 404, as on the other lot endpoints.
     #[sqlx::test(migrations = "../migrations")]
-    async fn holding_lots_hides_another_users_lots(pool: PgPool) {
+    async fn holding_lots_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
         save_lots(
@@ -668,11 +668,11 @@ mod tests {
             .0;
         assert_eq!(own.len(), 1, "the seeded lot is visible to its owner");
 
-        let theirs = holding_lots(State(pool.clone()), auth(bob.user), Path(alice.holding))
+        let err = holding_lots(State(pool.clone()), auth(bob.user), Path(alice.holding))
             .await
-            .expect("an unowned holding lists as empty")
-            .0;
-        assert!(theirs.is_empty());
+            .err()
+            .expect("cross-user read must fail");
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     /// Suggestions on another user's holding are a 404, never an empty list:

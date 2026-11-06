@@ -13,7 +13,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [features]
-test-util = ["gripsou-core/test-util"]
+test-util = ["gripsou-core/test-util", "gripsou-providers/test-util"]
 
 [dev-dependencies]
 gripsou-jobs = { path = ".", features = ["test-util"] }

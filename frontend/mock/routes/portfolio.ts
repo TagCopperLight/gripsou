@@ -74,7 +74,8 @@ export function portfolioRoutes(r: Router<Store>): void {
     const range = rangeParam(query);
     return typeof range === "string" ? v.prices(store, params.id, range) : range;
   });
-  r.route("GET /holdings/:id/lots", ({ store, params }) => v.lotsOf(store, params.id));
+  r.route("GET /holdings/:id/lots", ({ store, params }) =>
+    v.holdings(store).some((h) => h.id === params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
   r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
   r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) =>
     v.previewLots(store, params.id, body.rows));

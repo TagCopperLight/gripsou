@@ -54,21 +54,17 @@ pub async fn list_lots(
     user_id: Uuid,
     holding_id: Uuid,
 ) -> Result<Vec<LotRow>, CoreError> {
+    let holding = owned_holding(pool, user_id, holding_id).await?;
     let rows = sqlx::query_as!(
         LotRow,
         r#"
-        select l.id as "id!", l.side as "side!: LotSide", l.acquired_on as "acquired_on!",
-               l.quantity as "quantity!", l.unit_price as "unit_price!", l.fee as "fee!",
-               (l.source = $3) as "manual!"
-        from lot l
-        join holding h    on h.id = l.holding_id
-        join account a    on a.id = h.account_id
-        join connection c on c.id = a.connection_id
-        where l.holding_id = $1 and c.user_id = $2
-        order by l.acquired_on, l.created_at
+        select id, side as "side: LotSide", acquired_on, quantity, unit_price, fee,
+               (source = $2) as "manual!"
+        from lot
+        where holding_id = $1
+        order by acquired_on, created_at
         "#,
-        holding_id,
-        user_id,
+        holding.id,
         LotSource::Manual as LotSource,
     )
     .fetch_all(pool)
@@ -99,12 +95,10 @@ pub enum InvalidLot {
     NegativeUnitPrice,
     #[error("fee must not be negative")]
     NegativeFee,
-    #[error("quantity, unitPrice and fee support at most 8 decimal places")]
+    #[error("quantity, unitPrice and fee support at most {places} decimal places", places = LOT_DECIMAL_PLACES)]
     TooPrecise,
-    #[error("quantity, unitPrice and fee must be below 10^12")]
+    #[error("quantity, unitPrice and fee must be below 10^{digits}", digits = LOT_MAX_INTEGER_DIGITS)]
     TooLarge,
-    #[error("quantity * unitPrice does not fit in a decimal")]
-    Overflow,
 }
 
 impl NewLot {
@@ -152,10 +146,6 @@ impl NewLot {
         let max_magnitude = Decimal::from(10i64.pow(LOT_MAX_INTEGER_DIGITS));
         if figures.iter().any(|f| f.abs() >= max_magnitude) {
             return Err(InvalidLot::TooLarge);
-        }
-        match quantity.checked_mul(unit_price) {
-            Some(gross) if gross.scale() <= 28 => {}
-            _ => return Err(InvalidLot::Overflow),
         }
         Ok(NewLot {
             side,

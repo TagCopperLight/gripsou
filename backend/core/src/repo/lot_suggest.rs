@@ -171,7 +171,7 @@ async fn account_jumps(
                                   fx_asof($2, t.spent_on)) as expected
             ) e
             where t.account_id = $1
-              and t.type in ('buy', 'sell')
+              and budget_investment_leg(t.type)
               and t.spent_on between oj.win_from and oj.win_to
               and abs(t.amount) between 0.95 * e.expected and 1.05 * e.expected
         ) c on true

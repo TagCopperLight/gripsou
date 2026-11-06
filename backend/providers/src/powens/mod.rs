@@ -92,17 +92,21 @@ impl Credentials {
     }
 }
 
-/// Sends `req`, refusing a non-success status. `what` names the call in errors.
-async fn send(
+/// Sends `req`, whatever status comes back. `what` names the call in errors.
+async fn transport(
     req: reqwest::RequestBuilder,
     what: &str,
 ) -> Result<reqwest::Response, ProviderError> {
-    let resp = req.send().await.map_err(|e| {
+    req.send().await.map_err(|e| {
         ProviderError::Other(format!(
             "{what} failed: {}",
             gripsou_core::logs::error_chain(&e)
         ))
-    })?;
+    })
+}
+
+/// `resp`, unless its status is not a success.
+fn success(resp: reqwest::Response, what: &str) -> Result<reqwest::Response, ProviderError> {
     if !resp.status().is_success() {
         return Err(ProviderError::Other(format!(
             "{what} failed: {}",
@@ -110,6 +114,14 @@ async fn send(
         )));
     }
     Ok(resp)
+}
+
+/// Sends `req`, refusing a non-success status.
+async fn send(
+    req: reqwest::RequestBuilder,
+    what: &str,
+) -> Result<reqwest::Response, ProviderError> {
+    success(transport(req, what).await?, what)
 }
 
 /// A response body decoded as JSON, its decode error without the value.
@@ -451,30 +463,18 @@ impl AccountProvider for PowensProvider {
             .as_str()
             .ok_or_else(|| ProviderError::Other(format!("missing {EXTERNAL_CONNECTION_ID}")))?;
         let what = "PUT /users/me/connections";
-        let resp = self
+        let req = self
             .http
             .put(self.api_url(&format!("/users/me/connections/{cid}")))
             .bearer_auth(&auth_token)
-            .query(&[("psu_requested", "false")])
-            .send()
-            .await
-            .map_err(|e| {
-                ProviderError::Other(format!(
-                    "{what} failed: {}",
-                    gripsou_core::logs::error_chain(&e)
-                ))
-            })?;
+            .query(&[("psu_requested", "false")]);
+        let resp = transport(req, what).await?;
         // 409: Powens considers the connection up to date (or a sync is
         // already running) and sends no webhook.
         if resp.status() == reqwest::StatusCode::CONFLICT {
             return Ok(Refresh::AlreadyFresh);
         }
-        if !resp.status().is_success() {
-            return Err(ProviderError::Other(format!(
-                "{what} failed: {}",
-                resp.status()
-            )));
-        }
+        success(resp, what)?;
         Ok(Refresh::Requested)
     }
 

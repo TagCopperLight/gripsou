@@ -110,6 +110,7 @@ impl Providers {
     }
 
     /// The same keys, with `accounts` as the only account adapters.
+    #[cfg(feature = "test-util")]
     pub fn with_accounts(self, accounts: HashMap<String, Arc<dyn AccountProvider>>) -> Self {
         Self { accounts, ..self }
     }

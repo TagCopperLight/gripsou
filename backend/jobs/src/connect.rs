@@ -9,6 +9,7 @@ use gripsou_core::error::CoreError;
 use gripsou_core::logs::error_chain;
 use gripsou_core::provider::{ConnectInit, ProviderError};
 use gripsou_core::repo::connection;
+use gripsou_providers::registry::AccountKind;
 use uuid::Uuid;
 
 use crate::sync::{Trigger, request_sync};
@@ -44,15 +45,15 @@ pub async fn init_connection(
     db: Db,
     deps: &Deps,
     user_id: Uuid,
-    provider_key: &str,
-    display_name: &str,
+    provider: &'static AccountKind,
 ) -> Result<(Uuid, ConnectInit), ConnectError> {
+    let provider_key = provider.about.key;
     let adapter = deps.account(provider_key).ok_or(ConnectError::NoAdapter)?;
 
     let init = adapter.connect().await?;
 
     let connection_id =
-        connection::insert_pending(&db, user_id, provider_key, display_name).await?;
+        connection::insert_pending(&db, user_id, provider_key, provider.about.display_name).await?;
     tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = provider_key, "connection created");
 
     let init = ConnectInit {
@@ -145,7 +146,7 @@ async fn finish_connection(
     connection_id: Uuid,
     params: &HashMap<String, String>,
 ) -> Result<(), ConnectError> {
-    let provider_key = connection::provider_key(&db, connection_id)
+    let provider_key = connection::pending_provider_key(&db, user_id, connection_id)
         .await?
         .ok_or(ConnectError::NotFound)?;
 

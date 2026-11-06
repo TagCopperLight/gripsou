@@ -223,10 +223,22 @@ pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Resu
     Ok(())
 }
 
-pub async fn provider_key(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, CoreError> {
-    let key = sqlx::query_scalar!("select provider_key from connection where id = $1", id)
-        .fetch_optional(pool)
-        .await?;
+/// The provider of `user_id`'s connection `id` while it waits for its
+/// callback. `None` once it is active or when it isn't the user's: a replayed
+/// or foreign callback never reaches the provider.
+pub async fn pending_provider_key(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<Option<String>, CoreError> {
+    let key = sqlx::query_scalar!(
+        "select provider_key from connection where id = $1 and user_id = $2 and status = $3",
+        id,
+        user_id,
+        ConnectionStatus::Pending as ConnectionStatus,
+    )
+    .fetch_optional(pool)
+    .await?;
     Ok(key)
 }
 

@@ -144,15 +144,9 @@ pub async fn init_connection(
         .ok_or_else(|| {
             ApiError::BadRequest(format!("provider '{}' is not enabled", body.provider_key))
         })?;
-    let (connection_id, init) = gripsou_jobs::init_connection(
-        pool,
-        &jobs,
-        user_id,
-        &body.provider_key,
-        provider.about.display_name,
-    )
-    .await
-    .map_err(|e| ApiError::internal(gripsou_core::logs::error_chain(&e)))?;
+    let (connection_id, init) = gripsou_jobs::init_connection(pool, &jobs, user_id, provider)
+        .await
+        .map_err(|e| ApiError::internal(gripsou_core::logs::error_chain(&e)))?;
     Ok((
         StatusCode::CREATED,
         Json(dto::InitConnectionResp {
@@ -585,6 +579,80 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(left, vec![active]);
+    }
+
+    /// Counts the callbacks that reach it.
+    struct CountingBank(std::sync::atomic::AtomicUsize);
+
+    #[async_trait::async_trait]
+    impl AccountProvider for CountingBank {
+        async fn connect(&self) -> Result<ConnectInit, ProviderError> {
+            Err(ProviderError::NotImplemented)
+        }
+        async fn complete_connect(
+            &self,
+            _: &std::collections::HashMap<String, String>,
+        ) -> Result<CompleteConnect, ProviderError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(CompleteConnect {
+                credentials: serde_json::json!({}),
+                provider_meta: serde_json::json!({}),
+            })
+        }
+        async fn sync(
+            &self,
+            _: &serde_json::Value,
+        ) -> Result<gripsou_core::dto::SyncResult, ProviderError> {
+            Err(ProviderError::NotImplemented)
+        }
+    }
+
+    /// The provider's code is single-use: a replayed callback, or one naming
+    /// another user's connection, is refused before the provider sees it.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn a_replayed_or_foreign_callback_never_reaches_the_provider(pool: PgPool) {
+        use gripsou_core::repo::connection;
+        let user = seed_user(&pool, "u@t.local").await;
+        let other = seed_user(&pool, "other@t.local").await;
+        let bank = std::sync::Arc::new(CountingBank(Default::default()));
+        let deps = crate::testkit::deps();
+        deps.set_accounts(
+            [(
+                "powens".to_string(),
+                bank.clone() as std::sync::Arc<dyn AccountProvider>,
+            )]
+            .into(),
+        );
+        let active = connection::insert_pending(&pool, user, "powens", "Bank")
+            .await
+            .unwrap();
+        sqlx::query("update connection set status = 'ok' where id = $1")
+            .bind(active)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let foreign = connection::insert_pending(&pool, other, "powens", "Bank")
+            .await
+            .unwrap();
+
+        for id in [active, foreign] {
+            let err = complete_connection(
+                State(pool.clone()),
+                State(deps.clone()),
+                auth::AuthUser {
+                    user_id: user,
+                    session_id: Uuid::new_v4(),
+                },
+                Json(dto::CompleteConnectionReq {
+                    connection_id: id,
+                    params: [("code".to_string(), "c".to_string())].into(),
+                }),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(err, ApiError::NotFound("connection not found"));
+        }
+        assert_eq!(bank.0.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[sqlx::test(migrations = "../migrations")]

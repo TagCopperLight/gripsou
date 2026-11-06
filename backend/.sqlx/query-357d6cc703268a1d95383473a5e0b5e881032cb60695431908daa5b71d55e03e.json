@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select l.id as \"id!\", l.side as \"side!: LotSide\", l.acquired_on as \"acquired_on!\",\n               l.quantity as \"quantity!\", l.unit_price as \"unit_price!\", l.fee as \"fee!\",\n               (l.source = $3) as \"manual!\"\n        from lot l\n        join holding h    on h.id = l.holding_id\n        join account a    on a.id = h.account_id\n        join connection c on c.id = a.connection_id\n        where l.holding_id = $1 and c.user_id = $2\n        order by l.acquired_on, l.created_at\n        ",
+  "query": "\n        select id, side as \"side: LotSide\", acquired_on, quantity, unit_price, fee,\n               (source = $2) as \"manual!\"\n        from lot\n        where holding_id = $1\n        order by acquired_on, created_at\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id!",
+        "name": "id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "side!: LotSide",
+        "name": "side: LotSide",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "acquired_on!",
+        "name": "acquired_on",
         "type_info": "Date",
         "origin": {
           "Table": {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "quantity!",
+        "name": "quantity",
         "type_info": "Numeric",
         "origin": {
           "Table": {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 4,
-        "name": "unit_price!",
+        "name": "unit_price",
         "type_info": "Numeric",
         "origin": {
           "Table": {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "fee!",
+        "name": "fee",
         "type_info": "Numeric",
         "origin": {
           "Table": {
@@ -79,7 +79,6 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
         "Text"
       ]
     },
@@ -93,5 +92,5 @@
       null
     ]
   },
-  "hash": "4a60b8da6c1e416033d9306b1233efca9a2b22071e0074b768a07c01566a5935"
+  "hash": "357d6cc703268a1d95383473a5e0b5e881032cb60695431908daa5b71d55e03e"
 }

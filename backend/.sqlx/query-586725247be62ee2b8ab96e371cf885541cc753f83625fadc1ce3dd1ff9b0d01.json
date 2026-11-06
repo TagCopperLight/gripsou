@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select provider_key from connection where id = $1",
+  "query": "select provider_key from connection where id = $1 and user_id = $2 and status = $3",
   "describe": {
     "columns": [
       {
@@ -17,12 +17,14 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "ee550a669f5415ba345a3dad7563222df2a84904a84fd0a5617790f0e729aa6e"
+  "hash": "586725247be62ee2b8ab96e371cf885541cc753f83625fadc1ce3dd1ff9b0d01"
 }
