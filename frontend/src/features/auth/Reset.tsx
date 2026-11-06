@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
 import { FieldError, LabeledField } from "../../ui/FieldError";
@@ -12,13 +12,15 @@ import { ApiError, postJson } from "../../api/client";
 import { showError } from "../../lib/errorToasts";
 import type { SessionUser } from "../../api/types";
 
+const route = getRouteApi("/reset/$token");
+
 type RedeemResp = { token: string; user: SessionUser };
 
 export function Reset() {
   const { t } = useTranslation();
   const { adoptSession } = useAuth();
   const navigate = useNavigate();
-  const { token } = useParams({ strict: false }) as { token: string };
+  const { token } = route.useParams();
   const guard = useTokenGuard(token);
 
   const [password, setPassword] = useState("");

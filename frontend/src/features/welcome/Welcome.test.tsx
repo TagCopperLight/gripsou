@@ -13,7 +13,7 @@ vi.mock("../../lib/navigate", () => ({ goTo: vi.fn() }));
 let search: { step?: "bank"; callback?: string } = {};
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
-  useSearch: () => search,
+  getRouteApi: () => ({ useSearch: () => search }),
   useNavigate: () => navigate,
 }));
 

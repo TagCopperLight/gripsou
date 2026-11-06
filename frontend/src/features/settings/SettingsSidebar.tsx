@@ -1,18 +1,15 @@
 import { Fragment } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { settingsNavItems } from "./settingsNav";
+import { useSettingsNav } from "./settingsNav";
 import { LogoutButton } from "./LogoutButton";
-import { useAuth } from "../../auth/context";
 
 const navLinkClassName =
   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover hover:text-fg data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-bold";
 
 export function SettingsSidebar() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const items = settingsNavItems.filter((item) => isAdmin || !item.adminOnly);
+  const items = useSettingsNav();
   const firstAdminIndex = items.findIndex((item) => item.adminOnly);
 
   return (

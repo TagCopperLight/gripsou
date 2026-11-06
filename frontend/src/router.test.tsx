@@ -233,14 +233,21 @@ describe("welcome guard", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/welcome"));
   });
 
-  it("lets the bank-connection callback through, outside the app chrome", async () => {
-    // The guard lets an unfinished user reach the callback, rendered outside the
-    // app chrome. The hand-over to /welcome itself is covered in
-    // ConnectionCallback.test.tsx.
-    const router = renderAt("/connections/callback?state=c1&error=access_denied", newcomer);
-    expect(await screen.findByText("Your bank couldn't be connected")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/connections/callback");
-    expect(screen.queryByRole("link", { name: "Accounts" })).not.toBeInTheDocument();
+  it("hands the bank's raw query to the welcome screen", async () => {
+    // The provider's query as the browser has it, which the guard forwards untouched.
+    window.history.pushState({}, "", "/connections/callback?state=c42&code=1e3&connection_id=7");
+    try {
+      const router = renderAt("/connections/callback?state=c42&code=1e3&connection_id=7", newcomer);
+      await waitFor(() => expect(router.state.location.pathname).toBe("/welcome"));
+      const complete = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/connections/complete");
+      await waitFor(() => expect(complete()).toHaveLength(1));
+      expect(JSON.parse(complete()[0][1]!.body as string)).toEqual({
+        connectionId: "c42",
+        params: { code: "1e3", connection_id: "7" },
+      });
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
   });
 
   it("renders the callback page without the sidebar for a finished user", async () => {
@@ -263,6 +270,32 @@ describe("welcome guard", () => {
   it("sends a logged-out visitor of /welcome to /login", async () => {
     const router = renderAt("/welcome", unauth);
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+  });
+});
+
+describe("admin-only settings", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("sends a non-admin away from an admin page", async () => {
+    const router = renderAt("/settings/users", authedUser);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("lets an admin open it", async () => {
+    const admin: AuthValue = { ...authedUser, user: { ...authedUser.user!, role: "admin" } };
+    const router = renderAt("/settings/server", admin);
+    await waitFor(() => expect(router.state.matches.at(-1)?.routeId).toBe("/signedIn/app/settings/server"));
+    expect(router.state.location.pathname).toBe("/settings/server");
   });
 });
 

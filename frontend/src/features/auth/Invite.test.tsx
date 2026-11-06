@@ -8,7 +8,7 @@ import { DEFAULT_PREFS } from "../../lib/prefs";
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
-  useParams: () => ({ token: "tok" }),
+  getRouteApi: () => ({ useParams: () => ({ token: "tok" }) }),
 }));
 
 function wrap(children: ReactNode, adoptSession = vi.fn()) {

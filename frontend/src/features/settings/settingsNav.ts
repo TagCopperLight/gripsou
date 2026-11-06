@@ -6,21 +6,34 @@ import {
   Server,
   type LucideIcon,
 } from "lucide-react";
+import { useRouter, type RegisteredRouter } from "@tanstack/react-router";
 
 import { BudgetIcon } from "../../lib/budget";
+import { useAuth } from "../../auth/context";
 
-export type SettingsNavItem = {
-  to: string;
+type SettingsPath = Exclude<Extract<keyof RegisteredRouter["routesByPath"], `/settings/${string}`>, "/settings/">;
+
+type SettingsNavItem = {
+  to: SettingsPath;
   labelKey: string;
   icon: LucideIcon;
-  adminOnly: boolean;
 };
 
-export const settingsNavItems: SettingsNavItem[] = [
-  { to: "/settings/general",     labelKey: "settings.general.title",     icon: SlidersHorizontal, adminOnly: false },
-  { to: "/settings/account",     labelKey: "settings.account.title",     icon: User,              adminOnly: false },
-  { to: "/settings/connections", labelKey: "settings.connections.title", icon: Link2,             adminOnly: false },
-  { to: "/settings/budget",      labelKey: "settings.budget.title",      icon: BudgetIcon,        adminOnly: false },
-  { to: "/settings/users",       labelKey: "settings.users.title",       icon: Users,             adminOnly: true  },
-  { to: "/settings/server",      labelKey: "settings.server.title",      icon: Server,            adminOnly: true  },
+const settingsNavItems: SettingsNavItem[] = [
+  { to: "/settings/general",     labelKey: "settings.general.title",     icon: SlidersHorizontal },
+  { to: "/settings/account",     labelKey: "settings.account.title",     icon: User },
+  { to: "/settings/connections", labelKey: "settings.connections.title", icon: Link2 },
+  { to: "/settings/budget",      labelKey: "settings.budget.title",      icon: BudgetIcon },
+  { to: "/settings/users",       labelKey: "settings.users.title",       icon: Users },
+  { to: "/settings/server",      labelKey: "settings.server.title",      icon: Server },
 ];
+
+/** The settings pages the signed-in user may open. Which ones are admin-only
+ *  is the route's own `adminOnly`, the flag the router guards them with. */
+export function useSettingsNav(): (SettingsNavItem & { adminOnly: boolean })[] {
+  const { routesByPath } = useRouter();
+  const isAdmin = useAuth().user?.role === "admin";
+  return settingsNavItems
+    .map((item) => ({ ...item, adminOnly: routesByPath[item.to].options.staticData?.adminOnly === true }))
+    .filter((item) => isAdmin || !item.adminOnly);
+}

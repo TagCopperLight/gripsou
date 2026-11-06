@@ -5,20 +5,16 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
-import { useAuth } from "../../auth/context";
 import { useCompleteConnection } from "../../api/hooks";
 import { parseCallbackParams } from "../../lib/connectionCallback";
 
-/** Where the bank provider sends the user back to. Mid-setup the page is never
- *  shown: the welcome screen finishes the connection (see Welcome). */
+/** Where the bank provider sends the user back to. Mid-setup the router hands
+ *  the visit to the welcome screen instead, which finishes the connection. */
 export function ConnectionCallback() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const complete = useCompleteConnection();
-  const { user } = useAuth();
-  const search = window.location.search;
-  const { connectionId, rest } = parseCallbackParams(search);
-  const inWelcome = user?.welcomeDone === false;
+  const { connectionId, rest } = parseCallbackParams(window.location.search);
   // Powens echoes our `state` (the connectionId) plus an `error` param when the
   // user cancels or the flow fails.
   const [failed, setFailed] = useState(() => !connectionId || !!rest.error);
@@ -28,14 +24,6 @@ export function ConnectionCallback() {
     if (called.current) return;
     called.current = true;
 
-    if (inWelcome) {
-      void navigate({
-        to: "/welcome",
-        search: { step: "bank", callback: search.replace(/^\?/, "") },
-        replace: true,
-      });
-      return;
-    }
     if (!connectionId) return;
 
     // Sent even when the provider reported an error: a failed complete deletes
@@ -45,8 +33,6 @@ export function ConnectionCallback() {
       .then(() => navigate({ to: "/settings/connections" }))
       .catch(() => setFailed(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (inWelcome) return null;
 
   return (
     <AuthPage>

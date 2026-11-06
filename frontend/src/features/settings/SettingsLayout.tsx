@@ -1,9 +1,8 @@
 import { Outlet, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { SettingsSidebar } from "./SettingsSidebar";
-import { settingsNavItems } from "./settingsNav";
+import { useSettingsNav } from "./settingsNav";
 import { LogoutButton } from "./LogoutButton";
-import { useAuth } from "../../auth/context";
 
 // Phone: the sidebar becomes a scrollable tab row above the page.
 const tabClassName =
@@ -11,9 +10,7 @@ const tabClassName =
 
 export function SettingsLayout() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const items = settingsNavItems.filter((item) => isAdmin || !item.adminOnly);
+  const items = useSettingsNav();
 
   return (
     <div className="flex min-h-full flex-col md:flex-row">

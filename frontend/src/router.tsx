@@ -49,20 +49,39 @@ const loginRoute = createRoute({
   component: Login,
 });
 
-// Pathless layout: everything under it requires auth and renders inside the
-// app chrome (sidebar + content).
-const appRoute = createRoute({
+// Pathless layout for every page that needs a session. A user who hasn't
+// finished the welcome screen sees only it; the bank's return to the callback
+// is handed to it, query and all, so the welcome screen finishes the connection.
+const signedInRoute = createRoute({
   getParentRoute: () => rootRoute,
-  id: "app",
-  beforeLoad: ({ context }) => {
-    if (!context.auth.isAuthenticated) {
-      throw redirect({ to: "/login" });
-    }
-    // A new account goes through the welcome screen first.
-    if (context.auth.user?.welcomeDone === false) {
+  id: "signedIn",
+  beforeLoad: ({ context: { auth }, matches }) => {
+    if (!auth.isAuthenticated) throw redirect({ to: "/login" });
+    const entering = (route: { id: string }) => matches.some((m) => m.routeId === route.id);
+
+    const welcomePending = auth.user?.welcomeDone === false;
+    const onWelcome = entering(welcomeRoute);
+    if (welcomePending && !onWelcome) {
+      if (entering(connectionsCallbackRoute)) {
+        // The provider's own query string, byte for byte: the router's parsed
+        // search would retype values that look like numbers.
+        const callback = window.location.search.replace(/^\?/, "");
+        throw redirect({ to: "/welcome", search: { step: "bank", callback } });
+      }
       throw redirect({ to: "/welcome" });
     }
+    if (!welcomePending && onWelcome) throw redirect({ to: "/" });
+
+    if (matches.some((m) => m.staticData.adminOnly) && auth.user?.role !== "admin") {
+      throw redirect({ to: "/" });
+    }
   },
+});
+
+// Pathless layout: the app chrome (sidebar + content).
+const appRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  id: "app",
   component: RootLayout,
 });
 
@@ -168,23 +187,21 @@ const settingsBudgetRoute = createRoute({
 const settingsUsersRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "users",
+  staticData: { adminOnly: true },
   component: SettingsUsers,
 });
 
 const settingsServerRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "server",
+  staticData: { adminOnly: true },
   component: SettingsServer,
 });
 
-// Full page outside the app chrome. Not guarded by the welcome redirect: mid-
-// setup the page hands the callback over to /welcome itself.
+// Full page outside the app chrome.
 const connectionsCallbackRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => signedInRoute,
   path: "/connections/callback",
-  beforeLoad: ({ context }) => {
-    if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });
-  },
   component: ConnectionCallback,
 });
 
@@ -202,16 +219,12 @@ const resetRoute = createRoute({
 
 // Full page outside the app chrome, like login and invite.
 const welcomeRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => signedInRoute,
   path: "/welcome",
   validateSearch: (search: Record<string, unknown>): { step?: "bank"; callback?: string } => ({
     ...(search.step === "bank" ? { step: "bank" as const } : {}),
     ...(typeof search.callback === "string" ? { callback: search.callback } : {}),
   }),
-  beforeLoad: ({ context }) => {
-    if (!context.auth.isAuthenticated) throw redirect({ to: "/login" });
-    if (context.auth.user?.welcomeDone !== false) throw redirect({ to: "/" });
-  },
   component: Welcome,
 });
 
@@ -229,15 +242,17 @@ export const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteRoute,
   resetRoute,
-  welcomeRoute,
-  connectionsCallbackRoute,
-  appRoute.addChildren([
-    indexRoute,
-    accountsRoute,
-    investmentsRoute,
-    budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
-    transactionsRedirectRoute,
-    settingsRouteWithChildren,
+  signedInRoute.addChildren([
+    welcomeRoute,
+    connectionsCallbackRoute,
+    appRoute.addChildren([
+      indexRoute,
+      accountsRoute,
+      investmentsRoute,
+      budgetRoute.addChildren([budgetIndexRoute, budgetOverviewRoute, budgetTransactionsRoute, budgetReviewRoute]),
+      transactionsRedirectRoute,
+      settingsRouteWithChildren,
+    ]),
   ]),
 ]);
 
@@ -253,5 +268,9 @@ export const router = createRouter({
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
+  }
+  interface StaticDataRouteOption {
+    /** Only admins may open the page; the settings nav hides it from others. */
+    adminOnly?: boolean;
   }
 }

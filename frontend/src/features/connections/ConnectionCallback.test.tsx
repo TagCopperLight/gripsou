@@ -11,13 +11,13 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-function withClient(children: ReactNode, welcomeDone = true) {
+function withClient(children: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const auth: AuthValue = {
     isAuthenticated: true,
-    user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone },
+    user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
     isBootstrapping: false,
     prefs: DEFAULT_PREFS,
     login: async () => null,
@@ -142,48 +142,5 @@ describe("ConnectionCallback", () => {
       expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" }),
     );
     expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1);
-  });
-
-  describe("while the welcome isn't finished", () => {
-    it("hands the raw query to the welcome screen without showing or requesting anything", async () => {
-      landWith("?state=c42&code=abc&connection_id=7");
-      render(withClient(<ConnectionCallback />, false));
-
-      expect(navigate).toHaveBeenCalledWith({
-        to: "/welcome",
-        search: { step: "bank", callback: "state=c42&code=abc&connection_id=7" },
-        replace: true,
-      });
-      expect(screen.queryByText(CONNECTING)).not.toBeInTheDocument();
-      expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 20));
-      });
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it("hands over an empty callback when there is no query string, so the welcome screen shows the failure", () => {
-      landWith("");
-      render(withClient(<ConnectionCallback />, false));
-
-      expect(navigate).toHaveBeenCalledWith({
-        to: "/welcome",
-        search: { step: "bank", callback: "" },
-        replace: true,
-      });
-    });
-
-    it("does the same for a provider error", () => {
-      landWith("?state=c42&error=access_denied");
-      render(withClient(<ConnectionCallback />, false));
-
-      expect(navigate).toHaveBeenCalledWith({
-        to: "/welcome",
-        search: { step: "bank", callback: "state=c42&error=access_denied" },
-        replace: true,
-      });
-      expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
   });
 });

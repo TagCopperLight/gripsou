@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
 import { LabeledField } from "../../ui/FieldError";
@@ -12,13 +12,15 @@ import { passwordLengthOk } from "../../lib/password";
 import { ApiError, postJson } from "../../api/client";
 import type { SessionUser } from "../../api/types";
 
+const route = getRouteApi("/invite/$token");
+
 type RedeemResp = { token: string; user: SessionUser };
 
 export function Invite() {
   const { t } = useTranslation();
   const { adoptSession } = useAuth();
   const navigate = useNavigate();
-  const { token } = useParams({ strict: false }) as { token: string };
+  const { token } = route.useParams();
   const guard = useTokenGuard(token);
 
   const [email, setEmail] = useState("");

@@ -10,7 +10,7 @@ let pathname = "/budget/transactions";
 vi.mock("@tanstack/react-router", () => ({
   Outlet: () => <div data-testid="outlet" />,
   useNavigate: () => navigate,
-  useRouterState: () => ({ location: { pathname } }),
+  useMatchRoute: () => ({ to }: { to: string }) => to === pathname,
 }));
 
 function status(reviewCount: number) {

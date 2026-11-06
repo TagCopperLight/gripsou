@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Outlet, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 
@@ -7,14 +7,13 @@ import { SegmentedControl, type SegmentedOption } from "../../ui/SegmentedContro
 import { BudgetProvider } from "./BudgetProvider";
 import { useAiStatus } from "../../api/budget";
 
-type Mode = "overview" | "transactions" | "review";
+const MODE_PATHS = {
+  overview: "/budget/overview",
+  transactions: "/budget/transactions",
+  review: "/budget/review",
+} as const;
 
-/** A bare `/budget` is Overview, the same default the router redirects to. */
-function modeOf(pathname: string): Mode {
-  if (pathname.endsWith("/transactions")) return "transactions";
-  if (pathname.endsWith("/review")) return "review";
-  return "overview";
-}
+type Mode = keyof typeof MODE_PATHS;
 
 /** The one Budget page. Modes live in the URL; the filters and the
  *  selection live in the provider, so they survive a mode switch.
@@ -24,8 +23,9 @@ function modeOf(pathname: string): Mode {
 export function Budget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const pathname = useRouterState().location.pathname;
-  const mode = modeOf(pathname);
+  const matchRoute = useMatchRoute();
+  // A bare `/budget` is Overview, the same default the router redirects to.
+  const mode = (["transactions", "review"] as const).find((m) => matchRoute({ to: MODE_PATHS[m] })) ?? "overview";
   const reviewCount = useAiStatus().data?.reviewCount ?? 0;
 
   const options: SegmentedOption<Mode>[] = [
@@ -57,7 +57,7 @@ export function Budget() {
         <SegmentedControl<Mode>
           className="clear-sync-button"
           value={mode}
-          onChange={(next) => navigate({ to: `/budget/${next}` })}
+          onChange={(next) => navigate({ to: MODE_PATHS[next] })}
           options={options}
         />
       </PageHeader>

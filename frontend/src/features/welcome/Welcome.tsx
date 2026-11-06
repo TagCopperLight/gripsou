@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../lib/errorToasts";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { Check, CircleAlert, Landmark, Lock, LoaderCircle } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select } from "../../ui/Select";
@@ -28,12 +28,14 @@ import type { PrefsPatch } from "../../lib/prefs";
 
 type Step = 1 | 2 | 3;
 
+const route = getRouteApi("/signedIn/welcome");
+
 /** After an invite: preferences, a first bank, the AI opt-in. Shown until the
  *  user finishes or skips it (`welcomeDone`); the router sends them here. */
 export function Welcome() {
   const { t, i18n } = useTranslation();
   const { user, prefs, updatePrefs, updateUser } = useAuth();
-  const search = useSearch({ strict: false }) as { step?: "bank"; callback?: string };
+  const search = route.useSearch();
   const navigate = useNavigate();
   const backFromBank = search.step === "bank";
 
