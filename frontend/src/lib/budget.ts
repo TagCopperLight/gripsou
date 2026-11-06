@@ -1,129 +1,11 @@
-import {
-  Activity, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BookOpen, CandlestickChart,
-  CircleDashed, CirclePlus,
-  Coins, EyeOff, Film, Fuel, Gamepad2, Gift, GraduationCap, HeartPulse, House, Lamp,
-  Landmark, List, PawPrint, Percent, PiggyBank, Plane, PlugZap, Receipt, ReceiptEuro, Repeat, Shield,
-  Shirt, ShoppingBag, ShoppingCart, Smartphone, Sparkles, TrainFront, TrendingUp, Undo2,
-  Utensils, Wallet, Zap, type LucideIcon
-} from "lucide-react";
 import type { TFunction } from "i18next";
-import type { ReactNode } from "react";
 
 import type { BudgetCategory, BudgetKind } from "../api/budget";
-import type { Transaction, TypeBucket } from "../api/types";
-import { ApiError } from "../api/client";
+import type { Transaction } from "../api/types";
 import { AMBER, FG_DIM } from "./theme";
 
 /** Display order of the three kinds; also the grouping order of every list. */
 export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "neutral"];
-
-/** The TYPE control, shared with the active-filter chips so a bucket looks the
- *  same wherever it appears.
- *
- *  Only the icon carries colour — green for money arriving, red for money
- *  leaving, blue for securities, neutral for `all`, which is the absence of
- *  the filter rather than a fourth kind of row. Selection is drawn in the
- *  panel's own greys, so the colours read as a fixed property of the bucket
- *  and never as "this one is on".
- *
- *  The array order is the 2×2 reading order: `all` and `in` on the top row,
- *  `lots` and `out` beneath them, which puts the scope choices in the left
- *  column and the two cash directions in the right. */
-export const TYPE_BUCKETS: { key: TypeBucket; icon: LucideIcon; tint: string }[] = [
-  { key: "all", icon: List, tint: "text-fg-faint" },
-  { key: "in", icon: ArrowDownLeft, tint: "text-green" },
-  { key: "lots", icon: CandlestickChart, tint: "text-blue" },
-  { key: "out", icon: ArrowUpRight, tint: "text-red" },
-];
-
-/** The OTHERS control, shared with the active-filter chips the same way
- *  `TYPE_BUCKETS` is: plain booleans on `filters`, each one its own on/off.
- *  Both are amber — the colour an uncategorised row and an unreviewed guess
- *  already carry on their chips. */
-export const OTHER_FLAGS = [
-  {
-    key: "uncategorized",
-    labelKey: "budget.uncategorized",
-    icon: CircleDashed,
-    tint: "text-amber",
-    strokeWidth: 2,
-  },
-  // Lucide draws every glyph at stroke 2, which is tuned for open shapes like
-  // an arrow. `Sparkles` packs four closed stars into the same box, so at 14px
-  // its strokes very nearly meet and the icon reads bold next to its
-  // neighbours. Thinning the stroke, not shrinking the icon, is what restores
-  // the weight — the glyph keeps its size in the row.
-  {
-    key: "needsReview",
-    labelKey: "budget.needsReview",
-    icon: Sparkles,
-    tint: "text-amber",
-    strokeWidth: 1.5,
-  },
-  // Not amber: this one flags nothing needing attention, it only widens the
-  // list back to rows hidden by default. Neutral, like the `all` bucket.
-  {
-    key: "transfers",
-    labelKey: "budget.transfers",
-    icon: ArrowLeftRight,
-    tint: "text-fg-dim",
-    strokeWidth: 2,
-  },
-] as const;
-
-/** Flag lookup for callers that hold a key and want its icon and colour. */
-export const otherFlag = (key: "uncategorized" | "needsReview" | "transfers") =>
-  OTHER_FLAGS.find((f) => f.key === key) ?? OTHER_FLAGS[0];
-
-/** Bucket lookup for callers that hold a key and want its icon and colour. */
-export const typeBucket = (key: TypeBucket) =>
-  TYPE_BUCKETS.find((b) => b.key === key) ?? TYPE_BUCKETS[0];
-
-/** The page/sidebar glyph, named once so Settings and later phases agree. */
-export const BudgetIcon: LucideIcon = ReceiptEuro;
-
-/** Every icon the seed in `0028_budget.sql` uses plus the rest of the pickable
- *  set, statically imported —
- *  lucide's dynamic index would pull the whole icon set into the bundle. */
-export const BUDGET_ICONS: Record<string, LucideIcon> = {
-  activity: Activity,
-  "arrow-left-right": ArrowLeftRight,
-  banknote: Banknote,
-  "book-open": BookOpen,
-  "circle-dashed": CircleDashed,
-  "circle-plus": CirclePlus,
-  coins: Coins,
-  "eye-off": EyeOff,
-  film: Film,
-  fuel: Fuel,
-  "gamepad-2": Gamepad2,
-  gift: Gift,
-  "graduation-cap": GraduationCap,
-  "heart-pulse": HeartPulse,
-  house: House,
-  lamp: Lamp,
-  landmark: Landmark,
-  "paw-print": PawPrint,
-  percent: Percent,
-  "piggy-bank": PiggyBank,
-  plane: Plane,
-  "plug-zap": PlugZap,
-  receipt: Receipt,
-  repeat: Repeat,
-  shield: Shield,
-  shirt: Shirt,
-  "shopping-bag": ShoppingBag,
-  "shopping-cart": ShoppingCart,
-  smartphone: Smartphone,
-  "train-front": TrainFront,
-  "trending-up": TrendingUp,
-  "undo-2": Undo2,
-  utensils: Utensils,
-  wallet: Wallet,
-  zap: Zap,
-};
-
-export const BUDGET_ICON_NAMES: readonly string[] = Object.keys(BUDGET_ICONS);
 
 /** The fallback for a missing or unsafe colour. A colour reaches an inline
  *  `style`, so it is validated, not trusted. */
@@ -151,16 +33,6 @@ export function categoryLabel(
  *  react-refresh rule forbids a non-component export from a `.tsx`. */
 export type CategoryLike = Pick<BudgetCategory, "name" | "defaultKey" | "color" | "icon">;
 
-/** The one place that turns a failed budget write into a translation key.
- *  Branches on `ApiError.status`, never on message text. */
-export function budgetErrorKey(err: unknown): "duplicate" | "gone" | "saveError" {
-  if (err instanceof ApiError) {
-    if (err.status === 409) return "duplicate";
-    if (err.status === 404) return "gone";
-  }
-  return "saveError";
-}
-
 /** Kind-major, and nothing more: inside a kind the backend's `sort_order` is
  *  the order the user arranged by hand, and `Array.prototype.sort` is stable,
  *  so it survives. */
@@ -170,15 +42,33 @@ export function sortCategories(list: BudgetCategory[]): BudgetCategory[] {
   );
 }
 
-/** One line of an `EntityChooser`. `label` is what the search box matches and
- *  what the keyboard reads; `render` is what the line draws (a chip). */
-export type ChooserItem = {
-  id: string;
-  label: string;
-  /** A group heading key, or undefined for a flat list. */
-  group?: string;
-  render: ReactNode;
-};
+type Orderable = Pick<BudgetCategory, "id" | "kind">;
+
+/** The row a category's arrow would trade places with: the previous/next row
+ *  of its kind that is on screen. `undefined` at that end of its kind, where
+ *  the arrow is dead. */
+export function categoryNeighbour<C extends Orderable>(visible: C[], c: C, dir: -1 | 1): C | undefined {
+  const siblings = visible.filter((r) => r.kind === c.kind);
+  return siblings[siblings.findIndex((r) => r.id === c.id) + dir];
+}
+
+/** Every id, in order, once `c` moves past its visible neighbour; null when it
+ *  has none. Hidden archived rows are carried along rather than stepped on: the
+ *  row lands where the neighbour was in the *full* kind list, so the arrow
+ *  always moves it exactly one visible place. `rows` is the full list in
+ *  `sortCategories` order. */
+export function categoryOrderAfterMove(rows: Orderable[], visible: Orderable[], c: Orderable, dir: -1 | 1): string[] | null {
+  const target = categoryNeighbour(visible, c, dir);
+  if (!target) return null;
+  const kindRows = rows.filter((r) => r.kind === c.kind);
+  const to = kindRows.findIndex((r) => r.id === target.id);
+  const moved = kindRows.filter((r) => r.id !== c.id);
+  // `to` still addresses the right slot after the removal: moving up, the
+  // rows before it did not shift; moving down, the neighbour slid one place
+  // left, so inserting at `to` puts `c` just after it.
+  moved.splice(to, 0, c);
+  return BUDGET_KINDS.flatMap((k) => (k === c.kind ? moved : rows.filter((r) => r.kind === k))).map((r) => r.id);
+}
 
 /** The row's own category, as much of it as the chip draws — rebuilt from
  *  the flat fields the list endpoint sends. Nothing is invented: a row does not

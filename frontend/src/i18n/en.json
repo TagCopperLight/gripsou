@@ -62,8 +62,7 @@
     "pea": "PEA",
     "brokerage": "Brokerage",
     "life_insurance": "Life insurance",
-    "retirement": "Retirement",
-    "multiple": "Multiple"
+    "retirement": "Retirement"
   },
   "time": {
     "justNow": "just now",
@@ -131,6 +130,7 @@
       "clearSearch": "Clear search",
       "all": "All",
       "multipleAccounts": "Multiple accounts",
+      "multipleTypes": "Multiple",
       "columns": {
         "asset": "ASSET",
         "quantity": "QUANTITY",

@@ -16,7 +16,7 @@ import {
   type CategoryBody,
 } from "../../../api/budget";
 import {
-  BUDGET_KINDS, categoryLabel, safeBudgetColor, sortCategories,
+  categoryLabel, categoryNeighbour, categoryOrderAfterMove, safeBudgetColor, sortCategories,
 } from "../../../lib/budget";
 import { withAlpha } from "../../../lib/color";
 import { CategoryModal } from "./CategoryModal";
@@ -129,38 +129,14 @@ export function CategoriesSurface() {
     setDeleting(null);
   }
 
-  /** The neighbour a row would trade places with — the previous/next row of
-   *  the same kind that is actually on screen. `undefined` means the row is at
-   *  that end of its kind and the arrow is dead. */
-  function neighbour(c: BudgetCategory, dir: -1 | 1): BudgetCategory | undefined {
-    const siblings = visibleRows.filter((r) => r.kind === c.kind);
-    return siblings[siblings.indexOf(c) + dir];
-  }
+  const neighbour = (c: BudgetCategory, dir: -1 | 1) => categoryNeighbour(visibleRows, c, dir);
 
-  /** Moves `c` past its visible neighbour and persists the whole list. Hidden
-   *  archived rows are carried along rather than stepped on: the row lands
-   *  where the neighbour was in the *full* kind list, so the arrow always
-   *  moves the row exactly one visible place. */
   function runMove(c: BudgetCategory, dir: -1 | 1) {
-    const target = neighbour(c, dir);
-    if (!target || reorder.isPending) return;
+    if (reorder.isPending) return;
+    const order = categoryOrderAfterMove(rows, visibleRows, c, dir);
+    if (!order) return;
     setActionError(false);
-
-    const kindRows = rows.filter((r) => r.kind === c.kind);
-    const to = kindRows.indexOf(target);
-    const moved = kindRows.filter((r) => r.id !== c.id);
-    // `to` still addresses the right slot after the removal: moving up, the
-    // rows before it did not shift; moving down, the neighbour slid one place
-    // left, so inserting at `to` puts `c` just after it.
-    moved.splice(to, 0, c);
-
-    const order = BUDGET_KINDS.flatMap((k) =>
-      k === c.kind ? moved : rows.filter((r) => r.kind === k),
-    );
-    reorder.mutate(
-      order.map((r) => r.id),
-      { onError: () => setActionError(true) },
-    );
+    reorder.mutate(order, { onError: () => setActionError(true) });
   }
 
   function runArchiveToggle(c: BudgetCategory) {

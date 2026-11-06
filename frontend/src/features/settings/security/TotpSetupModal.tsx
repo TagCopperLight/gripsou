@@ -8,7 +8,7 @@ import { Button } from "../../../ui/Button";
 import { ApiError } from "../../../api/client";
 import { useTotpConfirm, useTotpSetup } from "../../../api/hooks";
 import type { TotpSetup } from "../../../api/types";
-import { throttleMinutes } from "../../../lib/mfa";
+import { throttleMinutes } from "../../../auth/throttle";
 import { CodeInput } from "../../../ui/CodeInput";
 import { BackupCodes } from "./BackupCodes";
 import { FieldError } from "../../../ui/FieldError";

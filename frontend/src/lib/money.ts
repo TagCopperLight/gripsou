@@ -141,40 +141,6 @@ export function formatQuantity(
   return `${sign}${body}`;
 }
 
-/** An FR keyboard under `inputMode="decimal"` produces `16,03`, so a comma has
- *  to be readable as a decimal separator. But `15,617` (three decimals, like
- *  a typical ETF unit price) and `1,234` (en-US grouping) are indistinguishable
- *  from the string alone, and guessing wrong posts a value 1000x off in silence.
- *
- *  So the reader is locale-led: under `fr` a comma is the decimal separator,
- *  which is what the French keyboard produces and what French formatting means.
- *  Under any other language a comma is grouping, and a decimal comma is not
- *  expected — so anything containing one is left alone for `DECIMAL_RE` to
- *  reject, and the user is told rather than silently misread. Mixed or repeated
- *  separators are always ambiguous and always refused. */
-export function normaliseDecimal(raw: string, language: string): string {
-  const s = raw.trim();
-  // Both separators, or more than one comma: grouped, never unambiguous.
-  if (s.includes(".") && s.includes(",")) return s;
-  if ((s.match(/,/g) ?? []).length > 1) return s;
-  if (!language.toLowerCase().startsWith("fr")) return s;
-  return s.replace(",", ".");
-}
-
-export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
-
-export type ValidationError = "invalidNumber" | "nonPositiveQuantity" | "negativeUnitPrice";
-
-/** Mirrors the server's validation rules so a malformed row is caught with a
- *  specific, translated message instead of a generic "row N failed" once it
- *  round-trips to the API and back as a 400. */
-export function validateRow(quantity: string, unitPrice: string): ValidationError | null {
-  if (!DECIMAL_RE.test(quantity) || !DECIMAL_RE.test(unitPrice)) return "invalidNumber";
-  if (Number(quantity) <= 0) return "nonPositiveQuantity";
-  if (Number(unitPrice) < 0) return "negativeUnitPrice";
-  return null;
-}
-
 export function formatPercent(
   value: string | number,
   options: PercentFormatOptions = {},
@@ -191,70 +157,4 @@ export function formatPercent(
     signed: options.signed ?? false,
   });
   return `${sign}${body}`;
-}
-
-/** Sums decimal strings exactly, in BigInt arithmetic — never `Number(...)`,
- *  which reintroduces the float error the server's decimal strings exist to
- *  avoid (see CLAUDE.md: money is `Decimal` end-to-end, never floats; the
- *  global constraint restricts `Number(...)` to a comparison delta or a
- *  ratio, never a rendered amount). Every input is scaled to the widest
- *  fraction length among them before adding, so `"1.5" + "2.25"` lines up on
- *  hundredths rather than losing `2.25`'s second digit. An empty list sums to
- *  `"0"`; an exact-zero result renders unsigned, still at that width (e.g.
- *  `"-0.5" + "0.5"` → `"0.0"`, not `"-0.0"`). */
-export function sumDecimals(values: string[]): string {
-  if (values.length === 0) return "0";
-
-  const parsed = values.map((v) => {
-    const m = /^(-)?(\d+)(?:\.(\d+))?$/.exec(v.trim());
-    if (!m) throw new Error(`sumDecimals: not a decimal string: ${v}`);
-    const [, negative, intPart, fracPart = ""] = m;
-    return { negative: Boolean(negative), intPart, fracPart };
-  });
-
-  const maxFrac = Math.max(...parsed.map((p) => p.fracPart.length));
-
-  let total = 0n;
-  for (const p of parsed) {
-    const fracPadded = p.fracPart.padEnd(maxFrac, "0");
-    const magnitude = BigInt(p.intPart + fracPadded);
-    total += p.negative ? -magnitude : magnitude;
-  }
-
-  const negative = total < 0n;
-  const abs = negative ? -total : total;
-  const absStr = abs.toString().padStart(maxFrac + 1, "0");
-
-  const body =
-    maxFrac === 0
-      ? absStr
-      : `${absStr.slice(0, absStr.length - maxFrac)}.${absStr.slice(absStr.length - maxFrac)}`;
-
-  return negative ? `-${body}` : body;
-}
-
-/** Cash impact of a single lot, matching the backend's convention exactly
- *  (`query.rs`, transactions view): a buy is `-(qty x price + fee)` — money
- *  out, fee included; a sale is `+(qty x price - fee)` — money in, net of
- *  fee. This is plain cash arithmetic, not the cost-basis rule (no averaging
- *  across rows), so computing it locally is fine — but every screen that
- *  shows a lot's amount must use this one function, or two screens can show
- *  two different numbers for the same row. */
-export function lotCashAmount(
-  side: "buy" | "sell",
-  qty: string | number,
-  price: string | number,
-  fee: string | number = 0,
-): number {
-  const gross = Number(qty) * Number(price);
-  const f = Number(fee);
-  return side === "buy" ? -(gross + f) : gross - f;
-}
-
-/** `a - b` on decimal strings, exactly — the same arithmetic as `sumDecimals`,
- *  for a difference that is rendered as an amount. */
-export function subtractDecimals(a: string, b: string): string {
-  const t = b.trim();
-  const negated = t.startsWith("-") ? t.slice(1) : `-${t}`;
-  return sumDecimals([a, negated]);
 }

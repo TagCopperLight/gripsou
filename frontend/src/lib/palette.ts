@@ -45,7 +45,6 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 export function colorForString(str: string): string {
-  if (str === "EUR") return ACCOUNT_PALETTE[0];
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);

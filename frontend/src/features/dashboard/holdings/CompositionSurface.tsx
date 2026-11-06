@@ -2,34 +2,21 @@ import { useTranslation } from "react-i18next";
 import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { STRIPE_CSS } from "../../exposure/exposureColors";
 import { localizeCountry, localizeSector } from "../../../lib/composition-i18n";
+import { allocationPercents } from "../../../lib/composition";
 import type { Allocation, Composition } from "../../../api/types";
 
-// Boursorama only lists the top holdings, so the listed weights sum to less
-// than 100%. "Other" is the remainder (everything not broken out
-// individually), striped like the leftover slice of the Investments donuts.
+// "Other", the remainder, is striped like the leftover slice of the
+// Investments donuts.
 const OTHER_COLOR = STRIPE_CSS;
 
 type Slice = { name: string; percent: number; color: string };
 
-/// Real slices (as integer percents) plus an "Other" remainder, so the displayed
-/// percents always total exactly 100%. "Other" absorbs both the unlisted holdings
-/// and the leftover from rounding each slice; it is shown only when it is >= 1%.
+/** The listed slices in the account palette's colours by position (top-N
+ *  lists fit within it; longer ones wrap), then "Other" when it is >= 1%. */
 function buildSlices(items: Allocation[], otherLabel: string): Slice[] {
-  // Largest first: Boursorama's own order breaks once repeated lines are
-  // merged (a 13 % line after an 8 % one).
-  const sorted = [...items].sort((a, b) => b.weight - a.weight);
-  const slices: Slice[] = sorted.map((a, i) => ({
-    name: a.name,
-    percent: Math.round(a.weight * 100),
-    // Cycle the fixed account palette by position for well-spaced, distinct
-    // colors (top-N lists fit within the palette; longer lists wrap).
-    color: ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length],
-  }));
-  const otherPercent = 100 - slices.reduce((sum, s) => sum + s.percent, 0);
-  if (otherPercent >= 1) {
-    slices.push({ name: otherLabel, percent: otherPercent, color: OTHER_COLOR });
-  }
-  return slices;
+  const { listed, other } = allocationPercents(items);
+  const slices = listed.map((s, i) => ({ ...s, color: ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length] }));
+  return other >= 1 ? [...slices, { name: otherLabel, percent: other, color: OTHER_COLOR }] : slices;
 }
 
 function AllocationBar({

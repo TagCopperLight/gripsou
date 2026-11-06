@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 import { FilledDot } from "./FilledDot";
-import { BUDGET_ICONS } from "../../lib/budget";
+import { BUDGET_ICONS } from "./budgetIcons";
 
 type CategoryIconProps = {
   /** The category's icon name; `null` or an unknown name draws the dot. */

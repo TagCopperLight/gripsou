@@ -1,6 +1,6 @@
 import type { Sankey, Slice } from "../api/overview";
 import { sliceColor, sliceKey } from "./slice";
-import { sumDecimals } from "./money";
+import { sumDecimals } from "./decimal";
 import { FG_FAINT } from "./theme";
 import { MINT, ORANGE } from "./palette";
 

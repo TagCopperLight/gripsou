@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { EntityChooser } from "./EntityChooser";
+import { EntityChooser, type ChooserItem } from "./EntityChooser";
 import { TagChip } from "./TagChip";
 import { useBudgetTags } from "../../api/budget";
-import type { ChooserItem } from "../../lib/budget";
 
 type TagChooserProps = {
   selectedIds: string[];

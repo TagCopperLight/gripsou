@@ -2,7 +2,7 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import en from "./en.json";
 import fr from "./fr.json";
-import { browserPrefs } from "../lib/welcome";
+import { browserLanguage } from "./browserLanguage";
 
 // en/fr strings. Until a user is known (sign-in, invite, reset), the
 // browser's language; then the user's own, from their prefs (AuthProvider).
@@ -18,7 +18,7 @@ export const i18nReady = i18n.use(initReactI18next).init({
     en: { translation: en },
     fr: { translation: fr },
   },
-  lng: browserPrefs().uiLanguage,
+  lng: browserLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
 });

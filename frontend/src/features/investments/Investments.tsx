@@ -9,23 +9,12 @@ import { ExposureDonut } from "../exposure/ExposureDonut";
 import { InvestmentsEmpty } from "./InvestmentsEmpty";
 import { indexItems, regionItems, sectorItems } from "../exposure/exposureColors";
 import { useHoldings, useInvestmentReturns } from "../../api/hooks";
-import type { Holding, InvestmentReturns } from "../../api/types";
+import type { InvestmentReturns } from "../../api/types";
 import { exposure, type ExposureHolding } from "../../lib/exposure";
+import { investmentsView } from "../../lib/investments";
 import { ExcludedNote } from "../../ui/FxNote";
 import { PrivacyEye } from "../../ui/PrivateMoney";
 import { usePrivacy } from "../../auth/usePrivacy";
-
-/** The securities the page is about: cash never counts here. */
-function securities(holdings: Holding[]): ExposureHolding[] {
-  return holdings
-    .filter((h) => h.kind !== "cash")
-    .map((h) => ({
-      name: h.name,
-      kind: h.kind,
-      value: Number(h.value),
-      composition: h.composition,
-    }));
-}
 
 export function Investments() {
   const { t } = useTranslation();
@@ -33,14 +22,13 @@ export function Investments() {
   const holdings = useHoldings();
 
   const failed = returns.isError || holdings.isError;
-  const ready = returns.data !== undefined && holdings.data !== undefined;
-  const held = ready ? securities(holdings.data) : [];
-  const excluded = (holdings.data ?? []).filter((h) => h.kind !== "cash" && h.fxMissing).length;
+  const view =
+    returns.data !== undefined && holdings.data !== undefined ? investmentsView(holdings.data, returns.data) : null;
 
   return (
     <div>
       <PageHeader title={t("nav.investments")} />
-      {!ready ? (
+      {view === null || returns.data === undefined ? (
         <Placeholder
           variant={failed ? "error" : "loading"}
           onRetry={() => {
@@ -48,10 +36,10 @@ export function Investments() {
             void holdings.refetch();
           }}
         />
-      ) : held.length === 0 && returns.data.accounts.length === 0 ? (
+      ) : view.empty ? (
         <InvestmentsEmpty />
       ) : (
-        <InvestmentsBody data={returns.data} held={held} excluded={excluded} />
+        <InvestmentsBody data={returns.data} held={view.held} excluded={view.excluded} />
       )}
     </div>
   );

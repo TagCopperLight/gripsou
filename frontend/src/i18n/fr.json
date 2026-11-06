@@ -62,8 +62,7 @@
     "pea": "PEA",
     "brokerage": "Compte-titres",
     "life_insurance": "Assurance-vie",
-    "retirement": "Épargne retraite",
-    "multiple": "Plusieurs types"
+    "retirement": "Épargne retraite"
   },
   "time": {
     "justNow": "à l'instant",
@@ -131,6 +130,7 @@
       "clearSearch": "Effacer la recherche",
       "all": "Tous",
       "multipleAccounts": "Plusieurs comptes",
+      "multipleTypes": "Plusieurs types",
       "columns": {
         "asset": "ACTIF",
         "quantity": "QUANTITÉ",

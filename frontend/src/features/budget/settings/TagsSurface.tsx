@@ -8,7 +8,7 @@ import { Surface } from "../../../ui/Surface";
 import { CardState } from "../../../ui/CardState";
 import { Button } from "../../../ui/Button";
 import { useBudgetTags, useCreateBudgetTag, type BudgetTag } from "../../../api/budget";
-import { budgetErrorKey } from "../../../lib/budget";
+import { budgetErrorKey } from "../budgetErrors";
 import { TagRow } from "./TagRow";
 import { DeleteTagModal } from "./DeleteTagModal";
 

@@ -1,68 +1,132 @@
 import type { Holding } from "../api/types";
+import { currencySymbol } from "./currency";
+import { sumDecimals } from "./decimal";
 import { ACCOUNT_PALETTE } from "./palette";
 
-/**
- * Collapse cash holdings into a single line per currency. Cash is the same
- * instrument across accounts (EUR is EUR), so the holdings list shows one
- * summed "Cash" row rather than one per account; the per-account breakdown
- * lives on the Accounts tab. Non-cash holdings pass through untouched, and a
- * currency held in only one account keeps its original (per-account) row.
- *
- * `multipleLabel` is the translated "Multiple accounts" string shown in the
- * account column of a merged row.
- */
-export function aggregateCash(holdings: Holding[], multipleLabel: string): Holding[] {
-  const cash = holdings.filter((h) => h.kind === "cash");
-  if (cash.length === 0) return holdings;
-  const rest = holdings.filter((h) => h.kind !== "cash");
+/** A line of the holdings table: one holding, or the cash of one currency
+ *  held in several accounts. Cash is the same instrument in every account (a
+ *  euro is a euro), so the list shows it once, summed; the per-account split
+ *  lives on the Accounts tab. */
+export type HoldingLine = {
+  key: string;
+  /** The line's holdings, all of the same instrument: the instrument fields
+   *  (name, ticker, kind, logo, price currency) are read off the first. */
+  holdings: [Holding, ...Holding[]];
+  value: string;
+  /** Null when any holding has no price at all. */
+  valueNative: string | null;
+  fxMissing: boolean;
+  /** The account the line is in; null when it spans several. */
+  account: { name: string; color: string } | null;
+  /** The account type its accounts share; null when they differ. */
+  accountType: string | null;
+};
 
-  const groups = new Map<string, Holding[]>();
-  for (const h of cash) {
-    const group = groups.get(h.ticker);
-    if (group) group.push(h);
-    else groups.set(h.ticker, [h]);
+/** The colour of the merged cash line's account swatch and of every cash badge. */
+export const CASH_COLOR = ACCOUNT_PALETTE[0];
+
+/** A cash line's badge text: its currency's symbol (`€`), or the badge's
+ *  default for a currency without one. */
+export function cashGlyph(currency: string): string | undefined {
+  const symbol = currencySymbol(currency);
+  return symbol === currency ? undefined : symbol;
+}
+
+function line(holdings: [Holding, ...Holding[]]): HoldingLine {
+  const [first] = holdings;
+  if (holdings.length === 1) {
+    return {
+      key: first.id,
+      holdings,
+      value: first.value,
+      valueNative: first.valueNative,
+      fxMissing: first.fxMissing,
+      account: { name: first.accountName, color: first.accountColor },
+      accountType: first.accountType,
+    };
   }
+  const natives = holdings.map((h) => h.valueNative);
+  return {
+    key: `cash:${first.ticker}`,
+    holdings,
+    value: sumDecimals(holdings.map((h) => h.value)),
+    valueNative: natives.every((v) => v !== null) ? sumDecimals(natives) : null,
+    fxMissing: holdings.some((h) => h.fxMissing),
+    account: null,
+    accountType: holdings.every((h) => h.accountType === first.accountType) ? first.accountType : null,
+  };
+}
 
-  const merged: Holding[] = [];
-  for (const items of groups.values()) {
-    if (items.length === 1) {
-      merged.push({ ...items[0] });
-      continue;
-    }
-    const value = items.reduce((sum, h) => sum + Number(h.value), 0);
-    const qty = items.reduce((sum, h) => sum + Number(h.qty), 0);
-    const first = items[0];
-    // The merged row can span accounts of different types (a checking EUR
-    // balance and a Livret A). Only claim a type when they all agree.
-    const sameType = items.every((h) => h.accountType === first.accountType);
-    merged.push({
-      ...first,
-      id: `cash:${first.ticker}`,
-      accountId: "",
-      accountName: multipleLabel,
-      accountColor: ACCOUNT_PALETTE[0],
-      logo: first.logo,
-      ...(!sameType && { accountType: "multiple" }),
-      qty: String(qty),
-      invested: String(value),
-      value: String(value),
-      gl: "0",
-      glPct: "0",
-      spark: null,
-      fxMissing: items.some((h) => h.fxMissing),
-      valueNative: items.every((h) => h.valueNative !== null)
-        ? String(items.reduce((s, h) => s + Number(h.valueNative), 0))
-        : null,
-      investedNative: String(items.reduce((s, h) => s + Number(h.investedNative), 0)),
-      // Cash has no lots, so `lot_basis` always reports this as "0" for every
-      // cash holding (there's no unexplained gap to carry) — summing is safe
-      // today and, unlike carrying just `first`'s value, stays correct if
-      // that ever stops being true, matching how the other numeric fields
-      // above are combined across the merged accounts rather than taken from
-      // one arbitrary member.
-      unexplainedCost: String(items.reduce((s, h) => s + Number(h.unexplainedCost), 0)),
-    });
+/** One line per holding, with each currency's cash merged into one. */
+export function holdingLines(holdings: Holding[]): HoldingLine[] {
+  const lines: HoldingLine[] = [];
+  const cash = new Map<string, [Holding, ...Holding[]]>();
+  for (const h of holdings) {
+    if (h.kind !== "cash") lines.push(line([h]));
+    else if (cash.has(h.ticker)) cash.get(h.ticker)!.push(h);
+    else cash.set(h.ticker, [h]);
   }
+  return [...lines, ...[...cash.values()].map(line)];
+}
 
-  return [...rest, ...merged];
+export type HoldingSortKey = "asset" | "qty" | "value" | "pnl";
+export type HoldingSort = { key: HoldingSortKey; dir: "asc" | "desc" };
+
+/** A new column starts in its natural direction (A→Z for names, largest
+ *  first for figures); a second click flips it. */
+export function toggleHoldingSort(prev: HoldingSort | null, key: HoldingSortKey): HoldingSort {
+  return prev?.key === key
+    ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+    : { key, dir: key === "asset" ? "asc" : "desc" };
+}
+
+// Cash has no meaningful quantity or P/L; those lines always sort to the bottom.
+function sortable(l: HoldingLine, key: "qty" | "pnl"): number | null {
+  const h = l.holdings[0];
+  if (h.kind === "cash") return null;
+  return Number(key === "qty" ? h.qty : h.gl);
+}
+
+function compareNullable(a: number | null, b: number | null, mul: number): number {
+  if (a === null) return b === null ? 0 : 1;
+  if (b === null) return -1;
+  return (a - b) * mul;
+}
+
+function compare(a: HoldingLine, b: HoldingLine, sort: HoldingSort): number {
+  const mul = sort.dir === "asc" ? 1 : -1;
+  switch (sort.key) {
+    case "asset":
+      return a.holdings[0].name.localeCompare(b.holdings[0].name) * mul;
+    case "value":
+      return (Number(a.value) - Number(b.value)) * mul;
+    default:
+      return compareNullable(sortable(a, sort.key), sortable(b, sort.key), mul);
+  }
+}
+
+/** The account types to filter by, read off the holdings themselves. */
+export function holdingAccountTypes(holdings: Holding[]): string[] {
+  return [...new Set(holdings.map((h) => h.accountType))];
+}
+
+export type HoldingFilter = {
+  /** Null for every type. */
+  accountType: string | null;
+  query: string;
+};
+
+/** The table's lines. Filtering comes before the cash merge, so a filtered
+ *  list's cash line is that type's cash only (the PEA's own liquidity under
+ *  "PEA"). */
+export function shownHoldingLines(holdings: Holding[], filter: HoldingFilter, sort: HoldingSort | null): HoldingLine[] {
+  const q = filter.query.trim().toLowerCase();
+  const lines = holdingLines(
+    holdings.filter(
+      (h) =>
+        (filter.accountType === null || h.accountType === filter.accountType) &&
+        (q === "" || h.name.toLowerCase().includes(q) || h.ticker.toLowerCase().includes(q)),
+    ),
+  );
+  return sort ? lines.sort((a, b) => compare(a, b, sort)) : lines;
 }

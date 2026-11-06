@@ -4,7 +4,8 @@ import { X } from "lucide-react";
 import { useBudget } from "../budgetContext";
 import { useAccounts } from "../../../api/hooks";
 import { useBudgetCategories, useBudgetTags } from "../../../api/budget";
-import { categoryLabel, otherFlag, safeBudgetColor, typeBucket } from "../../../lib/budget";
+import { categoryLabel, safeBudgetColor } from "../../../lib/budget";
+import { otherFlag, typeBucket } from "../budgetIcons";
 import { periodLabel } from "../../../lib/period";
 import {
   EMPTY_FILTERS, activeFilters, clearFilter, type ActiveFilter,

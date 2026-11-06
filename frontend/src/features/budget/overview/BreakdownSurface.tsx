@@ -8,12 +8,14 @@ import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../../ui/gridTable";
 import { MaskedMoney } from "../../../ui/PrivateMoney";
 import { Percent } from "../../../ui/Percent";
 import { CategoryChip } from "../CategoryChip";
-import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
+import {
+  sliceChip, sliceColor, sliceKey, sortBreakdown, toggleBreakdownSort,
+  type BreakdownSort, type BreakdownSortKey,
+} from "../../../lib/slice";
 import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 import type { BreakdownRow, Slice } from "../../../api/overview";
 
-type SortKey = "category" | "amount" | "txnCount";
-type ColKey = SortKey | "share" | "avg12";
+type ColKey = BreakdownSortKey | "share" | "avg12";
 
 type BreakdownSurfaceProps = {
   rows: BreakdownRow[];
@@ -30,42 +32,18 @@ type BreakdownSurfaceProps = {
 
 export function BreakdownSurface({ rows, expensesTotal, onOpen, masked = false }: BreakdownSurfaceProps) {
   const { t } = useTranslation();
-  const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: "amount", asc: false });
+  const [sort, setSort] = useState<BreakdownSort>({ key: "amount", asc: false });
 
   const total = Number(expensesTotal);
 
-  // Same behaviour as the holdings table: a new column starts in its natural
-  // direction (A→Z for names, largest first for figures), a second click flips.
-  const toggle = (key: SortKey) =>
-    setSort((prev) =>
-      prev.key === key ? { key, asc: !prev.asc } : { key, asc: key === "category" },
-    );
-
-  // `other` is a rollup, not a peer: it stays pinned last however the real rows
-  // are ordered, so the table always reads "…and everything else".
-  const real = rows.filter((r) => r.slice.kind !== "other");
-  const rollup = rows.filter((r) => r.slice.kind === "other");
-
-  const sorted = [...real].sort((a, b) => {
-    const dir = sort.asc ? 1 : -1;
-    switch (sort.key) {
-      case "category":
-        // `sliceLabel`, not `sliceChip(...)?.name`: the chip's own name falls
-        // back to "" for uncategorised, which would sort it before every real
-        // category instead of alongside them by its displayed label.
-        return dir * sliceLabel(t, a.slice).localeCompare(sliceLabel(t, b.slice));
-      case "txnCount":
-        return dir * (a.txnCount - b.txnCount);
-      default:
-        return dir * (Number(a.amount) - Number(b.amount));
-    }
-  });
+  const toggle = (key: BreakdownSortKey) => setSort((prev) => toggleBreakdownSort(prev, key));
+  const sorted = sortBreakdown(t, rows, sort);
 
   // On the shared grid table (`gridTable.ts`), like Holdings and Transactions:
   // CATEGORY and SHARE grow, the figures have floors, so sorting never moves a
   // column. SHARE orders exactly like AMOUNT and the 12-month column is a ratio
   // with gaps, so neither sorts. The last track holds the row's caret.
-  const columns: { key: ColKey; labelKey: string; right: boolean; track: string; pad: string; sort?: SortKey }[] = [
+  const columns: { key: ColKey; labelKey: string; right: boolean; track: string; pad: string; sort?: BreakdownSortKey }[] = [
     { key: "category", labelKey: "category", right: false, track: "minmax(180px, 2fr)", pad: "pl-3 pr-4", sort: "category" },
     { key: "amount", labelKey: "amount", right: true, track: "minmax(7rem, max-content)", pad: "pr-4", sort: "amount" },
     { key: "share", labelKey: "share", right: false, track: "minmax(140px, 3fr)", pad: "pr-4" },
@@ -125,7 +103,7 @@ export function BreakdownSurface({ rows, expensesTotal, onOpen, masked = false }
               </>
             }
           >
-            {[...sorted, ...rollup].map((row) => {
+            {sorted.map((row) => {
               const linkable = row.slice.kind !== "other";
               const share = total === 0 ? 0 : Number(row.amount) / total;
               // Absent on `other`, whose membership changes month to month.

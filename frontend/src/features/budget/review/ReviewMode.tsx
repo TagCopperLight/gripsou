@@ -19,7 +19,8 @@ import {
   useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction,
   useUndoReview,
 } from "../../../api/budget";
-import { budgetErrorKey, categoryLabel, categoryOfTransaction } from "../../../lib/budget";
+import { categoryLabel, categoryOfTransaction } from "../../../lib/budget";
+import { budgetErrorKey } from "../budgetErrors";
 import {
   applyToSame, clearResolved, initialReview, offerSame, resolve, syncPending, unresolve,
   type Resolution, type ReviewState,

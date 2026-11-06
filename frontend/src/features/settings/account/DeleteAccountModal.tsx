@@ -6,7 +6,7 @@ import { ConfirmDialog } from "../../../ui/ConfirmDialog";
 import { PasswordField } from "../../../ui/PasswordField";
 import { ApiError } from "../../../api/client";
 import { useDeleteAccount } from "../../../api/hooks";
-import { throttleMinutes } from "../../../lib/mfa";
+import { throttleMinutes } from "../../../auth/throttle";
 
 type DeleteAccountModalProps = {
   onClose: () => void;

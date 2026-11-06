@@ -9,7 +9,7 @@ import { FieldError } from "../../ui/FieldError";
 import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { ApiError } from "../../api/client";
-import { throttleMinutes } from "../../lib/mfa";
+import { throttleMinutes } from "../../auth/throttle";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 

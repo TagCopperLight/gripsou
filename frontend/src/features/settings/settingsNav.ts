@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useRouter, type RegisteredRouter } from "@tanstack/react-router";
 
-import { BudgetIcon } from "../../lib/budget";
+import { BudgetIcon } from "../budget/budgetIcons";
 import { useAuth } from "../../auth/context";
 
 type SettingsPath = Exclude<Extract<keyof RegisteredRouter["routesByPath"], `/settings/${string}`>, "/settings/">;

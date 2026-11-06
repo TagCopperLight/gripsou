@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { Slice } from "../api/overview";
+import type { BreakdownRow, Slice } from "../api/overview";
 import {
   FALLBACK_COLOR, UNCATEGORISED_COLOR, categoryLabel, safeBudgetColor, type CategoryLike,
 } from "./budget";
@@ -40,4 +40,34 @@ export function sliceChip(t: TFunction, s: Slice): CategoryLike | null {
     color: OTHER_COLOR,
     icon: null,
   };
+}
+
+export type BreakdownSortKey = "category" | "amount" | "txnCount";
+export type BreakdownSort = { key: BreakdownSortKey; asc: boolean };
+
+/** Like the holdings table: a new column starts in its natural direction (A→Z
+ *  for names, largest first for figures), a second click flips. */
+export function toggleBreakdownSort(prev: BreakdownSort, key: BreakdownSortKey): BreakdownSort {
+  return prev.key === key ? { key, asc: !prev.asc } : { key, asc: key === "category" };
+}
+
+/** The breakdown's rows in table order. `other` is a rollup, not a peer: it
+ *  stays last however the real rows are ordered, so the table always reads
+ *  "…and everything else". Names sort by `sliceLabel`, so uncategorised sits
+ *  among the categories by its displayed label. */
+export function sortBreakdown(t: TFunction, rows: BreakdownRow[], sort: BreakdownSort): BreakdownRow[] {
+  const dir = sort.asc ? 1 : -1;
+  const real = rows.filter((r) => r.slice.kind !== "other");
+  const rollup = rows.filter((r) => r.slice.kind === "other");
+  real.sort((a, b) => {
+    switch (sort.key) {
+      case "category":
+        return dir * sliceLabel(t, a.slice).localeCompare(sliceLabel(t, b.slice));
+      case "txnCount":
+        return dir * (a.txnCount - b.txnCount);
+      default:
+        return dir * (Number(a.amount) - Number(b.amount));
+    }
+  });
+  return [...real, ...rollup];
 }

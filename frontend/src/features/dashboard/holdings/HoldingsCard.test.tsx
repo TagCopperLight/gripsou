@@ -20,13 +20,13 @@ const CASH_CHECKING = {
   accountId: "a1", accountName: "Main Checking", accountColor: "#888",
   accountType: "checking", qty: "100", price: "1", currency: "EUR",
   invested: "100", investedNative: "100",
-  value: "100", gl: "0", glPct: "0", fxMissing: false, spark: null,
+  value: "100", valueNative: "100", gl: "0", glPct: "0", fxMissing: false, spark: null,
   unexplainedQty: "0",
 };
 
 const CASH_PEA = {
   ...CASH_CHECKING, id: "c2", accountId: "a2", accountName: "PEA", accountType: "pea",
-  qty: "200", invested: "200", value: "200",
+  qty: "200", invested: "200", value: "200", valueNative: "200",
 };
 
 function renderCard(holdings: unknown[], prefs = DEFAULT_PREFS) {

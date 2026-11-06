@@ -15,19 +15,19 @@ import { RecordLotsModal } from "./RecordLotsModal";
 import { CardState } from "../../../ui/CardState";
 import { HoldingBadge } from "../../../ui/HoldingBadge";
 import { formatQuantity } from "../../../lib/money";
-import { aggregateCash } from "../../../lib/holdings";
+import { sumDecimals } from "../../../lib/decimal";
+import {
+  CASH_COLOR, cashGlyph, holdingAccountTypes, shownHoldingLines, toggleHoldingSort,
+  type HoldingSort, type HoldingSortKey,
+} from "../../../lib/holdings";
 import { KIND_LABEL_KEY, accountTypeLabel, type Holding } from "../../../api/types";
 import { useHoldings } from "../../../api/hooks";
 import { usePrivacy } from "../../../auth/usePrivacy";
 
-type SortKey = "asset" | "qty" | "value" | "pnl";
-type SortDir = "asc" | "desc";
-type Sort = { key: SortKey; dir: SortDir };
-
 type Column = {
   labelKey: string;
   align: "left" | "right";
-  sort?: SortKey;
+  sort?: HoldingSortKey;
   /** The column's grid track (see `gridTable.ts`). */
   track: string;
   /** Its gutter: every cell pays for the space on its right. */
@@ -50,35 +50,6 @@ const TRACKS = COLUMNS.map((c) => c.track).join(" ");
 const PAD = COLUMNS.map((c) => c.pad);
 const MIN_WIDTH = "55rem";
 
-// Cash has no meaningful quantity or P/L; those rows always sort to the bottom.
-function qtyOf(h: Holding): number | null {
-  return h.kind === "cash" ? null : Number(h.qty);
-}
-
-function pnlOf(h: Holding): number | null {
-  return h.kind === "cash" ? null : Number(h.gl);
-}
-
-function compareNullable(a: number | null, b: number | null, mul: number): number {
-  if (a === null) return b === null ? 0 : 1;
-  if (b === null) return -1;
-  return (a - b) * mul;
-}
-
-function compare(a: Holding, b: Holding, sort: Sort): number {
-  const mul = sort.dir === "asc" ? 1 : -1;
-  switch (sort.key) {
-    case "asset":
-      return a.name.localeCompare(b.name) * mul;
-    case "qty":
-      return compareNullable(qtyOf(a), qtyOf(b), mul);
-    case "value":
-      return (Number(a.value) - Number(b.value)) * mul;
-    case "pnl":
-      return compareNullable(pnlOf(a), pnlOf(b), mul);
-  }
-}
-
 type HoldingsCardProps = {
   className?: string;
 };
@@ -88,51 +59,19 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const { data, isError, refetch } = useHoldings();
   const ready = data !== undefined;
   const privacy = usePrivacy();
-  // Cash is the same instrument across accounts; show one summed line per
-  // currency here, with the per-account split living on the Accounts tab.
-  const multiple = t("dashboard.holdings.multipleAccounts");
-  const holdings = useMemo(() => aggregateCash(data ?? [], multiple), [data, multiple]);
-  const [sort, setSort] = useState<Sort | null>({ key: "value", dir: "desc" });
-  const [accountType, setAccountType] = useState("All");
+  const [sort, setSort] = useState<HoldingSort | null>({ key: "value", dir: "desc" });
+  const [accountType, setAccountType] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
   const [lotFor, setLotFor] = useState<Holding | null>(null);
 
-  // Filter by stable account-type key, read off the accounts themselves
-  // rather than the merged cash line, which may span several types.
-  const accountTypes = useMemo(
-    () => ["All", ...new Set((data ?? []).map((h) => h.accountType))],
-    [data],
+  const accountTypes = useMemo(() => holdingAccountTypes(data ?? []), [data]);
+  const netWorth = useMemo(() => Number(sumDecimals((data ?? []).map((h) => h.value))), [data]);
+  const rows = useMemo(
+    () => shownHoldingLines(data ?? [], { accountType, query }, sort),
+    [data, accountType, query, sort],
   );
-
-  const netWorth = useMemo(
-    () => holdings.reduce((sum, h) => sum + Number(h.value), 0),
-    [holdings],
-  );
-
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    // Filter before merging the cash, so a filtered list's cash line is that
-    // type's cash only (the PEA's own liquidity under "PEA").
-    const filtered = aggregateCash(
-      (data ?? []).filter(
-        (h) =>
-          (accountType === "All" || h.accountType === accountType) &&
-          (q === "" ||
-            h.name.toLowerCase().includes(q) ||
-            h.ticker.toLowerCase().includes(q)),
-      ),
-      multiple,
-    );
-    return sort ? [...filtered].sort((a, b) => compare(a, b, sort)) : filtered;
-  }, [data, multiple, accountType, query, sort]);
-
-  const toggleSort = (key: SortKey) =>
-    setSort((prev) =>
-      prev?.key === key
-        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: key === "asset" ? "asc" : "desc" },
-    );
+  const toggleSort = (key: HoldingSortKey) => setSort((prev) => toggleHoldingSort(prev, key));
 
   return (
     <Surface className={`w-full ${className}`}>
@@ -166,11 +105,11 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         ) : (
         <>
         <div className="flex flex-wrap items-center gap-1.5 mt-4">
-          {accountTypes.map((c) => {
+          {[null, ...accountTypes].map((c) => {
             const selected = c === accountType;
             return (
               <button
-                key={c}
+                key={c ?? ""}
                 type="button"
                 onClick={() => setAccountType(c)}
                 className={`rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 ${
@@ -179,7 +118,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                     : "bg-surface-2 text-fg-dim hover:text-fg"
                 }`}
               >
-                {c === "All"
+                {c === null
                   ? t("dashboard.holdings.all")
                   : accountTypeLabel(t, c)}
               </button>
@@ -192,7 +131,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             icon={<Search />}
             message={t("dashboard.holdings.noMatch", { query: query.trim() })}
             action={
-              <Button variant="ghost" onClick={() => { setQuery(""); setAccountType("All"); }}>
+              <Button variant="ghost" onClick={() => { setQuery(""); setAccountType(null); }}>
                 {t("dashboard.holdings.clearSearch")}
               </Button>
             }
@@ -233,16 +172,18 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             );
           })}
         >
-            {rows.map((h) => {
+            {rows.map((line) => {
+              const h = line.holdings[0];
               const up = Number(h.gl) >= 0;
               const hasPnl = h.kind !== "cash";
               // No rate: the value is zero, so a gain would be invented.
-              const showPnl = hasPnl && !h.fxMissing;
+              const showPnl = hasPnl && !line.fxMissing;
+              const accountName = line.account?.name ?? t("dashboard.holdings.multipleAccounts");
               // Cash rows are summary lines (no asset detail / purchase history),
               // so they are not clickable.
               return (
                 <tr
-                  key={h.id}
+                  key={line.key}
                   role="row"
                   onClick={hasPnl ? () => setSelected(h) : undefined}
                   className={`${ROW_CELLS} ${hasPnl ? `cursor-pointer ${ROW_HOVER}` : ""}`}
@@ -282,7 +223,8 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         <HoldingBadge
                           logo={h.logo}
                           ticker={h.ticker}
-                          fallbackText={h.kind === "cash" && h.ticker === "EUR" ? "€" : undefined}
+                          fallbackText={h.kind === "cash" ? cashGlyph(h.ticker) : undefined}
+                          color={h.kind === "cash" ? CASH_COLOR : undefined}
                           className="size-8 rounded-lg text-[13px]"
                         />
                       )}
@@ -307,29 +249,31 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                   {/* ACCOUNT */}
                   <td role="cell" className={PAD[2]}>
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="inline-block size-3 shrink-0 rounded" style={{ background: h.accountColor }} />
-                      <span className="truncate text-fg-dim" title={h.accountName}>{h.accountName}</span>
+                      <span className="inline-block size-3 shrink-0 rounded" style={{ background: line.account?.color ?? CASH_COLOR }} />
+                      <span className="truncate text-fg-dim" title={accountName}>{accountName}</span>
                     </span>
                   </td>
                   {/* ACCOUNT TYPE */}
                   <td role="cell" className={PAD[3]}>
                     <span className="truncate whitespace-nowrap rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-faint">
-                      {accountTypeLabel(t, h.accountType)}
+                      {line.accountType === null
+                        ? t("dashboard.holdings.multipleTypes")
+                        : accountTypeLabel(t, line.accountType)}
                     </span>
                   </td>
                   {/* VALUE */}
                   <td role="cell" className={`justify-end whitespace-nowrap ${PAD[4]}`}>
-                    {h.fxMissing ? (
+                    {line.fxMissing ? (
                       <span className="relative">
-                        {h.valueNative === null ? (
+                        {line.valueNative === null ? (
                           <span className="text-fg-faint">-</span>
                         ) : (
-                          <MaskedMoney masked={privacy.masked} value={h.valueNative} currency={h.priceCurrency} className="text-fg-dim" />
+                          <MaskedMoney masked={privacy.masked} value={line.valueNative} currency={h.priceCurrency} className="text-fg-dim" />
                         )}
                         <FxAsterisk />
                       </span>
                     ) : (
-                      <MaskedMoney masked={privacy.masked} value={h.value} className="text-fg" />
+                      <MaskedMoney masked={privacy.masked} value={line.value} className="text-fg" />
                     )}
                   </td>
                   {/* UNREALIZED P/L */}
@@ -367,7 +311,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         </GridTable>
         </div>
         )}
-        {holdings.some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
+        {(data ?? []).some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
         </>
         )}
       </div>

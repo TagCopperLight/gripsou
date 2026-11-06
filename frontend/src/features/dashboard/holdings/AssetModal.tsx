@@ -15,12 +15,13 @@ import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "../../../ui/Modal";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
-import { formatQuantity, lotCashAmount } from "../../../lib/money";
+import { formatQuantity } from "../../../lib/money";
+import { lotCashAmount } from "../../../lib/lots";
 import { formatDay } from "../../../lib/date";
 import { colorForString } from "../../../lib/palette";
 import { KIND_LABEL_KEY, type Holding, type Lot } from "../../../api/types";
 import { useHoldingLots, useHoldingPrices } from "../../../api/hooks";
-import { positionSeries, windowReturn } from "../../../lib/assetSeries";
+import { positionChart, priceChart, shownMeanPrice } from "../../../lib/assetSeries";
 import { usePrivacy } from "../../../auth/usePrivacy";
 import { reportingOffered } from "../../../lib/reportingUnit";
 import { currencySymbol } from "../../../lib/currency";
@@ -97,24 +98,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     if (mode === "purchases") refetchTxn();
   };
 
-  const qtyNum = Number(holding.qty);
-  // Unconverted, not `holding.invested`: it is the fallback for a series built
-  // from unconverted prices and purchase amounts, so mixing in the reporting-
-  // currency figure would put two currencies on one line.
-  const investedNum = Number(holding.investedNative);
-  // The server's fee-inclusive mean buy price (`lot_basis`) — the same figure
-  // RecordLotsModal shows under the same label. It is "0" only when no buy is
-  // recorded at all (e.g. a provider that reports a balance but no lots); in
-  // that one case fall back to the plain average so the stat does not read as
-  // zero for a real position. Amount-domain (account currency), not a market
-  // price — labelled with accountCurrency below, never the price row's or the
-  // instrument's currency.
-  const meanPrice =
-    holding.meanPrice !== "0"
-      ? Number(holding.meanPrice)
-      : qtyNum === 0
-        ? 0
-        : Number(holding.investedNative) / qtyNum;
+  const meanPrice = shownMeanPrice(holding);
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
   const reader = getPrefs().currency;
@@ -132,66 +116,27 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     { value: "percent", label: "%" },
   ];
 
-  // Chart series + header figures depend on the mode and range.
   const { series, headerValue, gainAbs, gainPct, chartLabel } = useMemo(() => {
     if (mode === "asset") {
-      const shown = inReporting
-        ? prices
-            .filter((p) => p.reportingPrice !== null)
-            .map((p) => ({ t: p.t, v: Number(p.reportingPrice) }))
-        : prices.map((p) => ({ t: p.t, v: Number(p.price) }));
-      const values = shown.map((p) => p.v);
-      const first = values[0] ?? 0;
-      const last = values[values.length - 1] ?? 0;
+      const chart = priceChart(prices, holding.price, inReporting);
       return {
+        ...chart,
         series: [
-          {
-            name: t("dashboard.assetModal.unitPrice"),
-            data: shown.map((p) => [p.t, p.v] as [number, number]),
-            color: colorForString(holding.ticker),
-            area: true,
-          },
+          { name: t("dashboard.assetModal.unitPrice"), data: chart.points, color: colorForString(holding.ticker), area: true },
         ] satisfies ChartSeries[],
-        headerValue: inReporting ? last : Number(holding.price),
-        gainAbs: last - first,
-        gainPct: first ? (last - first) / first : 0,
         chartLabel: t("dashboard.assetModal.unitPrice"),
       };
     }
-    const pts = positionSeries(
-      prices,
-      purchases,
-      Number(holding.meanPrice),
-      Number(holding.unexplainedCost),
-      qtyNum,
-      investedNum,
-      inReporting ? "reporting" : "account",
-    );
-    const values = pts.map((p) => p.value);
-    const last = values[values.length - 1] ?? 0;
-    // What the position made over the window: its value's change minus what
-    // was bought or sold meanwhile. A purchase is money put in, not a gain.
-    const first = pts[0];
-    const end = pts[pts.length - 1];
-    const gain = first && end ? end.value - end.invested - (first.value - first.invested) : 0;
-    const returns = windowReturn(
-      pts.map((p) => [p.t, p.value] as [number, number]),
-      pts.map((p) => [p.t, p.invested] as [number, number]),
-    );
+    const chart = positionChart(prices, purchases, holding, inReporting);
     return {
+      ...chart,
       series: [
-        { name: t("dashboard.assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: FG_FAINT, dashed: true },
-        { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: GREEN, area: true },
+        { name: t("dashboard.assetModal.invested"), data: chart.invested, color: FG_FAINT, dashed: true },
+        { name: t("dashboard.assetModal.positionValue"), data: chart.value, color: GREEN, area: true },
       ] satisfies ChartSeries[],
-      // The chart's own last point, not `holding.value`: this series is
-      // amount-domain, so the header must read in the same currency as the
-      // axis beneath it — not the reporting currency.
-      headerValue: last,
-      gainAbs: gain,
-      gainPct: returns[returns.length - 1]?.[1] ?? 0,
       chartLabel: t("dashboard.assetModal.positionValue"),
     };
-  }, [holding, mode, prices, purchases, qtyNum, investedNum, inReporting, t]);
+  }, [holding, mode, prices, purchases, inReporting, t]);
 
   const gainUp = gainAbs >= 0;
   const chartUnit: ChartUnit = inReporting ? "value" : shownUnit;
@@ -355,7 +300,7 @@ function StatsSurface({
   masked,
 }: {
   holding: Holding;
-  meanPrice: number;
+  meanPrice: string | number;
   up: boolean;
   masked: boolean;
 }) {
@@ -524,10 +469,6 @@ function PurchaseHistorySurface({
                     <MaskedMoney masked={masked} value={p.price} currency={currency} />
                   </td>
                   <td role="cell" className="justify-end whitespace-nowrap pr-3 text-fg">
-                    {/* Same convention as the transactions ledger and
-                        RecordLotsModal: a buy is negative (cash out, fee
-                        included), a sale is positive (cash in, net of fee). Plain
-                        cash arithmetic, not the cost-basis rule. */}
                     <MaskedMoney masked={masked} value={lotCashAmount(p.side, p.qty, p.price, p.fee)} currency={currency} signed />
                   </td>
                 </tr>

@@ -1,14 +1,14 @@
+import { browserLanguage } from "../i18n/browserLanguage";
 import { DEFAULT_PREFS, type UserPrefs } from "./prefs";
 
 /** Language and time zone as the browser reports them. Browsers expose no
  *  currency, so that one stays at its default (EUR). */
 export function browserPrefs(
-  languages: readonly string[] = navigator.languages?.length ? navigator.languages : [navigator.language],
+  languages?: readonly string[],
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): { uiLanguage: UserPrefs["uiLanguage"]; timeZone: string } {
-  const first = languages.find((l) => /^(en|fr)\b/i.test(l));
   return {
-    uiLanguage: first?.toLowerCase().startsWith("fr") ? "fr" : "en",
+    uiLanguage: browserLanguage(languages),
     timeZone: timeZone || DEFAULT_PREFS.timeZone,
   };
 }

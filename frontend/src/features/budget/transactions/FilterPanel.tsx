@@ -8,7 +8,8 @@ import { TagChooser } from "../TagChooser";
 import { CategoryChip } from "../CategoryChip";
 import { TagChip } from "../TagChip";
 import { useBudgetCategories, useBudgetTags } from "../../../api/budget";
-import { OTHER_FLAGS, TYPE_BUCKETS, categoryLabel } from "../../../lib/budget";
+import { categoryLabel } from "../../../lib/budget";
+import { OTHER_FLAGS, TYPE_BUCKETS } from "../budgetIcons";
 
 function Column({ title, children }: { title: string; children: ReactNode }) {
   return (

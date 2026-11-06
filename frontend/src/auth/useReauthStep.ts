@@ -4,7 +4,7 @@ import { showError } from "../lib/errorToasts";
 
 import { ApiError } from "../api/client";
 import { useReauth } from "../api/hooks";
-import { throttleMinutes } from "../lib/mfa";
+import { throttleMinutes } from "./throttle";
 
 /** The password check before a sensitive change. `check()` trades the password
  *  for a reauth token, or shows why it can't (throttled, wrong password, or

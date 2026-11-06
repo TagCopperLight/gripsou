@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-import { EntityChooser } from "./EntityChooser";
+import { EntityChooser, type ChooserItem } from "./EntityChooser";
 import { CategoryChip } from "./CategoryChip";
 import { useBudgetCategories } from "../../api/budget";
-import { BUDGET_KINDS, categoryLabel, type ChooserItem } from "../../lib/budget";
+import { BUDGET_KINDS, categoryLabel } from "../../lib/budget";
 
 type CategoryChooserProps = {
   selectedIds: string[];

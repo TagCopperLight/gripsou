@@ -17,14 +17,9 @@ import {
   type BudgetKind,
   type CategoryBody,
 } from "../../../api/budget";
-import {
-  BUDGET_ICONS,
-  BUDGET_ICON_NAMES,
-  BUDGET_KINDS,
-  budgetErrorKey,
-  categoryLabel,
-  safeBudgetColor,
-} from "../../../lib/budget";
+import { BUDGET_KINDS, categoryLabel, safeBudgetColor } from "../../../lib/budget";
+import { BUDGET_ICONS, BUDGET_ICON_NAMES } from "../budgetIcons";
+import { budgetErrorKey } from "../budgetErrors";
 import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { withAlpha } from "../../../lib/color";
 

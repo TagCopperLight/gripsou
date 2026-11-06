@@ -1,4 +1,4 @@
-import { calendarDay, formatDate, zonedDay } from "../../../lib/date";
+import { formatDate, zonedDay } from "../../../lib/date";
 import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
@@ -13,9 +13,13 @@ import { MoneyHint } from "../../../ui/MoneyHint";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { getPrefs } from "../../../lib/prefs";
 import type { ReactNode } from "react";
-import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots, type SaveLotAdd } from "../../../api/hooks";
-import { formatMoney, formatQuantity, lotCashAmount, normaliseDecimal, validateRow } from "../../../lib/money";
-import type { BasisPreview, Holding, LotSuggestion } from "../../../api/types";
+import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/hooks";
+import { formatMoney, formatQuantity } from "../../../lib/money";
+import {
+  accounted, badFee, badQuantity, badUnitPrice, byDate, lotCashAmount, lotChanges, lotEntry,
+  recordedQuantity, rowFromLot, rowFromSuggestion, type FoundLot, type LotRow,
+} from "../../../lib/lots";
+import type { BasisPreview, Holding } from "../../../api/types";
 
 // Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
 // quantities, unit prices, and everything the preview endpoint derives from
@@ -27,44 +31,10 @@ import type { BasisPreview, Holding, LotSuggestion } from "../../../api/types";
 // The resulting figures (mean price, invested, realised, unrealised) are never
 // computed here — they come verbatim from `POST /holdings/:id/lots/preview`,
 // which runs the same `lot_basis` function the save path and the chart use.
-// This file must never grow a `buyCost / buyQty` of its own: a second copy of
-// the rule is how two figures for the same holding ended up disagreeing.
 
 /** How long to wait after the last edit before asking the server for updated
  *  figures — avoids firing a request per keystroke. */
 const PREVIEW_DEBOUNCE_MS = 300;
-
-/** Quantities compare through a tolerance, not `===`: these are decimal strings
- *  parsed into IEEE doubles, and 0.1 + 0.2 must still count as 0.3. */
-const EPS = 1e-8;
-
-const today = () => zonedDay();
-
-type Row = {
-  /** Stable React key: rows move when they are put back in date order. */
-  key: string;
-  /** Present on a row already saved; absent on one the user just added. */
-  id?: string;
-  /** A provider's lot: shown and counted, never edited, deleted or sent. The
-   *  preview keeps the provider's lots on its own, as saving does. */
-  locked?: boolean;
-  type: "buy" | "sell";
-  date: string;
-  quantity: string;
-  unitPrice: string;
-  /** Optional; an empty string means zero. */
-  fee: string;
-  /** Present only on rows seeded from the server: the values as loaded, so an
-   *  edit can be detected later. A saved row is "changed" when its date differs
-   *  as a string, or any amount differs NUMERICALLY — see `isRowChanged`. */
-  pristine?: { type: "buy" | "sell"; date: string; quantity: string; unitPrice: string; fee: string };
-  /** The suggestion this row was added from: binning the row puts it back in
-   *  the "found in your transactions" panel. */
-  fromSuggestion?: Found;
-};
-
-/** A suggestion waiting in the panel, until the user adds or dismisses it. */
-type Found = LotSuggestion & { key: string };
 
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
@@ -72,35 +42,10 @@ const ADD_ROW_BUTTON =
 /** Column titles stay pinned while the rows scroll under them. */
 const TH = "sticky top-0 z-10 bg-surface pt-4 pb-2 font-medium";
 
+const BAR_COLOR = { short: "bg-amber", exact: "bg-green", over: "bg-red" } as const;
+
 let nextKey = 0;
 const newKey = () => `row-${nextKey++}`;
-
-/** Oldest first; `sort` is stable, so rows on the same day keep their order. */
-const byDate = <T extends { date: string }>(rows: T[]): T[] => [...rows].sort((a, b) => a.date.localeCompare(b.date));
-
-/** True for a saved row whose date/quantity/unitPrice no longer match what it
- *  was seeded with. Always false for a row the user just added (no pristine).
- *
- *  The amounts compare as NUMBERS, not as strings: the server sends a decimal
- *  it chose the scale of, so a PEA lot arrives as "16.030" while the user
- *  retypes the same price as "16.03". String-comparing those calls it an edit
- *  and saves a delete + re-add that changes nothing — burning the row's id and
- *  counting a phantom entry on the Save button. A non-numeric intermediate
- *  ("16.") yields NaN, which compares unequal and so reads as changed; that is
- *  harmless, because such a row is invalid and already blocks Save.
- *
- *  The date stays a string comparison: it is an exact `YYYY-MM-DD` from the
- *  date input, with no equivalent-but-differently-written forms. */
-const sameAmount = (a: string, b: string): boolean =>
-  a.trim() === b.trim() || Number(a) === Number(b);
-
-const isRowChanged = (r: Row): boolean =>
-  r.pristine !== undefined &&
-  (r.type !== r.pristine.type ||
-    r.date.trim() !== r.pristine.date.trim() ||
-    !sameAmount(r.quantity, r.pristine.quantity) ||
-    !sameAmount(r.unitPrice, r.pristine.unitPrice) ||
-    !sameAmount(r.fee, r.pristine.fee));
 
 export function RecordLotsModal({
   holding,
@@ -115,36 +60,26 @@ export function RecordLotsModal({
   const preview = useLotsPreview(holding.id);
   const suggestions = useLotSuggestions(holding.id);
 
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<LotRow[] | null>(null);
   // Suggestions stay out of the table until the user adds them.
-  const [found, setFound] = useState<Found[]>([]);
+  const [found, setFound] = useState<FoundLot[]>([]);
   const [dismissed, setDismissed] = useState(false);
-  // Ids the user explicitly binned via the delete button. A changed-but-not-
-  // binned saved row is NOT in here — its delete half is derived at save time
-  // (see `deletes` below), so a row that is both edited and then binned only
-  // contributes one delete, not two.
+  // Ids the user binned. An edited saved row's delete half is derived at save
+  // time instead, so a row both edited and binned is deleted once.
   const [queuedDeletes, setQueuedDeletes] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
-  // Flips true on the first user edit (typing, adding, deleting a row). Until
-  // then the table just mirrors the server, so a refetch before the user has
-  // touched anything is free to reseed it — only a refetch mid-edit must not
-  // throw away what the user is typing.
+  // Until the first edit the table mirrors the server, so a refetch may
+  // reseed it; mid-edit it must not throw away what the user is typing.
   const [dirty, setDirty] = useState(false);
-  // The last pair of server responses the table was seeded from — lets a
-  // render tell a genuine refetch apart from a re-render with the same data.
   const [seededFrom, setSeededFrom] = useState<{ lots: typeof data; suggested: typeof suggestions.data }>({
     lots: undefined,
     suggested: undefined,
   });
 
-  // Adjusting state during render (not in an effect) is the pattern React
-  // recommends for "mirror this prop into state until the user diverges from
-  // it" — it avoids an extra render pass and the effect only exists to call
-  // setState synchronously anyway.
-  //
-  // Seed once the suggestions have settled too (loaded or failed), so the
-  // pre-filled rows don't pop in after the table has rendered. A failed
-  // request seeds without them: the form works exactly as before.
+  // Mirrors the server into state during render, as React recommends for
+  // "copy this prop until the user diverges from it". Seeding waits for the
+  // suggestions to settle (loaded or failed) so pre-filled rows don't pop in
+  // after the table has rendered.
   const suggestionsSettled = !suggestions.isPending;
   if (
     data !== undefined &&
@@ -154,30 +89,11 @@ export function RecordLotsModal({
   ) {
     setSeededFrom({ lots: data, suggested: suggestions.data });
     setFound(byDate((suggestions.data ?? []).map((sg) => ({ ...sg, key: newKey() }))));
-    setRows(byDate([
-      ...data.map((l) => {
-        const date = calendarDay(l.t);
-        const quantity = l.qty;
-        const unitPrice = l.price;
-        const fee = l.fee;
-        return {
-          key: l.id,
-          id: l.id,
-          locked: !l.manual,
-          type: l.side,
-          date,
-          quantity,
-          unitPrice,
-          fee,
-          pristine: { type: l.side, date, quantity, unitPrice, fee },
-        };
-      }),
-    ]));
-
+    setRows(byDate(data.map(rowFromLot)));
   }
 
   const list = rows ?? [];
-  const set = (i: number, patch: Partial<Row>) => {
+  const set = (i: number, patch: Partial<LotRow>) => {
     setDirty(true);
     setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
@@ -188,19 +104,14 @@ export function RecordLotsModal({
 
   const addRow = () => {
     setDirty(true);
-    setRows((rs) => byDate([...(rs ?? []), { key: newKey(), type: "buy", date: today(), quantity: "", unitPrice: "", fee: "" }]));
+    setRows((rs) => byDate([...(rs ?? []), { key: newKey(), type: "buy", date: zonedDay(), quantity: "", unitPrice: "", fee: "" }]));
   };
 
-  const addFound = (adding: Found[]) => {
+  const addFound = (adding: FoundLot[]) => {
     setDirty(true);
     const keys = new Set(adding.map((f) => f.key));
     setFound((fs) => fs.filter((f) => !keys.has(f.key)));
-    setRows((rs) => byDate([
-      ...(rs ?? []),
-      ...adding.map((f) => ({
-        key: newKey(), type: f.type, date: f.date, quantity: f.quantity, unitPrice: f.unitPrice, fee: f.fee, fromSuggestion: f,
-      })),
-    ]));
+    setRows((rs) => byDate([...(rs ?? []), ...adding.map((f) => rowFromSuggestion(f, newKey()))]));
   };
 
   const remove = (i: number) => {
@@ -212,49 +123,19 @@ export function RecordLotsModal({
     setRows((rs) => (rs ?? []).filter((_, j) => j !== i));
   };
 
-  /** A row is invalid when its date is empty, or its numbers fail the same
-   *  rules the server applies. Invalid rows contribute nothing to the bar or
-   *  the figures — a half-typed number, or a missing date, must not make
-   *  either jump. The server rejects an empty date at deserialization, so
-   *  gating here keeps Save from ever offering a batch the server would
-   *  refuse. */
-  const toLotEntry = (r: Row): SaveLotAdd | null => {
-    if (r.date === "") return null;
-    const quantity = normaliseDecimal(r.quantity, i18n.language);
-    const unitPrice = normaliseDecimal(r.unitPrice, i18n.language);
-    if (validateRow(quantity, unitPrice) !== null) return null;
-    const fee = r.fee.trim() === "" ? undefined : normaliseDecimal(r.fee, i18n.language);
-    return { type: r.type, date: r.date, quantity, unitPrice, ...(fee !== undefined ? { fee } : {}) };
-  };
-
-  const editable = list.filter((r) => !r.locked);
+  const language = i18n.language;
   const parsed = useMemo(
-    () => editable.map(toLotEntry).filter((p): p is SaveLotAdd => p !== null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [list, i18n.language],
+    () => (rows ?? []).filter((r) => !r.locked).map((r) => lotEntry(r, language)).filter((p) => p !== null),
+    [rows, language],
   );
-  const anyInvalid = editable.some((r) => toLotEntry(r) === null);
 
-  // Net quantity is a plain count, not a money figure — safe to derive locally
-  // (unlike mean price / invested / realised, which only ever come from the
-  // preview endpoint).
-  const recorded = [...parsed, ...list.filter((r) => r.locked).map(toLotEntry).filter((p) => p !== null)].reduce(
-    (acc, p) => acc + (p.type === "sell" ? -Number(p.quantity) : Number(p.quantity)),
-    0,
-  );
-  const total = Number(holding.qty);
-  const short = recorded < total - EPS;
-  const over = recorded > total + EPS;
-  const barColor = over ? "bg-red" : short ? "bg-amber" : "bg-green";
-  const barWidth = over || total <= 0 ? 1 : Math.max(0, Math.min(1, recorded / total));
+  const recorded = recordedQuantity(list, language);
+  const bar = accounted(recorded, holding.qty);
 
-  // Preview loaded rows immediately; debounce only user edits. TanStack
-  // Query's mutation state resets `data` to `undefined`
-  // the instant a mutation goes pending — `preview.data` alone would blank
-  // the panel to zero on every request, not just the first. So the last
-  // successful result is held here explicitly, and THAT is what renders;
-  // `preview.data` is read only inside `onSuccess`, never for display.
-  // Null until the first answer: no figure rather than a wrong "0,00 €".
+  // Loaded rows are previewed at once; only user edits are debounced. A
+  // mutation's `data` resets to undefined whenever it goes pending, so the
+  // last answer is held here and is what renders. Null until the first
+  // answer: no figure rather than a wrong "0,00 €".
   const [lastPreview, setLastPreview] = useState<BasisPreview | null>(null);
   useEffect(() => {
     if (rows === null) return;
@@ -273,21 +154,9 @@ export function RecordLotsModal({
   }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
   // Nothing to compute from: no figure, rather than the server's all-zero answer.
-  const figures = list.some((r) => toLotEntry(r) !== null) ? lastPreview : null;
+  const figures = list.some((r) => lotEntry(r, language) !== null) ? lastPreview : null;
 
-  // A changed saved row is saved as a delete + re-add in the same atomic
-  // batch — the backend applies both halves in one DB transaction, so the
-  // row picking up a new id is harmless (manual lots aren't referenced by id).
-  const newRows = editable.filter((r) => r.id === undefined);
-  const changedSaved = editable.filter((r) => r.id !== undefined && isRowChanged(r));
-
-  const adds: SaveLotAdd[] = [...newRows, ...changedSaved]
-    .map(toLotEntry)
-    .filter((p): p is SaveLotAdd => p !== null);
-  const deletes = [...queuedDeletes, ...changedSaved.map((r) => r.id!)];
-  // One user-visible edit = one entry, even though a changed row contributes
-  // to both `adds` and `deletes` above.
-  const pending = newRows.length + changedSaved.length + queuedDeletes.length;
+  const { adds, deletes, pending, anyInvalid } = lotChanges(list, queuedDeletes, language);
   // A red bar does NOT disable Save: a user entering a sale before the buy it
   // came from is mid-task, not wrong.
   const canSave = pending > 0 && !anyInvalid && !saveLots.isPending;
@@ -339,7 +208,7 @@ export function RecordLotsModal({
             <Trans
               i18nKey="dashboard.holdings.gap.accounted"
               values={{
-                recorded: formatQuantity(String(recorded)),
+                recorded: formatQuantity(recorded),
                 total: formatQuantity(holding.qty),
               }}
               components={{ num: <span className="font-mono" /> }}
@@ -348,8 +217,8 @@ export function RecordLotsModal({
           <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
             <div
               data-testid="accounted-bar"
-              className={`h-full rounded-full transition-all duration-140 ${barColor}`}
-              style={{ width: `${barWidth * 100}%` }}
+              className={`h-full rounded-full transition-all duration-140 ${BAR_COLOR[bar.state]}`}
+              style={{ width: `${bar.fill * 100}%` }}
             />
           </div>
         </div>
@@ -384,13 +253,7 @@ export function RecordLotsModal({
             </thead>
             <tbody>
               {list.map((r, i) => {
-                const p = toLotEntry(r);
-                const badQty =
-                  r.quantity !== "" &&
-                  validateRow(normaliseDecimal(r.quantity, i18n.language), "1") !== null;
-                const badPrice =
-                  r.unitPrice !== "" &&
-                  validateRow("1", normaliseDecimal(r.unitPrice, i18n.language)) !== null;
+                const p = lotEntry(r, language);
                 const ring = "ring-1 ring-red";
                 const input =
                   "w-full bg-surface-2 rounded-xl px-3 py-2 text-fg text-sm outline-none ring-inset focus:ring-1 focus:ring-green";
@@ -445,7 +308,7 @@ export function RecordLotsModal({
                         data-testid="lot-quantity"
                         value={r.quantity}
                         onChange={(e) => set(i, { quantity: e.target.value })}
-                        className={`${input} text-right ${badQty ? ring : ""}`}
+                        className={`${input} text-right ${badQuantity(r.quantity, language) ? ring : ""}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
@@ -454,7 +317,7 @@ export function RecordLotsModal({
                         data-testid="lot-unitPrice"
                         value={r.unitPrice}
                         onChange={(e) => set(i, { unitPrice: e.target.value })}
-                        className={`${input} text-right ${badPrice ? ring : ""}`}
+                        className={`${input} text-right ${badUnitPrice(r.unitPrice, language) ? ring : ""}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
@@ -463,7 +326,7 @@ export function RecordLotsModal({
                         data-testid="lot-fee"
                         value={r.fee}
                         onChange={(e) => set(i, { fee: e.target.value })}
-                        className={`${input} text-right`}
+                        className={`${input} text-right ${badFee(r.fee, language) ? ring : ""}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2 text-right font-mono text-fg-dim whitespace-nowrap">
@@ -625,9 +488,9 @@ function LotColumns() {
  *  touch the table: a row each, in the table's own columns, added one by one
  *  or all at once, or dismissed for now. */
 function FoundPanel({ found, currency, onAdd, onDismiss }: {
-  found: Found[];
+  found: FoundLot[];
   currency: string;
-  onAdd: (f: Found[]) => void;
+  onAdd: (f: FoundLot[]) => void;
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();

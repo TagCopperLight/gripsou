@@ -8,7 +8,7 @@ import { LabeledField } from "../../../ui/FieldError";
 import { TextInput } from "../../../ui/TextInput";
 import { ApiError } from "../../../api/client";
 import { useChangePassword } from "../../../api/hooks";
-import { throttleMinutes } from "../../../lib/mfa";
+import { throttleMinutes } from "../../../auth/throttle";
 import { passwordLengthOk } from "../../../lib/password";
 
 export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {

@@ -10,7 +10,8 @@ import {
   type BudgetAiModelUsage,
   type BudgetAiPrices,
 } from "../../../api/budget";
-import { DECIMAL_RE, formatMoney, normaliseDecimal } from "../../../lib/money";
+import { formatMoney } from "../../../lib/money";
+import { DECIMAL_RE, normaliseDecimal } from "../../../lib/decimal";
 
 type Side = "in" | "out";
 

@@ -15,7 +15,7 @@ export function portfolioRoutes(r: Router<Store>): void {
     Object.assign(account, { name, typeKey, color });
     return reply(204);
   });
-  r.route("GET", "/account-types", () => ["checking", "savings", "pea", "brokerage", "life_insurance", "retirement", "multiple"]);
+  r.route("GET", "/account-types", () => ["checking", "savings", "pea", "brokerage", "life_insurance", "retirement"]);
   r.route("GET", "/connections", ({ store }) => v.connections(store));
   r.route("POST", "/sync", ({ store }) => {
     for (const c of store.connections) if (c.status !== "pending") v.syncConnection(store, c.id);

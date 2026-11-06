@@ -3,7 +3,16 @@ import { useTranslation } from "react-i18next";
 import { Check, Search } from "lucide-react";
 
 import { Popover } from "../../ui/Popover";
-import type { ChooserItem } from "../../lib/budget";
+
+/** One line of an `EntityChooser`. `label` is what the search box matches and
+ *  what the keyboard reads; `render` is what the line draws (a chip). */
+export type ChooserItem = {
+  id: string;
+  label: string;
+  /** A group heading key, or undefined for a flat list. */
+  group?: string;
+  render: ReactNode;
+};
 
 type ChooserBase = {
   title: string;
