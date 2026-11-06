@@ -1,6 +1,5 @@
-// The cost basis of one holding, as the server's `lot_basis` gives it
-// (backend/migrations/0022_lot_basis.sql, redefined in 0025): every screen's
-// basis comes from here, as on the server.
+// The cost basis of one holding, as the server's `lot_basis` SQL function
+// gives it: every screen's basis comes from here, as on the server.
 
 import type { Lot } from "../../src/api/wire.ts";
 

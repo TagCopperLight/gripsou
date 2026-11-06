@@ -312,7 +312,7 @@ export function trend(store: Store, q: URLSearchParams): BudgetTrend {
   const perMonth = months.map((m) => expenseSide(monthRows(all, m)));
   const totals = new Map<string, number>();
   for (const m of perMonth) for (const [k, v] of m) totals.set(k, (totals.get(k) ?? 0) + v);
-  const fold = store.categories.find((c) => c.defaultKey === TREND_FOLD_KEY)?.id;
+  const fold = store.categories.find((c) => c.seedKey === TREND_FOLD_KEY)?.id;
   const rank = sorted(totals).map(([k]) => k).filter((k) => k !== fold);
   const anchorTop = sorted(perMonth[n - 1] ?? new Map()).map(([k]) => k).filter((k) => k !== fold).slice(0, TREND_ANCHOR_KEEP);
   const kept: string[] = [];

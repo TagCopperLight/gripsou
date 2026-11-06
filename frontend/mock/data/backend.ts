@@ -70,5 +70,6 @@ export const BASELINE_MONTHS = 12;
 export const TREND_KEEP = SANKEY_MAX_SLICES;
 /** The anchor month's largest slices the trend always keeps. */
 export const TREND_ANCHOR_KEEP = 3;
-/** The seeded category the trend folds into Other (backend/core/src/budget/overview/mod.rs). */
+/** The seed key of the category the trend folds into Other (`SeedKey` in
+ *  backend/core/src/budget/vocab.rs, migration 0055). */
 export const TREND_FOLD_KEY = "other_expense";

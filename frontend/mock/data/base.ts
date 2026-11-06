@@ -67,6 +67,7 @@ function categories(ids: Ids): CategoryRow[] {
       id: ids.next("category"),
       name,
       defaultKey: key,
+      seedKey: key,
       color,
       icon,
       hint,
@@ -78,9 +79,9 @@ function categories(ids: Ids): CategoryRow[] {
   });
 }
 
-/** The category id of a seeded default key. */
+/** The category id of a seed key. */
 export function cat(rows: CategoryRow[], key: string): string {
-  const row = rows.find((c) => c.defaultKey === key);
+  const row = rows.find((c) => c.seedKey === key);
   if (!row) throw new Error(`no seeded category ${key}`);
   return row.id;
 }

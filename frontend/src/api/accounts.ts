@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getJson, patchJson } from "./client";
-import type { Account, AccountSeries, NetWorthResponse, UpdateAccountReq, UpdatedAccount } from "./wire";
+import type { Account, AccountSeries, NetWorthResponse, Range, UpdateAccountReq, UpdatedAccount } from "./wire";
 import { keys } from "./keys";
 import { afterAccountEdit } from "./invalidate";
 
@@ -8,7 +8,7 @@ import { afterAccountEdit } from "./invalidate";
 // preference changes invalidate these queries before the window expires.
 export const PORTFOLIO_STALE_MS = 30_000;
 
-export function useNetWorth(range: string) {
+export function useNetWorth(range: Range) {
   return useQuery({
     queryKey: keys.netWorth(range),
     staleTime: PORTFOLIO_STALE_MS,
@@ -25,7 +25,7 @@ export function useAccounts() {
   });
 }
 
-export function useAccountSeries(range: string) {
+export function useAccountSeries(range: Range) {
   return useQuery({
     queryKey: keys.accountSeries(range),
     staleTime: PORTFOLIO_STALE_MS,

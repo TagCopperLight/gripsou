@@ -1,7 +1,7 @@
 // Valuations computed from the store, so a write (a lot, a transaction) shows
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
-import type { Account, AccountSeries, BasisPreview, Holding, InvestmentReturns, Lot, LotEntry, NetWorthResponse, PricePoint, ProviderGroup, ReturnFigures, SaveLotsReq } from "../../src/api/wire.ts";
+import type { Account, AccountSeries, BasisPreview, Holding, InvestmentReturns, Lot, LotEntry, NetWorthResponse, PricePoint, ProviderGroup, Range, ReturnFigures, SaveLotsReq } from "../../src/api/wire.ts";
 import { HISTORY_DAYS, dayIndex } from "../data/base.ts";
 import { healthy, type SecurityRow } from "../data/rows.ts";
 import { DAY_MS, EUR_PER_USD, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
@@ -104,11 +104,11 @@ function dayT(i: number): number {
   return TODAY - (HISTORY_DAYS - 1 - i) * DAY_MS;
 }
 
-function firstIndex(range: string): number {
+function firstIndex(range: Range): number {
   return Math.max(0, HISTORY_DAYS - 1 - rangeDays(range));
 }
 
-export function netWorth(store: Store, range: string): NetWorthResponse {
+export function netWorth(store: Store, range: Range): NetWorthResponse {
   // Like the server: no accounts, no points, and a zero summary.
   if (store.accounts.length === 0) {
     return {
@@ -145,7 +145,7 @@ export function netWorth(store: Store, range: string): NetWorthResponse {
   };
 }
 
-export function accountSeries(store: Store, range: string): AccountSeries {
+export function accountSeries(store: Store, range: Range): AccountSeries {
   const { value } = accountDaily(store);
   const points = [];
   for (let i = firstIndex(range); i < HISTORY_DAYS; i++) {
@@ -272,7 +272,7 @@ export function holdings(store: Store): Holding[] {
   return out;
 }
 
-export function prices(store: Store, holdingId: string, range: string): PricePoint[] {
+export function prices(store: Store, holdingId: string, range: Range): PricePoint[] {
   const s = store.securities.find((x) => x.id === holdingId);
   if (!s) return [];
   const h = holdings(store).find((x) => x.id === holdingId)!;

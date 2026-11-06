@@ -27,7 +27,9 @@ export type TxnRow = {
   tagIds: string[];
 };
 
-export type CategoryRow = Omit<BudgetCategory, "txCount"> & { sortOrder: number };
+/** `seedKey` is the seed a category came from. A rename keeps it (unlike
+ *  `defaultKey`), and the server never sends it. */
+export type CategoryRow = Omit<BudgetCategory, "txCount"> & { sortOrder: number; seedKey: string | null };
 export type TagRow = Omit<BudgetTag, "txCount">;
 
 export type AccountRow = Omit<Account, "value" | "lastSyncAt" | "fxMissing" | "valueNative">;

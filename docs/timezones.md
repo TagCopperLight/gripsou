@@ -11,7 +11,7 @@ searching for those names finds them all. The server function accepts an optiona
 deterministic boundary tests. The API validates timezone names before saving
 preferences; changing the setting refreshes cached reports.
 
-Date ranges (`range_window` on the server, `lib/period.ts` in the browser) are
+Date ranges (`Range::window` on the server, `lib/period.ts` in the browser) are
 inclusive calendar-day windows, and their calendar arithmetic is separate from
 instant-to-day conversion. Real timestamps (sessions, syncs, account creation)
 display in the saved timezone (`lib/date.ts`); relative elapsed times remain

@@ -1,13 +1,28 @@
-import { fail, reply, type Router } from "../router.ts";
+import { fail, reply, type Failure, type Router } from "../router.ts";
+import { RANGES, type Range } from "../../src/api/wire.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";
 import en from "../../src/i18n/en.json" with { type: "json" };
 
+/** A chart's `range` parameter, as the server's `RangeParams` reads it. */
+function rangeParam(query: URLSearchParams): Range | Failure {
+  const range = query.get("range");
+  if (range === null) return "6mo";
+  return RANGES.find((r) => r === range)
+    ?? fail(400, `Failed to deserialize query string: range: unknown variant \`${range}\`, expected one of ${RANGES.map((r) => `\`${r}\``).join(", ")}`);
+}
+
 export function portfolioRoutes(r: Router<Store>): void {
-  r.route("GET /dashboard/net-worth", ({ store, query }) => v.netWorth(store, query.get("range") ?? "6mo"));
+  r.route("GET /dashboard/net-worth", ({ store, query }) => {
+    const range = rangeParam(query);
+    return typeof range === "string" ? v.netWorth(store, range) : range;
+  });
   r.route("GET /accounts", ({ store }) => v.accounts(store));
-  r.route("GET /accounts/series", ({ store, query }) => v.accountSeries(store, query.get("range") ?? "6mo"));
+  r.route("GET /accounts/series", ({ store, query }) => {
+    const range = rangeParam(query);
+    return typeof range === "string" ? v.accountSeries(store, range) : range;
+  });
   r.route("PATCH /accounts/:id", ({ store, params, body: { name, typeKey, color } }) => {
     const account = store.accounts.find((a) => a.id === params.id);
     if (!account) return fail(404, "account not found");
@@ -55,7 +70,10 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("POST /connections/:id/manage", () => ({ redirectUrl: "about:blank" }));
   r.route("GET /holdings", ({ store }) => v.holdings(store));
   r.route("GET /investments/returns", ({ store }) => v.returns(store));
-  r.route("GET /holdings/:id/prices", ({ store, params, query }) => v.prices(store, params.id, query.get("range") ?? "1y"));
+  r.route("GET /holdings/:id/prices", ({ store, params, query }) => {
+    const range = rangeParam(query);
+    return typeof range === "string" ? v.prices(store, params.id, range) : range;
+  });
   r.route("GET /holdings/:id/lots", ({ store, params }) => v.lotsOf(store, params.id));
   r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
   r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) =>

@@ -1,6 +1,6 @@
 // Deterministic helpers for the fake dataset: the same data on every reset.
 
-import { RANGES, type Range } from "../../src/api/wire.ts";
+import type { Range } from "../../src/api/wire.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -40,11 +40,9 @@ export function money(n: number, decimals = 2): string {
 /** Euros per dollar, the dataset's one exchange rate. */
 export const EUR_PER_USD = 0.92;
 
-/** Days back of a chart range, as the backend's `Range::window`; an unknown
- *  range is the whole history. */
-export function rangeDays(range: string): number {
-  const r: Range = RANGES.find((x) => x === range) ?? "max";
-  switch (r) {
+/** Days back of a chart range, as the backend's `Range::window`. */
+export function rangeDays(range: Range): number {
+  switch (range) {
     case "7d": return 7;
     case "1mo": return 30;
     case "6mo": return 182;

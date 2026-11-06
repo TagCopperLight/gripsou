@@ -8,6 +8,7 @@ import type {
   LotEntry,
   LotSuggestion,
   PricePoint,
+  Range,
   SaveLotsReq,
 } from "./wire";
 import { keys } from "./keys";
@@ -54,7 +55,7 @@ export function useSaveLots(holdingId: string) {
   });
 }
 
-export function useHoldingPrices(id: string, range: string) {
+export function useHoldingPrices(id: string, range: Range) {
   return useQuery({
     queryKey: keys.holdingPrices(id, range),
     queryFn: ({ signal }) => getJson<PricePoint[]>(`/holdings/${id}/prices?range=${range}`, { signal }),

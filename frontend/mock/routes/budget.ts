@@ -86,15 +86,17 @@ export function budgetRoutes(r: Router<Store>): void {
   // A name already used (any case) is refused, as the server does.
   r.route("POST /budget/categories", ({ store, body: b }) => {
     if (taken(store.categories, b.name)) return fail(409, "duplicate name");
-    const row = { ...b, archived: b.archived ?? false, id: store.ids.next("category"), defaultKey: null, systemKey: null, sortOrder: store.categories.length };
+    const row = { ...b, archived: b.archived ?? false, id: store.ids.next("category"), defaultKey: null, seedKey: null, systemKey: null, sortOrder: store.categories.length };
     store.categories.push(row);
-    return reply(201, { ...row, txCount: 0 });
+    return reply(201, v.categories(store).find((c) => c.id === row.id)!);
   });
   r.route("PATCH /budget/categories/:id", ({ store, params, body: b }) => {
     const cat = store.categories.find((c) => c.id === params.id);
     if (!cat) return fail(404, "no such category");
     if (taken(store.categories.filter((c) => c !== cat), b.name)) return fail(409, "duplicate name");
-    Object.assign(cat, { ...b, archived: b.archived ?? cat.archived });
+    // A rename clears the default key (the server's update_category).
+    const defaultKey = b.name === cat.name ? cat.defaultKey : null;
+    Object.assign(cat, { ...b, defaultKey, archived: b.archived ?? cat.archived });
     return v.categories(store).find((c) => c.id === cat.id)!;
   });
   r.route("PUT /budget/categories/order", ({ store, body }) => {
