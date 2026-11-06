@@ -236,14 +236,17 @@ pub async fn budget_ai_enabled(
     )
 }
 
-/// PostgreSQL owns timezone rules for every server-side calendar calculation.
+/// The current day in the user's timezone, the day every figure the user
+/// reads is dated by. SQL reads it as `user_today(user_id)`: PostgreSQL owns
+/// the timezone rules. Market data is dated in UTC instead
+/// ([`crate::repo::price::market_today`]).
 pub async fn today(
-    pool: &sqlx::PgPool,
+    db: impl sqlx::PgExecutor<'_>,
     user_id: uuid::Uuid,
 ) -> Result<chrono::NaiveDate, crate::error::CoreError> {
     Ok(
         sqlx::query_scalar!("select user_today($1) as \"day!\"", user_id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await?,
     )
 }

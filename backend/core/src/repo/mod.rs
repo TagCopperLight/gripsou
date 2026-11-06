@@ -1,6 +1,10 @@
-//! Persistence helpers: one focused function per entity, each taking a
-//! `&mut PgConnection` so the ingest orchestrator can run them in one
-//! transaction. All queries use sqlx's compile-time-checked macros.
+//! Persistence: one module per table or concern, all queries checked at
+//! compile time by sqlx's macros.
+//!
+//! A function that a transaction may need to run, like the ingest's, takes
+//! `impl PgExecutor` (one statement) or `&mut PgConnection` (several), so it
+//! runs on the pool or inside the caller's transaction alike. One that opens
+//! its own transaction, or that only request handlers call, takes `&PgPool`.
 
 pub mod account;
 pub mod budget;
@@ -16,7 +20,6 @@ pub mod mfa;
 pub mod passkey;
 pub mod prefs;
 pub mod price;
-pub mod provider;
 pub mod provider_config;
 pub mod query;
 pub mod returns;

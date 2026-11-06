@@ -39,17 +39,12 @@ pub async fn backfill_connection(
         with scope as (
             select h.id as holding_id, h.account_id, h.instrument_id,
                    i.kind = 'cash' as is_cash,
-                   -- Last-resort value for a holding no snapshot ever valued.
-                   h.cost_basis as book_value,
+                   -- Last-resort value for a holding no snapshot ever valued,
+                   -- in the account's currency. A cash line's cost basis is
+                   -- in its own currency, so it has none.
+                   case when i.kind = 'cash' then 0 else h.cost_basis end as book_value,
                    i.currency = a.currency as is_account_currency,
-                   -- Some connectors send a statement period as `booked_on`
-                   -- (the 1st or the 16th). A row booked before it was spent
-                   -- gives them away; such an account is keyed on `spent_on`.
-                   not exists (
-                       select 1 from transaction t
-                       where t.account_id = a.id
-                         and t.booked_on < t.spent_on
-                   ) as trust_booked_on
+                   account_trusts_booked_on(a.id) as trust_booked_on
             from holding h
             join account a    on a.id = h.account_id
             join instrument i on i.id = h.instrument_id
@@ -239,7 +234,7 @@ pub async fn backfill_connection(
             )
         ),
         walked as (
-            select g.holding_id, g.as_of, g.anchor_day, s.is_cash,
+            select g.holding_id, g.as_of, g.anchor_day, s.is_cash, s.is_account_currency,
                    g.unit_qty, g.unit_value, s.book_value,
                    -- Σ(as_of, anchor_day] = Σ(> as_of) − Σ(> anchor_day).
                    g.anchor_qty - (g.total - aa.total) as quantity
@@ -259,13 +254,15 @@ pub async fn backfill_connection(
             from walked w
         )
         select w.holding_id, w.as_of, w.quantity + w.lift,
-               -- `value` is only read for an instrument with no price. A
-               -- security carries the nearest valued snapshot's per-unit value
-               -- (multiplied first, so an unchanged quantity gives the
-               -- snapshot's value exactly), else its book value: zero would
-               -- dip the chart and raise fx_missing.
+               -- `value`, in the account's currency, is only read for an
+               -- instrument with no price or rate. Cash in the account's
+               -- currency is worth its quantity. Anything else carries the
+               -- nearest valued snapshot's per-unit value (multiplied first, so
+               -- an unchanged quantity gives the snapshot's value exactly),
+               -- else its book value: zero would dip the chart and raise
+               -- fx_missing.
                case
-                   when w.is_cash then w.quantity + w.lift
+                   when w.is_cash and w.is_account_currency then w.quantity + w.lift
                    else coalesce(
                        (w.quantity + w.lift) * w.unit_value / nullif(w.unit_qty, 0),
                        w.book_value

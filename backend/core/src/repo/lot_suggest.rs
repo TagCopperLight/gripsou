@@ -161,6 +161,9 @@ async fn account_jumps(
         select oj.holding_id as "holding_id!", oj.day as "day!", oj.dq as "dq!", oj."open" as "open!",
                c.id as "txn_id?", c.day as "txn_day?", c.amount as "amount?"
         from open_jumps oj
+        -- A trade is matched on the day it was executed (`spent_on`), not the
+        -- day its cash settled (`txn_day`): that is the day its lot is dated
+        -- and the day whose price its amount reflects.
         left join lateral (
             select t.id, t.spent_on as day, t.amount
             from transaction t

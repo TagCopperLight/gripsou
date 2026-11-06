@@ -7,7 +7,6 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
-#[derive(serde::Serialize)]
 pub struct NetWorthRow {
     pub as_of: NaiveDate,
     pub net_worth: Decimal,
@@ -212,7 +211,6 @@ async fn account_day_values(
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
 pub struct HoldingRow {
     pub holding_id: Uuid,
     pub symbol: Option<String>,
@@ -474,7 +472,6 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     Ok(out)
 }
 
-#[derive(serde::Serialize)]
 pub struct PricePointRow {
     pub ts: DateTime<Utc>,
     /// In the price row's own currency (the listing's quote).
@@ -563,7 +560,6 @@ pub async fn holding_prices(
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
 pub struct AccountRow {
     pub account_id: Uuid,
     pub connection_id: Uuid,
@@ -670,7 +666,6 @@ pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountR
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
 pub struct AccountSeriesRow {
     pub account_id: Uuid,
     pub name: String,
@@ -716,7 +711,6 @@ pub async fn account_types(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError
     Ok(keys)
 }
 
-#[derive(serde::Serialize)]
 pub struct UserRow {
     pub id: Uuid,
     pub name: String,
@@ -742,7 +736,6 @@ pub async fn users(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     Ok(rows)
 }
 
-#[derive(serde::Serialize)]
 pub struct TransactionListRow {
     pub id: Uuid,
     pub day: NaiveDate,
@@ -806,7 +799,7 @@ pub struct TransactionListRow {
 }
 
 /// The TYPE control on the filter panel: one value, always one selected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TypeBucket {
     #[default]
     All,
@@ -838,13 +831,7 @@ impl TypeBucket {
     }
 }
 
-/// The review threshold used when a caller has no reader preference to hand.
-/// Kept equal to the preference's own default.
-pub fn default_review_threshold() -> Decimal {
-    Decimal::new(crate::repo::prefs::DEFAULT_BUDGET_AI_THRESHOLD as i64, 2)
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct TransactionFilters {
     /// Case-insensitive substring of `description` (cash rows) or `ticker`
     /// (lot rows).
@@ -886,7 +873,10 @@ impl Default for TransactionFilters {
             uncategorized: false,
             needs_review: false,
             include_transfers: true,
-            review_threshold: default_review_threshold(),
+            review_threshold: Decimal::new(
+                crate::repo::prefs::DEFAULT_BUDGET_AI_THRESHOLD.into(),
+                2,
+            ),
             limit: 200,
             offset: 0,
         }
@@ -966,7 +956,7 @@ pub async fn transactions(
     Ok(rows)
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct TagRef {
     pub id: Uuid,
     pub name: String,
@@ -1018,7 +1008,7 @@ pub async fn tags_for_transactions(
     Ok(map)
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct TransactionCounts {
     /// Rows under the active filters — the left half of "matching / total".
     pub matching: i64,
@@ -1152,7 +1142,6 @@ pub async fn matching_transaction_ids(
     Ok(ids)
 }
 
-#[derive(serde::Serialize)]
 pub struct PriceEligibleInstrument {
     pub id: Uuid,
     pub kind: String,
@@ -1190,7 +1179,7 @@ pub async fn composition_eligible_instruments_for_connection(
           and coalesce(i.meta->>'composition_status', '') <> 'none'
           and (
             i.meta->'composition'->>'as_of' is null
-            or (i.meta->'composition'->>'as_of')::date < (now() - interval '30 days')::date
+            or (i.meta->'composition'->>'as_of')::date < (now() at time zone 'utc')::date - 30
           )
         order by i.name
         "#,

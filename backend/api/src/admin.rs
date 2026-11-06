@@ -17,7 +17,7 @@ pub async fn providers(
     State(pool): State<PgPool>,
     _: AdminUser,
 ) -> Result<Json<Vec<dto::Provider>>, ApiError> {
-    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
+    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
     Ok(Json(
         gripsou_jobs::ACCOUNT_PROVIDERS
             .iter()
@@ -222,7 +222,7 @@ pub async fn set_provider(
     // Reject unknown providers before mutating.
     let kind =
         gripsou_jobs::account_provider(&key).ok_or(ApiError::NotFound("provider not found"))?;
-    gripsou_core::repo::provider::set_enabled(&pool, &key, body.enabled).await?;
+    gripsou_core::repo::settings::set_provider_enabled(&pool, &key, body.enabled).await?;
     tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
     Ok(Json(dto::Provider::new(kind, body.enabled)))
 }

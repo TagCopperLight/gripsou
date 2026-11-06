@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// An account as understood by gripsou, independent of any provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CanonicalAccount {
     pub external_id: String,
     pub name: String,
@@ -16,12 +16,11 @@ pub struct CanonicalAccount {
     /// day its holdings are true on. `None` means today. A provider that can't
     /// reach the bank keeps returning old balances: dating them today would
     /// save a false snapshot and hide the real history behind it.
-    #[serde(default)]
     pub balance_as_of: Option<NaiveDate>,
 }
 
 /// Reference to an instrument; the core resolves/creates the global row.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct InstrumentRef {
     /// `cash` | `equity` | `etf`
     pub kind: String,
@@ -32,7 +31,7 @@ pub struct InstrumentRef {
 }
 
 /// A current position reported by a provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CanonicalHolding {
     /// `external_id` of the owning account (links to a `CanonicalAccount`).
     pub account_external_id: String,
@@ -46,7 +45,7 @@ pub struct CanonicalHolding {
 }
 
 /// A statement line or investment buy/sell.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CanonicalTransaction {
     /// `external_id` of the owning account (links to a `CanonicalAccount`).
     pub account_external_id: String,
@@ -72,7 +71,7 @@ pub struct CanonicalTransaction {
 }
 
 /// A single point on an instrument's price series.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PricePoint {
     pub ts: DateTime<Utc>,
     pub unit_price: Decimal,
@@ -82,14 +81,14 @@ pub struct PricePoint {
 /// The financial institution (bank/broker) a connection belongs to. One per
 /// connection. `key` is the provider's raw identifier; `provider_key` on the
 /// connection namespaces it.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct Institution {
     pub key: String,
     pub name: String,
 }
 
 /// Rows a provider returned but the adapter could not map, by kind.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SkippedCounts {
     pub accounts: usize,
     pub holdings: usize,
@@ -108,17 +107,15 @@ pub struct SyncHealth {
 }
 
 /// What an `AccountProvider::sync` returns for one connection.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct SyncResult {
     /// Normalized provider observations; merged without replacing native ids.
-    #[serde(default)]
     pub provider_meta: serde_json::Value,
     pub institution: Institution,
     pub accounts: Vec<CanonicalAccount>,
     pub holdings: Vec<CanonicalHolding>,
     pub transactions: Vec<CanonicalTransaction>,
     /// What the adapter dropped while mapping (logged, never ingested).
-    #[serde(default)]
     pub skipped: SkippedCounts,
 }
 

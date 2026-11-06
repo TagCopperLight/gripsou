@@ -175,7 +175,7 @@ pub async fn set_composition(
     composition: &Composition,
 ) -> Result<(), CoreError> {
     let mut value = serde_json::to_value(composition)?;
-    value["as_of"] = serde_json::json!(chrono::Utc::now().date_naive().to_string());
+    value["as_of"] = serde_json::json!(crate::repo::price::market_today().to_string());
     sqlx::query!(
         r#"
         update instrument

@@ -452,26 +452,6 @@ async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn a_run_left_running_is_closed_by_the_next_one(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, _) = ledger(&pool, &[("A", -100)]).await?;
-    let dead = gripsou_core::repo::budget::ai::start_run(&pool, user_id, "mock:m1").await?;
-    assert!(
-        last_run(&pool, user_id).await?.is_none(),
-        "a live run is not the last result"
-    );
-
-    run_for_user(&pool, user_id, &Mock::new(50, vec![abstain_all()])).await?;
-
-    let outcome: String = sqlx::query_scalar("select outcome from budget_ai_run where id = $1")
-        .bind(dead)
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(outcome, "error");
-    assert_eq!(last_run(&pool, user_id).await?.unwrap().outcome, "ok");
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
 async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()> {
     let (alice, ids) = ledger(&pool, &[("A", -100)]).await?;
     let (bob, _) = ledger(&pool, &[]).await?;

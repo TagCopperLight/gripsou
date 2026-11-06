@@ -10,7 +10,7 @@ use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 use crate::provider::PriceProvider;
 use crate::repo::instrument::{mark_symbol_unresolved, set_resolved_symbol};
-use crate::repo::price::{insert_prices, latest_price_ts};
+use crate::repo::price::{insert_prices, latest_price_ts, market_today};
 use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for_connection};
 
 /// How far back of already-stored history each pass re-requests.
@@ -31,7 +31,7 @@ use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for
 /// holiday, or a laptop that was closed.
 const REFETCH_DAYS: i64 = 30;
 
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct PriceSyncSummary {
     pub resolved: usize,
     pub prices_inserted: usize,
@@ -71,22 +71,6 @@ pub async fn fetch_prices_for_connection(
     connection_id: Uuid,
     providers: &[Box<dyn PriceProvider>],
 ) -> Result<PriceSyncSummary, CoreError> {
-    fetch_prices_for_connection_at(
-        pool,
-        connection_id,
-        providers,
-        chrono::Utc::now().date_naive(),
-    )
-    .await
-}
-
-/// Runs the routine pass for an explicit business date. Production callers use UTC today.
-pub async fn fetch_prices_for_connection_at(
-    pool: &sqlx::PgPool,
-    connection_id: Uuid,
-    providers: &[Box<dyn PriceProvider>],
-    today: chrono::NaiveDate,
-) -> Result<PriceSyncSummary, CoreError> {
     let mut summary = PriceSyncSummary::default();
     {
         let mut conn = pool.acquire().await?;
@@ -95,7 +79,7 @@ pub async fn fetch_prices_for_connection_at(
     let instruments = price_eligible_instruments_for_connection(pool, connection_id).await?;
     let mut conn = pool.acquire().await?;
     for row in instruments {
-        fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
+        fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
     }
 
     Ok(summary)
@@ -110,7 +94,6 @@ pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,
     providers: &[Box<dyn PriceProvider>],
     currency: &str,
-    today: chrono::NaiveDate,
 ) -> Result<bool, CoreError> {
     if currency == crate::repo::settings::base_currency(pool).await? {
         return Ok(true);
@@ -137,7 +120,7 @@ pub async fn ensure_fx_rate(
     .fetch_one(&mut *conn)
     .await?;
     let mut summary = PriceSyncSummary::default();
-    fetch_instrument(&mut conn, providers, &row, today, &mut summary).await?;
+    fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
     Ok(latest_price_ts(&mut conn, row.id).await?.is_some())
 }
 
@@ -148,7 +131,6 @@ async fn fetch_instrument(
     conn: &mut sqlx::PgConnection,
     providers: &[Box<dyn PriceProvider>],
     row: &PriceEligibleInstrument,
-    today: chrono::NaiveDate,
     summary: &mut PriceSyncSummary,
 ) -> Result<(), CoreError> {
     let iref = InstrumentRef {
@@ -165,7 +147,7 @@ async fn fetch_instrument(
 
     // Freshness guard: already have today's point → nothing to do.
     let latest = latest_price_ts(conn, row.id).await?;
-    if latest.map(|ts| ts.date_naive()) == Some(today) {
+    if latest.map(|ts| ts.date_naive()) == Some(market_today()) {
         summary.skipped_fresh += 1;
         return Ok(());
     }

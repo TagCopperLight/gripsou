@@ -17,9 +17,7 @@ pub struct ReturnInputs {
 }
 
 pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, CoreError> {
-    let today = sqlx::query_scalar!(r#"select user_today($1) as "d!""#, user_id)
-        .fetch_one(pool)
-        .await?;
+    let today = crate::repo::prefs::today(pool, user_id).await?;
 
     // Held positions: the Holdings table's own rows, so the value is the figure
     // the user already sees there (one valuation path).
@@ -68,7 +66,8 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
     // Lots (fee-inclusive, buys negative) and dividends, each converted on its
     // own day from the account's currency into the reporting currency (picked as
     // `reporting_fx_asof` does, minus its fallback to 1). A NULL amount means a
-    // rate is missing for that day.
+    // rate is missing for that day. A dividend's day is the day it reached the
+    // balance, as the backfill dates every cash move.
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",
@@ -84,13 +83,15 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         join instrument i on i.id = h.instrument_id
         where c.user_id = $1 and i.kind <> 'cash'
         union all
-        select null::uuid, t.account_id,
-               coalesce(t.booked_on, t.spent_on), false,
-               t.amount * fx_asof(a.currency, coalesce(t.booked_on, t.spent_on))
-                 / nullif(fx_asof((select currency from users where id = $1), coalesce(t.booked_on, t.spent_on)), 0)
+        select null::uuid, t.account_id, d.day, false,
+               t.amount * fx_asof(a.currency, d.day)
+                 / nullif(fx_asof((select currency from users where id = $1), d.day), 0)
         from transaction t
         join account a    on a.id = t.account_id
         join connection c on c.id = a.connection_id
+        cross join lateral (
+            select txn_day(account_trusts_booked_on(t.account_id), t.booked_on, t.spent_on) as day
+        ) d
         where c.user_id = $1 and t.type = 'dividend'
         "#,
         user_id,

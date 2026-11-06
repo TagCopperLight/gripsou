@@ -95,24 +95,14 @@ pub enum RunOutcome {
     },
 }
 
-/// Categorise everything the user still has uncategorised, chunk by chunk,
-/// until the work set is empty or the model stops answering. Resumable by
-/// construction: the work set is re-read every chunk, so a quota or a crash
-/// only leaves rows for the next run.
-///
-/// The run row is written before the first call and updated after each one,
-/// so the spend survives a run that fails half-way; a database error closes
-/// it as `error` with the message before being returned.
-///
-/// The caller runs one at a time per user (`gripsou_jobs` keeps them in
-/// memory), so a run row still `running` here is a dead one and is closed.
-pub async fn run_for_user(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-    categorizer: &dyn Categorizer,
-) -> Result<RunOutcome, CoreError> {
-    repo::close_abandoned_runs(pool, Some(user_id)).await?;
-    run(pool, user_id, categorizer).await
+/// The `ai_run` span a run's lines are logged in.
+pub fn run_span(user_id: Uuid) -> tracing::Span {
+    tracing::info_span!(
+        "ai_run",
+        user_id = %user_id,
+        run_id = tracing::field::Empty,
+        model = tracing::field::Empty,
+    )
 }
 
 /// What the run has done so far.
@@ -122,7 +112,19 @@ struct Tally {
     items: i32,
 }
 
-async fn run(
+/// Categorise everything the user still has uncategorised, chunk by chunk,
+/// until the work set is empty or the model stops answering. Resumable by
+/// construction: the work set is re-read every chunk, so a quota or a crash
+/// only leaves rows for the next run.
+///
+/// The run row is written before the first call and updated after each one,
+/// so the spend survives a run that fails half-way; a database error closes
+/// it as `error` with the message before being returned. A row left
+/// `running` (the task panicked or the process stopped) is the caller's to
+/// close, with [`repo::close_abandoned_runs`].
+///
+/// Run it inside [`run_span`]: it records the run's id and model there.
+pub async fn run_for_user(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     categorizer: &dyn Categorizer,

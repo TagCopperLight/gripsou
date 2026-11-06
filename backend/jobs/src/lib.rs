@@ -618,14 +618,8 @@ pub fn request_categorize(db: Db, user_id: Uuid) {
     }
     tokio::spawn(async move {
         loop {
-            let span = tracing::info_span!(
-                "ai_run",
-                user_id = %user_id,
-                run_id = tracing::field::Empty,
-                model = tracing::field::Empty,
-            );
             guarded(&db, user_id, categorize_user(db.clone(), user_id))
-                .instrument(span)
+                .instrument(gripsou_core::budget::ai::run_span(user_id))
                 .await;
             if !run_again(user_id) {
                 break;
@@ -634,18 +628,18 @@ pub fn request_categorize(db: Db, user_id: Uuid) {
     });
 }
 
-/// Runs `run` in its own task so a panic is caught: the user's run row is
-/// then closed as failed and the slot goes on to the next run, instead of
-/// holding the user until a restart. Only for the task that owns the user's run.
+/// Runs `run` in its own task so a panic is caught and the slot goes on to the
+/// next run, instead of holding the user until a restart. Once the task has
+/// ended, a run row it left `running` (a panic, or a failed close) is closed
+/// as failed. Only for the task that owns the user's run.
 async fn guarded<F>(db: &Db, user_id: Uuid, run: F)
 where
     F: std::future::Future<Output = ()> + Send + 'static,
 {
-    let Err(e) = tokio::spawn(run.in_current_span()).await else {
-        return;
-    };
-    // The panic payload is in JoinError's Display.
-    tracing::error!(user_id = %user_id, error = %e, "ai run crashed");
+    if let Err(e) = tokio::spawn(run.in_current_span()).await {
+        // The panic payload is in JoinError's Display.
+        tracing::error!(user_id = %user_id, error = %e, "ai run crashed");
+    }
     if let Err(e) = gripsou_core::repo::budget::ai::close_abandoned_runs(db, Some(user_id)).await {
         tracing::error!(
             user_id = %user_id,

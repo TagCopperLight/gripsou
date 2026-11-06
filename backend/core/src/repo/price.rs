@@ -7,6 +7,13 @@ use uuid::Uuid;
 
 use crate::error::CoreError;
 
+/// The current day for market data. Prices and rates are dated in UTC
+/// (`fx_asof` and `unit_value_asof` cut their days at UTC midnight), whoever
+/// reads them. A user's own day is [`crate::repo::prefs::today`].
+pub fn market_today() -> chrono::NaiveDate {
+    Utc::now().date_naive()
+}
+
 /// Upsert many price points for one instrument in a single statement. The points
 /// share a currency (they come from one listing, hence one currency).
 /// Returns the number of rows written. Idempotent on (instrument_id, ts).

@@ -14,8 +14,8 @@ use crate::error::CoreError;
 const SAME_DESCRIPTION: i64 = 20;
 const NEIGHBOURS: i64 = 5;
 
-/// Closes runs still marked `running` as `error`: for one user when their
-/// run starts or crashes, or for everyone at boot. Either way no live task
+/// Closes runs still marked `running` as `error`: for one user once their
+/// run's task has ended, or for everyone at boot. Either way no live task
 /// owns them.
 pub async fn close_abandoned_runs(
     pool: &sqlx::PgPool,

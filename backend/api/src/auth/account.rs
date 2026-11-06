@@ -92,8 +92,7 @@ async fn reporting_rate_ready(
     user_id: Uuid,
     currency: &str,
 ) -> Result<bool, ApiError> {
-    let today = chrono::Utc::now().date_naive();
-    let fetch = gripsou_core::price_sync::ensure_fx_rate(pool, &jobs.prices, currency, today);
+    let fetch = gripsou_core::price_sync::ensure_fx_rate(pool, &jobs.prices, currency);
     let ready = match tokio::time::timeout(RATE_FETCH_LIMIT, fetch).await {
         Ok(ready) => ready?,
         Err(_) => false,

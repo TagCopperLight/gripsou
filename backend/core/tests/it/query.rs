@@ -678,6 +678,45 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     Ok(())
 }
 
+/// A snapshot's value is in its account's currency, so a cash line in another
+/// currency is not worth its quantity there: with no rate it counts for
+/// nothing and says so, today and on derived days, rather than 1000 USD read
+/// as 1000 EUR.
+#[sqlx::test(migrations = "../migrations")]
+async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
+    pool: PgPool,
+) -> anyhow::Result<()> {
+    let conn_id = seed_connection(&pool).await;
+    let mut usd_cash = cash_holding("acct-1", Decimal::new(1000, 0));
+    usd_cash.instrument.currency = "USD".to_string();
+    usd_cash.instrument.name = "Dollar".to_string();
+    ingest(
+        &pool,
+        conn_id,
+        &SyncResult {
+            accounts: vec![checking_account("acct-1")],
+            holdings: vec![usd_cash],
+            ..Default::default()
+        },
+    )
+    .await?;
+    let user_id = testkit::owner(&pool, conn_id).await;
+    let today = chrono::Utc::now().date_naive();
+
+    let accounts = query::accounts(&pool, user_id).await?;
+    assert_eq!(accounts[0].value, Decimal::ZERO);
+    assert!(accounts[0].fx_missing);
+
+    let rows =
+        query::net_worth_series(&pool, user_id, today - chrono::Duration::days(1), today).await?;
+    assert_eq!(rows.len(), 2, "yesterday is derived, today is the snapshot");
+    for row in rows {
+        assert_eq!(row.net_worth, Decimal::ZERO, "{}", row.as_of);
+        assert!(row.fx_missing, "{}", row.as_of);
+    }
+    Ok(())
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;

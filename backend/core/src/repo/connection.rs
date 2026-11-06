@@ -196,13 +196,45 @@ pub async fn provider_key(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<String
     Ok(key)
 }
 
-/// Who owns a connection — the scheduler needs it to start that user's
-/// categorisation run after a sync. `None` for an unknown id.
-pub async fn user_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Uuid>, CoreError> {
+/// Who owns a connection. `None` for an unknown id.
+pub async fn user_id(db: impl sqlx::PgExecutor<'_>, id: Uuid) -> Result<Option<Uuid>, CoreError> {
     let row = sqlx::query_scalar!("select user_id from connection where id = $1", id)
-        .fetch_optional(pool)
+        .fetch_optional(db)
         .await?;
     Ok(row)
+}
+
+/// Merges a sync's provider observations into the connection's
+/// `provider_meta`, key by key.
+pub async fn merge_provider_meta(
+    db: impl sqlx::PgExecutor<'_>,
+    id: Uuid,
+    meta: &serde_json::Value,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        "update connection set provider_meta = provider_meta || $2 where id = $1",
+        id,
+        meta,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn set_institution(
+    db: impl sqlx::PgExecutor<'_>,
+    id: Uuid,
+    institution: &crate::dto::Institution,
+) -> Result<(), CoreError> {
+    sqlx::query!(
+        "update connection set institution_key = $2, institution_name = $3 where id = $1",
+        id,
+        institution.key,
+        institution.name,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 /// Fetch the encrypted credentials blob for a connection.

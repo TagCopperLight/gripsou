@@ -81,7 +81,7 @@ pub async fn enabled_providers(
     State(pool): State<PgPool>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<dto::EnabledProvider>>, ApiError> {
-    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
+    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
     Ok(Json(
         gripsou_jobs::ACCOUNT_PROVIDERS
             .iter()
@@ -128,7 +128,7 @@ pub async fn init_connection(
     Json(body): Json<dto::InitConnectionReq>,
 ) -> Result<(StatusCode, Json<dto::InitConnectionResp>), ApiError> {
     // Validate provider is known and enabled (also gives the row's name).
-    let enabled = gripsou_core::repo::provider::enabled(&pool).await?;
+    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
     let provider = gripsou_jobs::account_provider(&body.provider_key)
         .filter(|k| enabled.iter().any(|e| e == k.key))
         .ok_or_else(|| {

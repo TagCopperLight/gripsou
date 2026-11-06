@@ -6,11 +6,11 @@ mod layer;
 mod terminal;
 mod writer;
 
-pub use layer::{LogLayer, is_saved};
+pub use layer::LogLayer;
 pub use writer::{LogWriter, WriterHandle};
 
 /// Lines held in memory while the database is slow or down.
-pub const QUEUE_CAPACITY: usize = 10_000;
+const QUEUE_CAPACITY: usize = 10_000;
 
 /// Install the process-wide subscriber: the terminal, filtered by `terminal`
 /// (RUST_LOG), and the saved log. Returns the writer to spawn once the
