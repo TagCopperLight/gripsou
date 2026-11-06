@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldError } from "../../../ui/FieldError";
-import { useErrorToast } from "../../../lib/errorToasts";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { TagChip } from "../TagChip";
 import { ColorPicker } from "../../../ui/ColorPicker";
 import { useUpdateBudgetTag, type BudgetTag, type TagBody } from "../../../api/budget";
 import { BUDGET_PALETTE } from "../../../lib/palette";
-import { budgetErrorKey } from "../budgetErrors";
+import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 
 type TagRowProps = {
   tag: BudgetTag;
@@ -75,10 +74,7 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
   };
 
   const failure = update.isError ? budgetErrorKey(update.error) : null;
-  useErrorToast(
-    failure !== null && failure !== "duplicate" && t(`settings.budget.tags.${failure}`),
-    failure === "gone" ? t("common.refreshPage") : undefined,
-  );
+  useBudgetErrorToast(failure, "settings.budget.tags", "duplicate");
 
   return (
     <div className="flex flex-col gap-1.5">

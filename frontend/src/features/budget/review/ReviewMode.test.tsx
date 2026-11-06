@@ -41,6 +41,8 @@ type Server = {
 const CATEGORIES = [
   { id: "c2", name: "Savings", defaultKey: null, color: "#5b9bf0", icon: null, hint: null,
     kind: "neutral", systemKey: null, archived: false, txCount: 0 },
+  { id: "c3", name: "Dining", defaultKey: null, color: "#f59e0b", icon: null, hint: null,
+    kind: "expense", systemKey: null, archived: false, txCount: 0 },
 ];
 
 function stubServer(server: Server) {
@@ -257,5 +259,24 @@ describe("Review mode", () => {
       body: { categoryId: "c2", offerScope: "review", confirmBreakPairs: true },
     });
     await waitFor(() => expect(screen.queryByTestId("break-pair-modal")).toBeNull());
+  });
+
+  it("asks before sending a correction of a row it shows as paired, as the transactions list does", async () => {
+    const server: Server = { pending: [{ ...NO_GUESS, isTransfer: true }], calls: [], paired: true };
+    stubServer(server);
+    renderMode();
+    fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
+    fireEvent.click(await screen.findByTestId("chooser-option-c3"));
+
+    expect(await screen.findByTestId("break-pair-modal")).toBeVisible();
+    expect(server.calls).toEqual([]);
+    expect(screen.getByTestId("review-line-t2")).toBeVisible();
+
+    fireEvent.click(screen.getByTestId("break-pair-confirm"));
+    expect(await screen.findByTestId("resolved-line-t2")).toBeVisible();
+    expect(server.calls).toEqual([{
+      url: expect.stringContaining("/transactions/t2"),
+      body: { categoryId: "c3", offerScope: "review", confirmBreakPairs: true },
+    }]);
   });
 });

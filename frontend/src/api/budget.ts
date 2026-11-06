@@ -165,8 +165,16 @@ type TransactionPatch = {
  *  — from the review queue — only those still in review. */
 export type SameDescriptionScope = "all" | "review";
 
-/** `pendingPairBreaks` set means refused, nothing written: see `WriteResult`. */
-type PatchResult = { sameDescriptionCount: number; pendingPairBreaks?: number | null };
+/** Every write that can unlink internal-transfer pairs answers this way: a
+ *  set `pendingPairBreaks` means the server refused it, wrote nothing, and
+ *  reports how many pairs it would unlink. Kept distinct from `updated: 0`:
+ *  "wrote no rows" and "awaiting your confirmation" are different answers. */
+export type PairBreakAnswer = { pendingPairBreaks?: number | null };
+
+export type PatchResult = PairBreakAnswer & { sameDescriptionCount: number };
+
+/** `ids` comes back from apply-to-description only: the rows it wrote. */
+export type WriteResult = PairBreakAnswer & { updated: number; ids?: string[] };
 
 export type BulkBody = {
   /** Explicit rows. Omit and pass `filter` for "select all shown". */
@@ -176,28 +184,79 @@ export type BulkBody = {
   addTagIds?: string[];
   checked?: boolean;
   /** The caller has seen how many internal-transfer pairs this write would
-   *  dissolve and wants it applied anyway. Without it, the server refuses such
+   *  unlink and wants it applied anyway. Without it, the server refuses such
    *  a write and reports the count instead of applying it. */
   confirmBreakPairs?: boolean;
 };
 
-/** A write that only ticks or unticks ✓ touches nothing but the rows. */
-function onlyChecked(body: object): boolean {
-  const fields = Object.entries(body)
-    .filter(([k, v]) => v !== undefined && k !== "ids" && k !== "filter")
-    .map(([k]) => k);
-  return fields.length === 1 && fields[0] === "checked";
+/** The flag goes on the wire only when set. */
+function withConfirm<B extends { confirmBreakPairs?: boolean }>({ confirmBreakPairs, ...rest }: B) {
+  return confirmBreakPairs ? { ...rest, confirmBreakPairs: true } : rest;
 }
 
-/** One row, applied to the cache before the request so the chip swaps at once.
- *  `optimistic` is the caller's view of the row after the write — the chip
- *  fields cannot be derived from the patch body, which carries only ids. */
+/** A write that only ticks or unticks ✓ touches nothing but the rows. */
+function onlyChecked(body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked"> & { tagIds?: string[] }) {
+  return (
+    body.checked !== undefined &&
+    body.categoryId === undefined &&
+    body.tagIds === undefined &&
+    body.addTagIds === undefined
+  );
+}
+
+/** A tag's place in the catalog; unknown tags sort after every known one. */
+function catalogRank(catalog: { id: string }[], id: string): number {
+  const i = catalog.findIndex((tag) => tag.id === id);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+/** The row as the server holds it once `body` is written, resolved from the
+ *  category and tag catalogs in the cache. A user's category write makes the
+ *  row `user`-sourced, which clears the confidence and the review flag; a
+ *  confirmed one unlinks the pair. The *other* half of that pair is not known
+ *  here: it arrives with the refetch. */
+function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Transaction {
+  const next = { ...row };
+  if (body.categoryId !== undefined) {
+    const categories = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
+    const c = categories?.find((x) => x.id === body.categoryId) ?? null;
+    Object.assign(next, {
+      categoryId: c?.id ?? null,
+      categoryName: c?.name ?? null,
+      categoryDefaultKey: c?.defaultKey ?? null,
+      categoryColor: c?.color ?? null,
+      categoryIcon: c?.icon ?? null,
+      categoryKind: c?.kind ?? null,
+      categorySource: c ? "user" : null,
+      categoryConfidence: null,
+      needsReview: false,
+      isTransfer: row.isTransfer && !body.confirmBreakPairs,
+    });
+  }
+  if (body.tagIds) {
+    const catalog = qc.getQueryData<BudgetTag[]>(keys.budgetTags()) ?? [];
+    // In the catalog's order, which is the order the server sends a row's
+    // tags back in, so a new tag doesn't jump when the response lands.
+    next.tags = body.tagIds
+      .map(
+        (id) =>
+          catalog.find((tag) => tag.id === id) ??
+          row.tags.find((tag) => tag.id === id) ?? { id, name: "", color: null },
+      )
+      .sort((a, b) => catalogRank(catalog, a.id) - catalogRank(catalog, b.id));
+  }
+  if (body.checked !== undefined) next.checked = body.checked;
+  return next;
+}
+
+/** One row. With `optimistic`, the cached row shows the write before the
+ *  server answers, and goes back if the write fails or is refused. */
 export function usePatchTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: Partial<Transaction> }) =>
-      patchJson<PatchResult>(`/transactions/${id}`, body),
-    onMutate: async ({ id, optimistic }) => {
+    mutationFn: ({ id, body }: { id: string; body: TransactionPatch; optimistic?: boolean }) =>
+      patchJson<PatchResult>(`/transactions/${id}`, withConfirm(body)),
+    onMutate: async ({ id, body, optimistic }) => {
       if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
       // Every cached filter combination may hold this row, so patch the whole
       // family rather than guessing which key the caller is reading.
@@ -208,7 +267,7 @@ export function usePatchTransaction() {
           ? {
               ...data,
               pages: data.pages.map((page) =>
-                page.map((row) => (row.id === id ? { ...row, ...optimistic } : row)),
+                page.map((row) => (row.id === id ? rowAfter(row, body, qc) : row)),
               ),
             }
           : data,
@@ -218,8 +277,6 @@ export function usePatchTransaction() {
     onError: (_err, _vars, ctx) => {
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
-    // Refused pending confirmation: nothing was written, so the row goes back
-    // to what it was while the caller asks.
     onSuccess: (res, _vars, ctx) => {
       if (!res?.pendingPairBreaks) return;
       for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
@@ -229,33 +286,18 @@ export function usePatchTransaction() {
   });
 }
 
-/** A write the server refused pending confirmation reports `pendingPairBreaks`
- *  — how many internal-transfer pairs it would dissolve — and wrote nothing.
- *  Kept distinct from `updated: 0`: "wrote no rows" and "awaiting your
- *  confirmation" are different answers, and conflating them would silently
- *  swallow the confirmation step. */
-/** `ids` comes back from apply-to-description only: the rows it wrote. */
-type WriteResult = { updated: number; pendingPairBreaks?: number; ids?: string[] };
-
 export function useApplyToDescription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       id,
-      categoryId,
-      scope,
-      confirmBreakPairs,
+      ...body
     }: {
       id: string;
       categoryId: string | null;
       scope?: SameDescriptionScope;
       confirmBreakPairs?: boolean;
-    }) =>
-      postJson<WriteResult>(`/transactions/${id}/apply-to-description`, {
-        categoryId,
-        ...(scope ? { scope } : {}),
-        ...(confirmBreakPairs ? { confirmBreakPairs: true } : {}),
-      }),
+    }) => postJson<WriteResult>(`/transactions/${id}/apply-to-description`, withConfirm(body)),
     onSuccess: () => afterTransactionChange(qc),
   });
 }
@@ -269,7 +311,7 @@ export function useBulkTransactions() {
   return useMutation({
     mutationFn: (body: BulkBody) => {
       const wire: Omit<BulkBody, "filter"> & { filter?: Record<string, unknown> } = {
-        ...body,
+        ...withConfirm(body),
         filter: body.filter ? transactionFilterFields(body.filter) : undefined,
       };
       return postJson<WriteResult>("/transactions/bulk", wire);

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useErrorToast } from "../../../lib/errorToasts";
 
 import { Dialog } from "../../../ui/Dialog";
 import { ColorSwatchGrid } from "../../../ui/ColorSwatchGrid";
@@ -19,7 +18,7 @@ import {
 } from "../../../api/budget";
 import { BUDGET_KINDS, categoryLabel, safeBudgetColor } from "../../../lib/budget";
 import { BUDGET_ICONS, BUDGET_ICON_NAMES } from "../budgetIcons";
-import { budgetErrorKey } from "../budgetErrors";
+import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { withAlpha } from "../../../lib/color";
 
@@ -86,10 +85,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
   const previewColor = safeBudgetColor(color);
 
   const failure = mutation.isError ? budgetErrorKey(mutation.error) : null;
-  useErrorToast(
-    failure !== null && failure !== "duplicate" && t(`settings.budget.categories.${failure}`),
-    failure === "gone" ? t("common.refreshPage") : undefined,
-  );
+  useBudgetErrorToast(failure, "settings.budget.categories", "duplicate");
 
   return (
     <Dialog

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldError } from "../../../ui/FieldError";
-import { useErrorToast } from "../../../lib/errorToasts";
 import { Plus } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 import { CardState } from "../../../ui/CardState";
 import { Button } from "../../../ui/Button";
 import { useBudgetTags, useCreateBudgetTag, type BudgetTag } from "../../../api/budget";
-import { budgetErrorKey } from "../budgetErrors";
+import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 import { TagRow } from "./TagRow";
 import { DeleteTagModal } from "./DeleteTagModal";
 
@@ -32,10 +31,7 @@ export function TagsSurface() {
   };
 
   const failure = create.isError ? budgetErrorKey(create.error) : null;
-  useErrorToast(
-    failure !== null && failure !== "duplicate" && t(`settings.budget.tags.${failure}`),
-    failure === "gone" ? t("common.refreshPage") : undefined,
-  );
+  useBudgetErrorToast(failure, "settings.budget.tags", "duplicate");
 
   return (
     <div>
