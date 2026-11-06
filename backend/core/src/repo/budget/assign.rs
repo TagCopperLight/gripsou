@@ -110,9 +110,8 @@ async fn lock_owned(
         r#"
         select t.id as "id!", (t.transfer_pair_id is not null) as "paired!"
         from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where t.id = any($1) and k.user_id = $2
+        where t.id = any($1)
+          and t.id in (select id from user_transactions($2))
         order by t.id
         for update of t
         "#,
@@ -183,9 +182,8 @@ async fn write_category(
                category_source = case when $3::uuid is null then null else 'user' end,
                category_confidence = null,
                category_reviewed_at = case when $3::uuid is null then null else now() end
-          from account a
-          join connection k on k.id = a.connection_id
-         where t.id = any($1) and a.id = t.account_id and k.user_id = $2
+         where t.id = any($1)
+           and t.id in (select id from user_transactions($2))
            and ($3::uuid is null
                 or exists (select 1 from budget_category c
                             where c.id = $3 and c.user_id = $2))
@@ -201,6 +199,34 @@ async fn write_category(
         dissolve_pairs(conn, &written).await?;
     }
     Ok(written)
+}
+
+/// Clears the category of every row filed under `category_id`, as the user
+/// clearing each one would: the rows go back to the AI, review and pairing,
+/// and their pairs are unlinked. Run before the category is deleted.
+pub(crate) async fn clear_category(
+    tx: &mut crate::db::UserWriteTx<'_>,
+    category_id: Uuid,
+) -> Result<(), CoreError> {
+    let user_id = tx.user_id();
+    let ids = sqlx::query_scalar!(
+        r#"
+        select t.id as "id!"
+        from user_transactions($1) t
+        where t.budget_category_id = $2
+        "#,
+        user_id,
+        category_id,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let owned: Vec<Uuid> = lock_owned(tx, user_id, &ids)
+        .await?
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    write_category(tx, user_id, &owned, None).await?;
+    Ok(())
 }
 
 /// Replaces one owned transaction's tag set. Tags that are not the user's are
@@ -246,11 +272,7 @@ async fn add_tags(
     let touched = sqlx::query_scalar!(
         r#"
         with owned as (
-            select t.id
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection k on k.id = a.connection_id
-            where t.id = any($1) and k.user_id = $2
+            select t.id from user_transactions($2) t where t.id = any($1)
         ), mine as (
             select id from budget_tag where user_id = $2 and id = any($3)
         ), ins as (
@@ -280,9 +302,8 @@ async fn write_checked(
         r#"
         update transaction t
            set checked_at = case when $3 then now() else null end
-          from account a
-          join connection k on k.id = a.connection_id
-         where t.id = any($1) and a.id = t.account_id and k.user_id = $2
+         where t.id = any($1)
+           and t.id in (select id from user_transactions($2))
         "#,
         ids,
         user_id,
@@ -417,18 +438,12 @@ async fn same_description_ids<'e>(
     let ids = sqlx::query_scalar!(
         r#"
         select t.id as "id!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $2
-          and t.description_norm <> ''
+        from user_transactions($2) t
+        where t.description_norm <> ''
           and t.description_norm = (
-              select t2.description_norm
-              from transaction t2
-              join account a2    on a2.id = t2.account_id
-              join connection k2 on k2.id = a2.connection_id
-              where t2.id = $1 and k2.user_id = $2
-                and t2.description_norm <> ''
+              select a.description_norm
+              from user_transactions($2) a
+              where a.id = $1 and a.description_norm <> ''
           )
           and ($3::numeric is null
                or (t.id <> $1

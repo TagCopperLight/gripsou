@@ -80,21 +80,18 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
                t.amount      as "amount!",
                a.currency    as "currency!",
                t.transfer_pair_id
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
+        -- The cash leg of a buy/sell is the lot's record, already out of
+        -- every budget total, and it mirrors across a broker's cash and
+        -- portfolio accounts: pairing those copies would mean nothing.
+        from budget_transactions($1) t
+        join account a on a.id = t.account_id
         left join budget_category c on c.id = t.budget_category_id
-        where k.user_id = $1
-          and t.amount <> 0
-          -- The cash leg of a buy/sell is the lot's record, already out of
-          -- every budget total, and it mirrors across a broker's cash and
-          -- portfolio accounts: pairing those copies would mean nothing.
-          and not budget_investment_leg(t.type)
+        where t.amount <> 0
           and (
               -- A transfer whose category pairing may still decide: an empty
-              -- slot, an AI guess nobody has looked at yet, or a row whose
-              -- partner went away. A category the user chose (set, or an AI
-              -- guess accepted in review) is theirs.
+              -- slot, an AI guess nobody has looked at yet, or a row pairing
+              -- filed (paired now, to be matched again, or the half left
+              -- when the user recategorised its partner).
               --
               -- Only transfers: matching is by amount and date alone, so any
               -- other type lets a coincidence through — a card payment equal
@@ -104,11 +101,7 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
               -- opening this to every type paired more coincidences than
               -- transfers, and the extra rows' ties blocked good pairs.
               (t.type = 'transfer'
-               and (t.category_source is null
-                    -- Set by pairing: paired now (to be matched again), or
-                    -- the half left when the user recategorised its partner.
-                    or t.category_source = 'pair'
-                    or (t.category_source = 'ai' and t.category_reviewed_at is null)))
+               and not budget_user_chose(t.category_source, t.category_reviewed_at))
               -- Any row, of any type and whoever filed it, already in a
               -- neutral category: someone said it counts toward nothing, so
               -- pairing it hides nothing that was counted. This is what
@@ -172,10 +165,7 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
                                          then null else t.budget_category_id end,
                category_source = case when t.category_source = 'pair'
                                       then null else t.category_source end
-          from account a
-          join connection k on k.id = a.connection_id
-         where a.id = t.account_id
-           and k.user_id = $1
+         where t.id in (select id from user_transactions($1))
            and t.transfer_pair_id is not null
            and not (t.id = any($2))
         "#,
@@ -208,7 +198,7 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
                category_reviewed_at = case when o.user_chose then t.category_reviewed_at end
           from unnest($1::uuid[], $2::uuid[]) as p(id, partner)
           join lateral (
-              select x.category_source = 'user' or x.category_reviewed_at is not null as user_chose
+              select budget_user_chose(x.category_source, x.category_reviewed_at) as user_chose
               from transaction x
               where x.id = p.id
           ) o on true,

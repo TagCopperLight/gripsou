@@ -24,11 +24,7 @@ async fn not_written(
 ) -> Result<ReviewWrite, CoreError> {
     let owned = sqlx::query_scalar!(
         r#"
-        select exists(
-          select 1 from transaction t
-          join account a on a.id = t.account_id
-          join connection k on k.id = a.connection_id
-          where t.id = $1 and k.user_id = $2) as "e!"
+        select exists(select 1 from user_transactions($2) t where t.id = $1) as "e!"
         "#,
         txn_id,
         user_id
@@ -54,9 +50,8 @@ pub async fn accept(
     let n = sqlx::query!(
         r#"
         update transaction t set category_reviewed_at = now()
-          from account a
-          join connection k on k.id = a.connection_id
-         where t.id = $1 and a.id = t.account_id and k.user_id = $2
+         where t.id = $1
+           and t.id in (select id from user_transactions($2))
            and t.category_source = 'ai'
            and t.budget_category_id is not null
            and t.category_reviewed_at is null
@@ -98,9 +93,8 @@ pub async fn undo(
                category_source = 'ai',
                category_confidence = $4,
                category_reviewed_at = null
-          from account a
-          join connection k on k.id = a.connection_id
-         where t.id = $1 and a.id = t.account_id and k.user_id = $2
+         where t.id = $1
+           and t.id in (select id from user_transactions($2))
            and t.category_reviewed_at is not null
            and t.category_source in ('ai', 'user')
            and t.transfer_pair_id is null

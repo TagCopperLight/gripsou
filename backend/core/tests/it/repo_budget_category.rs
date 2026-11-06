@@ -1,4 +1,5 @@
 use gripsou_core::repo::account::upsert_account;
+use gripsou_core::repo::budget::ai;
 use gripsou_core::repo::budget::category::{
     CategoryPatch, DeleteCategory, NewCategory, category_refs, create_category, delete_category,
     list_categories, reorder_categories, update_category,
@@ -183,18 +184,21 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     Ok(())
 }
 
-/// Deleting returns the transactions to uncategorised rather than deleting them.
+/// Deleting returns the transactions to uncategorised rather than deleting
+/// them, and to nobody's choice: the AI has them to look at again.
 #[sqlx::test(migrations = "../migrations")]
 async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
-    upsert_transaction(
-        &mut conn,
-        account_id,
-        &txn("acct-1", "t1", "withdrawal", Decimal::new(-1200, 2)).described("LECLERC"),
-    )
-    .await?;
+    for (ext, description) in [("t1", "LECLERC"), ("t2", "LIDL")] {
+        upsert_transaction(
+            &mut conn,
+            account_id,
+            &txn("acct-1", ext, "withdrawal", Decimal::new(-1200, 2)).described(description),
+        )
+        .await?;
+    }
     let created = create_category(
         &pool,
         user_id,
@@ -207,22 +211,37 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
         },
     )
     .await?;
-    sqlx::query("update transaction set budget_category_id = $1, category_source = 'user'")
-        .bind(created.id)
-        .execute(&pool)
-        .await?;
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = 'user', \
+         category_reviewed_at = now() where external_id = 't1'",
+    )
+    .bind(created.id)
+    .execute(&pool)
+    .await?;
+    sqlx::query(
+        "update transaction set budget_category_id = $1, category_source = 'ai', \
+         category_confidence = 0.9, category_reviewed_at = now() where external_id = 't2'",
+    )
+    .bind(created.id)
+    .execute(&pool)
+    .await?;
+    assert_eq!(ai::remaining(&pool, user_id).await?, 0);
 
     assert_eq!(
         delete_category(&pool, user_id, created.id).await?,
         DeleteCategory::Deleted
     );
 
-    let (left, categorised): (i64, i64) =
-        sqlx::query_as("select count(*), count(budget_category_id) from transaction")
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(left, 1, "the transaction survives");
-    assert_eq!(categorised, 0, "it is uncategorised again");
+    let (left, settled): (i64, i64) = sqlx::query_as(
+        "select count(*), count(*) filter (where budget_category_id is not null \
+         or category_source is not null or category_confidence is not null \
+         or category_reviewed_at is not null) from transaction",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(left, 2, "the transactions survive");
+    assert_eq!(settled, 0, "uncategorised and nobody's choice");
+    assert_eq!(ai::remaining(&pool, user_id).await?, 2);
     Ok(())
 }
 

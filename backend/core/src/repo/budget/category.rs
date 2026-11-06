@@ -60,10 +60,7 @@ pub async fn list_categories(
         from budget_category c
         left join (
             select t.budget_category_id as cid, count(*) as cnt
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection k on k.id = a.connection_id
-            where k.user_id = $1
+            from user_transactions($1) t
             group by t.budget_category_id
         ) n on n.cid = c.id
         where c.user_id = $1
@@ -191,10 +188,8 @@ pub async fn update_category(
                   c.system_key,
                   (c.archived_at is not null) as "archived!",
                   (select count(*)
-                     from transaction t
-                     join account a    on a.id = t.account_id
-                     join connection k on k.id = a.connection_id
-                    where k.user_id = $2 and t.budget_category_id = c.id) as "tx_count!"
+                     from user_transactions($2) t
+                    where t.budget_category_id = c.id) as "tx_count!"
         "#,
         id,
         user_id,
@@ -219,8 +214,8 @@ pub enum DeleteCategory {
     System,
 }
 
-/// Deletes one category. Its transactions survive — `on delete set null`
-/// sends them back to uncategorised.
+/// Deletes one category. Its transactions survive, uncategorised and back in
+/// the AI's, review's and pairing's hands.
 pub async fn delete_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -245,6 +240,7 @@ pub async fn delete_category(
         Some(true) => return Ok(DeleteCategory::System),
         Some(false) => {}
     }
+    super::assign::clear_category(&mut tx, id).await?;
     sqlx::query!(
         "delete from budget_category where id = $1 and user_id = $2",
         id,

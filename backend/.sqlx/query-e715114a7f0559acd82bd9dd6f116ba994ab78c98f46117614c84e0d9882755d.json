@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.description, t.amount as \"amount!\", a.currency, a.type_key,\n               t.spent_on as \"day!\",\n               t.budget_category_id as \"category_id!\"\n        from budget_transactions($1) t\n        join account a on a.id = t.account_id\n        where t.budget_category_id is not null\n          and budget_user_chose(t.category_source, t.category_reviewed_at)\n        order by t.category_reviewed_at desc nulls last\n        limit $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "description",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "currency",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "type_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "type_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "category_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "e715114a7f0559acd82bd9dd6f116ba994ab78c98f46117614c84e0d9882755d"
+}

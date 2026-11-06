@@ -261,11 +261,8 @@ pub async fn tags_for_transactions(
                g.color
         from budget_transaction_tag tt
         join budget_tag g on g.id = tt.tag_id
-        join transaction t on t.id = tt.transaction_id
-        join account a     on a.id = t.account_id
-        join connection k  on k.id = a.connection_id
         where tt.transaction_id = any($1)
-          and k.user_id = $2
+          and g.user_id = $2
         order by g.created_at, g.name, g.id
         "#,
         ids,

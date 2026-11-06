@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select t.id as \"id!\", (t.transfer_pair_id is not null) as \"paired!\"\n        from transaction t\n        join account a    on a.id = t.account_id\n        join connection k on k.id = a.connection_id\n        where t.id = any($1) and k.user_id = $2\n        order by t.id\n        for update of t\n        ",
+  "query": "\n        select t.id as \"id!\", (t.transfer_pair_id is not null) as \"paired!\"\n        from transaction t\n        where t.id = any($1)\n          and t.id in (select id from user_transactions($2))\n        order by t.id\n        for update of t\n        ",
   "describe": {
     "columns": [
       {
@@ -32,5 +32,5 @@
       null
     ]
   },
-  "hash": "5d6c4af20f61bc8c8d26be9ba83e802f99b1651e4a03e76cbe24f48057564e9f"
+  "hash": "0e4be78d450f6e31796e212d2884851e4b23aa392e6e30ae2f95a927df192070"
 }

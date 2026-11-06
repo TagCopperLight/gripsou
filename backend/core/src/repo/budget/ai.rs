@@ -70,9 +70,8 @@ pub struct WorkRow {
     pub day: NaiveDate,
 }
 
-/// The next chunk: uncategorised cash rows, newest first, minus the ones this
-/// run already sent (`skip`). Buy/sell rows are excluded — the list hides
-/// them (`budget_investment_leg`), so a guess on one could never be reviewed.
+/// The next chunk: the rows still the AI's to look at, newest first, minus the
+/// ones this run already sent (`skip`).
 pub async fn work_chunk(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -82,17 +81,11 @@ pub async fn work_chunk(
     Ok(sqlx::query_as!(
         WorkRow,
         r#"
-        select t.id, t.description, t.amount, a.currency, a.type_key as account_type,
-               t.spent_on as "day!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          -- What the AI still has to look at: keep in step with `remaining`.
-          and t.category_source is null
-          and t.budget_category_id is null
-          and t.amount <> 0
-          and not budget_investment_leg(t.type)
+        select t.id as "id!", t.description, t.amount as "amount!", a.currency,
+               a.type_key as account_type, t.spent_on as "day!"
+        from budget_transactions($1) t
+        join account a on a.id = t.account_id
+        where budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
           and t.id <> all($2)
         order by t.spent_on desc, t.id
         limit $3
@@ -110,15 +103,8 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
     Ok(sqlx::query_scalar!(
         r#"
         select count(*) as "n!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          -- What the AI still has to look at: keep in step with `work_chunk`.
-          and t.category_source is null
-          and t.budget_category_id is null
-          and t.amount <> 0
-          and not budget_investment_leg(t.type)
+        from budget_transactions($1) t
+        where budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
         "#,
         user_id
     )
@@ -128,8 +114,8 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
 
 /// Evidence per item: up to 20 confirmed rows with the same normalised
 /// description (most recent first), then up to 5 confirmed rows with the
-/// most similar other descriptions. "Confirmed" = the user set it, or
-/// reviewed an AI guess. One statement for the whole chunk; both lookups go
+/// most similar other descriptions. "Confirmed" = the user chose it
+/// (`budget_user_chose`). One statement for the whole chunk; both lookups go
 /// through the indexes on `description_norm`. Items not owned by `user_id`
 /// get no evidence.
 pub async fn examples_for(
@@ -141,39 +127,35 @@ pub async fn examples_for(
         r#"
         with items as (
             select t.id, t.description_norm as norm
-            from transaction t
-            join account a    on a.id = t.account_id
-            join connection k on k.id = a.connection_id
-            where k.user_id = $1 and t.id = any($2) and t.description_norm <> ''
+            from budget_transactions($1) t
+            where t.id = any($2) and t.description_norm <> ''
+        ),
+        confirmed as not materialized (
+            select c.id, c.description, c.description_norm, c.amount, a.currency, a.type_key,
+                   c.spent_on, c.budget_category_id
+            from budget_transactions($1) c
+            join account a on a.id = c.account_id
+            where c.budget_category_id is not null
+              and budget_user_chose(c.category_source, c.category_reviewed_at)
         )
         select i.id as "item_id!", e.description, e.amount as "amount!", e.currency as "currency!",
                e.type_key as "account_type!", e.day as "day!", e.category_id as "category_id!"
         from items i
         cross join lateral (
-            (select c.description, c.amount, a.currency, a.type_key,
+            (select c.description, c.amount, c.currency, c.type_key,
                     c.spent_on as day, c.budget_category_id as category_id
-               from transaction c
-               join account a    on a.id = c.account_id
-               join connection k on k.id = a.connection_id
+               from confirmed c
               where c.description_norm = i.norm
                 and c.id <> i.id
-                and k.user_id = $1
-                and c.budget_category_id is not null
-                and (c.category_source = 'user' or c.category_reviewed_at is not null)
               order by c.spent_on desc, c.id
               limit $3)
             union all
-            (select c.description, c.amount, a.currency, a.type_key,
+            (select c.description, c.amount, c.currency, c.type_key,
                     c.spent_on as day, c.budget_category_id as category_id
-               from transaction c
-               join account a    on a.id = c.account_id
-               join connection k on k.id = a.connection_id
+               from confirmed c
               where c.description_norm % i.norm
                 and similarity(c.description_norm, i.norm) > 0.3
                 and c.description_norm <> i.norm
-                and k.user_id = $1
-                and c.budget_category_id is not null
-                and (c.category_source = 'user' or c.category_reviewed_at is not null)
               order by similarity(c.description_norm, i.norm) desc, c.spent_on desc, c.id
               limit $4)
         ) e
@@ -207,16 +189,14 @@ pub async fn recent_corrections(
 ) -> Result<Vec<Example>, CoreError> {
     let rows = sqlx::query!(
         r#"
-        select t.description, t.amount, a.currency, a.type_key,
+        select t.description, t.amount as "amount!", a.currency, a.type_key,
                t.spent_on as "day!",
                t.budget_category_id as "category_id!"
-        from transaction t
-        join account a    on a.id = t.account_id
-        join connection k on k.id = a.connection_id
-        where k.user_id = $1
-          and t.budget_category_id is not null
-          and t.category_reviewed_at is not null
-        order by t.category_reviewed_at desc
+        from budget_transactions($1) t
+        join account a on a.id = t.account_id
+        where t.budget_category_id is not null
+          and budget_user_chose(t.category_source, t.category_reviewed_at)
+        order by t.category_reviewed_at desc nulls last
         limit $2
         "#,
         user_id,
@@ -263,12 +243,8 @@ pub async fn write_decisions(
           from unnest($2::uuid[], $3::uuid[], $4::numeric[]) as d (txn_id, category_id, confidence)
           left join budget_category c on c.id = d.category_id and c.user_id = $1
          where t.id = d.txn_id
-           and t.category_source is null
-           and t.budget_category_id is null
-           and exists (select 1
-                         from account a
-                         join connection k on k.id = a.connection_id
-                        where a.id = t.account_id and k.user_id = $1)
+           and budget_ai_pending(t.category_source, t.budget_category_id, t.amount)
+           and t.id in (select id from budget_transactions($1))
         "#,
         user_id,
         &txn_ids,

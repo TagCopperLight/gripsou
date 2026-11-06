@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update transaction t set category_reviewed_at = now()\n         where t.id = $1\n           and t.id in (select id from user_transactions($2))\n           and t.category_source = 'ai'\n           and t.budget_category_id is not null\n           and t.category_reviewed_at is null\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c285954d7db72457cd3028a309469c8b91547daee1a842712c57dd358c55dfdb"
+}
