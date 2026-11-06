@@ -200,7 +200,7 @@ mod tests {
     }
 
     /// The transactions list shows only the caller's transactions.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn transactions_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -220,7 +220,7 @@ mod tests {
 
     /// Filtering on another user's account id returns nothing rather than
     /// that account's rows.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn transactions_account_filter_cannot_reach_another_user(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;

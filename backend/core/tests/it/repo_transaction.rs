@@ -4,7 +4,7 @@ use gripsou_core::testkit::{checking_account, seed_connection, txn};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn inserts_once_then_updates_in_place(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await?;

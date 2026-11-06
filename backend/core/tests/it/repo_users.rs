@@ -1,7 +1,7 @@
 use gripsou_core::repo::user::Role;
 use sqlx::PgPool;
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn lists_users_oldest_first(pool: PgPool) -> anyhow::Result<()> {
     sqlx::query(
         "insert into users (email, name, password_hash, role, created_at) \
@@ -30,7 +30,7 @@ async fn lists_users_oldest_first(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn welcome_starts_pending_and_finishing_is_idempotent(pool: PgPool) -> anyhow::Result<()> {
     let id = gripsou_core::testkit::seed_user(&pool).await;
 
@@ -69,7 +69,7 @@ async fn welcome_starts_pending_and_finishing_is_idempotent(pool: PgPool) -> any
 
 /// One admin removed while the only other one is being removed: the second
 /// removal waits for the first, then refuses, so the server keeps an admin.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_last_two_admins_removed_at_once_leave_one(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::repo::user::{AdminGuarded, delete_user, set_role};
     use gripsou_core::testkit::seed_user_as;

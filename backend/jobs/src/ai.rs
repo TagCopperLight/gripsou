@@ -292,7 +292,7 @@ mod categorize_gate_tests {
     /// from each user's own prefs. The admin configuring a provider is not
     /// consent: a user who did not opt in never has their transactions sent
     /// to a model, and one user's opt-in never opens it for another.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn open_only_for_the_users_who_opted_in(pool: PgPool) {
         let opted_in = seed_user(&pool, true).await;
         let other = seed_user(&pool, false).await;
@@ -374,7 +374,7 @@ mod categorize_run_tests {
 
     /// A request while the user's run is in flight starts no second task: it
     /// only books one more round, which the running task picks up.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn a_request_during_a_run_books_a_rerun_instead_of_starting_one(pool: PgPool) {
         let user = Uuid::new_v4();
         assert!(claim_run(user), "a run is in flight");
@@ -392,7 +392,7 @@ mod categorize_run_tests {
 
     /// A run that cannot start (AI off) must still free the user's slot, or
     /// every later request would be swallowed until a restart.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn a_run_that_cannot_start_frees_the_slot(pool: PgPool) {
         let user = gripsou_core::testkit::seed_user(&pool).await;
         assert_eq!(
@@ -411,7 +411,7 @@ mod categorize_run_tests {
         assert!(!run_again(user));
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn a_panicking_run_closes_its_row(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);
         let user = gripsou_core::testkit::seed_user(&pool).await;

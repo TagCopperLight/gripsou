@@ -2,7 +2,7 @@ use gripsou_core::repo::budget::tag::{create_tag, delete_tag, list_tags, update_
 use gripsou_core::testkit::seed_user_and_connection;
 use sqlx::PgPool;
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn creates_lists_renames_and_deletes(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     assert!(
@@ -32,7 +32,7 @@ async fn creates_lists_renames_and_deletes(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn tags_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()> {
     let (owner, _c1) = seed_user_and_connection(&pool).await;
     let (stranger, _c2) = seed_user_and_connection(&pool).await;
@@ -50,7 +50,7 @@ async fn tags_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_duplicate_name_is_an_error(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     create_tag(&pool, user_id, "Holiday", None).await?;

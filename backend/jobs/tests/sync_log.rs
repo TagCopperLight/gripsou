@@ -98,7 +98,7 @@ async fn finished_lines(pool: &PgPool) -> Vec<(String, Value)> {
         .unwrap()
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
@@ -139,7 +139,7 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
     assert_eq!(started, 1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
@@ -167,7 +167,7 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
     assert_eq!(errors, 1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
@@ -199,7 +199,7 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
 
 /// A provider that never answers must not hold the connection: the sync is
 /// stopped at its time limit and recorded like any other failure.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;
@@ -232,7 +232,7 @@ async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) 
     assert_eq!(last_error.as_deref(), Some("sync took too long"));
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
     let (user, conn) = seed(&pool).await;

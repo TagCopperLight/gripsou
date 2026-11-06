@@ -90,7 +90,7 @@ async fn bulk(
     .map(|j| j.0)
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_partial_patch_leaves_the_other_fields_alone(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let id = seed_txn(&pool, account, "LECLERC").await;
@@ -115,7 +115,7 @@ async fn a_partial_patch_leaves_the_other_fields_alone(pool: PgPool) {
     assert_eq!(err.status(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_with_a_foreign_category_fails_whole(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let id = seed_txn(&pool, account, "LECLERC").await;
@@ -143,7 +143,7 @@ async fn a_patch_with_a_foreign_category_fails_whole(pool: PgPool) {
     assert_eq!(err.status(), StatusCode::NOT_FOUND);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_on_a_paired_row_asks_first(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let out = seed_txn(&pool, account, "VIREMENT").await;
@@ -179,7 +179,7 @@ async fn a_patch_on_a_paired_row_asks_first(pool: PgPool) {
 
 /// A bulk `filter` is the list's own query parameters: an absent
 /// `includeTransfers` hides transfers, `true` includes them.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_filter_includes_transfers_only_when_asked(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let spend = seed_txn(&pool, account, "LECLERC").await;
@@ -209,7 +209,7 @@ async fn a_bulk_filter_includes_transfers_only_when_asked(pool: PgPool) {
     assert!(row(&pool, transfer).await.1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_takes_ids_or_a_filter_not_both(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let id = seed_txn(&pool, account, "LECLERC").await;
@@ -240,7 +240,7 @@ async fn a_bulk_takes_ids_or_a_filter_not_both(pool: PgPool) {
     assert!(!row(&pool, id).await.1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn deleting_a_category_is_404_409_or_204(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -269,7 +269,7 @@ async fn deleting_a_category_is_404_409_or_204(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_reorder_with_a_duplicate_id_is_refused(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let groceries = category(&pool, user_id, "groceries").await.to_string();
@@ -465,7 +465,7 @@ async fn trend_of(
 
 /// A category id is guessable from any shared link; the owner check is
 /// what stops another account renaming someone else's taxonomy.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_stranger_cannot_edit_someone_elses_category(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -487,7 +487,7 @@ async fn a_stranger_cannot_edit_someone_elses_category(pool: PgPool) {
 }
 
 /// Same owner check for tags: renaming is scoped to the caller.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_stranger_cannot_rename_someone_elses_tag(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -503,7 +503,7 @@ async fn a_stranger_cannot_rename_someone_elses_tag(pool: PgPool) {
 
 /// Deleting a tag strips it from every transaction, so a cross-user
 /// delete would silently erase another user's labelling.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_stranger_cannot_delete_someone_elses_tag(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -519,7 +519,7 @@ async fn a_stranger_cannot_delete_someone_elses_tag(pool: PgPool) {
 
 /// The category list is the caller's taxonomy only — another user's
 /// custom category must never show up in the picker.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_category_list_holds_only_the_callers_own(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -550,7 +550,7 @@ async fn the_category_list_holds_only_the_callers_own(pool: PgPool) {
 }
 
 /// Same for tags.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_tag_list_holds_only_the_callers_own(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -564,7 +564,7 @@ async fn the_tag_list_holds_only_the_callers_own(pool: PgPool) {
 /// Accepting marks the row reviewed; another user must not be able to
 /// do that to a row that is not theirs (404, not 409, so the endpoint
 /// does not even confirm the row exists).
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_stranger_cannot_accept_a_review_on_someone_elses_row(pool: PgPool) {
     let (owner, account) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -584,7 +584,7 @@ async fn a_stranger_cannot_accept_a_review_on_someone_elses_row(pool: PgPool) {
 }
 
 /// Undo rewrites the row's category; another user must not reach it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_stranger_cannot_undo_a_review_on_someone_elses_row(pool: PgPool) {
     let (owner, account) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -602,7 +602,7 @@ async fn a_stranger_cannot_undo_a_review_on_someone_elses_row(pool: PgPool) {
 
 /// Undo can put a guess back only into one of the caller's own
 /// categories: otherwise a row could point at another user's taxonomy.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_into_a_strangers_category_is_refused(pool: PgPool) {
     let (owner, account) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -620,7 +620,7 @@ async fn undo_into_a_strangers_category_is_refused(pool: PgPool) {
 }
 
 /// "Apply to all with this description" on someone else's row is a 404.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn apply_to_description_on_someone_elses_row_is_404(pool: PgPool) {
     let (_, account) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -641,7 +641,7 @@ async fn apply_to_description_on_someone_elses_row_is_404(pool: PgPool) {
 /// Descriptions like "LECLERC" are shared by every user; "apply to all"
 /// must sweep only the caller's rows, or one user's categorising would
 /// rewrite everyone else's budget.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn apply_to_description_sweeps_only_the_callers_rows(pool: PgPool) {
     let (_, owner_account) = seed_user(&pool).await;
     let (stranger, stranger_account) = seed_user(&pool).await;
@@ -674,7 +674,7 @@ async fn apply_to_description_sweeps_only_the_callers_rows(pool: PgPool) {
 
 /// Creating a category under an existing name is an ordinary UI mistake
 /// and must read as 409, not an opaque 500.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_duplicate_category_name_is_409(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     new_category(&pool, user_id, "Climbing", "expense")
@@ -688,7 +688,7 @@ async fn a_duplicate_category_name_is_409(pool: PgPool) {
 }
 
 /// Renaming a category onto another's name is the same 409.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn renaming_a_category_onto_an_existing_name_is_409(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     new_category(&pool, user_id, "Climbing", "expense")
@@ -710,7 +710,7 @@ async fn renaming_a_category_onto_an_existing_name_is_409(pool: PgPool) {
 }
 
 /// Names are unique per user, not globally: a second user may reuse one.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn two_users_may_share_a_category_name(pool: PgPool) {
     let (owner, _) = seed_user(&pool).await;
     let (stranger, _) = seed_user(&pool).await;
@@ -723,7 +723,7 @@ async fn two_users_may_share_a_category_name(pool: PgPool) {
 }
 
 /// Tags share the duplicate-name rule: 409 on create and on rename.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_duplicate_tag_name_is_409(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     new_tag(&pool, user_id, "Holiday").await.unwrap();
@@ -746,7 +746,7 @@ async fn a_duplicate_tag_name_is_409(pool: PgPool) {
 /// A blank name would create a category nothing can display: 400, and
 /// nothing written. (An unknown kind is refused with the body, see
 /// `tests/router.rs`.)
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn creating_a_category_needs_a_name(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let before = category_names(&pool, user_id).await.len();
@@ -759,7 +759,7 @@ async fn creating_a_category_needs_a_name(pool: PgPool) {
 }
 
 /// The same check guards an edit, so a rename cannot blank a category.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn editing_a_category_needs_a_name(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let groceries = category(&pool, user_id, "groceries").await;
@@ -771,7 +771,7 @@ async fn editing_a_category_needs_a_name(pool: PgPool) {
 }
 
 /// A tag needs a name, on create and on rename.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_tag_needs_a_name(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let err = new_tag(&pool, user_id, "  ").await.err().unwrap();
@@ -784,7 +784,7 @@ async fn a_tag_needs_a_name(pool: PgPool) {
 
 /// The summary period is a month or a from/to pair, never ambiguous:
 /// every other shape is a 400 rather than a silently guessed period.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_summary_period_must_be_one_month_or_an_ordered_range(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     for params in [
@@ -804,7 +804,7 @@ async fn a_summary_period_must_be_one_month_or_an_ordered_range(pool: PgPool) {
 }
 
 /// The trend needs a parseable anchor and a 1..=24 month window.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_trend_needs_a_valid_anchor_and_window(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     for params in [
@@ -827,7 +827,7 @@ async fn a_trend_needs_a_valid_anchor_and_window(pool: PgPool) {
 
 /// The handler is the only range check on an undo's confidence: the
 /// repository stores whatever it gets.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_undo_confidence_outside_0_to_1_is_400(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let txn = seed_txn(&pool, account, "LECLERC").await;
@@ -850,7 +850,7 @@ async fn an_undo_confidence_outside_0_to_1_is_400(pool: PgPool) {
 
 /// Accepting a row that is not an unreviewed AI guess is 409: the row is
 /// the caller's, but the action does not apply to it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accepting_a_row_not_in_review_is_409(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let txn = seed_txn(&pool, account, "LECLERC").await;
@@ -863,7 +863,7 @@ async fn accepting_a_row_not_in_review_is_409(pool: PgPool) {
 
 /// A tag created through the API is listed, renamed and deleted through
 /// it, and a second delete is a 404.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_tag_round_trips_create_list_rename_delete(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let created = new_tag(&pool, user_id, "  Holiday  ").await.unwrap();
@@ -890,7 +890,7 @@ async fn a_tag_round_trips_create_list_rename_delete(pool: PgPool) {
 
 /// A category created through the API is listed, edited (name, kind,
 /// archived) and deleted through it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_category_round_trips_create_list_edit_delete(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     let created = new_category(&pool, user_id, " Climbing ", "expense")
@@ -940,7 +940,7 @@ async fn a_category_round_trips_create_list_edit_delete(pool: PgPool) {
 
 /// Accept then undo is the review queue's "oops": the row must go back
 /// exactly into the queue with the guess the client showed.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_after_accept_puts_the_row_back_in_review(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let txn = seed_txn(&pool, account, "LECLERC").await;
@@ -996,7 +996,7 @@ async fn undo_after_accept_puts_the_row_back_in_review(pool: PgPool) {
 
 /// The summary endpoint wires the period through to the figures: one
 /// salary and two purchases in March, one purchase outside it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_month_summary_totals_its_own_rows(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     seed_dated(&pool, account, "2026-03-01", 2000, "SALAIRE").await;
@@ -1041,7 +1041,7 @@ async fn a_month_summary_totals_its_own_rows(pool: PgPool) {
 
 /// The trend endpoint returns `months` labels ending at the anchor and
 /// puts each month's spending in its own column.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_trend_puts_spending_in_its_month(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let groceries = category(&pool, user_id, "groceries").await;
@@ -1068,7 +1068,7 @@ async fn a_trend_puts_spending_in_its_month(pool: PgPool) {
 
 /// The seeded "Other" category is rolled into the trend's own Other
 /// series, so the legend never shows two slices called Other.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_trend_folds_the_other_category_into_other(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let other = category(&pool, user_id, "other_expense").await;
@@ -1093,7 +1093,7 @@ async fn a_trend_folds_the_other_category_into_other(pool: PgPool) {
 
 /// The count endpoint reads the list's own filters: total, uncategorised
 /// and the matching sum agree with the seeded rows.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_transaction_counts_match_the_seeded_rows(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let (_, stranger_account) = seed_user(&pool).await;
@@ -1135,7 +1135,7 @@ async fn the_transaction_counts_match_the_seeded_rows(pool: PgPool) {
 
 /// With no AI provider configured (the default settings), the status
 /// says so and still reports the user's review queue.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_ai_status_says_not_configured_by_default(pool: PgPool) {
     let (user_id, account) = seed_user(&pool).await;
     let txn = seed_txn(&pool, account, "LECLERC").await;
@@ -1157,7 +1157,7 @@ async fn the_ai_status_says_not_configured_by_default(pool: PgPool) {
 
 /// Asking for a run with no AI configured is refused with 409, never
 /// queued — nothing could ever pick it up.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn requesting_a_run_without_an_ai_is_409(pool: PgPool) {
     let (user_id, _) = seed_user(&pool).await;
     assert_eq!(

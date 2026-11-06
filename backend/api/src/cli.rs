@@ -50,7 +50,7 @@ mod tests {
     use gripsou_core::testkit::seed_user_email;
 
     /// The `second factors cleared` line is written only when something was.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn logs_only_when_something_was_cleared(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);
         let plain = seed_user_email(&pool, "plain@t.local").await;

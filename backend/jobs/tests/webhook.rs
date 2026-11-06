@@ -63,7 +63,7 @@ async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uui
 
 /// A correctly-signed webhook with a known connection id claims the connection
 /// and returns Accepted.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let conn_id = seed_connection(&pool, user_id, "99").await;
@@ -108,7 +108,7 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
 
 /// A webhook with a wrong signature is rejected with Unauthorized; the
 /// connection status is not touched.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Result<()> {
     let (_g, mut writer) = gripsou_core::logs::capture(100);
     let user_id = testkit::seed_user(&pool).await;
@@ -172,7 +172,7 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
 
 /// A valid signature whose connection.id matches no row returns Accepted
 /// (the provider should stop retrying) and does not panic.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Result<()> {
     let path = "/api/webhooks/powens";
     let date = "2024-01-15T10:00:00.000Z";
@@ -203,7 +203,7 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
 
 /// A provider the admin turned off accepts no webhook, even correctly signed:
 /// its connections must not sync behind the admin's back.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn handle_webhook_refuses_a_disabled_provider(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let conn_id = seed_connection(&pool, user_id, "55").await;

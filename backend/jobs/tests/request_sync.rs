@@ -67,7 +67,7 @@ async fn seed_connection(
 
 /// When the connection's provider has no registered adapter, request_sync takes
 /// the direct path: status becomes 'syncing'.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
@@ -98,7 +98,7 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
 
 /// When a Powens adapter is configured with a webhook secret, request_sync takes
 /// the webhook path: status becomes 'awaiting' and sync_requested_at is stamped.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
@@ -144,7 +144,7 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
 ///
 /// This covers the Powens OAuth flow that omits connection_id (documented in
 /// `complete_connect_without_connection_id`).
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
@@ -177,7 +177,7 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
 
 /// A database that cannot answer is an Err (the handler turns it into a 500),
 /// never a silent "not found".
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     pool.close().await;

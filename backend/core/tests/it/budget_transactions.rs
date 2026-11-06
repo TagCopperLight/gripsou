@@ -36,7 +36,7 @@ async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
     (user_id, account_id)
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn lists_newest_first_with_the_account_joined(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, account_id) = seed(&pool).await;
     let rows = transactions(&pool, user_id, &all()).await?;
@@ -48,7 +48,7 @@ async fn lists_newest_first_with_the_account_joined(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn searches_descriptions_case_insensitively_on_a_substring(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -67,7 +67,7 @@ async fn searches_descriptions_case_insensitively_on_a_substring(
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn filters_by_date_range(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await;
 
@@ -89,7 +89,7 @@ async fn filters_by_date_range(pool: PgPool) -> anyhow::Result<()> {
 /// assertion). Seed a *second* real user with their own connection, account
 /// and transactions, then confirm querying as the first user returns only
 /// the first user's rows -- the second user's transactions must never leak.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await;
 
@@ -139,7 +139,7 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
 /// A buy/sell is the cash leg of an investment; the lot is the record of it.
 /// Hidden on ANY account — TR's trades land on a checking account — while the
 /// PEA's transfers, dividends and fees, real cash movements, still show.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -201,7 +201,7 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
 }
 
 /// Unreachable, not merely hidden: searching must not resurrect a buy.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -234,7 +234,7 @@ async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
 /// out of `transaction` — the lots entered by hand predate the PEA connector's
 /// history and have no provider row behind them, so losing them here would
 /// erase real entries.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;

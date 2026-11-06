@@ -36,7 +36,7 @@ impl CompositionProvider for MockComp {
     }
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;
 
@@ -71,7 +71,7 @@ async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn marks_none_when_no_tracker(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;
 
@@ -94,7 +94,7 @@ async fn marks_none_when_no_tracker(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn marks_none_when_composition_empty(pool: PgPool) {
     // Symbol resolves, but the page has no breakdown (e.g. an equity, or a
     // tracker that reports none) — must NOT be stamped `etf`.
@@ -137,7 +137,7 @@ impl CompositionProvider for FailingResolve {
 
 // An unavailable source is not "no composition": the instrument must stay
 // eligible for the next sync.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_unavailable_source_is_a_failure_not_a_none_mark(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;
 

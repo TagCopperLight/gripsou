@@ -17,7 +17,7 @@ fn dec(s: &str) -> Decimal {
     s.parse().unwrap()
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     // This test is about day grouping, not currency: pin the equity to the
@@ -78,7 +78,7 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -169,7 +169,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -217,7 +217,7 @@ async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -271,7 +271,7 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     // First sync: cash + equity.
@@ -323,7 +323,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -374,7 +374,7 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
 /// Each price is converted at the last rate stamped on or before its day (the
 /// latest of that day when there are several), and has no account price
 /// before the first rate.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::testkit::{insert_price, rate_on, seed_cash_instrument};
     let conn_id = seed_connection(&pool).await;
@@ -457,7 +457,7 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
 /// Each price point carries the position that day from `lot_basis`: none
 /// before the first lot, and a sale removes its share of the cost, not its
 /// proceeds.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::testkit::{rate_on, seed_cash_instrument, seed_lot};
     let conn_id = seed_connection(&pool).await;
@@ -515,7 +515,7 @@ async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::R
 
 /// A holding with no lot at all (a balance-only provider) is held flat at its
 /// quantity and the provider's basis.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holding_prices_hold_a_lotless_position_flat(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -554,7 +554,7 @@ async fn holding_prices_hold_a_lotless_position_flat(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -593,7 +593,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
     // The accounts grid (and the distribution pie drawn from it) must value an
     // equity from the price series (so they sum to the net-worth figure), not from the provider
@@ -640,7 +640,7 @@ async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -680,7 +680,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -726,7 +726,7 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -780,7 +780,7 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
 /// currency is not worth its quantity there: with no rate it counts for
 /// nothing and says so, today and on derived days, rather than 1000 USD read
 /// as 1000 EUR.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -816,7 +816,7 @@ async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -849,7 +849,7 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -918,7 +918,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -959,7 +959,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
 /// card, the pie and the net-worth chart all showed the provider valuation, on
 /// the same screen. If these ever disagree it means a second, divergent
 /// valuation path crept back in.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1115,7 +1115,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
 /// instrument's quote currency. Here the instrument is labelled EUR (a rate that
 /// trivially exists) while its only price row is quoted in GBP (no rate): a flag
 /// keyed on `fx_asof(i.currency)` would show value 0 with no warning.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1181,7 +1181,7 @@ async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> a
 /// denominated in it — so neither the cash-instrument backfill nor the
 /// eligibility union may key off `instrument.currency` alone, or the rate can
 /// never arrive and the position above stays zero forever.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut equity = equity_holding(
@@ -1239,7 +1239,7 @@ async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Re
 /// A provider's malformed currency string must never become a globally-shared
 /// cash instrument (the `kind='cash'` unique index on `currency` would happily
 /// hold both "USD" and "usd") nor reach a live Yahoo URL.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut equity = equity_holding(
@@ -1276,7 +1276,7 @@ async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> a
 
 /// A derived row is a first-class point on the chart: net worth on a day with
 /// no snapshot comes from the backfill rather than from the older snapshot.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1367,7 +1367,7 @@ async fn seed_backfilled_equity(
 /// the anchor snapshot's unit valuation flat backward (the held-flat rule,
 /// applied to price). Without that the chart would dip to zero on every derived day and
 /// spuriously raise fx_missing.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_priceless_security_keeps_its_valuation_on_derived_days(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1394,7 +1394,7 @@ async fn a_priceless_security_keeps_its_valuation_on_derived_days(
 
 /// The priced path is untouched: when a price exists, quantity × unit_value_asof
 /// wins and the backfill's stored `value` is never consulted.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_priced_security_is_valued_from_the_price_on_derived_days(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1470,7 +1470,7 @@ async fn seed_sold_equity(
 /// A fully-sold priceless security: every *later* snapshot has quantity zero, so
 /// the per-unit valuation has to be found by looking backward. Without that the
 /// chart dips to zero across exactly the window the position was held.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1509,7 +1509,7 @@ async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
 /// known: it falls back to `holding.cost_basis`, read flat (not a basis walk),
 /// because valuing an owned asset at zero is worse than valuing it at book —
 /// and a bare 0 here would also spuriously raise fx_missing on the read side.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1539,7 +1539,7 @@ async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
 
 /// The production gap shape: a derived day sitting *between* two snapshots must
 /// read the derived row, not the older snapshot carried forward.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1607,7 +1607,7 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
 }
 
 /// A security position no lot explains is what the badge keys off.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1654,7 +1654,7 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
 }
 
 /// A fully explained position reports zero, not a negative shortfall.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1702,7 +1702,7 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
 /// realistic after a partial sale that was never recorded) reports a NEGATIVE
 /// shortfall. A `greatest(…, 0)` floor would hide this state: the user could
 /// never be told, and could never open the modal to fix it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1755,7 +1755,7 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
 /// A holding with both buys and sells recorded must compute
 /// `quantity − Σbuys + Σsells`, exercising the `sell` branch of the case
 /// expression that no other test touches.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1815,7 +1815,7 @@ async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Resu
 }
 
 /// Cash has nothing to explain regardless of transaction history.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -1862,7 +1862,7 @@ async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
 /// instrument alone: another user's buy of the same ETF must never reduce this
 /// holding's unexplained figure (mirroring the cross-user backfill-engine bug
 /// found earlier).
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1939,7 +1939,7 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
 /// rows when two holdings share an instrument or two accounts share a currency.
 /// This is the failure mode the rewrite introduces if the join keys are wrong,
 /// and it would silently double net worth rather than error.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn sharing_an_instrument_or_currency_does_not_double_count(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1982,7 +1982,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
 /// PEA that is often nothing useful. Once the user's own lots explain the
 /// position exactly, they are strictly more truthful, so they win. Read-time
 /// only: nothing is written, so the next sync cannot clobber it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -2049,7 +2049,7 @@ async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow
 
 /// A partial history is NOT more truthful than the provider's figure — it is
 /// only part of the story — so the override must not fire.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -2099,7 +2099,7 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
 /// A holding whose lots explain its position exactly must report the SAME
 /// invested figure through holdings() as through the chart, or the table and
 /// the chart disagree on the same screen.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -2140,7 +2140,7 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
 
 /// The other half: the chart's invested line and the holdings table's Invested
 /// column must agree at today's date, because they are the same function.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -2224,7 +2224,7 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
 /// balance actually held on each day. Answering today's balance for every day
 /// would put the dashed invested line far *above* net worth on past days. Cash is
 /// valued at book on both sides, so the two must cancel exactly, every day.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     ingest(
@@ -2264,7 +2264,7 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
 
 /// A reporting currency with no rate leaves the figure out and flags it,
 /// never shows the pivot figure under the reader's symbol.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -2327,7 +2327,7 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
 /// A position can be perfectly priceable while the account it sits in has no
 /// rate. Net worth counts it, so `invested` must flag the basis it could not
 /// convert: dropping it silently reads as a several-hundred-percent gain.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -2421,7 +2421,7 @@ async fn cny_account(pool: &PgPool) -> anyhow::Result<Uuid> {
     Ok(testkit::owner(pool, conn_id).await)
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_carry_their_balance_in_their_own_currency(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::testkit::rate_on;
     let user_id = cny_account(&pool).await?;
@@ -2439,7 +2439,7 @@ async fn accounts_carry_their_balance_in_their_own_currency(pool: PgPool) -> any
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_native_balance_is_null_without_a_rate(pool: PgPool) -> anyhow::Result<()> {
     let user_id = cny_account(&pool).await?;
     let rows = valuation::accounts(&pool, user_id).await?;
@@ -2448,7 +2448,7 @@ async fn accounts_native_balance_is_null_without_a_rate(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_in_the_readers_currency_have_native_equal_value(
     pool: PgPool,
 ) -> anyhow::Result<()> {

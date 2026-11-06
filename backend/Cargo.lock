@@ -1157,6 +1157,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "gripsou-core",
+ "gripsou-test-macros",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -1211,6 +1212,15 @@ dependencies = [
  "uuid",
  "wiremock",
  "yahoo_finance_api",
+]
+
+[[package]]
+name = "gripsou-test-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

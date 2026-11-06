@@ -68,7 +68,7 @@ async fn apply_to_all(
     }
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn assigning_a_category_marks_it_as_the_users_own(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
 
@@ -98,7 +98,7 @@ async fn assigning_a_category_marks_it_as_the_users_own(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn clearing_a_category_returns_the_row_to_the_pipeline(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     for category_id in [Some(groceries), None] {
@@ -125,7 +125,7 @@ async fn clearing_a_category_returns_the_row_to_the_pipeline(pool: PgPool) -> an
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_replaces_the_whole_tag_set(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
@@ -167,7 +167,7 @@ async fn a_patch_replaces_the_whole_tag_set(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn checked_is_a_timestamp_the_engine_never_reads(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let checked = |checked| TransactionPatch {
@@ -193,7 +193,7 @@ async fn checked_is_a_timestamp_the_engine_never_reads(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn bulk_operations_touch_only_the_users_rows(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["A", "B", "C"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
@@ -242,7 +242,7 @@ async fn bulk_operations_touch_only_the_users_rows(pool: PgPool) -> anyhow::Resu
 /// The "N other transactions have this description" prompt: the count ignores
 /// the row being corrected, and matching is on the normalised string, so a card
 /// mask or a date in the wording does not split a merchant in two.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(
         &pool,
@@ -280,7 +280,7 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
 /// Regression: no tags to add means no transaction was
 /// touched by any definition, even though every id in `txn_ids` is this
 /// user's own and would otherwise count as "matched".
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_adding_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["A", "B"]).await?;
 
@@ -309,7 +309,7 @@ async fn a_bulk_adding_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<(
 /// merchant" — a blank (null) description never clusters with other blank
 /// descriptions, and an anchor whose own description is blank applies to
 /// nothing at all, not to every other blank-description row.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -362,7 +362,7 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
 /// of 2+ digits, so two *unrelated* digit-only descriptions ("12345",
 /// "98765") both normalise to `''` and must not cluster as the same
 /// merchant — a normalised-empty description carries no merchant identity.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -388,7 +388,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
 /// `''`, but they are not "the same description": `count_same_description`
 /// must not count the sibling, since `apply_to_description` refuses to touch
 /// it. The preview and the apply must show the same number: zero.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -454,7 +454,7 @@ async fn paired_fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid, Uuid
     Ok((user_id, groceries, ids[0], ids[1]))
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_unconfirmed_bulk_reports_the_pairs_it_would_break(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, _inn) = paired_fixture(&pool).await?;
 
@@ -476,7 +476,7 @@ async fn an_unconfirmed_bulk_reports_the_pairs_it_would_break(pool: PgPool) -> a
 
 /// The guard runs before *any* write, so a call carrying tags alongside the
 /// category cannot half-apply while waiting for confirmation.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_unconfirmed_bulk_writes_nothing_at_all(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, _inn) = paired_fixture(&pool).await?;
     let tag = create_tag(&pool, user_id, "Holiday", None).await?;
@@ -508,7 +508,7 @@ async fn an_unconfirmed_bulk_writes_nothing_at_all(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_confirmed_bulk_writes_and_unlinks(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, inn) = paired_fixture(&pool).await?;
 
@@ -536,7 +536,7 @@ async fn a_confirmed_bulk_writes_and_unlinks(pool: PgPool) -> anyhow::Result<()>
 
 /// Nothing to confirm when no pair is involved: the common case stays one
 /// round trip, with no modal in front of it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC", "SPOTIFY"]).await?;
 
@@ -558,7 +558,7 @@ async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<
 
 /// Tags and the checked flag never break a pair, so they are never gated —
 /// even on a row that is half of one.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, _inn) = paired_fixture(&pool).await?;
 
@@ -593,7 +593,7 @@ async fn row_state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64, Option<
 
 /// A refused category must not leave the tags and ✓ of the same save
 /// written behind it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
@@ -617,7 +617,7 @@ async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let mine = create_tag(&pool, user_id, "Holiday", None).await?.id;
@@ -641,7 +641,7 @@ async fn a_patch_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_saves_every_field_together(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", None).await?.id;
@@ -667,7 +667,7 @@ async fn a_patch_saves_every_field_together(pool: PgPool) -> anyhow::Result<()> 
 }
 
 /// Tags, ✓ and category on someone else's row: refused, and nothing moves.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
     let (stranger, _c) = seed_user_and_connection(&pool).await;
@@ -720,7 +720,7 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
 
 /// The single-row save guards a pair exactly like the bulk paths: refused
 /// and reported until confirmed, then written and unlinked.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_on_a_paired_row_waits_for_confirmation(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, inn) = paired_fixture(&pool).await?;
     let patch = TransactionPatch {
@@ -748,7 +748,7 @@ async fn a_patch_on_a_paired_row_waits_for_confirmation(pool: PgPool) -> anyhow:
 }
 
 /// ✓ and tags break no pair, so a paired row takes them without a question.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
     assert_eq!(
@@ -769,7 +769,7 @@ async fn a_patch_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["A", "B"]).await?;
     let (stranger, _c) = seed_user_and_connection(&pool).await;
@@ -794,7 +794,7 @@ async fn a_bulk_with_a_foreign_tag_writes_nothing(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["VIREMENT", "VIREMENT"]).await?;
     sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
@@ -858,7 +858,7 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
 /// rows still waiting in that queue: a category the user set, a guess already
 /// accepted and a guess confident enough to skip review are left alone. The
 /// anchor is resolved already, so it is neither counted nor rewritten.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"; 6]).await?;
     let restaurants = list_categories(&pool, user_id)
@@ -940,7 +940,7 @@ async fn savings(pool: &PgPool, user_id: Uuid) -> anyhow::Result<Uuid> {
         .id)
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_patch_to_a_neutral_category_keeps_the_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
     let savings = savings(&pool, user_id).await?;
@@ -968,7 +968,7 @@ async fn a_patch_to_a_neutral_category_keeps_the_pair(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_bulk_to_a_neutral_category_keeps_the_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
     let savings = savings(&pool, user_id).await?;
@@ -997,7 +997,7 @@ async fn a_bulk_to_a_neutral_category_keeps_the_pairs(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1031,7 +1031,7 @@ async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
 
 /// A budget write waits for a sync of the same user (which holds the user's
 /// write lock) instead of racing it for row locks, so the two cannot deadlock.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn bulk_apply_waits_for_a_sync_in_progress(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _, ids) = fixture(&pool, &["LECLERC", "LIDL"]).await?;
 

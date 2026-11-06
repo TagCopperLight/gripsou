@@ -153,7 +153,7 @@ mod tests {
     use crate::testkit::*;
     use sqlx::PgPool;
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn me_returns_profile_and_logout_revokes(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let token = login_token(&pool, "a@t.local", PASSWORD).await;
@@ -195,7 +195,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn lists_marks_current_and_revokes(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let t1 = login_token(&pool, "a@t.local", PASSWORD).await;
@@ -265,7 +265,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn change_password_revokes_other_sessions(pool: PgPool) {
         seed_user_with_password(&pool, "a@t.local", "old-pass", Role::Admin).await;
         let current = login_token(&pool, "a@t.local", "old-pass").await;
@@ -313,7 +313,7 @@ mod tests {
         assert!(auth::password::verify("new-pass", &hash));
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn delete_account_requires_the_password(pool: PgPool) {
         // A non-admin user, so the last-admin guard is not in play here.
         seed_user_with_password(&pool, "a@t.local", PASSWORD, Role::User).await;
@@ -380,7 +380,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn delete_account_refuses_last_admin(pool: PgPool) {
         seed_admin(&pool, "boss@t.local").await;
         let token = login_token(&pool, "boss@t.local", PASSWORD).await;
@@ -441,7 +441,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn update_profile_persists_and_rejects_duplicate_email(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
         seed_user(&pool, "taken@t.local").await;
@@ -516,7 +516,7 @@ mod tests {
         assert_eq!(conflict.status(), StatusCode::CONFLICT);
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn change_password_requires_correct_current(pool: PgPool) {
         let id = seed_user_with_password(&pool, "a@t.local", "old-pass", Role::Admin).await;
         // Need a real session_id for change_password
@@ -546,7 +546,7 @@ mod tests {
         assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn change_password_is_throttled_like_login(pool: PgPool) {
         seed_user_with_password(&pool, "c@t.local", "old-password", Role::User).await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;
@@ -578,7 +578,7 @@ mod tests {
     }
 
     /// "Sign out everywhere else" keeps the caller's own session alive.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_keeps_current(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
         let current = principal_for(&pool, "a@t.local", PASSWORD).await;
@@ -593,7 +593,7 @@ mod tests {
     }
 
     /// "Sign out everywhere else" revokes the caller's other sessions.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
         let current = principal_for(&pool, "a@t.local", PASSWORD).await;
@@ -606,7 +606,7 @@ mod tests {
     }
 
     /// "Sign out everywhere else" never touches another user's sessions.
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
         seed_user(&pool, "b@t.local").await;
@@ -619,7 +619,7 @@ mod tests {
         assert!(session_alive(&pool, b.session_id).await);
     }
 
-    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+    #[gripsou_core::testkit::db_test]
     async fn change_password_refuses_a_short_password(pool: PgPool) {
         seed_user_with_password(&pool, "c@t.local", "old-password", Role::User).await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;

@@ -18,7 +18,7 @@ async fn isin_instrument(pool: &PgPool, isin: &str) -> Uuid {
     id
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn set_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool) {
     let id = Uuid::new_v4();
     sqlx::query(
@@ -45,7 +45,7 @@ async fn set_symbol_writes_meta_and_leaves_identity_alone(pool: PgPool) {
     assert_eq!(meta["yahoo_symbol"].as_str(), Some("PUST.PA"));
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn set_symbol_leaves_cash_symbol_null(pool: PgPool) {
     let id = Uuid::new_v4();
     sqlx::query("insert into instrument (id, kind, name, currency) values ($1,'cash','CNY','CNY')")
@@ -84,7 +84,7 @@ fn equity_ref(symbol: &str) -> InstrumentRef {
 /// those passes rewrote `symbol` and `kind`, the next sync would miss the
 /// natural key, insert a second instrument and a second holding, and ingest's
 /// close loop would zero the original, destroying that position's history.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn symbol_only_instrument_survives_resolution_and_composition(pool: PgPool) {
     let mut conn = pool.acquire().await.unwrap();
     let first = resolve_instrument(&mut conn, &equity_ref("PUST"))
@@ -120,7 +120,7 @@ async fn symbol_only_instrument_survives_resolution_and_composition(pool: PgPool
     assert_eq!(count, 1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn mark_unresolved_writes_meta(pool: PgPool) {
     let id = isin_instrument(&pool, "FR0000121014").await;
     let mut conn = pool.acquire().await.unwrap();

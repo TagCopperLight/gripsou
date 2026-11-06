@@ -18,7 +18,7 @@ step() {
 }
 
 # The tests run on a throwaway Postgres, never the dev one. Every
-# #[sqlx::test] copies template1 into a new database and migrates it, so
+# #[db_test] copies template1 into a new database and migrates it, so
 # template1 is migrated first (then each test finds everything applied) and
 # the data lives in RAM without fsync (nothing here is worth keeping). Both
 # would be wrong on the dev server; here template1 is rebuilt every run, so it

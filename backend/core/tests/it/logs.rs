@@ -13,7 +13,7 @@ fn line(at: chrono::DateTime<Utc>, message: &str) -> LogLine {
     }
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn insert_batch_writes_every_line(pool: PgPool) {
     let now = Utc::now();
     let n = gripsou_core::repo::log::insert_batch(&pool, &[line(now, "a"), line(now, "b")])
@@ -31,7 +31,7 @@ async fn insert_batch_writes_every_line(pool: PgPool) {
     assert_eq!(rows[0].2["connection_id"], "c1");
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn purge_deletes_only_rows_older_than_the_retention(pool: PgPool) {
     let now = Utc::now();
     gripsou_core::repo::log::insert_batch(
@@ -55,7 +55,7 @@ async fn purge_deletes_only_rows_older_than_the_retention(pool: PgPool) {
 }
 
 /// Install a subscriber that only has the saving layer, for the current
-/// thread (sqlx::test runs a current-thread runtime, so spawned tasks too).
+/// thread (`db_test` runs a current-thread runtime, so spawned tasks too).
 fn install(
     capacity: usize,
 ) -> (
@@ -72,7 +72,7 @@ async fn saved(pool: &PgPool) -> Vec<(String, String, String, serde_json::Value)
         .unwrap()
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn info_lines_are_saved_with_their_span_fields(pool: PgPool) {
     let (_g, mut writer) = install(100);
     let span = tracing::info_span!(target: "gripsou_jobs", "sync", connection_id = "c1", user_id = tracing::field::Empty);
@@ -96,7 +96,7 @@ async fn info_lines_are_saved_with_their_span_fields(pool: PgPool) {
     assert_eq!(fields["spans"], serde_json::json!(["sync"]));
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn inner_span_and_event_fields_win(pool: PgPool) {
     let (_g, mut writer) = install(100);
     let outer = tracing::info_span!(target: "gripsou_api", "request", step = "outer");
@@ -110,7 +110,7 @@ async fn inner_span_and_event_fields_win(pool: PgPool) {
     assert_eq!(rows[0].3["spans"], serde_json::json!(["request", "sync"]));
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn debug_lines_and_other_crates_are_not_saved(pool: PgPool) {
     let (_g, mut writer) = install(100);
     tracing::debug!(target: "gripsou_jobs", "routine detail");
@@ -120,7 +120,7 @@ async fn debug_lines_and_other_crates_are_not_saved(pool: PgPool) {
     assert!(saved(&pool).await.is_empty());
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_full_queue_drops_lines_and_says_how_many(pool: PgPool) {
     let (_g, mut writer) = install(2);
     for i in 0..5 {
@@ -135,7 +135,7 @@ async fn a_full_queue_drops_lines_and_says_how_many(pool: PgPool) {
     assert_eq!(rows[1].2, "tick");
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn shutdown_flushes_what_is_queued(pool: PgPool) {
     let (_g, writer) = install(100);
     let handle = writer.spawn(pool.clone());
@@ -144,7 +144,7 @@ async fn shutdown_flushes_what_is_queued(pool: PgPool) {
     assert_eq!(saved(&pool).await.len(), 1);
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_nul_in_a_field_or_the_message_does_not_lose_the_batch(pool: PgPool) {
     let (_g, mut writer) = install(100);
     let span = tracing::info_span!(target: "gripsou_jobs", "sync", connection_id = "c\0span");

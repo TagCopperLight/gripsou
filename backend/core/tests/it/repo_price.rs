@@ -15,7 +15,7 @@ async fn make_instrument(pool: &PgPool) -> Uuid {
     id
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn latest_price_ts_none_then_max(pool: PgPool) {
     let instrument = make_instrument(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -37,7 +37,7 @@ async fn latest_price_ts_none_then_max(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn insert_prices_batches_and_upserts(pool: PgPool) {
     let instrument = make_instrument(&pool).await;
     let mut conn = pool.acquire().await.unwrap();

@@ -143,7 +143,7 @@ mod tests {
         serde_json::json!({ "n": n })
     }
 
-    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
+    #[crate::testkit::db_test]
     async fn insert_list_find_and_scope(pool: PgPool) {
         let a = seed_user_email(&pool, "a@t.local").await;
         let b = seed_user_email(&pool, "b@t.local").await;
@@ -180,7 +180,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
+    #[crate::testkit::db_test]
     async fn record_use_rename_delete(pool: PgPool) {
         let a = seed_user_email(&pool, "a@t.local").await;
         let b = seed_user_email(&pool, "b@t.local").await;

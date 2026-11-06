@@ -43,7 +43,7 @@ async fn state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, Option<String>, Option
         .bind(id).fetch_one(pool).await.unwrap()
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accepting_keeps_the_guess_and_marks_it_reviewed(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     assert!(matches!(
@@ -63,7 +63,7 @@ async fn accepting_keeps_the_guess_and_marks_it_reviewed(pool: PgPool) -> anyhow
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn a_no_guess_row_cannot_be_accepted(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, _) = ai_row(&pool, None, false).await?;
     assert!(matches!(
@@ -73,7 +73,7 @@ async fn a_no_guess_row_cannot_be_accepted(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn another_users_row_is_not_found(pool: PgPool) -> anyhow::Result<()> {
     let (_, id, _) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     let (stranger, _) = seed_user_and_connection(&pool).await;
@@ -84,7 +84,7 @@ async fn another_users_row_is_not_found(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_after_accept_restores_the_pending_guess(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     accept(&pool, user_id, id).await?;
@@ -112,7 +112,7 @@ async fn undo_after_accept_restores_the_pending_guess(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_after_a_correction_restores_the_ai_guess(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     let other = list_categories(&pool, user_id)
@@ -135,7 +135,7 @@ async fn undo_after_a_correction_restores_the_ai_guess(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_refuses_a_category_that_is_not_the_users(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, _) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     accept(&pool, user_id, id).await?;
@@ -147,7 +147,7 @@ async fn undo_refuses_a_category_that_is_not_the_users(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_refuses_a_pending_row(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     assert!(matches!(
@@ -160,7 +160,7 @@ async fn undo_refuses_a_pending_row(pool: PgPool) -> anyhow::Result<()> {
 /// Same threshold on both sides, and rows on both sides of it: a row at 75 %
 /// is in the queue at 80 % and out of it at 70 %, so a count and a list
 /// reading different thresholds, or different rules, would disagree here.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, first, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     let acct: Uuid = sqlx::query_scalar("select account_id from transaction where id = $1")
@@ -206,7 +206,7 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
 
 /// Undo re-checks the row in the write itself: a row paired since it was
 /// accepted stays a transfer rather than becoming half an AI guess.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn undo_refuses_a_row_paired_since_it_was_accepted(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     accept(&pool, user_id, id).await?;
@@ -222,7 +222,7 @@ async fn undo_refuses_a_row_paired_since_it_was_accepted(pool: PgPool) -> anyhow
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn another_user_can_neither_accept_nor_undo(pool: PgPool) -> anyhow::Result<()> {
     let (owner, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
     let (stranger, _) = seed_user_and_connection(&pool).await;

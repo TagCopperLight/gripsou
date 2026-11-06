@@ -328,7 +328,7 @@ async fn backfill_digest(pool: &PgPool) -> String {
     out
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
@@ -337,7 +337,7 @@ async fn backfill_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
@@ -365,7 +365,7 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
@@ -407,7 +407,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 /// values a holding on a day only through an inner lateral join on its latest
 /// `holding_point` at or before that day, so a day before `history_start` has
 /// no row with or without the clamp.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
@@ -439,7 +439,7 @@ async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()>
 
 /// Today is always the final point, and its value is exact — the headline
 /// net-worth figure reads it.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
@@ -468,7 +468,7 @@ async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<(
 /// (sampling SELECTS, never averages), and the exact set of returned days
 /// matches an independently computed `sample_days` call — pinning the stride
 /// itself, not just its endpoints.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     let today = Utc::now().date_naive();
@@ -545,7 +545,7 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
 /// order, because a uuid and a randomly-assigned colour cannot anchor a stable
 /// file. The value ordering is a real part of the contract though — the pie shows
 /// the largest slice first — so it is asserted separately below.
-#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
+#[gripsou_core::testkit::db_test]
 async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
     testkit::backfill(&pool, connection_id).await?;
