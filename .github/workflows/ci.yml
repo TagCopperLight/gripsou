@@ -16,7 +16,7 @@ concurrency:
 # The checks themselves live in ci.sh, so a local run is the same as this one.
 jobs:
   backend-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -32,7 +32,7 @@ jobs:
       matrix:
         half: [api, rest]
     name: backend-test-${{ matrix.half }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -43,7 +43,7 @@ jobs:
       - run: ./ci.sh backend-test-${{ matrix.half }}
 
   frontend-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -52,7 +52,7 @@ jobs:
       - run: ./ci.sh frontend-lint
 
   frontend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
