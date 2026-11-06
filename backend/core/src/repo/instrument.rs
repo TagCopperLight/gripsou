@@ -1,10 +1,34 @@
 //! Resolve a canonical `InstrumentRef` to a global `instrument` row id,
-//! creating it if absent. Instruments are shared across all users.
+//! creating it if absent, and record what the market-data passes learn about
+//! it. Instruments are shared across all users.
 
 use uuid::Uuid;
 
 use crate::dto::{Composition, InstrumentRef};
 use crate::error::CoreError;
+
+/// An instrument a market-data pass works on.
+pub struct InstrumentRow {
+    pub id: Uuid,
+    pub kind: String,
+    pub symbol: Option<String>,
+    pub isin: Option<String>,
+    pub name: String,
+    pub currency: String,
+    pub meta: serde_json::Value,
+}
+
+impl InstrumentRow {
+    pub fn instrument_ref(&self) -> InstrumentRef {
+        InstrumentRef {
+            kind: self.kind.clone(),
+            symbol: self.symbol.clone(),
+            isin: self.isin.clone(),
+            name: self.name.clone(),
+            currency: self.currency.clone(),
+        }
+    }
+}
 
 /// On conflict, the provider-supplied `name` is written (provider-authoritative;
 /// instrument names are not user-editable, unlike `account.name`).

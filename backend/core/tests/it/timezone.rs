@@ -46,7 +46,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
     use gripsou_core::{
         dto::SyncResult,
         ingest::ingest,
-        repo::{prefs, query},
+        repo::{prefs, valuation},
     };
     use rust_decimal::Decimal;
     let (user, connection) = testkit::seed_user_and_connection(&pool).await;
@@ -117,12 +117,15 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
     let changes = gripsou_core::repo::lot::LotChanges::replace_manual(preview_rows);
     let preview = gripsou_core::repo::lot::basis_preview(&pool, user, holding_id, &changes).await?;
     assert_eq!(preview.explained_qty, Decimal::ONE);
-    let holdings = query::holdings(&pool, user).await?;
+    let holdings = valuation::holdings(&pool, user).await?;
     assert_eq!(holdings[0].price, Some(Decimal::TEN));
     assert_eq!(holdings[0].value, Decimal::TEN);
-    assert_eq!(query::accounts(&pool, user).await?[0].value, Decimal::TEN);
     assert_eq!(
-        query::net_worth_series(&pool, user, today, today).await?[0].net_worth,
+        valuation::accounts(&pool, user).await?[0].value,
+        Decimal::TEN
+    );
+    assert_eq!(
+        valuation::net_worth_series(&pool, user, today, today).await?[0].net_worth,
         Some(Decimal::TEN)
     );
     Ok(())

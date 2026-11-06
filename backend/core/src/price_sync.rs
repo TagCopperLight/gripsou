@@ -6,12 +6,10 @@
 use chrono::Duration;
 use uuid::Uuid;
 
-use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 use crate::provider::PriceProvider;
-use crate::repo::instrument::{mark_symbol_unresolved, set_resolved_symbol};
-use crate::repo::price::{insert_prices, latest_price_ts, market_today};
-use crate::repo::query::{PriceEligibleInstrument, price_eligible_instruments_for_connection};
+use crate::repo::instrument::{InstrumentRow, mark_symbol_unresolved, set_resolved_symbol};
+use crate::repo::price::{has_fx_rate, insert_prices, latest_price_ts, market_today};
 
 /// How far back of already-stored history each pass re-requests.
 ///
@@ -85,10 +83,62 @@ pub async fn fetch_prices_for_connection(
     Ok(summary)
 }
 
+/// Distinct non-cash instruments held (nonzero quantity) under a connection,
+/// plus the cash instrument (the FX rate) for every currency this connection
+/// needs a rate for, excluding the pivot (`connection_fx_currencies`, which
+/// says why each one is needed).
+///
+/// Drives the per-connection price-fetch pass.
+pub async fn price_eligible_instruments_for_connection(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+) -> Result<Vec<InstrumentRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        InstrumentRow,
+        r#"
+        select distinct
+               i.id       as "id!",
+               i.kind     as "kind!",
+               i.symbol,
+               i.isin,
+               i.name     as "name!",
+               i.currency as "currency!",
+               i.meta     as "meta!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join instrument i on i.id = h.instrument_id
+        where a.connection_id = $1
+          and i.kind <> 'cash'
+          and h.quantity <> 0
+
+        union
+
+        -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
+        -- pivot is 1 by definition and has no Yahoo pair.
+        select fx.id       as "id!",
+               fx.kind     as "kind!",
+               fx.symbol,
+               fx.isin,
+               fx.name     as "name!",
+               fx.currency as "currency!",
+               fx.meta     as "meta!"
+        from connection_fx_currencies($1) cur
+        join instrument fx on fx.kind = 'cash' and fx.currency = cur
+
+        order by 5
+        "#,
+        connection_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Makes sure a rate into `currency` is stored, fetching it now rather than at
 /// the next sync. For a reader switching their currency: their figures are
-/// converted at read time, and with no rate they are left out. True when a rate is stored afterwards (the pivot needs none); a
-/// provider failure is logged and reads as false, so the caller decides.
+/// converted at read time, and with no rate they are left out. True when a
+/// rate is stored afterwards (the pivot needs none); a provider failure is
+/// logged and reads as false, so the caller decides.
 pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,
     providers: &[Box<dyn PriceProvider>],
@@ -99,7 +149,7 @@ pub async fn ensure_fx_rate(
     }
     let mut conn = pool.acquire().await?;
     let row = sqlx::query_as!(
-        PriceEligibleInstrument,
+        InstrumentRow,
         r#"
         with ins as (
             insert into instrument (kind, symbol, isin, name, currency)
@@ -120,7 +170,7 @@ pub async fn ensure_fx_rate(
     .await?;
     let mut summary = PriceSyncSummary::default();
     fetch_instrument(&mut conn, providers, &row, &mut summary).await?;
-    Ok(latest_price_ts(&mut conn, row.id).await?.is_some())
+    has_fx_rate(&mut *conn, currency).await
 }
 
 /// One instrument's pass: resolve its symbol (cached), then fetch and upsert
@@ -129,16 +179,10 @@ pub async fn ensure_fx_rate(
 async fn fetch_instrument(
     conn: &mut sqlx::PgConnection,
     providers: &[Box<dyn PriceProvider>],
-    row: &PriceEligibleInstrument,
+    row: &InstrumentRow,
     summary: &mut PriceSyncSummary,
 ) -> Result<(), CoreError> {
-    let iref = InstrumentRef {
-        kind: row.kind.clone(),
-        symbol: row.symbol.clone(),
-        isin: row.isin.clone(),
-        name: row.name.clone(),
-        currency: row.currency.clone(),
-    };
+    let iref = row.instrument_ref();
 
     let Some(provider) = providers.iter().find(|p| p.supports(&iref)) else {
         return Ok(());

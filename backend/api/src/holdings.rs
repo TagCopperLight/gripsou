@@ -17,7 +17,7 @@ pub async fn holdings(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::Holding>>, ApiError> {
-    let rows = gripsou_core::repo::query::holdings(&pool, user_id).await?;
+    let rows = gripsou_core::repo::valuation::holdings(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(dto::Holding::from_row).collect()))
 }
 
@@ -26,10 +26,10 @@ pub async fn investment_returns(
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<dto::InvestmentReturns>, ApiError> {
     let inputs = gripsou_core::repo::returns::load(&pool, user_id).await?;
-    let accounts = gripsou_core::repo::query::accounts(&pool, user_id).await?;
+    let accounts = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
     let r = gripsou_core::returns::returns(&inputs.positions, &inputs.flows, inputs.today);
 
-    // `query::accounts` lists every account it can value from snapshots, which
+    // `valuation::accounts` lists every account it can value from snapshots, which
     // every synced account has, so the lookup only fails for an account never
     // synced.
     let rows = r
@@ -71,7 +71,7 @@ pub async fn holding_prices(
 ) -> Result<Json<Vec<dto::PricePoint>>, ApiError> {
     let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
-    let rows = gripsou_core::repo::query::holding_prices(
+    let rows = gripsou_core::repo::valuation::holding_prices(
         &pool,
         user_id,
         id,

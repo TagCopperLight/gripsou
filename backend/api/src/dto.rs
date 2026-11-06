@@ -37,7 +37,7 @@ pub struct NetWorthResponse {
 impl NetWorthResponse {
     /// Build from net-worth rows. The headline is the last point; `gain*`
     /// compares the first and last points that have a value.
-    pub fn from_rows(rows: &[gripsou_core::repo::query::NetWorthRow]) -> Self {
+    pub fn from_rows(rows: &[gripsou_core::repo::valuation::NetWorthRow]) -> Self {
         let points: Vec<NetWorthPoint> = rows
             .iter()
             .map(|r| NetWorthPoint {
@@ -134,7 +134,7 @@ fn display_kind(kind: &str, has_composition: bool) -> String {
 }
 
 impl Holding {
-    pub fn from_row(r: gripsou_core::repo::query::HoldingRow) -> Self {
+    pub fn from_row(r: gripsou_core::repo::valuation::HoldingRow) -> Self {
         let is_cash = r.kind == "cash";
         let kind = display_kind(&r.kind, r.composition.is_some());
         // Unit price is native to the instrument. A unit of cash is worth one
@@ -174,7 +174,11 @@ impl Holding {
             ticker: r.symbol.unwrap_or_else(|| r.currency.clone()),
             name: r.instrument_name,
             kind,
-            logo: r.logo_url,
+            logo: gripsou_core::logo::instrument_logo_url(
+                &r.kind,
+                r.instrument_isin.as_deref(),
+                r.instrument_symbol.as_deref(),
+            ),
             account_id: r.account_id.to_string(),
             account_name: r.account_name,
             account_color: r.account_color,
@@ -337,7 +341,7 @@ pub struct PricePoint {
 }
 
 impl PricePoint {
-    pub fn from_row(r: gripsou_core::repo::query::PricePointRow) -> Self {
+    pub fn from_row(r: gripsou_core::repo::valuation::PricePointRow) -> Self {
         PricePoint {
             t: r.ts.timestamp_millis(),
             price: r.unit_price.to_string(),
@@ -413,8 +417,8 @@ pub struct TagDto {
 
 impl Transaction {
     pub fn from_row(
-        r: gripsou_core::repo::query::TransactionListRow,
-        tags: Vec<gripsou_core::repo::query::TagRef>,
+        r: gripsou_core::repo::budget::transactions::TransactionListRow,
+        tags: Vec<gripsou_core::repo::budget::transactions::TagRef>,
     ) -> Self {
         Transaction {
             id: r.id.to_string(),
@@ -481,7 +485,7 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn from_row(r: gripsou_core::repo::query::AccountRow) -> Self {
+    pub fn from_row(r: gripsou_core::repo::valuation::AccountRow) -> Self {
         let source_name = source_name(&r);
         Account {
             id: r.account_id.to_string(),
@@ -529,7 +533,7 @@ impl AccountSeriesResponse {
     /// The `accounts` list is then sorted by each account's latest in-window value
     /// descending, so the stacked chart draws the largest account on the stable
     /// zero-baseline and matches the value-ranked order of the accounts grid.
-    pub fn from_rows(rows: Vec<gripsou_core::repo::query::AccountSeriesRow>) -> Self {
+    pub fn from_rows(rows: Vec<gripsou_core::repo::valuation::AccountSeriesRow>) -> Self {
         use std::collections::{HashMap, HashSet};
         let mut accounts: Vec<SeriesAccount> = Vec::new();
         let mut seen: HashSet<uuid::Uuid> = HashSet::new();
@@ -740,7 +744,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn from_row(r: gripsou_core::repo::query::UserRow, current_id: uuid::Uuid) -> Self {
+    pub fn from_row(r: gripsou_core::repo::user::UserRow, current_id: uuid::Uuid) -> Self {
         User {
             is_self: r.id == current_id,
             id: r.id.to_string(),
@@ -1018,7 +1022,7 @@ fn provider_name(key: &str) -> &str {
 }
 
 /// Where an account comes from: its bank once known, else its provider.
-pub fn source_name(r: &gripsou_core::repo::query::AccountRow) -> String {
+pub fn source_name(r: &gripsou_core::repo::valuation::AccountRow) -> String {
     r.institution_name
         .clone()
         .unwrap_or_else(|| provider_name(&r.provider_key).to_string())
@@ -1153,7 +1157,7 @@ pub struct InvestmentReturns {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gripsou_core::repo::query::AccountSeriesRow;
+    use gripsou_core::repo::valuation::AccountSeriesRow;
     use uuid::Uuid;
 
     #[test]
@@ -1191,7 +1195,7 @@ mod tests {
 
     #[test]
     fn a_day_without_a_rate_is_a_gap_and_left_out_of_the_gain() {
-        use gripsou_core::repo::query::NetWorthRow;
+        use gripsou_core::repo::valuation::NetWorthRow;
         let day = |d: u32, v: Option<i64>| NetWorthRow {
             as_of: NaiveDate::from_ymd_opt(2026, 1, d).unwrap(),
             net_worth: v.map(Decimal::from),

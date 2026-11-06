@@ -1,8 +1,8 @@
 use gripsou_core::dto::SyncResult;
 use gripsou_core::ingest::ingest;
 use gripsou_core::price_sync::fetch_prices_for_connection;
+use gripsou_core::price_sync::price_eligible_instruments_for_connection;
 use gripsou_core::provider::PriceProvider;
-use gripsou_core::repo::query::price_eligible_instruments_for_connection;
 use gripsou_core::testkit::{cash_holding, checking_account, equity_holding, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;

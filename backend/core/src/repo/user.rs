@@ -1,10 +1,10 @@
-//! Credential lookups for authentication. Read-only helpers + a password
-//! update, all taking the pool (interactive API calls, not sync transactions).
+//! The `users` row: credentials, profile, role, welcome state, and the admin
+//! listing. Preferences are [`crate::repo::prefs`].
 
 use uuid::Uuid;
 
 use crate::error::CoreError;
-use crate::repo::prefs::{DisplayPrefs, UserPrefs};
+use crate::repo::prefs::{self, UserPrefs};
 
 /// What a password login checks: the hash, and whose it is.
 #[derive(Debug)]
@@ -49,55 +49,56 @@ pub struct UserProfile {
     pub welcome_done: bool,
 }
 
-/// A profile as the queries read it, prefs still in their columns.
-struct ProfileRow {
-    id: Uuid,
-    name: String,
-    email: String,
-    role: String,
-    welcome_done: bool,
-    prefs: sqlx::types::Json<DisplayPrefs>,
-    currency: String,
-    time_zone: String,
-    budget_ai_enabled: bool,
-    budget_ai_threshold: i16,
-}
-
-impl From<ProfileRow> for UserProfile {
-    fn from(r: ProfileRow) -> Self {
-        UserProfile {
-            id: r.id,
-            name: r.name,
-            email: r.email,
-            role: r.role,
-            prefs: UserPrefs {
-                display: r.prefs.0,
-                currency: r.currency,
-                time_zone: r.time_zone,
-                budget_ai_enabled: r.budget_ai_enabled,
-                budget_ai_threshold: r.budget_ai_threshold as u8,
-            },
-            welcome_done: r.welcome_done,
-        }
-    }
-}
-
 pub async fn profile_by_id(
     pool: &sqlx::PgPool,
     user_id: Uuid,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query_as!(
-        ProfileRow,
-        r#"select id, name, email, role,
-                  welcomed_at is not null as "welcome_done!",
-                  prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
-                  currency, time_zone, budget_ai_enabled, budget_ai_threshold
+    let Some(row) = sqlx::query!(
+        r#"select id, name, email, role, welcomed_at is not null as "welcome_done!"
            from users where id = $1"#,
         user_id,
     )
     .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let Some(prefs) = prefs::get(pool, user_id).await? else {
+        return Ok(None);
+    };
+    Ok(Some(UserProfile {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: row.role,
+        prefs,
+        welcome_done: row.welcome_done,
+    }))
+}
+
+pub struct UserRow {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub role: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub avatar: Option<String>,
+}
+
+/// Every user on the server, oldest first (the seeded admin sorts first), for
+/// the admin Users page.
+pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        UserRow,
+        r#"
+        select id, name, email, role, created_at, prefs->>'avatar' as avatar
+        from users
+        order by created_at
+        "#,
+    )
+    .fetch_all(pool)
     .await?;
-    Ok(row.map(UserProfile::from))
+    Ok(rows)
 }
 
 /// Number of users with the `admin` role. Used to refuse deleting the last
@@ -146,20 +147,15 @@ pub async fn update_profile(
     name: &str,
     email: &str,
 ) -> Result<Option<UserProfile>, CoreError> {
-    let row = sqlx::query_as!(
-        ProfileRow,
-        r#"update users set name = $2, email = $3 where id = $1
-           returning id, name, email, role,
-                     welcomed_at is not null as "welcome_done!",
-                     prefs as "prefs!: sqlx::types::Json<DisplayPrefs>",
-                     currency, time_zone, budget_ai_enabled, budget_ai_threshold"#,
+    sqlx::query!(
+        r#"update users set name = $2, email = $3 where id = $1"#,
         user_id,
         name,
         email,
     )
-    .fetch_optional(pool)
+    .execute(pool)
     .await?;
-    Ok(row.map(UserProfile::from))
+    profile_by_id(pool, user_id).await
 }
 
 /// Mark the welcome screen done. Keeps the first date when called again.
@@ -223,7 +219,10 @@ mod tests {
         assert_eq!(profile.prefs.display.ui_language, "en");
         assert_eq!(profile.prefs.currency, "EUR");
         assert_eq!(profile.prefs.time_zone, "Europe/Paris");
-        assert_eq!(profile.prefs.budget_ai_threshold, 70);
+        assert_eq!(
+            profile.prefs.budget_ai_threshold,
+            prefs::DEFAULT_BUDGET_AI_THRESHOLD
+        );
         assert_eq!(profile.prefs.display.number_decimal_sep, ",");
         Ok(())
     }

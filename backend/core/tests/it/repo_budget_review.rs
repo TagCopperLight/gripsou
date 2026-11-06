@@ -1,7 +1,7 @@
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::review::{ReviewWrite, accept, review_count, undo};
-use gripsou_core::repo::query::{TransactionFilters, transaction_counts};
+use gripsou_core::repo::budget::transactions::{TransactionFilters, transaction_counts};
 use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::set_category;
 use gripsou_core::testkit::{checking_account, seed_user_and_connection, txn};

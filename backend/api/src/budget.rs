@@ -12,8 +12,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
+use gripsou_core::repo::budget::transactions::{
+    TypeBucket, matching_transaction_ids, transaction_counts,
+};
 use gripsou_core::repo::budget::{ai as ai_repo, assign, category, review, tag};
-use gripsou_core::repo::query::{TypeBucket, matching_transaction_ids, transaction_counts};
 
 use crate::error::ApiError;
 use chrono::NaiveDate;
@@ -914,12 +916,8 @@ pub fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, ApiError> {
 /// Same loud-failure rule as [`parse_ids`]: an unrecognised bucket is a 400,
 /// not a silent fall-through to `all`.
 pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, ApiError> {
-    match raw {
-        None => Ok(TypeBucket::default()),
-        // A present-but-blank bucket means the same thing as an absent one.
-        Some(s) if s.trim().is_empty() => Ok(TypeBucket::default()),
-        Some(s) => TypeBucket::parse(s).ok_or(ApiError::BadRequest(format!("invalid bucket: {s}"))),
-    }
+    let s = raw.unwrap_or_default();
+    TypeBucket::parse(s).ok_or(ApiError::BadRequest(format!("invalid bucket: {s}")))
 }
 
 pub async fn categorize_status(

@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
-use gripsou_core::repo::query::{TransactionFilters, transactions};
+use gripsou_core::repo::budget::transactions::{TransactionFilters, transactions};
 use gripsou_core::repo::transaction::upsert_transaction;
 use gripsou_core::testkit::{self, Lot, checking_account, seed_connection, txn};
 use rust_decimal::Decimal;

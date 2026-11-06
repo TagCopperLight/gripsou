@@ -1,7 +1,8 @@
-//! Upsert a canonical account under a connection. On conflict, only
-//! provider-derived fields are updated; user-editable `name`/`color`/
-//! `type_key` are left untouched so a re-sync never clobbers a rename,
-//! recolor, or a user's chosen account type.
+//! Accounts: the sync's upsert, the user's edits, and the account-type keys.
+//!
+//! On an upsert conflict only provider-derived fields are updated;
+//! user-editable `name`/`color`/`type_key` are left untouched so a re-sync
+//! never clobbers a rename, recolor, or a user's chosen account type.
 
 use std::sync::OnceLock;
 
@@ -95,4 +96,13 @@ pub async fn update_account(
     .fetch_optional(pool)
     .await?;
     Ok(row)
+}
+
+/// Every account-type key, for the edit-account dropdown. A new type is a row
+/// in `account_type`.
+pub async fn type_keys(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
+    let keys = sqlx::query_scalar!("select key from account_type order by key")
+        .fetch_all(pool)
+        .await?;
+    Ok(keys)
 }

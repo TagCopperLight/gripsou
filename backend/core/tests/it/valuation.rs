@@ -5,7 +5,7 @@ use gripsou_core::ingest::ingest;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::holding::upsert_holding;
 use gripsou_core::repo::instrument::resolve_instrument;
-use gripsou_core::repo::query;
+use gripsou_core::repo::valuation;
 use gripsou_core::testkit::{
     self, Lot, cash_holding, checking_account, equity_holding, holding_ids, insert_price_on,
     seed_connection, seed_equity_holding, stamp_on,
@@ -69,7 +69,7 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     .await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::net_worth_series(&pool, user_id, d1, d2).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, d1, d2).await?;
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].as_of, d1);
@@ -143,7 +143,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     insert_price_on(&pool, instrument_id, at(d1), Decimal::new(210, 0)).await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::net_worth_series(&pool, user_id, d0, d1).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, d0, d1).await?;
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].as_of, d0);
@@ -205,7 +205,7 @@ async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Resul
     .await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::accounts(&pool, user_id).await?;
+    let rows = valuation::accounts(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
@@ -258,7 +258,7 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
     .await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
     let r = &rows[0];
@@ -314,7 +314,7 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
     .await?;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     assert_eq!(
         rows.len(),
         1,
@@ -366,7 +366,7 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
 
     let user_id = testkit::owner(&pool, conn_id).await;
     let from = base - chrono::Duration::days(3);
-    let prices = query::holding_prices(&pool, user_id, holding_id, from, base).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, from, base).await?;
     assert_eq!(prices.len(), 1);
     assert_eq!(prices[0].unit_price, Decimal::new(200, 0));
     Ok(())
@@ -421,7 +421,7 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
     }
     drop(conn);
 
-    let prices = query::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
     let account: Vec<_> = prices.iter().map(|p| p.account_price).collect();
     assert_eq!(
         account,
@@ -441,7 +441,7 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
         .bind(user_id)
         .execute(&pool)
         .await?;
-    let prices = query::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, at(1, 0), at(20, 0)).await?;
     let reporting: Vec<_> = prices.iter().map(|p| p.reporting_price).collect();
     assert_eq!(
         reporting,
@@ -491,7 +491,7 @@ async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::R
     seed_lot(&pool, holding_id, Lot::buy(d(2), dec("10"), dec("100"))).await;
     seed_lot(&pool, holding_id, Lot::sell(d(6), dec("4"), dec("200"))).await;
 
-    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
     let position: Vec<_> = prices.iter().map(|p| (p.qty, p.invested)).collect();
     assert_eq!(
         position,
@@ -509,7 +509,7 @@ async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::R
         .bind(user_id)
         .execute(&pool)
         .await?;
-    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
     assert_eq!(prices[2].reporting_invested, Some(dec("1200")));
     Ok(())
 }
@@ -549,7 +549,7 @@ async fn holding_prices_hold_a_lotless_position_flat(pool: PgPool) -> anyhow::Re
     };
     insert_price_on(&pool, instrument_id, at(1), Decimal::new(10, 0)).await;
 
-    let prices = query::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
+    let prices = valuation::holding_prices(&pool, user_id, holding_id, at(1), at(20)).await?;
     assert_eq!(prices[0].qty, Some(dec("7")));
     assert_eq!(prices[0].invested, Some(dec("70")));
     Ok(())
@@ -580,7 +580,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
     .await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::accounts(&pool, user_id).await?;
+    let rows = valuation::accounts(&pool, user_id).await?;
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name, "Current account");
@@ -631,7 +631,7 @@ async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
 
     let user_id = testkit::owner(&pool, conn_id).await;
 
-    let accts = query::accounts(&pool, user_id).await?;
+    let accts = valuation::accounts(&pool, user_id).await?;
     assert_eq!(accts.len(), 1);
     assert_eq!(
         accts[0].value,
@@ -671,7 +671,7 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
     }
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::account_series(&pool, user_id, day, day).await?;
+    let rows = valuation::account_series(&pool, user_id, day, day).await?;
 
     assert_eq!(rows.len(), 2, "one row per (account, day)");
     let total: Decimal = rows.iter().filter_map(|r| r.value).sum();
@@ -718,7 +718,7 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
     .unwrap();
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let etf = rows.iter().find(|r| r.kind == "etf").unwrap();
     let comp = etf.composition.as_ref().unwrap();
     assert_eq!(comp.countries[0].name, "USA");
@@ -729,7 +729,7 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
 
 #[sqlx::test(migrations = "../migrations")]
 async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<()> {
-    let keys = query::account_types(&pool).await?;
+    let keys = gripsou_core::repo::account::type_keys(&pool).await?;
     let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
     assert!(keys.contains(&"checking"));
     assert!(keys.contains(&"brokerage"));
@@ -764,7 +764,8 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
 
     // No rate yet: the holding is worth zero and the day is flagged.
     let rows =
-        query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
+        valuation::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today)
+            .await?;
     assert_eq!(
         rows[0].net_worth,
         Some(Decimal::ZERO),
@@ -780,7 +781,8 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     insert_price_on(&pool, cny_id, chrono::Utc::now(), "0.12".parse()?).await;
 
     let rows =
-        query::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today).await?;
+        valuation::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today)
+            .await?;
     assert_eq!(rows[0].net_worth, Some("120.00".parse()?));
     assert!(!rows[0].fx_missing);
     Ok(())
@@ -811,12 +813,13 @@ async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
     let user_id = testkit::owner(&pool, conn_id).await;
     let today = chrono::Utc::now().date_naive();
 
-    let accounts = query::accounts(&pool, user_id).await?;
+    let accounts = valuation::accounts(&pool, user_id).await?;
     assert_eq!(accounts[0].value, Decimal::ZERO);
     assert!(accounts[0].fx_missing);
 
     let rows =
-        query::net_worth_series(&pool, user_id, today - chrono::Duration::days(1), today).await?;
+        valuation::net_worth_series(&pool, user_id, today - chrono::Duration::days(1), today)
+            .await?;
     assert_eq!(rows.len(), 2, "yesterday is derived, today is the snapshot");
     for row in rows {
         assert_eq!(row.net_worth, Some(Decimal::ZERO), "{}", row.as_of);
@@ -853,7 +856,7 @@ async fn net_worth_divides_into_the_reporting_currency(pool: PgPool) -> anyhow::
         .await?;
 
     let today = chrono::Utc::now().date_naive();
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, Some("125".parse()?));
     Ok(())
 }
@@ -903,7 +906,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
     )
     .await?;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let h = rows.iter().find(|r| r.kind == "equity").unwrap();
     assert_eq!(
         h.price,
@@ -950,7 +953,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
     )
     .await?;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let h = &rows[0];
     assert_eq!(h.value, Decimal::ZERO);
     assert!(h.fx_missing);
@@ -1075,17 +1078,17 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         stamp_on(&pool, holding_id, today, qty, value).await;
     }
 
-    let holdings_total: Decimal = query::holdings(&pool, user_id)
+    let holdings_total: Decimal = valuation::holdings(&pool, user_id)
         .await?
         .iter()
         .map(|r| r.value)
         .sum();
-    let accounts_total: Decimal = query::accounts(&pool, user_id)
+    let accounts_total: Decimal = valuation::accounts(&pool, user_id)
         .await?
         .iter()
         .map(|r| r.value)
         .sum();
-    let net_worth_rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let net_worth_rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     let net_worth_total = net_worth_rows[0].net_worth.unwrap();
 
     assert_eq!(holdings_total, accounts_total, "holdings vs accounts");
@@ -1103,7 +1106,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         "100 + 120 + 1800 + 400 (fallback converted from the account currency)"
     );
     // And the unpriced holding is not silently zeroed in the holdings table.
-    let unpriced = query::holdings(&pool, user_id)
+    let unpriced = valuation::holdings(&pool, user_id)
         .await?
         .into_iter()
         .find(|r| r.instrument_name == "Unpriced SA")
@@ -1164,7 +1167,7 @@ async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> a
     .await?;
     drop(conn);
 
-    let h = query::holdings(&pool, user_id)
+    let h = valuation::holdings(&pool, user_id)
         .await?
         .into_iter()
         .find(|r| r.kind == "equity")
@@ -1235,7 +1238,8 @@ async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Re
             .await?;
     assert!(gbp.is_some(), "a GBP cash instrument now carries the rate");
 
-    let eligible = query::price_eligible_instruments_for_connection(&pool, conn_id).await?;
+    let eligible =
+        gripsou_core::price_sync::price_eligible_instruments_for_connection(&pool, conn_id).await?;
     assert!(
         eligible
             .iter()
@@ -1330,7 +1334,7 @@ async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
     .execute(&pool)
     .await?;
 
-    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, derived_day, anchor).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == derived_day)
@@ -1384,7 +1388,7 @@ async fn a_priceless_security_keeps_its_valuation_on_derived_days(
     let derived_day = NaiveDate::from_ymd_opt(2026, 1, 9).unwrap();
     let (user_id, _) = seed_backfilled_equity(&pool, anchor, Decimal::new(1200, 0)).await?;
 
-    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, derived_day, anchor).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == derived_day)
@@ -1421,7 +1425,7 @@ async fn a_priced_security_is_valued_from_the_price_on_derived_days(
     )
     .await;
 
-    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, derived_day, anchor).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == derived_day)
@@ -1496,7 +1500,7 @@ async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
     )
     .await?;
 
-    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, derived_day, anchor).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == derived_day)
@@ -1529,7 +1533,7 @@ async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
     let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
     let user_id = seed_sold_equity(&pool, None, sell_day, anchor, Decimal::new(1000, 0)).await?;
 
-    let rows = query::net_worth_series(&pool, user_id, derived_day, anchor).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, derived_day, anchor).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == derived_day)
@@ -1602,7 +1606,7 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
     .execute(&pool)
     .await?;
 
-    let rows = query::net_worth_series(&pool, user_id, d1, d10).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, d1, d10).await?;
     let on_derived = rows
         .iter()
         .find(|r| r.as_of == d5)
@@ -1653,7 +1657,7 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -1698,7 +1702,7 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -1748,7 +1752,7 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -1810,7 +1814,7 @@ async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Resu
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -1858,7 +1862,7 @@ async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -1931,7 +1935,7 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     )
     .await;
 
-    let rows = query::holdings(&pool, user_a).await?;
+    let rows = valuation::holdings(&pool, user_a).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_a)
@@ -1977,7 +1981,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
         stamp_on(&pool, hid, day, q, q).await;
     }
 
-    let rows = query::net_worth_series(&pool, user_id, day, day).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, day, day).await?;
     assert_eq!(rows.len(), 1, "one row per day, not one per holding");
     assert_eq!(
         rows[0].net_worth,
@@ -2037,7 +2041,7 @@ async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -2094,7 +2098,7 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await?;
+    let rows = valuation::holdings(&pool, user_id).await?;
     let row = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -2134,7 +2138,7 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     )
     .await;
 
-    let rows = query::holdings(&pool, user_id).await.unwrap();
+    let rows = valuation::holdings(&pool, user_id).await.unwrap();
     let h = rows
         .iter()
         .find(|r| r.holding_id == holding_id)
@@ -2214,10 +2218,10 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     )
     .await;
 
-    let series = query::net_worth_series(&pool, user_id, today, today)
+    let series = valuation::net_worth_series(&pool, user_id, today, today)
         .await
         .unwrap();
-    let table = query::holdings(&pool, user_id).await.unwrap();
+    let table = valuation::holdings(&pool, user_id).await.unwrap();
 
     let chart_invested = series.last().unwrap().invested.unwrap();
     let table_invested: Decimal = table.iter().map(|h| h.invested).sum();
@@ -2253,7 +2257,7 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     stamp_on(&pool, ids[0], today, dec("120"), dec("120")).await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
-    let series = query::net_worth_series(&pool, user_id, yesterday, today).await?;
+    let series = valuation::net_worth_series(&pool, user_id, yesterday, today).await?;
 
     assert_eq!(series.len(), 2);
     assert_eq!(
@@ -2296,7 +2300,7 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
         .bind(user_id)
         .execute(&pool)
         .await?;
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(
         rows[0].net_worth, None,
         "a gap in the chart, not 100 euros read as dollars"
@@ -2308,13 +2312,13 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
         listed[0].value, None,
         "the connections list says the rate is missing"
     );
-    let series = query::account_series(&pool, user_id, today, today).await?;
+    let series = valuation::account_series(&pool, user_id, today, today).await?;
     assert_eq!(series[0].value, None);
-    let accounts = query::accounts(&pool, user_id).await?;
+    let accounts = valuation::accounts(&pool, user_id).await?;
     assert_eq!(accounts[0].value, Decimal::ZERO);
     assert!(accounts[0].fx_missing);
     assert_eq!(accounts[0].value_native, Some(Decimal::new(100, 0)));
-    let holdings = query::holdings(&pool, user_id).await?;
+    let holdings = valuation::holdings(&pool, user_id).await?;
     assert_eq!(holdings[0].value, Decimal::ZERO);
     assert!(holdings[0].fx_missing);
 
@@ -2325,7 +2329,7 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     .fetch_one(&pool)
     .await?;
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, Some("125".parse()?));
     // The connections list shows the same converted figure, not the account's euros.
     let listed = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
@@ -2374,7 +2378,7 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     .await;
     let today = chrono::Utc::now().date_naive();
 
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(
         rows[0].net_worth,
         Some("1350".parse()?),
@@ -2389,12 +2393,12 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
         rows[0].fx_missing,
         "the gap between the two lines is not a gain and must not read as one"
     );
-    let accounts = query::accounts(&pool, user_id).await?;
+    let accounts = valuation::accounts(&pool, user_id).await?;
     assert!(
         accounts[0].fx_missing,
         "the accounts card flags the same basis"
     );
-    let held = query::holdings(&pool, user_id).await?;
+    let held = valuation::holdings(&pool, user_id).await?;
     assert_eq!(held[0].invested, Decimal::ZERO);
     assert!(held[0].fx_missing, "the holdings row says so too");
 
@@ -2405,7 +2409,7 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     .fetch_one(&pool)
     .await?;
     insert_price_on(&pool, cny, chrono::Utc::now(), "0.12".parse()?).await;
-    let rows = query::net_worth_series(&pool, user_id, today, today).await?;
+    let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].invested, Some("72.00".parse()?), "600 CNY at 0.12");
     assert!(!rows[0].fx_missing);
     Ok(())
@@ -2441,7 +2445,7 @@ async fn accounts_carry_their_balance_in_their_own_currency(pool: PgPool) -> any
             .await?;
     rate_on(&pool, cny, today, "0.125".parse()?).await;
 
-    let rows = query::accounts(&pool, user_id).await?;
+    let rows = valuation::accounts(&pool, user_id).await?;
     assert_eq!(rows[0].currency, "CNY");
     assert_eq!(rows[0].value, Decimal::new(100, 0));
     assert_eq!(rows[0].value_native, Some(Decimal::new(800, 0)));
@@ -2451,7 +2455,7 @@ async fn accounts_carry_their_balance_in_their_own_currency(pool: PgPool) -> any
 #[sqlx::test(migrations = "../migrations")]
 async fn accounts_native_balance_is_null_without_a_rate(pool: PgPool) -> anyhow::Result<()> {
     let user_id = cny_account(&pool).await?;
-    let rows = query::accounts(&pool, user_id).await?;
+    let rows = valuation::accounts(&pool, user_id).await?;
     assert_eq!(rows[0].currency, "CNY");
     assert_eq!(rows[0].value_native, None);
     Ok(())
@@ -2473,7 +2477,7 @@ async fn accounts_in_the_readers_currency_have_native_equal_value(
     )
     .await?;
     let user_id = testkit::owner(&pool, conn_id).await;
-    let rows = query::accounts(&pool, user_id).await?;
+    let rows = valuation::accounts(&pool, user_id).await?;
     assert_eq!(rows[0].currency, "EUR");
     assert_eq!(rows[0].value_native, Some(rows[0].value));
     Ok(())

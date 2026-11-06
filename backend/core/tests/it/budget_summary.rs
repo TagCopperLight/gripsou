@@ -547,7 +547,9 @@ async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
 async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    use gripsou_core::repo::query::{TransactionFilters, transaction_counts, transactions};
+    use gripsou_core::repo::budget::transactions::{
+        TransactionFilters, transaction_counts, transactions,
+    };
 
     let chf = seed_cash_instrument(&pool, "CHF").await;
     rate_on(&pool, chf, day(2026, 3, 10), Decimal::new(125, 2)).await;

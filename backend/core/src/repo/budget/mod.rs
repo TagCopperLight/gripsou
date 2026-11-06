@@ -9,3 +9,4 @@ pub mod category;
 pub mod review;
 pub mod summary;
 pub mod tag;
+pub mod transactions;

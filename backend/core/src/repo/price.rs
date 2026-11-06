@@ -14,6 +14,18 @@ pub fn market_today() -> chrono::NaiveDate {
     Utc::now().date_naive()
 }
 
+/// Whether figures in `currency` can be read today: it is the pivot, or a
+/// rate into it is stored (`fx_asof`).
+pub async fn has_fx_rate(db: impl sqlx::PgExecutor<'_>, currency: &str) -> Result<bool, CoreError> {
+    Ok(sqlx::query_scalar!(
+        r#"select fx_asof($1, $2) is not null as "ready!""#,
+        currency,
+        market_today(),
+    )
+    .fetch_one(db)
+    .await?)
+}
+
 /// Upsert many price points for one instrument in a single statement. The points
 /// share a currency (they come from one listing, hence one currency).
 /// Returns the number of rows written. Idempotent on (instrument_id, ts).

@@ -41,7 +41,7 @@ pub async fn net_worth(
 ) -> Result<Json<dto::NetWorthResponse>, ApiError> {
     let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
-    let rows = gripsou_core::repo::query::net_worth_series(&pool, user_id, from, to).await?;
+    let rows = gripsou_core::repo::valuation::net_worth_series(&pool, user_id, from, to).await?;
     Ok(Json(dto::NetWorthResponse::from_rows(&rows)))
 }
 
@@ -49,7 +49,7 @@ pub async fn accounts(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::Account>>, ApiError> {
-    let rows = gripsou_core::repo::query::accounts(&pool, user_id).await?;
+    let rows = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
     Ok(Json(rows.into_iter().map(dto::Account::from_row).collect()))
 }
 
@@ -60,7 +60,7 @@ pub async fn account_series(
 ) -> Result<Json<dto::AccountSeriesResponse>, ApiError> {
     let today = gripsou_core::repo::prefs::today(&pool, user_id).await?;
     let (from, to) = range_window(&p.range, today);
-    let rows = gripsou_core::repo::query::account_series(&pool, user_id, from, to).await?;
+    let rows = gripsou_core::repo::valuation::account_series(&pool, user_id, from, to).await?;
     Ok(Json(dto::AccountSeriesResponse::from_rows(rows)))
 }
 
@@ -92,8 +92,8 @@ pub struct TransactionParams {
 pub fn filters_from_params(
     p: TransactionParams,
     review_threshold: rust_decimal::Decimal,
-) -> Result<gripsou_core::repo::query::TransactionFilters, ApiError> {
-    use gripsou_core::repo::query::TransactionFilters;
+) -> Result<gripsou_core::repo::budget::transactions::TransactionFilters, ApiError> {
+    use gripsou_core::repo::budget::transactions::TransactionFilters;
     Ok(TransactionFilters {
         search: p.search.filter(|s| !s.trim().is_empty()),
         account_id: p.account_id,
@@ -121,9 +121,12 @@ pub async fn transactions(
 ) -> Result<Json<Vec<dto::Transaction>>, ApiError> {
     let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
     let filters = filters_from_params(p, threshold)?;
-    let rows = gripsou_core::repo::query::transactions(&pool, user_id, &filters).await?;
+    let rows =
+        gripsou_core::repo::budget::transactions::transactions(&pool, user_id, &filters).await?;
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-    let mut tags = gripsou_core::repo::query::tags_for_transactions(&pool, user_id, &ids).await?;
+    let mut tags =
+        gripsou_core::repo::budget::transactions::tags_for_transactions(&pool, user_id, &ids)
+            .await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| {
@@ -135,7 +138,7 @@ pub async fn transactions(
 }
 
 pub async fn account_types(State(pool): State<PgPool>) -> Result<Json<Vec<String>>, ApiError> {
-    Ok(Json(gripsou_core::repo::query::account_types(&pool).await?))
+    Ok(Json(gripsou_core::repo::account::type_keys(&pool).await?))
 }
 
 pub async fn update_account(

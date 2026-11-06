@@ -7,6 +7,7 @@ mod connections;
 mod dto;
 pub mod error;
 mod holdings;
+mod prefs;
 mod security_headers;
 #[cfg(test)]
 mod testkit;
@@ -121,7 +122,7 @@ pub fn router(
         .route("/auth/token/{token}", get(invite::token_info))
         .route("/auth/invite/{token}/redeem", post(invite::redeem_invite))
         .route("/auth/reset/{token}/redeem", post(invite::redeem_reset))
-        .route("/auth/prefs", patch(account::update_prefs))
+        .route("/auth/prefs", patch(prefs::update_prefs))
         .route("/auth/welcome", post(account::finish_welcome))
         .route("/auth/change-password", post(account::change_password))
         .route("/auth/account", delete(account::delete_account))

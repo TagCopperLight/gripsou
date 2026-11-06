@@ -1,6 +1,6 @@
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
-use gripsou_core::repo::query::{
+use gripsou_core::repo::budget::transactions::{
     TransactionFilters, matching_transaction_ids, transaction_counts, transactions,
 };
 use gripsou_core::repo::transaction::upsert_transaction;

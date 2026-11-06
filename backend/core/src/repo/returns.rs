@@ -1,5 +1,5 @@
 //! Inputs of the annualised return: every non-cash position of a user (held
-//! ones valued by `query::holdings`, sold-out ones at zero) and the cash flows
+//! ones valued by `valuation::holdings`, sold-out ones at zero) and the cash flows
 //! that built them, each converted to the reporting currency on its own day.
 
 use chrono::NaiveDate;
@@ -21,7 +21,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
 
     // Held positions: the Holdings table's own rows, so the value is the figure
     // the user already sees there (one valuation path).
-    let mut positions: Vec<Position> = crate::repo::query::holdings(pool, user_id)
+    let mut positions: Vec<Position> = crate::repo::valuation::holdings(pool, user_id)
         .await?
         .into_iter()
         .filter(|h| h.kind != "cash")

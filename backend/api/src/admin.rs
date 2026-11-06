@@ -232,7 +232,7 @@ pub async fn users(
     AdminUser { user_id }: AdminUser,
 ) -> Result<Json<Vec<dto::User>>, ApiError> {
     // Listing every account (names/emails/roles) is admin-only.
-    let rows = gripsou_core::repo::query::users(&pool).await?;
+    let rows = gripsou_core::repo::user::list(&pool).await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| dto::User::from_row(r, user_id))

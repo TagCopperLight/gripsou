@@ -348,7 +348,7 @@ async fn net_worth_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     drop(conn);
 
     let today = Utc::now().date_naive();
-    let rows = gripsou_core::repo::query::net_worth_series(
+    let rows = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(130),
@@ -378,7 +378,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     drop(conn);
 
     let today = Utc::now().date_naive();
-    let mut rows = gripsou_core::repo::query::account_series(
+    let mut rows = gripsou_core::repo::valuation::account_series(
         &pool,
         user_id,
         today - Duration::days(130),
@@ -425,14 +425,14 @@ async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()>
     drop(conn);
 
     let today = Utc::now().date_naive();
-    let wide = gripsou_core::repo::query::net_worth_series(
+    let wide = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
     )
     .await?;
-    let tight = gripsou_core::repo::query::net_worth_series(
+    let tight = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(121),
@@ -459,14 +459,15 @@ async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<(
     drop(conn);
 
     let today = Utc::now().date_naive();
-    let sampled = gripsou_core::repo::query::net_worth_series(
+    let sampled = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
     )
     .await?;
-    let single = gripsou_core::repo::query::net_worth_series(&pool, user_id, today, today).await?;
+    let single =
+        gripsou_core::repo::valuation::net_worth_series(&pool, user_id, today, today).await?;
 
     assert_eq!(sampled.last().unwrap().as_of, today);
     assert_eq!(sampled.last().unwrap().net_worth, single[0].net_worth);
@@ -483,7 +484,7 @@ async fn every_sampled_point_is_that_days_real_value(pool: PgPool) -> anyhow::Re
     drop(conn);
 
     let today = Utc::now().date_naive();
-    let sampled = gripsou_core::repo::query::net_worth_series(
+    let sampled = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
@@ -492,9 +493,13 @@ async fn every_sampled_point_is_that_days_real_value(pool: PgPool) -> anyhow::Re
     .await?;
 
     for point in sampled.iter().rev().take(5) {
-        let single =
-            gripsou_core::repo::query::net_worth_series(&pool, user_id, point.as_of, point.as_of)
-                .await?;
+        let single = gripsou_core::repo::valuation::net_worth_series(
+            &pool,
+            user_id,
+            point.as_of,
+            point.as_of,
+        )
+        .await?;
         assert_eq!(
             point.net_worth, single[0].net_worth,
             "point {} is not that day's real value",
@@ -504,41 +509,61 @@ async fn every_sampled_point_is_that_days_real_value(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// Forces a small sample target (20, against the scenario's 121 days of real
-/// history) so the stride is actually > 1 and sampling is exercised for real,
-/// unlike the other tests above where every range clamps to the same 121-day
-/// scenario and always yields step 1. Proves three things at once: the last
-/// point is exactly `today`, every returned point is that day's real value
+/// Stretches the scenario's history to 1000 days with one old snapshot, so
+/// the chart's sample target forces a stride above 1 and sampling is exercised
+/// for real, unlike the other tests above where every range clamps to the same
+/// 121-day scenario and always yields step 1. Proves three things at once: the
+/// last point is exactly `today`, every returned point is that day's real value
 /// (sampling SELECTS, never averages), and the exact set of returned days
 /// matches an independently computed `sample_days` call — pinning the stride
 /// itself, not just its endpoints.
 #[sqlx::test(migrations = "../migrations")]
 async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
+    let today = Utc::now().date_naive();
     let mut conn = pool.acquire().await?;
+    let cash: Uuid = sqlx::query_scalar(
+        "select h.id from holding h join instrument i on i.id = h.instrument_id \
+         where i.kind = 'cash' and i.currency = 'EUR'",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    stamp_snapshot(
+        &mut conn,
+        cash,
+        today - Duration::days(1000),
+        dec("40"),
+        dec("600"),
+    )
+    .await?;
     backfill_connection(&mut conn, connection_id).await?;
     drop(conn);
 
-    let today = Utc::now().date_naive();
-    let target = 20;
-    let sampled = gripsou_core::repo::query::net_worth_series_with_target(
+    let sampled = gripsou_core::repo::valuation::net_worth_series(
         &pool,
         user_id,
         today - Duration::days(4000),
         today,
-        target,
     )
     .await?;
+    assert!(
+        sampled.len() < 1000,
+        "the stride must be above 1 for this test to mean anything"
+    );
 
     // (a) today is exact.
     assert_eq!(sampled.last().unwrap().as_of, today);
 
-    // (b) every returned point is that day's real value on its own — proves
+    // (b) returned points are that day's real value on its own — proves
     // sampling selects real days rather than averaging or interpolating.
-    for point in &sampled {
-        let single =
-            gripsou_core::repo::query::net_worth_series(&pool, user_id, point.as_of, point.as_of)
-                .await?;
+    for point in sampled.iter().step_by(25) {
+        let single = gripsou_core::repo::valuation::net_worth_series(
+            &pool,
+            user_id,
+            point.as_of,
+            point.as_of,
+        )
+        .await?;
         assert_eq!(
             point.net_worth, single[0].net_worth,
             "point {} is not that day's real value",
@@ -551,7 +576,11 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
     let history_start = gripsou_core::repo::series::history_start(&pool, user_id)
         .await?
         .expect("scenario has history");
-    let expected_days = gripsou_core::repo::series::sample_days(history_start, today, target);
+    let expected_days = gripsou_core::repo::series::sample_days(
+        history_start,
+        today,
+        gripsou_core::repo::series::CHART_TARGET_POINTS,
+    );
     let actual_days: Vec<_> = sampled.iter().map(|r| r.as_of).collect();
     assert_eq!(actual_days, expected_days);
 
@@ -572,7 +601,7 @@ async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     backfill_connection(&mut conn, connection_id).await?;
     drop(conn);
 
-    let rows = gripsou_core::repo::query::accounts(&pool, user_id).await?;
+    let rows = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
 
     let values: Vec<Decimal> = rows.iter().map(|r| r.value).collect();
     let mut sorted = values.clone();

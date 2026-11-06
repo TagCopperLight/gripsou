@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use gripsou_core::repo::account::upsert_account;
 use gripsou_core::repo::budget::category::list_categories;
 use gripsou_core::repo::budget::tag::create_tag;
-use gripsou_core::repo::query::{
+use gripsou_core::repo::budget::transactions::{
     TransactionFilters, TypeBucket, matching_transaction_ids, tags_for_transactions,
     transaction_counts, transactions,
 };

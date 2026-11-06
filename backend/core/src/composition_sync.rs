@@ -6,11 +6,11 @@
 
 use uuid::Uuid;
 
-use crate::dto::InstrumentRef;
 use crate::error::CoreError;
 use crate::provider::CompositionProvider;
-use crate::repo::instrument::{mark_composition_none, set_boursorama_symbol, set_composition};
-use crate::repo::query::composition_eligible_instruments_for_connection;
+use crate::repo::instrument::{
+    InstrumentRow, mark_composition_none, set_boursorama_symbol, set_composition,
+};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct CompositionSyncSummary {
@@ -31,13 +31,7 @@ pub async fn fetch_composition_for_connection(
     let mut conn = pool.acquire().await?;
 
     for row in instruments {
-        let iref = InstrumentRef {
-            kind: row.kind.clone(),
-            symbol: row.symbol.clone(),
-            isin: row.isin.clone(),
-            name: row.name.clone(),
-            currency: row.currency.clone(),
-        };
+        let iref = row.instrument_ref();
 
         // Resolve (or reuse cached) symbol.
         let symbol = match row.meta.get("boursorama_symbol").and_then(|v| v.as_str()) {
@@ -94,4 +88,42 @@ pub async fn fetch_composition_for_connection(
     }
 
     Ok(summary)
+}
+
+/// Instruments worth a composition scrape: non-cash, holds a symbol/isin, not
+/// already marked "none", and composition missing or older than 30 days.
+pub async fn composition_eligible_instruments_for_connection(
+    pool: &sqlx::PgPool,
+    connection_id: Uuid,
+) -> Result<Vec<InstrumentRow>, CoreError> {
+    let rows = sqlx::query_as!(
+        InstrumentRow,
+        r#"
+        select distinct
+               i.id       as "id!",
+               i.kind     as "kind!",
+               i.symbol,
+               i.isin,
+               i.name     as "name!",
+               i.currency as "currency!",
+               i.meta     as "meta!"
+        from holding h
+        join account a    on a.id = h.account_id
+        join instrument i on i.id = h.instrument_id
+        where a.connection_id = $1
+          and i.kind <> 'cash'
+          and h.quantity <> 0
+          and (i.symbol is not null or i.isin is not null)
+          and coalesce(i.meta->>'composition_status', '') <> 'none'
+          and (
+            i.meta->'composition'->>'as_of' is null
+            or (i.meta->'composition'->>'as_of')::date < (now() at time zone 'utc')::date - 30
+          )
+        order by i.name
+        "#,
+        connection_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
