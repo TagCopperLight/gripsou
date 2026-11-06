@@ -3,7 +3,7 @@
 // simplified copy of the server's rules (core/src/budget/overview/calc.rs), close
 // enough to review the screens with.
 
-import { TRANSACTIONS_LIMIT_DEFAULT, TRANSACTIONS_LIMIT_MAX, type BreakdownRow, type BudgetCategory, type BudgetSummary, type BudgetTag, type BudgetTrend, type CategoryRef, type Figure, type Slice, type SliceAmount, type Transaction, type TransactionCounts, type TransactionParams } from "../../src/api/wire.ts";
+import { TRANSACTIONS_LIMIT_DEFAULT, TRANSACTIONS_LIMIT_MAX, TYPE_BUCKETS, type TypeBucket, type BreakdownRow, type BudgetCategory, type BudgetSummary, type BudgetTag, type BudgetTrend, type CategoryRef, type Figure, type Slice, type SliceAmount, type Transaction, type TransactionCounts, type TransactionParams } from "../../src/api/wire.ts";
 import type { TransactionFilterQuery } from "../../src/api/filter.ts";
 import {
   BASELINE_MONTHS,
@@ -92,24 +92,52 @@ export function transactionView(store: Store, x: TxnRow): Transaction {
   };
 }
 
-const ids = (raw: string | undefined) => raw?.split(",").filter(Boolean);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The filter of the list's query or of a bulk body's `filter`. Names each
- *  field `transactionFilterFields` writes: a new filter field fails to
- *  type-check here until the mock reads it. */
-export function parseTransactionFilter(p: TransactionParams): TransactionFilterQuery {
-  return {
-    search: p.search,
-    accountId: p.accountId,
-    bucket: p.bucket,
-    from: p.from,
-    to: p.to,
-    categoryIds: ids(p.categoryIds),
-    tagIds: ids(p.tagIds),
-    uncategorized: p.uncategorized,
-    needsReview: p.needsReview,
-    includeTransfers: p.includeTransfers,
-  } satisfies Record<keyof TransactionFilterQuery, unknown>;
+/** A filter the server can't honour is a 400, never a wider selection. */
+class BadFilter extends Error {}
+
+function ids(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  return raw.split(",").map((p) => {
+    if (!UUID_RE.test(p.trim())) throw new BadFilter(`invalid id: ${p}`);
+    return p.trim();
+  });
+}
+
+function bucket(raw: string | undefined): TypeBucket | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  if (!(TYPE_BUCKETS as readonly string[]).includes(raw)) throw new BadFilter(`invalid bucket: ${raw}`);
+  return raw as TypeBucket;
+}
+
+/** The filter of the list's query or of a bulk body's `filter`, or the
+ *  server's 400 text. Names each field `transactionFilterFields` writes: a
+ *  new filter field fails to type-check here until the mock reads it. */
+export function parseTransactionFilter(p: TransactionParams): TransactionFilterQuery | string {
+  try {
+    return {
+      search: p.search,
+      accountId: p.accountId,
+      bucket: bucket(p.bucket),
+      from: p.from,
+      to: p.to,
+      categoryIds: ids(p.categoryIds),
+      tagIds: ids(p.tagIds),
+      uncategorized: p.uncategorized,
+      needsReview: p.needsReview,
+      includeTransfers: p.includeTransfers,
+    } satisfies Record<keyof TransactionFilterQuery, unknown>;
+  } catch (e) {
+    if (e instanceof BadFilter) return e.message;
+    throw e;
+  }
+}
+
+/** Filed under the Internal transfer category: hidden unless asked for,
+ *  paired or not. */
+function isInternalTransfer(store: Store, x: TxnRow): boolean {
+  return x.categoryId !== null && store.categories.find((c) => c.id === x.categoryId)?.systemKey === "internal_transfer";
 }
 
 /** The rows a filter selects, newest first — the list, counts and bulk share it. */
@@ -119,7 +147,7 @@ export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
   const catIds = f.categoryIds ?? [];
   const tagIds = f.tagIds ?? [];
   return store.txns.filter((x) => {
-    if (x.pairId !== null && !f.includeTransfers) return false;
+    if (!f.includeTransfers && isInternalTransfer(store, x)) return false;
     if (search && !(x.description ?? "").toLowerCase().includes(search)) return false;
     if (f.accountId && x.accountId !== f.accountId) return false;
     if (bucket === "in" && !(x.source === "cash" && x.amount > 0)) return false;
@@ -135,23 +163,22 @@ export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
   });
 }
 
-export function transactions(store: Store, q: TransactionParams): Transaction[] {
+export function transactions(store: Store, q: TransactionParams, f: TransactionFilterQuery): Transaction[] {
   const limit = Math.min(Math.max(q.limit ?? TRANSACTIONS_LIMIT_DEFAULT, 1), TRANSACTIONS_LIMIT_MAX);
   const offset = Math.max(q.offset ?? 0, 0);
-  return matching(store, parseTransactionFilter(q))
+  return matching(store, f)
     .slice(offset, offset + limit)
     .map((x) => transactionView(store, x));
 }
 
-export function counts(store: Store, q: TransactionParams): TransactionCounts {
-  const rows = matching(store, parseTransactionFilter(q));
+export function counts(store: Store, f: TransactionFilterQuery): TransactionCounts {
+  const rows = matching(store, f);
   // What "select all shown" covers, as the server: the cash rows only.
   const cash = rows.filter((x) => x.source === "cash");
-  const visible = store.txns.filter((x) => x.pairId === null);
   return {
     matching: rows.length,
-    total: visible.length,
-    uncategorized: visible.filter((x) => x.source === "cash" && x.categoryId === null).length,
+    total: store.txns.length,
+    uncategorized: store.txns.filter((x) => x.source === "cash" && x.categoryId === null).length,
     selectable: cash.length,
     matchingTotal: money(cash.reduce((s, x) => s + (reporting(store, x) ?? 0), 0)),
     fxMissing: cash.some((x) => reporting(store, x) === null),

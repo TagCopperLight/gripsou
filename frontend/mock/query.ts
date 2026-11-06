@@ -68,7 +68,8 @@ const range = read<RangeParams>({ range: oneOf(RANGES) });
 const transactions = read<TransactionParams>({
   search: text,
   accountId: text,
-  // Any text: the server reads the bucket as a string, then checks it.
+  // Any text: the server reads the bucket as a string, then checks it
+  // (`parseTransactionFilter`).
   bucket: (q, name) => text(q, name) as TypeBucket | undefined,
   from: date,
   to: date,

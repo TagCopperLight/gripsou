@@ -175,6 +175,18 @@ fn constants() -> String {
             serde_json::to_string(&wire::Range::default()).expect("a range serializes")
         ),
     );
+    let buckets: Vec<String> = gripsou_core::repo::budget::transactions::TypeBucket::ALL
+        .iter()
+        .map(|b| format!("{:?}", b.as_str()))
+        .collect();
+    line(
+        "TYPE_BUCKETS",
+        "Every transaction bucket; any other non-blank `bucket` is a 400.",
+        &format!(
+            "[{}] as const satisfies readonly TypeBucket[]",
+            buckets.join(", ")
+        ),
+    );
     let days_back: Vec<String> = wire::Range::ALL
         .iter()
         .map(|r| {

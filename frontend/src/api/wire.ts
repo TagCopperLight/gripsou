@@ -756,6 +756,8 @@ export const TREND_MONTHS_MAX = 24;
 export const RANGES = ["7d", "1mo", "6mo", "1y", "ytd", "max"] as const satisfies readonly Range[];
 /** The range a chart's query means when it names none. */
 export const DEFAULT_RANGE = "6mo" satisfies Range;
+/** Every transaction bucket; any other non-blank `bucket` is a 400. */
+export const TYPE_BUCKETS = ["all", "in", "out", "lots"] as const satisfies readonly TypeBucket[];
 /** How many days before today each range's window starts; null for `ytd`, which starts on January 1st. */
 export const RANGE_DAYS_BACK = { "7d": 7, "1mo": 30, "6mo": 182, "1y": 365, "ytd": null, "max": 4000 } as const satisfies Record<Range, number | null>;
 /** What a new user's preferences read as, shown before anyone signs in. */

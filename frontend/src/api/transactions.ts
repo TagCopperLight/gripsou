@@ -1,10 +1,12 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { api } from "./client";
+import { TRANSACTIONS_LIMIT_DEFAULT } from "./wire";
 import { transactionFilterFields, type TransactionFilterQuery } from "./filter";
 import { keys } from "./keys";
 
-// A page shorter than the page size is the last one.
-const TRANSACTIONS_PAGE_SIZE = 200;
+// A page shorter than the page size is the last one, so it must not exceed
+// the server's `TRANSACTIONS_LIMIT_MAX`.
+const TRANSACTIONS_PAGE_SIZE = TRANSACTIONS_LIMIT_DEFAULT;
 
 export function useTransactions(q: TransactionFilterQuery) {
   return useInfiniteQuery({

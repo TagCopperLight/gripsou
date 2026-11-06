@@ -40,8 +40,14 @@ function pairBreaks(store: Store, rows: TxnRow[], categoryId: string | null | un
 }
 
 export function budgetRoutes(r: Router<Store>): void {
-  r.route("GET /transactions", ({ store, query }) => v.transactions(store, query));
-  r.route("GET /transactions/counts", ({ store, query }) => v.counts(store, query));
+  r.route("GET /transactions", ({ store, query }) => {
+    const f = v.parseTransactionFilter(query);
+    return typeof f === "string" ? fail(400, f) : v.transactions(store, query, f);
+  });
+  r.route("GET /transactions/counts", ({ store, query }) => {
+    const f = v.parseTransactionFilter(query);
+    return typeof f === "string" ? fail(400, f) : v.counts(store, f);
+  });
   r.route("PATCH /transactions/:id", ({ store, params, body: b }) => {
     const row = store.txns.find((x) => x.id === params.id);
     if (!row) return fail(404, "no such transaction");
@@ -65,9 +71,9 @@ export function budgetRoutes(r: Router<Store>): void {
   });
   r.route("POST /transactions/bulk", ({ store, body: b }) => {
     const ids = b.ids;
-    const rows = ids
-      ? store.txns.filter((x) => ids.includes(x.id))
-      : v.matching(store, v.parseTransactionFilter(b.filter ?? {}));
+    const f = ids ? null : v.parseTransactionFilter(b.filter ?? {});
+    if (typeof f === "string") return fail(400, f);
+    const rows = ids ? store.txns.filter((x) => ids.includes(x.id)) : v.matching(store, f!);
     const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
     for (const x of rows) {

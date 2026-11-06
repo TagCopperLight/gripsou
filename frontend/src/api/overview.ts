@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 import { api } from "./client";
 import { keys } from "./keys";
-import type { SummaryParams } from "./wire";
+import { TREND_MONTHS_DEFAULT, type SummaryParams } from "./wire";
 import { currentMonth, periodBounds, type Period } from "../lib/period";
 
 function summaryParams(period: Period): SummaryParams {
@@ -31,7 +31,7 @@ export function useBudgetSummary(period: Period) {
 export function useBudgetTrend(anchor: string) {
   return useQuery({
     queryKey: keys.budgetTrend(anchor),
-    queryFn: ({ signal }) => api("GET /budget/trend", { query: { anchor, months: 12 }, signal }),
+    queryFn: ({ signal }) => api("GET /budget/trend", { query: { anchor, months: TREND_MONTHS_DEFAULT }, signal }),
     placeholderData: keepPreviousData,
   });
 }
