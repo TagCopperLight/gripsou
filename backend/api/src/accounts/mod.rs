@@ -86,7 +86,7 @@ mod tests {
 
     /// The frontend labels every account type the migrations seed, and no
     /// other (the review mock serves its keys as /account-types).
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn every_account_type_has_a_label(pool: PgPool) {
         let en: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -105,7 +105,7 @@ mod tests {
     }
 
     /// Renaming another user's account by id must 404 and leave it untouched.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn update_account_refuses_another_users_account(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -134,7 +134,7 @@ mod tests {
     }
 
     /// The owner's update persists and echoes the new type.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn update_account_persists_for_owner(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
 
@@ -166,7 +166,7 @@ mod tests {
 
     /// An account type that does not exist is refused (404) and writes nothing,
     /// so an account can never point at a type the UI cannot label.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn update_account_rejects_unknown_type(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
 
@@ -195,7 +195,7 @@ mod tests {
     }
 
     /// The accounts list shows only the caller's accounts.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn accounts_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         seed_owned(&pool, "bob@t.local", "bob-txn").await;

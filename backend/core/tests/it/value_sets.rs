@@ -38,7 +38,7 @@ fn spelled(all: &[impl ToString]) -> BTreeSet<String> {
     all.iter().map(ToString::to_string).collect()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn category_kind(pool: PgPool) {
     assert_eq!(
         spelled(CategoryKind::ALL),
@@ -46,7 +46,7 @@ async fn category_kind(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn category_source(pool: PgPool) {
     assert_eq!(
         spelled(CategorySource::ALL),
@@ -54,7 +54,7 @@ async fn category_source(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn ai_run_outcome(pool: PgPool) {
     assert_eq!(
         spelled(AiRunOutcome::ALL),
@@ -62,7 +62,7 @@ async fn ai_run_outcome(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn connection_status(pool: PgPool) {
     assert_eq!(
         spelled(ConnectionStatus::ALL),
@@ -70,7 +70,7 @@ async fn connection_status(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn challenge_kind(pool: PgPool) {
     assert_eq!(
         spelled(ChallengeKind::ALL),
@@ -78,7 +78,7 @@ async fn challenge_kind(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn token_kind(pool: PgPool) {
     assert_eq!(
         spelled(TokenKind::ALL),
@@ -86,17 +86,17 @@ async fn token_kind(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn role(pool: PgPool) {
     assert_eq!(spelled(Role::ALL), allowed(&pool, "users", "role").await);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn lot_side(pool: PgPool) {
     assert_eq!(spelled(LotSide::ALL), allowed(&pool, "lot", "side").await);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn lot_source(pool: PgPool) {
     assert_eq!(
         spelled(LotSource::ALL),
@@ -106,7 +106,7 @@ async fn lot_source(pool: PgPool) {
 
 /// Seed and system keys have no check: the seed function is their list, so
 /// every key the code names must be on a new user's categories.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn seed_and_system_keys(pool: PgPool) {
     let user = gripsou_core::testkit::seed_user(&pool).await;
     let (seeds, systems): (Vec<Option<String>>, Vec<Option<String>>) =
@@ -127,7 +127,7 @@ async fn seed_and_system_keys(pool: PgPool) {
 
 /// `UserPrefs::default()` is what the frontend shows before sign-in; a new
 /// user's row must read back the same.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn new_user_prefs_are_the_defaults(pool: PgPool) {
     let user = gripsou_core::testkit::seed_user(&pool).await;
     let stored = gripsou_core::repo::prefs::get(&pool, user)

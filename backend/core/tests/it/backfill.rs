@@ -93,7 +93,7 @@ async fn backfill_digest(pool: &PgPool, holding_id: Uuid) -> Vec<(NaiveDate, Dec
     .unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -149,7 +149,7 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
 /// A PEA counts every type like any other account. Within its own
 /// history each provider buy is funded by a transfer-in on record, so counting
 /// both walks back to the bank's real balances.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = pea_account("pea-1");
@@ -220,7 +220,7 @@ async fn manual_txn(pool: &PgPool, account_id: Uuid, kind: &str, amount: &str, d
 /// there is: hand-entered deposits bring cash in and lots take it out. After
 /// it starts, the provider's buy row is the cash leg and the lot must not count
 /// a second time.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -275,7 +275,7 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
 
 /// Lots alone, with no hand-entered deposits, leave the pre-history cash flat:
 /// counting only the purchases would inflate cash going back in time.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn lots_alone_do_not_move_cash_before_the_provider_history(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -310,7 +310,7 @@ async fn lots_alone_do_not_move_cash_before_the_provider_history(
 }
 
 /// A non-PEA account counts a transfer the same way.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -335,7 +335,7 @@ async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
 
 /// Gaps *between* sparse snapshots are filled too, each from its own later
 /// anchor — not from today, so drift stays inside one gap.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -363,7 +363,7 @@ async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -413,7 +413,7 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
 /// account's own currency — the line the provider denominates `amount` in.
 /// A second cash holding on the same account, in another currency, has no
 /// evidence and must be held flat at its anchor.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1"); // currency EUR
@@ -499,7 +499,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
 /// per-holding `moves` grouping, and the delete's connection scoping. Also
 /// checks that a pre-existing `holding_backfill` row of another user's
 /// connection survives this user's delete-and-refill.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -568,7 +568,7 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
 /// read-side lateral is an inner join, so a holding contributes nothing before
 /// its first derived row — a per-connection horizon draws each bank popping
 /// into existence on a different day and steps net worth up as it goes.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, shallow_conn) = testkit::seed_user_and_connection(&pool).await;
     let deep_conn = testkit::seed_connection_for(&pool, user_id).await;
@@ -629,7 +629,7 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
 }
 
 /// Another user's deeper history must not widen this user's horizon.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("mine-1");
@@ -673,7 +673,7 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
 /// with a snapshot of 100 on the 10th. The balance only dropped on the 8th, so
 /// days 8 and 9 read 100 and days 5-7 read 130 — keying on `spent_on` instead would
 /// subtract it three days early and report 130 on the 8th and 9th.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -715,7 +715,7 @@ async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::R
 /// later snapshot must land exactly on the earlier one. This is the property
 /// real data can violate by a few euros over a couple of weeks, and the reason
 /// derived cash goes negative.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -774,7 +774,7 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
 /// The tell is a row whose money supposedly moved *before* it was spent, which
 /// cannot happen — 123 of one account's 167 rows do it. When an account shows that
 /// signature, the whole account is walked on the spend date instead.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -834,7 +834,7 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
 /// A balance cannot be negative, and the error is a constant, so each anchored
 /// stretch that dips below zero is lifted by its own shortfall: the shape of
 /// the line is untouched, it just sits at the right height.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -876,7 +876,7 @@ async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow:
 
 /// The lift is per anchored stretch, not per holding: a gap between two sound
 /// snapshots must not be dragged up by a shortfall on some older one.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -918,7 +918,7 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
 /// anchor day, and an INNER join against an axis missing it would silently drop
 /// every row anchored on it. This is the hazard the `holding_snapshot` union in
 /// `axis` exists for.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -953,7 +953,7 @@ async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result
 /// `axis` at all, so the left join in `moves_after` would never see it and
 /// its delta would be silently missing from every suffix sum on the walk-back
 /// side of it — not merely cancelled out, but dropped.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -998,7 +998,7 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
 /// `Σ(> as_of) − Σ(> anchor_day)`, because it is after both bounds. It must
 /// therefore leave every derived day exactly as it was — the differential is
 /// the assertion, so this holds without knowing the absolute values.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let today = chrono::Utc::now().date_naive();
     let anchor = today - chrono::Duration::days(2);
@@ -1057,7 +1057,7 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
 /// A movement landing exactly on the anchor day is INSIDE the walk's window
 /// (`day > as_of and day <= anchor_day`), and one landing exactly on the day
 /// being computed is OUTSIDE it. Both boundaries must survive the rewrite.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -1104,7 +1104,7 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
 /// the sale itself so the walk can reconstruct the pre-sale quantity: 40
 /// units bought and held from 07-20, revalued at the 08-10 snapshot, sold
 /// whole on 08-20.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -1185,7 +1185,7 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
 /// verified against unmodified `src/`. 2026-08-19 is the sole derived day, so
 /// it is checked twice: once via `quantity_on` and once via the digest, both
 /// of which must show the same flat 750.)
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -1206,7 +1206,7 @@ async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Re
 
 /// The first and last day of the derived range must both exist. An off-by-one
 /// in the day axis is the classic way a windowed rewrite goes wrong.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");

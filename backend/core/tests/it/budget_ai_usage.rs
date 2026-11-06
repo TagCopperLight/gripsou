@@ -43,7 +43,7 @@ fn d(s: &str) -> Decimal {
     Decimal::from_str(s).unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn prices_round_trip_and_default_to_empty(pool: PgPool) -> anyhow::Result<()> {
     assert!(budget_ai_prices(&pool).await?.is_empty());
 
@@ -72,7 +72,7 @@ async fn prices_round_trip_and_default_to_empty(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn usage_sums_every_user_per_model(pool: PgPool) -> anyhow::Result<()> {
     let (alice, _) = seed_user_and_connection(&pool).await;
     let (bob, _) = seed_user_and_connection(&pool).await;
@@ -106,7 +106,7 @@ async fn usage_sums_every_user_per_model(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn report_prices_known_models_only(pool: PgPool) -> anyhow::Result<()> {
     let (user, _) = seed_user_and_connection(&pool).await;
     insert_run(
@@ -171,7 +171,7 @@ async fn report_prices_known_models_only(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_run_with_one_unreported_call_counts_as_without_usage(
     pool: PgPool,
 ) -> anyhow::Result<()> {

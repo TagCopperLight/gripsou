@@ -130,7 +130,7 @@ mod tests {
         .map(|Json(user)| user)
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn update_prefs_saves_only_the_settings_sent(pool: PgPool) {
         let user_id = seed_user(&pool, "a@t.local").await;
         let updated = patch_prefs(
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(after.time_zone, "America/Los_Angeles");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn a_new_currency_fetches_its_rate_before_saving(pool: PgPool) {
         let user_id = seed_user(&pool, "a@t.local").await;
         patch_prefs(&pool, user_id, json!({ "currency": "USD" }))
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(rates, 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn a_currency_with_no_rate_is_refused_and_nothing_saved(pool: PgPool) {
         let user_id = seed_user(&pool, "a@t.local").await;
         let err = patch_prefs_with_rate(
@@ -196,7 +196,7 @@ mod tests {
         assert_eq!(prefs_of(&pool, user_id).await.currency, "EUR");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn two_settings_saved_at_once_both_stick(pool: PgPool) {
         let user_id = seed_user(&pool, "a@t.local").await;
         let (a, b) = tokio::join!(
@@ -212,7 +212,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn update_prefs_rejects_bad_values_without_writing(pool: PgPool) {
         let user_id = seed_user(&pool, "tz@example.com").await;
         let before = prefs_of(&pool, user_id).await;
@@ -243,7 +243,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn a_null_removes_the_avatar(pool: PgPool) {
         let user_id = seed_user(&pool, "av@example.com").await;
         patch_prefs(

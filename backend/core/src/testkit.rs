@@ -15,6 +15,10 @@ use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transact
 use crate::repo::lot::{LotSide, LotSource};
 use crate::repo::user::Role;
 
+/// The migrations of every `#[sqlx::test]`: one copy, where a
+/// `migrations = "..."` argument embeds them all in each test.
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../migrations");
+
 /// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
     EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()

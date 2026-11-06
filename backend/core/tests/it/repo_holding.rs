@@ -5,7 +5,7 @@ use gripsou_core::testkit::{cash_holding, checking_account, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn upserts_holding_and_updates_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");

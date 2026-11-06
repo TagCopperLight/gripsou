@@ -228,7 +228,7 @@ async fn member_token(pool: &sqlx::PgPool) -> String {
 
 /// A chart range the server doesn't know is refused like any other filter,
 /// never read as the widest window.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_unknown_range_is_a_400(pool: sqlx::PgPool) {
     let token = member_token(&pool).await;
     let app = app(pool, &std::env::temp_dir());
@@ -252,7 +252,7 @@ async fn an_unknown_range_is_a_400(pool: sqlx::PgPool) {
 
 /// A body that isn't JSON, or is JSON of the wrong shape (an unknown lot
 /// type or category kind), is a 400 and writes nothing.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_malformed_body_is_a_400(pool: sqlx::PgPool) {
     let token = member_token(&pool).await;
     let app = app(pool.clone(), &std::env::temp_dir());

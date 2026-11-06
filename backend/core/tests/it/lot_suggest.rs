@@ -91,7 +91,7 @@ async fn bought_23(pool: &PgPool) -> Fx {
     fx
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_rise_with_one_matching_buy_is_suggested(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
@@ -105,7 +105,7 @@ async fn a_rise_with_one_matching_buy_is_suggested(pool: PgPool) {
     assert_eq!(got[0].fee, Decimal::ZERO);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_amount_six_percent_off_is_not_a_candidate(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // 23 × 6.36 = 146.28; +6 % ≈ 155.06.
@@ -114,7 +114,7 @@ async fn an_amount_six_percent_off_is_not_a_candidate(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_transaction_outside_the_window_is_not_a_candidate(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // Window is [Oct 5, Oct 11].
@@ -123,7 +123,7 @@ async fn a_transaction_outside_the_window_is_not_a_candidate(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn the_wording_and_the_sign_do_not_matter(pool: PgPool) {
     let fx = bought_23(&pool).await;
     // A mirrored portfolio-account row: positive, typed as a sale.
@@ -134,7 +134,7 @@ async fn the_wording_and_the_sign_do_not_matter(pool: PgPool) {
     assert_eq!(got[0].date, oct(7));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn two_matching_transactions_suggest_nothing(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
@@ -143,7 +143,7 @@ async fn two_matching_transactions_suggest_nothing(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_lot_of_the_same_side_in_the_window_covers_the_jump(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
@@ -153,7 +153,7 @@ async fn a_lot_of_the_same_side_in_the_window_covers_the_jump(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_new_holding_on_a_watched_account_rises_from_zero(pool: PgPool) {
     let fx = fixture(&pool, "23").await;
     // Another holding proves the account was synced on Oct 4.
@@ -167,7 +167,7 @@ async fn a_new_holding_on_a_watched_account_rises_from_zero(pool: PgPool) {
     assert_eq!(got[0].quantity, dec("23"));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_holding_on_a_freshly_connected_account_gets_nothing(pool: PgPool) {
     let fx = fixture(&pool, "23").await;
     snap(&pool, fx.holding, 8, "23").await;
@@ -176,7 +176,7 @@ async fn a_holding_on_a_freshly_connected_account_gets_nothing(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_sale_down_to_zero_is_suggested(pool: PgPool) {
     let fx = fixture(&pool, "0").await;
     lot(
@@ -198,7 +198,7 @@ async fn a_sale_down_to_zero_is_suggested(pool: PgPool) {
     assert_eq!(got[0].unit_price, dec("6.36"));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_fully_explained_holding_gets_nothing(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
@@ -215,7 +215,7 @@ async fn a_fully_explained_holding_gets_nothing(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn another_users_holding_is_not_found(pool: PgPool) {
     let fx = bought_23(&pool).await;
     let (stranger, _) = testkit::seed_user_and_connection(&pool).await;
@@ -225,7 +225,7 @@ async fn another_users_holding_is_not_found(pool: PgPool) {
     ));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
     // ETF1's purchase is already recorded (a lot in its window).
     let fx = bought_23(&pool).await;
@@ -263,7 +263,7 @@ async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
     assert!(got.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_long_sync_gap_widens_the_window_backwards(pool: PgPool) {
     let fx = fixture(&pool, "83").await;
     lot(

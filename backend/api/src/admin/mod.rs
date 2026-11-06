@@ -355,7 +355,7 @@ mod tests {
 
     /// Every admin route refuses a member before the handler runs (no body
     /// is sent, so a handler would answer 4xx).
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn every_admin_route_refuses_a_member(pool: PgPool) {
         use axum::body::Body;
         use axum::http::Request;
@@ -406,7 +406,7 @@ mod tests {
         assert!(json.contains(r#""value":"id-1""#), "{json}");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn an_api_key_is_trimmed_removed_by_a_blank_and_refused_when_unknown(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let set = |provider: &str, field: &str, value: &str| {
@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_provider_toggles_enabled_idempotently(pool: PgPool) {
         let admin = seed_admin(&pool, "admin@t.local").await;
         let principal = || AdminUser { user_id: admin };
@@ -488,7 +488,7 @@ mod tests {
         assert!(list.iter().find(|p| p.key == "powens").unwrap().enabled);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
         let admin = seed_admin(&pool, "admin@t.local").await;
         // 'yahoo' is a price provider, not an account provider: not found.
@@ -505,7 +505,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn create_invite_writes_invite_row(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let who = principal_for(&pool, "a@t.local", PASSWORD).await;
@@ -538,7 +538,7 @@ mod tests {
         assert_ne!(stored_token, resp.1.0.token, "raw token must not be stored");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn create_reset_link_stores_target_email(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "target@t.local").await;
@@ -573,7 +573,7 @@ mod tests {
         assert_ne!(stored_token, resp.1.0.token, "raw token must not be stored");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn create_reset_link_needs_a_reauth_and_another_user(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "target@t.local").await;
@@ -604,7 +604,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn delete_user_rejects_mismatched_email(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "target@t.local").await;
@@ -631,7 +631,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_role_promotes_and_demotes_another_user(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "b@t.local").await;
@@ -660,7 +660,7 @@ mod tests {
         assert_eq!(role_of().await, Role::User);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_role_refuses_your_own(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         seed_admin(&pool, "b@t.local").await;
@@ -678,7 +678,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn delete_user_refuses_last_admin(pool: PgPool) {
         let admin = seed_admin(&pool, "boss@t.local").await;
         let who = principal_for(&pool, "boss@t.local", PASSWORD).await;
@@ -698,7 +698,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::CONFLICT);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn delete_user_removes_target(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "target@t.local").await;
@@ -726,7 +726,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let err = budget_ai_models(
@@ -740,7 +740,7 @@ mod tests {
     }
 
     /// An admin's budget AI choice persists (trimmed) and reads back as written.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
@@ -771,7 +771,7 @@ mod tests {
 
     /// Blank strings switch the AI off (stored as null), rather than storing a
     /// provider named "" that the scheduler would then try to look up.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
@@ -797,7 +797,7 @@ mod tests {
 
     /// A provider key outside the registry is a 400 and leaves the previous
     /// choice in place, so a typo cannot silently disable categorisation.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let key = registry::CATEGORIZERS[0].about.key;
@@ -832,7 +832,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn prices_then_usage(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         for (tin, tout, complete) in [(9_495_459_i64, 4_484_808_i64, true), (0, 0, false)] {
@@ -895,7 +895,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn usage_with_no_runs_totals_zero(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let v = serde_json::to_value(
@@ -911,7 +911,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn bad_prices_are_a_400_and_change_nothing(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         for (i, o) in [

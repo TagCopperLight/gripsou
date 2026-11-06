@@ -68,7 +68,7 @@ async fn two_accounts(pool: &PgPool, currency_b: &str) -> anyhow::Result<(Uuid, 
     Ok((user_id, a, b))
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -102,7 +102,7 @@ async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
 
 /// Two equally-near candidates: pair neither. A wrong pair silently deletes
 /// real spending from every chart; an unpaired row costs one correction.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -138,7 +138,7 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
 /// Two identical transfers sent together (same accounts, amount and instant on
 /// each side) tie with each other, but the tie is harmless: whichever way they
 /// pair, the result is the same. So they pair one-to-one instead of not at all.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -174,7 +174,7 @@ async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()
 /// the duplicates: a lone -10 transfer to a friend two days before two
 /// identical +10 top-ups is not their counterpart. Only a group of k identical rows pairs
 /// with a group of k identical rows.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -198,7 +198,7 @@ async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyh
 /// arriving elsewhere is money leaving the user (a shop, an ATM), and a
 /// deposit equal to a transfer leaving is money arriving from someone else
 /// ("From Camille R") — neither is a movement between the user's accounts.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -233,7 +233,7 @@ async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<(
 /// Two transfers out on different days and two identical transfers in: all
 /// four are between the same two accounts, so whichever pairs with which the
 /// result is the same, and both pairs form.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -256,7 +256,7 @@ async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> a
 
 /// Same amount and instant is not enough: counterparts on two different
 /// accounts are a real ambiguity, so the tie still pairs nothing.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let conn_id: Uuid = sqlx::query_scalar("select connection_id from account where id = $1")
@@ -277,7 +277,7 @@ async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> an
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -297,7 +297,7 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
 }
 
 /// The window's edge is inclusive: five days apart still pairs.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -318,7 +318,7 @@ async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> 
 
 /// Equal |amount| is meaningless across currencies, so a cross-currency
 /// transfer never auto-pairs. Known limit, stated rather than papered over.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "USD").await?;
     let now = Utc::now().date_naive();
@@ -329,7 +329,7 @@ async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, _b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -344,7 +344,7 @@ async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result
 /// must never be filed as an internal transfer: it is a coincidence of
 /// amount, not a movement between the user's own accounts, and a PEA `buy`
 /// hidden this way would be uncorrectable through the transactions list.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -374,7 +374,7 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
 /// pairing outranks it, but never a category the user chose. This would fail
 /// (leaving the AI row unpaired) if the candidate filter reverted to
 /// `category_source is null` only.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -425,7 +425,7 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
 
 /// Precedence: a row the user filed as something that counts — an expense
 /// here — is never touched by the pass.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -468,7 +468,7 @@ async fn file_as(pool: &PgPool, id: Uuid, category: Uuid, source: &str) -> anyho
 /// A row the user filed in a neutral category already counts toward nothing,
 /// so pairing it hides nothing: it pairs, and keeps the category they chose.
 /// The other half, which nobody filed, becomes a pairing-set transfer.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -496,7 +496,7 @@ async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
 /// A real transfer the provider labels a deposit (or a card payment) pairs
 /// once it is filed in a neutral category; unfiled, it never does — see
 /// `card_payments_and_deposits_never_pair`.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -522,7 +522,7 @@ async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Res
 /// The cash leg of a buy or sell never pairs, even filed as Investments: the
 /// lot is its record, and a broker mirrors it across its cash and portfolio
 /// accounts.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -539,7 +539,7 @@ async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Resul
 /// An AI guess the user accepted in review is their choice, not a guess any
 /// more: pairing leaves it exactly as accepted, even when a perfect
 /// counterpart exists.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -574,7 +574,7 @@ async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> 
 /// otherwise keep the internal-transfer category with nothing to net against,
 /// and count as money set aside. It goes back to uncategorised, and the next
 /// pass may pair it again.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let (b, day): (Uuid, NaiveDate) =
@@ -606,7 +606,7 @@ async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::
 /// A pair the user breaks by recategorising one half leaves the other half
 /// flagged as an orphaned transfer. It is still a transfer nobody has matched,
 /// so a later pass may pair it with a better counterpart.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
@@ -637,7 +637,7 @@ async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
 /// Round 1: X's nearest is Y, but Y's nearest is W (closer), so only W-Y is
 /// mutual and pairs; X and Z are both left over. Round 2, with Y and W gone
 /// from the pool, X and Z are now each other's only (and so mutual) option.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -711,7 +711,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
 /// This is the case the mutual check at the end of `pair_one_round` exists
 /// for — deleting that check (pairing every entry in `out_choice`
 /// unconditionally) would pair X here, which this test catches.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -768,7 +768,7 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
 /// an arbitrary or farthest one. Flipping the `gap < best_gap` comparison to
 /// prefer the farther candidate would pick the +5 days inflow instead and this
 /// test would fail.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -851,7 +851,7 @@ async fn partner(pool: &PgPool, id: Uuid) -> anyhow::Result<Option<Uuid>> {
 /// depot and current-account inflows), so nearest-neighbour matching alone
 /// pairs nothing. But the depot can't pay itself, so there is only one way
 /// to explain all four rows — and that one is taken.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
     let [lo, di, dout, ci] = chain_at(
@@ -873,7 +873,7 @@ async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<
 /// One extra same-amount inflow elsewhere means some row in the cluster is
 /// not a movement between the user's accounts, and nothing says which — so
 /// nothing pairs.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
     let now = Utc::now().date_naive();
@@ -893,7 +893,7 @@ async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<
 
 /// Two identical chains the same day: which Livret row goes with which depot
 /// row makes no difference, so both chains pair.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
     let now = Utc::now().date_naive();
@@ -907,7 +907,7 @@ async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<
 /// Chains two days apart fall inside one three-day window, where a Livret
 /// row could as well go with the other day's depot row. Looking at each day
 /// first keeps each chain to itself.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
     let now = Utc::now().date_naive();
@@ -984,7 +984,7 @@ async fn tie_the_pair(pool: &PgPool, out: Uuid, inn: Uuid) -> anyhow::Result<()>
 
 /// A pair a later run no longer finds is undone, and both halves go back to
 /// uncategorised, as if never paired.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     tie_the_pair(&pool, out, inn).await?;
@@ -996,7 +996,7 @@ async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<(
 }
 
 /// Undoing a pair never touches a category the user chose.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let savings = by_key(&pool, user_id, "savings").await?;
@@ -1018,7 +1018,7 @@ async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow:
 
 /// The run after a correction sees it: once the row that was tying is filed
 /// as spending, the pair it blocked forms.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     tie_the_pair(&pool, out, inn).await?;
@@ -1036,7 +1036,7 @@ async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn categorising_one_half_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
@@ -1056,7 +1056,7 @@ async fn categorising_one_half_unlinks_both(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let before = row(&pool, inn).await?;
@@ -1073,7 +1073,7 @@ async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
 
 /// Clearing is a user category write too: the same dissolution applies, so a
 /// cleared row never keeps a stale link.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
 
@@ -1085,7 +1085,7 @@ async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result
 }
 
 /// Another user's transaction is not this user's to unlink.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, out, inn) = seeded_pair(&pool).await?;
     let (stranger, _c) = seed_user_and_connection(&pool).await;
@@ -1110,7 +1110,7 @@ async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result
 
 /// Both halves in one bulk write: each dissolves the other, and neither is
 /// left half-linked by the order the UPDATE happened to visit them in.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_bulk_write_covering_both_halves_unlinks_cleanly(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
@@ -1125,7 +1125,7 @@ async fn a_bulk_write_covering_both_halves_unlinks_cleanly(pool: PgPool) -> anyh
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn applying_to_a_description_unlinks_the_pairs_it_touches(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -1159,7 +1159,7 @@ fn category(id: Uuid) -> BulkChanges<'static> {
     }
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn counts_the_pairs_a_write_would_break(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
@@ -1176,7 +1176,7 @@ async fn counts_the_pairs_a_write_would_break(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn another_users_pairs_are_not_counted(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, out, _inn) = seeded_pair(&pool).await?;
     let (stranger, _c) = seed_user_and_connection(&pool).await;

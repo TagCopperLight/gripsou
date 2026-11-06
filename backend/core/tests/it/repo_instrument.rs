@@ -3,7 +3,7 @@ use gripsou_core::error::CoreError;
 use gripsou_core::repo::instrument::resolve_instrument;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn resolves_cash_idempotently(pool: PgPool) -> anyhow::Result<()> {
     let eur = InstrumentRef {
         kind: "cash".into(),
@@ -22,7 +22,7 @@ async fn resolves_cash_idempotently(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn resolves_equity_by_isin(pool: PgPool) -> anyhow::Result<()> {
     let aapl = InstrumentRef {
         kind: "equity".into(),
@@ -38,7 +38,7 @@ async fn resolves_equity_by_isin(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn rejects_unidentifiable_security(pool: PgPool) -> anyhow::Result<()> {
     let bad = InstrumentRef {
         kind: "equity".into(),
@@ -53,7 +53,7 @@ async fn rejects_unidentifiable_security(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn resolves_symbol_only_idempotently(pool: PgPool) -> anyhow::Result<()> {
     // Non-cash, no ISIN, symbol present -> the (kind, symbol) branch.
     let etf = InstrumentRef {
@@ -70,7 +70,7 @@ async fn resolves_symbol_only_idempotently(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn distinct_currencies_get_distinct_cash_instruments(pool: PgPool) -> anyhow::Result<()> {
     let eur = InstrumentRef {
         kind: "cash".into(),

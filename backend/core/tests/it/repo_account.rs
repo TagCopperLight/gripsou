@@ -4,7 +4,7 @@ use gripsou_core::testkit::{self, checking_account, seed_connection};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn upserts_account_idempotently(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -22,7 +22,7 @@ async fn upserts_account_idempotently(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn upsert_preserves_user_renamed_name(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -50,7 +50,7 @@ async fn upsert_preserves_user_renamed_name(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn upsert_updates_provider_fields_on_conflict(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut acct = checking_account("acct-1");
@@ -73,7 +73,7 @@ async fn upsert_updates_provider_fields_on_conflict(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn upsert_preserves_user_chosen_type_key(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut acct = checking_account("acct-1");
@@ -102,7 +102,7 @@ async fn upsert_preserves_user_chosen_type_key(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -128,7 +128,7 @@ async fn update_persists_user_edits(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn update_rejects_other_users_account(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await?;

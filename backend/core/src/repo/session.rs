@@ -169,7 +169,7 @@ mod tests {
         expire(pool, "session", "id = $1", id).await;
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn create_then_find_by_hash(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let hash = vec![1u8, 2, 3, 4];
@@ -193,7 +193,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn expired_session_is_not_found(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let hash = vec![5u8, 6];
@@ -205,7 +205,7 @@ mod tests {
         assert!(find_valid_by_hash(&pool, &hash).await.unwrap().is_none());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn touch_extends_remembered_only(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let soon = |id: Uuid| {
@@ -235,7 +235,7 @@ mod tests {
         assert!(after2.expires_at < Utc::now() + Duration::minutes(6));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn delete_is_user_scoped(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let other = seed_user(&pool).await;
@@ -252,7 +252,7 @@ mod tests {
         assert!(find_valid_by_hash(&pool, &[1u8]).await.unwrap().is_none());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn delete_expired_removes_only_expired(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let old = create(&pool, user_id, &[1u8], None, None, false)

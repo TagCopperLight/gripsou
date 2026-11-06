@@ -43,7 +43,7 @@ async fn set_reporting_currency(pool: &PgPool, user_id: Uuid, currency: &str) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -81,7 +81,7 @@ async fn sums_one_category_over_a_period(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -104,7 +104,7 @@ async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyh
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyhow::Result<()> {
     // USD was worth 0.50 EUR in March and 0.90 EUR in September. A $100 spend
     // in March is 50 EUR, and must stay 50 EUR when read in September.
@@ -136,7 +136,7 @@ async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     // A cash instrument with no price at all: the rate is unknown, never 1.
     seed_cash_instrument(&pool, "CNY").await;
@@ -161,7 +161,7 @@ async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -186,7 +186,7 @@ async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
     // Investments is a neutral category: a name, not a side. It counts nowhere.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -218,7 +218,7 @@ async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
 /// A pair the user broke by recategorising the other half leaves this half
 /// filed by the pairing pass with no partner. It moved money with nothing on
 /// the other side, so it counts as uncategorised by its sign, not as neutral.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -253,7 +253,7 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Result<()> {
     // A buy/sell is the cash leg of an investment, never spending or income.
     // TR books its trades on a checking account, so the rule cannot be
@@ -345,7 +345,7 @@ async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Resu
 /// A paired checking -> PEA transfer must net
 /// to zero, not leave the checking half standing as an internal-transfer
 /// outflow.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -386,7 +386,7 @@ async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Re
 
 /// A pair whose halves land in different months must vanish from both, not
 /// leave -x in one month and +x in the other.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -423,7 +423,7 @@ async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn the_window_bounds_are_inclusive(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -450,7 +450,7 @@ async fn the_window_bounds_are_inclusive(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn another_users_rows_are_invisible(pool: PgPool) -> anyhow::Result<()> {
     let (mine, my_conn) = seed_user_and_connection(&pool).await;
     let (_theirs, their_conn) = seed_user_and_connection(&pool).await;
@@ -474,7 +474,7 @@ async fn another_users_rows_are_invisible(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyhow::Result<()> {
     // Reporting in GBP: 1 GBP = 1.25 EUR in March, 1.00 EUR in April. A 100 EUR
     // spend must become a different GBP figure depending on which day it fell
@@ -515,7 +515,7 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -544,7 +544,7 @@ async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
 
 /// The Overview and the Transactions list it deep-links into leave out the
 /// same rows when the reader's currency has no rate on their day.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -597,7 +597,7 @@ async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -663,7 +663,7 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::Result<()> {
     // On payday, everything may still be uncategorised (all of it, without
     // the AI). A salary
@@ -721,7 +721,7 @@ async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
 
 /// The user's catch-all is folded into the trend's Other series by what it
 /// was seeded as, so renaming it does not put two "Other"s in the legend.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_renamed_catch_all_still_folds_into_other(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::budget::overview::{
         calc::{Month, Slice},

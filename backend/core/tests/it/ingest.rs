@@ -25,7 +25,7 @@ fn sample_sync() -> SyncResult {
     }
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = sample_sync();
@@ -62,7 +62,7 @@ async fn ingest_then_reingest_is_idempotent(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -86,7 +86,7 @@ async fn cash_instrument_is_shared_across_accounts(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -127,7 +127,7 @@ async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
 
@@ -200,7 +200,7 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -219,7 +219,7 @@ async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::Result<()> {
     // `instrument` is global; the same EUR cash row must serve holdings under
     // two different connections.
@@ -250,7 +250,7 @@ async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -278,7 +278,7 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
 /// name a liability or deleted account that the mapper skipped on purpose.
 /// Failing on it would fail every later sync too, since the row never goes
 /// away.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -319,7 +319,7 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
 
 /// A dangling *holding* reference stays fatal: `map_sync` guarantees every
 /// holding belongs to an emitted account, so a violation is a real bug.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -338,7 +338,7 @@ async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow
 
 /// The backfill runs as part of ingest, so a sync that reports a balance and a
 /// history of transactions leaves a usable series behind it.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let day = chrono::Utc::now().date_naive() - chrono::Duration::days(3);
@@ -365,7 +365,7 @@ async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn health_observations_persist_without_replacing_native_ids(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -430,7 +430,7 @@ async fn cash_snapshots(pool: &PgPool) -> Vec<(chrono::NaiveDate, Decimal)> {
 
 /// A provider that last read the bank days ago returns that day's balances:
 /// they are stamped on that day, and a holding closed by that sync closes then.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn snapshots_are_dated_when_the_bank_was_last_read(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let today = user_today(&pool, conn_id).await;
@@ -481,7 +481,7 @@ async fn snapshots_are_dated_when_the_bank_was_last_read(pool: PgPool) -> anyhow
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_read_day_in_the_future_is_today(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let today = user_today(&pool, conn_id).await;
@@ -504,7 +504,7 @@ async fn a_read_day_in_the_future_is_today(pool: PgPool) -> anyhow::Result<()> {
 /// #58: the bank can't be reached for a few days and the provider keeps
 /// returning its last balance. Nothing false is saved, and once it's repaired
 /// the stretch is rebuilt from the transactions it catches up on.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let today = user_today(&pool, conn_id).await;

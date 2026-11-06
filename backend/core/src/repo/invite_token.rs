@@ -177,7 +177,7 @@ mod tests {
         crate::testkit::seed_user_as(pool, "a@t.local", Role::Admin, "x").await
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn find_valid_returns_unused_unexpired(pool: PgPool) {
         let admin = seed_admin(&pool).await;
         create(&pool, TokenKind::Reset, Some("u@t.local"), admin, "tok-ok")
@@ -201,7 +201,7 @@ mod tests {
         assert!(find_valid(&pool, "tok-ok").await.unwrap().is_none());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn redeem_invite_expired_token_is_none(pool: PgPool) {
         let admin = seed_admin(&pool).await;
         create(&pool, TokenKind::Invite, None, admin, "inv-3")
@@ -216,7 +216,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "crate::testkit::MIGRATOR")]
     async fn redeem_reset_clears_second_factors_of_that_user_only(pool: PgPool) {
         let admin = seed_admin(&pool).await; // a@t.local
         let other = crate::testkit::seed_user_email(&pool, "b@t.local").await;

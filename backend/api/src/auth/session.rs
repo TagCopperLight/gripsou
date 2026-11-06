@@ -154,7 +154,7 @@ mod tests {
         (raw, s)
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn extractor_accepts_valid_token(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let (raw, session) = seed_session(&pool, user_id).await;
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(auth_user.session_id, session.id);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn extractor_rejects_missing_header(pool: PgPool) {
         let mut parts = make_parts(None);
         let err = AuthUser::from_request_parts(&mut parts, &pool)
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn extractor_rejects_garbage_token(pool: PgPool) {
         let mut parts = make_parts(Some("not-a-real-token-xyzzy"));
         let err = AuthUser::from_request_parts(&mut parts, &pool)
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn extractor_rejects_expired_token(pool: PgPool) {
         let user_id = seed_user(&pool).await;
         let (raw, session) = seed_session(&pool, user_id).await;
@@ -201,7 +201,7 @@ mod tests {
 
     /// A database outage is a server error, not "you are logged out": a 401
     /// would make the SPA drop the session.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn session_lookup_failure_is_a_server_error(pool: PgPool) {
         pool.close().await;
         let mut parts = make_parts(Some("whatever"));

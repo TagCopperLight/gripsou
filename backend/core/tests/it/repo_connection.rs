@@ -5,7 +5,7 @@ use gripsou_core::repo::connection::{
 use gripsou_core::testkit::{self, seed_connection};
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
@@ -33,7 +33,7 @@ async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
 
@@ -61,7 +61,7 @@ async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn insert_pending_creates_row(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -76,7 +76,7 @@ async fn insert_pending_creates_row(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -115,7 +115,7 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn finish_connect_refuses_an_active_connection(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
@@ -155,7 +155,7 @@ async fn finish_connect_refuses_an_active_connection(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -184,7 +184,7 @@ async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()>
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
     let conn = testkit::seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
@@ -207,7 +207,7 @@ async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -233,7 +233,7 @@ async fn awaiting_status_and_sync_requested_at_are_persistable(pool: PgPool) -> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
     let user_id = testkit::seed_user(&pool).await;
     let fresh = insert_pending(&pool, user_id, "powens", "fresh")
@@ -257,7 +257,7 @@ async fn awaiting_timeout_selects_only_stale(pool: PgPool) {
     assert!(ids.contains(&stale) && !ids.contains(&fresh));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
     let user_id = testkit::seed_user(&pool).await;
     let fresh = insert_pending(&pool, user_id, "powens", "fresh")
@@ -301,7 +301,7 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
 
 /// The boot sweep: every claim predates the process, so all are released, and
 /// they land in 'error' so the user sees the sync did not finish.
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn clear_syncing_releases_every_claim(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let syncing = insert_pending(&pool, user_id, "powens", "syncing").await?;

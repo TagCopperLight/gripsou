@@ -59,7 +59,7 @@ async fn seed(pool: &PgPool, qty: &str) -> (Uuid, Uuid, Uuid) {
     (user_id, account_id, holding_id)
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn lots_become_signed_flows_with_fees(pool: PgPool) {
     let (user_id, account_id, holding_id) = seed(&pool, "1").await;
     add_lot(&pool, holding_id, "buy", "2025-01-10", "2", "100", "1").await;
@@ -99,7 +99,7 @@ async fn lots_become_signed_flows_with_fees(pool: PgPool) {
     assert!(p[0].complete, "2 bought − 1 sold = 1 held");
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn dividends_are_account_flows(pool: PgPool) {
     let (user_id, account_id, holding_id) = seed(&pool, "1").await;
     add_lot(&pool, holding_id, "buy", "2025-01-10", "1", "100", "0").await;
@@ -116,7 +116,7 @@ async fn dividends_are_account_flows(pool: PgPool) {
         && !f.buy));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn unexplained_quantity_is_incomplete(pool: PgPool) {
     let (user_id, _, holding_id) = seed(&pool, "5").await;
     add_lot(&pool, holding_id, "buy", "2025-01-10", "2", "100", "0").await;
@@ -129,7 +129,7 @@ async fn unexplained_quantity_is_incomplete(pool: PgPool) {
     assert!(!inputs.positions[0].complete);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn sold_out_holdings_still_count(pool: PgPool) {
     let (user_id, _, holding_id) = seed(&pool, "0").await;
     add_lot(&pool, holding_id, "buy", "2025-01-10", "2", "100", "0").await;
@@ -146,7 +146,7 @@ async fn sold_out_holdings_still_count(pool: PgPool) {
     assert_eq!(inputs.flows.len(), 2);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn other_users_data_is_not_loaded(pool: PgPool) {
     let (user_a, _, holding_a) = seed(&pool, "1").await;
     let (_, account_b, holding_b) = seed(&pool, "1").await;
@@ -163,7 +163,7 @@ async fn other_users_data_is_not_loaded(pool: PgPool) {
     assert_eq!(inputs.flows[0].amount, Some(dec("-100")));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
 async fn a_missing_reporting_rate_leaves_the_amount_unknown(pool: PgPool) {
     let (user_id, _account_id, holding_id) = seed(&pool, "1").await;
     sqlx::query("update users set currency = 'USD' where id = $1")

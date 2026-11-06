@@ -126,7 +126,7 @@ mod tests {
             .is_some()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_invite_endpoint_creates_account(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
@@ -141,7 +141,7 @@ mod tests {
         assert!(!still_valid(&pool, &raw).await);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeemed_account_needs_welcome_until_finished(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
@@ -170,7 +170,7 @@ mod tests {
         assert!(me_resp.0.welcome_done);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_invite_endpoint_conflicts_on_existing_email(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await; // creates a@t.local
         let raw = invite(&pool, admin).await;
@@ -183,7 +183,7 @@ mod tests {
         assert!(still_valid(&pool, &raw).await);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn token_info_404_for_unknown(pool: PgPool) {
         let err = token_info(State(pool.clone()), Path("does-not-exist".to_string()))
             .await
@@ -219,7 +219,7 @@ mod tests {
 
     /// A valid reset link sets the new password, kills the old one, signs out
     /// every old session and logs the user in.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
@@ -244,7 +244,7 @@ mod tests {
 
     /// A reset link works once: replaying it is a 404 and cannot overwrite the
     /// password chosen with it.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_reset_token_is_single_use(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let raw = mint_reset(&pool, "t@t.local").await;
@@ -262,7 +262,7 @@ mod tests {
     }
 
     /// An unknown reset token is a 404 and changes no password.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let err = call_redeem_reset(&pool, "never-minted", "new-password")
@@ -273,7 +273,7 @@ mod tests {
     }
 
     /// An expired reset link is a 404 and changes no password.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_reset_expired_token_is_404(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let raw = mint_reset(&pool, "t@t.local").await;
@@ -292,7 +292,7 @@ mod tests {
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn reset_refuses_a_short_password(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-password", Role::User).await;
         let raw = mint_reset(&pool, "t@t.local").await;
@@ -302,7 +302,7 @@ mod tests {
         assert!(call_redeem_reset(&pool, &raw, "12345678").await.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn invite_refuses_a_short_password(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
@@ -314,7 +314,7 @@ mod tests {
 
     /// An empty new password is a 400 and does not burn the link, so the user
     /// can retry with a real one.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrator = "gripsou_core::testkit::MIGRATOR")]
     async fn redeem_reset_rejects_empty_password(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let raw = mint_reset(&pool, "t@t.local").await;
