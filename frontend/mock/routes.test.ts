@@ -1,53 +1,39 @@
 import { describe, expect, it } from "vitest";
+import { ROUTES } from "../src/api/routes.ts";
+import type { Account, Holding } from "../src/api/wire.ts";
+import { NOT_MOCKED } from "./contract.ts";
 import { CW8 } from "./data/base.ts";
 import { router } from "./routes/index.ts";
 import { createStore } from "./store.ts";
 
-// One concrete request per GET the app makes (`grep getJson src`).
-const GETS = [
-  "/auth/me",
-  "/auth/sessions",
-  "/auth/mfa/status",
-  "/auth/token/abc",
-  "/dashboard/net-worth?range=6mo",
-  "/accounts",
-  "/accounts/series?range=1y",
-  "/account-types",
-  "/connections",
-  "/holdings",
-  "/investments/returns",
-  `/holdings/${CW8}/prices?range=1y`,
-  `/holdings/${CW8}/lots`,
-  `/holdings/${CW8}/lots/suggestions`,
-  "/transactions?limit=200&offset=0",
-  "/transactions?limit=1",
-  "/transactions/counts",
-  "/budget/categories",
-  "/budget/tags",
-  "/budget/summary?month=2026-09",
-  "/budget/summary?from=2026-01-01&to=2026-09-30",
-  "/budget/trend?anchor=2026-09&months=12",
-  "/budget/categorize/status",
-  "/health",
-  "/users",
-  "/providers",
-  "/providers/enabled",
-  "/settings/budget-ai",
-  "/settings/budget-ai/usage",
-  "/settings/budget-ai/models/jev",
-];
+/** A value for each path parameter of a server GET, and the queries it requires. */
+const PARAMS: Record<string, string> = { id: CW8, token: "abc", provider: "jev" };
+const QUERIES: Record<string, Record<string, string>> = { "/budget/trend": { anchor: "2026-09" } };
 
-describe("base dataset", () => {
-  it.each(GETS)("answers GET %s", (url) => {
-    const u = new URL(url, "http://mock");
-    const out = router.dispatch(createStore(), "GET", u.pathname, u.searchParams, undefined);
-    expect(out.status).toBe(200);
+const body = <T,>(path: string, query: Record<string, string> = {}): T => {
+  const out = router.dispatch(createStore(), "GET", path, new URLSearchParams(query), undefined);
+  if (!out || !("body" in out)) throw new Error(`GET ${path}: ${JSON.stringify(out)}`);
+  return out.body as T;
+};
+
+describe("the mock against the server's routes", () => {
+  it("handles every server route but the listed ones, and no other", () => {
+    const skipped: readonly string[] = NOT_MOCKED;
+    expect([...router.keys()].sort()).toEqual(ROUTES.filter((r) => !skipped.includes(r)).sort());
   });
 
+  const gets = ROUTES.filter((r) => r.startsWith("GET ")).map((r) => r.slice(4));
+  it.each(gets)("answers GET %s from the base dataset", (pattern) => {
+    const path = pattern.replace(/:(\w+)/g, (_, name: string) => PARAMS[name]);
+    const out = router.dispatch(createStore(), "GET", path, new URLSearchParams(QUERIES[pattern]), undefined);
+    expect(out?.status).toBe(200);
+  });
+});
+
+describe("base dataset", () => {
   it("values the PEA from its lots and cash", () => {
-    const store = createStore();
-    const accounts = router.dispatch(store, "GET", "/accounts", new URLSearchParams(), undefined).body as { id: string; value: string }[];
-    const holdings = router.dispatch(store, "GET", "/holdings", new URLSearchParams(), undefined).body as { accountId: string; value: string }[];
+    const accounts = body<Account[]>("/accounts");
+    const holdings = body<Holding[]>("/holdings");
     for (const a of accounts) {
       const sum = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + Number(h.value), 0);
       expect(Number(a.value)).toBeCloseTo(sum, 1);
@@ -55,9 +41,7 @@ describe("base dataset", () => {
   });
 
   it("pages the transaction list", () => {
-    const store = createStore();
-    const page = (offset: number) =>
-      router.dispatch(store, "GET", "/transactions", new URLSearchParams({ limit: "200", offset: String(offset) }), undefined).body as unknown[];
+    const page = (offset: number) => body<unknown[]>("/transactions", { limit: "200", offset: String(offset) });
     expect(page(0)).toHaveLength(200);
     expect(page(200).length).toBeGreaterThan(0);
   });

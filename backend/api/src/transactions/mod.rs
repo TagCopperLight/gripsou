@@ -9,11 +9,9 @@ use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, Json};
-use axum::Router;
-use axum::routing::get;
+use crate::routes::Routes;
 use gripsou_core::repo::budget::transactions::{self as repo, TransactionFilters, TypeBucket};
 
 /// The list's query parameters; `BulkBody.filter` sends the same fields as JSON.
@@ -137,10 +135,10 @@ pub async fn transaction_count_summary(
     }))
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/transactions", get(transactions))
-        .route("/transactions/counts", get(transaction_count_summary))
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .get("/transactions", transactions)
+        .get("/transactions/counts", transaction_count_summary)
 }
 
 #[cfg(test)]

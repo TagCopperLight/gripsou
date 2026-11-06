@@ -244,7 +244,7 @@ export function Panel() {
           </Section>
 
           {unhandled.length > 0 && (
-            <Section title="Not handled by the fake API (501)">
+            <Section title="Not handled by the fake API (404)">
               {unhandled.map((u) => (
                 <div key={u} style={s.warn}>{u}</div>
               ))}

@@ -3,15 +3,14 @@
 
 pub mod dto;
 
-use axum::Router;
+use crate::routes::Routes;
 use axum::extract::{DefaultBodyLimit, OriginalUri, Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::routing::{delete, get, post};
+use axum::http::{HeaderMap, Method, StatusCode, header};
+use axum::routing::post;
 use gripsou_jobs::ConnectError;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, Json};
 
@@ -222,17 +221,18 @@ pub async fn delete_connection(
     }
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/connections", get(connections))
-        .route("/connections/init", post(init_connection))
-        .route("/connections/complete", post(complete_connection))
-        .route("/connections/{id}", delete(delete_connection))
-        .route("/connections/{id}/sync", post(sync_connection))
-        .route("/connections/{id}/manage", post(manage_connection))
-        .route("/sync", post(sync_all))
-        .route("/providers/enabled", get(enabled_providers))
-        .route(
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .get("/connections", connections)
+        .post("/connections/init", init_connection)
+        .post("/connections/complete", complete_connection)
+        .delete("/connections/{id}", delete_connection)
+        .post("/connections/{id}/sync", sync_connection)
+        .post("/connections/{id}/manage", manage_connection)
+        .post("/sync", sync_all)
+        .get("/providers/enabled", enabled_providers)
+        .with(
+            Method::POST,
             "/webhooks/{provider}",
             post(webhook).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
         )

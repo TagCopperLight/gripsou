@@ -17,10 +17,7 @@ pub mod throttle;
 
 pub use session::{AdminUser, AuthUser};
 
-use axum::Router;
-use axum::routing::{delete, get, patch, post};
-
-use crate::AppState;
+use crate::routes::Routes;
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use base64::Engine as _;
@@ -44,44 +41,38 @@ pub fn hash_token_str(token: &str) -> String {
     URL_SAFE_NO_PAD.encode(hash_token(token))
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/auth/login", post(login::login))
-        .route("/auth/login/verify", post(login::login_verify))
-        .route("/auth/passkey/options", post(passkey::sign_in_options))
-        .route("/auth/passkey", post(passkey::sign_in))
-        .route("/auth/reauth", post(mfa::reauth))
-        .route("/auth/mfa/status", get(mfa::status))
-        .route("/auth/mfa/totp/setup", post(mfa::totp_setup))
-        .route("/auth/mfa/totp/confirm", post(mfa::totp_confirm))
-        .route("/auth/mfa/totp", delete(mfa::totp_remove))
-        .route(
-            "/auth/mfa/recovery/regenerate",
-            post(mfa::recovery_regenerate),
-        )
-        .route(
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .post("/auth/login", login::login)
+        .post("/auth/login/verify", login::login_verify)
+        .post("/auth/passkey/options", passkey::sign_in_options)
+        .post("/auth/passkey", passkey::sign_in)
+        .post("/auth/reauth", mfa::reauth)
+        .get("/auth/mfa/status", mfa::status)
+        .post("/auth/mfa/totp/setup", mfa::totp_setup)
+        .post("/auth/mfa/totp/confirm", mfa::totp_confirm)
+        .delete("/auth/mfa/totp", mfa::totp_remove)
+        .post("/auth/mfa/recovery/regenerate", mfa::recovery_regenerate)
+        .post(
             "/auth/mfa/passkeys/register/options",
-            post(passkey::register_options),
+            passkey::register_options,
         )
-        .route("/auth/mfa/passkeys/register", post(passkey::register))
-        .route(
-            "/auth/mfa/passkeys/{id}",
-            patch(passkey::rename).delete(passkey::remove),
-        )
-        .route("/auth/me", get(account::me).patch(account::update_profile))
-        .route("/auth/logout", post(account::logout))
-        .route("/auth/token/{token}", get(invite::token_info))
-        .route("/auth/invite/{token}/redeem", post(invite::redeem_invite))
-        .route("/auth/reset/{token}/redeem", post(invite::redeem_reset))
-        .route("/auth/prefs", patch(crate::prefs::update_prefs))
-        .route("/auth/welcome", post(account::finish_welcome))
-        .route("/auth/change-password", post(account::change_password))
-        .route("/auth/account", delete(account::delete_account))
-        .route(
-            "/auth/sessions",
-            get(account::list_sessions).delete(account::revoke_other_sessions),
-        )
-        .route("/auth/sessions/{id}", delete(account::revoke_session))
+        .post("/auth/mfa/passkeys/register", passkey::register)
+        .patch("/auth/mfa/passkeys/{id}", passkey::rename)
+        .delete("/auth/mfa/passkeys/{id}", passkey::remove)
+        .get("/auth/me", account::me)
+        .patch("/auth/me", account::update_profile)
+        .post("/auth/logout", account::logout)
+        .get("/auth/token/{token}", invite::token_info)
+        .post("/auth/invite/{token}/redeem", invite::redeem_invite)
+        .post("/auth/reset/{token}/redeem", invite::redeem_reset)
+        .patch("/auth/prefs", crate::prefs::update_prefs)
+        .post("/auth/welcome", account::finish_welcome)
+        .post("/auth/change-password", account::change_password)
+        .delete("/auth/account", account::delete_account)
+        .get("/auth/sessions", account::list_sessions)
+        .delete("/auth/sessions", account::revoke_other_sessions)
+        .delete("/auth/sessions/{id}", account::revoke_session)
 }
 
 #[cfg(test)]

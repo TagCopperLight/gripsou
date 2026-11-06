@@ -3,7 +3,7 @@
 // simplified copy of the server's rules (core/src/budget/overview.rs), close
 // enough to review the screens with.
 
-import type { BreakdownRow, BudgetCategory, BudgetSummary, BudgetTag, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount, Transaction, TransactionCounts, TypeBucket } from "../../src/api/wire.ts";
+import type { BreakdownRow, BudgetCategory, BudgetSummary, BudgetTag, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount, Transaction, TransactionCounts, TransactionParams, TypeBucket } from "../../src/api/wire.ts";
 import type { TransactionFilterQuery } from "../../src/api/filter.ts";
 import {
   BASELINE_MONTHS,
@@ -111,11 +111,11 @@ const FILTER_FIELDS: { [K in keyof TransactionFilterQuery]-?: (raw: string) => T
 };
 
 /** The filter of a query string or of a bulk body's `filter`. */
-export function parseTransactionFilter(fields: URLSearchParams | Record<string, string | boolean>): TransactionFilterQuery {
+export function parseTransactionFilter(fields: URLSearchParams | TransactionParams): TransactionFilterQuery {
   const entries = fields instanceof URLSearchParams ? [...fields] : Object.entries(fields);
   const f: Record<string, unknown> = {};
   for (const [k, v] of entries) {
-    if (k in FILTER_FIELDS) f[k] = FILTER_FIELDS[k as keyof TransactionFilterQuery](String(v));
+    if (k in FILTER_FIELDS && v !== undefined) f[k] = FILTER_FIELDS[k as keyof TransactionFilterQuery](String(v));
   }
   return f as TransactionFilterQuery;
 }

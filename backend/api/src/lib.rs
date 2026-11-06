@@ -7,6 +7,7 @@ mod connections;
 pub mod error;
 mod holdings;
 mod prefs;
+pub mod routes;
 mod security_headers;
 #[cfg(test)]
 mod testkit;
@@ -14,10 +15,10 @@ mod transactions;
 mod wire;
 pub mod wire_ts;
 
+use axum::Router;
 use axum::extract::FromRef;
 use axum::http::header::CACHE_CONTROL;
 use axum::http::{HeaderValue, Response};
-use axum::{Router, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -43,6 +44,22 @@ pub struct AppState {
     pub passkeys: Passkeys,
 }
 
+fn member_routes() -> routes::Routes {
+    routes::Routes::default()
+        .get("/health", health)
+        .merge(auth::routes())
+        .merge(accounts::routes())
+        .merge(transactions::routes())
+        .merge(budget::routes())
+        .merge(holdings::routes())
+        .merge(connections::routes())
+}
+
+/// Every route under `/api`, the admin ones included.
+fn api_routes() -> routes::Routes {
+    member_routes().merge(admin::routes())
+}
+
 pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
@@ -59,14 +76,8 @@ pub fn router(
 
     let index_html = static_dir.join("index.html");
 
-    let api = Router::new()
-        .route("/health", get(health))
-        .merge(auth::routes())
-        .merge(accounts::routes())
-        .merge(transactions::routes())
-        .merge(budget::routes())
-        .merge(holdings::routes())
-        .merge(connections::routes())
+    let api = member_routes()
+        .into_router()
         .merge(admin::router(state.clone()))
         .with_state(state);
 

@@ -28,6 +28,13 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/** An error as the server sends it: a plain-text message. */
+function sendText(res: ServerResponse, status: number, text: string): void {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end(text);
+}
+
 type Held = { request: string; release: () => void };
 
 // Vite restarts the server whenever a file under mock/ changes; the active
@@ -60,6 +67,7 @@ export function mockApi(): Plugin {
     const answer = () => {
       const out = control.handle(method, url.pathname, url.searchParams, body);
       if (out === "hold") held.push({ request: requestKey(method, url.pathname), release: answer });
+      else if ("text" in out) sendText(res, out.status, out.text);
       else send(res, out.status, out.body);
     };
     answer();
@@ -98,7 +106,7 @@ export function mockApi(): Plugin {
     name: "gripsou-mock-api",
     apply: "serve",
     configureServer(server) {
-      const fail = (res: ServerResponse) => (err: unknown) => send(res, 500, { error: String(err) });
+      const fail = (res: ServerResponse) => (err: unknown) => sendText(res, 500, String(err));
       server.middlewares.use("/api", (req, res) => void api(req, res).catch(fail(res)));
       server.middlewares.use("/__mock", (req, res) => void panel(req, res).catch(fail(res)));
     },

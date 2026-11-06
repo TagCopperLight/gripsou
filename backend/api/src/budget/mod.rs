@@ -11,11 +11,9 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, Json};
-use axum::Router;
-use axum::routing::{get, patch, post, put};
+use crate::routes::Routes;
 use gripsou_core::budget::overview::{
     self,
     calc::{Figures, Month, Period, Slice, SliceAmount},
@@ -532,31 +530,29 @@ pub async fn undo_review(
     review_result(review::undo(&pool, user_id, id, body.category_id, body.confidence).await?)
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/transactions/{id}", patch(patch_transaction))
-        .route(
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .patch("/transactions/{id}", patch_transaction)
+        .post(
             "/transactions/{id}/apply-to-description",
-            post(apply_to_description),
+            apply_to_description,
         )
-        .route("/transactions/bulk", post(bulk_transactions))
-        .route(
-            "/budget/categories",
-            get(list_categories).post(create_category),
-        )
-        .route("/budget/categories/order", put(reorder_categories))
-        .route(
-            "/budget/categories/{id}",
-            patch(update_category).delete(delete_category),
-        )
-        .route("/budget/tags", get(list_tags).post(create_tag))
-        .route("/budget/tags/{id}", patch(update_tag).delete(delete_tag))
-        .route("/budget/summary", get(summary))
-        .route("/budget/trend", get(trend_handler))
-        .route("/budget/categorize", post(request_categorize))
-        .route("/budget/categorize/status", get(categorize_status))
-        .route("/budget/review/{id}/accept", post(accept_review))
-        .route("/budget/review/{id}/undo", post(undo_review))
+        .post("/transactions/bulk", bulk_transactions)
+        .get("/budget/categories", list_categories)
+        .post("/budget/categories", create_category)
+        .put("/budget/categories/order", reorder_categories)
+        .patch("/budget/categories/{id}", update_category)
+        .delete("/budget/categories/{id}", delete_category)
+        .get("/budget/tags", list_tags)
+        .post("/budget/tags", create_tag)
+        .patch("/budget/tags/{id}", update_tag)
+        .delete("/budget/tags/{id}", delete_tag)
+        .get("/budget/summary", summary)
+        .get("/budget/trend", trend_handler)
+        .post("/budget/categorize", request_categorize)
+        .get("/budget/categorize/status", categorize_status)
+        .post("/budget/review/{id}/accept", accept_review)
+        .post("/budget/review/{id}/undo", undo_review)
 }
 
 #[cfg(test)]

@@ -42,9 +42,9 @@ test_db() {
 backend() {
   step "fmt"    bash -c 'cd backend && cargo fmt --all --check'
   step "clippy" bash -c 'cd backend && cargo clippy --all-targets -- -D warnings'
-  # The frontend's copy of the API types is generated: it must match the code.
+  # The frontend's copy of the API types and routes is generated: it must match the code.
   step "wire types" bash -c 'cd backend && cargo run -q -p gripsou-api --example wire-types \
-    && git diff --exit-code -- ../frontend/src/api/wire.ts'
+    && git diff --exit-code -- ../frontend/src/api/wire.ts ../frontend/src/api/routes.ts'
   echo "::: test-db"
   if test_db; then
     step "test" bash -c 'cd backend && cargo test'

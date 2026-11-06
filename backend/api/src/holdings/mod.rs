@@ -10,12 +10,10 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::ApiError;
+use crate::routes::Routes;
 use crate::wire::RangeParams;
-use axum::Router;
-use axum::routing::{get, post};
 
 pub async fn holdings(
     State(pool): State<PgPool>,
@@ -165,14 +163,15 @@ pub async fn preview_lots(
     Ok(Json(dto::BasisPreview::from_core(preview)))
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/holdings", get(holdings))
-        .route("/investments/returns", get(investment_returns))
-        .route("/holdings/{id}/prices", get(holding_prices))
-        .route("/holdings/{id}/lots", get(holding_lots).put(save_lots))
-        .route("/holdings/{id}/lots/preview", post(preview_lots))
-        .route("/holdings/{id}/lots/suggestions", get(lot_suggestions))
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .get("/holdings", holdings)
+        .get("/investments/returns", investment_returns)
+        .get("/holdings/{id}/prices", holding_prices)
+        .get("/holdings/{id}/lots", holding_lots)
+        .put("/holdings/{id}/lots", save_lots)
+        .post("/holdings/{id}/lots/preview", preview_lots)
+        .get("/holdings/{id}/lots/suggestions", lot_suggestions)
 }
 
 #[cfg(test)]

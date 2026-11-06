@@ -6,12 +6,10 @@ use axum::extract::{Path, Query, State};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, Json};
+use crate::routes::Routes;
 use crate::wire::RangeParams;
-use axum::Router;
-use axum::routing::{get, patch};
 
 pub async fn net_worth(
     State(pool): State<PgPool>,
@@ -70,13 +68,13 @@ pub async fn update_account(
     Ok(Json(dto::UpdatedAccount::from_row(updated)))
 }
 
-pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/dashboard/net-worth", get(net_worth))
-        .route("/accounts", get(accounts))
-        .route("/accounts/series", get(account_series))
-        .route("/accounts/{id}", patch(update_account))
-        .route("/account-types", get(account_types))
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .get("/dashboard/net-worth", net_worth)
+        .get("/accounts", accounts)
+        .get("/accounts/series", account_series)
+        .patch("/accounts/{id}", update_account)
+        .get("/account-types", account_types)
 }
 
 #[cfg(test)]
@@ -85,6 +83,26 @@ mod tests {
     use crate::testkit::*;
     use axum::http::StatusCode;
     use sqlx::PgPool;
+
+    /// The frontend labels every account type the migrations seed, and no
+    /// other (the review mock serves its keys as /account-types).
+    #[sqlx::test(migrations = "../migrations")]
+    async fn every_account_type_has_a_label(pool: PgPool) {
+        let en: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../frontend/src/i18n/en.json"
+        )))
+        .unwrap();
+        let mut labelled: Vec<String> = en["accountTypes"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        labelled.sort();
+        let Json(seeded) = account_types(State(pool)).await.unwrap();
+        assert_eq!(seeded, labelled);
+    }
 
     /// Renaming another user's account by id must 404 and leave it untouched.
     #[sqlx::test(migrations = "../migrations")]

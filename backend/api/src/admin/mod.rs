@@ -13,43 +13,35 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::auth::{AdminUser, challenge, invite};
 use crate::error::ApiError;
+use crate::routes::Routes;
 use axum::Router;
-use axum::routing::{MethodRouter, get, patch, post, put};
 use gripsou_core::repo::invite_token::TokenKind;
 use gripsou_core::repo::user::AdminGuarded;
 use gripsou_providers::registry;
 
 /// Every admin route. [`router`] puts them all behind the admin check, so
 /// none can be added without it.
-pub(crate) fn routes() -> Vec<(&'static str, MethodRouter<AppState>)> {
-    vec![
-        ("/users", get(users)),
-        ("/users/{id}", patch(set_role).delete(delete_user)),
-        ("/users/{id}/reset-link", post(create_reset_link)),
-        ("/invites", post(create_invite)),
-        ("/providers", get(providers)),
-        ("/providers/{key}", patch(set_provider)),
-        (
-            "/settings/budget-ai",
-            get(budget_ai_settings).patch(set_budget_ai_settings),
-        ),
-        ("/settings/budget-ai/usage", get(budget_ai_usage)),
-        (
-            "/settings/budget-ai/models/{provider}",
-            get(budget_ai_models),
-        ),
-        ("/settings/budget-ai/prices", put(set_budget_ai_prices)),
-        ("/settings/api-keys", get(api_keys)),
-        ("/settings/api-keys/{provider}", patch(set_api_key)),
-    ]
+pub(crate) fn routes() -> Routes {
+    Routes::default()
+        .get("/users", users)
+        .patch("/users/{id}", set_role)
+        .delete("/users/{id}", delete_user)
+        .post("/users/{id}/reset-link", create_reset_link)
+        .post("/invites", create_invite)
+        .get("/providers", providers)
+        .patch("/providers/{key}", set_provider)
+        .get("/settings/budget-ai", budget_ai_settings)
+        .patch("/settings/budget-ai", set_budget_ai_settings)
+        .get("/settings/budget-ai/usage", budget_ai_usage)
+        .get("/settings/budget-ai/models/{provider}", budget_ai_models)
+        .put("/settings/budget-ai/prices", set_budget_ai_prices)
+        .get("/settings/api-keys", api_keys)
+        .patch("/settings/api-keys/{provider}", set_api_key)
 }
 
 pub(crate) fn router(state: AppState) -> Router<AppState> {
     routes()
-        .into_iter()
-        .fold(Router::new(), |router, (path, route)| {
-            router.route(path, route)
-        })
+        .into_router()
         .route_layer(axum::middleware::from_fn_with_state(
             state,
             crate::auth::session::require_admin,
@@ -363,12 +355,12 @@ mod tests {
     use crate::testkit::*;
     use sqlx::PgPool;
 
-    /// Every admin route refuses a member on each method it answers, before
-    /// the handler runs (no body is sent, so a handler would answer 4xx).
+    /// Every admin route refuses a member before the handler runs (no body
+    /// is sent, so a handler would answer 4xx).
     #[sqlx::test(migrations = "../migrations")]
     async fn every_admin_route_refuses_a_member(pool: PgPool) {
         use axum::body::Body;
-        use axum::http::{Method, Request};
+        use axum::http::Request;
         use tower::ServiceExt;
 
         seed_user(&pool, "member@t.local").await;
@@ -376,7 +368,7 @@ mod tests {
         let passkeys = crate::Passkeys::parse(Some("https://gripsou.test")).unwrap();
         let app = crate::router(pool, &std::env::temp_dir(), deps(), passkeys);
         let id = Uuid::new_v4().to_string();
-        for (path, _) in routes() {
+        for (method, path) in routes().list() {
             let path = format!("/api{path}")
                 .split('/')
                 .map(|seg| {
@@ -388,34 +380,20 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("/");
-            let mut refused = 0;
-            for method in [
-                Method::GET,
-                Method::POST,
-                Method::PUT,
-                Method::PATCH,
-                Method::DELETE,
-            ] {
-                let status = app
-                    .clone()
-                    .oneshot(
-                        Request::builder()
-                            .method(method.clone())
-                            .uri(&path)
-                            .header("authorization", format!("Bearer {token}"))
-                            .body(Body::empty())
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap()
-                    .status();
-                match status {
-                    StatusCode::FORBIDDEN => refused += 1,
-                    StatusCode::METHOD_NOT_ALLOWED => {}
-                    other => panic!("{method} {path}: {other}"),
-                }
-            }
-            assert!(refused > 0, "{path} answers no method");
+            let status = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(&path)
+                        .header("authorization", format!("Bearer {token}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status();
+            assert_eq!(status, StatusCode::FORBIDDEN, "{method} {path}");
         }
     }
 

@@ -3,7 +3,7 @@
 
 import type { Role, UserPrefs } from "../src/api/wire.ts";
 import { injected, requestKey, type OverrideMode } from "./faults.ts";
-import type { Reply } from "./router.ts";
+import type { Sent } from "./router.ts";
 import { router } from "./routes/index.ts";
 import type { MockState, Piece } from "./states/pieces.ts";
 import { createStore } from "./store.ts";
@@ -80,12 +80,15 @@ export function createControl(
   }
 
   /** The answer, or "hold" while the request is kept loading. */
-  function handle(method: string, path: string, query: URLSearchParams, body: unknown): Reply | "hold" {
+  function handle(method: string, path: string, query: URLSearchParams, body: unknown): Sent | "hold" {
     seen.add(requestKey(method, path));
     const forced = injected(store.faults, overrides, method, path);
     if (forced) return forced;
     const out = router.dispatch(store, method, path, query, body);
-    if (out.status === 501) unhandled.add(requestKey(method, path));
+    if (!out) {
+      unhandled.add(requestKey(method, path));
+      return { status: 404, text: `no route for ${requestKey(method, path)}` };
+    }
     if (method === "PATCH" && path === "/auth/prefs" && out.status === 200) captureApp();
     return out;
   }

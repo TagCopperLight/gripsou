@@ -1,7 +1,7 @@
 // Failure injection, checked before any route: the faults states put in the
 // store, and the panel's per-request overrides.
 
-import { reply, type Reply } from "./router.ts";
+import type { Sent } from "./router.ts";
 
 export type FaultMode = "loading" | "error" | "malformed";
 
@@ -36,7 +36,7 @@ function matches(f: Fault, method: string, path: string): boolean {
 }
 
 /** The forced answer, "hold" to keep the request loading, or null to answer it. */
-export function injected(faults: Fault[], overrides: Map<string, OverrideMode>, method: string, path: string): Reply | "hold" | null {
+export function injected(faults: Fault[], overrides: Map<string, OverrideMode>, method: string, path: string): Sent | "hold" | null {
   const mode = overrides.get(requestKey(method, path)) ?? faults.find((f) => matches(f, method, path))?.mode;
   switch (mode) {
     case undefined:
@@ -44,9 +44,9 @@ export function injected(faults: Fault[], overrides: Map<string, OverrideMode>, 
     case "loading":
       return "hold";
     case "error":
-      return reply(500, { error: "forced by the review panel" });
+      return { status: 500, text: "forced by the review panel" };
     // A number where a list belongs: the pages reading it throw.
     case "malformed":
-      return reply(200, 42);
+      return { status: 200, body: 42 };
   }
 }
