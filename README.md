@@ -1,6 +1,6 @@
 # gripsou
 
-Self-hosted personal finance dashboard. Connect bank/broker/crypto providers,
+Self-hosted personal finance dashboard. Connect bank and broker providers,
 sync transactions and holdings, and see net worth and its distribution over time.
 
 ![Dashboard](docs/screenshots/dashboard.png)
@@ -15,14 +15,14 @@ The current interface and workflow are a mix of my own ideas, concepts from Pics
 
 ## Develop
 
-Prerequisites: Rust (stable), [bun](https://bun.sh) 1.4.3 or newer, Docker.
+Prerequisites: Rust (stable), [bun](https://bun.sh) (the version `frontend/package.json` pins), Docker.
 
 ```sh
 # 1. Start Postgres
 docker compose -f docker/docker-compose.yml up -d postgres
 
 # 2. Backend (serves API on :8080, applies migrations on startup)
-cp .env.example .env          # then edit secrets
+cp .env.example .env          # then fill in the database address and secrets
 cd backend
 cargo run
 
@@ -32,8 +32,7 @@ bun install
 bun run dev
 ```
 
-Frontend checks: `bun run build`, `bun run test`, `bun run lint`.
-Backend checks: `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`.
+`./ci.sh` runs the same checks as CI (`./ci.sh backend` or `./ci.sh frontend` for one half). Its backend tests start a throwaway Postgres container.
 
 ## Run the whole stack
 
@@ -42,7 +41,7 @@ scripts/build-image.sh
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-The backend binary serves both the built SPA and the JSON API, with Postgres alongside. `scripts/build-image.sh` stamps the image with `git describe` of your checkout, the version shown in the app; a plain `docker compose build` labels it `dev`.
+The backend binary serves both the built SPA and the JSON API, with Postgres alongside. It publishes no port: it joins the external Docker network `web` (`docker network create web`), where a reverse proxy forwards to `backend:8080`. `scripts/build-image.sh` stamps the image with `git describe` of your checkout, the version shown in the app; a plain `docker compose build` labels it `dev`.
 
 ## Locked out of two-factor
 
@@ -64,7 +63,7 @@ For real-time sync of Powens connections (instead of polling):
 2. In the Powens console, register a webhook for `CONNECTION_SYNCED` pointing to that URL.
 3. Register an HMAC auth provider on the **Powens** API (not gripsou), using your Powens configuration token:
    ```sh
-   POST https://<your-domain>.biapi.pro/webhooks/auth \
+   curl -X POST https://<your-domain>.biapi.pro/webhooks/auth \
      -H "Authorization: Bearer <powens-configuration-token>" \
      -H "Content-Type: application/json" \
      -d '{ "type": "hmac_signature", "name": "gripsou" }'

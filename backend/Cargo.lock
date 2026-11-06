@@ -1143,7 +1143,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "gripsou-core",
- "rand 0.8.8",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -1171,7 +1170,6 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 

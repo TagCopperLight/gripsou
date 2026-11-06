@@ -4,26 +4,18 @@ Each user chooses an IANA timezone in Settings → General. It defaults to
 `Europe/Paris` when the preferences have no `timeZone`. It stays fixed when the user travels or uses another browser.
 PostgreSQL and the browser apply the zone's daylight-saving rules.
 
-The current calendar day comes from `user_today(user_id)` on the server and
-`zonedDay()` in the browser. The server function accepts an optional instant
-for deterministic boundary tests. The API validates timezone names before
-saving preferences; changing the setting refreshes cached reports.
+The current calendar day comes from `user_today(user_id)` on the server
+(`repo::prefs::today` in Rust) and `zonedDay()` in the browser. Every day
+taken from the clock in the user's timezone goes through one of them, so
+searching for those names finds them all. The server function accepts an optional instant for
+deterministic boundary tests. The API validates timezone names before saving
+preferences; changing the setting refreshes cached reports.
 
-## Clock-derived dates
-
-- `core/src/ingest.rs`: daily snapshots, including closed holdings.
-- `core/src/backfill.rs`: horizon fallback and end of the derived day axis.
-- `core/src/repo/query.rs`: holdings and accounts valuations;
-  the displayed holding price uses the same day cutoff as its value.
-- `core/src/repo/lot.rs`: current-day lot basis previews.
-- `api/src/accounts.rs` (`range_window`): dashboard, account and
-  holding-price range bounds, including the year for YTD. These are inclusive calendar-day windows.
-- `frontend/src/lib/period.ts`: current month and preset date ranges;
-  calendar arithmetic is separate from instant-to-day conversion.
-- `frontend/src/components/RecordLotsModal.tsx`: new-lot date defaults.
-- `frontend/src/components/PageHeader.tsx` and settings date preview: today.
-- `frontend/src/lib/date.ts`: real timestamps (sessions, syncs, account creation)
-  display in the saved timezone. Relative elapsed times remain elapsed times.
+Date ranges (`range_window` on the server, `lib/period.ts` in the browser) are
+inclusive calendar-day windows, and their calendar arithmetic is separate from
+instant-to-day conversion. Real timestamps (sessions, syncs, account creation)
+display in the saved timezone (`lib/date.ts`); relative elapsed times remain
+elapsed times.
 
 Global market data uses UTC days: Yahoo daily bars are
 normalized to UTC midnight, price-sync freshness uses the UTC day, and

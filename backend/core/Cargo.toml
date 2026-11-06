@@ -15,8 +15,7 @@ thiserror.workspace = true
 uuid.workspace = true
 aes-gcm.workspace = true
 base64.workspace = true
-rand.workspace = true
-tracing = { workspace = true }
+tracing.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 
@@ -27,4 +26,3 @@ test-util = []
 [dev-dependencies]
 gripsou-core = { path = ".", features = ["test-util"] }
 anyhow.workspace = true
-tokio.workspace = true

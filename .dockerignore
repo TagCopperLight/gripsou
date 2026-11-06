@@ -4,3 +4,4 @@ frontend/dist/
 .env
 **/*.log
 .git/
+.claude/worktrees/
