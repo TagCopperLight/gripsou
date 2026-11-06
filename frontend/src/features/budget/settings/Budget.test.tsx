@@ -1,14 +1,11 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "vitest";
+import { screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 
 import { SettingsBudget } from "./Budget";
 import type { BudgetCategory, BudgetTag } from "../../../api/budget";
 import i18n from "../../../i18n";
-import { AuthContext, type AuthValue } from "../../../auth/context";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
   return {
@@ -33,10 +30,7 @@ function tag(over: Partial<BudgetTag>): BudgetTag {
 type ServerState = { categories: BudgetCategory[]; tags: BudgetTag[] };
 
 function jsonRes(body: unknown, status = 200) {
-  return new Response(body === null ? null : JSON.stringify(body), {
-    status,
-    headers: body === null ? undefined : { "Content-Type": "application/json" },
-  });
+  return body === null ? new Response(null, { status }) : jsonResponse(body, status);
 }
 
 let nextId = 100;
@@ -47,7 +41,7 @@ let nextId = 100;
 function makeServer(initial: ServerState) {
   const state: ServerState = structuredClone(initial);
 
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const handle = async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     const path = url.replace(/^\/api/, "");
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
@@ -97,28 +91,13 @@ function makeServer(initial: ServerState) {
     }
 
     return jsonRes("not found", 404);
-  });
+  };
 
-  return { state, fetch: fetchMock };
+  return { state, fetch: handle };
 }
 
-const authValue = {
-  prefs: DEFAULT_PREFS,
-  updatePrefs: vi.fn(async () => {}),
-} as unknown as AuthValue;
-
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>
-        <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>
-      </QueryClientProvider>
-    );
-  }
-  return render(<SettingsBudget />, { wrapper: Wrapper });
+  return renderWithApp(<SettingsBudget />);
 }
 
 const SEED: ServerState = {
@@ -140,7 +119,7 @@ const SEED: ServerState = {
 describe("SettingsBudget page", () => {
   it("creates, edits, archives, restores, and deletes a category, reflecting the refetched server state", async () => {
     const server = makeServer(SEED);
-    vi.stubGlobal("fetch", server.fetch);
+    stubFetch(server.fetch);
     renderPage();
     await screen.findByText("Groceries");
 
@@ -187,7 +166,7 @@ describe("SettingsBudget page", () => {
 
   it("creates, renames, recolours, and deletes a tag, reflecting the refetched server state", async () => {
     const server = makeServer(SEED);
-    vi.stubGlobal("fetch", server.fetch);
+    stubFetch(server.fetch);
     renderPage();
     await screen.findByText("Holiday");
 
@@ -221,7 +200,7 @@ describe("SettingsBudget page", () => {
 
   it("never issues a write to /transactions", async () => {
     const server = makeServer(SEED);
-    vi.stubGlobal("fetch", server.fetch);
+    const fetchMock = stubFetch(server.fetch);
     renderPage();
     await screen.findByText("Groceries");
     await screen.findByText("Holiday");
@@ -231,31 +210,29 @@ describe("SettingsBudget page", () => {
     await screen.findByText("Trip");
 
     expect(
-      server.fetch.mock.calls.filter(
+      fetchMock.mock.calls.filter(
         ([u, i]) => String(u).includes("/transactions") && (i as RequestInit | undefined)?.method,
       ).length,
     ).toBe(0);
   });
 
   it("keeps each list independent: one query failing does not block the other", async () => {
-    const failingCategories = vi.fn(async (url: string, init?: RequestInit) => {
+    stubFetch(async (url: string, init?: RequestInit) => {
       if (url.includes("/budget/categories")) return jsonRes("down", 500);
       const server = makeServer(SEED);
       return server.fetch(url, init);
     });
-    vi.stubGlobal("fetch", failingCategories);
     renderPage();
     await screen.findByText("Holiday");
     expect(await screen.findByRole("button", { name: /retry|réessayer/i })).toBeVisible();
   });
 
   it("keeps each list independent: the reverse failure still renders categories", async () => {
-    const failingTags = vi.fn(async (url: string, init?: RequestInit) => {
+    stubFetch(async (url: string, init?: RequestInit) => {
       if (url.includes("/budget/tags")) return jsonRes("down", 500);
       const server = makeServer(SEED);
       return server.fetch(url, init);
     });
-    vi.stubGlobal("fetch", failingTags);
     renderPage();
     await screen.findByText("Groceries");
     expect(await screen.findByRole("button", { name: /retry|réessayer/i })).toBeVisible();
@@ -274,7 +251,7 @@ describe("SettingsBudget page", () => {
     it("translates headings and seeded rows while keeping user-created names verbatim", async () => {
       await i18n.changeLanguage("fr");
       const server = makeServer(SEED);
-      vi.stubGlobal("fetch", server.fetch);
+      stubFetch(server.fetch);
       renderPage();
 
       expect(await screen.findByText("Catégories")).toBeVisible();
@@ -294,7 +271,7 @@ describe("SettingsBudget page", () => {
   it("supports opening, tabbing into, typing, submitting and closing the category modal by keyboard", async () => {
     const user = userEvent.setup();
     const server = makeServer(SEED);
-    vi.stubGlobal("fetch", server.fetch);
+    stubFetch(server.fetch);
     renderPage();
     await screen.findByText("Groceries");
 

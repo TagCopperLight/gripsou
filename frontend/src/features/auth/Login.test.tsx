@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Login } from "./Login";
-import { AuthProvider } from "../../auth/AuthProvider";
-import { AuthContext, useAuth, type AuthValue } from "../../auth/context";
+import { useAuth, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
 import { ApiError, getAuthToken, setAuthToken } from "../../api/client";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
+import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("@simplewebauthn/browser", () => ({
   startAuthentication: vi.fn(),
@@ -17,45 +15,11 @@ vi.mock("@simplewebauthn/browser", () => ({
 // Login itself doesn't navigate — the /login route guard redirects once auth
 // flips (see router.test.tsx for that end-to-end flow). Here we only assert it
 // calls `login` correctly and surfaces credential errors.
-function wrap(children: ReactNode) {
-  return <QueryClientProvider client={new QueryClient()}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
-}
-
-/** Render Login with a fully controlled auth context (no real provider). */
-function wrapWithMock(
-  login: AuthValue["login"],
-  children: ReactNode,
-  verifyLogin: AuthValue["verifyLogin"] = async () => {},
-  loginWithPasskey: AuthValue["loginWithPasskey"] = async () => {},
-) {
-  const value: AuthValue = {
-    isAuthenticated: false,
-    user: null,
-    isBootstrapping: false,
-    prefs: DEFAULT_PREFS,
-    login,
-    loginWithPasskey,
-    verifyLogin,
-    adoptSession: () => {},
-    logout: async () => {},
-    updateUser: () => {},
-    updatePrefs: async () => {},
-  };
-  return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-  );
-}
-
 describe("Login", () => {
   it("logs in with the entered credentials on success", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({ token: "t", user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS } }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Login />));
+    const fetchMock = stubFetch(async () =>
+      jsonResponse({ token: "t", user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS } }));
+    renderWithApp(<Login />, { auth: "provider" });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -69,11 +33,8 @@ describe("Login", () => {
   });
 
   it("shows an error on bad credentials", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("nope", { status: 401 })),
-    );
-    render(wrap(<Login />));
+    stubFetch(async () => new Response("nope", { status: 401 }));
+    renderWithApp(<Login />, { auth: "provider" });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -81,8 +42,8 @@ describe("Login", () => {
   });
 
   it("doesn't blame the email or password when the server fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
-    render(wrap(<Login />));
+    stubFetch(async () => new Response("boom", { status: 500 }));
+    renderWithApp(<Login />, { auth: "provider" });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -91,10 +52,8 @@ describe("Login", () => {
   });
 
   it("says how long to wait when throttled", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response("too many attempts", { status: 429, headers: { "Retry-After": "181" } }),
-    ));
-    render(wrap(<Login />));
+    stubFetch(async () => new Response("too many attempts", { status: 429, headers: { "Retry-After": "181" } }));
+    renderWithApp(<Login />, { auth: "provider" });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -104,7 +63,7 @@ describe("Login", () => {
 
   it("passes remember=true when checked", async () => {
     const login = vi.fn().mockResolvedValue(undefined);
-    render(wrapWithMock(login, <Login />));
+    renderWithApp(<Login />, { auth: signedOut({ login }) });
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "a@t.local" } });
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pw" } });
     fireEvent.click(screen.getByLabelText(/remember me/i));
@@ -118,7 +77,7 @@ describe("Login", () => {
     /** Sign in with a password the server accepts for a two-factor account. */
     async function toCodeStep(verifyLogin: AuthValue["verifyLogin"], { remember = false } = {}) {
       const login = vi.fn<AuthValue["login"]>().mockResolvedValue(mfa);
-      render(wrapWithMock(login, <Login />, verifyLogin));
+      renderWithApp(<Login />, { auth: signedOut({ login, verifyLogin }) });
       fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
       fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
       if (remember) fireEvent.click(screen.getByLabelText("Remember me"));
@@ -273,7 +232,7 @@ describe("Login", () => {
       /** Sign in with a password the server accepts for a two-factor account. */
       async function toCodeStep(loginWithPasskey: AuthValue["loginWithPasskey"]) {
         const login = vi.fn<AuthValue["login"]>().mockResolvedValue({ mfaRequired: true, challenge: "ch1" });
-        render(wrapWithMock(login, <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login, loginWithPasskey }) });
         fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
         fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
         fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -305,7 +264,7 @@ describe("Login", () => {
 
     describe("on the password page", () => {
       it("offers a passkey sign-in under an or line", () => {
-        render(wrapWithMock(vi.fn(), <Login />));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn() }) });
         expect(screen.getByText("or")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Sign in with a passkey" })).toBeInTheDocument();
       });
@@ -315,7 +274,7 @@ describe("Login", () => {
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>(
           () => new Promise<void>((r) => { resolve = r; }),
         );
-        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn(), loginWithPasskey }) });
         fireEvent.click(screen.getByLabelText("Remember me"));
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText("Waiting for your browser…")).toBeInTheDocument();
@@ -327,7 +286,7 @@ describe("Login", () => {
 
       it("goes back to the form with a message when the server refused (400)", async () => {
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("bad", 400));
-        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn(), loginWithPasskey }) });
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText(refused)).toBeInTheDocument();
         expect(screen.getByLabelText("Email")).toBeInTheDocument();
@@ -335,7 +294,7 @@ describe("Login", () => {
 
       it("goes back to the form with a message when the challenge expired (410)", async () => {
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>().mockRejectedValue(new ApiError("expired", 410));
-        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn(), loginWithPasskey }) });
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         expect(await screen.findByText(refused)).toBeInTheDocument();
         expect(screen.getByLabelText("Email")).toBeInTheDocument();
@@ -345,7 +304,7 @@ describe("Login", () => {
         const loginWithPasskey = vi
           .fn<AuthValue["loginWithPasskey"]>()
           .mockRejectedValue(new DOMException("cancelled", "NotAllowedError"));
-        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn(), loginWithPasskey }) });
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         await waitFor(() => expect(screen.getByLabelText("Email")).toBeInTheDocument());
         expect(screen.queryByText(refused)).toBeNull();
@@ -354,7 +313,7 @@ describe("Login", () => {
 
       it("Use your password instead returns to the form", async () => {
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>(() => new Promise<void>(() => {}));
-        render(wrapWithMock(vi.fn(), <Login />, undefined, loginWithPasskey));
+        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn(), loginWithPasskey }) });
         fireEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
         fireEvent.click(await screen.findByRole("button", { name: "Use your password instead" }));
         expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
@@ -366,9 +325,7 @@ describe("Login", () => {
 
   describe("second step through the real AuthProvider", () => {
     const user = { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS };
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-
+    
     afterEach(() => setAuthToken(null));
 
     function Status() {
@@ -377,13 +334,11 @@ describe("Login", () => {
     }
 
     it("stores no token after the password, then signs in after the code", async () => {
-      const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) =>
+      const fetchMock = stubFetch(async (url) =>
         url === "/api/auth/login/verify"
-          ? json({ token: "tok", user })
-          : json({ mfaRequired: true, challenge: "ch1" }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
-      render(wrap(<><Status /><Login /></>));
+          ? jsonResponse({ token: "tok", user })
+          : jsonResponse({ mfaRequired: true, challenge: "ch1" }));
+      renderWithApp(<><Status /><Login /></>, { auth: "provider" });
       fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
       fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
       fireEvent.click(screen.getByRole("button", { name: "Sign in" }));

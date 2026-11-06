@@ -1,13 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, screen, waitFor } from "@testing-library/react";
 import type { ProviderGroup, SyncStatus } from "../../api/types";
 
-vi.mock("../../api/connections", () => ({ useConnections: vi.fn() }));
 vi.mock("./SyncModal", () => ({ SyncModal: () => <div>modal</div> }));
 
 import { SyncButton } from "./SyncButton";
-import { useConnections } from "../../api/connections";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 function groups(status: SyncStatus): ProviderGroup[] {
   return [
@@ -29,57 +27,43 @@ function groups(status: SyncStatus): ProviderGroup[] {
   ];
 }
 
-const mockUseConnections = vi.mocked(useConnections);
-
-function renderButton(client = new QueryClient()) {
-  return render(
-    <QueryClientProvider client={client}>
-      <SyncButton />
-    </QueryClientProvider>,
-  );
+async function renderButton(data: ProviderGroup[]) {
+  const fetchMock = stubFetch(async () => jsonResponse(data));
+  const view = renderWithApp(<SyncButton />);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  await waitFor(() => expect(view.client.isFetching()).toBe(0));
+  return view;
 }
 
+const spinning = () => screen.getByRole("button").querySelector(".animate-spin");
+
 describe("SyncButton", () => {
-  it("shows the error dot when a connection is in error", () => {
-    mockUseConnections.mockReturnValue({ data: groups("error") } as ReturnType<
-      typeof useConnections
-    >);
-    renderButton();
-    expect(screen.getByTestId("sync-error-dot")).toBeInTheDocument();
+  it("shows the error dot when a connection is in error", async () => {
+    await renderButton(groups("error"));
+    expect(await screen.findByTestId("sync-error-dot")).toBeInTheDocument();
   });
 
-  it("spins and shows no error dot while syncing", () => {
-    mockUseConnections.mockReturnValue({ data: groups("syncing") } as ReturnType<
-      typeof useConnections
-    >);
-    renderButton();
+  it("spins and shows no error dot while syncing", async () => {
+    await renderButton(groups("syncing"));
+    await waitFor(() => expect(spinning()).toBeTruthy());
     expect(screen.queryByTestId("sync-error-dot")).toBeNull();
-    expect(
-      screen.getByRole("button").querySelector(".animate-spin"),
-    ).toBeTruthy();
   });
 
-  it("shows neither dot nor spin when idle (all ok)", () => {
-    mockUseConnections.mockReturnValue({ data: groups("ok") } as ReturnType<
-      typeof useConnections
-    >);
-    renderButton();
+  it("shows neither dot nor spin when idle (all ok)", async () => {
+    await renderButton(groups("ok"));
     expect(screen.queryByTestId("sync-error-dot")).toBeNull();
-    expect(
-      screen.getByRole("button").querySelector(".animate-spin"),
-    ).toBeNull();
+    expect(spinning()).toBeNull();
   });
 });
 
-
-it("shows a warning for provider problems even after a successful local sync", () => {
+it("shows a warning for provider problems even after a successful local sync", async () => {
   const data = groups("ok");
-  data[0].connections[0].health = {verified:true,lastUpdatedOn:"2099-10-10",state:"bug",errorMessage:"Forbidden",nextRetryOn:null};
-  mockUseConnections.mockReturnValue({data} as ReturnType<typeof useConnections>);
-  const {rerender} = renderButton();
-  expect(screen.getByTestId("sync-warning-dot")).toBeInTheDocument();
-  data[0].connections[0].health.state = null;
-  data[0].connections[0].health.errorMessage = null;
-  rerender(<SyncButton />);
-  expect(screen.queryByTestId("sync-warning-dot")).toBeNull();
+  data[0].connections[0].health = { verified: true, lastUpdatedOn: "2099-10-10", state: "bug", errorMessage: "Forbidden", nextRetryOn: null };
+  const { client } = await renderButton(data);
+  expect(await screen.findByTestId("sync-warning-dot")).toBeInTheDocument();
+  const healed = groups("ok");
+  healed[0].connections[0].health = { ...data[0].connections[0].health!, state: null, errorMessage: null };
+  stubFetch(async () => jsonResponse(healed));
+  await act(() => client.refetchQueries());
+  await waitFor(() => expect(screen.queryByTestId("sync-warning-dot")).toBeNull());
 });

@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent } from "@testing-library/react";
 
 import { SelectionBar } from "./SelectionBar";
 import { BudgetProvider } from "../BudgetProvider";
 import { useBudget } from "../budgetContext";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 function Controls() {
   const b = useBudget();
@@ -18,21 +17,16 @@ function Controls() {
 }
 
 function renderBar(props: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
   const handlers = {
     onAssignCategory: vi.fn(),
     onAddTags: vi.fn(),
     onMarkChecked: vi.fn(),
   };
-  render(
+  renderWithApp(
     <BudgetProvider>
       <Controls />
       <SelectionBar matching={57} total="-21.48" showChecked={false} busy={false} {...handlers} {...props} />
     </BudgetProvider>,
-    { wrapper: Wrapper },
   );
   return handlers;
 }
@@ -74,21 +68,15 @@ describe("SelectionBar", () => {
 
   describe("pending tags", () => {
     beforeEach(() => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (url: string) => {
+      stubFetch(async (url: string) => {
           const body = String(url).includes("/budget/tags")
             ? [
                 { id: "t1", name: "holiday", color: "#f0b952", txCount: 2 },
                 { id: "t2", name: "work", color: "#5b9bf0", txCount: 5 },
               ]
             : [];
-          return new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }),
-      );
+          return jsonResponse(body);
+        });
     });
 
     it("discards the pending tags when the chooser is dismissed without saving", async () => {

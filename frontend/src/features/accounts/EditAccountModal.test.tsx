@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { EditAccountModal } from "./EditAccountModal";
 import type { Account } from "../../api/types";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const ACCOUNT: Account = {
   id: "a1",
@@ -20,24 +20,14 @@ const ACCOUNT: Account = {
 };
 
 function renderModal(onClose = () => {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <EditAccountModal account={ACCOUNT} onClose={onClose} />
-    </QueryClientProvider>,
-  );
+  return renderWithApp(<EditAccountModal account={ACCOUNT} onClose={onClose} />);
 }
 
 describe("EditAccountModal", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
+    stubFetch(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.endsWith("/api/account-types")) {
-          return new Response(
-            JSON.stringify(["checking", "savings"]),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          );
+          return jsonResponse(["checking", "savings"]);
         }
         // PATCH
         return new Response(JSON.stringify({ id: "a1" }), {
@@ -45,8 +35,7 @@ describe("EditAccountModal", () => {
           headers: { "Content-Type": "application/json" },
           ...init,
         });
-      }),
-    );
+      });
   });
 
   it("does nothing when a field's name is clicked", async () => {
@@ -59,11 +48,7 @@ describe("EditAccountModal", () => {
   });
 
   it("names the account's bank under the title", () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <EditAccountModal account={{ ...ACCOUNT, sourceName: "Crédit Mutuel" }} onClose={() => {}} />
-      </QueryClientProvider>,
-    );
+    renderWithApp(<EditAccountModal account={{ ...ACCOUNT, sourceName: "Crédit Mutuel" }} onClose={() => {}} />);
     expect(screen.getByRole("heading")).toHaveTextContent(/Compte Courant\s*Crédit Mutuel/);
   });
 

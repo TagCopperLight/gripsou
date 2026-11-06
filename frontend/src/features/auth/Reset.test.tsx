@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { Reset } from "./Reset";
-import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
+import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -11,47 +10,22 @@ vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useParams: () => ({ token: "tok" }) }),
 }));
 
-function wrap(children: ReactNode, adoptSession = vi.fn()) {
-  const value: AuthValue = {
-    isAuthenticated: false,
-    user: null,
-    isBootstrapping: false,
-    prefs: DEFAULT_PREFS,
-    login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-    adoptSession,
-    logout: async () => {},
-    updateUser: () => {},
-    updatePrefs: async () => {},
-  };
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
 beforeEach(() => navigate.mockClear());
 
 describe("Reset", () => {
   it("sets a new password and adopts the session", async () => {
     const adopt = vi.fn();
-    const fetchMock = vi
-      .fn()
+    stubFetch()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ type: "reset", email: "u@t.local" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        jsonResponse({ type: "reset", email: "u@t.local" }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
+        jsonResponse({
             token: "sess",
             user: { id: "u1", name: "U", email: "u@t.local", role: "user", prefs: DEFAULT_PREFS },
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
       );
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Reset />, adopt));
+    renderWithApp(<Reset />, { auth: signedOut({ adoptSession: adopt }) });
 
     await screen.findByLabelText("New password");
     expect(screen.getByText("u@t.local")).toBeInTheDocument();
@@ -64,16 +38,11 @@ describe("Reset", () => {
   });
 
   it("refuses a too-short password without calling the server", async () => {
-    const fetchMock = vi
-      .fn()
+    const fetchMock = stubFetch()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ type: "reset", email: "u@t.local" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        jsonResponse({ type: "reset", email: "u@t.local" }),
       );
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Reset />));
+    renderWithApp(<Reset />, { auth: signedOut() });
 
     await screen.findByLabelText("New password");
     expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
@@ -89,10 +58,10 @@ describe("Reset", () => {
     [404, true],
     [500, false],
   ])("blames the link only when the server says it's gone (%i)", async (status, blamed) => {
-    vi.stubGlobal("fetch", vi.fn()
+    stubFetch()
       .mockResolvedValueOnce(Response.json({ type: "reset", email: "u@t.local" }))
-      .mockResolvedValueOnce(new Response("no", { status })));
-    render(wrap(<Reset />));
+      .mockResolvedValueOnce(new Response("no", { status }));
+    renderWithApp(<Reset />, { auth: signedOut() });
 
     await screen.findByLabelText("New password");
     fireEvent.change(screen.getByLabelText("New password"), { target: { value: "hunter22" } });

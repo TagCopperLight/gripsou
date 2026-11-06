@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ManageTwoFactorModal } from "./ManageTwoFactorModal";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 type Reply = { status: number; body?: unknown };
 
 function stubApi(routes: Record<string, Reply>) {
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const fetchMock = stubFetch(async (url: string, init?: RequestInit) => {
     const key = `${init?.method ?? "GET"} ${url.replace(/^\/api/, "")}`;
     const reply = routes[key] ?? { status: 200, body: {} };
     return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
@@ -16,7 +16,6 @@ function stubApi(routes: Record<string, Reply>) {
       headers: { "Content-Type": "application/json" },
     });
   });
-  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -32,12 +31,7 @@ const OK: Record<string, Reply> = {
 
 function renderModal(start?: "menu" | "turnOff") {
   const onClose = vi.fn();
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <ManageTwoFactorModal onClose={onClose} start={start} />
-    </QueryClientProvider>,
-  );
+  renderWithApp(<ManageTwoFactorModal onClose={onClose} start={start} />);
   return { onClose, user: userEvent.setup() };
 }
 

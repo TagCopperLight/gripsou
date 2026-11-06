@@ -1,12 +1,11 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18n from "../../../i18n";
-import { AuthProvider } from "../../../auth/AuthProvider";
 import * as client from "../../../api/client";
 import { DEFAULT_PREFS, setPrefs } from "../../../lib/prefs";
 import { SettingsGeneral } from "./General";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 beforeEach(() => {
   localStorage.clear();
@@ -27,21 +26,12 @@ test("preview updates live (no refresh) when prefs change", async () => {
     role: "admin" as const,
     prefs: { ...DEFAULT_PREFS, currency: "GBP" },
   };
-  vi.spyOn(client, "getJson").mockResolvedValue(user);
   // PATCH echoes back the sent prefs, like the real backend.
-  vi.spyOn(client, "patchJson").mockImplementation(
-    async (_path: string, body: unknown) => ({ ...user, prefs: body }),
+  stubFetch(async (url, init) =>
+    jsonResponse(url.endsWith("/auth/prefs") ? { ...user, prefs: JSON.parse(String(init?.body)) } : user),
   );
 
-  render(
-    <I18nextProvider i18n={i18n}>
-      <QueryClientProvider client={new QueryClient()}>
-        <AuthProvider>
-          <SettingsGeneral />
-        </AuthProvider>
-      </QueryClientProvider>
-    </I18nextProvider>,
-  );
+  renderWithApp(<I18nextProvider i18n={i18n}><SettingsGeneral /></I18nextProvider>, { auth: "provider" });
 
   // Bootstrap applied the user's £ prefs — preview reflects it.
   await screen.findByText("1 234 567,89 £");
@@ -64,18 +54,9 @@ test("a currency the server can't get a rate for is refused and the old one stay
     role: "admin" as const,
     prefs: { ...DEFAULT_PREFS, currency: "GBP" },
   };
-  vi.spyOn(client, "getJson").mockResolvedValue(user);
-  vi.spyOn(client, "patchJson").mockRejectedValue(new client.ApiError("no rate", 502));
+  stubFetch(async (url) => (url.endsWith("/auth/prefs") ? new Response("no rate", { status: 502 }) : jsonResponse(user)));
 
-  render(
-    <I18nextProvider i18n={i18n}>
-      <QueryClientProvider client={new QueryClient()}>
-        <AuthProvider>
-          <SettingsGeneral />
-        </AuthProvider>
-      </QueryClientProvider>
-    </I18nextProvider>,
-  );
+  renderWithApp(<I18nextProvider i18n={i18n}><SettingsGeneral /></I18nextProvider>, { auth: "provider" });
   await screen.findByText("1 234 567,89 £");
 
   fireEvent.click(screen.getByText("GBP (£)"));
@@ -88,18 +69,9 @@ test("a currency the server can't get a rate for is refused and the old one stay
 
 test("a setting the server failed to save says so and goes back", async () => {
   const user = { id: "1", name: "A", email: "a@t.local", role: "admin" as const, prefs: DEFAULT_PREFS };
-  vi.spyOn(client, "getJson").mockResolvedValue(user);
-  vi.spyOn(client, "patchJson").mockRejectedValue(new client.ApiError("boom", 500));
+  stubFetch(async (url) => (url.endsWith("/auth/prefs") ? new Response("boom", { status: 500 }) : jsonResponse(user)));
 
-  render(
-    <I18nextProvider i18n={i18n}>
-      <QueryClientProvider client={new QueryClient()}>
-        <AuthProvider>
-          <SettingsGeneral />
-        </AuthProvider>
-      </QueryClientProvider>
-    </I18nextProvider>,
-  );
+  renderWithApp(<I18nextProvider i18n={i18n}><SettingsGeneral /></I18nextProvider>, { auth: "provider" });
   fireEvent.click(await screen.findByText("English"));
   fireEvent.click(screen.getByText("Français"));
 

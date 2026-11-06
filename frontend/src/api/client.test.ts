@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { ApiError, deleteJson, getAuthToken, getJson, postJson, putJson, setAuthToken, setUnauthorizedHandler } from "./client";
+import { stubFetch } from "../test/kit";
 
 beforeEach(() => {
   localStorage.clear();
@@ -35,7 +36,7 @@ describe("ApiError", () => {
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
     let release!: (response: Response) => void;
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    stubFetch(() => new Promise<Response>((resolve) => { release = resolve; }));
     const request = getJson("/transactions").catch((error: unknown) => error);
     setAuthToken("new-token");
     release(new Response("", { status: 401 }));
@@ -43,7 +44,7 @@ describe("ApiError", () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
   it("carries the status so callers can branch on 409 without parsing messages", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 409 })));
+    stubFetch(async () => new Response("nope", { status: 409 }));
     const err = (await getJson("/budget/categories").catch((e: unknown) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(409);
@@ -54,7 +55,7 @@ describe("ApiError", () => {
     setAuthToken("tok");
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 401 })));
+    stubFetch(async () => new Response("", { status: 401 }));
     const err = (await getJson("/budget/tags").catch((e: unknown) => e)) as ApiError;
     expect(onUnauthorized).toHaveBeenCalled();
     expect(err).toBeInstanceOf(ApiError);
@@ -64,7 +65,7 @@ describe("ApiError", () => {
   it("leaves a 401 to a request without a session to its caller", async () => {
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 401 })));
+    stubFetch(async () => new Response("", { status: 401 }));
     const err = (await postJson("/auth/login", {}).catch((e: unknown) => e)) as ApiError;
     expect(onUnauthorized).not.toHaveBeenCalled();
     expect(err.status).toBe(401);
@@ -73,9 +74,7 @@ describe("ApiError", () => {
 
 describe("ApiError.retryAfter", () => {
   it("carries Retry-After seconds from a 429", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response("too many attempts", { status: 429, headers: { "Retry-After": "240" } }),
-    ));
+    stubFetch(async () => new Response("too many attempts", { status: 429, headers: { "Retry-After": "240" } }));
     const err = await postJson("/auth/login", {}).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(429);
@@ -83,14 +82,14 @@ describe("ApiError.retryAfter", () => {
   });
 
   it("is null without the header", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 500 })));
+    stubFetch(async () => new Response("x", { status: 500 }));
     const err = (await postJson("/x", {}).catch((e: unknown) => e)) as ApiError;
     expect(err.retryAfter).toBeNull();
   });
 });
 
 test("an empty success body reads as undefined for every verb", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
+  stubFetch(async () => new Response("", { status: 200 }));
   expect(await putJson("/x", {})).toBeUndefined();
   expect(await deleteJson("/x")).toBeUndefined();
 });

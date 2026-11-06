@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 import { CategoryModal } from "./CategoryModal";
 import { DeleteCategoryModal } from "./DeleteCategoryModal";
 import type { BudgetCategory } from "../../../api/budget";
 import i18n from "../../../i18n";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
   return {
@@ -25,30 +24,13 @@ const SYSTEM = cat({
   systemKey: "internal_transfer", color: "#aeaaa7", icon: "arrow-left-right", txCount: 8,
 });
 
-const client = new QueryClient({
-  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-});
-
-function Wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-
-const wrapper = Wrapper;
-
-function jsonOnce(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
 function renderModal(props: { category?: BudgetCategory; onClose?: () => void } = {}) {
-  return render(
-    <CategoryModal category={props.category} onClose={props.onClose ?? vi.fn()} />,
-    { wrapper },
-  );
+  return renderWithApp(<CategoryModal category={props.category} onClose={props.onClose ?? vi.fn()} />);
 }
 
 describe("CategoryModal — create", () => {
   it("previews the typed name in the heading, refuses a blank one, and POSTs a trimmed body", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce({ ...cat({ id: "new" }) }, 201)));
+    stubFetch(async () => jsonResponse({ ...cat({ id: "new" }) }, 201));
     renderModal();                                   // no `category` prop
     expect(screen.getByTestId("category-preview")).toHaveTextContent("New category");
     const submit = screen.getByRole("button", { name: "Create category" });
@@ -73,7 +55,7 @@ describe("CategoryModal — create", () => {
   });
 
   it("keeps the draft and explains a 409 instead of closing", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("dup", { status: 409 })));
+    stubFetch(async () => new Response("dup", { status: 409 }));
     const onClose = vi.fn();
     renderModal({ onClose });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Groceries" } });
@@ -88,7 +70,7 @@ describe("CategoryModal — create", () => {
 
   it("does not fire a second write while the first is in flight", async () => {
     let resolve!: (r: Response) => void;
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => { resolve = r; })));
+    stubFetch(() => new Promise<Response>((r) => { resolve = r; }));
     renderModal();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Coffee" } });
     const submit = screen.getByRole("button", { name: "Create category" });
@@ -96,13 +78,13 @@ describe("CategoryModal — create", () => {
     await waitFor(() => expect(submit).toBeDisabled());
     fireEvent.click(submit);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
-    resolve(jsonOnce(cat({ id: "new" }), 201));
+    resolve(jsonResponse(cat({ id: "new" }), 201));
   });
 });
 
 describe("CategoryModal — edit", () => {
   it("sends the raw stored name when a translated seed's other fields change", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
+    stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });            // defaultKey "groceries", name "Groceries"
     expect(screen.getByLabelText("Name")).toHaveValue("Groceries");
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "Supermarkets" } });
@@ -115,7 +97,7 @@ describe("CategoryModal — edit", () => {
   });
 
   it("sends the user's literal text once they actually rename it", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
+    stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Mes courses" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -126,7 +108,7 @@ describe("CategoryModal — edit", () => {
   });
 
   it("a language switch with the draft open is not a rename", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
+    stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });
     // Edit something unrelated first, so Save has a real reason to be
     // enabled — a bare language switch with nothing else touched is a
@@ -148,7 +130,7 @@ describe("CategoryModal — edit", () => {
     // shown name, a check against `initialDisplayName` alone would treat that
     // as a real rename and send the literal "Courses", un-seeding the row. A
     // match against the *current* categoryLabel(t, category) is no rename.
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
+    stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });
     expect(screen.getByLabelText("Name")).toHaveValue("Groceries");
     await act(async () => { await i18n.changeLanguage("fr"); });
@@ -165,7 +147,7 @@ describe("CategoryModal — edit", () => {
   });
 
   it("mounted while already French, sends the raw stored name, not the displayed 'Courses'", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(GROCERIES)));
+    stubFetch(async () => jsonResponse(GROCERIES));
     await act(async () => { await i18n.changeLanguage("fr"); });
     renderModal({ category: GROCERIES });
     // The name field genuinely shows the French label at mount — this is
@@ -204,7 +186,7 @@ describe("CategoryModal — edit", () => {
   });
 
   it("explains a 404 as a vanished row", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("gone", { status: 404 })));
+    stubFetch(async () => new Response("gone", { status: 404 }));
     renderModal({ category: GROCERIES });
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -213,7 +195,7 @@ describe("CategoryModal — edit", () => {
 
   it("cannot be dismissed while the write is in flight", async () => {
     let resolve!: (r: Response) => void;
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => { resolve = r; })));
+    stubFetch(() => new Promise<Response>((r) => { resolve = r; }));
     const onClose = vi.fn();
     renderModal({ category: GROCERIES, onClose });
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "x" } });
@@ -221,7 +203,7 @@ describe("CategoryModal — edit", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /close/i })).toBeDisabled());
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
-    resolve(jsonOnce(GROCERIES));
+    resolve(jsonResponse(GROCERIES));
   });
 
   it("closes on Cancel and on Escape when idle", () => {
@@ -236,9 +218,9 @@ describe("CategoryModal — edit", () => {
 
 describe("DeleteCategoryModal", () => {
   it("says the transactions survive, then DELETEs on confirmation", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    stubFetch(async () => new Response(null, { status: 204 }));
     const onClose = vi.fn();
-    render(<DeleteCategoryModal category={GROCERIES} onClose={onClose} />, { wrapper });
+    renderWithApp(<DeleteCategoryModal category={GROCERIES} onClose={onClose} />);
     expect(screen.getByText(/137 transactions are kept and become uncategorised/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
     await waitFor(() =>
@@ -248,9 +230,9 @@ describe("DeleteCategoryModal", () => {
   });
 
   it("stays open and explains a failed deletion", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 500 })));
+    stubFetch(async () => new Response("no", { status: 500 }));
     const onClose = vi.fn();
-    render(<DeleteCategoryModal category={GROCERIES} onClose={onClose} />, { wrapper });
+    renderWithApp(<DeleteCategoryModal category={GROCERIES} onClose={onClose} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the category");
     expect(onClose).not.toHaveBeenCalled();
@@ -259,5 +241,4 @@ describe("DeleteCategoryModal", () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  client.clear();
 });

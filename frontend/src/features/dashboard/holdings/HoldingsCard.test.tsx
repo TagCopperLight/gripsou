@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HoldingsCard } from "./HoldingsCard";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const HOLDING = {
   id: "h1", ticker: "AAPL", name: "Apple Inc.", kind: "equity", logo: "#555",
@@ -30,19 +29,10 @@ const CASH_PEA = {
 };
 
 function renderCard(holdings: unknown[], prefs = DEFAULT_PREFS) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Every URL gets the holdings list, except the record window's lots and
   // suggestions: none of either is what these tests want.
-  vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-    new Response(JSON.stringify(/\/lots(\/suggestions)?$/.test(String(url)) ? [] : holdings), { status: 200, headers: { "Content-Type": "application/json" } }),
-  ));
-  return render(
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={{ prefs } as unknown as AuthValue}>
-        <HoldingsCard />
-      </AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  stubFetch(async (url: string) => jsonResponse(/\/lots(\/suggestions)?$/.test(String(url)) ? [] : holdings));
+  return renderWithApp(<HoldingsCard />, { prefs });
 }
 
 describe("HoldingsCard", () => {

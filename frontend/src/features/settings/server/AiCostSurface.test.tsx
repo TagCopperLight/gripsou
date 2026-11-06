@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiCostSurface } from "./AiCostSurface";
 import { formatMoney } from "../../../lib/money";
 import type { BudgetAiUsage } from "../../../api/budget";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const USAGE: BudgetAiUsage = {
   currency: "USD",
@@ -19,20 +19,19 @@ const USAGE: BudgetAiUsage = {
 
 function stub(usage: BudgetAiUsage = USAGE) {
   const puts: unknown[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+  stubFetch(async (url: string, init?: RequestInit) => {
     if (init?.method === "PUT" && url === "/api/settings/budget-ai/prices") {
       puts.push(JSON.parse(String(init.body)));
       return new Response(null, { status: 204 });
     }
     if (url === "/api/settings/budget-ai/usage") return Response.json(usage);
     return new Response(null, { status: 404 });
-  }));
+  });
   return puts;
 }
 
 function renderSurface() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><AiCostSurface /></QueryClientProvider>);
+  renderWithApp(<AiCostSurface />);
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -103,7 +102,7 @@ describe("AiCostSurface", () => {
   });
 
   it("keeps its panel while loading, and offers a retry when the server cannot be reached", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 500 })));
+    stubFetch(async () => new Response("down", { status: 500 }));
     renderSurface();
     expect(screen.getByText("AI categorisation cost")).toBeVisible();
     expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();

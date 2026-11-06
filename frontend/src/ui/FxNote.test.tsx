@@ -1,54 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen } from "@testing-library/react";
 import { NetWorthCard } from "../features/dashboard/NetWorthCard";
 import { DistributionCard } from "../features/dashboard/DistributionCard";
 import { HoldingsCard } from "../features/dashboard/holdings/HoldingsCard";
 import type { Account, Holding, NetWorthResponse } from "../api/types";
-import { AuthContext, type AuthValue } from "../auth/context";
 import { DEFAULT_PREFS, setPrefs } from "../lib/prefs";
+import { renderWithApp, jsonResponse, stubFetch } from "../test/kit";
 
 vi.mock("./EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
-
-// NetWorthCard's headline privacy mask reads useAuth(): a minimal context
-// with private mode off.
-const authValue: AuthValue = {
-  isAuthenticated: false,
-  user: null,
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: async () => null,
-  loginWithPasskey: async () => {},
-  verifyLogin: async () => {},
-  adoptSession: () => {},
-  logout: async () => {},
-  updateUser: () => {},
-  updatePrefs: async () => {},
-};
-
-function withClient(children: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
-    <AuthContext.Provider value={authValue}>
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    </AuthContext.Provider>
-  );
-}
-
 /** Answers each endpoint the cards read. */
 function stubApi(routes: Record<string, unknown>) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => {
+  stubFetch(async (url: string) => {
       const path = Object.keys(routes).find((p) => url.includes(p));
-      return new Response(JSON.stringify(path ? routes[path] : []), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }),
-  );
+      return jsonResponse(path ? routes[path] : []);
+    });
 }
 
 const netWorth = (fxMissing: boolean): NetWorthResponse => ({
@@ -83,26 +49,26 @@ describe("missing exchange rate", () => {
       "/net-worth": netWorth(true),
       "/holdings": [unconverted("ese", "ESE"), unconverted("spy", "SPY")],
     });
-    render(withClient(<NetWorthCard />));
+    renderWithApp(<NetWorthCard />);
     expect(await screen.findByText("Excludes 2 holdings: no exchange rate yet.")).toBeInTheDocument();
   });
 
   it("says nothing when every rate resolved", async () => {
     stubApi({ "/net-worth": netWorth(false), "/holdings": [] });
-    render(withClient(<NetWorthCard />));
+    renderWithApp(<NetWorthCard />);
     expect(await screen.findByText(/1[ ,.]?000/)).toBeInTheDocument();
     expect(screen.queryByText(/Excludes/)).not.toBeInTheDocument();
   });
 
   it("explains the understated distribution under its card", async () => {
     stubApi({ "/accounts": [account(true)], "/holdings": [unconverted("ese", "ESE")] });
-    render(withClient(<DistributionCard />));
+    renderWithApp(<DistributionCard />);
     expect(await screen.findByText("Excludes 1 holding: no exchange rate yet.")).toBeInTheDocument();
   });
 
   it("shows the holding in its own currency, with no gain or loss", async () => {
     stubApi({ "/holdings": [unconverted("ese", "ESE")] });
-    render(withClient(<HoldingsCard />));
+    renderWithApp(<HoldingsCard />);
     expect(await screen.findByText("4 812,30 $")).toBeInTheDocument();
     expect(screen.queryByText(/4 000/)).not.toBeInTheDocument();
   });

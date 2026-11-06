@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor, within, act } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 
 import { CategoriesSurface } from "./CategoriesSurface";
 import type { BudgetCategory } from "../../../api/budget";
 import i18n from "../../../i18n";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
   return {
@@ -25,13 +25,7 @@ const ROWS: BudgetCategory[] = [
 ];
 
 function renderSurface() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-  return { ...render(<CategoriesSurface />, { wrapper: Wrapper }), client };
+  return renderWithApp(<CategoriesSurface />);
 }
 
 /** Waits for the write itself AND the cache-invalidation refetch it kicks off
@@ -42,13 +36,9 @@ async function waitForFullSettle(client: QueryClient) {
   await waitFor(() => expect(client.isMutating()).toBe(0));
 }
 
-function jsonOnce(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
 describe("CategoriesSurface", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(ROWS)));
+    stubFetch(async () => jsonResponse(ROWS));
   });
 
   it("lists the unarchived rows grouped expense → income → neutral", async () => {
@@ -89,12 +79,8 @@ describe("CategoriesSurface", () => {
 
     /** The list, then a 204 for the PUT, then the list again for the refetch. */
     function mockRows(rows: BudgetCategory[]) {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (_url: string, init?: RequestInit) =>
-          init?.method === "PUT" ? new Response(null, { status: 204 }) : jsonOnce(rows),
-        ),
-      );
+      stubFetch(async (_url: string, init?: RequestInit) =>
+          init?.method === "PUT" ? new Response(null, { status: 204 }) : jsonResponse(rows));
     }
 
     function putBody() {
@@ -115,16 +101,12 @@ describe("CategoriesSurface", () => {
     it("moves the row on screen before the server answers", async () => {
       // The PUT hangs, so what is on screen can only be the optimistic order.
       let answer: (r: Response) => void = () => {};
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (_url: string, init?: RequestInit) =>
+      stubFetch(async (_url: string, init?: RequestInit) =>
           init?.method === "PUT"
             ? new Promise<Response>((res) => {
                 answer = res;
               })
-            : jsonOnce(THREE),
-        ),
-      );
+            : jsonResponse(THREE));
       const { client } = renderSurface();
       await screen.findByText("Beta");
       fireEvent.click(screen.getByRole("button", { name: "Move Beta up" }));
@@ -179,12 +161,8 @@ describe("CategoriesSurface", () => {
     });
 
     it("puts the list back if the write fails", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (_url: string, init?: RequestInit) =>
-          init?.method === "PUT" ? new Response("nope", { status: 500 }) : jsonOnce(THREE),
-        ),
-      );
+      stubFetch(async (_url: string, init?: RequestInit) =>
+          init?.method === "PUT" ? new Response("nope", { status: 500 }) : jsonResponse(THREE));
       const { client } = renderSurface();
       await screen.findByText("Beta");
       fireEvent.click(screen.getByRole("button", { name: "Move Beta up" }));
@@ -293,7 +271,7 @@ describe("CategoriesSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_url, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("boom", { status: 500 })
-        : jsonOnce(ROWS),
+        : jsonResponse(ROWS),
     );
     renderSurface();
     await screen.findByText("Groceries");
@@ -308,7 +286,7 @@ describe("CategoriesSurface", () => {
     vi.mocked(fetch).mockImplementation(async () => new Response("no", { status: 500 }));
     renderSurface();
     const retry = await screen.findByRole("button", { name: /retry|réessayer/i });
-    vi.mocked(fetch).mockImplementation(async () => jsonOnce([]));
+    vi.mocked(fetch).mockImplementation(async () => jsonResponse([]));
     fireEvent.click(retry);
     expect(await screen.findByText("No categories yet.")).toBeVisible();
   });
@@ -322,7 +300,7 @@ describe("CategoriesSurface", () => {
           resolvers[id] = resolve;
         });
       }
-      return jsonOnce(ROWS);
+      return jsonResponse(ROWS);
     });
     const { client } = renderSurface();
     await screen.findByText("Groceries");
@@ -335,14 +313,14 @@ describe("CategoriesSurface", () => {
     });
 
     // Groceries' write settles first...
-    resolvers["gro"](jsonOnce(ROWS));
+    resolvers["gro"](jsonResponse(ROWS));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Archive Groceries" })).toBeEnabled(),
     );
     // ...but Ignore's write is still in flight, so it must stay disabled.
     expect(screen.getByRole("button", { name: "Archive Ignore" })).toBeDisabled();
 
-    resolvers["ign"](jsonOnce(ROWS));
+    resolvers["ign"](jsonResponse(ROWS));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Archive Ignore" })).toBeEnabled(),
     );
@@ -353,7 +331,7 @@ describe("CategoriesSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_url, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("boom", { status: 500 })
-        : jsonOnce(ROWS),
+        : jsonResponse(ROWS),
     );
     const { client } = renderSurface();
     await screen.findByText("Groceries");

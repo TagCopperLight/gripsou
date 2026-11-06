@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { NetWorthCard } from "./NetWorthCard";
 import type { NetWorthResponse, ProviderGroup, SyncStatus } from "../../api/types";
-import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
+import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
@@ -35,25 +34,13 @@ function connections(...statuses: SyncStatus[]): ProviderGroup[] {
 }
 
 function stubApi(groups: ProviderGroup[]) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) =>
-      new Response(JSON.stringify(String(url).includes("/connections") ? groups : String(url).includes("/holdings") ? [] : NO_ACCOUNTS), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
-  );
+  stubFetch(async (url: string) =>
+      jsonResponse(String(url).includes("/connections") ? groups : String(url).includes("/holdings") ? [] : NO_ACCOUNTS));
 }
 
 function renderCard(prefs = DEFAULT_PREFS) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const auth = { prefs } as unknown as AuthValue;
-  render(
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={auth}><NetWorthCard /></AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  const auth = authValue({ prefs });
+  renderWithApp(<NetWorthCard />, { auth });
 }
 
 describe("NetWorthCard with no accounts", () => {
@@ -100,7 +87,7 @@ describe("NetWorthCard with a day the reader's currency has no rate", () => {
       points: [{ t: 0, netWorth: null, invested: null }, { t: 1, netWorth: "100", invested: "90" }],
       summary: { netWorth: "100", invested: "90", gainAbs: "0", gainPct: "0", fxMissing: false },
     };
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body)));
+    stubFetch(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body));
     renderCard();
 
     await screen.findByTestId("chart");
@@ -119,7 +106,7 @@ describe("NetWorthCard in private mode", () => {
       points: [{ t: 0, netWorth: "10000", invested: "9000" }, { t: 1, netWorth: "11234.56", invested: "9000" }],
       summary: { netWorth: "11234.56", invested: "9000", gainAbs: "1234.56", gainPct: "0.1235", fxMissing: false },
     };
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body)));
+    stubFetch(async (url: string) => Response.json(String(url).includes("/holdings") ? [] : body));
     renderCard({ ...DEFAULT_PREFS, privateMode: true });
 
     expect(await screen.findByText(/12,35\s?%/)).toBeInTheDocument();

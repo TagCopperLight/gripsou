@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
 import { afterAiRunFinished, afterAiRunProgress } from "./invalidate";
+import { testQueryClient } from "../test/kit";
 
 describe("a background AI run", () => {
   async function calls(run: (qc: QueryClient) => unknown) {
-    const qc = new QueryClient();
+    const qc = testQueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
     await run(qc);
     return spy.mock.calls.map(([filters, options]) => ({

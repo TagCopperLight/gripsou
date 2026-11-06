@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { SettingsConnections } from "./Connections";
 import type { EnabledProvider, ProviderGroup } from "../../api/types";
 import { goTo } from "../../lib/navigate";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("../../lib/navigate", () => ({ goTo: vi.fn() }));
 
-const json = (body: unknown) => Response.json(body);
 let providers: EnabledProvider[];
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof stubFetch>;
 
 const GROUPS: ProviderGroup[] = [
   {
@@ -42,36 +40,28 @@ const GROUPS: ProviderGroup[] = [
   },
 ];
 
-function withClient(children: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-
 describe("SettingsConnections", () => {
   beforeEach(() => {
     vi.mocked(goTo).mockClear();
     providers = [{ key: "powens", displayName: "Powens", description: null }];
-    fetchMock = vi.fn(async (url: string) => {
-      if (url === "/api/providers/enabled") return json(providers);
-      if (url === "/api/connections/init") return json({ connectionId: "c3", redirectUrl: "https://provider.test/connect" });
-      return json(GROUPS);
+    fetchMock = stubFetch(async (url) => {
+      if (url === "/api/providers/enabled") return jsonResponse(providers);
+      if (url === "/api/connections/init") return jsonResponse({ connectionId: "c3", redirectUrl: "https://provider.test/connect" });
+      return jsonResponse(GROUPS);
     });
-    vi.stubGlobal("fetch", fetchMock);
   });
 
   it("shows an error state with retry when the fetch fails", async () => {
     // isLoading is false once a query errors, so the error branch must not be
     // nested under isLoading — otherwise an API failure shows the empty state.
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response("nope", { status: 500 }),
-    ));
-    render(withClient(<SettingsConnections />));
+    stubFetch(async () => new Response("nope", { status: 500 }));
+    renderWithApp(<SettingsConnections />);
     expect(await screen.findByText("Couldn't load this")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("expands a connection to reveal its accounts", async () => {
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const header = await screen.findByText("Boursorama");
     expect(screen.queryByText("Compte courant")).toBeNull();
     fireEvent.click(header);
@@ -80,14 +70,14 @@ describe("SettingsConnections", () => {
   });
 
   it("names the bank when asking to delete it", async () => {
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     await screen.findByText("Boursorama");
     fireEvent.click(screen.getAllByRole("button", { name: "Delete connection" })[0]);
     expect(screen.getByRole("dialog", { name: "Delete Boursorama?" })).toBeInTheDocument();
   });
 
   it("starts the only provider directly and follows its redirect", async () => {
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
@@ -100,11 +90,11 @@ describe("SettingsConnections", () => {
 
   it("returns to connections when the provider needs no redirect", async () => {
     fetchMock.mockImplementation(async (url: string) => {
-      if (url === "/api/providers/enabled") return json(providers);
-      if (url === "/api/connections/init") return json({ connectionId: "c3", redirectUrl: null });
-      return json(GROUPS);
+      if (url === "/api/providers/enabled") return jsonResponse(providers);
+      if (url === "/api/connections/init") return jsonResponse({ connectionId: "c3", redirectUrl: null });
+      return jsonResponse(GROUPS);
     });
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
@@ -119,33 +109,33 @@ describe("SettingsConnections", () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === "/api/providers/enabled") return providerResponse;
       if (url === "/api/connections/init") return initResponse;
-      return json(GROUPS);
+      return jsonResponse(GROUPS);
     });
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     expect(add).toBeDisabled();
     fireEvent.click(add);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    resolveProviders(json(providers));
+    resolveProviders(jsonResponse(providers));
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
     await waitFor(() => expect(add).toBeDisabled());
     fireEvent.click(add);
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/connections/init")).toHaveLength(1);
-    resolveInit(json({ connectionId: "c3", redirectUrl: null }));
+    resolveInit(jsonResponse({ connectionId: "c3", redirectUrl: null }));
     await waitFor(() => expect(goTo).toHaveBeenCalledWith("/settings/connections"));
   });
 
   it("shows a failure and lets the user retry the direct connection", async () => {
     let fail = true;
     fetchMock.mockImplementation(async (url: string) => {
-      if (url === "/api/providers/enabled") return json(providers);
+      if (url === "/api/providers/enabled") return jsonResponse(providers);
       if (url === "/api/connections/init") return fail
         ? new Response("nope", { status: 500 })
-        : json({ connectionId: "c3", redirectUrl: null });
-      return json(GROUPS);
+        : jsonResponse({ connectionId: "c3", redirectUrl: null });
+      return jsonResponse(GROUPS);
     });
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
@@ -158,7 +148,7 @@ describe("SettingsConnections", () => {
 
   it("keeps the picker when several providers are enabled", async () => {
     providers.push({ key: "other", displayName: "Other provider", description: null });
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
@@ -174,7 +164,7 @@ describe("SettingsConnections", () => {
 
   it("explains when no providers are enabled", async () => {
     providers = [];
-    render(withClient(<SettingsConnections />));
+    renderWithApp(<SettingsConnections />);
     const add = screen.getByRole("button", { name: "Add connection" });
     await waitFor(() => expect(add).toBeEnabled());
     fireEvent.click(add);
@@ -184,8 +174,8 @@ describe("SettingsConnections", () => {
   });
 
   it("with no bank, offers one Add button, in the empty state, and the guide", async () => {
-    fetchMock.mockImplementation(async (url: string) => (url === "/api/providers/enabled" ? json(providers) : json([])));
-    render(withClient(<SettingsConnections />));
+    fetchMock.mockImplementation(async (url: string) => (url === "/api/providers/enabled" ? jsonResponse(providers) : jsonResponse([])));
+    renderWithApp(<SettingsConnections />);
     expect(await screen.findByText("Connect your first bank")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Add connection" })).toHaveLength(1);
     expect(screen.getByText("Read-only")).toBeInTheDocument();

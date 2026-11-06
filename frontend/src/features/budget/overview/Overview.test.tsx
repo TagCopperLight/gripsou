@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, screen, waitFor, fireEvent } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { BudgetOverview } from "./Overview";
 import { BudgetProvider } from "../BudgetProvider";
 import { useBudget } from "../budgetContext";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS } from "../../../lib/prefs";
 import { addMonths, currentMonth, monthLabel } from "../../../lib/period";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
@@ -70,9 +69,7 @@ type Data = {
 
 function stubApi(summary: unknown = SUMMARY, data: Data = {}) {
   const { latest = currentMonth(), before = 5 } = data;
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => {
+  stubFetch(async (url: string) => {
       const u = String(url);
       const counts = {
         matching: before, total: before, uncategorized: 0, matchingTotal: "0",
@@ -92,8 +89,7 @@ function stubApi(summary: unknown = SUMMARY, data: Data = {}) {
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    }),
-  );
+    });
 }
 
 const requested = (fragment: string) =>
@@ -114,33 +110,13 @@ function FilterProbe() {
   );
 }
 
-// FiguresSurface's privacy mask reads useAuth, which throws outside an
-// AuthContext.Provider.
-const authValue: AuthValue = {
-  isAuthenticated: true,
-  user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-  adoptSession: () => {},
-  logout: async () => {},
-  updateUser: () => {},
-  updatePrefs: async () => {},
-};
-
 function renderPage(extra?: ReactNode, prefs = DEFAULT_PREFS) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={{ ...authValue, prefs }}>
-        <BudgetProvider>
-          <BudgetOverview />
-          {extra}
-        </BudgetProvider>
-      </AuthContext.Provider>
-    </QueryClientProvider>,
+  renderWithApp(
+    <BudgetProvider>
+      <BudgetOverview />
+      {extra}
+    </BudgetProvider>,
+    { prefs },
   );
 }
 

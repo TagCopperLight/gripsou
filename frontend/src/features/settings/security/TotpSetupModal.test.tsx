@@ -1,29 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { TotpSetupModal } from "./TotpSetupModal";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 type Reply = { status: number; body?: unknown; headers?: Record<string, string> };
 
 const json = ({ status, body, headers }: Reply) =>
-  new Response(body === undefined ? null : JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...headers },
-  });
+  body === undefined ? new Response(null, { status, headers }) : jsonResponse(body, status, headers);
 
 /** Answers per path; a path given a list answers its items in turn. */
 function stubApi(routes: Record<string, Reply | Reply[]>) {
   // Typed with `init` so the tests can read the sent body.
-  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
+  const fetchMock = stubFetch(async (url) => {
     const path = url.replace(/^\/api/, "");
     const route = routes[path];
     if (!route) return json({ status: 200, body: {} });
     const reply = Array.isArray(route) ? (route.length > 1 ? route.shift()! : route[0]) : route;
     return json(reply);
   });
-  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -42,12 +38,7 @@ const OK = {
 };
 
 function renderModal(onClose = vi.fn()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <TotpSetupModal onClose={onClose} />
-    </QueryClientProvider>,
-  );
+  renderWithApp(<TotpSetupModal onClose={onClose} />);
   return { onClose, user: userEvent.setup() };
 }
 

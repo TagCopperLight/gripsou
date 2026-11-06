@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { Budget } from "./Budget";
+import { renderWithApp, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();
 let pathname = "/budget/transactions";
@@ -14,24 +14,15 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 function status(reviewCount: number) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () =>
+  stubFetch(async () =>
       new Response(
         JSON.stringify({ configured: true, running: false, remaining: 0, reviewCount, lastRun: null }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    ),
-  );
+      ));
 }
 
 function renderShell() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={qc}>
-      <Budget />
-    </QueryClientProvider>,
-  );
+  return renderWithApp(<Budget />);
 }
 
 afterEach(() => {

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 
 import {
   useAiStatus,
@@ -11,23 +9,15 @@ import {
   type AiStatus,
 } from "./budget";
 import { keys } from "./keys";
-
-function wrapper() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
-}
+import { appWrapper, stubFetch } from "../test/kit";
 
 function stub(body: unknown, status = 200) {
   const empty = status === 204 || status === 202;
-  const fetchMock = vi.fn(async () =>
+  const fetchMock = stubFetch(async () =>
     new Response(empty ? null : JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json" },
-    }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+    }));
   return fetchMock;
 }
 
@@ -36,13 +26,13 @@ afterEach(() => vi.unstubAllGlobals());
 describe("budget AI client", () => {
   it("reads the run status", async () => {
     stub({ configured: true, running: false, remaining: 0, reviewCount: 3, lastRun: null });
-    const { result } = renderHook(() => useAiStatus(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useAiStatus(), appWrapper());
     await waitFor(() => expect(result.current.data?.reviewCount).toBe(3));
   });
 
   it("sends the original guess back on undo", async () => {
     const fetchMock = stub(null, 204);
-    const { result } = renderHook(() => useUndoReview(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useUndoReview(), appWrapper());
     await result.current.mutateAsync({ id: "t1", categoryId: "c1", confidence: "0.40" });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(String(url)).toContain("/budget/review/t1/undo");
@@ -51,7 +41,7 @@ describe("budget AI client", () => {
 
   it("accepts an empty 202 when a run is requested", async () => {
     const fetchMock = stub(null, 202);
-    const { result } = renderHook(() => useRequestCategorize(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useRequestCategorize(), appWrapper());
     await expect(result.current.mutateAsync()).resolves.toBeUndefined();
     const [url] = fetchMock.mock.calls[0] as unknown as [string];
     expect(String(url)).toContain("/budget/categorize");
@@ -59,7 +49,7 @@ describe("budget AI client", () => {
 
   it("accepts an empty 204 when the admin saves the provider", async () => {
     const fetchMock = stub(null, 204);
-    const { result } = renderHook(() => useSetBudgetAiSettings(), { wrapper: wrapper() });
+    const { result } = renderHook(() => useSetBudgetAiSettings(), appWrapper());
     await expect(
       result.current.mutateAsync({ provider: "jev", model: null }),
     ).resolves.toBeUndefined();
@@ -74,12 +64,9 @@ describe("refreshing as an AI run moves on", () => {
 
   function setup() {
     status = { configured: true, running: true, remaining: 10, reviewCount: 0, lastRun: null };
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(status)));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    stubFetch(async () => Response.json(status));
+    const { client: qc, wrapper } = appWrapper();
     const spy = vi.spyOn(qc, "invalidateQueries");
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-    );
     // Two readers at once, as the Budget page and its banner are.
     const { result } = renderHook(() => [useAiStatus(), useAiStatus()], { wrapper });
     const refreshed = (key: readonly unknown[]) =>

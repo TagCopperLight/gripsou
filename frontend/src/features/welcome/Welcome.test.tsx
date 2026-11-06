@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
-import { AuthContext, type AuthValue } from "../../auth/context";
+import { type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
 import type { SessionUser } from "../../api/types";
 import { ApiError } from "../../api/client";
+import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("../../lib/navigate", () => ({ goTo: vi.fn() }));
 
@@ -22,53 +21,34 @@ const newcomer: SessionUser = {
   id: "u1", name: "Alex", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false,
 };
 
-const json = (body: unknown) =>
-  new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
 type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number };
 let server: Server;
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof stubFetch>;
 
 function routes(url: string, init?: RequestInit) {
   const method = init?.method ?? "GET";
-  if (url === "/api/providers/enabled") return json(server.providers);
-  if (url === "/api/budget/categorize/status") return json({ configured: server.aiConfigured, running: false });
+  if (url === "/api/providers/enabled") return jsonResponse(server.providers);
+  if (url === "/api/budget/categorize/status") return jsonResponse({ configured: server.aiConfigured, running: false });
   if (url === "/api/connections")
-    return json(server.connections === 0 ? [] : [{
+    return jsonResponse(server.connections === 0 ? [] : [{
       providerKey: "p1", providerName: "Provider",
       connections: Array.from({ length: server.connections }, (_, i) => ({
         id: `c${i}`, displayName: `Bank ${i + 1}`, status: server.status ?? "ok", lastSyncAt: null, lastError: null, accounts: [], logo: null,
       })),
     }]);
-  if (url === "/api/connections/init" && method === "POST") return json({ connectionId: "c9", redirectUrl: null });
+  if (url === "/api/connections/init" && method === "POST") return jsonResponse({ connectionId: "c9", redirectUrl: null });
   if (url === "/api/auth/welcome" && method === "POST") return new Response(null, { status: 204 });
   // Like the server: a provider error fails the complete.
   if (url === "/api/connections/complete")
     return new Response(null, { status: String(init?.body).includes('"error"') ? 400 : 204 });
-  return json([]);
+  return jsonResponse([]);
 }
 
 function renderWelcome(overrides: Partial<AuthValue> = {}) {
-  const value: AuthValue = {
-    isAuthenticated: true,
-    user: newcomer,
-    isBootstrapping: false,
-    prefs: DEFAULT_PREFS,
-    login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-    adoptSession: () => {},
-    logout: async () => {},
-    updateUser: vi.fn(),
-    updatePrefs: vi.fn(async () => {}),
-    ...overrides,
-  };
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const wrap = (c: ReactNode) => (
-    <QueryClientProvider client={client}><AuthContext.Provider value={value}>{c}</AuthContext.Provider></QueryClientProvider>
-  );
-  render(wrap(<Welcome />));
-  return value;
+  const auth = authValue({ user: newcomer, ...overrides });
+  renderWithApp(<Welcome />, { auth });
+  return auth;
 }
 
 const posted = (path: string) =>
@@ -78,8 +58,7 @@ beforeEach(() => {
   search = {};
   navigate.mockClear();
   server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0 };
-  fetchMock = vi.fn(async (url: string, init?: RequestInit) => routes(url, init));
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock = stubFetch(routes);
 });
 
 afterEach(() => {
@@ -283,7 +262,7 @@ describe("Welcome", () => {
       search = { step: "bank", callback: "state=c9&code=abc" };
       fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
         if (url === "/api/connections/complete") return new Response("boom", { status: 400 });
-        if (url === "/api/connections") return json([pendingRow]);
+        if (url === "/api/connections") return jsonResponse([pendingRow]);
         return routes(url, init);
       });
       renderWelcome();

@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { SyncConnection } from "../../api/types";
 
-const syncSpy = vi.fn();
-const manageSpy = vi.fn();
-vi.mock("../../api/connections", () => ({
-  useManageConnection: () => ({ mutateAsync: manageSpy, isPending: false }),
-  useSyncConnection: () => ({ mutate: syncSpy }),
-}));
-
 import { ConnectionRow } from "./ConnectionRow";
+import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../test/kit";
+
+let fetchMock: ReturnType<typeof stubFetch>;
+/** The answer to POST /connections/c1/manage. */
+let manage: () => Promise<Response>;
+const syncs = () => requestsTo(fetchMock, "/connections/c1/sync");
+const manages = () => requestsTo(fetchMock, "/connections/c1/manage");
 
 const conn: SyncConnection = {
   id: "c1",
@@ -25,13 +25,17 @@ const conn: SyncConnection = {
 
 const expand = () => fireEvent.click(screen.getByRole("button", { name: /caisse/i }));
 
-beforeEach(() => { syncSpy.mockReset(); manageSpy.mockReset(); vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.restoreAllMocks();
+  manage = async () => jsonResponse({ redirectUrl: "https://webview.powens.com/en/manage?code=temporary" });
+  fetchMock = stubFetch(async (url) => (url.endsWith("/manage") ? manage() : new Response(null, { status: 204 })));
+});
 
 describe("ConnectionRow", () => {
 
 
   it("marks an account whose value has no rate today instead of showing 0", () => {
-    render(<ConnectionRow conn={{ ...conn, accounts: [{ ...conn.accounts[0], value: null }] }} />);
+    renderWithApp(<ConnectionRow conn={{ ...conn, accounts: [{ ...conn.accounts[0], value: null }] }} />);
     expand();
     expect(screen.getByText("—")).toBeInTheDocument();
     expect(screen.queryByText(/0,00/)).toBeNull();
@@ -39,21 +43,21 @@ describe("ConnectionRow", () => {
   });
 
   it("keeps the actions hidden until the row is expanded", () => {
-    render(<ConnectionRow conn={conn} onDelete={() => {}} />);
+    renderWithApp(<ConnectionRow conn={conn} onDelete={() => {}} />);
     // Only the (desktop) icon buttons exist while collapsed.
     expect(screen.queryByText("LIVRET A")).toBeNull();
     expand();
     expect(screen.getByText("LIVRET A")).toBeInTheDocument();
   });
 
-  it("syncs and deletes from the expanded panel", () => {
+  it("syncs and deletes from the expanded panel", async () => {
     const onDelete = vi.fn();
-    render(<ConnectionRow conn={conn} onDelete={onDelete} />);
+    renderWithApp(<ConnectionRow conn={conn} onDelete={onDelete} />);
     expand();
     // Icon button + panel button share the label; the panel one is last.
     const syncButtons = screen.getAllByRole("button", { name: /sync now/i });
     fireEvent.click(syncButtons[syncButtons.length - 1]);
-    expect(syncSpy).toHaveBeenCalledWith("c1");
+    await waitFor(() => expect(syncs()).toEqual([{ method: "POST", body: {} }]));
 
     const deleteButtons = screen.getAllByRole("button", { name: /delete connection/i });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
@@ -62,7 +66,7 @@ describe("ConnectionRow", () => {
 
   it("doesn't open on a computer when there is nothing to show", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
-    const { rerender } = render(<ConnectionRow conn={{ ...conn, accounts: [] }} />);
+    const { rerender } = renderWithApp(<ConnectionRow conn={{ ...conn, accounts: [] }} />);
     expand();
     expect(screen.getAllByRole("button", { name: /sync now/i })).toHaveLength(1);
     rerender(<ConnectionRow conn={{ ...conn, status: "pending" }} />);
@@ -72,7 +76,7 @@ describe("ConnectionRow", () => {
   });
 
   it("still opens a panel for a connection with no accounts on a phone", () => {
-    render(<ConnectionRow conn={{ ...conn, accounts: [] }} onDelete={() => {}} />);
+    renderWithApp(<ConnectionRow conn={{ ...conn, accounts: [] }} onDelete={() => {}} />);
     expand();
     expect(
       screen.getAllByRole("button", { name: /sync now/i }).length,
@@ -82,7 +86,7 @@ describe("ConnectionRow", () => {
 
 it("keeps the problem's message for the open row, under the accounts", () => {
   const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
-  render(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
+  renderWithApp(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
   // The problem takes the sync time's place, and the logo carries an amber dot.
   expect(screen.getByText("Partial update")).toBeInTheDocument();
   expect(screen.queryByText(/403 Client Error: Forbidden/)).toBeNull();
@@ -97,7 +101,7 @@ it("keeps the problem's message for the open row, under the accounts", () => {
 });
 
 it("says a failed sync in words with a red dot, and a healthy one's sync time with no dot", () => {
-  const { rerender } = render(<ConnectionRow conn={{ ...conn, status: "error", lastError: "sync took too long" }} />);
+  const { rerender } = renderWithApp(<ConnectionRow conn={{ ...conn, status: "error", lastError: "sync took too long" }} />);
   expect(screen.getByText("Sync failed")).toHaveAttribute("title", "sync took too long");
   expect(screen.getByTestId("connection-error-dot")).toBeInTheDocument();
   expand();
@@ -110,46 +114,46 @@ it("says a failed sync in words with a red dot, and a healthy one's sync time wi
 it("opens Manage with a temporary link and syncs once when returning", async () => {
   const tab = {opener:window,location:{href:"about:blank"},close:vi.fn()};
   vi.spyOn(window,"open").mockReturnValue(tab as unknown as Window);
-  manageSpy.mockResolvedValue({redirectUrl:"https://webview.powens.com/en/manage?code=temporary"});
-  render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  renderWithApp(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
   await waitFor(()=>expect(tab.location.href).toContain("code=temporary"));
-  expect(manageSpy).toHaveBeenCalledWith("c1");
+  expect(manages()).toHaveLength(1);
   expect(tab.opener).toBeNull();
   fireEvent.focus(window);
   fireEvent.focus(window);
-  expect(syncSpy).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(syncs()).toHaveLength(1));
 });
 
 it("handles blocked tabs and failed Manage requests", async () => {
   vi.spyOn(window,"open").mockReturnValue(null);
-  const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  const {unmount}=renderWithApp(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
   expect(screen.getByRole("alert")).toHaveTextContent("allow pop-ups");
-  expect(manageSpy).not.toHaveBeenCalled();
+  expect(manages()).toHaveLength(0);
   unmount();
   const close=vi.fn();
   vi.mocked(window.open).mockReturnValue({opener:null,location:{href:""},close} as unknown as Window);
-  manageSpy.mockRejectedValue(new Error("provider failed"));
-  render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  manage = async () => new Response("provider failed", { status: 502 });
+  renderWithApp(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
   await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("Couldn't open Powens"));
   expect(close).toHaveBeenCalled();
-  expect(syncSpy).not.toHaveBeenCalled();
+  expect(syncs()).toHaveLength(0);
 });
 
 it("discards a delayed Manage response after leaving the page", async () => {
   const close=vi.fn();
   const tab={opener:null,location:{href:"about:blank"},close};
   vi.spyOn(window,"open").mockReturnValue(tab as unknown as Window);
-  let resolve!: (value:{redirectUrl:string}) => void;
-  manageSpy.mockReturnValue(new Promise((done)=>{resolve=done;}));
-  const {unmount}=render(<ConnectionRow conn={{...conn,canManage:true}} />);
+  let resolve!: (value: Response) => void;
+  manage = () => new Promise((done)=>{resolve=done;});
+  const {unmount}=renderWithApp(<ConnectionRow conn={{...conn,canManage:true}} />);
   fireEvent.click(screen.getByRole("button",{name:"Manage"}));
   unmount();
-  resolve({redirectUrl:"https://webview.powens.com/en/manage?code=temporary"});
+  await waitFor(() => expect(manages()).toHaveLength(1));
+  resolve(jsonResponse({redirectUrl:"https://webview.powens.com/en/manage?code=temporary"}));
   await waitFor(()=>expect(close).toHaveBeenCalled());
   expect(tab.location.href).toBe("about:blank");
   fireEvent.focus(window);
-  expect(syncSpy).not.toHaveBeenCalled();
+  expect(syncs()).toHaveLength(0);
 });

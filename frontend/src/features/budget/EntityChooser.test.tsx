@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { screen, fireEvent, within } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 
 import { CategoryChooser } from "./CategoryChooser";
 import type { BudgetCategory } from "../../api/budget";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 function cat(over: Partial<BudgetCategory>): BudgetCategory {
   return {
@@ -25,36 +25,22 @@ const CATS: BudgetCategory[] = [
 type ChooserOptions = { mode?: "multi" | "pick"; selectedIds?: string[]; allowNone?: boolean };
 
 function renderChooser({ mode = "multi", selectedIds = [], allowNone }: ChooserOptions = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
   const onToggle = vi.fn();
   const onPick = vi.fn();
   const onClose = vi.fn();
-  const result = render(
+  const result = renderWithApp(
     mode === "pick" ? (
       <CategoryChooser mode="pick" selectedIds={selectedIds} onPick={onPick} onClose={onClose} allowNone={allowNone} />
     ) : (
       <CategoryChooser mode="multi" selectedIds={selectedIds} onToggle={onToggle} onClose={onClose} />
     ),
-    { wrapper: Wrapper },
   );
   return { onToggle, onPick, onClose, unmount: result.unmount };
 }
 
 describe("CategoryChooser", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify(CATS), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-      ),
-    );
+    stubFetch(async () => jsonResponse(CATS));
   });
 
   it("focuses the search field on open, so typing starts at once", () => {
@@ -176,7 +162,6 @@ describe("CategoryChooser", () => {
   it("keeps focus in the search field across keyboard toggles, even as the parent re-renders", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     // A parent like the filter panel: every toggle updates its state, and its
     // close handler reads that state, so each render hands the chooser a new
     // one (the React Compiler can only reuse closures whose inputs are
@@ -202,11 +187,7 @@ describe("CategoryChooser", () => {
         </>
       );
     }
-    render(
-      <QueryClientProvider client={client}>
-        <Harness />
-      </QueryClientProvider>,
-    );
+    renderWithApp(<Harness />);
     await screen.findByText("Groceries");
     const search = screen.getByRole("searchbox");
     expect(search).toHaveFocus();

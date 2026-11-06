@@ -1,93 +1,45 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { SettingsAccount } from "./Account";
-import { AuthContext, type AuthValue } from "../../../auth/context";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { authValue, testUser, renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
-// Module-level spies so they can be referenced in the hoisted vi.mock factory.
-const revokeSpy = vi.fn();
-const revokeOthersSpy = vi.fn();
 const logoutSpy = vi.fn();
 const navigateSpy = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigateSpy }));
 
-vi.mock("../../../api/auth", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../api/auth")>();
-  return {
-    ...actual,
-    useSessions: () => ({
-      data: [
-        {
-          id: "1",
-          device: "Chrome on macOS",
-          ip: "1.2.3.4",
-          createdAt: 0,
-          lastActiveAt: 0,
-          remembered: true,
-          current: true,
-        },
-        {
-          id: "2",
-          device: "Firefox on Linux",
-          ip: null,
-          createdAt: 0,
-          lastActiveAt: 0,
-          remembered: false,
-          current: false,
-        },
-      ],
+const SESSIONS = [
+  { id: "1", device: "Chrome on macOS", ip: "1.2.3.4", createdAt: 0, lastActiveAt: 0, remembered: true, current: true },
+  { id: "2", device: "Firefox on Linux", ip: null, createdAt: 0, lastActiveAt: 0, remembered: false, current: false },
+];
+
+const renderAccount = () =>
+  renderWithApp(<SettingsAccount />, {
+    auth: authValue({
+      user: testUser({ name: "Jules", email: "jules@gripsou.local", role: "admin" }),
+      logout: logoutSpy,
     }),
-    useRevokeSession: () => ({ mutate: revokeSpy, isPending: false }),
-    useRevokeOtherSessions: () => ({ mutate: revokeOthersSpy, isPending: false }),
-  };
-});
-
-const authValue: AuthValue = {
-  isAuthenticated: true,
-  user: { id: "u1", name: "Jules", email: "jules@gripsou.local", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true },
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: vi.fn(),
-  loginWithPasskey: vi.fn(),
-  verifyLogin: vi.fn(),
-  adoptSession: () => {},
-  logout: logoutSpy,
-  updateUser: vi.fn(),
-  updatePrefs: async () => {},
-};
-
-function withClient(children: ReactNode) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return (
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>
-    </QueryClientProvider>
-  );
-}
 
 type Reply = () => Response;
 
-/** A fetch that answers `/auth/mfa/status` with the given two-factor state and
- *  any other path from `routes` (by path, after the `/api` prefix), else 204. */
-function stubFetch(
+/** A fetch that answers `/auth/mfa/status` with the given two-factor state,
+ *  `/auth/sessions` with two sessions, and any other path from `routes` (by
+ *  path, after the `/api` prefix), else 204. */
+function stubAccount(
   totp: boolean,
   routes: Record<string, Reply> = {},
   passkeys: { id: string; name: string; createdAt: number; lastUsedAt: number | null }[] = [],
 ) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = stubFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace(/^\/api/, "");
     if (path === "/auth/mfa/status") {
-      return new Response(JSON.stringify({ totp, recoveryRemaining: 10, passkeys }), { status: 200 });
+      return jsonResponse({ totp, recoveryRemaining: 10, passkeys });
     }
     const reply = routes[path];
+    if (!reply && path === "/auth/sessions" && init?.method === "GET") return jsonResponse(SESSIONS);
     return reply ? reply() : new Response(null, { status: 204 });
   });
-  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -98,8 +50,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("SettingsAccount layout", () => {
   it("shows the profile line and the security rows", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    renderAccount();
     expect(screen.getByText("Jules")).toBeInTheDocument();
     expect(screen.getByText("jules@gripsou.local")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit profile" })).toBeInTheDocument();
@@ -111,8 +63,8 @@ describe("SettingsAccount layout", () => {
   });
 
   it("opens the Edit profile window", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    renderAccount();
     fireEvent.click(screen.getByRole("button", { name: "Edit profile" }));
     expect(screen.getByRole("dialog", { name: "Edit profile" })).toBeInTheDocument();
     await twoFactorSwitch();
@@ -121,8 +73,8 @@ describe("SettingsAccount layout", () => {
 
 describe("SettingsAccount two-factor row", () => {
   it("shows the switch off with a phone icon when two-factor is off", async () => {
-    stubFetch(false);
-    const { container } = render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    const { container } = renderAccount();
     const sw = await twoFactorSwitch();
     expect(sw).toHaveAttribute("aria-checked", "false");
     expect(container.querySelector(".lucide-smartphone")).not.toBeNull();
@@ -131,8 +83,8 @@ describe("SettingsAccount two-factor row", () => {
   });
 
   it("shows the switch on, a shield and the gear when two-factor is on", async () => {
-    stubFetch(true);
-    const { container } = render(withClient(<SettingsAccount />));
+    stubAccount(true);
+    const { container } = renderAccount();
     const sw = await twoFactorSwitch();
     expect(sw).toHaveAttribute("aria-checked", "true");
     expect(container.querySelector(".lucide-shield-check")).not.toBeNull();
@@ -141,8 +93,8 @@ describe("SettingsAccount two-factor row", () => {
   });
 
   it("opens the setup window when the switch is turned on", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    renderAccount();
     fireEvent.click(await twoFactorSwitch());
     expect(screen.getByRole("dialog", { name: "Set up two-factor" })).toBeInTheDocument();
     // Opening the window does not flip the switch: the server's state does.
@@ -150,16 +102,16 @@ describe("SettingsAccount two-factor row", () => {
   });
 
   it("asks to confirm when the switch is turned off", async () => {
-    stubFetch(true);
-    render(withClient(<SettingsAccount />));
+    stubAccount(true);
+    renderAccount();
     fireEvent.click(await twoFactorSwitch());
     expect(screen.getByRole("dialog", { name: "Turn off two-factor?" })).toBeInTheDocument();
     expect(await twoFactorSwitch()).toHaveAttribute("aria-checked", "true");
   });
 
   it("opens the manage window from the gear", async () => {
-    stubFetch(true);
-    render(withClient(<SettingsAccount />));
+    stubAccount(true);
+    renderAccount();
     await twoFactorSwitch();
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
     expect(
@@ -173,12 +125,13 @@ describe("SettingsAccount two-factor row", () => {
 describe("SettingsAccount when two-factor's status can't be loaded", () => {
   it("says so on both rows, offers a retry, and shows the switch once it loads", async () => {
     let fail = true;
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
-      String(input).endsWith("/auth/mfa/status") && !fail
-        ? new Response(JSON.stringify({ totp: false, recoveryRemaining: 0, passkeys: [] }), { status: 200 })
-        : new Response(null, { status: String(input).endsWith("/auth/mfa/status") ? 500 : 204 }),
-    ));
-    render(withClient(<SettingsAccount />));
+    stubFetch(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/auth/sessions")) return jsonResponse(SESSIONS);
+      if (!url.endsWith("/auth/mfa/status")) return new Response(null, { status: 204 });
+      return fail ? new Response(null, { status: 500 }) : jsonResponse({ totp: false, recoveryRemaining: 0, passkeys: [] });
+    });
+    renderAccount();
     expect(await screen.findAllByText("Couldn't load this")).toHaveLength(2);
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 
@@ -194,8 +147,8 @@ describe("SettingsAccount passkeys row", () => {
   const passkeysIcon = (container: HTMLElement) => container.querySelector(".lucide-fingerprint");
 
   it("shows a grey icon and only the add button when there are no passkeys", async () => {
-    stubFetch(false);
-    const { container } = render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    const { container } = renderAccount();
     expect(screen.getByText("Passkeys")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Add passkey" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
@@ -205,8 +158,8 @@ describe("SettingsAccount passkeys row", () => {
   });
 
   it("shows a green icon and the gear when there are passkeys", async () => {
-    stubFetch(false, {}, [PASSKEY]);
-    const { container } = render(withClient(<SettingsAccount />));
+    stubAccount(false, {}, [PASSKEY]);
+    const { container } = renderAccount();
     expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add passkey" })).toBeInTheDocument();
     const box = passkeysIcon(container)!.parentElement!;
@@ -215,23 +168,23 @@ describe("SettingsAccount passkeys row", () => {
   });
 
   it("opens the passkeys list from the gear", async () => {
-    stubFetch(false, {}, [PASSKEY]);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false, {}, [PASSKEY]);
+    renderAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getByRole("dialog", { name: "Passkeys" });
     expect(await within(dialog).findByText("MacBook")).toBeInTheDocument();
   });
 
   it("opens the add window from the plus button", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    renderAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Add passkey" }));
     expect(screen.getByRole("dialog", { name: "Add a passkey" })).toBeInTheDocument();
   });
 
   it("swaps the list for the add window when Add passkey is pressed inside the list", async () => {
-    stubFetch(false, {}, [PASSKEY]);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false, {}, [PASSKEY]);
+    renderAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getByRole("dialog", { name: "Passkeys" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add passkey" }));
@@ -245,14 +198,14 @@ describe("SettingsAccount password", () => {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
   async function openPasswordWindow() {
-    render(withClient(<SettingsAccount />));
+    renderAccount();
     await twoFactorSwitch();
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     return screen.getByRole("dialog", { name: "Change password" });
   }
 
   it("posts to /auth/change-password, closes the window and says so on the row", async () => {
-    const fetchMock = stubFetch(false);
+    const fetchMock = stubAccount(false);
     await openPasswordWindow();
     expect(screen.queryByText("Password updated")).not.toBeInTheDocument();
     set("Current password", "old");
@@ -268,7 +221,7 @@ describe("SettingsAccount password", () => {
   });
 
   it("clears the success line when the window is opened again", async () => {
-    stubFetch(false);
+    stubAccount(false);
     await openPasswordWindow();
     set("Current password", "old");
     set("New password", "newpass12");
@@ -280,7 +233,7 @@ describe("SettingsAccount password", () => {
   });
 
   it("keeps the window open with a message when the current password is wrong", async () => {
-    stubFetch(false, {
+    stubAccount(false, {
       "/auth/change-password": () => new Response("bad", { status: 400 }),
     });
     const dialog = await openPasswordWindow();
@@ -294,28 +247,27 @@ describe("SettingsAccount password", () => {
 });
 
 describe("SettingsAccount sessions card", () => {
-  beforeEach(() => {
-    revokeSpy.mockReset();
-    revokeOthersSpy.mockReset();
-  });
-
   it("lists sessions, marks current, revokes others", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    const fetchMock = stubAccount(false);
+    renderAccount();
     // Phone and desktop layouts are both in the DOM (CSS picks one), so each
     // session appears twice.
-    expect(screen.getAllByText("Chrome on macOS")).not.toHaveLength(0);
+    expect(await screen.findAllByText("Chrome on macOS")).not.toHaveLength(0);
     expect(screen.getAllByText(/this device/i)).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
-    expect(revokeSpy).toHaveBeenCalledWith("2");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/auth/sessions/2", expect.objectContaining({ method: "DELETE" })),
+    );
     await twoFactorSwitch();
   });
 
   it("logs out every other session", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
-    fireEvent.click(screen.getByRole("button", { name: "Log out all other sessions" }));
-    expect(revokeOthersSpy).toHaveBeenCalled();
+    const fetchMock = stubAccount(false);
+    renderAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Log out all other sessions" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/auth/sessions", expect.objectContaining({ method: "DELETE" })),
+    );
     await twoFactorSwitch();
   });
 });
@@ -327,8 +279,8 @@ describe("SettingsAccount delete account", () => {
   });
 
   it("asks for the password before deleting", async () => {
-    stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    stubAccount(false);
+    renderAccount();
     await twoFactorSwitch();
     fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
 
@@ -341,8 +293,8 @@ describe("SettingsAccount delete account", () => {
   });
 
   it("deletes via DELETE /auth/account, then logs out and redirects", async () => {
-    const fetchMock = stubFetch(false);
-    render(withClient(<SettingsAccount />));
+    const fetchMock = stubAccount(false);
+    renderAccount();
     await twoFactorSwitch();
     fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
     fireEvent.change(screen.getByLabelText(/enter your password to confirm/i), {

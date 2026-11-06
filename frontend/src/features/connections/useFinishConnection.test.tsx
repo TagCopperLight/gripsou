@@ -1,34 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode, type ReactNode } from "react";
 import { useFinishConnection } from "./useFinishConnection";
+import { appWrapper, stubFetch, requestsTo } from "../../test/kit";
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof stubFetch>;
 
 beforeEach(() => {
   // Like the server: a provider error fails the complete.
-  fetchMock = vi.fn(async (url: string, init?: RequestInit) =>
+  fetchMock = stubFetch(async (url, init) =>
     url === "/api/connections/complete" && String(init?.body).includes('"error"')
       ? new Response("boom", { status: 400 })
       : new Response(null, { status: 204 }),
   );
-  vi.stubGlobal("fetch", fetchMock);
 });
 
 function finish(query: string | undefined, { strict = false, onDone = vi.fn() } = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const wrapper = ({ children }: { children: ReactNode }) => {
-    const tree = <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-    return strict ? <StrictMode>{tree}</StrictMode> : tree;
-  };
-  return { onDone, ...renderHook(() => useFinishConnection(query, onDone), { wrapper }) };
+  return { onDone, ...renderHook(() => useFinishConnection(query, onDone), appWrapper({ strict })) };
 }
 
-const completes = () =>
-  fetchMock.mock.calls
-    .filter(([url]) => url === "/api/connections/complete")
-    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
+const completes = () => requestsTo(fetchMock, "/connections/complete").map((r) => r.body);
 
 /** A mutation reaches fetch a few ticks after the effect: give it the
  *  chance, so "nothing" means nothing and not "nothing yet". */

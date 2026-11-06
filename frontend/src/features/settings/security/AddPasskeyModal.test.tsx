@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser";
 
 import { AddPasskeyModal } from "./AddPasskeyModal";
 import { keys } from "../../../api/keys";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 vi.mock("@simplewebauthn/browser", () => ({
   startRegistration: vi.fn(),
@@ -15,21 +15,17 @@ vi.mock("@simplewebauthn/browser", () => ({
 type Reply = { status: number; body?: unknown; headers?: Record<string, string> };
 
 const json = ({ status, body, headers }: Reply) =>
-  new Response(body === undefined ? null : JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...headers },
-  });
+  body === undefined ? new Response(null, { status, headers }) : jsonResponse(body, status, headers);
 
 /** Answers per path; a path given a list answers its items in turn. */
 function stubApi(routes: Record<string, Reply | Reply[]>) {
-  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
+  const fetchMock = stubFetch(async (url) => {
     const path = url.replace(/^\/api/, "");
     const route = routes[path];
     if (!route) return json({ status: 200, body: {} });
     const reply = Array.isArray(route) ? (route.length > 1 ? route.shift()! : route[0]) : route;
     return json(reply);
   });
-  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -52,13 +48,8 @@ const mockedStart = vi.mocked(startRegistration);
 const domError = (name: string) => new DOMException("nope", name);
 
 function renderModal(onClose = vi.fn()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { client } = renderWithApp(<AddPasskeyModal onClose={onClose} />);
   const invalidate = vi.spyOn(client, "invalidateQueries");
-  render(
-    <QueryClientProvider client={client}>
-      <AddPasskeyModal onClose={onClose} />
-    </QueryClientProvider>,
-  );
   return { onClose, invalidate, user: userEvent.setup() };
 }
 
@@ -119,13 +110,12 @@ describe("AddPasskeyModal", () => {
   it("opens no browser window when closed before the options arrived", async () => {
     let release!: () => void;
     const held = new Promise<void>((r) => { release = r; });
-    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
+    const fetchMock = stubFetch(async (url) => {
       const path = url.replace(/^\/api/, "");
       if (path === "/auth/mfa/passkeys/register/options") await held;
       const reply = OK[path as keyof typeof OK];
       return json(reply ?? { status: 200, body: {} });
     });
-    vi.stubGlobal("fetch", fetchMock);
     const { onClose, user } = renderModal();
 
     await submitPassword(user);

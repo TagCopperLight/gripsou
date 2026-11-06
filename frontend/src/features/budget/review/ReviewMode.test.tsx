@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 import { ReviewMode } from "./ReviewMode";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { authValue, renderWithApp, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
@@ -46,7 +45,7 @@ const CATEGORIES = [
 ];
 
 function stubServer(server: Server) {
-  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+  stubFetch(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (init?.method === "POST" || init?.method === "PATCH") {
       server.calls.push({ url: u, body: init.body ? JSON.parse(String(init.body)) : null });
@@ -78,19 +77,12 @@ function stubServer(server: Server) {
     }
     if (u.includes("/budget/categories")) return Response.json(CATEGORIES);
     return Response.json(server.pending);
-  }));
+  });
 }
 
 function renderMode() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const auth = { prefs: DEFAULT_PREFS, updatePrefs: vi.fn() } as unknown as AuthValue;
-  return render(
-    <QueryClientProvider client={qc}>
-      <AuthContext.Provider value={auth}>
-        <ReviewMode />
-      </AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  const auth = authValue({ prefs: DEFAULT_PREFS, updatePrefs: vi.fn() });
+  return renderWithApp(<ReviewMode />, { auth });
 }
 
 afterEach(() => vi.unstubAllGlobals());

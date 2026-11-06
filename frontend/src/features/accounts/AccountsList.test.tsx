@@ -1,13 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 
 import userEvent from "@testing-library/user-event";
 
 import { AccountsList } from "./AccountsList";
 import type { Account } from "../../api/types";
-import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
+import { authValue, renderWithApp, stubFetch } from "../../test/kit";
 
 function account(id: string, connectionId: string, value: string): Account {
   return {
@@ -17,16 +16,10 @@ function account(id: string, connectionId: string, value: string): Account {
 }
 
 function renderList(accounts: Account[], privateMode = false) {
-  vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-    new Response(/\/(holdings|connections)/.test(String(url)) ? "[]" : JSON.stringify(accounts), { status: 200, headers: { "Content-Type": "application/json" } }),
-  ));
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const auth = { prefs: { ...DEFAULT_PREFS, privateMode } } as unknown as AuthValue;
-  return render(
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={auth}><AccountsList /></AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  stubFetch(async (url: string) =>
+    new Response(/\/(holdings|connections)/.test(String(url)) ? "[]" : JSON.stringify(accounts), { status: 200, headers: { "Content-Type": "application/json" } }));
+  const auth = authValue({ prefs: { ...DEFAULT_PREFS, privateMode } });
+  return renderWithApp(<AccountsList />, { auth });
 }
 
 describe("AccountsList", () => {

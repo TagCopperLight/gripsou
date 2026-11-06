@@ -1,51 +1,41 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, beforeEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ProviderGroup } from "../../api/types";
 
-const syncOne = { mutate: vi.fn(), isPending: false, variables: undefined };
-const syncAll = { mutate: vi.fn(), isPending: false };
-const connectionsData: { data: ProviderGroup[]; isLoading: boolean } = {
-  data: [
-    {
-      providerKey: "powens",
-      providerName: "Powens",
-      connections: [
-        {
-          id: "c1",
-          displayName: "My bank",
-          status: "ok",
-          lastSyncAt: null,
-          lastError: null,
-          accounts: [
-            { id: "a1", name: "Checking", typeKey: "savings", value: "10", lastSyncAt: null, color: "#4dd0b1" },
-          ],
-          logo: null,
-        },
-      ],
-    },
-  ],
-  isLoading: false,
-};
-
-const manageSpy = vi.fn();
-vi.mock("../../api/connections", () => ({
-  useConnections: () => connectionsData,
-  useManageConnection: () => ({ mutateAsync: manageSpy, isPending: false }),
-  useSyncConnection: () => syncOne,
-  useSyncAll: () => syncAll,
-}));
+const CONNECTIONS: ProviderGroup[] = [
+  {
+    providerKey: "powens",
+    providerName: "Powens",
+    connections: [
+      {
+        id: "c1",
+        displayName: "My bank",
+        status: "ok",
+        lastSyncAt: null,
+        lastError: null,
+        accounts: [
+          { id: "a1", name: "Checking", typeKey: "savings", value: "10", lastSyncAt: null, color: "#4dd0b1" },
+        ],
+        logo: null,
+      },
+    ],
+  },
+];
 
 import { SyncModal } from "./SyncModal";
+import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../test/kit";
 
 describe("SyncModal", () => {
+  let fetchMock: ReturnType<typeof stubFetch>;
   beforeEach(() => {
-    syncOne.mutate.mockReset();
-    syncAll.mutate.mockReset();
+    fetchMock = stubFetch(async (_url, init) =>
+      init?.method === "POST" ? new Response(null, { status: 204 }) : jsonResponse(CONNECTIONS),
+    );
   });
 
-  it("lists the connections without naming their provider", () => {
-    render(<SyncModal onClose={() => {}} />);
-    expect(screen.getByText("My bank")).toBeInTheDocument();
+  it("lists the connections without naming their provider", async () => {
+    renderWithApp(<SyncModal onClose={() => {}} />);
+    expect(await screen.findByText("My bank")).toBeInTheDocument();
     expect(screen.queryByText(/powens/i)).not.toBeInTheDocument();
     // Accounts are collapsed until the row is expanded.
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
@@ -55,11 +45,13 @@ describe("SyncModal", () => {
     expect(screen.queryByText("Savings")).not.toBeInTheDocument();
   });
 
-  it("syncs one connection and syncs all", () => {
-    render(<SyncModal onClose={() => {}} />);
+  it("syncs one connection and syncs all", async () => {
+    renderWithApp(<SyncModal onClose={() => {}} />);
+    await screen.findByText("My bank");
     fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
-    expect(syncOne.mutate).toHaveBeenCalledWith("c1");
+    await waitFor(() => expect(requestsTo(fetchMock, "/connections/c1/sync")).toHaveLength(1));
+    expect(requestsTo(fetchMock, "/connections/c1/sync")[0].method).toBe("POST");
     fireEvent.click(screen.getByRole("button", { name: "Sync all" }));
-    expect(syncAll.mutate).toHaveBeenCalled();
+    await waitFor(() => expect(requestsTo(fetchMock, "/api/sync")).toEqual([{ method: "POST", body: {} }]));
   });
 });

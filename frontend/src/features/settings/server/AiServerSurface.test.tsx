@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiServerSurface } from "./AiServerSurface";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 function stub(available: string[]) {
   const patches: unknown[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+  stubFetch(async (_url: string, init?: RequestInit) => {
     if (init?.method === "PATCH") { patches.push(JSON.parse(String(init.body))); return new Response(null, { status: 204 }); }
     return Response.json({ provider: null, model: null, available, defaults: { jev: "jev-latest" } });
-  }));
+  });
   return patches;
 }
 
@@ -18,16 +18,14 @@ afterEach(() => vi.unstubAllGlobals());
 describe("AiServerSurface", () => {
   it("hides a provider whose key is not set", async () => {
     stub([]);
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
+    renderWithApp(<AiServerSurface />);
     expect(await screen.findByRole("radio", { name: "off" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("radio", { name: "jev" })).toBeNull();
   });
 
   it("offers a provider whose key is set, and pre-fills the model", async () => {
     const patches = stub(["jev"]);
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
+    renderWithApp(<AiServerSurface />);
     // Every choice is a visible radio segment.
     fireEvent.click(await screen.findByRole("radio", { name: "jev" }));
     await waitFor(() => expect(patches.at(-1)).toEqual({ provider: "jev", model: "jev-latest" }));
@@ -37,7 +35,7 @@ describe("AiServerSurface", () => {
     const patches: unknown[] = [];
     let settings = { provider: "jev", model: "jev-retired", available: ["jev"],
       defaults: { jev: "jev-latest" } };
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    stubFetch(async (url: string, init?: RequestInit) => {
       if (init?.method === "PATCH") {
         const body = JSON.parse(String(init.body));
         patches.push(body);
@@ -48,9 +46,8 @@ describe("AiServerSurface", () => {
         return Response.json(["jev-2", "jev-latest"]);
       }
       return Response.json(settings);
-    }));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
+    });
+    renderWithApp(<AiServerSurface />);
     const model = await screen.findByLabelText("Model");
     await waitFor(() => expect(model).toBeEnabled());
     expect(model).toHaveTextContent("jev-retired");
@@ -69,7 +66,7 @@ describe("AiServerSurface", () => {
     const patches: unknown[] = [];
     let settings = { provider: "jev", model: "custom-model", available: ["jev"],
       defaults: { jev: "jev-latest" } };
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    stubFetch(async (url: string, init?: RequestInit) => {
       if (url.includes("/models/")) return new Response("bad gateway", { status: 502 });
       if (init?.method === "PATCH") {
         const body = JSON.parse(String(init.body));
@@ -78,9 +75,8 @@ describe("AiServerSurface", () => {
         return new Response(null, { status: 204 });
       }
       return Response.json(settings);
-    }));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
+    });
+    renderWithApp(<AiServerSurface />);
     expect(await screen.findByText(/could not be loaded/)).toBeVisible();
     const model = screen.getByLabelText("Model");
     expect(model).toHaveValue("custom-model");
@@ -92,9 +88,8 @@ describe("AiServerSurface", () => {
   });
 
   it("offers a retry instead of vanishing when the settings cannot be loaded", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 500 })));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={qc}><AiServerSurface /></QueryClientProvider>);
+    stubFetch(async () => new Response("down", { status: 500 }));
+    renderWithApp(<AiServerSurface />);
     expect(screen.getByText("AI categorisation")).toBeVisible();
     expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
   });

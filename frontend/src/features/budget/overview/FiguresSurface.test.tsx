@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 
 import { FiguresSurface } from "./FiguresSurface";
 import type { BudgetSummary } from "../../../api/overview";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
+import { renderWithApp } from "../../../test/kit";
 
 function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
   return {
@@ -21,27 +21,9 @@ function summary(over: Partial<BudgetSummary["figures"]> = {}): BudgetSummary {
   };
 }
 
-// The figures' privacy mask reads `useAuth()`, so every render needs an
-// AuthContext.Provider.
+// The figures' privacy mask reads `useAuth()`.
 function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
-  const authValue: AuthValue = {
-    isAuthenticated: true,
-    user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs, welcomeDone: true },
-    isBootstrapping: false,
-    prefs,
-    login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-    adoptSession: () => {},
-    logout: async () => {},
-    updateUser: () => {},
-    updatePrefs: async () => {},
-  };
-  return render(
-    <AuthContext.Provider value={authValue}>
-      <FiguresSurface summary={sum} />
-    </AuthContext.Provider>,
-  );
+  return renderWithApp(<FiguresSurface summary={sum} />, { prefs });
 }
 
 describe("FiguresSurface", () => {

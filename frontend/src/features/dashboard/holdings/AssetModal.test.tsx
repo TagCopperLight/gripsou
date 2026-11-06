@@ -1,12 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { AssetModal } from "./AssetModal";
 import type { Holding } from "../../../api/types";
-import { AuthContext, type AuthValue } from "../../../auth/context";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 // Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
 // the chart mid-test — stub it out, as FxNote.test.tsx does.
@@ -24,34 +21,19 @@ const BASE: Holding = {
   meanPrice: "80",
 };
 
-function withClient(children: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={{ prefs: DEFAULT_PREFS } as unknown as AuthValue}>{children}</AuthContext.Provider>
-    </QueryClientProvider>
-  );
-}
-
 describe("AssetModal composition surface", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify([]), {
-        status: 200, headers: { "Content-Type": "application/json" },
-      }),
-    ));
+    stubFetch(async () => jsonResponse([]));
   });
 
   it("shows the composition surface for an ETF with composition", () => {
-    render(withClient(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />));
+    renderWithApp(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />);
     expect(screen.getByText("Country distribution")).toBeInTheDocument();
     expect(screen.getByText("United States")).toBeInTheDocument();
   });
 
   it("hides the surface when composition is null", () => {
-    render(withClient(
-      <AssetModal holding={{ ...BASE, composition: null }} netWorth={5000} onClose={() => {}} />,
-    ));
+    renderWithApp(<AssetModal holding={{ ...BASE, composition: null }} netWorth={5000} onClose={() => {}} />);
     expect(screen.queryByText("Country distribution")).not.toBeInTheDocument();
   });
 });
@@ -64,11 +46,7 @@ describe("AssetModal composition surface", () => {
 // the code used to, silently misreports both.
 describe("AssetModal currency domains", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify([]), {
-        status: 200, headers: { "Content-Type": "application/json" },
-      }),
-    ));
+    stubFetch(async () => jsonResponse([]));
   });
 
   const MIXED: Holding = {
@@ -82,20 +60,20 @@ describe("AssetModal currency domains", () => {
   };
 
   it("labels the unit price with the price row's currency, not the instrument's", () => {
-    render(withClient(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />));
+    renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
     // headerValue = holding.price = 100, formatted in the price domain (GBP),
     // NOT in holding.currency (EUR).
     expect(screen.getByText("100,00 £")).toBeInTheDocument();
   });
 
   it("labels mean price per share with the account's currency", () => {
-    render(withClient(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />));
+    renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
     // investedNative 800 / qty 10 = 80, an amount-domain figure -> USD.
     expect(screen.getByText("80,00 $")).toBeInTheDocument();
   });
 
   it("never labels anything with the instrument's quote currency", () => {
-    render(withClient(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />));
+    renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
     // EUR is both the instrument's quote currency and (by default prefs) the
     // reporting currency, so it does appear — but only on reporting-domain
     // figures. Nothing on the price or amount side may carry it.
@@ -108,19 +86,14 @@ describe("AssetModal purchases chart", () => {
   // A GBP quote in a USD account: the purchases chart values the position at
   // the account-currency price, so it reads in USD like the invested line.
   it("reads in the account's currency", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-      new Response(JSON.stringify(
-        url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120", qty: "10", invested: "800" }] : [],
-      ), { status: 200, headers: { "Content-Type": "application/json" } }),
-    ));
+    stubFetch(async (url: string) =>
+      jsonResponse(url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120", qty: "10", invested: "800" }] : []));
     const user = userEvent.setup();
-    render(withClient(
-      <AssetModal
+    renderWithApp(<AssetModal
         holding={{ ...BASE, priceCurrency: "GBP", accountCurrency: "USD" }}
         netWorth={5000}
         onClose={() => {}}
-      />,
-    ));
+      />);
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
     // 10 shares x 120 USD.
     expect(await screen.findByText(/^1.200,00.\$$/)).toBeInTheDocument();
@@ -131,18 +104,15 @@ describe("AssetModal purchases gain", () => {
   // Five shares on day 1, five more on day 2, the price flat at 100: the
   // position doubles in value, but only because money went in.
   it("does not count a purchase as a gain", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
-      new Response(JSON.stringify(
-        url.includes("/prices")
+    stubFetch(async (url: string) =>
+      jsonResponse(url.includes("/prices")
           ? [
               { t: 1, price: "100", accountPrice: "100", qty: "5", invested: "500" },
               { t: 2, price: "100", accountPrice: "100", qty: "10", invested: "1000" },
             ]
-          : [],
-      ), { status: 200, headers: { "Content-Type": "application/json" } }),
-    ));
+          : []));
     const user = userEvent.setup();
-    render(withClient(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />));
+    renderWithApp(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />);
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
     // Position value 1 000 €, gain zero, not +500 €.
     expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();
@@ -152,24 +122,18 @@ describe("AssetModal purchases gain", () => {
 
 describe("incomplete-history strip", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () =>
-      new Response(JSON.stringify([]), {
-        status: 200, headers: { "Content-Type": "application/json" },
-      }),
-    ));
+    stubFetch(async () => jsonResponse([]));
   });
 
   it("offers to record the history, in both modes", async () => {
     const user = userEvent.setup();
     const onRecordLots = vi.fn();
-    render(withClient(
-      <AssetModal
+    renderWithApp(<AssetModal
         holding={{ ...BASE, unexplainedQty: "5" }}
         netWorth={1000}
         onClose={vi.fn()}
         onRecordLots={onRecordLots}
-      />,
-    ));
+      />);
     expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
     expect(screen.getByText(/^incomplete history$/i)).toBeInTheDocument();
@@ -178,14 +142,12 @@ describe("incomplete-history strip", () => {
   });
 
   it("stays out of the way when the history is complete", () => {
-    render(withClient(
-      <AssetModal
+    renderWithApp(<AssetModal
         holding={{ ...BASE, unexplainedQty: "0" }}
         netWorth={1000}
         onClose={vi.fn()}
         onRecordLots={vi.fn()}
-      />,
-    ));
+      />);
     expect(screen.queryByText(/^incomplete history$/i)).not.toBeInTheDocument();
   });
 });

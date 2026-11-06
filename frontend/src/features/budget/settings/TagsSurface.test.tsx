@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 
 import { TagsSurface } from "./TagsSurface";
 import type { BudgetTag } from "../../../api/budget";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const TAGS: BudgetTag[] = [
   { id: "t1", name: "Holiday", color: "#5b9bf0", txCount: 4 },
@@ -12,22 +11,12 @@ const TAGS: BudgetTag[] = [
 ];
 
 function renderSurface() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-  return render(<TagsSurface />, { wrapper: Wrapper });
-}
-
-function jsonOnce(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  return renderWithApp(<TagsSurface />);
 }
 
 describe("TagsSurface", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonOnce(TAGS)));
+    stubFetch(async () => jsonResponse(TAGS));
   });
 
   it("is a plain list, not a table, with a chip per tag", async () => {
@@ -68,7 +57,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "POST"
         ? new Response("dup", { status: 409 })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     renderSurface();
     await screen.findByText("Holiday");
@@ -82,7 +71,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "POST"
         ? new Response("gone", { status: 404 })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     renderSurface();
     await screen.findByText("Holiday");
@@ -126,7 +115,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("boom", { status: 500 })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     renderSurface();
     await screen.findByText("Holiday");
@@ -141,7 +130,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("gone", { status: 404 })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     renderSurface();
     await screen.findByText("Holiday");
@@ -208,7 +197,7 @@ describe("TagsSurface", () => {
         ? new Promise<Response>((r) => {
             resolve = r;
           })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     renderSurface();
     await screen.findByText("Holiday");
@@ -218,7 +207,7 @@ describe("TagsSurface", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Delete Holiday" })).toBeDisabled());
     expect(screen.getByRole("button", { name: "Modify Work" })).toBeEnabled();
-    resolve(jsonOnce({ id: "t1", name: "Vacation", color: "#5b9bf0", txCount: 4 }));
+    resolve(jsonResponse({ id: "t1", name: "Vacation", color: "#5b9bf0", txCount: 4 }));
   });
 
   it("deletes only after confirmation, and survives a failed delete", async () => {
@@ -236,7 +225,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "DELETE"
         ? new Response("no", { status: 500 })
-        : jsonOnce(TAGS),
+        : jsonResponse(TAGS),
     );
     fireEvent.click(screen.getByRole("button", { name: "Delete Holiday" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete tag" }));
@@ -251,7 +240,7 @@ describe("TagsSurface", () => {
     vi.mocked(fetch).mockImplementation(async () => new Response("no", { status: 500 }));
     renderSurface();
     const retry = await screen.findByRole("button", { name: /retry|réessayer/i });
-    vi.mocked(fetch).mockImplementation(async () => jsonOnce([]));
+    vi.mocked(fetch).mockImplementation(async () => jsonResponse([]));
     fireEvent.click(retry);
     expect(await screen.findByText(/No tags yet\./)).toBeVisible();
   });

@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 
 import { AccountsChartCard } from "./AccountsChartCard";
 import type { NetWorthResponse } from "../../api/types";
-import { AuthContext, type AuthValue } from "../../auth/context";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
@@ -20,20 +18,12 @@ describe("AccountsChartCard with no accounts", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
   it("asks to connect a bank instead of showing a 0 € figure and a gain", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
+    stubFetch(async (url: string) => {
         const u = String(url);
         const body = u.includes("/connections") || u.includes("/holdings") ? [] : u.includes("/accounts/series") ? { accounts: [], points: [] } : NO_ACCOUNTS;
-        return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-      }),
-    );
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <AuthContext.Provider value={{ prefs: DEFAULT_PREFS } as unknown as AuthValue}><AccountsChartCard /></AuthContext.Provider>
-      </QueryClientProvider>,
-    );
+        return jsonResponse(body);
+      });
+    renderWithApp(<AccountsChartCard />);
     expect(await screen.findByText("No accounts yet")).toBeInTheDocument();
     expect(screen.queryByText(/0\s?€/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("chart")).not.toBeInTheDocument();

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { ApiKeysSurface } from "./ApiKeysSurface";
 import type { ApiKeyProvider } from "../../../api/types";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const KEYS: ApiKeyProvider[] = [
   {
@@ -15,17 +15,15 @@ const KEYS: ApiKeyProvider[] = [
   },
 ];
 
-const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 const patches = () =>
   (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([, init]) => init?.method === "PATCH");
 
 function renderCard() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><ApiKeysSurface /></QueryClientProvider>);
+  renderWithApp(<ApiKeysSurface />);
 }
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => json(init?.method === "PATCH" ? KEYS[0] : KEYS)));
+  stubFetch(async (_url: string, init?: RequestInit) => jsonResponse(init?.method === "PATCH" ? KEYS[0] : KEYS));
 });
 
 describe("ApiKeysSurface — secret", () => {

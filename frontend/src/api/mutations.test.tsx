@@ -1,42 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { useUpdateAccount } from "./accounts";
 import { useSetProviderEnabled } from "./admin";
 import { useChangePassword } from "./auth";
 import { useDeleteConnection, useEnabledProviders } from "./connections";
 import { useSaveLots } from "./holdings";
 import { useTransactions } from "./transactions";
+import { appWrapper, jsonResponse, stubFetch } from "../test/kit";
 
 // The page size the list asks the server for.
 const TRANSACTIONS_PAGE_SIZE = 200;
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-
-function makeWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-  return { client, wrapper: Wrapper };
-}
-
 it("refreshes the connection picker after a provider is disabled", async () => {
   let enabled = true;
-  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+  stubFetch(async (_url: string, init?: RequestInit) => {
     if (init?.method === "PATCH") {
       enabled = false;
       return new Response(null, { status: 204 });
     }
     return Response.json(enabled ? [{ key: "powens", name: "Powens" }] : []);
-  }));
-  const { client, wrapper: w } = makeWrapper();
+  });
+  const { client, wrapper: w } = appWrapper();
   const { result, unmount } = renderHook(() => ({ list: useEnabledProviders(), toggle: useSetProviderEnabled() }), { wrapper: w });
   try {
     await waitFor(() => expect(result.current.list.data?.length).toBe(1));
@@ -47,18 +31,9 @@ it("refreshes the connection picker after a provider is disabled", async () => {
 
 describe("useUpdateAccount invalidation", () => {
   it("also refreshes the holdings and transactions tables, which render the account name", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ id: "a1" }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-      ),
-    );
+    stubFetch(async () => jsonResponse({ id: "a1" }));
 
-    const { client, wrapper: w } = makeWrapper();
+    const { client, wrapper: w } = appWrapper();
     const invalidateSpy = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useUpdateAccount(), { wrapper: w });
 
@@ -82,12 +57,9 @@ describe("useUpdateAccount invalidation", () => {
 
 describe("useDeleteConnection", () => {
   it("refreshes every figure the deleted connection fed, not just the list", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(null, { status: 204 })),
-    );
+    stubFetch(async () => new Response(null, { status: 204 }));
 
-    const { client, wrapper: w } = makeWrapper();
+    const { client, wrapper: w } = appWrapper();
     const invalidateSpy = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useDeleteConnection(), { wrapper: w });
 
@@ -118,12 +90,9 @@ describe("useDeleteConnection", () => {
 
 describe("useSaveLots", () => {
   it("invalidates every query a saved batch changes, including account-series and holding-* views", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(null, { status: 204 })),
-    );
+    stubFetch(async () => new Response(null, { status: 204 }));
 
-    const { client, wrapper: w } = makeWrapper();
+    const { client, wrapper: w } = appWrapper();
     const invalidateSpy = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useSaveLots("h1"), { wrapper: w });
 
@@ -153,16 +122,9 @@ describe("useTransactions", () => {
   }
 
   it("requests the first page at offset 0 with the page-size limit", async () => {
-    const fetchMock = vi.fn(
-      async () =>
-        new Response(JSON.stringify(page(TRANSACTIONS_PAGE_SIZE)), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetch(async () => jsonResponse(page(TRANSACTIONS_PAGE_SIZE)));
 
-    const { result } = renderHook(() => useTransactions({ search: "leclerc" }), { wrapper });
+    const { result } = renderHook(() => useTransactions({ search: "leclerc" }), appWrapper());
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -173,23 +135,15 @@ describe("useTransactions", () => {
   });
 
   it("fetches the next page at the accumulated offset, and stops once a page comes back short", async () => {
-    const fetchMock = vi
-      .fn()
+    const fetchMock = stubFetch()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(page(TRANSACTIONS_PAGE_SIZE)), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        jsonResponse(page(TRANSACTIONS_PAGE_SIZE)),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(page(5)), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        jsonResponse(page(5)),
       );
-    vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTransactions({}), { wrapper });
+    const { result } = renderHook(() => useTransactions({}), appWrapper());
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.hasNextPage).toBe(true);
 
@@ -206,12 +160,9 @@ describe("useTransactions", () => {
 
 describe("useChangePassword", () => {
   it("invalidates the sessions query on success so stale sessions disappear", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(null, { status: 204 })),
-    );
+    stubFetch(async () => new Response(null, { status: 204 }));
 
-    const { client, wrapper: w } = makeWrapper();
+    const { client, wrapper: w } = appWrapper();
     // Pre-seed the sessions cache so there is a query to invalidate.
     client.setQueryData(["sessions"], [{ id: "s1" }]);
 

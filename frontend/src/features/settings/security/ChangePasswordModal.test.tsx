@@ -1,26 +1,17 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 function renderModal() {
   const onClose = vi.fn();
   const onChanged = vi.fn();
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <ChangePasswordModal onClose={onClose} onChanged={onChanged} />
-    </QueryClientProvider>,
-  );
+  renderWithApp(<ChangePasswordModal onClose={onClose} onChanged={onChanged} />);
   return { onClose, onChanged };
 }
 
-function stubFetch(status: number) {
-  const fetchMock = vi.fn(async () => new Response(status === 204 ? null : "x", { status }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
+function answerWith(status: number) {
+  return stubFetch(async () => new Response(status === 204 ? null : "x", { status }));
 }
 
 const set = (label: string, value: string) =>
@@ -37,7 +28,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("ChangePasswordModal", () => {
   it("is titled Change password and waits for all three fields", () => {
-    stubFetch(204);
+    answerWith(204);
     renderModal();
     expect(screen.getByRole("dialog", { name: "Change password" })).toBeInTheDocument();
     expect(update()).toBeDisabled();
@@ -49,7 +40,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("posts to /auth/change-password, then reports success and closes", async () => {
-    const fetchMock = stubFetch(204);
+    const fetchMock = answerWith(204);
     const { onClose, onChanged } = renderModal();
     fill("old-password", "newpass12");
     fireEvent.click(update());
@@ -64,7 +55,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("says the current password is wrong on a 400 and stays open", async () => {
-    stubFetch(400);
+    answerWith(400);
     const { onClose, onChanged } = renderModal();
     fill("old", "newpass12");
     fireEvent.click(update());
@@ -74,7 +65,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("does not blame the current password when the server fails", async () => {
-    stubFetch(500);
+    answerWith(500);
     renderModal();
     fill("old", "newpass12");
     fireEvent.click(update());
@@ -83,7 +74,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("refuses a too-short password on click without calling the server", () => {
-    const fetchMock = stubFetch(204);
+    const fetchMock = answerWith(204);
     renderModal();
     expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
     fill("old-password", "1234567");
@@ -98,7 +89,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("sends a password of 8 characters", async () => {
-    const fetchMock = stubFetch(204);
+    const fetchMock = answerWith(204);
     const { onClose } = renderModal();
     fill("old-password", "12345678");
     fireEvent.click(update());
@@ -110,7 +101,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("says when the two new passwords differ and keeps Update disabled", () => {
-    stubFetch(204);
+    answerWith(204);
     renderModal();
     fill("old-password", "newpass12", "newpass13");
     expect(screen.getByText("The passwords don't match.")).toBeInTheDocument();
@@ -120,7 +111,7 @@ describe("ChangePasswordModal", () => {
   });
 
   it("closes on Cancel without calling the server", () => {
-    const fetchMock = stubFetch(204);
+    const fetchMock = answerWith(204);
     const { onClose, onChanged } = renderModal();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();

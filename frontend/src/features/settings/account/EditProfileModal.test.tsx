@@ -1,44 +1,27 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { EditProfileModal } from "./EditProfileModal";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
 import { fileToAvatarDataUrl } from "../../../lib/avatar";
+import { authValue, testUser, renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 vi.mock("../../../lib/avatar", () => ({
   fileToAvatarDataUrl: vi.fn(async () => "data:image/webp;base64,NEW"),
 }));
 
-const user = { id: "u1", name: "Jules", email: "jules@gripsou.local", role: "admin" as const, prefs: DEFAULT_PREFS, welcomeDone: true };
+const user = testUser({ name: "Jules", email: "jules@gripsou.local", role: "admin" });
 
 function renderModal(prefs: UserPrefs = DEFAULT_PREFS) {
   const onClose = vi.fn();
   const updateUser = vi.fn();
   const updatePrefs = vi.fn(async () => {});
-  const auth: AuthValue = {
-    isAuthenticated: true,
+  const auth = authValue({
     user: { ...user, prefs },
-    isBootstrapping: false,
     prefs,
-    login: vi.fn(),
-    loginWithPasskey: vi.fn(),
-    verifyLogin: vi.fn(),
-    adoptSession: () => {},
-    logout: vi.fn(),
     updateUser,
     updatePrefs,
-  };
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const utils = render(
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={auth}>
-        <EditProfileModal onClose={onClose} />
-      </AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  const utils = renderWithApp(<EditProfileModal onClose={onClose} />, { auth });
   return { ...utils, onClose, updateUser, updatePrefs };
 }
 
@@ -72,8 +55,7 @@ describe("EditProfileModal", () => {
 
   it("patches /auth/me, updates the cached user, then closes", async () => {
     const updated = { ...user, name: "Jules Renamed" };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(updated), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetch(async () => jsonResponse(updated));
     const { onClose, updateUser } = renderModal();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: " Jules Renamed " } });
     fireEvent.click(save());
@@ -88,7 +70,7 @@ describe("EditProfileModal", () => {
   });
 
   it("says the email is in use on a 409 and stays open", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("taken", { status: 409 })));
+    stubFetch(async () => new Response("taken", { status: 409 }));
     const { onClose } = renderModal();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "taken@gripsou.local" } });
     fireEvent.click(save());
@@ -97,7 +79,7 @@ describe("EditProfileModal", () => {
   });
 
   it("says saving failed on any other error", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+    stubFetch(async () => new Response("boom", { status: 500 }));
     renderModal();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jules R" } });
     fireEvent.click(save());

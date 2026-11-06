@@ -1,18 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AuthContext, type AuthValue } from "../../auth/context";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { screen, waitFor } from "@testing-library/react";
 vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 import { Investments } from "./Investments";
-
-const AUTH = {
-  isAuthenticated: true,
-  user: null,
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-} as unknown as AuthValue;
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const RETURNS = {
   today: "2026-10-08",
@@ -38,25 +29,12 @@ const FUND = {
 const CASH = { ...FUND, id: "c1", instrumentId: "i0", ticker: "EUR", name: "Euro", kind: "cash", composition: null };
 
 function renderPage(routes: Record<string, unknown> | "down") {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => {
+  stubFetch(async (url: string) => {
       if (routes === "down") return new Response("", { status: 503 });
       const key = Object.keys(routes).find((k) => String(url).includes(k));
-      return new Response(JSON.stringify(key ? routes[key] : null), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }),
-  );
-  return render(
-    <AuthContext.Provider value={AUTH}>
-      <QueryClientProvider client={client}>
-        <Investments />
-      </QueryClientProvider>
-    </AuthContext.Provider>,
-  );
+      return jsonResponse(key ? routes[key] : null);
+    });
+  return renderWithApp(<Investments />);
 }
 
 afterEach(() => vi.unstubAllGlobals());

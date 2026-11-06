@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { describe, it, expect, beforeEach } from "vitest";
+import { screen, fireEvent, within } from "@testing-library/react";
 
 import { SearchSurface } from "./SearchSurface";
 import { BudgetProvider } from "../BudgetProvider";
 import { useBudget } from "../budgetContext";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const ACCOUNTS = [{ id: "acc-1", name: "Current", color: "#5b9bf0" }];
 const CATEGORIES = [
@@ -15,13 +14,6 @@ const CATEGORIES = [
   },
 ];
 const TAGS = [{ id: "t1", name: "holiday", color: "#f0b952", txCount: 2 }];
-
-function json(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 /** Surfaces the context so assertions can read what the controls wrote, and
  *  exposes a handler that fires two derived `patchFilters` updater calls back
@@ -47,16 +39,11 @@ function Probe() {
 }
 
 function renderSurface() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-  render(
+  renderWithApp(
     <BudgetProvider>
       <SearchSurface counts={{ matching: 12, total: 400, uncategorized: 300, selectable: 12, matchingTotal: "0", fxMissing: false }} />
       <Probe />
     </BudgetProvider>,
-    { wrapper: Wrapper },
   );
 }
 
@@ -75,14 +62,11 @@ function pickTimeFrame(label: string) {
 
 describe("SearchSurface", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (String(url).includes("/budget/categories")) return json(CATEGORIES);
-        if (String(url).includes("/budget/tags")) return json(TAGS);
-        return json(ACCOUNTS);
-      }),
-    );
+    stubFetch(async (url: string) => {
+        if (String(url).includes("/budget/categories")) return jsonResponse(CATEGORIES);
+        if (String(url).includes("/budget/tags")) return jsonResponse(TAGS);
+        return jsonResponse(ACCOUNTS);
+      });
   });
 
   it("shows part 1 only, until a filter exists", () => {

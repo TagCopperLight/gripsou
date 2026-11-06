@@ -1,24 +1,16 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiSurface } from "./AiSurface";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS, type UserPrefs } from "../../../lib/prefs";
+import { authValue, renderWithApp, stubFetch } from "../../../test/kit";
 
 function renderWith(prefs: UserPrefs, configured: boolean) {
-  vi.stubGlobal("fetch", vi.fn(async () =>
+  stubFetch(async () =>
     Response.json({ configured, enabled: configured && prefs.budgetAiEnabled, running: false, remaining: 0,
-      reviewCount: 0, threshold: prefs.budgetAiThreshold, lastRun: null })));
+      reviewCount: 0, threshold: prefs.budgetAiThreshold, lastRun: null }));
   const updatePrefs = vi.fn(async () => {});
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={qc}>
-      <AuthContext.Provider value={{ prefs, updatePrefs } as unknown as AuthValue}>
-        <AiSurface />
-      </AuthContext.Provider>
-    </QueryClientProvider>,
-  );
+  renderWithApp(<AiSurface />, { auth: authValue({ prefs, updatePrefs }) });
   return { updatePrefs };
 }
 

@@ -1,34 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import i18n from "../../../i18n";
-import { AuthContext, type AuthValue } from "../../../auth/context";
-import { DEFAULT_PREFS } from "../../../lib/prefs";
 import { SettingsGeneral } from "./General";
+import { authValue, renderWithApp } from "../../../test/kit";
 
 const updatePrefsSpy = vi.fn().mockResolvedValue(undefined);
 
-const authValue: AuthValue = {
-  isAuthenticated: true,
-  user: { id: "1", name: "A", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-  adoptSession: () => {},
-  logout: async () => {},
-  updateUser: () => {},
-  updatePrefs: updatePrefsSpy,
-};
-
 function renderPage() {
-  return render(
+  return renderWithApp(
     <I18nextProvider i18n={i18n}>
-      <AuthContext.Provider value={authValue}>
-        <SettingsGeneral />
-      </AuthContext.Provider>
+      <SettingsGeneral />
     </I18nextProvider>,
+    { auth: authValue({ updatePrefs: updatePrefsSpy }) },
   );
 }
 

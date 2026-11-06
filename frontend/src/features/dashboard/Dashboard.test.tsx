@@ -1,20 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 
 import { Dashboard } from "./Dashboard";
+import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("./NetWorthCard", () => ({ NetWorthCard: () => <div>net worth</div> }));
 vi.mock("./DistributionCard", () => ({ DistributionCard: () => <div>distribution</div> }));
 vi.mock("./holdings/HoldingsCard", () => ({ HoldingsCard: () => <div>holdings</div> }));
 
 function stubAccounts(body: unknown, status = 200) {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })));
+  stubFetch(async () => jsonResponse(body, status));
 }
 
 function renderDashboard() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+  renderWithApp(<Dashboard />);
 }
 
 describe("Dashboard", () => {

@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { Invite } from "./Invite";
-import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
+import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -11,28 +10,8 @@ vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useParams: () => ({ token: "tok" }) }),
 }));
 
-function wrap(children: ReactNode, adoptSession = vi.fn()) {
-  const value: AuthValue = {
-    isAuthenticated: false,
-    user: null,
-    isBootstrapping: false,
-    prefs: DEFAULT_PREFS,
-    login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-    adoptSession,
-    logout: async () => {},
-    updateUser: () => {},
-    updatePrefs: async () => {},
-  };
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
 const tokenOk = () =>
-  new Response(JSON.stringify({ type: "invite", email: null }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  jsonResponse({ type: "invite", email: null });
 
 beforeEach(() => {
   navigate.mockClear();
@@ -41,20 +20,15 @@ beforeEach(() => {
 describe("Invite", () => {
   it("creates an account and adopts the session", async () => {
     const adopt = vi.fn();
-    const fetchMock = vi
-      .fn()
+    stubFetch()
       .mockResolvedValueOnce(tokenOk()) // page-load guard
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
+        jsonResponse({
             token: "sess",
             user: { id: "u1", name: "New", email: "new@t.local", role: "user", prefs: DEFAULT_PREFS },
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
       );
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Invite />, adopt));
+    renderWithApp(<Invite />, { auth: signedOut({ adoptSession: adopt }) });
 
     await screen.findByLabelText("Name");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@t.local" } });
@@ -68,9 +42,8 @@ describe("Invite", () => {
   });
 
   it("refuses a too-short password without calling the server", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(tokenOk());
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Invite />));
+    const fetchMock = stubFetch().mockResolvedValueOnce(tokenOk());
+    renderWithApp(<Invite />, { auth: signedOut() });
 
     await screen.findByLabelText("Name");
     expect(screen.queryByText("At least 8 characters")).not.toBeInTheDocument();
@@ -85,9 +58,8 @@ describe("Invite", () => {
   });
 
   it("asks for a name left blank, without calling the server", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(tokenOk());
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Invite />));
+    const fetchMock = stubFetch().mockResolvedValueOnce(tokenOk());
+    renderWithApp(<Invite />, { auth: signedOut() });
 
     await screen.findByLabelText("Name");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });
@@ -101,12 +73,10 @@ describe("Invite", () => {
   });
 
   it("shows an email-exists error on 409", async () => {
-    const fetchMock = vi
-      .fn()
+    stubFetch()
       .mockResolvedValueOnce(tokenOk())
       .mockResolvedValueOnce(new Response("dup", { status: 409 }));
-    vi.stubGlobal("fetch", fetchMock);
-    render(wrap(<Invite />));
+    renderWithApp(<Invite />, { auth: signedOut() });
 
     await screen.findByLabelText("Name");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@t.local" } });

@@ -1,39 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { ConnectionCallback } from "./ConnectionCallback";
-import { AuthContext, type AuthValue } from "../../auth/context";
-import { DEFAULT_PREFS } from "../../lib/prefs";
+import { renderWithApp, stubFetch, requestsTo } from "../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
-
-function withClient(children: ReactNode) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  const auth: AuthValue = {
-    isAuthenticated: true,
-    user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
-    isBootstrapping: false,
-    prefs: DEFAULT_PREFS,
-    login: async () => null,
-    loginWithPasskey: async () => {},
-    verifyLogin: async () => {},
-    adoptSession: () => {},
-    logout: async () => {},
-    updateUser: () => {},
-    updatePrefs: async () => {},
-  };
-  return (
-    <QueryClientProvider client={client}>
-      <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
-    </QueryClientProvider>
-  );
-}
 
 /** Land on the callback page with the query string Powens redirected to. */
 function landWith(search: string) {
@@ -42,27 +15,14 @@ function landWith(search: string) {
 
 const noContent = () => new Response(null, { status: 204 });
 
-/** The calls made to one endpoint, with their method and parsed JSON body. */
-function callsTo(fetchMock: ReturnType<typeof vi.fn>, path: string) {
-  return fetchMock.mock.calls
-    .filter(([url]) => url === `/api${path}`)
-    .map(([, init]) => ({
-      method: (init as RequestInit | undefined)?.method ?? "GET",
-      body: (init as RequestInit | undefined)?.body
-        ? JSON.parse((init as RequestInit).body as string)
-        : undefined,
-    }));
-}
-
 const ERROR_TITLE = "Your bank couldn't be connected";
 const CONNECTING = "Connecting your bank…";
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof stubFetch>;
 
 beforeEach(() => {
   navigate.mockClear();
-  fetchMock = vi.fn(async () => noContent());
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock = stubFetch(async () => noContent());
 });
 
 afterEach(() => {
@@ -72,7 +32,7 @@ afterEach(() => {
 describe("ConnectionCallback", () => {
   it("completes the connection, then goes to the connections page", async () => {
     landWith("?state=c42&code=abc&connection_id=7");
-    render(withClient(<ConnectionCallback />));
+    renderWithApp(<ConnectionCallback />);
 
     expect(screen.getByText(CONNECTING)).toBeInTheDocument();
     await waitFor(() =>
@@ -86,10 +46,10 @@ describe("ConnectionCallback", () => {
       url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : noContent(),
     );
     landWith("?state=c42&error=access_denied");
-    render(withClient(<ConnectionCallback />));
+    renderWithApp(<ConnectionCallback />);
 
     expect(screen.getByText(ERROR_TITLE)).toBeInTheDocument();
-    await waitFor(() => expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1));
+    await waitFor(() => expect(requestsTo(fetchMock, "/connections/complete")).toHaveLength(1));
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -98,7 +58,7 @@ describe("ConnectionCallback", () => {
       url === "/api/connections/complete" ? new Response("boom", { status: 500 }) : noContent(),
     );
     landWith("?state=c42&code=abc");
-    render(withClient(<ConnectionCallback />));
+    renderWithApp(<ConnectionCallback />);
 
     expect(await screen.findByText(ERROR_TITLE)).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();

@@ -1,25 +1,24 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 
 import { AiBanner } from "./AiBanner";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
 function stub(status: object) {
   const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+  stubFetch(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") { calls.push(String(url)); return new Response(null, { status: 202 }); }
     return Response.json({ configured: true, running: false, remaining: 0, reviewCount: 0,
       lastRun: null, ...status });
-  }));
+  });
   return calls;
 }
 
 function renderBanner() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><AiBanner /></QueryClientProvider>);
+  return renderWithApp(<AiBanner />);
 }
 
 afterEach(() => vi.unstubAllGlobals());

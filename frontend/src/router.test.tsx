@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { act, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
   RouterProvider,
   createRouter,
@@ -8,11 +7,11 @@ import {
 } from "@tanstack/react-router";
 import { routeTree, router as appRouter } from "./router";
 import { App } from "./App";
-import { AuthProvider } from "./auth/AuthProvider";
 import { setAuthToken } from "./api/client";
 import type { AuthValue } from "./auth/context";
 import { DEFAULT_PREFS } from "./lib/prefs";
 import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
+import { authValue, signedOut, testUser, renderWithApp, jsonResponse, stubFetch } from "./test/kit";
 
 // The dashboard mounts ECharts cards that don't render in jsdom; for routing
 // tests we only care that we *land* on it, so stub it to a sentinel.
@@ -27,30 +26,11 @@ function renderAt(path: string, auth: AuthValue) {
     context: { auth },
     ...scrollRestorationOptions,
   });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <RouterProvider router={router} context={{ auth }} />
-      </AuthProvider>
-    </QueryClientProvider>,
-  );
+  renderWithApp(<RouterProvider router={router} context={{ auth }} />, { auth: "provider" });
   return router;
 }
 
-const unauth: AuthValue = {
-  isAuthenticated: false,
-  user: null,
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: async () => null,
-  loginWithPasskey: async () => {},
-  verifyLogin: async () => {},
-  adoptSession: () => {},
-  logout: async () => {},
-  updateUser: () => {},
-  updatePrefs: async () => {},
-};
+const unauth = signedOut();
 
 describe("route guard", () => {
   it("redirects an unauthenticated visit to a protected route to /login", async () => {
@@ -60,31 +40,11 @@ describe("route guard", () => {
   });
 });
 
-const authedUser: AuthValue = {
-  isAuthenticated: true,
-  user: { id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: true },
-  isBootstrapping: false,
-  prefs: DEFAULT_PREFS,
-  login: async () => null,
-  loginWithPasskey: async () => {},
-  verifyLogin: async () => {},
-  adoptSession: () => {},
-  logout: async () => {},
-  updateUser: () => {},
-  updatePrefs: async () => {},
-};
+const authedUser = authValue();
 
 describe("settings budget route", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    stubFetch(async () => jsonResponse([]));
   });
 
   it("resolves /settings/budget for an ordinary authenticated user and renders the Categories heading", async () => {
@@ -110,15 +70,7 @@ describe("public invite/reset routes", () => {
 
   it("renders /invite for an unauthenticated visitor without redirecting to login", async () => {
     // Token guard fetch: return a valid invite so the page renders its form.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ type: "invite", email: null }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    stubFetch(async () => jsonResponse({ type: "invite", email: null }));
     renderAt("/invite/abc", unauth);
     expect(await screen.findByText("Create your account")).toBeInTheDocument();
   });
@@ -135,32 +87,18 @@ describe("login redirect", () => {
   // Regression: a successful login must land on the dashboard, not bounce the
   // user back to /login because the route guard read a stale auth context.
   it("sends the user to the dashboard after a successful login", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) =>
+    stubFetch(async (url: string) =>
         url.includes("/auth/login")
-          ? new Response(
-              JSON.stringify({
+          ? jsonResponse({
                 token: "t",
                 user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true },
-              }),
-              { status: 200, headers: { "Content-Type": "application/json" } },
-            )
+              })
           : new Response("{}", {
               status: 200,
               headers: { "Content-Type": "application/json" },
-            }),
-      ),
-    );
+            }));
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </QueryClientProvider>,
-    );
+    renderWithApp(<App />, { auth: "provider" });
 
     fireEvent.change(await screen.findByLabelText("Email"), {
       target: { value: "a@t.local" },
@@ -178,15 +116,7 @@ describe("scroll reset on navigation", () => {
     sessionStorage.clear();
     setAuthToken(null);
     vi.restoreAllMocks();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    stubFetch(async () => jsonResponse([]));
   });
 
   // Regression: the app scrolls inside <main>, which belongs to the pathless
@@ -211,21 +141,10 @@ describe("scroll reset on navigation", () => {
 });
 
 describe("welcome guard", () => {
-  const newcomer: AuthValue = {
-    ...authedUser,
-    user: { ...authedUser.user!, welcomeDone: false },
-  };
+  const newcomer = authValue({ user: testUser({ welcomeDone: false }) });
 
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    stubFetch(async () => jsonResponse([]));
   });
 
   it("sends a user who hasn't finished the welcome to /welcome", async () => {
@@ -275,15 +194,7 @@ describe("welcome guard", () => {
 
 describe("admin-only settings", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    stubFetch(async () => jsonResponse([]));
   });
 
   it("sends a non-admin away from an admin page", async () => {
@@ -292,7 +203,7 @@ describe("admin-only settings", () => {
   });
 
   it("lets an admin open it", async () => {
-    const admin: AuthValue = { ...authedUser, user: { ...authedUser.user!, role: "admin" } };
+    const admin = authValue({ user: testUser({ role: "admin" }) });
     const router = renderAt("/settings/server", admin);
     await waitFor(() => expect(router.state.matches.at(-1)?.routeId).toBe("/signedIn/app/settings/server"));
     expect(router.state.location.pathname).toBe("/settings/server");
@@ -305,31 +216,19 @@ describe("finishing the welcome screen", () => {
     sessionStorage.clear();
     setAuthToken("t");
     vi.restoreAllMocks();
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
+        stubFetch(async (url: string) => {
         // /auth/me and the prefill's prefs save both answer with the session user.
         if (url === "/api/auth/me" || url === "/api/auth/prefs")
-          return json({ id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false });
+          return jsonResponse({ id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false });
         if (url === "/api/auth/welcome") return new Response(null, { status: 204 });
-        if (url === "/api/budget/categorize/status") return json({ configured: false, running: false });
-        return json([]);
-      }),
-    );
+        if (url === "/api/budget/categorize/status") return jsonResponse({ configured: false, running: false });
+        return jsonResponse([]);
+      });
   });
 
   // The whole chain: skip -> POST -> updateUser -> App invalidates -> guard leaves /welcome.
   it("leaves /welcome once the user skips the setup", async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </QueryClientProvider>,
-    );
+    renderWithApp(<App />, { auth: "provider" });
 
     const skip = await screen.findByRole("button", { name: "Skip setup for now" });
     expect(appRouter.state.location.pathname).toBe("/welcome");

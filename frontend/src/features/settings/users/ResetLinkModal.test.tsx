@@ -1,17 +1,17 @@
-import { it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { it, expect } from "vitest";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ResetLinkModal } from "./ResetLinkModal";
 import type { User } from "../../../api/types";
+import { renderWithApp, stubFetch } from "../../../test/kit";
 
 const MARIE: User = {
   id: "u2", name: "Marie Laurent", email: "marie@gripsou.local", role: "user", joinedAt: 0, isSelf: false,
 };
 
 it("asks for the password, then shows the link made with the reauth token", async () => {
-  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url, init) => {
+  const fetchMock = stubFetch(async (url, init) => {
     if (url === "/api/auth/reauth") {
       const { password } = JSON.parse(init!.body as string) as { password: string };
       return password === "right"
@@ -20,13 +20,7 @@ it("asks for the password, then shows the link made with the reauth token", asyn
     }
     return Response.json({ token: "tok" }, { status: 201 });
   });
-  vi.stubGlobal("fetch", fetchMock);
-  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <ResetLinkModal user={MARIE} onClose={() => {}} />
-    </QueryClientProvider>,
-  );
+  renderWithApp(<ResetLinkModal user={MARIE} onClose={() => {}} />);
   const user = userEvent.setup();
   const field = screen.getByLabelText("Current password");
 

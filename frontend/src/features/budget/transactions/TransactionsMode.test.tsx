@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
 
 import { TransactionsMode } from "./TransactionsMode";
 import { BudgetProvider } from "../BudgetProvider";
-import { AuthContext, type AuthValue } from "../../../auth/context";
 import { DEFAULT_PREFS } from "../../../lib/prefs";
 import type { Transaction } from "../../../api/types";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
@@ -67,54 +66,42 @@ let bulkShouldFail = false;
 // silently reverting an accepted write back to the fixture's initial tags.
 let serverRowsState: Transaction[] = [];
 
-function json(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 function errorJson(status = 500) {
-  return new Response(JSON.stringify({ error: "boom" }), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return jsonResponse({ error: "boom" }, status);
 }
 
-function stubFetch() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string, init?: RequestInit) => {
+function stubServer() {
+  stubFetch(async (url: string, init?: RequestInit) => {
       const u = String(url);
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-      if (u.includes("/budget/categories")) return json(CATEGORIES);
-      if (u.includes("/budget/tags")) return json(TAGS);
+      if (u.includes("/budget/categories")) return jsonResponse(CATEGORIES);
+      if (u.includes("/budget/tags")) return jsonResponse(TAGS);
       if (u.includes("/transactions/counts")) {
-        return json({ matching: 2, total: 2, uncategorized: 2, selectable: 2, matchingTotal: "-999.00" });
+        return jsonResponse({ matching: 2, total: 2, uncategorized: 2, selectable: 2, matchingTotal: "-999.00" });
       }
       if (u.includes("/apply-to-description")) {
         applyBodies.push(body);
         const confirmed = (body as { confirmBreakPairs?: boolean } | undefined)?.confirmBreakPairs;
         if (pendingPairBreaks > 0 && !confirmed) {
-          return json({ updated: 0, pendingPairBreaks });
+          return jsonResponse({ updated: 0, pendingPairBreaks });
         }
-        return json({ updated: 4 });
+        return jsonResponse({ updated: 4 });
       }
       if (u.includes("/transactions/bulk")) {
         bulkBodies.push(body);
         if (bulkShouldFail) return errorJson();
         const confirmed = (body as { confirmBreakPairs?: boolean } | undefined)?.confirmBreakPairs;
         if (pendingPairBreaks > 0 && !confirmed) {
-          return json({ updated: 0, pendingPairBreaks });
+          return jsonResponse({ updated: 0, pendingPairBreaks });
         }
-        return json({ updated: 2 });
+        return jsonResponse({ updated: 2 });
       }
       if (/\/transactions\/[^/?]+$/.test(u) && init?.method === "PATCH") {
         patchBodies.push(body);
         if (patchShouldFail) return errorJson();
         const b = body as { categoryId?: unknown; confirmBreakPairs?: boolean };
         if (patchPendingPairBreaks > 0 && "categoryId" in b && !b.confirmBreakPairs) {
-          return json({ sameDescriptionCount: 0, pendingPairBreaks: patchPendingPairBreaks });
+          return jsonResponse({ sameDescriptionCount: 0, pendingPairBreaks: patchPendingPairBreaks });
         }
         const match = u.match(/\/transactions\/([^/?]+)$/);
         const id = match?.[1];
@@ -124,39 +111,22 @@ function stubFetch() {
             r.id === id ? { ...r, tags: tagIds.map((tid) => TAGS.find((tg) => tg.id === tid)!) } : r,
           );
         }
-        return json({ sameDescriptionCount });
+        return jsonResponse({ sameDescriptionCount });
       }
       if (u.includes("/transactions")) {
         const search = new URL(u, "http://test").searchParams.get("search")?.toLowerCase() ?? "";
-        return json(serverRowsState.filter((row) => (row.description ?? "").toLowerCase().includes(search)));
+        return jsonResponse(serverRowsState.filter((row) => (row.description ?? "").toLowerCase().includes(search)));
       }
-      return json([]);
-    }),
-  );
-}
-
-// Same stub-provider pattern as `features/budget/settings/Budget.test.tsx`: a plain
-// object cast to `AuthValue`, since these tests never exercise a prefs write.
-function authValue(prefs = DEFAULT_PREFS): AuthValue {
-  return { prefs, updatePrefs: vi.fn(async () => {}) } as unknown as AuthValue;
+      return jsonResponse([]);
+    });
 }
 
 function renderMode(prefs = DEFAULT_PREFS) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>
-        <AuthContext.Provider value={authValue(prefs)}>{children}</AuthContext.Provider>
-      </QueryClientProvider>
-    );
-  }
-  render(
+  const { client } = renderWithApp(
     <BudgetProvider>
       <TransactionsMode />
     </BudgetProvider>,
-    { wrapper: Wrapper },
+    { prefs },
   );
   return client;
 }
@@ -177,7 +147,7 @@ describe("TransactionsMode", () => {
     patchShouldFail = false;
     bulkShouldFail = false;
     serverRowsState = ROWS.map((r) => ({ ...r, tags: [...r.tags] }));
-    stubFetch();
+    stubServer();
   });
 
   it("in private mode, hides the amounts behind one eye by the title", async () => {

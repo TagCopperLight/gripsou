@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { PasskeysModal } from "./PasskeysModal";
 import { formatDate, formatRelative } from "../../../lib/date";
+import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
 type Pk = { id: string; name: string; createdAt: number; lastUsedAt: number | null };
 
@@ -17,14 +17,11 @@ const PHONE: Pk = { id: "p2", name: "Phone", createdAt: CREATED, lastUsedAt: nul
  *  `fail` makes PATCH/DELETE answer 500. */
 function stubApi(initial: Pk[], fail = false) {
   let list = [...initial];
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const fetchMock = stubFetch(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     const path = url.replace(/^\/api/, "");
     if (path === "/auth/mfa/status") {
-      return new Response(
-        JSON.stringify({ totp: false, recoveryRemaining: 0, passkeys: list }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+      return jsonResponse({ totp: false, recoveryRemaining: 0, passkeys: list });
     }
     if (fail) return new Response("boom", { status: 500 });
     const id = path.replace("/auth/mfa/passkeys/", "");
@@ -36,7 +33,6 @@ function stubApi(initial: Pk[], fail = false) {
     }
     return new Response(null, { status: 204 });
   });
-  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -46,14 +42,7 @@ const writes = (f: ReturnType<typeof stubApi>) =>
 async function renderModal() {
   const onClose = vi.fn();
   const onAdd = vi.fn();
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <PasskeysModal onClose={onClose} onAdd={onAdd} />
-    </QueryClientProvider>,
-  );
+  renderWithApp(<PasskeysModal onClose={onClose} onAdd={onAdd} />);
   return { onClose, onAdd, user: userEvent.setup() };
 }
 
