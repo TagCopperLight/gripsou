@@ -1,5 +1,5 @@
 //! The server's lot rules against `shared/lot-cases.json`, which the
-//! frontend's copies (`frontend/src/lib/lots.ts`) run through too.
+//! frontend's copies (`frontend/src/lib/lotRules.ts`) run through too.
 
 use chrono::NaiveDate;
 use gripsou_core::repo::lot::{InvalidLot, LotSide, NewLot};

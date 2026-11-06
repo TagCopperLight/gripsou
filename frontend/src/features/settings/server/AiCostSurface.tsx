@@ -7,7 +7,7 @@ import { CardState } from "../../../ui/CardState";
 import { useBudgetAiUsage, useSetBudgetAiPrices, type BudgetAiPrices } from "../../../api/budget";
 import type { BudgetAiModelUsage } from "../../../api/wire";
 import { formatMoney } from "../../../lib/money";
-import { DECIMAL_RE, normaliseDecimal } from "../../../lib/decimal";
+import { canonicalDecimal, compareDecimals, normaliseDecimal } from "../../../lib/decimal";
 import { TextInput } from "../../../ui/TextInput";
 
 type Side = "in" | "out";
@@ -57,9 +57,8 @@ export function AiCostSurface() {
     const key = draftKey(m.model, side);
     const raw = drafts[key];
     if (raw === undefined) return;
-    const value = normaliseDecimal(raw, i18n.language);
-    const valid = DECIMAL_RE.test(value) && !value.startsWith("-");
-    if (!valid || value === current(m, side)) {
+    const value = canonicalDecimal(normaliseDecimal(raw, i18n.language));
+    if (value === null || compareDecimals(value, "0") < 0 || value === current(m, side)) {
       dropDraft(key);
       return;
     }

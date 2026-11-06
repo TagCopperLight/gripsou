@@ -44,8 +44,7 @@ const SAVED_FILE = `${CACHE_DIR}/gripsou-mock-states.json`;
 
 function loadSaved(): Saved {
   try {
-    const raw = JSON.parse(readFileSync(SAVED_FILE, "utf8")) as Saved | string[];
-    return Array.isArray(raw) ? { active: raw, app: null } : raw;
+    return JSON.parse(readFileSync(SAVED_FILE, "utf8")) as Saved;
   } catch {
     return { active: [], app: null };
   }

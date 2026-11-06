@@ -1,7 +1,7 @@
 // Failure injection, checked before any route: the faults states put in the
 // store, and the panel's per-request overrides.
 
-import type { Sent } from "./router.ts";
+import { matchPath, type Sent } from "./router.ts";
 
 export type FaultMode = "loading" | "error" | "malformed";
 
@@ -23,15 +23,9 @@ export function requestKey(method: string, path: string): string {
   return `${method} ${path}`;
 }
 
-function samePath(pattern: string, path: string): boolean {
-  const a = pattern.split("/").filter(Boolean);
-  const b = path.split("/").filter(Boolean);
-  return a.length === b.length && a.every((p, i) => p.startsWith(":") || p === b[i]);
-}
-
 function matches(f: Fault, method: string, path: string): boolean {
   if (f.method === "write" ? method === "GET" : f.method !== method) return false;
-  if (f.path !== undefined && !samePath(f.path, path)) return false;
+  if (f.path !== undefined && matchPath(f.path, path) === null) return false;
   return !f.except?.includes(path);
 }
 

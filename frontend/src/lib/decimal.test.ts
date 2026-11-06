@@ -6,7 +6,7 @@ describe("normaliseDecimal", () => {
     expect(normaliseDecimal("16,03", "fr")).toBe("16.03");
   });
 
-  it("leaves a comma alone under en, so DECIMAL_RE rejects it loudly", () => {
+  it("leaves a comma alone under en, so it is refused rather than misread", () => {
     expect(normaliseDecimal("1,234", "en")).toBe("1,234");
   });
 

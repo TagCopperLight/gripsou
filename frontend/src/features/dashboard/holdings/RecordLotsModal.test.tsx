@@ -462,6 +462,18 @@ describe("RecordLotsModal", () => {
     expect(saves()).toHaveLength(0);
   });
 
+  it("does not treat a retyped equivalent French decimal as a change", async () => {
+    await i18n.changeLanguage("fr");
+    const user = userEvent.setup();
+    txns = [lot("a", "buy", "10.00", "16.030")];
+    await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+    const price = screen.getAllByTestId("lot-unitPrice")[0];
+    await user.clear(price);
+    await user.type(price, "16,03");
+    expect(screen.getByRole("button", { name: /enregistrer/i })).toBeDisabled();
+    expect(saves()).toHaveLength(0);
+  });
+
   it("keeps Save disabled when an edit to a saved row makes it invalid", async () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20")];

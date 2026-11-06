@@ -8,7 +8,10 @@ import { createStore } from "./store.ts";
 
 /** A value for each path parameter of a server GET, and the queries it requires. */
 const PARAMS: Record<string, string> = { id: CW8, token: "abc", provider: "jev" };
-const QUERIES: Record<string, Record<string, string>> = { "/budget/trend": { anchor: "2026-09" } };
+const QUERIES: Record<string, Record<string, string>> = {
+  "/budget/trend": { anchor: "2026-09" },
+  "/budget/summary": { month: "2026-09" },
+};
 
 const body = <T,>(path: string, query: Record<string, string> = {}): T => {
   const out = router.dispatch(createStore(), "GET", path, new URLSearchParams(query), undefined);

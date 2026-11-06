@@ -15,17 +15,21 @@ function sameDescription(store: Store, row: TxnRow, categoryId: string | null, s
   );
 }
 
-/** A user's category write, as the server makes it: final, out of review. */
-function file(row: TxnRow, categoryId: string | null) {
+const isNeutral = (store: Store, categoryId: string | null) =>
+  store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
+
+/** A user's category write, as the server makes it: final, out of review, and
+ *  outside a neutral category it unlinks the row's pair. */
+function file(store: Store, row: TxnRow, categoryId: string | null) {
   Object.assign(row, { categoryId, categorySource: categoryId ? "user" : null, categoryConfidence: null, needsReview: false });
+  if (!isNeutral(store, categoryId)) row.isTransfer = false;
 }
 
 /** Filing a paired transfer outside a neutral category breaks its pair, so the
  *  server asks first: how many pairs it would break, nothing written. */
 function pairBreaks(store: Store, rows: TxnRow[], categoryId: string | null | undefined, confirmed?: boolean): number {
   if (categoryId === undefined || confirmed) return 0;
-  const neutral = store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
-  return neutral ? 0 : rows.filter((x) => x.isTransfer).length;
+  return isNeutral(store, categoryId) ? 0 : rows.filter((x) => x.isTransfer).length;
 }
 
 export function budgetRoutes(r: Router<Store>): void {
@@ -36,10 +40,7 @@ export function budgetRoutes(r: Router<Store>): void {
     if (!row) return fail(404, "no such transaction");
     const breaks = pairBreaks(store, [row], b.categoryId, b.confirmBreakPairs);
     if (breaks) return { pendingPairBreaks: breaks };
-    if (b.categoryId !== undefined) {
-      file(row, b.categoryId);
-      if (store.categories.find((c) => c.id === b.categoryId)?.kind !== "neutral") row.isTransfer = false;
-    }
+    if (b.categoryId !== undefined) file(store, row, b.categoryId);
     if (b.tagIds) row.tagIds = b.tagIds;
     if (b.checked != null) row.checked = b.checked;
     if (b.categoryId === undefined) return {};
@@ -52,7 +53,7 @@ export function budgetRoutes(r: Router<Store>): void {
     const rows = sameDescription(store, row, categoryId, b.scope);
     const breaks = pairBreaks(store, rows, categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
-    rows.forEach((x) => file(x, categoryId));
+    rows.forEach((x) => file(store, x, categoryId));
     return { updated: rows.length, ids: rows.map((x) => x.id) };
   });
   r.route("POST /transactions/bulk", ({ store, body: b }) => {
@@ -63,7 +64,7 @@ export function budgetRoutes(r: Router<Store>): void {
     const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
     for (const x of rows) {
-      if (b.categoryId !== undefined) file(x, b.categoryId);
+      if (b.categoryId !== undefined) file(store, x, b.categoryId);
       if (b.addTagIds) x.tagIds = [...new Set([...x.tagIds, ...b.addTagIds])];
       if (b.checked != null) x.checked = b.checked;
     }
@@ -130,7 +131,10 @@ export function budgetRoutes(r: Router<Store>): void {
     Object.assign(tag, b);
     return v.tags(store).find((t) => t.id === tag.id)!;
   });
-  r.route("GET /budget/summary", ({ store, query }) => v.summary(store, query));
+  r.route("GET /budget/summary", ({ store, query }) => {
+    const period = query.has("month") ? !query.has("from") && !query.has("to") : query.has("from") && query.has("to");
+    return period ? v.summary(store, query) : fail(400, "pass either month, or both from and to");
+  });
   r.route("GET /budget/trend", ({ store, query }) =>
     query.has("anchor") ? v.trend(store, query) : fail(400, "missing anchor"),
   );

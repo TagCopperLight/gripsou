@@ -39,33 +39,36 @@ export type Ctx<S, B> = {
 /** A route with no response body answers with a status only (`reply(204)`). */
 export type Answer<R> = ([R] extends [void] ? never : R) | Reply<R> | Failure;
 
-type Route<S> = { key: Key; method: string; parts: string[]; handler: (ctx: Ctx<S, unknown>) => unknown };
+/** The path parameters when `path` fits `pattern` (`:id` matches any one
+ *  segment), else null. */
+export function matchPath(pattern: string, path: string): Record<string, string> | null {
+  const want = pattern.split("/").filter(Boolean);
+  const parts = path.split("/").filter(Boolean);
+  if (want.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < parts.length; i++) {
+    const p = want[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Route<S> = { key: Key; method: string; pattern: string; handler: (ctx: Ctx<S, unknown>) => unknown };
 
 export function createRouter<S>() {
   const routes: Route<S>[] = [];
 
   function route<K extends Key>(key: K, handler: (ctx: Ctx<S, Body<K>>) => Answer<Res<K>>): void {
     const [method, pattern] = key.split(" ");
-    routes.push({ key, method, parts: pattern.split("/").filter(Boolean), handler: handler as Route<S>["handler"] });
-  }
-
-  function match(r: Route<S>, parts: string[]): Record<string, string> | null {
-    if (r.parts.length !== parts.length) return null;
-    const params: Record<string, string> = {};
-    for (let i = 0; i < parts.length; i++) {
-      const p = r.parts[i];
-      if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
-      else if (p !== parts[i]) return null;
-    }
-    return params;
+    routes.push({ key, method, pattern, handler: handler as Route<S>["handler"] });
   }
 
   /** The answer, or null when no route matches. */
   function dispatch(store: S, method: string, path: string, query: URLSearchParams, body: unknown): Sent | null {
-    const parts = path.split("/").filter(Boolean);
     for (const r of routes) {
       if (r.method !== method) continue;
-      const params = match(r, parts);
+      const params = matchPath(r.pattern, path);
       if (!params) continue;
       const out = r.handler({ store, params, query, body });
       if (!isReply(out)) return { status: 200, body: out };

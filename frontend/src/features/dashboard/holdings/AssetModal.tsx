@@ -18,7 +18,7 @@ import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "../../../ui/Modal";
 import { IncompleteHistoryStrip } from "./IncompleteHistoryStrip";
 import { formatQuantity } from "../../../lib/money";
-import { lotCashAmount } from "../../../lib/lots";
+import { lotCashAmount } from "../../../lib/lotRules";
 import { formatDay } from "../../../lib/date";
 import { colorForString } from "../../../lib/palette";
 import type { Holding, Lot } from "../../../api/wire";

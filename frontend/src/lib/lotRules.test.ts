@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import LOT_CASES from "../../../shared/lot-cases.json";
 import { compareDecimals } from "./decimal";
 import type { LotSide } from "../api/wire";
-import { lotCashAmount, validateLot } from "./lots";
+import { lotCashAmount, validateLot } from "./lotRules";
 
 // The server's rules run through the same cases (backend/core/tests/it/lot_cases.rs).
 describe("lotCashAmount", () => {

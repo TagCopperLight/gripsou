@@ -14,9 +14,10 @@ import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/holdings";
 import { formatMoney, formatQuantity } from "../../../lib/money";
 import {
-  accounted, badFee, badQuantity, badUnitPrice, byDate, lotCashAmount, lotChanges, lotEntry,
+  accounted, badFee, badQuantity, badUnitPrice, byDate, lotChanges, lotEntry,
   recordedQuantity, rowFromLot, rowFromSuggestion, type FoundLot, type LotRow,
 } from "../../../lib/lots";
+import { lotCashAmount } from "../../../lib/lotRules";
 import type { BasisPreview, Holding } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
 import { HEAD_TEXT } from "../../../ui/gridTable";

@@ -2,6 +2,7 @@
 // live here only, the base data and the states give what differs.
 
 import type { Account, BudgetCategory, BudgetTag, Composition, SyncConnection, SyncHealth } from "../../src/api/wire.ts";
+import { lotCashAmount } from "../../src/lib/lotRules.ts";
 import { TODAY, isoDay } from "./util.ts";
 
 /** A ledger or lot row as stored; the API view joins the category and account. */
@@ -82,7 +83,7 @@ export function cashRow(id: string, row: Pick<TxnRow, "t" | "type" | "amount" | 
  *  (it isn't a budget row). */
 export function lotRow(id: string, lot: { side: "buy" | "sell"; t: number; accountId: string; holdingId: string; quantity: number; unitPrice: number; fee: number }): TxnRow {
   const { side, quantity, unitPrice, fee, ...rest } = lot;
-  const amount = side === "buy" ? -(quantity * unitPrice + fee) : quantity * unitPrice - fee;
+  const amount = Number(lotCashAmount(side, String(quantity), String(unitPrice), String(fee)));
   return { ...cashRow(id, { ...rest, type: side, amount, description: null }), source: "lot", quantity, unitPrice, fee };
 }
 

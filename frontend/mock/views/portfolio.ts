@@ -2,6 +2,9 @@
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
 import type { Account, AccountSeries, BasisPreview, Holding, InvestmentReturns, Lot, LotEntry, NetWorthResponse, PricePoint, ProviderGroup, Range, ReturnFigures, SaveLotsReq } from "../../src/api/wire.ts";
+import { LOT_DECIMAL_PLACES, LOT_MAX_INTEGER_DIGITS } from "../../src/api/wire.ts";
+import { canonicalDecimal } from "../../src/lib/decimal.ts";
+import { validateLot, type LotValidationError } from "../../src/lib/lotRules.ts";
 import { HISTORY_DAYS, dayIndex } from "../data/base.ts";
 import { healthy, type SecurityRow } from "../data/rows.ts";
 import { DAY_MS, EUR_PER_USD, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
@@ -355,6 +358,29 @@ export function returns(store: Store): InvestmentReturns {
       missing: hs.filter((h) => h.accountId === a.id && Number(h.unexplainedQty) !== 0).map((h) => ({ id: h.id, name: h.name })),
     })),
   };
+}
+
+const LOT_REFUSALS: Record<Exclude<LotValidationError, "invalidNumber">, string> = {
+  nonPositiveQuantity: "quantity must be positive and unitPrice must not be negative",
+  negativeUnitPrice: "quantity must be positive and unitPrice must not be negative",
+  negativeFee: "fee must not be negative",
+  tooPrecise: `quantity, unitPrice and fee support at most ${LOT_DECIMAL_PLACES} decimal places`,
+  tooLarge: `quantity, unitPrice and fee must be below 10^${LOT_MAX_INTEGER_DIGITS}`,
+};
+
+/** The server's message for the first lot it would refuse (`NewLot::parse`),
+ *  or null when every lot is valid. */
+export function refusedLot(adds: LotEntry[]): string | null {
+  for (const a of adds) {
+    const figures = { quantity: a.quantity, unitPrice: a.unitPrice, fee: a.fee ?? "0" };
+    const error = validateLot(figures.quantity, figures.unitPrice, figures.fee);
+    if (error === "invalidNumber") {
+      const field = Object.entries(figures).find(([, x]) => canonicalDecimal(x) === null)![0];
+      return `${field} is not a decimal`;
+    }
+    if (error) return LOT_REFUSALS[error];
+  }
+  return null;
 }
 
 /** The figures after saving `sent` in place of the user's lots (the

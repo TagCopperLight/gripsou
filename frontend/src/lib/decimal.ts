@@ -3,11 +3,7 @@
 // bring back the float error the strings exist to avoid. `Number` stays
 // acceptable for a ratio or a chart coordinate, never for a shown amount.
 
-/** A decimal string as the API sends it and as `normaliseDecimal` leaves a
- *  well-formed input. */
-export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
-
-/** A typed number in the API's form (`DECIMAL_RE`): `"+1"` is `"1"`, `".5"`
+/** A typed number in the API's form (`-12.5`): `"+1"` is `"1"`, `".5"`
  *  is `"0.5"`, `"1."` is `"1"`. Null unless it is digits with an optional
  *  sign and decimal point. */
 export function canonicalDecimal(value: string): string | null {
@@ -82,7 +78,7 @@ export function compareDecimals(a: string, b: string): -1 | 0 | 1 {
  *  So the reader is locale-led: under `fr` a comma is the decimal separator,
  *  which is what the French keyboard produces and what French formatting means.
  *  Under any other language a comma is grouping, and a decimal comma is not
- *  expected — so anything containing one is left alone for `DECIMAL_RE` to
+ *  expected — so anything containing one is left alone for `canonicalDecimal` to
  *  reject, and the user is told rather than silently misread. Mixed or repeated
  *  separators are always ambiguous and always refused. */
 export function normaliseDecimal(raw: string, language: string): string {

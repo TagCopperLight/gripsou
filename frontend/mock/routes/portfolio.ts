@@ -77,9 +77,13 @@ export function portfolioRoutes(r: Router<Store>): void {
   r.route("GET /holdings/:id/lots", ({ store, params }) =>
     v.holdings(store).some((h) => h.id === params.id) ? v.lotsOf(store, params.id) : fail(404, "unknown holding"));
   r.route("GET /holdings/:id/lots/suggestions", ({ store, params }) => store.lotSuggestions[params.id] ?? []);
-  r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) =>
-    v.previewLots(store, params.id, body.rows));
+  r.route("POST /holdings/:id/lots/preview", ({ store, params, body }) => {
+    const refused = v.refusedLot(body.rows);
+    return refused ? fail(400, refused) : v.previewLots(store, params.id, body.rows);
+  });
   r.route("PUT /holdings/:id/lots", ({ store, params, body }) => {
+    const refused = v.refusedLot(body.adds ?? []);
+    if (refused) return fail(400, refused);
     v.saveLots(store, params.id, body);
     return reply(204);
   });

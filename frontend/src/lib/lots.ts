@@ -1,52 +1,7 @@
-import { LOT_DECIMAL_PLACES, LOT_MAX_INTEGER_DIGITS } from "../api/wire";
 import type { Lot, LotEntry, LotSide, LotSuggestion } from "../api/wire";
 import { calendarDay } from "./date";
-import {
-  canonicalDecimal,
-  compareDecimals,
-  multiplyDecimals,
-  negateDecimal,
-  normaliseDecimal,
-  subtractDecimals,
-  sumDecimals,
-} from "./decimal";
-
-/** Cash impact of a single lot: a buy is money out, fee included; a sale is
- *  money in, net of fee. The backend's `lot_cash_amount` SQL function is the
- *  same rule, and both are checked against `shared/lot-cases.json`. Every
- *  screen that shows a lot's amount must use this one function, or two
- *  screens can show two different numbers for the same row. */
-export function lotCashAmount(side: LotSide, qty: string, price: string, fee?: string | null): string {
-  const gross = multiplyDecimals(qty, price);
-  fee ??= "0";
-  return side === "buy" ? negateDecimal(sumDecimals([gross, fee])) : subtractDecimals(gross, fee);
-}
-
-export type LotValidationError =
-  | "invalidNumber"
-  | "nonPositiveQuantity"
-  | "negativeUnitPrice"
-  | "negativeFee"
-  | "tooPrecise"
-  | "tooLarge";
-
-const LOT_MAX_MAGNITUDE = `1${"0".repeat(LOT_MAX_INTEGER_DIGITS)}`;
-
-/** The server's rules for one lot (`NewLot::parse`), checked against the same
- *  cases (`shared/lot-cases.json`), so a malformed row is flagged while it is
- *  typed instead of refused on save. Inputs are already normalised
- *  (`normaliseDecimal`). */
-export function validateLot(quantity: string, unitPrice: string, fee = "0"): LotValidationError | null {
-  const figures = [quantity, unitPrice, fee].map(canonicalDecimal);
-  if (figures.some((f) => f === null)) return "invalidNumber";
-  const [q, p, f] = figures as string[];
-  if (compareDecimals(q, "0") <= 0) return "nonPositiveQuantity";
-  if (compareDecimals(p, "0") < 0) return "negativeUnitPrice";
-  if (compareDecimals(f, "0") < 0) return "negativeFee";
-  if ([q, p, f].some((x) => (x.split(".")[1] ?? "").length > LOT_DECIMAL_PLACES)) return "tooPrecise";
-  if ([q, p, f].some((x) => compareDecimals(x.replace("-", ""), LOT_MAX_MAGNITUDE) >= 0)) return "tooLarge";
-  return null;
-}
+import { canonicalDecimal, compareDecimals, negateDecimal, normaliseDecimal, sumDecimals } from "./decimal";
+import { validateLot } from "./lotRules";
 
 /** A suggestion waiting in the panel, until the user adds or dismisses it. */
 export type FoundLot = LotSuggestion & { key: string };
@@ -83,28 +38,27 @@ export const byDate = <T extends { date: string }>(rows: T[]): T[] =>
   [...rows].sort((a, b) => a.date.localeCompare(b.date));
 
 /** The server sends a decimal at a scale it chose, so a PEA lot arrives as
- *  "16.030" while the user retypes the same price as "16.03": equal, or the
- *  retyped row would be saved as a delete + re-add that changes nothing. An
- *  unreadable number reads as changed, which is harmless: that row is invalid
- *  and already blocks Save. An empty field is zero. */
-function sameAmount(a: string, b: string): boolean {
-  const x = a.trim() === "" ? "0" : a.trim();
-  const y = b.trim() === "" ? "0" : b.trim();
-  const cx = canonicalDecimal(x);
-  const cy = canonicalDecimal(y);
-  return x === y || (cx !== null && cy !== null && compareDecimals(cx, cy) === 0);
+ *  "16.030" while the user retypes the same price as "16.03" (or "16,03" in
+ *  French): equal, or the retyped row would be saved as a delete + re-add that
+ *  changes nothing. An unreadable number reads as changed, which is harmless:
+ *  that row is invalid and already blocks Save. An empty field is zero. */
+function sameAmount(a: string, b: string, language: string): boolean {
+  const read = (s: string) => canonicalDecimal(normaliseDecimal(s.trim() === "" ? "0" : s, language));
+  const x = read(a);
+  const y = read(b);
+  return x !== null && y !== null ? compareDecimals(x, y) === 0 : a.trim() === b.trim();
 }
 
 /** A saved row whose values no longer match what it was loaded with. */
-function isRowChanged(r: LotRow): boolean {
+function isRowChanged(r: LotRow, language: string): boolean {
   const p = r.pristine;
   return (
     p !== undefined &&
     (r.type !== p.type ||
       r.date.trim() !== p.date.trim() ||
-      !sameAmount(r.quantity, p.quantity) ||
-      !sameAmount(r.unitPrice, p.unitPrice) ||
-      !sameAmount(r.fee, p.fee))
+      !sameAmount(r.quantity, p.quantity, language) ||
+      !sameAmount(r.unitPrice, p.unitPrice, language) ||
+      !sameAmount(r.fee, p.fee, language))
   );
 }
 
@@ -142,7 +96,7 @@ export function lotEntry(r: LotRow, language: string): LotEntry | null {
 export function lotChanges(rows: LotRow[], queuedDeletes: string[], language: string) {
   const editable = rows.filter((r) => !r.locked);
   const newRows = editable.filter((r) => r.id === undefined);
-  const changedSaved = editable.filter((r) => r.id !== undefined && isRowChanged(r));
+  const changedSaved = editable.filter((r) => r.id !== undefined && isRowChanged(r, language));
   return {
     adds: [...newRows, ...changedSaved].map((r) => lotEntry(r, language)).filter((p) => p !== null),
     deletes: [...queuedDeletes, ...changedSaved.map((r) => r.id!)],
