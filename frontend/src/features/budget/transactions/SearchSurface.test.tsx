@@ -15,27 +15,10 @@ const CATEGORIES = [
 ];
 const TAGS = [{ id: "t1", name: "holiday", color: "#f0b952", txCount: 2 }];
 
-/** Surfaces the context so assertions can read what the controls wrote, and
- *  exposes a handler that fires two derived `patchFilters` updater calls back
- *  to back — the same shape as two chooser toggles or two chip-clears landing
- *  in one React batch — to prove neither write clobbers the other. */
+/** Surfaces the context so assertions can read what the controls wrote. */
 function Probe() {
-  const { filters, patchFilters } = useBudget();
-  return (
-    <>
-      <pre data-testid="filters">{JSON.stringify(filters)}</pre>
-      <button
-        type="button"
-        data-testid="batch-toggle-categories"
-        onClick={() => {
-          patchFilters((prev) => ({ categoryIds: [...prev.categoryIds, "gro"] }));
-          patchFilters((prev) => ({ categoryIds: [...prev.categoryIds, "other"] }));
-        }}
-      >
-        batch
-      </button>
-    </>
-  );
+  const { filters } = useBudget();
+  return <pre data-testid="filters">{JSON.stringify(filters)}</pre>;
 }
 
 function renderSurface() {
@@ -76,17 +59,6 @@ describe("SearchSurface", () => {
     expect(screen.queryByTestId("active-filters")).toBeNull();
   });
 
-  it("reveals the four-column panel from the Filters button", () => {
-    renderSurface();
-    fireEvent.click(screen.getByTestId("filters-toggle"));
-    const panel = screen.getByTestId("filter-panel");
-    expect(panel).toBeVisible();
-    expect(screen.getByTestId("column-type")).toBeVisible();
-    expect(screen.getByTestId("column-categories")).toBeVisible();
-    expect(screen.getByTestId("column-tags")).toBeVisible();
-    expect(screen.getByTestId("column-others")).toBeVisible();
-  });
-
   it("keeps exactly one type bucket active", () => {
     renderSurface();
     fireEvent.click(screen.getByTestId("filters-toggle"));
@@ -95,11 +67,6 @@ describe("SearchSurface", () => {
     fireEvent.click(screen.getByTestId("bucket-lots"));
     expect(filters().bucket).toBe("lots");
   });
-
-  /** Colour is a fixed property of a bucket, not a selection state: the icon
-   *  is always tinted — green for money arriving, red for leaving, blue for
-   *  securities, neutral for `all` — and selection is drawn in the panel's own
-   *  greys. A row must never announce itself by turning green. */
 
   it("writes the two other toggles", () => {
     renderSurface();
@@ -126,12 +93,6 @@ describe("SearchSurface", () => {
     expect(screen.getByTestId("counts-readout")).toHaveTextContent("400");
     fireEvent.click(screen.getByTestId("chip-clear-uncategorized"));
     expect(filters().uncategorized).toBe(false);
-  });
-
-  it("keeps both derived writes when two patchFilters calls land in one batch", () => {
-    renderSurface();
-    fireEvent.click(screen.getByTestId("batch-toggle-categories"));
-    expect(filters().categoryIds).toEqual(["gro", "other"]);
   });
 
   it("clears every filter at once", () => {

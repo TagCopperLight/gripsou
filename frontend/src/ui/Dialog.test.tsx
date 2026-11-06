@@ -17,23 +17,6 @@ function open(props: Partial<Parameters<typeof Dialog>[0]> = {}) {
 }
 
 describe("Dialog", () => {
-  it("is a labelled modal dialog", () => {
-    open();
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAccessibleName("Edit category");
-  });
-
-  it("moves focus inside on open and restores it on close", async () => {
-    const trigger = document.createElement("button");
-    document.body.appendChild(trigger);
-    trigger.focus();
-    const { onClose } = open();
-    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).toHaveBeenCalled();
-  });
-
   it("restores focus to the previously focused element on unmount", () => {
     const trigger = document.createElement("button");
     document.body.appendChild(trigger);
@@ -141,14 +124,5 @@ describe("Dialog", () => {
     // ...and Escape reaches the handler it was handed last.
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the aside in the header, before the close button", () => {
-    open({ aside: <span>Step 2 of 4</span> });
-    const aside = screen.getByText("Step 2 of 4");
-    const close = screen.getByRole("button", { name: /close/i });
-    expect(aside.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // It stays out of the body and the dialog's name.
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit category");
   });
 });

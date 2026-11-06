@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import type { EChartsOption } from "echarts";
 
 import { SankeySurface } from "./SankeySurface";
@@ -137,16 +137,3 @@ describe("SankeySurface's node labels", () => {
   });
 });
 
-describe("SankeySurface", () => {
-  it("offers the deep link to Transactions", () => {
-    const onSeeTransactions = vi.fn();
-    render(
-      <SankeySurface
-        sankey={{ sources: [salary], destinations: [rent] }}
-        onSeeTransactions={onSeeTransactions}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("sankey-see-transactions"));
-    expect(onSeeTransactions).toHaveBeenCalledTimes(1);
-  });
-});

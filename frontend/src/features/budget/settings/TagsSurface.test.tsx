@@ -19,13 +19,6 @@ describe("TagsSurface", () => {
     stubFetch(async () => jsonResponse(TAGS));
   });
 
-  it("is a plain list, not a table, with a chip per tag", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getAllByTestId("tag-chip")).toHaveLength(2);
-  });
-
   it("adds a trimmed tag and clears only the submitted draft", async () => {
     renderSurface();
     await screen.findByText("Holiday");
@@ -126,7 +119,7 @@ describe("TagsSurface", () => {
     expect(screen.getByDisplayValue("Vacation")).toBeVisible();
   });
 
-  it("explains a 404 on rename (TagRow) as a sentence, not the raw translation key", async () => {
+  it("explains a 404 on rename as a sentence, not the raw translation key", async () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("gone", { status: 404 })

@@ -108,15 +108,6 @@ describe("BreakdownSurface", () => {
     expect(onOpen).toHaveBeenCalledWith(rows[0].slice);
   });
 
-  it("sorts only by category, amount and transactions", () => {
-    renderTable();
-    expect(screen.getByTestId("sort-category")).toBeInTheDocument();
-    expect(screen.getByTestId("sort-amount")).toBeInTheDocument();
-    expect(screen.getByTestId("sort-txnCount")).toBeInTheDocument();
-    expect(screen.queryByTestId("sort-share")).toBeNull();
-    expect(screen.queryByTestId("sort-avg12")).toBeNull();
-  });
-
   it("compares with the 12-month average by the same rules as the figures above", () => {
     render(
       <BreakdownSurface

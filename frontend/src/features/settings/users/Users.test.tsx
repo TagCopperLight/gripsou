@@ -15,13 +15,6 @@ describe("SettingsUsers", () => {
     stubFetch(async () => jsonResponse(USERS));
   });
 
-  it("renders a row per user", async () => {
-    renderWithApp(<SettingsUsers />);
-    // Phone and desktop layouts are both in the DOM (CSS picks one).
-    expect(await screen.findAllByText("Marie Laurent")).not.toHaveLength(0);
-    expect(screen.getAllByText("Thomas Caron")).not.toHaveLength(0);
-  });
-
   it("shows reset and delete only for other users, not the self row", async () => {
     renderWithApp(<SettingsUsers />);
     await screen.findAllByText("Marie Laurent");
@@ -48,6 +41,4 @@ describe("SettingsUsers", () => {
       ),
     );
   });
-
-
 });

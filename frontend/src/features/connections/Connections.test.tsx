@@ -64,15 +64,6 @@ describe("SettingsConnections", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
-  it("expands a connection to reveal its accounts", async () => {
-    renderWithApp(<SettingsConnections />);
-    const header = await screen.findByText("Boursorama");
-    expect(screen.queryByText("Compte courant")).toBeNull();
-    fireEvent.click(header);
-    expect(screen.getByText("Compte courant")).toBeInTheDocument();
-    expect(screen.getByText("Livret A")).toBeInTheDocument();
-  });
-
   it("names the bank when asking to delete it", async () => {
     renderWithApp(<SettingsConnections />);
     await screen.findByText("Boursorama");

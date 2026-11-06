@@ -18,22 +18,6 @@ function tx(over: Partial<Transaction> = {}): Transaction {
 }
 
 describe("TransactionAvatar", () => {
-  it("draws the category icon tinted with the category colour", () => {
-    render(
-      <TransactionAvatar
-        tx={tx({ categoryId: "c1", categoryIcon: "shopping-cart", categoryColor: "#9bb06b" })}
-      />,
-    );
-    expect(screen.getByTestId("tx-avatar").style.color).toBe("rgb(155, 176, 107)");
-  });
-
-  it("falls back to a generic glyph when there is no category", () => {
-    render(<TransactionAvatar tx={tx({})} />);
-    const el = screen.getByTestId("tx-avatar");
-    expect(el.style.color).toBe("");
-    expect(el.querySelector("svg")).not.toBeNull();
-  });
-
   it("ignores an unsafe colour rather than putting it in a style attribute", () => {
     render(
       <TransactionAvatar

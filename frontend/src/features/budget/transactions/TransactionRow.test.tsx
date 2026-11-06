@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, within, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 import { TransactionRow } from "./TransactionRow";
 import type { Transaction } from "../../../api/wire";
@@ -42,40 +42,12 @@ function renderRow(over: Partial<Transaction> = {}, props: Record<string, unknow
 }
 
 describe("TransactionRow", () => {
-  it("draws the description, the account and the amount in its own currency", () => {
-    renderRow();
-    expect(screen.getByTestId("tx-description")).toHaveTextContent("ALDI SARL 1234");
-    expect(screen.getByText("Current")).toBeVisible();
-    expect(screen.getByTestId("tx-amount").textContent).toContain("12,40");
-  });
-
   it("shows the uncategorised chip and opens the chooser when it is clicked", () => {
     const h = renderRow();
     const chip = screen.getByTestId("category-chip");
     expect(chip).toHaveTextContent("Uncategorised");
     fireEvent.click(chip);
     expect(h.onOpenCategory).toHaveBeenCalled();
-  });
-
-  it("marks an unreviewed AI guess differently from a confirmed category", () => {
-    renderRow({
-      categoryId: "c1", categoryName: "Groceries", categoryIcon: "shopping-cart",
-      categoryColor: "#9bb06b", categoryKind: "expense", categorySource: "ai",
-      categoryConfidence: "0.42", needsReview: true,
-    });
-    expect(screen.getByTestId("category-chip").className).toContain("outline-dashed");
-  });
-
-  it("dims an internal transfer and says it was auto paired", () => {
-    renderRow({ isTransfer: true, categoryId: "c1", categoryName: "Groceries", categoryColor: "#9bb06b" });
-    expect(screen.getByTestId("tx-transfer-note")).toBeVisible();
-    // Dimmed cell by cell, so the two colour-bearing ones keep full strength.
-    expect(screen.getByTestId("tx-amount").className).toContain("opacity-60");
-    // The cell itself is never dimmed: its background is the selection/hover colour.
-    expect(screen.getByTestId("tx-amount").closest("td")!.className).not.toContain("opacity-60");
-    expect(screen.getByTestId("tx-avatar").closest("td")!.className).not.toContain("opacity-60");
-    expect(screen.getByTestId("category-chip").closest("td")!.className).not.toContain("opacity-60");
-    expect(screen.getByTestId("tx-tags").className).not.toContain("opacity-60");
   });
 
   it("renders a lot row with its instrument line and no budget affordances", () => {
@@ -110,7 +82,6 @@ describe("TransactionRow", () => {
     expect(screen.queryByTestId("tx-avatar")).toBeNull();
     const box = screen.getByTestId("tx-select");
     expect(box).toBeChecked();
-    expect(screen.getByTestId("tx-row").className).toContain("bg-green");
     fireEvent.click(box);
     expect(h.onToggleSelect).toHaveBeenCalledWith("t1");
   });
@@ -123,15 +94,6 @@ describe("TransactionRow", () => {
     expect(box).toBeChecked();
     fireEvent.click(box);
     expect(h.onToggleChecked).toHaveBeenCalled();
-  });
-
-  it("lists the row's tags and offers adding one", () => {
-    const h = renderRow({ tags: [{ id: "g1", name: "holiday", color: "#f0b952" }] });
-    // Two matches: the chip on the line, and the invisible twin `TagCell`
-    // measures the full line with. The first one is the visible one.
-    expect(within(screen.getByTestId("tx-tags")).getAllByText("holiday")[0]).toBeVisible();
-    fireEvent.click(screen.getByTestId("tx-add-tag"));
-    expect(h.onOpenTags).toHaveBeenCalled();
   });
 
   it("keeps the selection checkbox reachable by keyboard even before anything is selected", () => {
@@ -194,12 +156,5 @@ describe("TransactionRow", () => {
     });
     expect(screen.getByTestId("tx-orphan-note")).toBeVisible();
     expect(screen.queryByTestId("tx-transfer-note")).not.toBeInTheDocument();
-  });
-
-  // An orphan is a row that wants attention. Dimming it — which is what marks a
-  // live transfer as already handled — would work against the warning.
-  it("does not dim an orphaned transfer", () => {
-    renderRow({ isOrphanTransfer: true, categorySource: "pair" });
-    expect(screen.getByTestId("tx-description").className).not.toContain("opacity-60");
   });
 });

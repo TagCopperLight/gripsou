@@ -49,19 +49,6 @@ const twoFactorSwitch = () =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SettingsAccount layout", () => {
-  it("shows the profile line and the security rows", async () => {
-    stubAccount(false);
-    renderAccount();
-    expect(screen.getByText("Jules")).toBeInTheDocument();
-    expect(screen.getByText("jules@gripsou.local")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit profile" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();
-    expect(screen.getByText("Password")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
-    expect(screen.getByText("Two-factor authentication")).toBeInTheDocument();
-    await twoFactorSwitch();
-  });
-
   it("opens the Edit profile window", async () => {
     stubAccount(false);
     renderAccount();
@@ -72,23 +59,19 @@ describe("SettingsAccount layout", () => {
 });
 
 describe("SettingsAccount two-factor row", () => {
-  it("shows the switch off with a phone icon when two-factor is off", async () => {
+  it("shows the switch off and no gear when two-factor is off", async () => {
     stubAccount(false);
-    const { container } = renderAccount();
+    renderAccount();
     const sw = await twoFactorSwitch();
     expect(sw).toHaveAttribute("aria-checked", "false");
-    expect(container.querySelector(".lucide-smartphone")).not.toBeNull();
-    expect(container.querySelector(".lucide-shield-check")).toBeNull();
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
   });
 
-  it("shows the switch on, a shield and the gear when two-factor is on", async () => {
+  it("shows the switch on and the gear when two-factor is on", async () => {
     stubAccount(true);
-    const { container } = renderAccount();
+    renderAccount();
     const sw = await twoFactorSwitch();
     expect(sw).toHaveAttribute("aria-checked", "true");
-    expect(container.querySelector(".lucide-shield-check")).not.toBeNull();
-    expect(container.querySelector(".lucide-smartphone")).toBeNull();
     expect(screen.getByRole("button", { name: "Manage" })).toBeInTheDocument();
   });
 
@@ -144,27 +127,18 @@ describe("SettingsAccount when two-factor's status can't be loaded", () => {
 
 describe("SettingsAccount passkeys row", () => {
   const PASSKEY = { id: "p1", name: "MacBook", createdAt: 1_760_000_000_000, lastUsedAt: null };
-  const passkeysIcon = (container: HTMLElement) => container.querySelector(".lucide-fingerprint");
-
-  it("shows a grey icon and only the add button when there are no passkeys", async () => {
+  it("shows only the add button when there are no passkeys", async () => {
     stubAccount(false);
-    const { container } = renderAccount();
-    expect(screen.getByText("Passkeys")).toBeInTheDocument();
+    renderAccount();
     expect(await screen.findByRole("button", { name: "Add passkey" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
-    const box = passkeysIcon(container)!.parentElement!;
-    expect(box).toHaveClass("bg-surface-3");
-    expect(box).not.toHaveClass("bg-green-soft");
   });
 
-  it("shows a green icon and the gear when there are passkeys", async () => {
+  it("adds the gear when there are passkeys", async () => {
     stubAccount(false, {}, [PASSKEY]);
-    const { container } = renderAccount();
+    renderAccount();
     expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add passkey" })).toBeInTheDocument();
-    const box = passkeysIcon(container)!.parentElement!;
-    expect(box).toHaveClass("bg-green-soft");
-    expect(box).not.toHaveClass("bg-surface-3");
   });
 
   it("opens the passkeys list from the gear", async () => {

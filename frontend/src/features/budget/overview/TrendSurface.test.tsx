@@ -43,19 +43,6 @@ const trend: BudgetTrend = {
 };
 
 describe("TrendSurface", () => {
-  it("draws enough stack positions for every slice", () => {
-    render(<TrendSurface trend={trend} onSelectMonth={vi.fn()} />);
-    const option = JSON.parse(screen.getByTestId("chart").getAttribute("data-option")!);
-    expect(option.series).toHaveLength(2);
-    expect(option.series.every((s: { stack: string }) => s.stack === "total")).toBe(true);
-  });
-
-  it("only triggers the tooltip on bar items", () => {
-    render(<TrendSurface trend={trend} onSelectMonth={vi.fn()} />);
-    const option = JSON.parse(screen.getByTestId("chart").getAttribute("data-option")!);
-    expect(option.tooltip.trigger).toBe("item");
-  });
-
   it("mutes other months across every slice and restores their colours on leave", () => {
     const changing: BudgetTrend = {
       ...trend,

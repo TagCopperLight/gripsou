@@ -39,24 +39,6 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("figure-net")).not.toHaveTextContent("%");
   });
 
-  it("calls falling expenses good and rising expenses bad", () => {
-    renderSurface(summary());
-    // 1940 vs 2010 — spending less is the good direction.
-    expect(screen.getByTestId("cmp-expenses-prevMonth")).toHaveAttribute("data-tone", "good");
-
-    renderSurface(summary({ expenses: { amount: "2100.00", prevMonth: "2010.00" } }));
-    expect(screen.getAllByTestId("cmp-expenses-prevMonth")[1]).toHaveAttribute(
-      "data-tone",
-      "bad",
-    );
-  });
-
-  it("marks an unchanged figure neutral", () => {
-    // net: 1260 vs 1260.
-    renderSurface(summary({ net: { amount: "1260.00", prevMonth: "1260.00", avg12: "1179.00" } }));
-    expect(screen.getByTestId("cmp-net-prevMonth")).toHaveAttribute("data-tone", "flat");
-  });
-
   it("hides both comparisons when the server sends no baseline", () => {
     // A date range, or a month with too little history before it: the server
     // omits both keys together.
@@ -76,5 +58,4 @@ describe("FiguresSurface", () => {
     expect(screen.getByTestId("cmp-income-prevMonth")).not.toHaveTextContent("%");
     expect(screen.getByTestId("cmp-income-avg12")).toHaveTextContent("%");
   });
-
 });

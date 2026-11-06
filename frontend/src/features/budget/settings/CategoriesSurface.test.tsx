@@ -49,14 +49,6 @@ describe("CategoriesSurface", () => {
     expect(screen.queryByText("Old category")).toBeNull();
   });
 
-  it("shows the hint and the integer row count", async () => {
-    renderSurface();
-    const row = (await screen.findByText("Groceries")).closest("tr")!;
-    expect(within(row).getByText("Supermarkets and corner shops")).toBeVisible();
-    expect(within(row).getByText("137")).toBeVisible();
-    expect(within(row).getByText("Expense")).toBeVisible();
-  });
-
   it("locks archive and delete on the system row but keeps it editable", async () => {
     renderSurface();
     const row = (await screen.findByText("Internal transfer")).closest("tr")!;

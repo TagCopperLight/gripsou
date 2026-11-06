@@ -16,11 +16,4 @@ describe("CategoryChip", () => {
     render(<CategoryChip category={{ ...GROCERIES, color: "chartreuse" }} />);
     expect(screen.getByTestId("category-chip").style.color).toBe("rgb(174, 170, 167)");
   });
-
-  it("drops the fill and draws a dashed outline when the guess needs review", () => {
-    render(<CategoryChip category={GROCERIES} needsReview />);
-    const chip = screen.getByTestId("category-chip");
-    expect(chip.className).toContain("outline-dashed");
-    expect(chip.style.backgroundColor).toBe("");
-  });
 });

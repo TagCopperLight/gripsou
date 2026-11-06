@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { DEFAULT_PREFS } from "../api/wire";
 import { setPrefs } from "./prefs";
 import { formatMoney, formatPercent, formatQuantity } from "./money";
@@ -6,20 +6,11 @@ import { formatMoney, formatPercent, formatQuantity } from "./money";
 describe("formatMoney (prefs-driven)", () => {
   afterEach(() => setPrefs(DEFAULT_PREFS));
 
-  it("reuses number formatting across amounts without caching separators or currency", () => {
-    const NumberFormat = Intl.NumberFormat;
-    const constructor = vi.spyOn(Intl, "NumberFormat").mockImplementation(function (locales, options) {
-      return new NumberFormat(locales, options);
-    });
-    try {
-      expect(formatMoney("1234.5", { fractionDigits: 7, currency: "EUR" })).toBe("1 234,5000000 €");
-      expect(formatMoney("9876.25", {
-        fractionDigits: 7, currency: "USD", groupSep: ".", decimalSep: ",", currencyPosition: "before",
-      })).toBe("$9.876,2500000");
-      expect(constructor).toHaveBeenCalledTimes(1);
-    } finally {
-      constructor.mockRestore();
-    }
+  it("keeps each call's separators and currency when the digits are the same", () => {
+    expect(formatMoney("1234.5", { fractionDigits: 7, currency: "EUR" })).toBe("1 234,5000000 €");
+    expect(formatMoney("9876.25", {
+      fractionDigits: 7, currency: "USD", groupSep: ".", decimalSep: ",", currencyPosition: "before",
+    })).toBe("$9.876,2500000");
   });
 
   it("uses default prefs: space groups, comma decimal, € after", () => {

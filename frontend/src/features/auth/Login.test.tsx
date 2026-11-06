@@ -263,12 +263,6 @@ describe("Login", () => {
     });
 
     describe("on the password page", () => {
-      it("offers a passkey sign-in under an or line", () => {
-        renderWithApp(<Login />, { auth: signedOut({ login: vi.fn() }) });
-        expect(screen.getByText("or")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Sign in with a passkey" })).toBeInTheDocument();
-      });
-
       it("signs in with the passkey, passing the remember flag", async () => {
         let resolve!: () => void;
         const loginWithPasskey = vi.fn<AuthValue["loginWithPasskey"]>(

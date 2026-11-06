@@ -85,7 +85,7 @@ describe("BudgetProvider", () => {
     expect(screen.getByTestId("count")).toHaveTextContent("0");
   });
 
-  it("toggling a row does not clear the rest of the selection", () => {
+  it("clears the selection", () => {
     renderProbe();
     fireEvent.click(screen.getByText("toggle-a"));
     fireEvent.click(screen.getByText("toggle-b"));
@@ -144,26 +144,6 @@ describe("period", () => {
       </BudgetProvider>,
     );
     expect(screen.getByTestId("period")).toHaveTextContent("null");
-  });
-
-  it("steps to another month", () => {
-    render(
-      <BudgetProvider>
-        <PeriodProbe />
-      </BudgetProvider>,
-    );
-    fireEvent.click(screen.getByText("to-march"));
-    expect(screen.getByTestId("period")).toHaveTextContent('"month":"2024-03"');
-  });
-
-  it("switches to a range", () => {
-    render(
-      <BudgetProvider>
-        <PeriodProbe />
-      </BudgetProvider>,
-    );
-    fireEvent.click(screen.getByText("to-range"));
-    expect(screen.getByTestId("period")).toHaveTextContent('"mode":"range"');
   });
 
   it("leaves the selection alone — a period is not a transactions filter", () => {

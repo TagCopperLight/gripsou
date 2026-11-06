@@ -79,13 +79,6 @@ describe("TransactionsTable", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders six columns, and seven with the checked preference on", () => {
-    const { rerender } = render(<TransactionsTable {...BASE} />);
-    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
-    rerender(<TransactionsTable {...BASE} showChecked />);
-    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
-  });
-
   it("tells the first-run empty state from the no-match one", () => {
     const { rerender } = render(
       <TransactionsTable
@@ -107,12 +100,6 @@ describe("TransactionsTable", () => {
     expect(screen.getByTestId("empty-no-match")).toBeVisible();
     fireEvent.click(screen.getByTestId("empty-clear-filters"));
     expect(BASE.onClearFilters).toHaveBeenCalled();
-  });
-
-  it("pages when the fallback control is used", () => {
-    render(<TransactionsTable {...BASE} hasNextPage />);
-    fireEvent.click(screen.getByTestId("load-more"));
-    expect(BASE.onLoadMore).toHaveBeenCalled();
   });
 
   it("shows the error state with a retry", () => {

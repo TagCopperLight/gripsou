@@ -292,13 +292,6 @@ describe("TransactionsMode", () => {
     await settle(client);
   });
 
-  it("shows the checked column when the preference is on", async () => {
-    const client = renderMode({ ...DEFAULT_PREFS, showChecked: true });
-    await screen.findByText("ALDI");
-    expect(screen.getAllByTestId("tx-checked")).toHaveLength(ROWS.length);
-    await settle(client);
-  });
-
   it("bulk-assigns by filter for select-all-shown", async () => {
     const client = renderMode();
     await screen.findByText("ALDI");

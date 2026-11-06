@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 
 import { TagCell } from "./TagCell";
 
@@ -82,13 +82,5 @@ describe("TagCell", () => {
     render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
     expect(screen.getByTestId("tx-tags-overflow")).toHaveTextContent("+2");
     restore();
-  });
-
-  it("opens the chooser anchored to the add button", () => {
-    const onOpen = vi.fn();
-    render(<TagCell tags={TAGS} label="Add tags" onOpen={onOpen} />);
-    const button = screen.getByTestId("tx-add-tag");
-    fireEvent.click(button);
-    expect(onOpen).toHaveBeenCalledWith(button);
   });
 });

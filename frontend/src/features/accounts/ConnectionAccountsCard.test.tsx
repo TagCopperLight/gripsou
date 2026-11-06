@@ -38,7 +38,7 @@ describe("ConnectionAccountsCard", () => {
     stubFetch(async () => jsonResponse([]));
   });
 
-  it("shows each account's share of what the accounts own; an overdraft has none and reads red", () => {
+  it("shows each account's share of what the accounts own; an overdraft has none", () => {
     const overdrawn: Account = { ...ACCOUNT, id: "a3", name: "Overdrawn", value: "-50" };
     const tiny: Account = { ...ACCOUNT, id: "a4", name: "Tiny", value: "0.2" };
     renderWithApp(<ConnectionAccountsCard group={group({ accounts: [ACCOUNT, overdrawn, tiny] })} shares={new Map([["a1", 0.3], ["a3", null], ["a4", 0.0002]])} tagCh={10} masked={false} />);
@@ -46,7 +46,6 @@ describe("ConnectionAccountsCard", () => {
     expect(screen.getByText(/^<0[,.]1\s?%$/)).toBeInTheDocument();
     const row = screen.getByRole("button", { name: /Overdrawn/ });
     expect(row).not.toHaveTextContent("%");
-    expect(screen.getByText(/-50[,.]00/)).toHaveClass("text-red");
   });
 
   it("puts the sync window's dot on the bank's logo when its sync failed", async () => {

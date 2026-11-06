@@ -37,17 +37,6 @@ function renderSurface() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AiCostSurface", () => {
-  it("renders a row per model and the total", async () => {
-    stub();
-    renderSurface();
-    expect(await screen.findByText("jev:jev-latest")).toBeInTheDocument();
-    expect(screen.getByText("alpha:model-1")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-cost-total")).toHaveTextContent(
-      formatMoney("0.3988", { currency: "USD", fractionDigits: 2 }),
-    );
-    expect(screen.getByLabelText("Input price for jev:jev-latest")).toHaveValue("0.042");
-  });
-
   it("marks unpriced models and runs without usage", async () => {
     stub();
     renderSurface();

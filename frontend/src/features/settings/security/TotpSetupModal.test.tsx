@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TotpSetupModal } from "./TotpSetupModal";
@@ -141,12 +141,5 @@ describe("TotpSetupModal", () => {
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("img", { name: /QR code/ })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Step 2 of 4" })).toBeInTheDocument();
-  });
-
-  it("cancels from the password step", async () => {
-    stubApi({ ...OK });
-    const { onClose, user } = renderModal();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });

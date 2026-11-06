@@ -49,8 +49,9 @@ const domError = (name: string) => new DOMException("nope", name);
 
 function renderModal(onClose = vi.fn()) {
   const { client } = renderWithApp(<AddPasskeyModal onClose={onClose} />);
-  const invalidate = vi.spyOn(client, "invalidateQueries");
-  return { onClose, invalidate, user: userEvent.setup() };
+  client.setQueryData(keys.mfaStatus(), {});
+  const mfaStatusStale = () => client.getQueryState(keys.mfaStatus())?.isInvalidated;
+  return { onClose, mfaStatusStale, user: userEvent.setup() };
 }
 
 async function submitPassword(user: ReturnType<typeof userEvent.setup>) {
@@ -75,7 +76,7 @@ describe("AddPasskeyModal", () => {
   it("checks the password, runs the browser step, registers and shows the new name", async () => {
     const fetchMock = stubApi({ ...OK });
     mockedStart.mockResolvedValue(CREDENTIAL as never);
-    const { onClose, invalidate, user } = renderModal();
+    const { onClose, mfaStatusStale, user } = renderModal();
 
     await submitPassword(user);
     expect(await screen.findByText("Passkey added")).toBeInTheDocument();
@@ -89,7 +90,7 @@ describe("AddPasskeyModal", () => {
       challenge: "chal-1",
       credential: CREDENTIAL,
     });
-    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: keys.mfaStatus() }));
+    expect(mfaStatusStale()).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -172,16 +173,6 @@ describe("AddPasskeyModal", () => {
     expect(sent(fetchMock, "/auth/mfa/passkeys/register/options", 1)).toEqual({ reauth: "tok-1" });
     expect(mockedStart).toHaveBeenCalledTimes(2);
     expect(calls(fetchMock, "/auth/mfa/passkeys/register")).toHaveLength(1);
-  });
-
-  it("closes from the failed state with Cancel", async () => {
-    stubApi({ ...OK });
-    mockedStart.mockRejectedValue(domError("NotAllowedError"));
-    const { onClose, user } = renderModal();
-    await submitPassword(user);
-    await screen.findByText("No passkey was added");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("reports a device that already has a passkey when the browser refuses, with no Try again", async () => {

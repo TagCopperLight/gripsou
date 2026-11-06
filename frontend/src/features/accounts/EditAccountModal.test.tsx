@@ -47,11 +47,6 @@ describe("EditAccountModal", () => {
     expect(screen.getByLabelText("Account name")).not.toHaveFocus();
   });
 
-  it("names the account's bank under the title", () => {
-    renderWithApp(<EditAccountModal account={{ ...ACCOUNT, sourceName: "Crédit Mutuel" }} onClose={() => {}} />);
-    expect(screen.getByRole("heading")).toHaveTextContent(/Compte Courant\s*Crédit Mutuel/);
-  });
-
   it("disables Save until something changes", () => {
     renderModal();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();

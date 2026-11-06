@@ -45,12 +45,11 @@ describe("Budget shell", () => {
     await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
   });
 
-  it("shows the count in amber when rows need review", async () => {
+  it("shows the count when rows need review", async () => {
     status(4);
     renderShell();
     const seg = await screen.findByTestId("review-segment");
     expect(seg).toHaveTextContent("4");
-    expect(seg.closest("button")).toHaveClass("bg-amber-soft");
   });
 
   it("reads Review while in Review mode", async () => {

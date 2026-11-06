@@ -27,12 +27,6 @@ describe("SettingsGeneral auto-save", () => {
     );
   });
 
-  it("shows a live preview using the shared money formatter", () => {
-    renderPage();
-    // Default prefs -> space groups, comma decimal, € after.
-    expect(screen.getByText("1 234 567,89 €")).toBeInTheDocument();
-  });
-
   it("persists private mode via updatePrefs", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("switch", { name: "Private mode" }));

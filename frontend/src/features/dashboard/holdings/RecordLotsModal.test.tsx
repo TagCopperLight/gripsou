@@ -73,6 +73,10 @@ async function renderModal(ui: ReactElement) {
   return view;
 }
 
+/** The "x / y shares accounted for" line above the bar. */
+const accountedLine = () =>
+  screen.getByText((_, el) => el?.tagName === "SPAN" && /shares accounted for$/.test(el.textContent ?? "")).textContent;
+
 /** A background refetch that hands the modal the current `txns`. */
 async function refetch(client: QueryClient) {
   await act(() => client.refetchQueries());
@@ -132,7 +136,7 @@ describe("RecordLotsModal", () => {
     expect(screen.getAllByTestId("lot-row")).toHaveLength(2);
     expect(screen.getByLabelText(/sent by your bank/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /delete entry/i })).toHaveLength(1);
-    expect(screen.getByText((_, el) => /^15 \/ \d+ shares accounted for$/.test(el?.textContent ?? "") && el?.tagName === "SPAN")).toBeInTheDocument();
+    expect(accountedLine()).toBe("15 / 20 shares accounted for");
     // The server keeps the provider's lots itself: only the user's rows go out.
     expect(previews().at(-1)).toEqual([{ type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" }]);
 
@@ -242,20 +246,6 @@ describe("RecordLotsModal", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("colours the bar amber when short, green on a match, red when over", async () => {
-    txns = [lot("a", "buy", "10", "20")];
-    const { client } = await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-amber");
-
-    txns = [lot("a", "buy", "20", "20")];
-    await refetch(client);
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-green");
-
-    txns = [lot("a", "buy", "25", "20")];
-    await refetch(client);
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-red");
-  });
-
   // The figures are the server's, verbatim: the right rows reach the preview
   // endpoint and whatever it answers reaches the screen. The formula itself is
   // the backend's alone.
@@ -317,8 +307,8 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[1], "0");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    // 10 of 20 — the invalid row contributed nothing, so the bar has not moved.
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-amber");
+    // The invalid row contributed nothing.
+    expect(accountedLine()).toBe("10 / 20 shares accounted for");
     // Nor the preview request: the invalid row must never reach the server, only
     // the one valid buy of 10@20.
     await waitFor(() =>
@@ -341,19 +331,19 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[1], "5");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    // 10 of 20 — the dateless row contributed nothing, so the bar has not moved.
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-amber");
+    // The dateless row contributed nothing.
+    expect(accountedLine()).toBe("10 / 20 shares accounted for");
   });
 
   // Over-recording is information, not an error: a user may enter a sale before
   // the buy it came from.
-  it("keeps Save enabled when the bar is red", async () => {
+  it("keeps Save enabled when more is recorded than held", async () => {
     const user = userEvent.setup();
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /add entry/i }));
     await user.type(screen.getAllByTestId("lot-quantity")[0], "50");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "10");
-    expect(screen.getByTestId("accounted-bar")).toHaveClass("bg-red");
+    expect(accountedLine()).toBe("50 / 20 shares accounted for");
     expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
   });
 

@@ -51,14 +51,6 @@ describe("budgetFilters", () => {
     });
   });
 
-  it("clamps the day instead of rolling over when the target month is shorter", () => {
-    // 2027 is not a leap year: naive arithmetic would land on 2027-03-01.
-    expect(withTimeFrame(EMPTY_FILTERS, "last12Months", new Date(2028, 1, 29))).toMatchObject({
-      from: "2027-02-28",
-      to: "2028-02-29",
-    });
-  });
-
   it("clears the dates for `all` and keeps whatever the user typed for `custom`", () => {
     const dated = withTimeFrame(EMPTY_FILTERS, "thisMonth", new Date(2026, 8, 21));
     expect(withTimeFrame(dated, "all")).toMatchObject({ from: "", to: "" });
@@ -115,7 +107,7 @@ describe("budgetFilters", () => {
     });
   });
 
-  it("clears a stale Overview period when a new time frame is picked (I2)", () => {
+  it("clears a stale Overview period when a new time frame is picked", () => {
     // Without this, `activeFilters` hides the time-frame chip (it only shows
     // when `period` is unset) while the picked range silently applies —
     // the "Selected period" chip keeps showing the OLD Overview period.

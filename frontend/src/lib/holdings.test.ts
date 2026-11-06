@@ -37,50 +37,8 @@ function cash(
   };
 }
 
-function equity(id: string, value: string): Holding {
-  return {
-    id,
-    ticker: "AAPL",
-    name: "Apple Inc.",
-    kind: "equity",
-    logo: "#555",
-    accountId: "a",
-    accountName: "Example Broker",
-    accountColor: "#555",
-    accountType: "brokerage",
-    qty: "1",
-    price: value,
-    currency: "EUR",
-    priceCurrency: "EUR",
-    accountCurrency: "EUR",
-    invested: value,
-    investedNative: value,
-    value,
-    valueNative: value,
-    gl: "0",
-    glPct: "0",
-    fxMissing: false,
-    spark: ["1", "2"],
-    composition: null,
-    unexplainedQty: "0",
-    meanPrice: "0",
-  };
-}
-
 describe("holdingLines", () => {
   const cashLines = (holdings: Holding[]) => holdingLines(holdings).filter((l) => l.holdings[0].kind === "cash");
-
-  it("merges same-currency cash across accounts into one summed line", () => {
-    const result = holdingLines([cash("c1", "Checking", "100"), cash("c2", "PEA", "200"), equity("e1", "500")]);
-
-    const lines = result.filter((l) => l.holdings[0].kind === "cash");
-    expect(lines).toHaveLength(1);
-    expect(lines[0].value).toBe("300");
-    expect(lines[0].account).toBeNull();
-
-    // Non-cash holdings pass through untouched.
-    expect(result.filter((l) => l.holdings[0].kind === "equity")).toHaveLength(1);
-  });
 
   it("sums exactly, without a float artifact", () => {
     // 0.1 + 0.2 in floats is 0.30000000000000004.

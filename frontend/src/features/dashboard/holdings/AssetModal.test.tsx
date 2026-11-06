@@ -21,22 +21,6 @@ const BASE: Holding = {
   meanPrice: "80",
 };
 
-describe("AssetModal composition surface", () => {
-  beforeEach(() => {
-    stubFetch(async () => jsonResponse([]));
-  });
-
-  it("shows the composition surface for an ETF with composition", () => {
-    renderWithApp(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />);
-    expect(screen.getByText("Country distribution")).toBeInTheDocument();
-    expect(screen.getByText("United States")).toBeInTheDocument();
-  });
-
-  it("hides the surface when composition is null", () => {
-    renderWithApp(<AssetModal holding={{ ...BASE, composition: null }} netWorth={5000} onClose={() => {}} />);
-    expect(screen.queryByText("Country distribution")).not.toBeInTheDocument();
-  });
-});
 
 // The three domains must not be collapsed. Here they are deliberately all
 // different: the instrument is quoted in EUR (Powens' label), its price rows

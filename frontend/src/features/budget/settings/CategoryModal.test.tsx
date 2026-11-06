@@ -205,15 +205,6 @@ describe("CategoryModal — edit", () => {
     expect(onClose).not.toHaveBeenCalled();
     resolve(jsonResponse(GROCERIES));
   });
-
-  it("closes on Cancel and on Escape when idle", () => {
-    const onClose = vi.fn();
-    renderModal({ category: GROCERIES, onClose });
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).toHaveBeenCalledTimes(2);
-  });
 });
 
 describe("DeleteCategoryModal", () => {

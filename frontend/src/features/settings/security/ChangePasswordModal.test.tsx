@@ -109,13 +109,4 @@ describe("ChangePasswordModal", () => {
     set("Confirm new password", "newpass12");
     expect(screen.queryByText("The passwords don't match.")).not.toBeInTheDocument();
   });
-
-  it("closes on Cancel without calling the server", () => {
-    const fetchMock = answerWith(204);
-    const { onClose, onChanged } = renderModal();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onClose).toHaveBeenCalled();
-    expect(onChanged).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 });

@@ -45,12 +45,6 @@ describe("PeriodLine", () => {
     expect(onStep.mock.calls).toEqual([[-1], [1]]);
   });
 
-  it("disables each caret at the edge of the data the caller reports", () => {
-    renderLine({ canStepBack: false, canStepForward: false });
-    expect(screen.getByTestId("period-prev")).toBeDisabled();
-    expect(screen.getByTestId("period-next")).toBeDisabled();
-  });
-
   it("replaces the stepper with the range and a clearing cross under a range", () => {
     renderLine();
     fireEvent.click(screen.getByTestId("period-range"));

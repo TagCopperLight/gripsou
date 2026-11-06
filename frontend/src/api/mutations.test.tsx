@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useUpdateAccount } from "./accounts";
 import { useSetProviderEnabled } from "./admin";
@@ -6,6 +6,7 @@ import { useChangePassword } from "./auth";
 import { useDeleteConnection, useEnabledProviders } from "./connections";
 import { useSaveLots } from "./holdings";
 import { useTransactions } from "./transactions";
+import { keys } from "./keys";
 import { appWrapper, jsonResponse, stubFetch } from "../test/kit";
 
 // The page size the list asks the server for.
@@ -29,72 +30,63 @@ it("refreshes the connection picker after a provider is disabled", async () => {
   } finally { unmount(); client.clear(); }
 });
 
-describe("useUpdateAccount invalidation", () => {
+/** Caches an entry under each key, so a test can read which ones a write left stale. */
+function seeded(...cached: (readonly unknown[])[]) {
+  const { client, wrapper } = appWrapper();
+  for (const key of cached) client.setQueryData(key, []);
+  const stale = () => cached.filter((key) => client.getQueryState(key)?.isInvalidated);
+  return { wrapper, stale };
+}
+
+describe("useUpdateAccount", () => {
   it("also refreshes the holdings and transactions tables, which render the account name", async () => {
     stubFetch(async () => jsonResponse({ id: "a1" }));
-
-    const { client, wrapper: w } = appWrapper();
-    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useUpdateAccount(), { wrapper: w });
+    // The two tables print accountName/accountColor from their own payload, so
+    // a rename would leave them showing the old value.
+    const refreshed = [
+      keys.accounts(), keys.connections(), keys.accountSeries(), keys.holdings(),
+      keys.investmentReturns(), keys.transactions(), keys.transactionCounts(),
+    ];
+    const { wrapper, stale } = seeded(...refreshed, keys.netWorth(), keys.budgetSummary());
+    const { result } = renderHook(() => useUpdateAccount(), { wrapper });
 
     result.current.mutate({ id: "a1", name: "New", typeKey: "savings", color: "#4dd0b1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
-    // The last two: both tables print accountName/accountColor from their own
-    // payload, so a rename would leave them showing the old value.
-    expect(invalidatedKeys).toEqual([
-      ["accounts"],
-      ["connections"],
-      ["account-series"],
-      ["holdings"],
-      ["investment-returns"],
-      ["transactions"],
-      ["transaction-counts"],
-    ]);
+    expect(stale()).toEqual(refreshed);
   });
 });
 
 describe("useDeleteConnection", () => {
   it("refreshes every figure the deleted connection fed, not just the list", async () => {
     stubFetch(async () => new Response(null, { status: 204 }));
-
-    const { client, wrapper: w } = appWrapper();
-    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useDeleteConnection(), { wrapper: w });
+    const refreshed = [
+      keys.connections(), keys.netWorth(), keys.accounts(), keys.accountSeries(), keys.holdings(),
+      keys.holdingPrices(), keys.holdingLots(), keys.investmentReturns(), keys.transactions(),
+      keys.transactionCounts(), keys.budgetLatestMonth(), keys.budgetCategories(), keys.budgetTags(),
+      keys.budgetSummary(), keys.budgetTrend(), keys.budgetAiStatus(),
+    ];
+    const { wrapper, stale } = seeded(...refreshed, keys.sessions());
+    const { result } = renderHook(() => useDeleteConnection(), { wrapper });
 
     result.current.mutate("c1");
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(invalidatedKeys).toEqual([
-      ["connections"],
-      ["net-worth"],
-      ["accounts"],
-      ["account-series"],
-      ["holdings"],
-      ["holding-prices"],
-      ["holding-lots"],
-      ["investment-returns"],
-      ["transactions"],
-      ["transaction-counts"],
-      ["budget-latest-month"],
-      ["budget-categories"],
-      ["budget-tags"],
-      ["budget-summary"],
-      ["budget-trend"],
-      ["budget-ai-status"],
-    ]);
+    expect(stale()).toEqual(refreshed);
   });
 });
 
 describe("useSaveLots", () => {
-  it("invalidates every query a saved batch changes, including account-series and holding-* views", async () => {
+  it("refreshes every view a saved batch changes, including account-series and this holding's own", async () => {
     stubFetch(async () => new Response(null, { status: 204 }));
-
-    const { client, wrapper: w } = appWrapper();
-    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useSaveLots("h1"), { wrapper: w });
+    const refreshed = [
+      keys.holdings(), keys.investmentReturns(), keys.transactions(), keys.transactionCounts(),
+      // A saved lot can be the newest row, which is where the Overview opens.
+      keys.budgetLatestMonth(),
+      keys.netWorth(), keys.accountSeries(), keys.holdingLots("h1"), keys.holdingPrices("h1"),
+    ];
+    const { wrapper, stale } = seeded(...refreshed, keys.holdingLots("h2"), keys.budgetCategories());
+    const { result } = renderHook(() => useSaveLots("h1"), { wrapper });
 
     result.current.mutate({
       adds: [{ type: "buy", date: "2024-05-02", quantity: "20", unitPrice: "16.03" }],
@@ -102,17 +94,7 @@ describe("useSaveLots", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(invalidatedKeys).toContainEqual(["holdings"]);
-    expect(invalidatedKeys).toContainEqual(["investment-returns"]);
-    expect(invalidatedKeys).toContainEqual(["transactions"]);
-    expect(invalidatedKeys).toContainEqual(["transaction-counts"]);
-    // A saved lot can be the newest row, which is where the Overview opens.
-    expect(invalidatedKeys).toContainEqual(["budget-latest-month"]);
-    expect(invalidatedKeys).toContainEqual(["net-worth"]);
-    expect(invalidatedKeys).toContainEqual(["account-series"]);
-    expect(invalidatedKeys).toContainEqual(["holding-lots", "h1"]);
-    expect(invalidatedKeys).toContainEqual(["holding-prices", "h1"]);
+    expect(stale()).toEqual(refreshed);
   });
 });
 
@@ -159,19 +141,14 @@ describe("useTransactions", () => {
 });
 
 describe("useChangePassword", () => {
-  it("invalidates the sessions query on success so stale sessions disappear", async () => {
+  it("refreshes the sessions list so the signed-out sessions disappear", async () => {
     stubFetch(async () => new Response(null, { status: 204 }));
-
-    const { client, wrapper: w } = appWrapper();
-    // Pre-seed the sessions cache so there is a query to invalidate.
-    client.setQueryData(["sessions"], [{ id: "s1" }]);
-
-    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useChangePassword(), { wrapper: w });
+    const { wrapper, stale } = seeded(keys.sessions());
+    const { result } = renderHook(() => useChangePassword(), { wrapper });
 
     result.current.mutate({ currentPassword: "old", newPassword: "new" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["sessions"] });
+    expect(stale()).toEqual([keys.sessions()]);
   });
 });

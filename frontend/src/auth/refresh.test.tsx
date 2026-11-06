@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryObserver } from "@tanstack/react-query";
 import { useAuth } from "./context";
@@ -7,21 +7,36 @@ import { keys } from "../api/keys";
 import { setPrefs } from "../lib/prefs";
 import { DEFAULT_PREFS } from "../api/wire";
 import type { SessionUser } from "../api/wire";
-import { appWrapper } from "../test/kit";
+import { appWrapper, jsonResponse, requestsTo, stubFetch } from "../test/kit";
 
 const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true };
 const { client: queryClient, wrapper } = appWrapper({ auth: "provider" });
+
+/** The server's answer to a prefs save, given the patch it was sent. */
+let answerPrefs: (patch: Record<string, unknown>) => Response | Promise<Response>;
+let fetchMock: ReturnType<typeof stubFetch>;
+
+const withPrefs = (prefs: Partial<SessionUser["prefs"]>) => jsonResponse({ ...user, prefs: { ...DEFAULT_PREFS, ...prefs } });
+
+beforeEach(() => {
+  answerPrefs = () => jsonResponse(user);
+});
 
 afterEach(() => {
   queryClient.clear();
   api.setAuthToken(null);
   setPrefs(DEFAULT_PREFS);
-  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function authenticated() {
   api.setAuthToken("old-token");
-  vi.spyOn(api, "getJson").mockResolvedValue(user);
+  fetchMock = stubFetch(async (url, init) => {
+    if (url === "/api/auth/prefs") return answerPrefs(JSON.parse(String(init?.body)));
+    if (url === "/api/auth/login") return jsonResponse({ token: "new-token", user: { ...user, id: "b" } });
+    if (url === "/api/auth/logout") return new Response(null, { status: 204 });
+    return jsonResponse(user);
+  });
   const hook = renderHook(() => useAuth(), { wrapper });
   await waitFor(() => expect(hook.result.current.user?.id).toBe("a"));
   return hook;
@@ -34,10 +49,10 @@ it("refetches server-converted amounts after changing reporting currency", async
   const unsubscribe = observer.subscribe(() => {});
   try {
     await waitFor(() => expect(observer.getCurrentResult().data).toBe("100 EUR"));
-    vi.spyOn(api, "patchJson").mockImplementation(async () => {
+    answerPrefs = () => {
       amount = "110 USD";
-      return { ...user, prefs: { ...DEFAULT_PREFS, currency: "USD" } };
-    });
+      return withPrefs({ currency: "USD" });
+    };
     await act(() => result.current.updatePrefs({ currency: "USD" }));
     await waitFor(() => expect(observer.getCurrentResult().data).toBe("110 USD"));
   } finally { unsubscribe(); unmount(); }
@@ -47,7 +62,7 @@ it("checks AI status when opting in starts an automatic run", async () => {
   const { result, unmount } = await authenticated();
   try {
     queryClient.setQueryData(keys.budgetAiStatus(), { running: false });
-    vi.spyOn(api, "patchJson").mockResolvedValue({ ...user, prefs: { ...DEFAULT_PREFS, budgetAiEnabled: true } });
+    answerPrefs = () => withPrefs({ budgetAiEnabled: true });
     await act(() => result.current.updatePrefs({ budgetAiEnabled: true }));
     expect(queryClient.getQueryState(keys.budgetAiStatus())?.isInvalidated).toBe(true);
   } finally { unmount(); }
@@ -57,7 +72,7 @@ it("keeps server data cached for a formatting-only preference change", async () 
   const { result, unmount } = await authenticated();
   try {
     queryClient.setQueryData(keys.netWorth("1y"), []);
-    vi.spyOn(api, "patchJson").mockResolvedValue({ ...user, prefs: { ...DEFAULT_PREFS, numberDecimals: 0 } });
+    answerPrefs = () => withPrefs({ numberDecimals: 0 });
     await act(() => result.current.updatePrefs({ numberDecimals: 0 }));
     expect(queryClient.getQueryState(keys.netWorth("1y"))?.isInvalidated).toBe(false);
   } finally { unmount(); }
@@ -67,7 +82,6 @@ it.each(["login", "adoptSession", "logout"] as const)("clears the previous sessi
   const { result, unmount } = await authenticated();
   try {
     queryClient.setQueryData(keys.transactions({}), { pages: [[{ id: "old-user-row" }]], pageParams: [0] });
-    vi.spyOn(api, "postJson").mockResolvedValue({ token: "new-token", user: { ...user, id: "b" } });
     await act(async () => {
       if (action === "login") await result.current.login("bob@example.test", "password", false);
       else if (action === "adoptSession") result.current.adoptSession("new-token", { ...user, id: "b" });
@@ -79,19 +93,19 @@ it.each(["login", "adoptSession", "logout"] as const)("clears the previous sessi
 
 it("preserves a newer profile edit when an older preference acknowledgement arrives", async () => {
   const { result, unmount } = await authenticated();
-  let release!: (user: SessionUser) => void;
+  let release!: (response: Response) => void;
   let started = false;
-  vi.spyOn(api, "patchJson").mockImplementation(() => {
+  answerPrefs = () => {
     started = true;
-    return new Promise<SessionUser>((resolve) => { release = resolve; });
-  });
+    return new Promise<Response>((resolve) => { release = resolve; });
+  };
   try {
     let pending!: Promise<void>;
     act(() => { pending = result.current.updatePrefs({ numberDecimals: 0 }); });
     await waitFor(() => expect(started).toBe(true));
     act(() => result.current.updateUser({ ...user, name: "New name", email: "new@example.test" }));
     await act(async () => {
-      release({ ...user, prefs: { ...DEFAULT_PREFS, numberDecimals: 0 } });
+      release(withPrefs({ numberDecimals: 0 }));
       await pending;
     });
     expect(result.current.user?.name).toBe("New name");
@@ -103,7 +117,7 @@ it("preserves a newer profile edit when an older preference acknowledgement arri
 it("shows the stored prefs again when a save fails, and tells the caller nothing", async () => {
   const { result, unmount } = await authenticated();
   try {
-    vi.spyOn(api, "patchJson").mockRejectedValue(new Error("request failed"));
+    answerPrefs = () => new Response("boom", { status: 500 });
     let save!: Promise<void>;
     act(() => { save = result.current.updatePrefs({ numberDecimals: 0 }); });
     expect(result.current.prefs.numberDecimals).toBe(0);
@@ -115,9 +129,8 @@ it("shows the stored prefs again when a save fails, and tells the caller nothing
 it("sends only the changed setting", async () => {
   const { result, unmount } = await authenticated();
   try {
-    const patch = vi.spyOn(api, "patchJson").mockResolvedValue(user);
     await act(() => result.current.updatePrefs({ numberDecimals: 0 }));
-    expect(patch).toHaveBeenCalledWith("/auth/prefs", { numberDecimals: 0 });
+    expect(requestsTo(fetchMock, "/auth/prefs")).toEqual([{ method: "PATCH", body: { numberDecimals: 0 } }]);
   } finally { unmount(); }
 });
 
@@ -127,12 +140,12 @@ it("serializes preference autosaves, and shows a new currency only once the serv
   const first = new Promise<void>((resolve) => { release = resolve; });
   let requests = 0;
   let serverCurrency = "EUR";
-  vi.spyOn(api, "patchJson").mockImplementation(async (_path, patch) => {
+  answerPrefs = async (patch) => {
     requests++;
     if (requests === 1) await first;
-    serverCurrency = (patch as { currency: string }).currency;
-    return { ...user, prefs: { ...DEFAULT_PREFS, currency: serverCurrency } };
-  });
+    serverCurrency = patch.currency as string;
+    return withPrefs({ currency: serverCurrency });
+  };
   try {
     let usd!: Promise<void>;
     let gbp!: Promise<void>;
@@ -159,11 +172,11 @@ it("does not hold the next preference save behind a slow data refresh", async ()
   });
   const unsubscribe = observer.subscribe(() => {});
   let requests = 0;
-  vi.spyOn(api, "patchJson").mockImplementation(async (_path, patch) => {
+  answerPrefs = (patch) => {
     requests++;
-    currency = (patch as { currency: string }).currency;
-    return { ...user, prefs: { ...DEFAULT_PREFS, currency } };
-  });
+    currency = patch.currency as string;
+    return withPrefs({ currency });
+  };
   let usd: Promise<void> | undefined;
   let gbp: Promise<void> | undefined;
   try {

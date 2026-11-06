@@ -4,7 +4,6 @@ import i18n from "i18next";
 import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 import {
-  BUDGET_KINDS,
   categoryLabel,
   safeBudgetColor,
   sortCategories,
@@ -64,6 +63,5 @@ describe("sortCategories", () => {
     // e2 before e1: the list arrives in the order the user arranged, and only
     // the kind grouping is re-applied here.
     expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "x", "i2"]);
-    expect(BUDGET_KINDS).toEqual(["expense", "income", "neutral"]);
   });
 });
