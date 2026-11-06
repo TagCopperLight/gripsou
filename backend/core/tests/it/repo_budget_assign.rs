@@ -1056,11 +1056,7 @@ async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
 async fn bulk_apply_waits_for_a_sync_in_progress(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _, ids) = fixture(&pool, &["LECLERC", "LIDL"]).await?;
 
-    let mut sync = pool.begin().await?;
-    sqlx::query("select pg_advisory_xact_lock(hashtext($1))")
-        .bind(user_id.to_string())
-        .execute(&mut *sync)
-        .await?;
+    let sync = gripsou_core::db::begin_user_writes(&pool, user_id).await?;
 
     let write_pool = pool.clone();
     let write_ids = ids.clone();

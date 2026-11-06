@@ -209,14 +209,13 @@ pub async fn save(
     holding_id: Uuid,
     changes: &LotChanges,
 ) -> Result<(), CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let holding = owned_holding(&mut *tx, user_id, holding_id).await?;
     if changes.is_empty() {
         return Ok(());
     }
     apply(&mut tx, &holding, changes).await?;
-    crate::backfill::backfill_user(&mut tx, user_id).await?;
+    crate::backfill::backfill_user(&mut tx).await?;
     tx.commit().await?;
     Ok(())
 }

@@ -228,7 +228,7 @@ pub async fn delete_category(
 ) -> Result<DeleteCategory, CoreError> {
     // One transaction: the delete and the renumbering that closes the hole it
     // leaves have to be one step, or a concurrent reorder could interleave.
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let system = sqlx::query_scalar!(
         r#"
         select (system_key is not null) as "system!"
@@ -259,10 +259,7 @@ pub async fn delete_category(
 
 /// Renumbers every kind back to `1..n`, keeping the order the rows are already
 /// in. Called after a delete so the numbers never grow holes.
-async fn compact_sort_order(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    user_id: Uuid,
-) -> Result<(), CoreError> {
+async fn compact_sort_order(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         r#"
         update budget_category c
@@ -277,7 +274,7 @@ async fn compact_sort_order(
         "#,
         user_id,
     )
-    .execute(&mut **tx)
+    .execute(conn)
     .await?;
     Ok(())
 }

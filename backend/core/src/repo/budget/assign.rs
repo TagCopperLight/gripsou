@@ -315,8 +315,7 @@ pub async fn patch_transaction(
     patch: &TransactionPatch<'_>,
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<()>, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let Some(&(_, paired)) = lock_owned(&mut tx, user_id, &[txn_id]).await?.first() else {
         return Ok(WriteOutcome::NotFound);
     };
@@ -458,8 +457,7 @@ pub async fn apply_to_description(
     scope: SameDescription,
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<Vec<Uuid>>, CoreError> {
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     if lock_owned(&mut tx, user_id, &[txn_id]).await?.is_empty() {
         return Ok(WriteOutcome::NotFound);
     }
@@ -505,8 +503,7 @@ pub async fn bulk_apply(
     confirm_break_pairs: bool,
 ) -> Result<WriteOutcome<u64>, CoreError> {
     let add_tag_ids = changes.add_tag_ids.filter(|t| !t.is_empty());
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let rows = lock_owned(&mut tx, user_id, ids).await?;
     if let Some(category_id) = changes.category_id
         && !category_is_mine(&mut tx, user_id, category_id).await?

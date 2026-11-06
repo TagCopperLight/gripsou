@@ -210,9 +210,13 @@ async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
     let holding_b = testkit::seed_equity_holding(&pool, account_b, "WLDX", dec("5")).await;
     testkit::stamp_on(&pool, holding_a, today, dec("2"), dec("200")).await;
     testkit::stamp_on(&pool, holding_b, today, dec("5"), dec("500")).await;
-    gripsou_core::backfill::backfill_user(&mut conn, user_id)
+    let mut tx = gripsou_core::db::begin_user_writes(&pool, user_id)
         .await
         .unwrap();
+    gripsou_core::backfill::backfill_user(&mut tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
 
     let lot_day = today - chrono::Duration::days(30);
     let changes = LotChanges::edit(vec![buy(&lot_day.to_string(), "2", "100", "0")], []);

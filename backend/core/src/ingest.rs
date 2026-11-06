@@ -53,7 +53,7 @@ pub async fn ingest(
     let user_id = connection::user_id(&mut *tx, connection_id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::lock_user_writes(tx, user_id).await?;
 
     let today = crate::repo::prefs::today(&mut *tx, user_id).await?;
 
@@ -156,16 +156,13 @@ pub async fn ingest(
     }
 
     // Inside the same transaction, so a failed sync leaves no half-written history.
-    let backfill_rows = crate::backfill::backfill_user(&mut tx, user_id).await? as usize;
+    let backfill_rows = crate::backfill::backfill_user(&mut tx).await? as usize;
 
     // The budget pairing pass. Inside the same transaction as
     // everything else, so a failed sync leaves no half-paired ledger. Scoped to
     // the connection's owner, because a transfer's two halves routinely live
-    // under two different connections. `user_id` and this user's advisory lock
-    // were both taken at the top of the transaction; the pass takes no lock of
-    // its own and relies on this one.
-    let transfers_paired =
-        crate::budget::pairing::pair_internal_transfers(&mut tx, user_id).await?;
+    // under two different connections.
+    let transfers_paired = crate::budget::pairing::pair_internal_transfers(&mut tx).await?;
 
     tx.commit().await?;
 

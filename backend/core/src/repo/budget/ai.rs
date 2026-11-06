@@ -252,8 +252,7 @@ pub async fn write_decisions(
     let confidences: Vec<Option<Decimal>> = decisions.iter().map(|d| d.confidence).collect();
     // Many rows in one unordered update: queue behind a sync of another of the
     // user's connections rather than deadlock with its pairing pass.
-    let mut tx = pool.begin().await?;
-    crate::db::lock_user_writes(&mut tx, user_id).await?;
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let written = sqlx::query!(
         r#"
         update transaction t

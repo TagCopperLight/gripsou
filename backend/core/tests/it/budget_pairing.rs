@@ -74,8 +74,7 @@ async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
     let out = tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     let inn = tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
 
     let system = list_categories(&pool, user_id)
         .await?
@@ -96,7 +95,7 @@ async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(outgoing.3.as_deref(), Some("pair"));
 
     // Running again changes nothing.
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -126,8 +125,7 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     let paired: i64 =
         sqlx::query_scalar("select count(*) from transaction where transfer_pair_id is not null")
             .fetch_one(&pool)
@@ -149,8 +147,7 @@ async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()
     let i1 = tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
     let i2 = tx_at(&pool, b, "acct-b", "i2", Decimal::new(500, 2), later).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+    assert_eq!(pair(&pool, user_id).await?, 2);
 
     let pair_of = |id: Uuid| {
         let pool = pool.clone();
@@ -192,8 +189,7 @@ async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyh
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(1000, 2), now).await?;
     tx_at(&pool, b, "acct-b", "i2", Decimal::new(1000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -229,8 +225,7 @@ async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<(
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -254,8 +249,7 @@ async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> a
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(5000, 2), now).await?;
     tx_at(&pool, b, "acct-b", "i2", Decimal::new(5000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+    assert_eq!(pair(&pool, user_id).await?, 2);
     Ok(())
 }
 
@@ -278,8 +272,7 @@ async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> an
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(500, 2), later).await?;
     tx_at(&pool, c, "acct-c", "i2", Decimal::new(500, 2), later).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -298,8 +291,7 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -319,8 +311,7 @@ async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> 
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
     Ok(())
 }
 
@@ -333,8 +324,7 @@ async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -345,8 +335,7 @@ async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result
     tx_at(&pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     tx_at(&pool, a, "acct-a", "i1", Decimal::new(50000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -372,8 +361,7 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
     .await?;
     tx_at(&pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     let still: Option<Uuid> =
         sqlx::query_scalar("select transfer_pair_id from transaction where id = $1")
             .bind(buy)
@@ -408,8 +396,7 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     .execute(&pool)
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
 
     // The guess is gone, so is its confidence: a pair row carries none.
     let confidence: Option<Decimal> =
@@ -448,8 +435,7 @@ async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()
     let groceries = by_key(&pool, user_id, "groceries").await?;
     file_as(&pool, out, groceries, "user").await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     let still: Option<String> =
         sqlx::query_scalar("select category_source from transaction where id = $1")
             .bind(out)
@@ -494,8 +480,7 @@ async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
     let savings = by_key(&pool, user_id, "savings").await?;
     file_as(&pool, out, savings, "user").await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
 
     assert_eq!(
         row(&pool, out).await?,
@@ -530,8 +515,7 @@ async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Res
     let internal = by_key(&pool, user_id, "internal").await?;
     file_as(&pool, inn, internal, "user").await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
     assert_eq!(row(&pool, out).await?.1, Some(inn));
     Ok(())
 }
@@ -549,8 +533,7 @@ async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Resul
     file_as(&pool, buy, investments, "user").await?;
     file_as(&pool, sell, investments, "user").await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -578,8 +561,7 @@ async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> 
     .execute(&pool)
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
 
     let accepted = row(&pool, out).await?;
     assert_eq!(accepted.1, None, "an accepted guess is never paired");
@@ -617,8 +599,7 @@ async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::
 
     let fresh = tx_at(&pool, b, "acct-b", "i2", Decimal::new(50000, 2), day).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
     assert_eq!(row(&pool, out).await?.1, Some(fresh));
     Ok(())
 }
@@ -639,8 +620,7 @@ async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
             .await?;
     let fresh = tx_at(&pool, a, "acct-a", "o2", Decimal::new(-50000, 2), day).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
     assert_eq!(row(&pool, inn).await?.1, Some(fresh));
     let corrected = row(&pool, out).await?;
     assert_eq!(corrected.1, None, "the user's correction stands");
@@ -700,7 +680,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
     .await?;
 
     assert_eq!(
-        pair_internal_transfers(&mut conn, user_id).await?,
+        pair(&pool, user_id).await?,
         2,
         "both W-Y (round 1) and X-Z (round 2) should be written"
     );
@@ -722,7 +702,7 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
     assert_eq!(row(z).1, Some(x));
 
     // Re-running a converged pass writes nothing further.
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -766,7 +746,7 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
     )
     .await?;
 
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
 
     let rows: Vec<PairedRow> = sqlx::query_as(
         "select id, transfer_pair_id, budget_category_id, category_source from transaction",
@@ -813,8 +793,7 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
 
     let paired_with: Option<Uuid> =
         sqlx::query_scalar("select transfer_pair_id from transaction where id = $1")
@@ -885,11 +864,10 @@ async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 2);
+    assert_eq!(pair(&pool, user_id).await?, 2);
     assert_eq!(partner(&pool, lo).await?, Some(di));
     assert_eq!(partner(&pool, dout).await?, Some(ci));
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -910,7 +888,7 @@ async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<
     let other = upsert_account(&mut conn, conn_id, &account("other", "EUR")).await?;
     tx_at(&pool, other, "other", "stray", Decimal::new(10000, 2), now).await?;
 
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
@@ -923,8 +901,7 @@ async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<
     chain_at(&pool, accts, "c1", Decimal::new(10000, 2), now).await?;
     chain_at(&pool, accts, "c2", Decimal::new(10000, 2), now).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 4);
+    assert_eq!(pair(&pool, user_id).await?, 4);
     Ok(())
 }
 
@@ -945,8 +922,7 @@ async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow
     )
     .await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 4);
+    assert_eq!(pair(&pool, user_id).await?, 4);
     assert_eq!(partner(&pool, lo1).await?, Some(di1));
     assert_eq!(partner(&pool, do1).await?, Some(ci1));
     assert_eq!(partner(&pool, lo2).await?, Some(di2));
@@ -970,8 +946,7 @@ async fn seeded_pair(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid)> {
     let now = Utc::now().date_naive();
     let out = tx_at(pool, a, "acct-a", "o1", Decimal::new(-50000, 2), now).await?;
     let inn = tx_at(pool, b, "acct-b", "i1", Decimal::new(50000, 2), now).await?;
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(pool, user_id).await?, 1);
     Ok((user_id, out, inn))
 }
 
@@ -1029,8 +1004,7 @@ async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<(
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     tie_the_pair(&pool, out, inn).await?;
 
-    let mut conn = pool.acquire().await?;
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 0);
+    assert_eq!(pair(&pool, user_id).await?, 0);
     assert_eq!(row(&pool, out).await?, (out, None, None, None));
     assert_eq!(row(&pool, inn).await?, (inn, None, None, None));
     Ok(())
@@ -1049,8 +1023,7 @@ async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow:
     );
     tie_the_pair(&pool, out, inn).await?;
 
-    let mut conn = pool.acquire().await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     assert_eq!(
         row(&pool, out).await?,
         (out, None, Some(savings), Some("user".to_string()))
@@ -1064,8 +1037,7 @@ async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow:
 async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     tie_the_pair(&pool, out, inn).await?;
-    let mut conn = pool.acquire().await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     assert_eq!(row(&pool, out).await?.1, None);
 
     let stray: Uuid = sqlx::query_scalar("select id from transaction where external_id = 'i2'")
@@ -1074,7 +1046,7 @@ async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow
     let groceries = a_category(&pool, user_id).await?;
     set_category(&pool, user_id, stray, Some(groceries)).await;
 
-    assert_eq!(pair_internal_transfers(&mut conn, user_id).await?, 1);
+    assert_eq!(pair(&pool, user_id).await?, 1);
     assert_eq!(row(&pool, out).await?.1, Some(inn));
     Ok(())
 }
@@ -1238,4 +1210,12 @@ async fn another_users_pairs_are_not_counted(pool: PgPool) -> anyhow::Result<()>
         WriteOutcome::Done(0)
     );
     Ok(())
+}
+
+/// One pairing pass, under the user's write lock, committed.
+async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
+    let mut tx = gripsou_core::db::begin_user_writes(pool, user_id).await?;
+    let paired = pair_internal_transfers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(paired)
 }

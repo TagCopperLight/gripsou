@@ -18,6 +18,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
 /// How far apart the two halves may sit. Three days covered a weekend
@@ -69,15 +70,8 @@ fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
 ///
 /// A category the user chose is never changed: a row they filed in a neutral
 /// category may gain or lose a partner, but keeps that category.
-///
-/// The caller must hold this user's advisory lock (`ingest` takes it at the
-/// top of its transaction). This pass reads and writes across every account
-/// the user owns, and two connections of one user syncing at once would
-/// otherwise take row locks in opposite orders and deadlock.
-pub async fn pair_internal_transfers(
-    conn: &mut sqlx::PgConnection,
-    user_id: Uuid,
-) -> Result<usize, CoreError> {
+pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, CoreError> {
+    let user_id = tx.user_id();
     let rows = sqlx::query!(
         r#"
         select t.id          as "id!",
@@ -126,7 +120,7 @@ pub async fn pair_internal_transfers(
         "#,
         user_id,
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(&mut **tx)
     .await?;
 
     let current: HashMap<Uuid, Option<Uuid>> =
@@ -188,7 +182,7 @@ pub async fn pair_internal_transfers(
         user_id,
         &kept,
     )
-    .execute(&mut *conn)
+    .execute(&mut **tx)
     .await?;
 
     // Only links that are new or moved get written.
@@ -227,7 +221,7 @@ pub async fn pair_internal_transfers(
         &partners,
         user_id,
     )
-    .execute(&mut *conn)
+    .execute(&mut **tx)
     .await?;
 
     // A moved pair writes both of its rows, as a new one does.

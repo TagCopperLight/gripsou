@@ -370,7 +370,7 @@ async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Re
             .described("VIR"),
     )
     .await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     drop(conn);
 
     let paired: i64 =
@@ -409,7 +409,7 @@ async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
             .described("VIR"),
     )
     .await?;
-    pair_internal_transfers(&mut conn, user_id).await?;
+    pair(&pool, user_id).await?;
     drop(conn);
 
     for (from, to) in [
@@ -708,4 +708,12 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
     assert_eq!(income, eur(3000));
     assert_eq!(expense, eur(-4));
     Ok(())
+}
+
+/// One pairing pass, under the user's write lock, committed.
+async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
+    let mut tx = gripsou_core::db::begin_user_writes(pool, user_id).await?;
+    let paired = pair_internal_transfers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(paired)
 }

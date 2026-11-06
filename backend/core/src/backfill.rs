@@ -17,20 +17,21 @@
 
 use uuid::Uuid;
 
+use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// Rewrites the derived history of every connection of `user_id`. Returns the
-/// number of derived rows written.
-pub async fn backfill_user(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<u64, CoreError> {
+/// Rewrites the derived history of every connection of the locked user.
+/// Returns the number of derived rows written.
+pub async fn backfill_user(tx: &mut UserWriteTx<'_>) -> Result<u64, CoreError> {
     let connections = sqlx::query_scalar!(
         "select id from connection where user_id = $1 order by id",
-        user_id,
+        tx.user_id(),
     )
-    .fetch_all(&mut *conn)
+    .fetch_all(&mut **tx)
     .await?;
     let mut written = 0;
     for connection_id in connections {
-        written += backfill_connection(conn, connection_id).await?;
+        written += backfill_connection(tx, connection_id).await?;
     }
     Ok(written)
 }

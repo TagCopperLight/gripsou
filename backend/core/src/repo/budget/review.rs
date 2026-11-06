@@ -50,6 +50,7 @@ pub async fn accept(
     user_id: Uuid,
     txn_id: Uuid,
 ) -> Result<ReviewWrite, CoreError> {
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let n = sqlx::query!(
         r#"
         update transaction t set category_reviewed_at = now()
@@ -63,9 +64,10 @@ pub async fn accept(
         txn_id,
         user_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
+    tx.commit().await?;
     if n == 1 {
         Ok(ReviewWrite::Done)
     } else {
@@ -88,6 +90,7 @@ pub async fn undo(
     category_id: Option<Uuid>,
     confidence: Option<Decimal>,
 ) -> Result<ReviewWrite, CoreError> {
+    let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let n = sqlx::query!(
         r#"
         update transaction t
@@ -110,9 +113,10 @@ pub async fn undo(
         category_id,
         confidence,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
+    tx.commit().await?;
     if n == 1 {
         Ok(ReviewWrite::Done)
     } else {
