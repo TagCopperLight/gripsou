@@ -50,7 +50,7 @@ pub struct TransactionListRow {
     /// per-user number formatting render the lot fields.
     pub source: String,
     pub ticker: Option<String>,
-    /// What a lot row's logo is built from (`logo::instrument_logo_url`);
+    /// What a lot row's logo is built from (`Logos::instrument` in `providers`);
     /// null on a cash row.
     pub instrument_kind: Option<String>,
     pub instrument_isin: Option<String>,

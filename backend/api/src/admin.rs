@@ -14,26 +14,29 @@ use crate::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::invite_token::TokenKind;
 use gripsou_core::repo::user::Role;
+use gripsou_providers::registry;
 
 pub async fn providers(
     State(pool): State<PgPool>,
     _: AdminUser,
 ) -> Result<Json<Vec<dto::Provider>>, ApiError> {
-    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
+    let enabled = gripsou_jobs::enabled_providers(&pool).await?;
     Ok(Json(
-        gripsou_jobs::ACCOUNT_PROVIDERS
+        registry::ACCOUNTS
             .iter()
-            .map(|k| dto::Provider::new(k, enabled.iter().any(|e| e == k.key)))
+            .map(|k| dto::Provider::new(k, enabled.iter().any(|e| e.about.key == k.about.key)))
             .collect(),
     ))
 }
 
-pub async fn api_keys(_: AdminUser) -> Json<Vec<dto::ApiKeyProvider>> {
-    let config = gripsou_core::provider_config::current();
+pub async fn api_keys(
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
+    _: AdminUser,
+) -> Json<Vec<dto::ApiKeyProvider>> {
+    let providers = jobs.providers();
     Json(
-        gripsou_jobs::CONFIG_PROVIDERS
-            .iter()
-            .map(|k| dto::ApiKeyProvider::new(k, &config))
+        registry::keyed()
+            .map(|k| dto::ApiKeyProvider::new(k, providers.config()))
             .collect(),
     )
 }
@@ -41,8 +44,7 @@ pub async fn api_keys(_: AdminUser) -> Json<Vec<dto::ApiKeyProvider>> {
 /// The longest value accepted: real keys are far shorter.
 const MAX_KEY_CHARS: usize = 1000;
 
-/// Validates and stores one field, returning every provider's values. Does not
-/// put them in effect: [`set_api_key`] does, so tests can call this alone.
+/// Validates and stores one field, returning every provider's values.
 async fn save_api_key(
     pool: &PgPool,
     key: &gripsou_core::crypto::EncryptionKey,
@@ -51,7 +53,7 @@ async fn save_api_key(
     value: Option<&str>,
 ) -> Result<gripsou_core::provider_config::ProviderConfig, ApiError> {
     let kind =
-        gripsou_jobs::config_provider(provider).ok_or(ApiError::NotFound("provider not found"))?;
+        registry::keyed_provider(provider).ok_or(ApiError::NotFound("provider not found"))?;
     if !kind.fields.iter().any(|f| f.key == field) {
         return Err(ApiError::NotFound("field not found"));
     }
@@ -77,8 +79,6 @@ pub async fn set_api_key(
         body.value.as_deref(),
     )
     .await?;
-    gripsou_core::provider_config::replace(config.clone());
-    jobs.reload_accounts(&config);
     let removed = config.get(&provider, &body.field).is_none();
     tracing::info!(
         by = %user_id,
@@ -87,23 +87,26 @@ pub async fn set_api_key(
         action = if removed { "removed" } else { "set" },
         "provider setting changed"
     );
-    let kind = gripsou_jobs::config_provider(&provider).expect("checked by save_api_key");
-    Ok(Json(dto::ApiKeyProvider::new(kind, &config)))
+    let kind = registry::keyed_provider(&provider).expect("checked by save_api_key");
+    let dto = dto::ApiKeyProvider::new(kind, &config);
+    jobs.apply_config(config);
+    Ok(Json(dto))
 }
 
 pub async fn budget_ai_settings(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     _: AdminUser,
 ) -> Result<Json<dto::BudgetAiSettingsDto>, ApiError> {
     let s = gripsou_core::repo::settings::budget_ai(&pool).await?;
-    let defaults = gripsou_jobs::categorizer_keys()
-        .into_iter()
-        .filter_map(|k| gripsou_jobs::default_model(k).map(|m| (k, m)))
+    let defaults = registry::CATEGORIZERS
+        .iter()
+        .map(|k| (k.about.key, k.default_model))
         .collect();
     Ok(Json(dto::BudgetAiSettingsDto {
         provider: s.provider,
         model: s.model,
-        available: gripsou_jobs::available_categorizers(),
+        available: jobs.providers().available_categorizers(),
         defaults,
     }))
 }
@@ -118,7 +121,7 @@ pub async fn set_budget_ai_settings(
         .as_deref()
         .map(str::trim)
         .filter(|p| !p.is_empty());
-    if provider.is_some_and(|p| !gripsou_jobs::categorizer_keys().contains(&p)) {
+    if provider.is_some_and(|p| registry::categorizer_kind(p).is_none()) {
         return Err(ApiError::bad_request("unknown provider"));
     }
     let model = body
@@ -139,13 +142,14 @@ pub async fn set_budget_ai_settings(
 /// The models the provider offers, for the admin's model dropdown. Asked of
 /// the provider on every call: the list is short and only read by an admin.
 pub async fn budget_ai_models(
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     _: AdminUser,
     Path(provider): Path<String>,
 ) -> Result<Json<Vec<String>>, ApiError> {
-    if !gripsou_jobs::categorizer_keys().contains(&provider.as_str()) {
+    if registry::categorizer_kind(&provider).is_none() {
         return Err(ApiError::NotFound("unknown provider"));
     }
-    match gripsou_jobs::categorizer_models(&provider).await {
+    match jobs.providers().categorizer_models(&provider).await {
         Some(Ok(models)) => Ok(Json(models)),
         Some(Err(e)) => {
             tracing::warn!(provider = %provider, error = %gripsou_core::logs::error_chain(&e), "ai model list failed");
@@ -222,8 +226,7 @@ pub async fn set_provider(
     Json(body): Json<dto::SetProviderReq>,
 ) -> Result<Json<dto::Provider>, ApiError> {
     // Reject unknown providers before mutating.
-    let kind =
-        gripsou_jobs::account_provider(&key).ok_or(ApiError::NotFound("provider not found"))?;
+    let kind = registry::account_kind(&key).ok_or(ApiError::NotFound("provider not found"))?;
     gripsou_core::repo::settings::set_provider_enabled(&pool, &key, body.enabled).await?;
     tracing::info!(by = %user_id, provider = %key, enabled = body.enabled, "provider enabled changed");
     Ok(Json(dto::Provider::new(kind, body.enabled)))
@@ -356,7 +359,7 @@ mod tests {
         let mut c = gripsou_core::provider_config::ProviderConfig::default();
         c.set("powens", "client_id", Some("id-1".into()));
         c.set("powens", "client_secret", Some("hunter2".into()));
-        let dto = dto::ApiKeyProvider::new(gripsou_jobs::config_provider("powens").unwrap(), &c);
+        let dto = dto::ApiKeyProvider::new(registry::keyed_provider("powens").unwrap(), &c);
         let json = serde_json::to_string(&dto).unwrap();
         assert!(!json.contains("hunter2"), "{json}");
         assert!(
@@ -724,9 +727,13 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn budget_ai_models_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let err = budget_ai_models(AdminUser { user_id: admin }, Path("nope".into()))
-            .await
-            .expect_err("not found");
+        let err = budget_ai_models(
+            State(deps()),
+            AdminUser { user_id: admin },
+            Path("nope".into()),
+        )
+        .await
+        .expect_err("not found");
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
@@ -734,7 +741,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let key = gripsou_jobs::categorizer_keys()[0];
+        let key = registry::CATEGORIZERS[0].about.key;
 
         let status = set_budget_ai_settings(
             State(pool.clone()),
@@ -748,10 +755,14 @@ mod tests {
         .expect("admin may set");
         assert_eq!(status, StatusCode::NO_CONTENT);
 
-        let read = budget_ai_settings(State(pool.clone()), AdminUser { user_id: admin })
-            .await
-            .expect("admin may read")
-            .0;
+        let read = budget_ai_settings(
+            State(pool.clone()),
+            State(deps()),
+            AdminUser { user_id: admin },
+        )
+        .await
+        .expect("admin may read")
+        .0;
         assert_eq!(read.provider.as_deref(), Some(key));
         assert_eq!(read.model.as_deref(), Some("some-model"));
     }
@@ -761,7 +772,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let key = gripsou_jobs::categorizer_keys()[0];
+        let key = registry::CATEGORIZERS[0].about.key;
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
             .unwrap();
@@ -787,7 +798,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        let key = gripsou_jobs::categorizer_keys()[0];
+        let key = registry::CATEGORIZERS[0].about.key;
         gripsou_core::repo::settings::set_budget_ai(&pool, Some(key), Some("m"))
             .await
             .unwrap();

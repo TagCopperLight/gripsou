@@ -35,8 +35,6 @@ pub enum ProviderError {
 
 #[async_trait]
 pub trait AccountProvider: Send + Sync {
-    fn key(&self) -> &str;
-
     /// Begin a connection; may return a redirect/webview URL.
     async fn connect(&self) -> Result<ConnectInit, ProviderError>;
 

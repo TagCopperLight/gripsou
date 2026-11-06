@@ -90,7 +90,7 @@ pub async fn set_budget_ai_prices(
 }
 
 /// The account providers the admin turned on. The catalog itself (names,
-/// adapters) is in code (`gripsou_jobs::ACCOUNT_PROVIDERS`).
+/// adapters) is in code (`gripsou_providers::registry::ACCOUNTS`).
 pub async fn enabled_providers(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
     let keys = sqlx::query_scalar!(
         r#"select enabled_providers as "enabled_providers!" from app_settings where id = 1"#

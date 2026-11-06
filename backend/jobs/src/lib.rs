@@ -3,14 +3,14 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use gripsou_core::budget::ai::RunOutcome;
-use gripsou_core::categorize::Categorizer;
 use gripsou_core::crypto::EncryptionKey;
 use gripsou_core::db::Db;
 use gripsou_core::provider::{AccountProvider, CompositionProvider, PriceProvider, ProviderError};
-use gripsou_core::provider_config::{ConfigField, ProviderConfig};
+use gripsou_core::provider_config::ProviderConfig;
 use gripsou_core::repo::connection;
 use gripsou_core::repo::connection::BeginSync;
 use gripsou_core::repo::settings::BudgetAiSettings;
+use gripsou_providers::registry::{self, AccountKind, Context, Providers};
 use tracing::Instrument;
 use uuid::Uuid;
 
@@ -84,14 +84,14 @@ pub fn sync_span(user_id: Uuid, connection_id: Uuid, trigger: Trigger) -> tracin
 }
 
 /// The key and the adapters every job uses: built at startup and shared
-/// (tests build their own, with fakes). The account adapters are rebuilt when
-/// keys are saved.
+/// (tests build their own, with fakes).
 pub struct Deps {
     pub key: EncryptionKey,
-    /// `PUBLIC_URL`: Powens sends people back under it.
-    pub public_url: String,
-    /// Rebuilt when keys are saved; read through [`Deps::account`].
-    accounts: std::sync::RwLock<HashMap<String, Arc<dyn AccountProvider>>>,
+    context: Context,
+    /// Replaced as a whole by [`Deps::apply_config`]; read through [`Deps::providers`].
+    providers: std::sync::RwLock<Arc<Providers>>,
+    /// The currency FX rates are stored in (`app_settings.base_currency`).
+    pub pivot: String,
     pub prices: Vec<Box<dyn PriceProvider>>,
     pub composition: Box<dyn CompositionProvider>,
     /// How long a sync may run before it is stopped.
@@ -99,67 +99,64 @@ pub struct Deps {
 }
 
 impl Deps {
-    /// The adapters the saved keys configure, with the stored pivot.
-    pub async fn new(db: &Db, key: EncryptionKey, public_url: String) -> Deps {
+    /// The adapters the saved keys configure, with the stored pivot. Fails
+    /// when the settings can't be read: every figure depends on the pivot.
+    pub async fn load(db: &Db, key: EncryptionKey, public_url: String) -> Result<Deps, String> {
+        use gripsou_core::logs::error_chain;
         let pivot = gripsou_core::repo::settings::base_currency(db)
             .await
-            .unwrap_or_else(|e| {
-                tracing::warn!(
-                    error = %gripsou_core::logs::error_chain(&e),
-                    "base currency unreadable, using EUR"
-                );
-                "EUR".to_string()
-            });
-        Deps::build(key, pivot, public_url)
+            .map_err(|e| format!("base currency unreadable: {}", error_chain(&e)))?;
+        let loaded = gripsou_core::repo::provider_config::load(db, &key)
+            .await
+            .map_err(|e| format!("provider config unreadable: {}", error_chain(&e)))?;
+        for provider in &loaded.unreadable {
+            tracing::error!(provider = %provider, "provider config unreadable");
+        }
+        Deps::build(key, pivot, public_url, loaded.config)
+            .map_err(|e| format!("price provider unavailable: {}", error_chain(&e)))
     }
 
-    /// The adapters the saved keys configure. `pivot` is the FX storage
-    /// currency, which Yahoo's FX symbols need.
-    pub fn build(key: EncryptionKey, pivot: String, public_url: String) -> Deps {
-        let deps = Deps {
+    pub fn build(
+        key: EncryptionKey,
+        pivot: String,
+        public_url: String,
+        config: ProviderConfig,
+    ) -> Result<Deps, ProviderError> {
+        let context = Context { public_url };
+        Ok(Deps {
             key,
-            public_url,
-            accounts: Default::default(),
-            prices: price_providers(pivot),
-            composition: Box::new(composition_provider()),
+            providers: std::sync::RwLock::new(Arc::new(Providers::build(config, &context))),
+            context,
+            prices: registry::price_providers(&pivot)?,
+            pivot,
+            composition: registry::composition_provider(),
             time_limit: SYNC_TIME_LIMIT,
-        };
-        deps.reload_accounts(&gripsou_core::provider_config::current());
-        deps
+        })
     }
 
-    /// The adapter for `key`. A sync keeps the one it started with.
-    pub fn account(&self, key: &str) -> Option<Arc<dyn AccountProvider>> {
-        self.accounts
+    /// The adapters in effect. A sync keeps the ones it started with.
+    pub fn providers(&self) -> Arc<Providers> {
+        self.providers
             .read()
             .unwrap_or_else(|e| e.into_inner())
-            .get(key)
-            .cloned()
+            .clone()
     }
 
-    /// Rebuilds every account adapter from `config`, after keys were saved.
-    pub fn reload_accounts(&self, config: &ProviderConfig) {
-        let built = ACCOUNT_PROVIDERS
-            .iter()
-            .filter_map(|k| {
-                Some((
-                    k.key.to_string(),
-                    Arc::from((k.build)(config, &self.public_url)?),
-                ))
-            })
-            .collect();
-        self.set_accounts(built);
+    /// Puts saved keys in effect: every adapter built from them is rebuilt.
+    pub fn apply_config(&self, config: ProviderConfig) {
+        let built = Arc::new(Providers::build(config, &self.context));
+        *self.providers.write().unwrap_or_else(|e| e.into_inner()) = built;
     }
 
-    /// Tests: replaces the adapters with fakes.
+    /// Tests: replaces the account adapters with fakes.
     pub fn set_accounts(&self, accounts: HashMap<String, Arc<dyn AccountProvider>>) {
-        *self.accounts.write().unwrap_or_else(|e| e.into_inner()) = accounts;
+        let mut slot = self.providers.write().unwrap_or_else(|e| e.into_inner());
+        let current = Providers::build(slot.config().clone(), &self.context);
+        *slot = Arc::new(current.with_accounts(accounts));
     }
 
-    /// Whether the connection's provider can open its management page.
-    pub fn supports_manage(&self, provider_key: &str) -> bool {
-        self.account(provider_key)
-            .is_some_and(|p| p.supports_manage())
+    fn account(&self, key: &str) -> Option<Arc<dyn AccountProvider>> {
+        self.providers().account(key)
     }
 }
 
@@ -301,6 +298,7 @@ async fn sync_all_daily(db: Db, deps: Arc<Deps>) {
         // for transfer halves their pairing is about to claim.
         for (user_id, syncs) in per_user {
             let db = db.clone();
+            let deps = deps.clone();
             tokio::spawn(async move {
                 let mut any_ok = false;
                 for s in syncs {
@@ -314,7 +312,7 @@ async fn sync_all_daily(db: Db, deps: Arc<Deps>) {
                     }
                 }
                 if any_ok {
-                    request_categorize(db, user_id);
+                    request_categorize(db, deps, user_id);
                 }
             });
         }
@@ -351,141 +349,38 @@ async fn prune_logs(db: Db) {
     }
 }
 
-/// One account provider this build knows: what the admin and the connect
-/// page show, and how to build its adapter. This table is the only list of
-/// account providers, so adding one touches no schema; the admin turns it on
-/// in `app_settings.enabled_providers`.
-pub struct AccountProviderKind {
-    pub key: &'static str,
-    pub display_name: &'static str,
-    pub description: &'static str,
-    /// None when its keys aren't saved: the provider is then listed but has
-    /// no adapter, and its connections fail with "no adapter".
-    build: fn(&ProviderConfig, &str) -> Option<Box<dyn AccountProvider>>,
-}
-
-pub const ACCOUNT_PROVIDERS: &[AccountProviderKind] = &[AccountProviderKind {
-    key: "powens",
-    display_name: "Powens",
-    description: "European bank & brokerage aggregation. Connects checking, savings, PEA and brokerage accounts.",
-    build: |config, public_url| {
-        gripsou_providers::powens::PowensProvider::from_config(config, public_url)
-            .map(|p| Box::new(p) as Box<dyn AccountProvider>)
-    },
-}];
-
-pub fn account_provider(key: &str) -> Option<&'static AccountProviderKind> {
-    ACCOUNT_PROVIDERS.iter().find(|k| k.key == key)
-}
-
-/// Every provider with keys in Settings → Server → API keys, in display
-/// order: the only list the API accepts names from.
-pub struct ConfigProviderKind {
-    pub key: &'static str,
-    pub display_name: &'static str,
-    pub fields: &'static [ConfigField],
-}
-
-pub const CONFIG_PROVIDERS: &[ConfigProviderKind] = &[
-    ConfigProviderKind {
-        key: "powens",
-        display_name: "Powens",
-        fields: gripsou_providers::powens::CONFIG_FIELDS,
-    },
-    ConfigProviderKind {
-        key: "jev",
-        display_name: "JEV",
-        fields: gripsou_providers::jev::CONFIG_FIELDS,
-    },
-    ConfigProviderKind {
-        key: "brandfetch",
-        display_name: "Brandfetch",
-        fields: gripsou_core::logo::CONFIG_FIELDS,
-    },
-];
-
-pub fn config_provider(key: &str) -> Option<&'static ConfigProviderKind> {
-    CONFIG_PROVIDERS.iter().find(|k| k.key == key)
-}
-
-/// Price-provider adapters. Yahoo needs no credentials, so it is always
-/// registered (unless the connector fails to construct). `pivot` is the FX
-/// storage currency, needed to build `{currency}{pivot}=X` symbols.
-fn price_providers(pivot: String) -> Vec<Box<dyn PriceProvider>> {
-    let mut v: Vec<Box<dyn PriceProvider>> = Vec::new();
-    match gripsou_providers::yahoo::YahooPriceProvider::new(pivot) {
-        Ok(p) => v.push(Box::new(p)),
-        Err(e) => tracing::error!(
-            error = %gripsou_core::logs::error_chain(&e),
-            "yahoo provider unavailable"
-        ),
-    }
-    v
-}
-
-fn composition_provider() -> gripsou_providers::boursorama::BoursoramaCompositionProvider {
-    gripsou_providers::boursorama::BoursoramaCompositionProvider::new_default()
-}
-
-/// One categorisation provider this build knows. The adapter owns its saved key
-/// and the "blank means off" rule; this table is the only list of providers,
-/// so adding one touches no schema.
-struct CategorizerKind {
-    key: &'static str,
-    default_model: &'static str,
-    configured: fn() -> bool,
-    build: fn(&str) -> Option<Box<dyn Categorizer>>,
-}
-
-const CATEGORIZERS: &[CategorizerKind] = &[CategorizerKind {
-    key: "jev",
-    default_model: gripsou_providers::jev::JevCategorizer::DEFAULT_MODEL,
-    configured: || {
-        gripsou_providers::jev::JevCategorizer::api_key(&gripsou_core::provider_config::current())
-            .is_some()
-    },
-    build: |model| {
-        gripsou_providers::jev::JevCategorizer::from_config(
-            &gripsou_core::provider_config::current(),
-            model,
-        )
-        .map(|c| Box::new(c) as Box<dyn Categorizer>)
-    },
-}];
-
-fn categorizer_kind(key: &str) -> Option<&'static CategorizerKind> {
-    CATEGORIZERS.iter().find(|k| k.key == key)
-}
-
-/// Every provider key this build knows, configured or not — what the admin
-/// setting may name.
-pub fn categorizer_keys() -> Vec<&'static str> {
-    CATEGORIZERS.iter().map(|k| k.key).collect()
-}
-
-/// Providers whose API key is saved — the admin dropdown's
-/// options. A provider without a key is never offered.
-pub fn available_categorizers() -> Vec<&'static str> {
-    CATEGORIZERS
+/// The account providers the admin turned on, in catalog order.
+pub async fn enabled_providers(
+    db: &Db,
+) -> Result<Vec<&'static AccountKind>, gripsou_core::error::CoreError> {
+    let enabled = gripsou_core::repo::settings::enabled_providers(db).await?;
+    Ok(registry::ACCOUNTS
         .iter()
-        .filter(|k| (k.configured)())
-        .map(|k| k.key)
-        .collect()
+        .copied()
+        .filter(|k| enabled.iter().any(|e| e == k.about.key))
+        .collect())
 }
 
-pub fn default_model(kind: &str) -> Option<&'static str> {
-    categorizer_kind(kind).map(|k| k.default_model)
+/// `key` when it names an account provider the admin turned on.
+pub async fn enabled_provider(
+    db: &Db,
+    key: &str,
+) -> Result<Option<&'static AccountKind>, gripsou_core::error::CoreError> {
+    Ok(enabled_providers(db)
+        .await?
+        .into_iter()
+        .find(|k| k.about.key == key))
 }
 
-/// Pure gate: `(provider, model)` when the server has a provider whose key is
-/// present and the user opted in.
-fn gate(
+/// The admin's AI choice as `(provider, model)`, when the provider is one
+/// this build knows and its key is saved. A blank model is the provider's
+/// default.
+fn server_choice(
     settings: &BudgetAiSettings,
-    user_enabled: bool,
-    available: &[&str],
-) -> Option<(String, String)> {
-    let kind = settings.provider.as_deref()?;
-    if !user_enabled || !available.contains(&kind) {
+    providers: &Providers,
+) -> Option<(&'static str, String)> {
+    let kind = registry::categorizer_kind(settings.provider.as_deref()?)?;
+    if !(kind.configured)(providers.config()) {
         return None;
     }
     let model = settings
@@ -493,31 +388,22 @@ fn gate(
         .as_deref()
         .map(str::trim)
         .filter(|m| !m.is_empty())
-        .or_else(|| default_model(kind))?;
-    Some((kind.to_string(), model.to_string()))
+        .unwrap_or(kind.default_model);
+    Some((kind.about.key, model.to_string()))
 }
 
-fn categorizer(kind: &str, model: &str) -> Option<Box<dyn Categorizer>> {
-    (categorizer_kind(kind)?.build)(model)
+/// Whether the server can categorise at all, whoever opted in.
+pub async fn ai_configured(db: &Db, deps: &Deps) -> Result<bool, gripsou_core::error::CoreError> {
+    let settings = gripsou_core::repo::settings::budget_ai(db).await?;
+    Ok(server_choice(&settings, &deps.providers()).is_some())
 }
 
-/// The models a provider offers for categorising, asked of the provider
-/// itself. `None` when the provider is unknown or its key is not saved.
-pub async fn categorizer_models(
-    kind: &str,
-) -> Option<Result<Vec<String>, gripsou_core::categorize::CategorizeError>> {
-    let k = categorizer_kind(kind)?;
-    let c = (k.build)(k.default_model)?;
-    Some(c.models().await)
-}
-
-async fn open_gate(db: &Db, user_id: Uuid) -> Option<(String, String)> {
-    open_gate_with(db, user_id, &available_categorizers()).await
-}
-
-/// [`open_gate`] with the providers whose key is present passed in, so tests
-/// need not touch the process-wide config.
-async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(String, String)> {
+/// `(provider, model)` when the server can categorise and the user opted in.
+async fn open_gate(
+    db: &Db,
+    providers: &Providers,
+    user_id: Uuid,
+) -> Option<(&'static str, String)> {
     let settings = match gripsou_core::repo::settings::budget_ai(db).await {
         Ok(s) => s,
         Err(e) => {
@@ -525,30 +411,31 @@ async fn open_gate_with(db: &Db, user_id: Uuid, available: &[&str]) -> Option<(S
             return None;
         }
     };
-    settings.provider.as_ref()?;
-    let enabled = match gripsou_core::repo::prefs::budget_ai_enabled(db, user_id).await {
-        Ok(b) => b,
+    let choice = server_choice(&settings, providers)?;
+    match gripsou_core::repo::prefs::budget_ai_enabled(db, user_id).await {
+        Ok(true) => Some(choice),
+        Ok(false) => None,
         Err(e) => {
             tracing::error!(user_id = %user_id, error = %gripsou_core::logs::error_chain(&e), "ai opt-in unreadable");
-            return None;
+            None
         }
-    };
-    gate(&settings, enabled, available)
+    }
 }
 
 /// Whether a run would actually start — the API answers 409 when not.
-pub async fn categorize_ready(db: &Db, user_id: Uuid) -> bool {
-    open_gate(db, user_id).await.is_some()
+pub async fn categorize_ready(db: &Db, deps: &Deps, user_id: Uuid) -> bool {
+    open_gate(db, &deps.providers(), user_id).await.is_some()
 }
 
 /// Categorise one user's uncategorised rows. Never fails loudly: a run that
 /// cannot start logs why; a run that fails, on the model or on the database,
 /// records it in `budget_ai_run` for the banner.
-pub async fn categorize_user(db: Db, user_id: Uuid) {
-    let Some((kind, model)) = open_gate(&db, user_id).await else {
+async fn categorize_user(db: Db, deps: Arc<Deps>, user_id: Uuid) {
+    let providers = deps.providers();
+    let Some((kind, model)) = open_gate(&db, &providers, user_id).await else {
         return;
     };
-    let Some(c) = categorizer(&kind, &model) else {
+    let Some(c) = providers.categorizer(kind, &model) else {
         tracing::error!(provider = %kind, "ai provider key missing");
         return;
     };
@@ -612,15 +499,19 @@ fn run_again(user_id: Uuid) -> bool {
 /// Fire and forget: the run can take minutes. A request while the user's run
 /// is going is not dropped: one more run follows it, however many requests
 /// arrived, so rows a later sync brought in are not left for tomorrow.
-pub fn request_categorize(db: Db, user_id: Uuid) {
+pub fn request_categorize(db: Db, deps: Arc<Deps>, user_id: Uuid) {
     if !claim_run(user_id) {
         return;
     }
     tokio::spawn(async move {
         loop {
-            guarded(&db, user_id, categorize_user(db.clone(), user_id))
-                .instrument(gripsou_core::budget::ai::run_span(user_id))
-                .await;
+            guarded(
+                &db,
+                user_id,
+                categorize_user(db.clone(), deps.clone(), user_id),
+            )
+            .instrument(gripsou_core::budget::ai::run_span(user_id))
+            .await;
             if !run_again(user_id) {
                 break;
             }
@@ -673,12 +564,12 @@ fn decrypt_credentials(
 /// categorise the user's new rows. Fetches and decrypts credentials from the
 /// DB before calling the adapter.
 pub async fn sync_connection(db: Db, deps: Arc<Deps>, connection_id: Uuid) {
-    if !sync_connection_data(db.clone(), deps, connection_id).await {
+    if !sync_connection_data(db.clone(), deps.clone(), connection_id).await {
         return;
     }
     // After the lock is released: categorising must never hold a sync.
     match connection::user_id(&db, connection_id).await {
-        Ok(Some(user_id)) => request_categorize(db, user_id),
+        Ok(Some(user_id)) => request_categorize(db, deps, user_id),
         Ok(None) => {}
         Err(e) => {
             tracing::warn!(
@@ -899,9 +790,15 @@ async fn run_sync(
 }
 
 pub enum WebhookOutcome {
-    NotFound,     // unknown provider
-    Unauthorized, // signature rejected
-    Accepted,     // verified (acted, ignored, or unknown connection)
+    /// Unknown, unconfigured or disabled provider.
+    NotFound,
+    /// Signature rejected.
+    Unauthorized,
+    /// Verified: acted on, ignored, or for an unknown connection.
+    Accepted,
+    /// The database could not say whether the provider is enabled: the
+    /// provider retries.
+    Unavailable,
 }
 
 /// Verify an incoming webhook and, if it signals a finished sync, claim the
@@ -915,7 +812,14 @@ pub async fn handle_webhook(
     headers: std::collections::HashMap<String, String>,
     body: Vec<u8>,
 ) -> WebhookOutcome {
-    let Some(adapter) = deps.account(provider) else {
+    let enabled = match enabled_provider(&db, provider).await {
+        Ok(k) => k.is_some(),
+        Err(e) => {
+            tracing::error!(provider, error = %gripsou_core::logs::error_chain(&e), "webhook lookup failed");
+            return WebhookOutcome::Unavailable;
+        }
+    };
+    let Some(adapter) = deps.account(provider).filter(|_| enabled) else {
         tracing::warn!(provider, reason = "unknown_provider", "webhook rejected");
         return WebhookOutcome::NotFound;
     };
@@ -1240,7 +1144,20 @@ async fn finish_connection(
 #[cfg(test)]
 mod categorize_gate_tests {
     use super::*;
-    use gripsou_core::repo::settings::BudgetAiSettings;
+    use sqlx::PgPool;
+
+    fn providers(jev_key: bool) -> Providers {
+        let mut c = ProviderConfig::default();
+        if jev_key {
+            c.set("jev", "api_key", Some("k".into()));
+        }
+        Providers::build(
+            c,
+            &Context {
+                public_url: "https://g.example".into(),
+            },
+        )
+    }
 
     fn s(p: Option<&str>, m: Option<&str>) -> BudgetAiSettings {
         BudgetAiSettings {
@@ -1251,41 +1168,38 @@ mod categorize_gate_tests {
 
     #[test]
     fn closed_when_the_server_has_no_provider() {
-        assert_eq!(gate(&s(None, None), true, &["jev"]), None);
-    }
-
-    #[test]
-    fn closed_when_the_user_has_not_opted_in() {
-        assert_eq!(gate(&s(Some("jev"), None), false, &["jev"]), None);
+        assert_eq!(server_choice(&s(None, None), &providers(true)), None);
     }
 
     #[test]
     fn closed_when_the_key_is_missing() {
-        assert_eq!(gate(&s(Some("jev"), None), true, &[]), None);
+        assert_eq!(
+            server_choice(&s(Some("jev"), None), &providers(false)),
+            None
+        );
+    }
+
+    /// The schema stores any provider key; one this build does not know (stale
+    /// setting, typo) keeps the gate shut instead of failing mid-run.
+    #[test]
+    fn closed_when_the_admin_named_an_unknown_provider() {
+        assert_eq!(
+            server_choice(&s(Some("no-such-provider"), None), &providers(true)),
+            None
+        );
     }
 
     #[test]
     fn open_with_the_default_model_when_none_is_set() {
         assert_eq!(
-            gate(&s(Some("jev"), Some("  ")), true, &["jev"]),
-            Some(("jev".to_string(), "jev-latest".to_string()))
+            server_choice(&s(Some("jev"), Some("  ")), &providers(true)),
+            Some(("jev", "jev-latest".to_string()))
         );
         assert_eq!(
-            gate(&s(Some("jev"), Some("jev-2")), true, &["jev"]),
-            Some(("jev".to_string(), "jev-2".to_string()))
+            server_choice(&s(Some("jev"), Some("jev-2")), &providers(true)),
+            Some(("jev", "jev-2".to_string()))
         );
     }
-}
-
-/// [`open_gate_with`] against a real database: the gate reads the admin's
-/// provider from `app_settings` and the opt-in from the user's own prefs. The
-/// available providers are passed in, never read from the saved keys.
-#[cfg(test)]
-mod open_gate_tests {
-    use super::*;
-    use sqlx::PgPool;
-
-    const AVAILABLE: &[&str] = &["jev"];
 
     /// Insert a user with `budget_ai_enabled = opted_in`.
     async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
@@ -1299,76 +1213,29 @@ mod open_gate_tests {
         id
     }
 
-    /// Set the admin's provider choice (`None` = AI off server-wide).
-    async fn set_admin_provider(pool: &PgPool, provider: Option<&str>) {
-        sqlx::query(
-            "update app_settings set budget_ai_provider = $1, budget_ai_model = null where id = 1",
-        )
-        .bind(provider)
-        .execute(pool)
-        .await
-        .unwrap();
-    }
-
-    async fn ready(pool: &PgPool, user: Uuid) -> bool {
-        open_gate_with(pool, user, AVAILABLE).await.is_some()
-    }
-
-    /// With neither the admin nor the user having switched the AI on, nothing runs.
+    /// The gate reads the admin's provider from `app_settings` and the opt-in
+    /// from each user's own prefs. The admin configuring a provider is not
+    /// consent: a user who did not opt in never has their transactions sent
+    /// to a model, and one user's opt-in never opens it for another.
     #[sqlx::test(migrations = "../migrations")]
-    async fn closed_when_neither_admin_nor_user_enabled_it(pool: PgPool) {
-        let user = seed_user(&pool, false).await;
-        set_admin_provider(&pool, None).await;
-        assert!(!ready(&pool, user).await);
-    }
-
-    /// The admin configuring a provider is not consent: a user who did not opt
-    /// in never has their transactions sent to a model.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn closed_when_only_the_admin_enabled_it(pool: PgPool) {
-        let user = seed_user(&pool, false).await;
-        set_admin_provider(&pool, Some("jev")).await;
-        assert!(!ready(&pool, user).await);
-    }
-
-    /// A user's opt-in alone does nothing while the admin has not picked a
-    /// provider.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn closed_when_only_the_user_opted_in(pool: PgPool) {
-        let user = seed_user(&pool, true).await;
-        set_admin_provider(&pool, None).await;
-        assert!(!ready(&pool, user).await);
-    }
-
-    /// Admin provider with its key present plus user opt-in: the run may start,
-    /// on the provider's default model since the admin left it blank.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn open_when_admin_and_user_both_enabled_it(pool: PgPool) {
-        let user = seed_user(&pool, true).await;
-        set_admin_provider(&pool, Some("jev")).await;
-        assert_eq!(
-            open_gate_with(&pool, user, AVAILABLE).await,
-            Some(("jev".to_string(), default_model("jev").unwrap().to_string()))
-        );
-    }
-
-    /// The schema stores any provider key; one this build does not know (stale
-    /// setting, typo) keeps the gate shut instead of failing mid-run.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn closed_when_the_admin_named_an_unknown_provider(pool: PgPool) {
-        let user = seed_user(&pool, true).await;
-        set_admin_provider(&pool, Some("no-such-provider")).await;
-        assert!(!ready(&pool, user).await);
-    }
-
-    /// The gate is per user: one user's opt-in never opens it for another.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn one_users_opt_in_does_not_open_the_gate_for_another(pool: PgPool) {
+    async fn open_only_for_the_users_who_opted_in(pool: PgPool) {
         let opted_in = seed_user(&pool, true).await;
         let other = seed_user(&pool, false).await;
-        set_admin_provider(&pool, Some("jev")).await;
-        assert!(ready(&pool, opted_in).await);
-        assert!(!ready(&pool, other).await);
+        let p = providers(true);
+        assert_eq!(
+            open_gate(&pool, &p, opted_in).await,
+            None,
+            "AI off server-wide"
+        );
+        sqlx::query("update app_settings set budget_ai_provider = 'jev' where id = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            open_gate(&pool, &p, opted_in).await,
+            Some(("jev", "jev-latest".to_string()))
+        );
+        assert_eq!(open_gate(&pool, &p, other).await, None);
     }
 }
 
@@ -1376,6 +1243,18 @@ mod open_gate_tests {
 mod categorize_run_tests {
     use super::*;
     use sqlx::PgPool;
+
+    fn deps() -> Arc<Deps> {
+        Arc::new(
+            Deps::build(
+                gripsou_core::testkit::encryption_key(),
+                "EUR".into(),
+                "http://localhost:5173".into(),
+                ProviderConfig::default(),
+            )
+            .unwrap(),
+        )
+    }
 
     #[test]
     fn requests_during_a_run_coalesce_into_one_more_run() {
@@ -1431,8 +1310,8 @@ mod categorize_run_tests {
     async fn a_request_during_a_run_books_a_rerun_instead_of_starting_one(pool: PgPool) {
         let user = Uuid::new_v4();
         assert!(claim_run(user), "a run is in flight");
-        request_categorize(pool.clone(), user);
-        request_categorize(pool.clone(), user);
+        request_categorize(pool.clone(), deps(), user);
+        request_categorize(pool.clone(), deps(), user);
         // Give a wrongly spawned task the chance to run and touch the slot.
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(ai_runs().get(&user), Some(&true), "one re-run is booked");
@@ -1445,7 +1324,7 @@ mod categorize_run_tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn a_run_that_cannot_start_frees_the_slot(pool: PgPool) {
         let user = gripsou_core::testkit::seed_user(&pool).await;
-        request_categorize(pool.clone(), user);
+        request_categorize(pool.clone(), deps(), user);
         let freed = async {
             while ai_runs().contains_key(&user) {
                 tokio::time::sleep(Duration::from_millis(20)).await;

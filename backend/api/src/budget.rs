@@ -872,13 +872,10 @@ pub fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, ApiError> {
 
 pub async fn categorize_status(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<crate::dto::AiStatusDto>, ApiError> {
-    let settings = gripsou_core::repo::settings::budget_ai(&pool).await?;
-    let configured = settings
-        .provider
-        .as_deref()
-        .is_some_and(|p| gripsou_jobs::available_categorizers().contains(&p));
+    let configured = gripsou_jobs::ai_configured(&pool, &jobs).await?;
     let threshold = gripsou_core::repo::prefs::review_threshold(&pool, user_id).await?;
     let last = ai_repo::last_run(&pool, user_id).await?;
     Ok(Json(crate::dto::AiStatusDto {
@@ -896,12 +893,13 @@ pub async fn categorize_status(
 
 pub async fn request_categorize(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> StatusCode {
-    if !gripsou_jobs::categorize_ready(&pool, user_id).await {
+    if !gripsou_jobs::categorize_ready(&pool, &jobs, user_id).await {
         return StatusCode::CONFLICT;
     }
-    gripsou_jobs::request_categorize(pool, user_id);
+    gripsou_jobs::request_categorize(pool, jobs, user_id);
     StatusCode::ACCEPTED
 }
 
@@ -2159,10 +2157,14 @@ mod handler_tests {
         let txn = seed_txn(&pool, account, "LECLERC").await;
         ai_guess(&pool, txn, category(&pool, user_id, "groceries").await).await;
 
-        let s = categorize_status(State(pool.clone()), auth(user_id))
-            .await
-            .unwrap()
-            .0;
+        let s = categorize_status(
+            State(pool.clone()),
+            State(crate::testkit::deps()),
+            auth(user_id),
+        )
+        .await
+        .unwrap()
+        .0;
         assert!(!s.configured);
         assert!(!s.running);
         assert_eq!(s.review_count, 1);
@@ -2175,7 +2177,12 @@ mod handler_tests {
     async fn requesting_a_run_without_an_ai_is_409(pool: PgPool) {
         let (user_id, _) = seed_user(&pool).await;
         assert_eq!(
-            request_categorize(State(pool.clone()), auth(user_id)).await,
+            request_categorize(
+                State(pool.clone()),
+                State(crate::testkit::deps()),
+                auth(user_id)
+            )
+            .await,
             StatusCode::CONFLICT
         );
     }

@@ -30,9 +30,6 @@ struct FakeBank {
 
 #[async_trait]
 impl AccountProvider for FakeBank {
-    fn key(&self) -> &str {
-        "fake"
-    }
     async fn connect(&self) -> Result<ConnectInit, ProviderError> {
         Err(ProviderError::NotImplemented)
     }
@@ -73,7 +70,9 @@ fn deps(mode: Mode) -> Arc<Deps> {
         gripsou_core::testkit::encryption_key(),
         "EUR".into(),
         "http://localhost:5173".into(),
-    );
+        Default::default(),
+    )
+    .unwrap();
     deps.set_accounts(accounts);
     deps.prices = Vec::new();
     deps.composition = Box::new(NoComposition);

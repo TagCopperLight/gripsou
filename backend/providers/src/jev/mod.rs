@@ -18,12 +18,24 @@ use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-/// What Settings → Server → API keys asks for JEV.
-pub const CONFIG_FIELDS: &[ConfigField] = &[ConfigField {
-    key: "api_key",
-    label: "API key",
-    secret: true,
-}];
+use crate::registry::{About, CategorizerKind};
+
+pub const KIND: CategorizerKind = CategorizerKind {
+    about: About {
+        key: "jev",
+        display_name: "JEV",
+        fields: &[ConfigField {
+            key: "api_key",
+            label: "API key",
+            secret: true,
+        }],
+    },
+    default_model: JevCategorizer::DEFAULT_MODEL,
+    configured: |config| JevCategorizer::api_key(config).is_some(),
+    build: |config, model| {
+        JevCategorizer::from_config(config, model).map(|c| Box::new(c) as Box<dyn Categorizer>)
+    },
+};
 
 const IN_FLIGHT: usize = 8;
 
@@ -57,7 +69,7 @@ impl JevCategorizer {
     /// The saved key, or `None` when absent or blank (the provider is then off).
     pub fn api_key(config: &ProviderConfig) -> Option<String> {
         config
-            .get("jev", "api_key")
+            .get(KIND.about.key, "api_key")
             .map(str::trim)
             .filter(|k| !k.is_empty())
             .map(str::to_string)
@@ -71,7 +83,7 @@ impl JevCategorizer {
 #[async_trait]
 impl Categorizer for JevCategorizer {
     fn key(&self) -> &str {
-        "jev"
+        KIND.about.key
     }
     fn model(&self) -> &str {
         &self.model

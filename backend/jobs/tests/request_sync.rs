@@ -23,7 +23,9 @@ fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
         testkit::encryption_key(),
         "EUR".into(),
         "http://localhost:5173".into(),
-    );
+        Default::default(),
+    )
+    .unwrap();
     deps.set_accounts(
         accounts
             .into_iter()

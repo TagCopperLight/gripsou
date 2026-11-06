@@ -47,10 +47,16 @@ pub async fn net_worth(
 
 pub async fn accounts(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::Account>>, ApiError> {
     let rows = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
-    Ok(Json(rows.into_iter().map(dto::Account::from_row).collect()))
+    let providers = jobs.providers();
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| dto::Account::from_row(r, providers.logos()))
+            .collect(),
+    ))
 }
 
 pub async fn account_series(
@@ -116,6 +122,7 @@ pub fn filters_from_params(
 
 pub async fn transactions(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
     Query(p): Query<TransactionParams>,
 ) -> Result<Json<Vec<dto::Transaction>>, ApiError> {
@@ -127,11 +134,12 @@ pub async fn transactions(
     let mut tags =
         gripsou_core::repo::budget::transactions::tags_for_transactions(&pool, user_id, &ids)
             .await?;
+    let providers = jobs.providers();
     Ok(Json(
         rows.into_iter()
             .map(|r| {
                 let row_tags = tags.remove(&r.id).unwrap_or_default();
-                dto::Transaction::from_row(r, row_tags)
+                dto::Transaction::from_row(r, row_tags, providers.logos())
             })
             .collect(),
     ))
@@ -290,7 +298,7 @@ mod tests {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         seed_owned(&pool, "bob@t.local", "bob-txn").await;
 
-        let list = accounts(State(pool.clone()), auth(alice.user))
+        let list = accounts(State(pool.clone()), State(deps()), auth(alice.user))
             .await
             .expect("list ok")
             .0;
@@ -306,6 +314,7 @@ mod tests {
 
         let list = transactions(
             State(pool.clone()),
+            State(deps()),
             auth(alice.user),
             Query(no_txn_filters()),
         )
@@ -325,6 +334,7 @@ mod tests {
 
         let list = transactions(
             State(pool.clone()),
+            State(deps()),
             auth(bob.user),
             Query(TransactionParams {
                 account_id: Some(alice.account),

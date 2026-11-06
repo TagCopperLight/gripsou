@@ -2,6 +2,8 @@
 //! (decimals never go over the wire as floats); timestamps are epoch-ms.
 
 use chrono::NaiveDate;
+use gripsou_providers::brandfetch::Logos;
+use gripsou_providers::registry::{self, About, AccountKind, Providers};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -134,7 +136,7 @@ fn display_kind(kind: &str, has_composition: bool) -> String {
 }
 
 impl Holding {
-    pub fn from_row(r: gripsou_core::repo::valuation::HoldingRow) -> Self {
+    pub fn from_row(r: gripsou_core::repo::valuation::HoldingRow, logos: &Logos) -> Self {
         let is_cash = r.kind == "cash";
         let kind = display_kind(&r.kind, r.composition.is_some());
         // Unit price is native to the instrument. A unit of cash is worth one
@@ -174,7 +176,7 @@ impl Holding {
             ticker: r.symbol.unwrap_or_else(|| r.currency.clone()),
             name: r.instrument_name,
             kind,
-            logo: gripsou_core::logo::instrument_logo_url(
+            logo: logos.instrument(
                 &r.kind,
                 r.instrument_isin.as_deref(),
                 r.instrument_symbol.as_deref(),
@@ -420,6 +422,7 @@ impl Transaction {
     pub fn from_row(
         r: gripsou_core::repo::budget::transactions::TransactionListRow,
         tags: Vec<gripsou_core::repo::budget::transactions::TagRef>,
+        logos: &Logos,
     ) -> Self {
         Transaction {
             id: r.id.to_string(),
@@ -435,7 +438,7 @@ impl Transaction {
             source: r.source,
             ticker: r.ticker,
             logo: r.instrument_kind.as_deref().and_then(|kind| {
-                gripsou_core::logo::instrument_logo_url(
+                logos.instrument(
                     kind,
                     r.instrument_isin.as_deref(),
                     r.instrument_symbol.as_deref(),
@@ -486,7 +489,7 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn from_row(r: gripsou_core::repo::valuation::AccountRow) -> Self {
+    pub fn from_row(r: gripsou_core::repo::valuation::AccountRow, logos: &Logos) -> Self {
         let source_name = source_name(&r);
         Account {
             id: r.account_id.to_string(),
@@ -499,7 +502,7 @@ impl Account {
             value_native: r.value_native.map(|v| v.to_string()),
             fx_missing: r.fx_missing,
             last_sync_at: r.last_sync_at.map(|d| d.timestamp_millis()),
-            source_logo: gripsou_core::logo::institution_logo_url(r.institution_key.as_deref()),
+            source_logo: logos.institution(&r.provider_key, r.institution_key.as_deref()),
             source_name,
         }
     }
@@ -632,7 +635,7 @@ impl ProviderGroup {
     pub fn tree(
         conns: Vec<gripsou_core::repo::connection::ConnectionListRow>,
         accounts: Vec<gripsou_core::repo::connection::ConnectionAccountRow>,
-        jobs: &gripsou_jobs::Deps,
+        providers: &Providers,
     ) -> Vec<ProviderGroup> {
         use std::collections::HashMap;
         let mut by_conn: HashMap<uuid::Uuid, Vec<SyncAccount>> = HashMap::new();
@@ -656,13 +659,15 @@ impl ProviderGroup {
         let mut groups: Vec<ProviderGroup> = Vec::new();
         for c in conns {
             let conn = SyncConnection {
-                can_manage: jobs.supports_manage(&c.provider_key),
+                can_manage: providers.supports_manage(&c.provider_key),
                 health: c
                     .provider_meta
                     .get("sync_health")
                     .and_then(|h| serde_json::from_value(h.clone()).ok()),
                 id: c.id.to_string(),
-                logo: gripsou_core::logo::institution_logo_url(c.institution_key.as_deref()),
+                logo: providers
+                    .logos()
+                    .institution(&c.provider_key, c.institution_key.as_deref()),
                 // Bank/broker name once known (filled on first sync); the
                 // provider label ("Powens") is a fallback until then.
                 display_name: c.institution_name.unwrap_or(c.display_name),
@@ -899,10 +904,10 @@ pub struct Provider {
 }
 
 impl Provider {
-    pub fn new(k: &gripsou_jobs::AccountProviderKind, enabled: bool) -> Self {
+    pub fn new(k: &AccountKind, enabled: bool) -> Self {
         Provider {
-            key: k.key.into(),
-            display_name: k.display_name.into(),
+            key: k.about.key.into(),
+            display_name: k.about.display_name.into(),
             description: k.description.into(),
             enabled,
         }
@@ -943,10 +948,7 @@ pub enum ApiKeyField {
 }
 
 impl ApiKeyProvider {
-    pub fn new(
-        k: &gripsou_jobs::ConfigProviderKind,
-        config: &gripsou_core::provider_config::ProviderConfig,
-    ) -> Self {
+    pub fn new(k: &About, config: &gripsou_core::provider_config::ProviderConfig) -> Self {
         let fields = k
             .fields
             .iter()
@@ -992,10 +994,10 @@ pub struct EnabledProvider {
 }
 
 impl EnabledProvider {
-    pub fn new(k: &gripsou_jobs::AccountProviderKind) -> Self {
+    pub fn new(k: &AccountKind) -> Self {
         EnabledProvider {
-            key: k.key.into(),
-            display_name: k.display_name.into(),
+            key: k.about.key.into(),
+            display_name: k.about.display_name.into(),
             description: k.description.into(),
         }
     }
@@ -1003,7 +1005,7 @@ impl EnabledProvider {
 
 /// A provider's display name, or its key for one this build no longer knows.
 fn provider_name(key: &str) -> &str {
-    gripsou_jobs::account_provider(key).map_or(key, |k| k.display_name)
+    registry::account_kind(key).map_or(key, |k| k.about.display_name)
 }
 
 /// Where an account comes from: its bank once known, else its provider.
@@ -1211,26 +1213,24 @@ mod tests {
         }
     }
 
+    /// A connection's logo comes from its bank, as its provider names it.
     #[test]
     fn connection_logo_derives_from_institution_key() {
-        // logo must come from the connector key via the core helper — not be
-        // hardcoded and not derived from the name.
+        let providers = crate::testkit::deps().providers();
         let groups = ProviderGroup::tree(
-            vec![conn_row(Some("some-key"))],
+            vec![
+                conn_row(Some("07d76adf-ae35-5b38-aca8-67aafba13169")),
+                conn_row(None),
+            ],
             vec![],
-            &crate::testkit::deps(),
+            &providers,
         );
-        let conn = &groups[0].connections[0];
-        assert_eq!(
-            conn.logo,
-            gripsou_core::logo::institution_logo_url(Some("some-key"))
+        let logo = groups[0].connections[0].logo.as_deref().unwrap();
+        assert!(
+            logo.starts_with("https://cdn.brandfetch.io/boursorama.com/"),
+            "{logo}"
         );
-    }
-
-    #[test]
-    fn connection_logo_none_without_institution_key() {
-        let groups = ProviderGroup::tree(vec![conn_row(None)], vec![], &crate::testkit::deps());
-        assert_eq!(groups[0].connections[0].logo, None);
+        assert_eq!(groups[0].connections[1].logo, None);
     }
 }
 

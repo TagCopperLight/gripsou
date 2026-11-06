@@ -53,7 +53,7 @@ pub async fn update_prefs(
         tracing::info!(user_id = %user_id, enabled, "ai opt-in changed");
     }
     if enabled && !was_enabled {
-        gripsou_jobs::request_categorize(pool.clone(), user_id);
+        gripsou_jobs::request_categorize(pool.clone(), jobs.clone(), user_id);
     }
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
@@ -109,7 +109,9 @@ mod tests {
             gripsou_core::testkit::encryption_key(),
             "EUR".into(),
             "http://localhost:5173".into(),
-        );
+            Default::default(),
+        )
+        .unwrap();
         deps.prices = vec![Box::new(gripsou_core::testkit::FixedRateProvider { rate })];
         update_prefs(
             State(pool.clone()),

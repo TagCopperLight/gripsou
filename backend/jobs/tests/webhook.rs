@@ -33,7 +33,9 @@ fn deps() -> Arc<Deps> {
         testkit::encryption_key(),
         "EUR".into(),
         "http://localhost:5173".into(),
-    );
+        Default::default(),
+    )
+    .unwrap();
     let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
     deps.set_accounts(
         [(
@@ -225,5 +227,43 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
         "expected Accepted even when connection is unknown"
     );
 
+    Ok(())
+}
+
+// ── disabled provider → NotFound ─────────────────────────────────────────────
+
+/// A provider the admin turned off accepts no webhook, even correctly signed:
+/// its connections must not sync behind the admin's back.
+#[sqlx::test(migrations = "../migrations")]
+async fn handle_webhook_refuses_a_disabled_provider(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+    let conn_id = seed_connection(&pool, user_id, "55").await;
+    gripsou_core::repo::settings::set_provider_enabled(&pool, "powens", false).await?;
+
+    let path = "/api/webhooks/powens";
+    let date = "2024-01-15T10:00:00.000Z";
+    let body = r#"{"connection":{"id":55}}"#;
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("bi-signature-date".to_string(), date.to_string());
+    headers.insert(
+        "bi-signature".to_string(),
+        sign(WEBHOOK_SECRET, path, date, body),
+    );
+
+    let outcome = gripsou_jobs::handle_webhook(
+        pool.clone(),
+        &deps(),
+        "powens",
+        path,
+        headers,
+        body.as_bytes().to_vec(),
+    )
+    .await;
+    assert!(matches!(outcome, gripsou_jobs::WebhookOutcome::NotFound));
+    let status: String = sqlx::query_scalar("select status from connection where id=$1")
+        .bind(conn_id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(status, "ok");
     Ok(())
 }

@@ -46,14 +46,10 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(code);
     };
 
-    // Provider keys: decrypted once here, replaced on each save.
-    let loaded = gripsou_core::repo::provider_config::load(&db, &key).await?;
-    for provider in &loaded.unreadable {
-        tracing::error!(provider = %provider, "provider config unreadable");
-    }
-    gripsou_core::provider_config::replace(loaded.config);
-
-    let jobs = std::sync::Arc::new(gripsou_jobs::Deps::new(&db, key, public_url).await);
+    let jobs = gripsou_jobs::Deps::load(&db, key, public_url)
+        .await
+        .map_err(anyhow::Error::msg)?;
+    let jobs = std::sync::Arc::new(jobs);
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), jobs.clone()));
 
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());

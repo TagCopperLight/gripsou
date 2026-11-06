@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 gripsou-core = { path = "../core" }
 gripsou-jobs = { path = "../jobs" }
+gripsou-providers = { path = "../providers" }
 anyhow.workspace = true
 argon2 = { version = "0.5.3", features = ["std"] }
 axum.workspace = true

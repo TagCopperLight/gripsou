@@ -15,10 +15,16 @@ use crate::error::ApiError;
 
 pub async fn holdings(
     State(pool): State<PgPool>,
+    State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     AuthUser { user_id, .. }: AuthUser,
 ) -> Result<Json<Vec<dto::Holding>>, ApiError> {
     let rows = gripsou_core::repo::valuation::holdings(&pool, user_id).await?;
-    Ok(Json(rows.into_iter().map(dto::Holding::from_row).collect()))
+    let providers = jobs.providers();
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| dto::Holding::from_row(r, providers.logos()))
+            .collect(),
+    ))
 }
 
 pub async fn investment_returns(
@@ -979,7 +985,7 @@ mod tests {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         seed_owned(&pool, "bob@t.local", "bob-txn").await;
 
-        let list = holdings(State(pool.clone()), auth(alice.user))
+        let list = holdings(State(pool.clone()), State(deps()), auth(alice.user))
             .await
             .expect("list ok")
             .0;

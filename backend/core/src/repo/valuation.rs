@@ -115,7 +115,7 @@ pub struct HoldingRow {
     pub symbol: Option<String>,
     pub instrument_name: String,
     pub kind: String,
-    /// With `kind`, what the logo is built from (`logo::instrument_logo_url`).
+    /// With `kind`, what the logo is built from (`Logos::instrument` in `providers`).
     pub instrument_isin: Option<String>,
     /// The identity column, not the display `symbol`.
     pub instrument_symbol: Option<String>,

@@ -18,7 +18,11 @@ pub async fn connections(
 ) -> Result<Json<Vec<dto::ProviderGroup>>, ApiError> {
     let conns = gripsou_core::repo::connection::list_connections(&pool, user_id).await?;
     let accounts = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
-    Ok(Json(dto::ProviderGroup::tree(conns, accounts, &jobs)))
+    Ok(Json(dto::ProviderGroup::tree(
+        conns,
+        accounts,
+        &jobs.providers(),
+    )))
 }
 
 pub async fn sync_connection(
@@ -81,11 +85,10 @@ pub async fn enabled_providers(
     State(pool): State<PgPool>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<dto::EnabledProvider>>, ApiError> {
-    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
     Ok(Json(
-        gripsou_jobs::ACCOUNT_PROVIDERS
-            .iter()
-            .filter(|k| enabled.iter().any(|e| e == k.key))
+        gripsou_jobs::enabled_providers(&pool)
+            .await?
+            .into_iter()
             .map(dto::EnabledProvider::new)
             .collect(),
     ))
@@ -100,7 +103,7 @@ pub async fn manage_connection(
     let conn = gripsou_core::repo::connection::connection_for_sync(&pool, user_id, id)
         .await?
         .ok_or(ApiError::NotFound("connection not found"))?;
-    if !jobs.supports_manage(&conn.provider_key) {
+    if !jobs.providers().supports_manage(&conn.provider_key) {
         return Err(ApiError::bad_request("connection management unavailable"));
     }
     let init = gripsou_jobs::manage_connection(&jobs, &conn)
@@ -128,9 +131,8 @@ pub async fn init_connection(
     Json(body): Json<dto::InitConnectionReq>,
 ) -> Result<(StatusCode, Json<dto::InitConnectionResp>), ApiError> {
     // Validate provider is known and enabled (also gives the row's name).
-    let enabled = gripsou_core::repo::settings::enabled_providers(&pool).await?;
-    let provider = gripsou_jobs::account_provider(&body.provider_key)
-        .filter(|k| enabled.iter().any(|e| e == k.key))
+    let provider = gripsou_jobs::enabled_provider(&pool, &body.provider_key)
+        .await?
         .ok_or_else(|| {
             ApiError::BadRequest(format!("provider '{}' is not enabled", body.provider_key))
         })?;
@@ -140,7 +142,7 @@ pub async fn init_connection(
         &jobs,
         user_id,
         &body.provider_key,
-        provider.display_name,
+        provider.about.display_name,
     )
     .await
     {
@@ -205,6 +207,7 @@ pub async fn webhook(
         WebhookOutcome::Accepted => StatusCode::OK,
         WebhookOutcome::Unauthorized => StatusCode::UNAUTHORIZED,
         WebhookOutcome::NotFound => StatusCode::NOT_FOUND,
+        WebhookOutcome::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
     }
 }
 
@@ -235,9 +238,6 @@ mod tests {
 
     #[async_trait::async_trait]
     impl AccountProvider for FakeBank {
-        fn key(&self) -> &str {
-            "powens"
-        }
         async fn connect(&self) -> Result<ConnectInit, ProviderError> {
             Ok(ConnectInit {
                 redirect_url: Some("https://webview.powens.com/en/connect?x=1".into()),

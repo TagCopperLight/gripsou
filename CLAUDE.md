@@ -54,8 +54,8 @@ Only `cargo run` loads `.env` (it searches parent directories; never create `bac
 Adding a provider must never need a migration. The crates enforce it:
 
 - `core`: canonical DTOs (`dto.rs`), provider ports (`provider.rs`, `categorize.rs`), repositories, ingest, backfill, price/composition sync, budget (`budget/`).
-- `providers`: adapters from native payloads to canonical DTOs: `powens` (accounts), `yahoo` (prices, FX), `boursorama` (ETF composition), `jev` (categorisation). They depend on `core`, never the reverse.
-- `jobs`: the in-process tokio scheduler and sync orchestration (one task and one lock per connection; the `CATEGORIZERS` registry).
+- `providers`: adapters from native payloads to canonical DTOs: `powens` (accounts), `yahoo` (prices, FX), `boursorama` (ETF composition), `jev` (categorisation), `brandfetch` (logos). They depend on `core`, never the reverse. Each adapter declares its key, name and config fields once; `registry` lists them and builds the adapters from a saved config.
+- `jobs`: the in-process tokio scheduler and sync orchestration (one task and one lock per connection). `Deps` holds the adapters in effect; `Deps::apply_config` is the one place saved keys take effect.
 - `api`: axum handlers, auth, routing, static files.
 
 Provider quirks belong in the adapter, the `*_meta` JSONB columns and `external_id` (idempotent upserts), never in new columns. A new account type is a row in `account_type`.

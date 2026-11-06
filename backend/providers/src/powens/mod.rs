@@ -1,10 +1,15 @@
+mod institutions;
 pub mod map;
 pub mod model;
+
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;
 use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
 use gripsou_core::provider_config::{ConfigField, ProviderConfig};
+
+use crate::registry::{About, AccountKind, Context};
 
 pub struct PowensProvider {
     pub(crate) client_id: String,
@@ -68,41 +73,54 @@ async fn read_json<T: serde::de::DeserializeOwned>(
         .map_err(|e| ProviderError::Other(crate::json_decode_error(what, &e)))
 }
 
-/// What Settings → Server → API keys asks for Powens. The redirect address is
-/// not one of them: it is always the public address + `/connections/callback`.
-pub const CONFIG_FIELDS: &[ConfigField] = &[
-    ConfigField {
-        key: "client_id",
-        label: "Client ID",
-        secret: false,
+pub const KIND: AccountKind = AccountKind {
+    about: About {
+        key: "powens",
+        display_name: "Powens",
+        // The redirect address is not asked for: it is always the public
+        // address + `/connections/callback`.
+        fields: &[
+            ConfigField {
+                key: "client_id",
+                label: "Client ID",
+                secret: false,
+            },
+            ConfigField {
+                key: "domain",
+                label: "Domain",
+                secret: false,
+            },
+            ConfigField {
+                key: "client_secret",
+                label: "Client secret",
+                secret: true,
+            },
+            ConfigField {
+                key: "webhook_secret",
+                label: "Webhook secret",
+                secret: true,
+            },
+        ],
     },
-    ConfigField {
-        key: "domain",
-        label: "Domain",
-        secret: false,
+    description: "European bank & brokerage aggregation. Connects checking, savings, PEA and brokerage accounts.",
+    build: |config, ctx| {
+        PowensProvider::from_config(config, ctx).map(|p| Arc::new(p) as Arc<dyn AccountProvider>)
     },
-    ConfigField {
-        key: "client_secret",
-        label: "Client secret",
-        secret: true,
-    },
-    ConfigField {
-        key: "webhook_secret",
-        label: "Webhook secret",
-        secret: true,
-    },
-];
+    institution_domain: institutions::domain,
+};
 
 impl PowensProvider {
     /// `None` until client id, domain and client secret are all set.
-    /// `public_url` is `PUBLIC_URL`, the address gripsou is opened at.
-    pub fn from_config(config: &ProviderConfig, public_url: &str) -> Option<Self> {
-        let get = |f| config.get("powens", f).map(str::to_string);
+    pub fn from_config(config: &ProviderConfig, ctx: &Context) -> Option<Self> {
+        let get = |f| config.get(KIND.about.key, f).map(str::to_string);
         let domain = get("domain")?;
         Some(Self {
             client_id: get("client_id")?,
             client_secret: get("client_secret")?,
-            redirect_uri: format!("{}/connections/callback", public_url.trim_end_matches('/')),
+            redirect_uri: format!(
+                "{}/connections/callback",
+                ctx.public_url.trim_end_matches('/')
+            ),
             origin: format!("https://{domain}"),
             domain,
             http: reqwest::Client::new(),
@@ -204,10 +222,6 @@ impl PowensProvider {
 
 #[async_trait]
 impl AccountProvider for PowensProvider {
-    fn key(&self) -> &str {
-        "powens"
-    }
-
     /// Build the Powens webview URL. The webview is always at webview.powens.com —
     /// no API call needed here. Powens creates an anonymous user on its side and
     /// returns a one-time `code` in the callback for us to exchange.
@@ -518,12 +532,15 @@ impl AccountProvider for PowensProvider {
 mod tests {
     #[test]
     fn from_config_needs_the_three_fields_and_builds_the_redirect() {
+        let ctx = |url: &str| Context {
+            public_url: url.into(),
+        };
         let mut c = ProviderConfig::default();
         c.set("powens", "client_id", Some("id".into()));
         c.set("powens", "domain", Some("x.biapi.pro".into()));
-        assert!(PowensProvider::from_config(&c, "https://g.example").is_none());
+        assert!(PowensProvider::from_config(&c, &ctx("https://g.example")).is_none());
         c.set("powens", "client_secret", Some("s".into()));
-        let p = PowensProvider::from_config(&c, "https://g.example/").unwrap();
+        let p = PowensProvider::from_config(&c, &ctx("https://g.example/")).unwrap();
         assert_eq!(p.redirect_uri, "https://g.example/connections/callback");
         assert_eq!(p.origin, "https://x.biapi.pro");
         assert!(!p.webhooks_enabled());

@@ -17,11 +17,15 @@ use uuid::Uuid;
 /// The job deps with whatever adapters the saved keys configure.
 pub(crate) fn deps() -> std::sync::Arc<gripsou_jobs::Deps> {
     let key = gripsou_core::testkit::encryption_key();
-    std::sync::Arc::new(gripsou_jobs::Deps::build(
-        key,
-        "EUR".into(),
-        "http://localhost:5173".into(),
-    ))
+    std::sync::Arc::new(
+        gripsou_jobs::Deps::build(
+            key,
+            "EUR".into(),
+            "http://localhost:5173".into(),
+            Default::default(),
+        )
+        .unwrap(),
+    )
 }
 
 /// The password `seed_user` gives its users.

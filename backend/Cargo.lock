@@ -1114,6 +1114,7 @@ dependencies = [
  "dotenvy",
  "gripsou-core",
  "gripsou-jobs",
+ "gripsou-providers",
  "qrcode",
  "rust_decimal",
  "serde",

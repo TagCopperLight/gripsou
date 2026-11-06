@@ -1,6 +1,8 @@
 pub mod boursorama;
+pub mod brandfetch;
 pub mod jev;
 pub mod powens;
+pub mod registry;
 pub mod yahoo;
 
 /// A JSON decode error as `"{what} decode error (<kind>) at line L column C"`.
