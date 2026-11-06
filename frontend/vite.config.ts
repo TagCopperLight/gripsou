@@ -19,9 +19,6 @@ export default defineConfig(async ({ mode }) => ({
     },
   },
   build: {
-    // The app ships as one chunk (about 1.6 MB, 515 kB gzip), so changing page
-    // never waits on a download. ECharts is most of it, already trimmed to the
-    // parts `lib/echarts.ts` registers. The limit warns if it grows much more.
     chunkSizeWarningLimit: 1800,
   },
   test: {
