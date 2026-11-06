@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useErrorToast } from "../../lib/errorToasts";
 import { Landmark, Plus } from "lucide-react";
 
 import { Surface } from "../../ui/Surface";
@@ -11,15 +10,18 @@ import { AddConnectionModal } from "./AddConnectionModal";
 import { ConnectionGuide } from "./ConnectionGuide";
 import { Dialog } from "../../ui/Dialog";
 import { DeleteConnectionModal } from "./DeleteConnectionModal";
-import { useConnections, useEnabledProviders, useInitConnection } from "../../api/hooks";
-import { goTo } from "../../lib/navigate";
+import { useConnections } from "../../api/connections";
+import { useStartConnection } from "./useStartConnection";
 import type { SyncConnection } from "../../api/types";
 
 export function SettingsConnections() {
   const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useConnections();
-  const { data: providers, isLoading: providersLoading } = useEnabledProviders();
-  const initConnection = useInitConnection();
+  const flow = useStartConnection({
+    returnTo: "/settings/connections",
+    errorMessage: t("settings.connections.connectError"),
+  });
+  const { data: providers, isLoading: providersLoading } = flow.providers;
   const groups = data ?? [];
   const conns = groups.flatMap((g) =>
     g.connections.map((c) => ({ ...c, providerName: g.providerName })),
@@ -28,23 +30,9 @@ export function SettingsConnections() {
   // Nothing connected (once known): the empty state carries the button.
   const empty = !isLoading && !isError && connCount === 0;
 
-  const [addOpen, setAddOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SyncConnection | null>(null);
 
-  const addConnection = () => {
-    if (providers?.length === 1) {
-      initConnection.mutate(providers[0].key, {
-        onSuccess: ({ redirectUrl }) => {
-          goTo(redirectUrl ?? "/settings/connections");
-        },
-      });
-    } else {
-      setAddOpen(true);
-    }
-  };
-
-  useErrorToast(initConnection.isError && t("settings.connections.connectError"));
 
   return (
     <div className="pb-8 md:mt-13">
@@ -59,7 +47,7 @@ export function SettingsConnections() {
                 </Button>
               )}
               {!empty && (
-                <Button onClick={addConnection} disabled={providersLoading || initConnection.isPending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
+                <Button onClick={flow.start} disabled={providersLoading || flow.pending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
                   <Plus className="size-4" />
                   {t("settings.connections.addConnection")}
                 </Button>
@@ -83,7 +71,7 @@ export function SettingsConnections() {
                 <Landmark className="size-6 text-fg-faint" />
                 <p className="text-sm font-medium text-fg">{t("settings.connections.empty.title")}</p>
                 <p className="max-w-md text-sm text-fg-faint">{t("settings.connections.empty.body")}</p>
-                <Button onClick={addConnection} disabled={providersLoading || initConnection.isPending} className="mt-2.5 inline-flex items-center gap-1.5">
+                <Button onClick={flow.start} disabled={providersLoading || flow.pending} className="mt-2.5 inline-flex items-center gap-1.5">
                   <Plus className="size-4" />
                   {t("settings.connections.addConnection")}
                 </Button>
@@ -107,7 +95,7 @@ export function SettingsConnections() {
         </div>
       </Surface>
 
-      {addOpen && <AddConnectionModal onClose={() => setAddOpen(false)} />}
+      {flow.pickerOpen && <AddConnectionModal onClose={flow.closePicker} />}
       {guideOpen && (
         <Dialog
           large

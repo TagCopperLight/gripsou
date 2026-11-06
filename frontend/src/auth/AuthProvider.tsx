@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, getAuthToken, getJson, patchJson, postJson, setAuthToken } from "../api/client";
-import type { MfaRequired, SessionUser } from "../api/types";
-import {
-  startAuthentication,
-  type PublicKeyCredentialRequestOptionsJSON,
-} from "@simplewebauthn/browser";
-import { AuthContext, isCurrencyRefused, type AuthValue, type SecondFactor } from "./context";
+import { ApiError, getAuthToken, setAuthToken } from "../api/client";
+import { authApi, type SecondFactor } from "../api/auth";
+import type { SessionUser } from "../api/types";
+import { startAuthentication } from "@simplewebauthn/browser";
+import { AuthContext, isCurrencyRefused, type AuthValue } from "./context";
 import i18n from "../i18n";
 import { showError } from "../lib/errorToasts";
 import { DEFAULT_PREFS, setPrefs, withPatch, type PrefsPatch } from "../lib/prefs";
 import { afterPrefsSaved } from "../api/invalidate";
-
-type SessionResponse = { token: string; user: SessionUser };
-type LoginResponse = SessionResponse | MfaRequired;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -47,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const u = await getJson<SessionUser>("/auth/me");
+        const u = await authApi.me();
         if (active) applyUser(u);
       } catch (err: unknown) {
         // Only a rejected token is cleared: network errors or 50x shouldn't log the user out.
@@ -68,10 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, remember: boolean) => {
-      const res = await postJson<LoginResponse>(
-        "/auth/login",
-        { email, password, remember },
-      );
+      const res = await authApi.login(email, password, remember);
       if ("mfaRequired" in res) return res;
       resetSession();
       setAuthToken(res.token, remember);
@@ -83,15 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithPasskey = useCallback(
     async (remember: boolean) => {
-      const { challenge, options } = await postJson<{
-        challenge: string;
-        options: PublicKeyCredentialRequestOptionsJSON;
-      }>("/auth/passkey/options", {});
+      const { challenge, options } = await authApi.passkeyOptions();
       const credential = await startAuthentication({ optionsJSON: options });
-      const res = await postJson<SessionResponse>(
-        "/auth/passkey",
-        { challenge, credential, remember },
-      );
+      const res = await authApi.loginWithPasskey(challenge, credential, remember);
       resetSession();
       setAuthToken(res.token, remember);
       applyUser(res.user);
@@ -105,10 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       code: SecondFactor,
       remember: boolean,
     ) => {
-      const res = await postJson<SessionResponse>(
-        "/auth/login/verify",
-        { challenge, ...code },
-      );
+      const res = await authApi.verifyLogin(challenge, code);
       resetSession();
       setAuthToken(res.token, remember);
       applyUser(res.user);
@@ -128,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     // Capture the old token in the logout request, then clear locally at once:
     // a slow or failed request must not keep another user's cache alive.
-    const request = postJson<void>("/auth/logout", {});
+    const request = authApi.logout();
     setAuthToken(null);
     resetSession();
     setUser(null);
@@ -151,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const showStoredPrefs = useCallback(async () => {
     try {
-      const stored = await getJson<SessionUser>("/auth/me");
+      const stored = await authApi.me();
       if (shown.current) applyUser({ ...shown.current, prefs: stored.prefs });
     } catch {
       // Offline or signed out: the next load shows the stored prefs.
@@ -168,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const waits = "currency" in patch;
       if (!waits) applyUser({ ...u, prefs: withPatch(u.prefs, patch) });
       // One save at a time, so two changes of one setting are stored in order.
-      const save = prefsSaves.current.then(() => patchJson<SessionUser>("/auth/prefs", patch));
+      const save = prefsSaves.current.then(() => authApi.savePrefs(patch));
       prefsSaves.current = save.catch(() => {});
       try {
         await save;

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { useAuth } from "../auth/context";
-import { useHealth } from "../api/hooks";
+import { useHealth } from "../api/health";
 import { BudgetIcon } from "../features/budget/budgetIcons";
 
 type NavItem = {

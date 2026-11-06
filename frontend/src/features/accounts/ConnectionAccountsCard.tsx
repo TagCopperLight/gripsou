@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "../../ui/FxNote";
-import { useConnections, useHoldings } from "../../api/hooks";
+import { useConnections } from "../../api/connections";
+import { useHoldings } from "../../api/holdings";
 import { AlertDot } from "../connections/AlertDot";
 import { Money } from "../../ui/Money";
 import { MaskedMoney } from "../../ui/PrivateMoney";
@@ -12,9 +13,9 @@ import { usePrefs } from "../../auth/context";
 import { HoldingBadge } from "../../ui/HoldingBadge";
 import { EditAccountModal } from "./EditAccountModal";
 import { formatShare } from "../../lib/distribution";
-import { connectionAlert } from "../../lib/connectionHealth";
-import type { ConnectionGroup } from "../../lib/accounts";
-import { accountTypeLabel, flattenConnections, type Account } from "../../api/types";
+import { connectionAlert, flattenConnections } from "../../lib/connectionState";
+import { accountTypeLabel, type ConnectionGroup } from "../../lib/accounts";
+import type { Account } from "../../api/types";
 
 type ConnectionAccountsCardProps = {
   group: ConnectionGroup;

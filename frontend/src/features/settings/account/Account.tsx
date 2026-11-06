@@ -16,12 +16,7 @@ import { TotpSetupModal } from "../security/TotpSetupModal";
 import { ManageTwoFactorModal } from "../security/ManageTwoFactorModal";
 import { PasskeysModal } from "../security/PasskeysModal";
 import { AddPasskeyModal } from "../security/AddPasskeyModal";
-import {
-  useMfaStatus,
-  useSessions,
-  useRevokeSession,
-  useRevokeOtherSessions,
-} from "../../../api/hooks";
+import { useMfaStatus, useSessions, useRevokeSession, useRevokeOtherSessions } from "../../../api/auth";
 import { useAuth } from "../../../auth/context";
 import type { Session } from "../../../api/types";
 import { formatDate, formatRelative } from "../../../lib/date";

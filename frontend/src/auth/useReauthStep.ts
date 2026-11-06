@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { showError } from "../lib/errorToasts";
 
 import { ApiError } from "../api/client";
-import { useReauth } from "../api/hooks";
+import { useReauth } from "../api/auth";
 import { throttleMinutes } from "./throttle";
 
 /** The password check before a sensitive change. `check()` trades the password

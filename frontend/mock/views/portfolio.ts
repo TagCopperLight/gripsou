@@ -1,7 +1,7 @@
 // Valuations computed from the store, so a write (a lot, a transaction) shows
 // up everywhere at once. Everything is EUR; FX states are forced per screen.
 
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/holdings.ts";
 import type {
   Account,
   BasisPreview,

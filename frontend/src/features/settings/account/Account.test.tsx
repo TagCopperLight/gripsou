@@ -14,8 +14,8 @@ const navigateSpy = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigateSpy }));
 
-vi.mock("../../../api/hooks", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../api/hooks")>();
+vi.mock("../../../api/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../api/auth")>();
   return {
     ...actual,
     useSessions: () => ({

@@ -2,15 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import {
-  useSaveLots,
-  useChangePassword,
-  useTransactions,
-  useUpdateAccount,
-  useDeleteConnection,
-  useSetProviderEnabled,
-  useEnabledProviders,
-} from "./hooks";
+import { useUpdateAccount } from "./accounts";
+import { useSetProviderEnabled } from "./admin";
+import { useChangePassword } from "./auth";
+import { useDeleteConnection, useEnabledProviders } from "./connections";
+import { useSaveLots } from "./holdings";
+import { useTransactions } from "./transactions";
 
 // The page size the list asks the server for.
 const TRANSACTIONS_PAGE_SIZE = 200;

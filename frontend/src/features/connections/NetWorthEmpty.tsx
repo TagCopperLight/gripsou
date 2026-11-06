@@ -4,8 +4,8 @@ import { ChartLine, Loader2 } from "lucide-react";
 
 import { Button } from "../../ui/Button";
 import { CardState } from "../../ui/CardState";
-import { useConnections } from "../../api/hooks";
-import { netWorthEmptyKind } from "../../lib/netWorthEmpty";
+import { useConnections } from "../../api/connections";
+import { netWorthEmptyKind } from "../../lib/connectionState";
 
 /** Stands in for the net worth chart while the user has no accounts. Only
  *  mounted then, so the dashboard doesn't read the connections otherwise. */

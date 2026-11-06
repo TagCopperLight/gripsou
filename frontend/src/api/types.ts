@@ -1,22 +1,9 @@
 // Response shapes from the read API. Money/quantities are decimal strings;
 // timestamps are epoch-ms. Components format strings; charts convert to number.
 
-import type { TFunction } from "i18next";
 import type { UserPrefs } from "../lib/prefs";
 
 export type HoldingKind = "cash" | "etf" | "equity";
-
-export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
-  cash: "holdingKind.cash",
-  etf: "holdingKind.etf",
-  equity: "holdingKind.equity",
-};
-
-// Account types are data-driven: the backend sends a stable key. A type added
-// to the database but not yet to the locale files shows its key.
-export function accountTypeLabel(t: TFunction, key: string): string {
-  return t(`accountTypes.${key}`, { defaultValue: key });
-}
 
 export type NetWorthPoint = { t: number; netWorth: string; invested: string };
 export type NetWorthSummary = {
@@ -217,22 +204,6 @@ export type ProviderGroup = {
   providerName: string;
   connections: SyncConnection[];
 };
-
-export function flattenConnections(
-  groups: ProviderGroup[] | undefined,
-): SyncConnection[] {
-  return (groups ?? []).flatMap((g) => g.connections);
-}
-
-export function hasSyncing(groups: ProviderGroup[] | undefined): boolean {
-  return flattenConnections(groups).some(
-    (c) => c.status === "syncing" || c.status === "awaiting",
-  );
-}
-
-export function hasError(groups: ProviderGroup[] | undefined): boolean {
-  return flattenConnections(groups).some((c) => c.status === "error");
-}
 
 export type Provider = {
   key: string;

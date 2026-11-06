@@ -8,7 +8,7 @@ import { Button } from "../../../ui/Button";
 import { BackupCodes } from "./BackupCodes";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
-import { useMfaStatus, useRegenerateRecovery, useRemoveTotp } from "../../../api/hooks";
+import { useMfaStatus, useRegenerateRecovery, useRemoveTotp } from "../../../api/auth";
 
 type View = "menu" | "newCodes" | "codes" | "turnOff";
 

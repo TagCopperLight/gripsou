@@ -3,7 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { useTransactions, useTransactionCounts } from "./hooks";
+import { useTransactions, useTransactionCounts } from "./transactions";
 import { usePatchTransaction, useApplyToDescription, useBulkTransactions } from "./budget";
 import type { TransactionFilterQuery } from "./types";
 import { keys } from "./keys";

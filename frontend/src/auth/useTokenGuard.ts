@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { getJson } from "../api/client";
-
-export type TokenInfo = { type: "invite" | "reset"; email: string | null };
+import { authApi, type TokenInfo } from "../api/auth";
 
 type Guard = { status: "loading" | "valid"; info: TokenInfo | null };
 
@@ -17,7 +15,7 @@ export function useTokenGuard(token: string): Guard {
 
   useEffect(() => {
     let active = true;
-    getJson<TokenInfo>(`/auth/token/${token}`)
+    authApi.tokenInfo(token)
       .then((info) => {
         if (active) setGuard({ status: "valid", info });
       })

@@ -8,7 +8,7 @@ import { ReturnsCard } from "./ReturnsCard";
 import { ExposureDonut } from "../exposure/ExposureDonut";
 import { InvestmentsEmpty } from "./InvestmentsEmpty";
 import { indexItems, regionItems, sectorItems } from "../exposure/exposureColors";
-import { useHoldings, useInvestmentReturns } from "../../api/hooks";
+import { useHoldings, useInvestmentReturns } from "../../api/holdings";
 import type { InvestmentReturns } from "../../api/types";
 import { exposure, type ExposureHolding } from "../../lib/exposure";
 import { investmentsView } from "../../lib/investments";

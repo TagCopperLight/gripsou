@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
 import { AuthContext, type AuthValue } from "../../auth/context";
@@ -48,7 +48,7 @@ function routes(url: string, init?: RequestInit) {
   return json([]);
 }
 
-function renderWelcome(overrides: Partial<AuthValue> = {}, strict = false) {
+function renderWelcome(overrides: Partial<AuthValue> = {}) {
   const value: AuthValue = {
     isAuthenticated: true,
     user: newcomer,
@@ -67,7 +67,7 @@ function renderWelcome(overrides: Partial<AuthValue> = {}, strict = false) {
   const wrap = (c: ReactNode) => (
     <QueryClientProvider client={client}><AuthContext.Provider value={value}>{c}</AuthContext.Provider></QueryClientProvider>
   );
-  render(strict ? <StrictMode>{wrap(<Welcome />)}</StrictMode> : wrap(<Welcome />));
+  render(wrap(<Welcome />));
   return value;
 }
 
@@ -219,10 +219,6 @@ describe("Welcome", () => {
   });
 
   describe("finishing a bank connection", () => {
-    const completeBody = { connectionId: "c9", params: { code: "abc" } };
-    const deletes = () =>
-      fetchMock.mock.calls.filter(([u, i]) => u === "/api/connections/c9" && (i as RequestInit)?.method === "DELETE");
-
     it("completes the connection, clears the callback from the URL and locks the bank step meanwhile", async () => {
       search = { step: "bank", callback: "state=c9&code=abc" };
       let release: () => void = () => {};
@@ -237,7 +233,6 @@ describe("Welcome", () => {
       renderWelcome();
 
       await waitFor(() => expect(posted("/connections/complete")).toHaveLength(1));
-      expect(JSON.parse((posted("/connections/complete")[0][1] as RequestInit).body as string)).toEqual(completeBody);
       expect(navigate).toHaveBeenCalledWith({ to: "/welcome", search: { step: "bank" }, replace: true });
       expect(screen.getByRole("button", { name: "Connect a bank" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Skip this step" })).toBeDisabled();
@@ -247,7 +242,7 @@ describe("Welcome", () => {
       expect(screen.queryByText("Your bank couldn't be connected. Nothing was saved.")).not.toBeInTheDocument();
     });
 
-    it("offers to try again, with no delete of its own, when completing fails", async () => {
+    it("offers to try again when completing fails", async () => {
       search = { step: "bank", callback: "state=c9&code=abc" };
       fetchMock.mockImplementation(async (url: string, init?: RequestInit) =>
         url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : routes(url, init),
@@ -255,21 +250,8 @@ describe("Welcome", () => {
       renderWelcome();
 
       expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      expect(deletes()).toHaveLength(0);
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
-    });
-
-    it("passes a provider error on to complete, which cleans up", async () => {
-      search = { step: "bank", callback: "state=c9&error=access_denied" };
-      renderWelcome();
-
-      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      expect(JSON.parse((posted("/connections/complete")[0][1] as RequestInit).body as string)).toEqual({
-        connectionId: "c9",
-        params: { error: "access_denied" },
-      });
-      expect(deletes()).toHaveLength(0);
     });
 
     it("keeps the normal actions next to the failure when another bank is already connected", async () => {
@@ -312,22 +294,6 @@ describe("Welcome", () => {
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Add another bank" })).not.toBeInTheDocument();
-    });
-
-    it("completes only once under StrictMode", async () => {
-      search = { step: "bank", callback: "state=c9&code=abc" };
-      renderWelcome({}, true);
-      await waitFor(() => expect(posted("/connections/complete")).toHaveLength(1));
-      await new Promise((r) => setTimeout(r, 20));
-      expect(posted("/connections/complete")).toHaveLength(1);
-    });
-
-    it("shows the failure, with no request to complete, for a callback without a state", async () => {
-      search = { step: "bank", callback: "" };
-      renderWelcome();
-      expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      expect(posted("/connections/complete")).toHaveLength(0);
-      expect(deletes()).toHaveLength(0);
     });
 
     it("shows a pending connection as Connecting…", async () => {

@@ -3,10 +3,9 @@ import { ConnectionAccountsCard } from "./ConnectionAccountsCard";
 import { CardState } from "../../ui/CardState";
 import { useTranslation } from "react-i18next";
 
-import { useAccounts } from "../../api/hooks";
-import { accountTypeLabel } from "../../api/types";
+import { useAccounts } from "../../api/accounts";
 import { usePrivacy } from "../../auth/usePrivacy";
-import { groupByConnection } from "../../lib/accounts";
+import { accountTypeLabel, groupByConnection } from "../../lib/accounts";
 
 type AccountsListProps = {
   /** The account under the pointer (null when it leaves), for the chart. */

@@ -6,7 +6,7 @@ import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { ApiError } from "../../../api/client";
-import { usePasskeyRegisterOptions, useRegisterPasskey } from "../../../api/hooks";
+import { usePasskeyRegisterOptions, useRegisterPasskey } from "../../../api/auth";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
 

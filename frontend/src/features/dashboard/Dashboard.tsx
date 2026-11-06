@@ -3,7 +3,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { NetWorthCard } from "./NetWorthCard";
 import { DistributionCard } from "./DistributionCard";
 import { HoldingsCard } from "./holdings/HoldingsCard";
-import { useAccounts } from "../../api/hooks";
+import { useAccounts } from "../../api/accounts";
 
 export function Dashboard() {
   const { t } = useTranslation();

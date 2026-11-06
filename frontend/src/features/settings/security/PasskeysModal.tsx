@@ -5,7 +5,7 @@ import { Fingerprint, Pencil, Trash2 } from "lucide-react";
 
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
-import { useDeletePasskey, useMfaStatus, useRenamePasskey } from "../../../api/hooks";
+import { useDeletePasskey, useMfaStatus, useRenamePasskey } from "../../../api/auth";
 import type { Passkey } from "../../../api/types";
 import { formatDate, formatRelative } from "../../../lib/date";
 

@@ -1,9 +1,8 @@
 import { createContext, useContext } from "react";
 import { ApiError } from "../api/client";
 import type { MfaRequired, SessionUser } from "../api/types";
+import type { SecondFactor } from "../api/auth";
 import { getPrefs, type PrefsPatch, type UserPrefs } from "../lib/prefs";
-
-export type SecondFactor = { totp: string } | { recoveryCode: string };
 
 export type AuthValue = {
   isAuthenticated: boolean;

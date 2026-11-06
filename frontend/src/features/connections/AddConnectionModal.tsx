@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useErrorToast } from "../../lib/errorToasts";
 import { Button } from "../../ui/Button";
 import { CardState } from "../../ui/CardState";
 import { Dialog } from "../../ui/Dialog";
-import { useEnabledProviders, useInitConnection } from "../../api/hooks";
+import { useStartConnection } from "./useStartConnection";
 import type { EnabledProvider } from "../../api/types";
-import { goTo } from "../../lib/navigate";
 
 type AddConnectionModalProps = {
   onClose: () => void;
@@ -16,20 +14,13 @@ type AddConnectionModalProps = {
 
 export function AddConnectionModal({ onClose, returnTo = "/settings/connections" }: AddConnectionModalProps) {
   const { t } = useTranslation();
-  const { data: providers, isLoading, isError } = useEnabledProviders();
-  const initConnection = useInitConnection();
+  const flow = useStartConnection({ returnTo, errorMessage: t("settings.connections.connectError") });
+  const { data: providers, isLoading, isError } = flow.providers;
   const [selected, setSelected] = useState<string | null>(null);
 
   const connect = () => {
-    if (!selected) return;
-    initConnection.mutate(selected, {
-      onSuccess: ({ redirectUrl }) => {
-        goTo(redirectUrl ?? returnTo);
-      },
-    });
+    if (selected) flow.connect(selected);
   };
-
-  useErrorToast(initConnection.isError && t("settings.connections.connectError"));
 
   return (
     <Dialog
@@ -43,7 +34,7 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
           <Button
             variant="primary"
             onClick={connect}
-            disabled={!selected || initConnection.isPending}
+            disabled={!selected || flow.pending}
             aria-label={t("settings.connections.connect")}
           >
             {t("settings.connections.connect")}

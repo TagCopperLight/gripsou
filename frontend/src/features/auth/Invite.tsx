@@ -9,12 +9,10 @@ import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { useTokenGuard } from "../../auth/useTokenGuard";
 import { passwordLengthOk } from "../../lib/password";
-import { ApiError, postJson } from "../../api/client";
-import type { SessionUser } from "../../api/types";
+import { ApiError } from "../../api/client";
+import { authApi } from "../../api/auth";
 
 const route = getRouteApi("/invite/$token");
-
-type RedeemResp = { token: string; user: SessionUser };
 
 export function Invite() {
   const { t } = useTranslation();
@@ -56,10 +54,7 @@ export function Invite() {
     setError(null);
     setPending(true);
     try {
-      const res = await postJson<RedeemResp>(
-        `/auth/invite/${token}/redeem`,
-        { email, name, password },
-      );
+      const res = await authApi.redeemInvite(token, { email, name, password });
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch (err: unknown) {

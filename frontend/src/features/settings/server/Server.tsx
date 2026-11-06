@@ -6,7 +6,8 @@ import { CardState } from "../../../ui/CardState";
 import { ApiKeysSurface } from "./ApiKeysSurface";
 import { AiServerSurface } from "./AiServerSurface";
 import { AiCostSurface } from "./AiCostSurface";
-import { useProviders, useSetProviderEnabled, useHealth } from "../../../api/hooks";
+import { useProviders, useSetProviderEnabled } from "../../../api/admin";
+import { useHealth } from "../../../api/health";
 
 export function SettingsServer() {
   const { t } = useTranslation();

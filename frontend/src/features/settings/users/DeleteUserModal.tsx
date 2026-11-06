@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
-import { useDeleteUser } from "../../../api/hooks";
+import { useDeleteUser } from "../../../api/admin";
 import type { User } from "../../../api/types";
 
 type DeleteUserModalProps = {

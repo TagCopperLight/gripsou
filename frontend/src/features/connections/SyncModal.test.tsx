@@ -28,7 +28,7 @@ const connectionsData: { data: ProviderGroup[]; isLoading: boolean } = {
 };
 
 const manageSpy = vi.fn();
-vi.mock("../../api/hooks", () => ({
+vi.mock("../../api/connections", () => ({
   useConnections: () => connectionsData,
   useManageConnection: () => ({ mutateAsync: manageSpy, isPending: false }),
   useSyncConnection: () => syncOne,

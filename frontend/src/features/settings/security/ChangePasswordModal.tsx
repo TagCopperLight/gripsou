@@ -7,7 +7,7 @@ import { Button } from "../../../ui/Button";
 import { LabeledField } from "../../../ui/FieldError";
 import { TextInput } from "../../../ui/TextInput";
 import { ApiError } from "../../../api/client";
-import { useChangePassword } from "../../../api/hooks";
+import { useChangePassword } from "../../../api/auth";
 import { throttleMinutes } from "../../../auth/throttle";
 import { passwordLengthOk } from "../../../lib/password";
 

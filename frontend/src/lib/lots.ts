@@ -1,5 +1,5 @@
 import type { Lot, LotSuggestion } from "../api/types";
-import type { SaveLotAdd } from "../api/hooks";
+import type { SaveLotAdd } from "../api/holdings";
 import { calendarDay } from "./date";
 import {
   DECIMAL_RE,

@@ -1,5 +1,5 @@
 import { reply, type Router } from "../router.ts";
-import type { SaveLotAdd, SaveLotsInput } from "../../src/api/hooks.ts";
+import type { SaveLotAdd, SaveLotsInput } from "../../src/api/holdings.ts";
 import type { Store } from "../store.ts";
 import * as v from "../views/portfolio.ts";
 import { connectionRow } from "../data/rows.ts";

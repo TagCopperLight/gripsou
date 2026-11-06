@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
-import { useConnections, useSyncAll } from "../../api/hooks";
-import { flattenConnections } from "../../api/types";
+import { useConnections, useSyncAll } from "../../api/connections";
+import { flattenConnections } from "../../lib/connectionState";
 import { useErrorToast } from "../../lib/errorToasts";
 import { Button } from "../../ui/Button";
 import { CardState } from "../../ui/CardState";

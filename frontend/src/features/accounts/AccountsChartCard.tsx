@@ -11,7 +11,7 @@ import { StackedAreaChart, type StackedSeries } from "./StackedAreaChart";
 import { ChartLegend } from "../../ui/ChartLegend";
 import { CardState } from "../../ui/CardState";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
-import { useNetWorth, useAccountSeries } from "../../api/hooks";
+import { useNetWorth, useAccountSeries } from "../../api/accounts";
 import { rangeOptions, type Range } from "../../lib/ranges";
 import { bySize, legendAccounts } from "../../lib/accounts";
 

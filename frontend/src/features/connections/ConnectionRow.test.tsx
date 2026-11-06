@@ -4,7 +4,7 @@ import type { SyncConnection } from "../../api/types";
 
 const syncSpy = vi.fn();
 const manageSpy = vi.fn();
-vi.mock("../../api/hooks", () => ({
+vi.mock("../../api/connections", () => ({
   useManageConnection: () => ({ mutateAsync: manageSpy, isPending: false }),
   useSyncConnection: () => ({ mutate: syncSpy }),
 }));

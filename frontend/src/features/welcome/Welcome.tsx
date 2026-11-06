@@ -12,19 +12,15 @@ import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { useAuth } from "../../auth/context";
 import { useCurrencyChange } from "../../auth/useCurrencyChange";
 import { CurrencyChangeHint } from "../../auth/CurrencyChangeHint";
-import { postJson } from "../../api/client";
-import {
-  useCompleteConnection,
-  useConnections,
-  useEnabledProviders,
-  useInitConnection,
-} from "../../api/hooks";
+import { authApi } from "../../api/auth";
+import { useConnections } from "../../api/connections";
 import { useAiStatus } from "../../api/budget";
-import { flattenConnections, type SyncConnection } from "../../api/types";
+import type { SyncConnection, SyncStatus } from "../../api/types";
+import { useStartConnection } from "../connections/useStartConnection";
+import { useFinishConnection } from "../connections/useFinishConnection";
+import { flattenConnections } from "../../lib/connectionState";
 import { CURRENCIES } from "../../lib/currency";
 import { timeZoneOptions } from "../../lib/timeZoneList";
-import { goTo } from "../../lib/navigate";
-import { parseCallbackParams } from "../../lib/connectionCallback";
 import { prefillFromBrowser } from "../../lib/welcome";
 import type { PrefsPatch } from "../../lib/prefs";
 
@@ -50,47 +46,31 @@ export function Welcome() {
   const currency = useCurrencyChange();
 
   const connections = flattenConnections(useConnections().data);
-  const providers = useEnabledProviders().data;
   const aiStatus = useAiStatus();
   const aiConfigured = aiStatus.data?.configured ?? false;
   // Until the status is known (or failed), whether step 3 exists is undecided.
   const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
-  const initConnection = useInitConnection();
-  const completeConnection = useCompleteConnection();
+  const flow = useStartConnection({ returnTo: "/welcome?step=bank", errorMessage: t("welcome.bank.connectError") });
+  const providers = flow.providers.data;
 
   const [step, setStep] = useState<Step>(backFromBank ? 2 : 1);
   const [done, setDone] = useState<Record<Step, boolean>>({ 1: backFromBank, 2: false, 3: false });
   const [bankSkipped, setBankSkipped] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(false);
   useErrorToast(finishError && t("welcome.finishError"));
   // Coming back from the provider with its query string (ConnectionCallback
-  // hands it over): finish the connection here, once.
-  const [connecting, setConnecting] = useState(search.callback !== undefined);
-  const [bankFailed, setBankFailed] = useState(false);
-  const callbackHandled = useRef(false);
+  // hands it over; an empty one still counts): finish the connection here.
+  const callback = useFinishConnection(search.callback);
+  const connecting = callback.status === "connecting";
+  const [retried, setRetried] = useState(false);
+  const bankFailed = callback.status === "failed" && !retried;
+  const callbackCleared = useRef(false);
   useEffect(() => {
-    // An empty callback (no query string at all) still counts: no state, so a failure.
-    if (callbackHandled.current || search.callback === undefined) return;
-    callbackHandled.current = true;
-    const { connectionId, rest } = parseCallbackParams(search.callback);
+    if (callbackCleared.current || search.callback === undefined) return;
+    callbackCleared.current = true;
     // Drop the query right away so a reload doesn't redo the connection.
     void navigate({ to: "/welcome", search: { step: "bank" }, replace: true });
-    const fail = () => {
-      setBankFailed(true);
-      setConnecting(false);
-    };
-    if (!connectionId) {
-      fail();
-      return;
-    }
-    // A failed complete (a provider error included) deletes the pending
-    // connection server-side.
-    completeConnection
-      .mutateAsync({ connectionId, params: rest })
-      .then(() => setConnecting(false))
-      .catch(fail);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fill language and time zone from the browser once, when step 1 is the
@@ -116,7 +96,7 @@ export function Welcome() {
     setFinishing(true);
     setFinishError(false);
     try {
-      await postJson<void>("/auth/welcome", {});
+      await authApi.finishWelcome();
       // The router guard re-runs on this change and leaves /welcome.
       updateUser({ ...user, welcomeDone: true });
     } catch {
@@ -127,16 +107,8 @@ export function Welcome() {
   };
 
   const connectBank = () => {
-    setBankFailed(false);
-    if (providers?.length === 1) {
-      initConnection.mutate(providers[0].key, {
-        onSuccess: ({ redirectUrl }) => {
-          goTo(redirectUrl ?? "/welcome?step=bank");
-        },
-      });
-    } else {
-      setPickerOpen(true);
-    }
+    setRetried(true);
+    flow.start();
   };
 
   const skipBank = () => {
@@ -153,9 +125,7 @@ export function Welcome() {
   // listed, but not a bank yet.
   const readyBanks = connections.filter((c) => c.status !== "pending");
   const hasBank = readyBanks.length > 0;
-  const connectDisabled = connecting || initConnection.isPending || providers === undefined;
-
-  useErrorToast(initConnection.isError && t("welcome.bank.connectError"));
+  const connectDisabled = connecting || flow.pending || providers === undefined;
 
   return (
     <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
@@ -293,7 +263,7 @@ export function Welcome() {
           {t("welcome.skipAll")}
         </button>
       </div>
-      {pickerOpen && <AddConnectionModal onClose={() => setPickerOpen(false)} returnTo="/welcome?step=bank" />}
+      {flow.pickerOpen && <AddConnectionModal onClose={flow.closePicker} returnTo="/welcome?step=bank" />}
     </div>
   );
 }
@@ -341,13 +311,17 @@ function WelcomeStep({
   );
 }
 
+const BANK_STATE: Record<SyncStatus, "ok" | "error" | "syncing" | "connecting"> = {
+  ok: "ok",
+  error: "error",
+  syncing: "syncing",
+  awaiting: "syncing",
+  pending: "connecting",
+};
+
 function BankRow({ connection }: { connection: SyncConnection }) {
   const { t } = useTranslation();
-  const state =
-    connection.status === "ok" ? "ok"
-    : connection.status === "error" ? "error"
-    : connection.status === "pending" ? "connecting"
-    : "syncing";
+  const state = BANK_STATE[connection.status];
   const tone = { ok: "text-green", error: "text-red", syncing: "text-amber", connecting: "text-fg-dim" }[state];
   return (
     <div className="flex items-center gap-3 rounded-xl bg-surface-2 px-3.5 py-2.5">

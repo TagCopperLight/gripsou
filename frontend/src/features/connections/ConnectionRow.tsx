@@ -6,9 +6,16 @@ import { showError, useErrorToast } from "../../lib/errorToasts";
 import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { HoldingBadge } from "../../ui/HoldingBadge";
-import { useManageConnection, useSyncConnection } from "../../api/hooks";
+import { useManageConnection, useSyncConnection } from "../../api/connections";
 import { AlertDot } from "./AlertDot";
-import { connectionAlert, connectionIssues, healthIssue } from "../../lib/connectionHealth";
+import {
+  connectionAlert,
+  connectionIssues,
+  connectionProblems,
+  healthIssue,
+  isSyncing,
+  issuesSummaryKey,
+} from "../../lib/connectionState";
 import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
 import type { SyncConnection } from "../../api/types";
@@ -62,27 +69,7 @@ export function ConnectionRow({
     }
   };
   const issues = connectionIssues(conn);
-  const partial = conn.accounts.some((a) => !healthIssue(a.health)) && issues.some((i) => i.accounts.length > 0);
-
-  type Problem = { severity: "error" | "warning"; accounts: string[]; text: string; detail?: string; technical?: boolean };
-  const problems: Problem[] = [];
-  if (conn.status === "error") {
-    problems.push({ severity: "error", accounts: [], text: t("settings.connections.syncFailedMessage"), detail: conn.lastError ?? undefined, technical: true });
-  }
-  if (conn.status !== "pending") {
-    for (const issue of issues) {
-      problems.push({
-        severity: "warning",
-        accounts: issue.accounts,
-        text: issue.kind === "error"
-          ? issue.health.errorMessage || t(`settings.connections.health.states.${issue.health.state}`, { defaultValue: t("settings.connections.health.providerError", { state: issue.health.state }) })
-          : issue.kind === "stale"
-            ? t("settings.connections.health.staleMessage", { date: formatDate(issue.health.lastUpdatedOn!) })
-            : t("settings.connections.health.unknownMessage"),
-        detail: issue.health.nextRetryOn ? t("settings.connections.health.retry", { date: formatDate(issue.health.nextRetryOn) }) : undefined,
-      });
-    }
-  }
+  const problems = connectionProblems(conn, issues, t);
 
   const isAwaiting = conn.status === "awaiting";
   // Nothing to show once open (still connecting, or no account and no
@@ -93,7 +80,7 @@ export function ConnectionRow({
     if (!expandable && window.matchMedia?.("(min-width: 48rem)").matches) return;
     setOpen((o) => !o);
   };
-  const isSyncing = conn.status === "syncing" || isAwaiting;
+  const syncing = isSyncing(conn.status);
   const isError = conn.status === "error";
   const isPending = conn.status === "pending";
 
@@ -139,7 +126,7 @@ export function ConnectionRow({
               onClick={stop(() => { void openManage(); })}
               aria-label={t("settings.connections.manage")}
               title={t("settings.connections.manage")}
-              disabled={manage.isPending || isSyncing || isPending}
+              disabled={manage.isPending || syncing || isPending}
             >
               <ExternalLink className="size-4" />
             </IconButton>
@@ -147,9 +134,9 @@ export function ConnectionRow({
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
             aria-label={t("settings.connections.syncConnection")}
-            disabled={isSyncing}
+            disabled={syncing}
           >
-            <RefreshCw className={`size-4 ${isSyncing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} />
           </IconButton>
           {onDelete && (
             <IconButton
@@ -245,7 +232,7 @@ export function ConnectionRow({
               live here instead. */}
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
             {conn.canManage && (
-              <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || isSyncing || isPending}
+              <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || syncing || isPending}
                 className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed">
                 <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
               </button>
@@ -253,10 +240,10 @@ export function ConnectionRow({
             <button
               type="button"
               onClick={stop(() => sync.mutate(conn.id))}
-              disabled={isSyncing}
+              disabled={syncing}
               className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`size-3.5 ${syncing ? "animate-spin" : ""}`} />
               {t("settings.connections.syncConnection")}
             </button>
             {onDelete && (
@@ -286,7 +273,7 @@ export function ConnectionRow({
         </p>
       );
     }
-    if (isSyncing || isPending) {
+    if (syncing || isPending) {
       return (
         <p className={`${line} text-fg-dim`}>
           {t(isAwaiting ? "settings.connections.status.awaiting" : isPending ? "settings.connections.status.pending" : "settings.connections.status.syncing")}
@@ -296,7 +283,7 @@ export function ConnectionRow({
     if (issues.length > 0) {
       return (
         <p className={`${line} text-amber`}>
-          {t(partial ? "settings.connections.health.partial" : issues.every((i) => i.kind === "stale") ? "settings.connections.health.stale" : "settings.connections.health.attention")}
+          {t(issuesSummaryKey(conn, issues))}
         </p>
       );
     }

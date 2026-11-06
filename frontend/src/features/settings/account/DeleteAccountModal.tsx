@@ -5,7 +5,7 @@ import { useErrorToast } from "../../../lib/errorToasts";
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
 import { PasswordField } from "../../../ui/PasswordField";
 import { ApiError } from "../../../api/client";
-import { useDeleteAccount } from "../../../api/hooks";
+import { useDeleteAccount } from "../../../api/auth";
 import { throttleMinutes } from "../../../auth/throttle";
 
 type DeleteAccountModalProps = {

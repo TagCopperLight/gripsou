@@ -8,7 +8,7 @@ import { Button } from "../../../ui/Button";
 import { Field } from "../../../ui/Field";
 import { TextInput } from "../../../ui/TextInput";
 import { showDone, useErrorToast } from "../../../lib/errorToasts";
-import { useApiKeys, useSetApiKey } from "../../../api/hooks";
+import { useApiKeys, useSetApiKey } from "../../../api/admin";
 import type { ApiKeyProvider } from "../../../api/types";
 
 // A plain text field drawn as dots, rather than a password field: password

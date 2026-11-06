@@ -13,7 +13,7 @@ import { MoneyHint } from "../../../ui/MoneyHint";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { usePrefs } from "../../../auth/context";
 import type { ReactNode } from "react";
-import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/hooks";
+import { useHoldingLots, useLotsPreview, useLotSuggestions, useSaveLots } from "../../../api/holdings";
 import { formatMoney, formatQuantity } from "../../../lib/money";
 import {
   accounted, badFee, badQuantity, badUnitPrice, byDate, lotCashAmount, lotChanges, lotEntry,

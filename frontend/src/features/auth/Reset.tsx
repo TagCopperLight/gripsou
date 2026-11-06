@@ -8,13 +8,11 @@ import { TextInput } from "../../ui/TextInput";
 import { useAuth } from "../../auth/context";
 import { useTokenGuard } from "../../auth/useTokenGuard";
 import { passwordLengthOk } from "../../lib/password";
-import { ApiError, postJson } from "../../api/client";
+import { ApiError } from "../../api/client";
+import { authApi } from "../../api/auth";
 import { showError } from "../../lib/errorToasts";
-import type { SessionUser } from "../../api/types";
 
 const route = getRouteApi("/reset/$token");
-
-type RedeemResp = { token: string; user: SessionUser };
 
 export function Reset() {
   const { t } = useTranslation();
@@ -44,10 +42,7 @@ export function Reset() {
     setError(null);
     setPending(true);
     try {
-      const res = await postJson<RedeemResp>(
-        `/auth/reset/${token}/redeem`,
-        { password },
-      );
+      const res = await authApi.redeemReset(token, password);
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch (err) {

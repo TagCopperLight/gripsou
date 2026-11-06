@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../lib/errorToasts";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { useDeleteConnection } from "../../api/hooks";
+import { useDeleteConnection } from "../../api/connections";
 import type { SyncConnection } from "../../api/types";
 
 type DeleteConnectionModalProps = {

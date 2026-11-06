@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import { CardState } from "../../ui/CardState";
 import { ExposureDonut } from "../exposure/ExposureDonut";
-import { useAccounts, useHoldings } from "../../api/hooks";
+import { useAccounts } from "../../api/accounts";
+import { useHoldings } from "../../api/holdings";
 import { ExcludedNote } from "../../ui/FxNote";
 import { MIN_DRAWN_SHARE, distribution } from "../../lib/distribution";
 import { usePrivacy } from "../../auth/usePrivacy";

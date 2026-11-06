@@ -1,7 +1,13 @@
-import type { Holding } from "../api/types";
+import type { Holding, HoldingKind } from "../api/types";
 import { currencySymbol } from "./currency";
 import { sumDecimals } from "./decimal";
 import { ACCOUNT_PALETTE } from "./palette";
+
+export const KIND_LABEL_KEY: Record<HoldingKind, string> = {
+  cash: "holdingKind.cash",
+  etf: "holdingKind.etf",
+  equity: "holdingKind.equity",
+};
 
 /** A line of the holdings table: one holding, or the cash of one currency
  *  held in several accounts. Cash is the same instrument in every account (a

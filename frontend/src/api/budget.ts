@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import {
-  hashKey,
   useMutation,
   useQuery,
   useQueryClient,
@@ -10,6 +9,7 @@ import {
 
 import { deleteJson, getJson, patchJson, postJson, putJson } from "./client";
 import { keys } from "./keys";
+import { watchQuery } from "./watch";
 import { transactionFilterFields } from "./filter";
 import {
   afterAiRunFinished,
@@ -365,38 +365,22 @@ export type BudgetAiUsage = {
 /** Full replacement map of every model's prices, per million tokens. */
 export type BudgetAiPrices = Record<string, { in: string; out: string }>;
 
-const AI_STATUS_HASH = hashKey(keys.budgetAiStatus());
-const watchedClients = new WeakSet<QueryClient>();
-
-/** Installed once per client. A finished run has a durable timestamp, so a
- *  short run missed between polls still refreshes its dependent queries. */
-function watchAiRun(qc: QueryClient) {
-  if (watchedClients.has(qc)) return;
-  watchedClients.add(qc);
-  let last = qc.getQueryData<AiStatus>(keys.budgetAiStatus());
-  qc.getQueryCache().subscribe((event) => {
-    if (event.query.queryHash !== AI_STATUS_HASH) return;
-    if (event.type === "removed") {
-      last = undefined;
-      return;
-    }
-    if (event.type !== "updated" || event.action.type !== "success") return;
-    const next = event.query.state.data as AiStatus | undefined;
-    const prev = last;
-    last = next;
-    if (!prev || !next) return;
+/** A finished run has a durable timestamp, so a short run missed between
+ *  polls still refreshes its dependent queries. */
+function onAiStatusChange(qc: QueryClient) {
+  return (prev: AiStatus, next: AiStatus) => {
     const completed = next.lastRun !== null && next.lastRun.startedAt !== prev.lastRun?.startedAt;
     if ((prev.running && !next.running) || completed) void afterAiRunFinished(qc);
     else if (next.running && (next.remaining !== prev.remaining || next.reviewCount !== prev.reviewCount))
       afterAiRunProgress(qc);
-  });
+  };
 }
 
 /** Fast polls while running; idle checks discover automatic or short runs.
  *  The Overview fills in live; transaction rows catch up at completion. */
 export function useAiStatus() {
   const qc = useQueryClient();
-  useEffect(() => watchAiRun(qc), [qc]);
+  useEffect(() => watchQuery(qc, keys.budgetAiStatus(), onAiStatusChange(qc)), [qc]);
   return useQuery({
     queryKey: keys.budgetAiStatus(),
     queryFn: ({ signal }) => getJson<AiStatus>("/budget/categorize/status", { signal }),

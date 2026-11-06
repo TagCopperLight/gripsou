@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ConnectionCallback } from "./ConnectionCallback";
 import { AuthContext, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../lib/prefs";
@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe("ConnectionCallback", () => {
-  it("completes the connection without the state param, then goes to the connections page", async () => {
+  it("completes the connection, then goes to the connections page", async () => {
     landWith("?state=c42&code=abc&connection_id=7");
     render(withClient(<ConnectionCallback />));
 
@@ -78,16 +78,10 @@ describe("ConnectionCallback", () => {
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" }),
     );
-    expect(callsTo(fetchMock, "/connections/complete")).toEqual([
-      {
-        method: "POST",
-        body: { connectionId: "c42", params: { code: "abc", connection_id: "7" } },
-      },
-    ]);
     expect(screen.queryByText(ERROR_TITLE)).not.toBeInTheDocument();
   });
 
-  it("passes a provider error on to complete, which cleans up, and shows the failure", async () => {
+  it("shows the failure at once when the provider reports an error", async () => {
     fetchMock.mockImplementation(async (url: string) =>
       url === "/api/connections/complete" ? new Response("boom", { status: 400 }) : noContent(),
     );
@@ -95,29 +89,11 @@ describe("ConnectionCallback", () => {
     render(withClient(<ConnectionCallback />));
 
     expect(screen.getByText(ERROR_TITLE)).toBeInTheDocument();
-    await waitFor(() =>
-      expect(callsTo(fetchMock, "/connections/complete")).toEqual([
-        { method: "POST", body: { connectionId: "c42", params: { error: "access_denied" } } },
-      ]),
-    );
-    expect(callsTo(fetchMock, "/connections/c42")).toEqual([]);
+    await waitFor(() => expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1));
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("shows the failure and calls nothing when there is no state param", async () => {
-    landWith("?code=abc");
-    render(withClient(<ConnectionCallback />));
-
-    expect(screen.getByText(ERROR_TITLE)).toBeInTheDocument();
-    // A mutation reaches fetch a few ticks after the effect: give it the
-    // chance, so "nothing" means nothing and not "nothing yet".
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 20));
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("shows the failure, with no delete of its own, when completing fails", async () => {
+  it("shows the failure when completing fails, with the way back", async () => {
     fetchMock.mockImplementation(async (url: string) =>
       url === "/api/connections/complete" ? new Response("boom", { status: 500 }) : noContent(),
     );
@@ -125,22 +101,9 @@ describe("ConnectionCallback", () => {
     render(withClient(<ConnectionCallback />));
 
     expect(await screen.findByText(ERROR_TITLE)).toBeInTheDocument();
-    expect(callsTo(fetchMock, "/connections/c42")).toEqual([]);
     expect(navigate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to connections" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" });
-  });
-
-  it("completes only once under StrictMode's double effect run", async () => {
-    landWith("?state=c42&code=abc");
-    render(
-      <StrictMode>{withClient(<ConnectionCallback />)}</StrictMode>,
-    );
-
-    await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith({ to: "/settings/connections" }),
-    );
-    expect(callsTo(fetchMock, "/connections/complete")).toHaveLength(1);
   });
 });

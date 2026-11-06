@@ -8,7 +8,7 @@ import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
 import { FieldError, LabeledField } from "../../../ui/FieldError";
 import { TextInput } from "../../../ui/TextInput";
-import { useUpdateProfile } from "../../../api/hooks";
+import { useUpdateProfile } from "../../../api/auth";
 import { useAuth } from "../../../auth/context";
 import { fileToAvatarDataUrl } from "../../../lib/avatar";
 

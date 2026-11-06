@@ -3,10 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import {
-  useAccounts, useAccountSeries, useConnections, useHoldings,
-  useInvestmentReturns, useNetWorth, useSyncConnection, useTransactions,
-} from "./hooks";
+import { useAccounts, useAccountSeries, useNetWorth } from "./accounts";
+import { useConnections, useSyncConnection } from "./connections";
+import { useHoldings, useInvestmentReturns } from "./holdings";
+import { useTransactions } from "./transactions";
 import { useAiStatus, type AiStatus } from "./budget";
 import { setAuthToken } from "./client";
 import {

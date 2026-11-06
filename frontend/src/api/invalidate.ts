@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
-import { hasSyncing, type ProviderGroup } from "./types";
+import type { ProviderGroup } from "./types";
+import { anySyncing } from "../lib/connectionState";
 import type { PrefsPatch } from "../lib/prefs";
 
 // What each domain event makes stale, named once.
@@ -61,7 +62,7 @@ export async function afterSyncRequested(qc: QueryClient) {
   const before = qc.getQueryData<ProviderGroup[]>(keys.connections());
   await invalidateAll(qc, [keys.connections()]);
   const next = qc.getQueryData<ProviderGroup[]>(keys.connections());
-  if (!before && next && !hasSyncing(next)) await afterSyncFinished(qc);
+  if (!before && next && !anySyncing(next)) await afterSyncFinished(qc);
 }
 
 // A failed connect: the server deleted the pending connection.

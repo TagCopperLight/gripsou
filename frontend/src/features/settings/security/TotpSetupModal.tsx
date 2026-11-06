@@ -6,7 +6,7 @@ import { Copy, Check } from "lucide-react";
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { ApiError } from "../../../api/client";
-import { useTotpConfirm, useTotpSetup } from "../../../api/hooks";
+import { useTotpConfirm, useTotpSetup } from "../../../api/auth";
 import type { TotpSetup } from "../../../api/types";
 import { throttleMinutes } from "../../../auth/throttle";
 import { CodeInput } from "../../../ui/CodeInput";

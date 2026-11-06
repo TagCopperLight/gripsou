@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../../i18n";
 import { RecordLotsModal } from "./RecordLotsModal";
 import type { BasisPreview, Holding, Lot, LotSuggestion } from "../../../api/types";
-import type { SaveLotAdd } from "../../../api/hooks";
+import type { SaveLotAdd } from "../../../api/holdings";
 
 const mutateAsync = vi.fn();
 let txns: Lot[] = [];
@@ -36,8 +36,8 @@ function releaseHeldPreview() {
   if (resolve) act(resolve);
 }
 
-vi.mock("../../../api/hooks", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/hooks")>("../../../api/hooks");
+vi.mock("../../../api/holdings", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/holdings")>("../../../api/holdings");
   return {
     ...actual,
     useSaveLots: () => ({ mutateAsync, isPending: false }),

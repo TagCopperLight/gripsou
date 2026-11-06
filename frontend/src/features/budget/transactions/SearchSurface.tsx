@@ -6,7 +6,7 @@ import { useBudget } from "../budgetContext";
 import { FilterPanel } from "./FilterPanel";
 import { ActiveFilterChips } from "./ActiveFilterChips";
 import { Select } from "../../../ui/Select";
-import { useAccounts } from "../../../api/hooks";
+import { useAccounts } from "../../../api/accounts";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../../lib/budgetFilters";
 import type { TransactionCounts } from "../../../api/types";
 

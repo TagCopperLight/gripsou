@@ -10,8 +10,9 @@ import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
 import { withAlpha } from "../../lib/color";
 import { safeBudgetColor } from "../../lib/budget";
-import { useAccountTypes, useUpdateAccount } from "../../api/hooks";
-import { accountTypeLabel, type Account } from "../../api/types";
+import { useAccountTypes, useUpdateAccount } from "../../api/accounts";
+import type { Account } from "../../api/types";
+import { accountTypeLabel } from "../../lib/accounts";
 
 type EditAccountModalProps = {
   account: Account;

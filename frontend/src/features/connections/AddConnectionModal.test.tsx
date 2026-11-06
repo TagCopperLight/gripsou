@@ -8,7 +8,7 @@ const providers: EnabledProvider[] = [
 const initMutate = vi.fn();
 const init = { mutate: initMutate, isPending: false, isError: false };
 
-vi.mock("../../api/hooks", () => ({
+vi.mock("../../api/connections", () => ({
   useEnabledProviders: () => ({ data: providers, isLoading: false, isError: false }),
   useInitConnection: () => init,
 }));

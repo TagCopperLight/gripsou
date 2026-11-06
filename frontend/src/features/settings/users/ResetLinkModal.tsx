@@ -7,7 +7,7 @@ import { Button } from "../../../ui/Button";
 import { LinkModal } from "./LinkModal";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
-import { useCreateResetLink } from "../../../api/hooks";
+import { useCreateResetLink } from "../../../api/admin";
 import type { User } from "../../../api/types";
 
 /** A reset link for another user: the admin's password first (redeeming the

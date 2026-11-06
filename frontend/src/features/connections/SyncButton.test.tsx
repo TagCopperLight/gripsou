@@ -3,11 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ProviderGroup, SyncStatus } from "../../api/types";
 
-vi.mock("../../api/hooks", () => ({ useConnections: vi.fn() }));
+vi.mock("../../api/connections", () => ({ useConnections: vi.fn() }));
 vi.mock("./SyncModal", () => ({ SyncModal: () => <div>modal</div> }));
 
 import { SyncButton } from "./SyncButton";
-import { useConnections } from "../../api/hooks";
+import { useConnections } from "../../api/connections";
 
 function groups(status: SyncStatus): ProviderGroup[] {
   return [

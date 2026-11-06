@@ -20,8 +20,10 @@ import {
   CASH_COLOR, cashGlyph, holdingAccountTypes, shownHoldingLines, toggleHoldingSort,
   type HoldingSort, type HoldingSortKey,
 } from "../../../lib/holdings";
-import { KIND_LABEL_KEY, accountTypeLabel, type Holding } from "../../../api/types";
-import { useHoldings } from "../../../api/hooks";
+import type { Holding } from "../../../api/types";
+import { KIND_LABEL_KEY } from "../../../lib/holdings";
+import { accountTypeLabel } from "../../../lib/accounts";
+import { useHoldings } from "../../../api/holdings";
 import { usePrivacy } from "../../../auth/usePrivacy";
 
 type Column = {

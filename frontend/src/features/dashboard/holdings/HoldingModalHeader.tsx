@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { HoldingBadge } from "../../../ui/HoldingBadge";
-import { accountTypeLabel, type Holding } from "../../../api/types";
+import type { Holding } from "../../../api/types";
+import { accountTypeLabel } from "../../../lib/accounts";
 
 /** The identity bar shared by `AssetModal` and `RecordLotsModal`. One of them
  *  opens the other, so any difference between the two reads as a glitch. */

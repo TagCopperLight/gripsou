@@ -6,7 +6,7 @@ import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
 import { CardState } from "../../../ui/CardState";
-import { useUsers, useCreateInvite, useSetUserRole } from "../../../api/hooks";
+import { useUsers, useCreateInvite, useSetUserRole } from "../../../api/admin";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { GridTable } from "../../../ui/GridTable";
 import { HEAD_CELL, ROW_CELLS, ROW_HOVER } from "../../../ui/gridTable";

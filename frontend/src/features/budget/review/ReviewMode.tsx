@@ -13,7 +13,7 @@ import { ReviewSkeleton } from "./ReviewSkeleton";
 import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
 import { CardState } from "../../../ui/CardState";
 import { BreakPairModal } from "../BreakPairModal";
-import { useTransactions } from "../../../api/hooks";
+import { useTransactions } from "../../../api/transactions";
 import {
   useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction,
   useUndoReview, type PatchResult, type WriteResult,

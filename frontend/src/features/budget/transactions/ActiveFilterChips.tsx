@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
 import { useBudget } from "../budgetContext";
-import { useAccounts } from "../../../api/hooks";
+import { useAccounts } from "../../../api/accounts";
 import { useBudgetCategories, useBudgetTags } from "../../../api/budget";
 import { categoryLabel, safeBudgetColor } from "../../../lib/budget";
 import { otherFlag, typeBucket } from "../budgetIcons";
