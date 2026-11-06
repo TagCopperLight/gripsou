@@ -16,8 +16,9 @@ import type {
 } from "../../src/api/types.ts";
 import { HISTORY_DAYS, dayIndex } from "../data/base.ts";
 import { healthy, type SecurityRow } from "../data/rows.ts";
-import { DAY_MS, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
+import { DAY_MS, EUR_PER_USD, TODAY, isoDay, money, rangeDays } from "../data/util.ts";
 import type { Store } from "../store.ts";
+import { explainedQty, lotBasis, meanBuyPrice } from "./basis.ts";
 
 /** Every lot of a security: provider lots from the ledger, plus manual ones. */
 export function lotsOf(store: Store, holdingId: string): Lot[] {
@@ -37,8 +38,17 @@ export function lotsOf(store: Store, holdingId: string): Lot[] {
   return [...fromLedger, ...(store.manualLots[holdingId] ?? [])].sort((a, b) => a.t - b.t);
 }
 
-function lotQty(l: Lot): number {
-  return (l.side === "sell" ? -1 : 1) * Number(l.qty);
+function toLot(r: SaveLotAdd, id: string): Lot {
+  return { id, t: Date.parse(`${r.date}T00:00:00Z`), side: r.type, qty: r.quantity, price: r.unitPrice, fee: r.fee ?? "0", manual: true };
+}
+
+/** A security's basis on `asOf`, as `lot_basis`. The mock stores no provider
+ *  cost: the bank's is taken as what is held at the mean price (at 90 % of
+ *  today's price with no buy at all). */
+function securityBasis(store: Store, s: SecurityRow, lots = lotsOf(store, s.id), asOf = Infinity) {
+  const held = s.reportedQty ?? explainedQty(lots);
+  const providerBasis = held * (meanBuyPrice(lots) ?? s.closes[HISTORY_DAYS - 1] * 0.9);
+  return { held, ...lotBasis(lots, held, providerBasis, asOf) };
 }
 
 /** Per-day series, index 0 = oldest history day, last = today. */
@@ -61,18 +71,17 @@ function cashDaily(store: Store): Daily {
 
 function qtyDaily(store: Store, s: SecurityRow): number[] {
   const deltas = new Array<number>(HISTORY_DAYS).fill(0);
-  for (const l of lotsOf(store, s.id)) deltas[Math.max(0, dayIndex(l.t))] += lotQty(l);
+  for (const l of lotsOf(store, s.id)) deltas[Math.max(0, dayIndex(l.t))] += explainedQty([l]);
   let q = 0;
   return deltas.map((d) => (q += d));
 }
 
-function costDaily(store: Store, s: SecurityRow): number[] {
-  const deltas = new Array<number>(HISTORY_DAYS).fill(0);
-  for (const l of lotsOf(store, s.id)) {
-    if (l.side === "buy") deltas[Math.max(0, dayIndex(l.t))] += Number(l.qty) * Number(l.price) + Number(l.fee);
-  }
-  let c = 0;
-  return deltas.map((d) => (c += d));
+/** Counted from the first lot (today with none), as the server counts a
+ *  holding from its first point. */
+function investedDaily(store: Store, s: SecurityRow): number[] {
+  const lots = lotsOf(store, s.id);
+  const from = lots.length === 0 ? HISTORY_DAYS - 1 : Math.max(0, dayIndex(lots[0].t));
+  return Array.from({ length: HISTORY_DAYS }, (_, i) => (i < from ? 0 : securityBasis(store, s, lots, dayT(i)).basis));
 }
 
 /** Value and invested amount per account per day. */
@@ -88,7 +97,7 @@ function accountDaily(store: Store): { value: Daily; invested: Daily } {
     // A security with no exchange rate is left out of every sum, as the server does.
     if (store.fx.missing.includes(s.id)) continue;
     const q = qtyDaily(store, s);
-    const c = costDaily(store, s);
+    const c = investedDaily(store, s);
     // What the provider reports today, even when the lots don't explain it.
     if (s.reportedQty !== undefined) q[HISTORY_DAYS - 1] = s.reportedQty;
     for (let i = 0; i < HISTORY_DAYS; i++) {
@@ -216,8 +225,6 @@ function holdingBase(store: Store, accountId: string) {
   return { accountId, accountName: a.name, accountColor: a.color, accountType: a.typeKey, accountCurrency: a.currency, fxMissing: false, logo: null };
 }
 
-const USD_PER_EUR = 1.08;
-
 export function holdings(store: Store): Holding[] {
   const cash = cashDaily(store);
   const out: Holding[] = store.accounts.map((a) => {
@@ -246,19 +253,9 @@ export function holdings(store: Store): Holding[] {
     };
   });
   for (const s of store.securities) {
-    const lots = lotsOf(store, s.id);
-    const explained = lots.reduce((q, l) => q + lotQty(l), 0);
-    const qty = s.reportedQty ?? explained;
+    const { held: qty, explainedQty: explained, basis: invested, meanPrice } = securityBasis(store, s);
     const missingFx = store.fx.missing.includes(s.id);
-    const buys = lots.filter((l) => l.side === "buy");
-    const boughtQty = buys.reduce((q, l) => q + Number(l.qty), 0);
-    const boughtCost = buys.reduce((c, l) => c + Number(l.qty) * Number(l.price) + Number(l.fee), 0);
-    const mean = boughtQty === 0 ? 0 : boughtCost / boughtQty;
     const price = s.closes[HISTORY_DAYS - 1];
-    // As `lot_basis`: when the lots don't explain what is held, the cost is
-    // the bank's, here taken as what is held at the mean price (at 90 % of
-    // today's price with no buy at all).
-    const invested = qty === explained ? mean * explained : qty * (boughtQty === 0 ? price * 0.9 : mean);
     const value = missingFx ? 0 : qty * price;
     out.push({
       ...holdingBase(store, s.accountId),
@@ -275,13 +272,13 @@ export function holdings(store: Store): Holding[] {
       invested: money(invested),
       investedNative: money(invested),
       value: money(value),
-      valueNative: money(qty * price * (missingFx ? USD_PER_EUR : 1)),
+      valueNative: money(qty * price * (missingFx ? 1 / EUR_PER_USD : 1)),
       gl: missingFx ? "0" : money(value - invested),
       glPct: missingFx || invested === 0 ? "0" : ((value - invested) / invested).toFixed(4),
       spark: s.closes.slice(-30).map((p) => money(p)),
       composition: s.composition,
       unexplainedQty: String(qty - explained),
-      meanPrice: money(mean === 0 && qty !== 0 ? invested / qty : mean),
+      meanPrice: money(meanPrice ?? (qty === 0 ? 0 : invested / qty)),
     });
   }
   return out;
@@ -292,18 +289,12 @@ export function prices(store: Store, holdingId: string, range: string): PricePoi
   if (!s) return [];
   const h = holdings(store).find((x) => x.id === holdingId)!;
   const lots = lotsOf(store, holdingId);
-  const buys = lots.filter((l) => l.side === "buy");
-  const boughtQty = buys.reduce((q, l) => q + Number(l.qty), 0);
-  const mean =
-    boughtQty === 0 ? null : buys.reduce((c, l) => c + Number(l.qty) * Number(l.price) + Number(l.fee), 0) / boughtQty;
-  // As `lot_basis`: the part of the basis no lot explains is carried flat.
-  const unexplained = mean === null ? 0 : Number(h.investedNative) - mean * lots.reduce((q, l) => q + lotQty(l), 0);
-  const firstLot = lots.length === 0 ? null : Math.min(...lots.map((l) => l.t));
+  const firstLot = lots.length === 0 ? null : lots[0].t;
   const position = (t: number): { qty: string | null; invested: string | null } => {
     if (firstLot === null) return { qty: h.qty, invested: h.investedNative };
     if (t < firstLot) return { qty: null, invested: null };
-    const explained = lots.filter((l) => l.t <= t).reduce((q, l) => q + lotQty(l), 0);
-    return { qty: String(explained), invested: mean === null ? h.investedNative : money(mean * explained + unexplained) };
+    const b = securityBasis(store, s, lots, t);
+    return { qty: String(b.explainedQty), invested: money(b.basis) };
   };
   const out: PricePoint[] = [];
   for (let i = Math.max(firstIndex(range), s.listedFrom ?? 0); i < HISTORY_DAYS; i++) {
@@ -378,36 +369,14 @@ export function returns(store: Store): InvestmentReturns {
   };
 }
 
-/** The figures for a full set of rows, as `lot_basis` would give them:
- *  fee-inclusive weighted average in date order, a sale realising its proceeds
- *  minus fee over that average. */
+/** The figures after saving `sent` in place of the user's lots (the
+ *  provider's stay, as on the server). */
 export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[]): BasisPreview {
-  // The rows replace the user's lots only; the provider's stay, as on the server.
-  const provider: SaveLotAdd[] = lotsOf(store, holdingId)
-    .filter((l) => !l.manual)
-    .map((l) => ({ type: l.side, date: isoDay(l.t), quantity: l.qty, unitPrice: l.price, fee: l.fee }));
-  const rows = [...provider, ...sent];
-  let qty = 0;
-  let cost = 0;
-  let realised = 0;
-  for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
-    const q = Number(r.quantity);
-    const p = Number(r.unitPrice);
-    const fee = Number(r.fee ?? 0);
-    if (r.type === "buy") {
-      qty += q;
-      cost += q * p + fee;
-    } else {
-      const mean = qty === 0 ? 0 : cost / qty;
-      realised += q * p - fee - q * mean;
-      cost -= q * mean;
-      qty -= q;
-    }
-  }
-  const mean = qty === 0 ? 0 : cost / qty;
+  const lots = [...lotsOf(store, holdingId).filter((l) => !l.manual), ...sent.map((r) => toLot(r, ""))].sort((a, b) => a.t - b.t);
   const s = store.securities.find((x) => x.id === holdingId);
-  const unrealised = s && !store.fx.missing.includes(s.id) ? money(qty * s.closes[HISTORY_DAYS - 1] - cost) : null;
-  const figures = { meanPrice: money(mean), invested: money(cost), realised: money(realised), unrealised };
+  const b = s ? securityBasis(store, s, lots) : lotBasis(lots, explainedQty(lots), 0);
+  const unrealised = s && !store.fx.missing.includes(s.id) ? money(b.explainedQty * s.closes[HISTORY_DAYS - 1] - b.basis) : null;
+  const figures = { meanPrice: money(b.meanPrice ?? 0), invested: money(b.basis), realised: money(b.realised), unrealised };
   return { ...figures, reporting: figures };
 }
 
@@ -415,14 +384,5 @@ export function previewLots(store: Store, holdingId: string, sent: SaveLotAdd[])
 export function saveLots(store: Store, holdingId: string, batch: SaveLotsInput): void {
   store.deletedLots.push(...batch.deletes);
   const kept = (store.manualLots[holdingId] ?? []).filter((l) => !batch.deletes.includes(l.id));
-  const added = batch.adds.map((r) => ({
-    id: store.ids.next("lot"),
-    t: Date.parse(`${r.date}T00:00:00Z`),
-    side: r.type,
-    qty: r.quantity,
-    price: r.unitPrice,
-    fee: r.fee ?? "0",
-    manual: true,
-  }));
-  store.manualLots[holdingId] = [...kept, ...added];
+  store.manualLots[holdingId] = [...kept, ...batch.adds.map((r) => toLot(r, store.ids.next("lot")))];
 }

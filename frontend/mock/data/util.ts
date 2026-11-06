@@ -1,5 +1,7 @@
 // Deterministic helpers for the fake dataset: the same data on every reset.
 
+import { RANGES, type Range } from "../../src/lib/ranges.ts";
+
 const DAY_MS = 86_400_000;
 
 /** Today at UTC midnight, the anchor every generated date counts back from. */
@@ -35,9 +37,14 @@ export function money(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
-/** Days back from `RANGE` keys, as the backend's `range_window`. */
+/** Euros per dollar, the dataset's one exchange rate. */
+export const EUR_PER_USD = 0.92;
+
+/** Days back of a chart range, as the backend's `range_window`; an unknown
+ *  range is the whole history. */
 export function rangeDays(range: string): number {
-  switch (range) {
+  const r: Range = RANGES.find((x) => x === range) ?? "max";
+  switch (r) {
     case "7d": return 7;
     case "1mo": return 30;
     case "6mo": return 182;
@@ -46,6 +53,6 @@ export function rangeDays(range: string): number {
       const now = new Date(TODAY);
       return Math.round((TODAY - Date.UTC(now.getUTCFullYear(), 0, 1)) / DAY_MS);
     }
-    default: return 4000;
+    case "max": return 4000;
   }
 }

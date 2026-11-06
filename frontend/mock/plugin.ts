@@ -1,7 +1,8 @@
 // Vite plugin behind `bun run dev:mock`: answers /api/* from the in-memory
 // store instead of proxying to the Rust server, exposes /__mock/* for the
-// review panel and injects the panel. Dev server only (`apply: "serve"`), and
-// vite.config.ts only imports it in mock mode, so a build never sees it.
+// review panel and injects the panel and its first-visit sign-in. Dev server
+// only (`apply: "serve"`), and vite.config.ts only imports it in mock mode, so
+// a build never sees it.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -47,14 +48,6 @@ function save(saved: Saved): void {
   mkdirSync(CACHE_DIR, { recursive: true });
   writeFileSync(SAVED_FILE, JSON.stringify(saved));
 }
-
-// Signs in on the first visit only, so signing out (to review the login
-// screen) sticks across reloads.
-const BOOTSTRAP = `
-if (!localStorage.getItem("gripsou.mock.started")) {
-  localStorage.setItem("gripsou.mock.started", "1");
-  localStorage.setItem("gripsou.token", "mock");
-}`;
 
 export function mockApi(): Plugin {
   const control = createControl(STATES, { focus: FOCUS, saved: loadSaved(), onChange: save });
@@ -111,7 +104,7 @@ export function mockApi(): Plugin {
     },
     transformIndexHtml() {
       return [
-        { tag: "script", children: BOOTSTRAP, injectTo: "head-prepend" },
+        { tag: "script", attrs: { type: "module", src: "/mock/panel/signIn.ts" }, injectTo: "head-prepend" },
         { tag: "script", attrs: { type: "module", src: "/mock/panel/main.tsx" }, injectTo: "body" },
       ];
     },

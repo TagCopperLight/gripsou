@@ -59,7 +59,7 @@ export function budgetRoutes(r: Router<Store>): void {
     const b = body as Omit<BulkBody, "filter"> & { filter?: Record<string, string | boolean> };
     const rows = b.ids
       ? store.txns.filter((x) => b.ids!.includes(x.id))
-      : v.matching(store, new URLSearchParams(Object.entries(b.filter ?? {}).map(([k, val]): [string, string] => [k, String(val)])));
+      : v.matching(store, v.parseTransactionFilter(b.filter ?? {}));
     const breaks = pairBreaks(store, rows, b.categoryId, b.confirmBreakPairs);
     if (breaks) return { updated: 0, pendingPairBreaks: breaks };
     for (const x of rows) {

@@ -1,3 +1,4 @@
+import ACCOUNT_PALETTE from "../../../shared/account-palette.json" with { type: "json" };
 import { BANK, BROKER, SAVINGS } from "../data/base.ts";
 import { connectionRow, healthy, type ConnectionRow } from "../data/rows.ts";
 import { addAccount, connection, staleDay } from "./helpers.ts";
@@ -25,7 +26,7 @@ export const sync: MockState[] = [
       more.forEach(([displayName, c, account], i) => {
         const id = store.ids.next("connection");
         store.connections.push(connectionRow(id, displayName, c));
-        if (account !== null) addAccount(store, id, 600 + 100 * i, { name: account, color: "#f0b952", typeKey: "checking" });
+        if (account !== null) addAccount(store, id, 600 + 100 * i, { name: account, color: ACCOUNT_PALETTE[3], typeKey: "checking" });
       });
       // A partial update: the bank's checking account is fresh, the Livret A is not.
       store.accountHealth[SAVINGS] = healthy({ lastUpdatedOn: staleDay(9) });

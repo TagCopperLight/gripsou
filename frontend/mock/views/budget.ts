@@ -5,9 +5,19 @@
 
 import type { BudgetCategory, BudgetTag } from "../../src/api/budget.ts";
 import type { BreakdownRow, BudgetSummary, BudgetTrend, CategoryRef, Figure, Slice, SliceAmount } from "../../src/api/overview.ts";
-import type { Transaction, TransactionCounts } from "../../src/api/types.ts";
+import type { Transaction, TransactionCounts, TransactionFilterQuery, TypeBucket } from "../../src/api/types.ts";
+import {
+  BASELINE_MONTHS,
+  BREAKDOWN_KEEP,
+  MIN_BASELINE_MONTHS,
+  SANKEY_MAX_SLICES,
+  SANKEY_MIN_SHARE,
+  TREND_ANCHOR_KEEP,
+  TREND_FOLD_KEY,
+  TREND_KEEP,
+} from "../data/backend.ts";
 import type { CategoryRow, TxnRow } from "../data/rows.ts";
-import { dayOf, isoDay, money } from "../data/util.ts";
+import { DAY_MS, EUR_PER_USD, dayOf, isoDay, money } from "../data/util.ts";
 import type { Store } from "../store.ts";
 
 /** The AI's guess waiting for review (`categoryId` null: it abstained). */
@@ -35,9 +45,6 @@ export function categories(store: Store): BudgetCategory[] {
 export function tags(store: Store): BudgetTag[] {
   return store.tags.map((t) => ({ ...t, txCount: store.txns.filter((x) => x.tagIds.includes(t.id)).length }));
 }
-
-/** Euros per dollar, for the rows of a dollar account. */
-const EUR_PER_USD = 0.92;
 
 /** A row's value in euros; null for a foreign row when the budget has no rate
  *  (the "Budget: a transaction has no rate" state). */
@@ -85,32 +92,53 @@ export function transactionView(store: Store, x: TxnRow): Transaction {
   };
 }
 
-function ids(q: URLSearchParams, key: string): string[] {
-  return (q.get(key) ?? "").split(",").filter(Boolean);
+const ids = (raw: string) => raw.split(",").filter(Boolean);
+const flag = (raw: string) => raw === "true";
+
+/** Reads each field `transactionFilterFields` writes: a new filter field
+ *  fails to type-check here until the mock reads it. */
+const FILTER_FIELDS: { [K in keyof TransactionFilterQuery]-?: (raw: string) => TransactionFilterQuery[K] } = {
+  search: (raw) => raw,
+  accountId: (raw) => raw,
+  bucket: (raw) => raw as TypeBucket,
+  from: (raw) => raw,
+  to: (raw) => raw,
+  categoryIds: ids,
+  tagIds: ids,
+  uncategorized: flag,
+  needsReview: flag,
+  includeTransfers: flag,
+};
+
+/** The filter of a query string or of a bulk body's `filter`. */
+export function parseTransactionFilter(fields: URLSearchParams | Record<string, string | boolean>): TransactionFilterQuery {
+  const entries = fields instanceof URLSearchParams ? [...fields] : Object.entries(fields);
+  const f: Record<string, unknown> = {};
+  for (const [k, v] of entries) {
+    if (k in FILTER_FIELDS) f[k] = FILTER_FIELDS[k as keyof TransactionFilterQuery](String(v));
+  }
+  return f as TransactionFilterQuery;
 }
 
 /** The rows a filter selects, newest first — the list, counts and bulk share it. */
-export function matching(store: Store, q: URLSearchParams, opts: { ignoreTransfers?: boolean } = {}): TxnRow[] {
-  const search = q.get("search")?.toLowerCase();
-  const accountId = q.get("accountId");
-  const bucket = q.get("bucket") ?? "all";
-  const from = q.get("from");
-  const to = q.get("to");
-  const catIds = ids(q, "categoryIds");
-  const tagIds = ids(q, "tagIds");
+export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
+  const search = f.search?.toLowerCase();
+  const bucket = f.bucket ?? "all";
+  const catIds = f.categoryIds ?? [];
+  const tagIds = f.tagIds ?? [];
   return store.txns.filter((x) => {
-    if (!opts.ignoreTransfers && x.isTransfer && q.get("includeTransfers") !== "true") return false;
+    if (x.isTransfer && !f.includeTransfers) return false;
     if (search && !(x.description ?? "").toLowerCase().includes(search)) return false;
-    if (accountId && x.accountId !== accountId) return false;
+    if (f.accountId && x.accountId !== f.accountId) return false;
     if (bucket === "in" && !(x.source === "cash" && x.amount > 0)) return false;
     if (bucket === "out" && !(x.source === "cash" && x.amount < 0)) return false;
     if (bucket === "lots" && x.source !== "lot") return false;
-    if (from && x.t < dayOf(from)) return false;
-    if (to && x.t > dayOf(to)) return false;
+    if (f.from && x.t < dayOf(f.from)) return false;
+    if (f.to && x.t > dayOf(f.to)) return false;
     if (catIds.length && !catIds.includes(x.categoryId ?? "")) return false;
     if (tagIds.length && !tagIds.every((t) => x.tagIds.includes(t))) return false;
-    if (q.get("uncategorized") === "true" && !(x.source === "cash" && x.categoryId === null)) return false;
-    if (q.get("needsReview") === "true" && !x.needsReview) return false;
+    if (f.uncategorized && !(x.source === "cash" && x.categoryId === null)) return false;
+    if (f.needsReview && !x.needsReview) return false;
     return true;
   });
 }
@@ -118,13 +146,13 @@ export function matching(store: Store, q: URLSearchParams, opts: { ignoreTransfe
 export function transactions(store: Store, q: URLSearchParams): Transaction[] {
   const limit = Number(q.get("limit") ?? 200);
   const offset = Number(q.get("offset") ?? 0);
-  return matching(store, q)
+  return matching(store, parseTransactionFilter(q))
     .slice(offset, offset + limit)
     .map((x) => transactionView(store, x));
 }
 
 export function counts(store: Store, q: URLSearchParams): TransactionCounts {
-  const rows = matching(store, q);
+  const rows = matching(store, parseTransactionFilter(q));
   // What "select all shown" covers, as the server: the cash rows only.
   const cash = rows.filter((x) => x.source === "cash");
   const visible = store.txns.filter((x) => !x.isTransfer);
@@ -146,10 +174,15 @@ function monthOf(t: number): Month {
   return isoDay(t).slice(0, 7);
 }
 
+// Not src/lib/period.ts's: it imports i18n, which Vite's config loader would
+// then bundle into the mock plugin.
 function addMonths(m: Month, n: number): Month {
   const [y, mo] = m.split("-").map(Number);
-  const d = new Date(Date.UTC(y, mo - 1 + n, 1));
-  return d.toISOString().slice(0, 7);
+  return new Date(Date.UTC(y, mo - 1 + n, 1)).toISOString().slice(0, 7);
+}
+
+function monthBounds(m: Month): { from: string; to: string } {
+  return { from: `${m}-01`, to: isoDay(dayOf(`${addMonths(m, 1)}-01`) - DAY_MS) };
 }
 
 function ref(c: CategoryRow): CategoryRef {
@@ -205,9 +238,9 @@ function sorted(m: Map<string, number>): [string, number][] {
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-/** Keeps at most `cap` slices of at least 2% of `total`; the rest becomes Other. */
-function collapse(store: Store, entries: [string, number][], total: number, cap: number): SliceAmount[] {
-  const kept = entries.filter(([, v]) => v >= total * 0.02).slice(0, cap);
+/** Keeps the slices the Sankey shows of `total`; the rest becomes Other. */
+function collapse(store: Store, entries: [string, number][], total: number): SliceAmount[] {
+  const kept = entries.filter(([, v]) => v >= total * SANKEY_MIN_SHARE).slice(0, SANKEY_MAX_SLICES);
   const rest = entries.filter((e) => !kept.includes(e)).reduce((s, [, v]) => s + v, 0);
   const out = kept.map(([k, v]) => ({ slice: slice(store, k), amount: money(v) }));
   if (rest > 0) out.push({ slice: { kind: "other" }, amount: money(rest) });
@@ -222,26 +255,22 @@ function monthRows(rows: Row[], m: Month): Row[] {
   return rows.filter((x) => monthOf(x.t) === m);
 }
 
-function monthEnd(m: Month): string {
-  const next = dayOf(`${addMonths(m, 1)}-01`);
-  return isoDay(next - 86_400_000);
-}
-
 export function summary(store: Store, q: URLSearchParams): BudgetSummary {
   const all = budgetRows(store);
   const month = q.get("month");
-  const from = month ? `${month}-01` : q.get("from")!;
-  const to = month ? monthEnd(month) : q.get("to")!;
+  const { from, to } = month ? monthBounds(month) : { from: q.get("from")!, to: q.get("to")! };
   const rows = inPeriod(all, from, to);
   const exp = expenseSide(rows);
   const inc = incomeSide(rows);
   const income = sum(inc);
   const expenses = sum(exp);
 
-  // Comparisons only for a month with three full months of history before it.
+  // Comparisons only for a month with enough full months of history before it.
   const firstMonth = all.length ? monthOf(Math.min(...all.map((x) => x.t))) : null;
-  const history = month && firstMonth ? Array.from({ length: 12 }, (_, i) => addMonths(month, -12 + i)).filter((m) => m >= firstMonth) : [];
-  const compare = history.length >= 3;
+  const history = month && firstMonth
+    ? Array.from({ length: BASELINE_MONTHS }, (_, i) => addMonths(month, i - BASELINE_MONTHS)).filter((m) => m >= firstMonth)
+    : [];
+  const compare = history.length >= MIN_BASELINE_MONTHS;
   const avgOf = (f: (r: Row[]) => number) => history.reduce((s, m) => s + f(monthRows(all, m)), 0) / Math.max(1, history.length);
   const figure = (amount: number, f: (r: Row[]) => number): Figure =>
     month && compare
@@ -253,7 +282,7 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
   // In cents, so a month that nets to zero reads exactly zero.
   const remainder = Math.round((income - expenses) * 100) / 100;
   const breakdownEntries = sorted(exp);
-  const breakdown: BreakdownRow[] = breakdownEntries.slice(0, 7).map(([k, v]) => {
+  const breakdown: BreakdownRow[] = breakdownEntries.slice(0, BREAKDOWN_KEEP).map(([k, v]) => {
     const row: BreakdownRow = {
       slice: slice(store, k),
       amount: money(v),
@@ -262,7 +291,7 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
     if (compare) row.avg12 = money(avgOf((r) => expenseSide(r).get(k) ?? 0));
     return row;
   });
-  const rest = breakdownEntries.slice(7);
+  const rest = breakdownEntries.slice(BREAKDOWN_KEEP);
   if (rest.length) {
     breakdown.push({
       slice: { kind: "other" },
@@ -280,8 +309,8 @@ export function summary(store: Store, q: URLSearchParams): BudgetSummary {
       net: figure(remainder, (r) => incomeOf(r) - expensesOf(r)),
     },
     sankey: {
-      sources: collapse(store, sorted(inc), expenses, 8),
-      destinations: collapse(store, sorted(exp), expenses, 8),
+      sources: collapse(store, sorted(inc), expenses),
+      destinations: collapse(store, sorted(exp), expenses),
       ...(remainder > 0 ? { notSpent: money(remainder) } : remainder < 0 ? { drawnFromSavings: money(-remainder) } : {}),
     },
     breakdown,
@@ -296,8 +325,15 @@ export function trend(store: Store, q: URLSearchParams): BudgetTrend {
   const perMonth = months.map((m) => expenseSide(monthRows(all, m)));
   const totals = new Map<string, number>();
   for (const m of perMonth) for (const [k, v] of m) totals.set(k, (totals.get(k) ?? 0) + v);
-  const fold = store.categories.find((c) => c.defaultKey === "other_expense")?.id;
-  const kept = sorted(totals).map(([k]) => k).filter((k) => k !== fold).slice(0, 8);
+  const fold = store.categories.find((c) => c.defaultKey === TREND_FOLD_KEY)?.id;
+  const rank = sorted(totals).map(([k]) => k).filter((k) => k !== fold);
+  const anchorTop = sorted(perMonth[n - 1] ?? new Map()).map(([k]) => k).filter((k) => k !== fold).slice(0, TREND_ANCHOR_KEEP);
+  const kept: string[] = [];
+  for (const k of [...anchorTop, ...rank]) {
+    if (kept.length === TREND_KEEP) break;
+    if (!kept.includes(k)) kept.push(k);
+  }
+  kept.sort((a, b) => rank.indexOf(a) - rank.indexOf(b));
   const series = kept.map((k) => ({ slice: slice(store, k), values: perMonth.map((m) => money(m.get(k) ?? 0)) }));
   const otherValues = perMonth.map((m) => [...m.entries()].filter(([k]) => !kept.includes(k)).reduce((s, [, v]) => s + v, 0));
   if (otherValues.some((v) => v > 0)) series.push({ slice: { kind: "other" }, values: otherValues.map((v) => money(v)) });

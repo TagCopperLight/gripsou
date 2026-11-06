@@ -2,8 +2,9 @@
 // `createStore`. The control (control.ts) holds the live one.
 
 import type { AiStatus, BudgetAiSettings, BudgetAiUsage } from "../src/api/budget.ts";
-import type { ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
+import type { ApiKeyField, ApiKeyProvider, LotSuggestion, SyncHealth } from "../src/api/types.ts";
 import { baseData, type BaseData } from "./data/base.ts";
+import { CONFIG_PROVIDERS } from "./data/backend.ts";
 import type { Fault } from "./faults.ts";
 
 export type Store = BaseData & {
@@ -27,6 +28,22 @@ export type Store = BaseData & {
   faults: Fault[];
 };
 
+/** Saved values: a public field's text, whether a secret is set; absent is unset. */
+const SAVED_KEYS: Record<string, Record<string, string | boolean>> = {
+  powens: { client_id: "48211093", domain: "myapp-sandbox.biapi.pro", client_secret: true },
+  jev: { api_key: true },
+};
+
+function apiKeys(): ApiKeyProvider[] {
+  return CONFIG_PROVIDERS.map((p) => ({
+    ...p,
+    fields: p.fields.map(({ key, label, secret }): ApiKeyField => {
+      const saved = SAVED_KEYS[p.key]?.[key];
+      return secret ? { key, label, secret, set: saved === true } : { key, label, secret, value: typeof saved === "string" ? saved : null };
+    }),
+  }));
+}
+
 export function createStore(): Store {
   const data = baseData();
   data.user.prefs.budgetAiEnabled = true;
@@ -38,20 +55,7 @@ export function createStore(): Store {
     accountHealth: {},
     loginMfa: false,
     faults: [],
-    apiKeys: [
-      {
-        key: "powens",
-        displayName: "Powens",
-        fields: [
-          { key: "client_id", label: "Client ID", secret: false, value: "48211093" },
-          { key: "domain", label: "Domain", secret: false, value: "myapp-sandbox.biapi.pro" },
-          { key: "client_secret", label: "Client secret", secret: true, set: true },
-          { key: "webhook_secret", label: "Webhook secret", secret: true, set: false },
-        ],
-      },
-      { key: "jev", displayName: "JEV", fields: [{ key: "api_key", label: "API key", secret: true, set: true }] },
-      { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", label: "Client ID", secret: false, value: null }] },
-    ],
+    apiKeys: apiKeys(),
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
       // As the server: AI prices and costs are in US dollars.

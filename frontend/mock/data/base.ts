@@ -3,9 +3,9 @@
 // everyday spending with transfer pairs, the seeded categories, three tags.
 // Everything is generated from a fixed seed, anchored on today.
 
-import type { BudgetCategory } from "../../src/api/budget.ts";
 import type { Composition, Lot, MfaStatus, Provider, Session, SessionUser, User } from "../../src/api/types.ts";
 import { DEFAULT_PREFS } from "../../src/lib/prefs.ts";
+import { CATEGORY_SEED } from "./backend.ts";
 import { createIds, named, type Ids } from "./ids.ts";
 import {
   accountRow,
@@ -58,41 +58,6 @@ export const BANK = named("connection", 1);
 export const BROKER = named("connection", 2);
 export const CW8 = named("security", 1);
 export const ESE = named("security", 2);
-
-const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kind"], string | null, string][] = [
-  ["Housing", "housing", "#f18c80", "house", "expense", null, "Rent, mortgage payments, service charges and property tax."],
-  ["Utilities", "utilities", "#ea945e", "zap", "expense", null, "Electricity, gas, water and heating."],
-  ["Internet & phone", "internet_phone", "#d9a147", "smartphone", "expense", null, "Internet access, mobile and landline plans."],
-  ["Groceries", "groceries", "#bfae46", "shopping-cart", "expense", null, "Supermarkets, grocers, markets and bakeries: food bought to take home."],
-  ["Restaurants & bars", "restaurants", "#9cba5d", "utensils", "expense", null, "Eating and drinking out: restaurants, cafés, bars, fast food, canteens and food delivery."],
-  ["Transport", "transport", "#72c27f", "train-front", "expense", null, "Getting around without fuel: trains, buses, metro passes, taxis, ride-hailing, tolls, parking, car hire and repairs."],
-  ["Fuel", "fuel", "#41c6a3", "fuel", "expense", null, "Petrol, diesel and EV charging at service stations."],
-  ["Insurance", "insurance", "#12c4c6", "shield", "expense", null, "Premiums for home, car, health, life and liability cover."],
-  ["Health", "health", "#30bee3", "heart-pulse", "expense", null, "Doctors, dentists, pharmacies, opticians, hospitals and therapy."],
-  ["Subscriptions", "subscriptions", "#60b4f5", "repeat", "expense", null, "Recurring memberships and services: streaming, software, news, cloud storage."],
-  ["Leisure", "leisure", "#8aa9fc", "film", "expense", null, "Cinema, concerts, games, books, hobbies and nights out."],
-  ["Sport", "sport", "#ae9df5", "activity", "expense", null, "Gyms, clubs, licences, lessons and sports gear."],
-  ["Travel", "travel", "#cb93e2", "plane", "expense", null, "Trips away from home: flights, hotels, holiday rentals and long-distance tickets."],
-  ["Shopping", "shopping", "#e18cc5", "shopping-bag", "expense", null, "General retail that fits no other category: electronics, household goods, beauty."],
-  ["Clothing", "clothing", "#ee89a3", "shirt", "expense", null, "Clothes, shoes and accessories."],
-  ["Home & furniture", "home_furniture", "#ef906e", "lamp", "expense", null, "Furniture, decoration, appliances, DIY and home maintenance."],
-  ["Gifts & donations", "gifts", "#e39a51", "gift", "expense", null, "Presents bought for others, money given to family, and donations to charities."],
-  ["Education", "education", "#cda743", "book-open", "expense", null, "Tuition, courses, exams, school fees and study material."],
-  ["Cash withdrawals", "cash_withdrawals", "#aeb44f", "banknote", "expense", null, "Cash taken out at an ATM or a counter. What the cash was spent on afterwards is unknown."],
-  ["Bank & broker fees", "bank_fees", "#88be6d", "percent", "expense", null, "Account and card fees, overdraft and payment interest, brokerage commissions, late-payment penalties."],
-  ["Taxes", "taxes", "#5ac491", "landmark", "expense", null, "Payments to the tax authority: income tax, social contributions, local and vehicle taxes."],
-  ["Pets", "pets", "#27c6b5", "paw-print", "expense", null, "Food, vets, insurance and supplies for an animal."],
-  ["Other", "other_expense", "#10c4cb", "circle-dashed", "expense", null, "Expenses that fit no other category. Use only when nothing else is a reasonable match."],
-  ["Salary", "salary", "#18c2d5", "wallet", "income", null, "Pay from an employer or client: wages, bonuses, pensions and self-employment income."],
-  ["Dividends", "dividends", "#49baed", "coins", "income", null, "Dividends paid out by shares, funds and ETFs."],
-  ["Interest", "interest", "#76affa", "piggy-bank", "income", null, "Interest paid by savings accounts, bonds and deposits."],
-  ["Reimbursements", "reimbursements", "#9da3fa", "undo-2", "income", null, "Money coming back for something already paid: merchant refunds, expense claims, insurance and tax rebates."],
-  ["Other income", "other_income", "#b99af0", "circle-plus", "income", null, "Incoming money that fits no other category: benefits, gifts received, one-off payments from people."],
-  ["Internal transfer", "internal", "#be98ec", "arrow-left-right", "neutral", "internal_transfer", "Money moved between your own accounts. Neither spending nor income — the pairing pass writes here."],
-  ["Savings", "savings", "#34d399", "piggy-bank", "neutral", null, "Money set aside into a savings account: it is still yours, not spending."],
-  ["Investments", "investments", "#34d399", "trending-up", "neutral", null, "Money moved into a brokerage or investment account, and securities bought with it."],
-  ["Ignore", "ignore", "#777471", "eye-off", "neutral", null, "Rows to leave out of every total: duplicates, corrections and anything that should not count."],
-];
 
 function categories(ids: Ids): CategoryRow[] {
   const order: Record<string, number> = {};

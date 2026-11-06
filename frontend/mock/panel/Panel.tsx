@@ -2,10 +2,14 @@
 // styled on its own (inline styles), apart from the app's design.
 
 import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { getAuthToken, setAuthToken } from "../../src/api/client.ts";
+import { CURRENCIES } from "../../src/lib/currency.ts";
+import type { UserPrefs } from "../../src/lib/prefs.ts";
 import type { ControlInfo } from "../control.ts";
 import type { OverrideMode } from "../faults.ts";
 
-const TOKEN_KEY = "gripsou.token";
+const LANGUAGES = { en: "EN", fr: "FR" } satisfies Record<UserPrefs["uiLanguage"], string>;
+
 const OPEN_KEY = "gripsou.mock.open";
 
 async function control(path: string, body?: unknown): Promise<void> {
@@ -22,16 +26,6 @@ async function patchPrefs(patch: Record<string, unknown>): Promise<void> {
     headers: { "Content-Type": "application/json", Authorization: "Bearer mock" },
     body: JSON.stringify(patch),
   });
-}
-
-function signedIn(): boolean {
-  return localStorage.getItem(TOKEN_KEY) !== null || sessionStorage.getItem(TOKEN_KEY) !== null;
-}
-
-function setSignedIn(on: boolean): void {
-  localStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(TOKEN_KEY);
-  if (on) localStorage.setItem(TOKEN_KEY, "mock");
 }
 
 /** Every change goes through a reload: React Query's cache would otherwise
@@ -196,13 +190,13 @@ export function Panel() {
                 <>
                   <span style={s.label}>Language</span>
                   <Segmented
-                    options={[["en", "EN"], ["fr", "FR"]]}
+                    options={Object.entries(LANGUAGES)}
                     value={user.uiLanguage}
                     onChange={(v) => void patchPrefs({ uiLanguage: v }).then(reload)}
                   />
                   <span style={s.label}>Currency</span>
                   <Segmented
-                    options={[["EUR", "EUR"], ["USD", "USD"], ["GBP", "GBP"]]}
+                    options={CURRENCIES.map((c): [string, string] => [c.code, c.code])}
                     value={user.currency}
                     onChange={(v) => void patchPrefs({ currency: v }).then(reload)}
                   />
@@ -217,10 +211,10 @@ export function Panel() {
               <span style={s.label}>Data</span>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 <Btn onClick={() => void control("/reset").then(reload)}>Reset</Btn>
-                {signedIn() ? (
-                  <Btn onClick={() => { setSignedIn(false); location.assign("/login"); }}>Sign out</Btn>
+                {getAuthToken() !== null ? (
+                  <Btn onClick={() => { setAuthToken(null); location.assign("/login"); }}>Sign out</Btn>
                 ) : (
-                  <Btn onClick={() => { setSignedIn(true); location.assign("/"); }}>Sign in</Btn>
+                  <Btn onClick={() => { setAuthToken("mock", true); location.assign("/"); }}>Sign in</Btn>
                 )}
               </div>
             </div>

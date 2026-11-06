@@ -1,6 +1,7 @@
 // What the review panel drives: the live store, the active per-screen states,
 // and per-request overrides that keep a request loading or make it fail.
 
+import type { UserPrefs } from "../src/lib/prefs.ts";
 import { injected, requestKey, type OverrideMode } from "./faults.ts";
 import type { Reply } from "./router.ts";
 import { router } from "./routes/index.ts";
@@ -8,7 +9,7 @@ import type { MockState, Piece } from "./states/pieces.ts";
 import { createStore } from "./store.ts";
 
 /** The panel's own App settings: kept across state changes, Reset and restarts. */
-export type AppSettings = { role: "admin" | "user"; uiLanguage: string; currency: string };
+export type AppSettings = { role: "admin" | "user"; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
 
 /** What survives a dev-server restart. */
 export type Saved = { active: string[]; app: AppSettings | null };
@@ -22,7 +23,7 @@ export type ControlInfo = {
   /** Requests the app made, for the override list. */
   seen: string[];
   unhandled: string[];
-  user: { role: string; uiLanguage: string; currency: string };
+  user: { role: string; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
 };
 
 /** `saved`: what was on before a restart; `onChange` sees every change to it. */
@@ -42,7 +43,7 @@ export function createControl(
   function applyApp(): void {
     if (!app) return;
     store.user.role = app.role;
-    store.user.prefs = { ...store.user.prefs, uiLanguage: app.uiLanguage as typeof store.user.prefs.uiLanguage, currency: app.currency };
+    store.user.prefs = { ...store.user.prefs, uiLanguage: app.uiLanguage, currency: app.currency };
   }
 
   /** Read back after the panel (or the app's own settings page) changed them. */

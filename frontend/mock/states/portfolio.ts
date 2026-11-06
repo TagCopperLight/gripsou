@@ -1,3 +1,4 @@
+import ACCOUNT_PALETTE from "../../../shared/account-palette.json" with { type: "json" };
 import { BANK, BROKER, CHECKING, CW8, ESE, HISTORY_DAYS, PEA, SP500, WORLD, closes, dayIndex } from "../data/base.ts";
 import { daysAgo, isoDay } from "../data/util.ts";
 import type { Store } from "../store.ts";
@@ -69,7 +70,7 @@ export const distribution: MockState[] = [
     label: "An account at 0 € (emptied savings book)",
     pieces: ["Distribution", "Accounts list"],
     apply(store) {
-      addAccount(store, BANK, 0, { name: "LDDS", typeKey: "savings", color: "#f0b952" });
+      addAccount(store, BANK, 0, { name: "LDDS", typeKey: "savings", color: ACCOUNT_PALETTE[3] });
     },
   },
   {
@@ -78,15 +79,15 @@ export const distribution: MockState[] = [
     pieces: ["Distribution", "Accounts chart", "Accounts list", "Edit account"],
     apply(store) {
       const more: [string, string, string, number][] = [
-        ["Compte joint Camille et Alex", "checking", "#f08fb0", 1840],
-        ["Livret Développement Durable et Solidaire", "savings", "#9bb06b", 4200],
-        ["Livret Jeune", "savings", "#e88a5f", 1600],
-        ["PEL", "savings", "#6aa0e0", 7300],
-        ["Compte à terme 2027", "savings", "#b8a8f0", 3000],
-        ["Assurance vie Linxea Spirit 2", "brokerage", "#5fcf9e", 12500],
-        ["CEL", "savings", "#5b9bf0", 310],
-        ["Compte courant pro", "checking", "#4dd0b1", 42],
-        ["Cagnotte vacances", "savings", "#b07ef0", 12],
+        ["Compte joint Camille et Alex", "checking", ACCOUNT_PALETTE[4], 1840],
+        ["Livret Développement Durable et Solidaire", "savings", ACCOUNT_PALETTE[5], 4200],
+        ["Livret Jeune", "savings", ACCOUNT_PALETTE[6], 1600],
+        ["PEL", "savings", ACCOUNT_PALETTE[7], 7300],
+        ["Compte à terme 2027", "savings", ACCOUNT_PALETTE[8], 3000],
+        ["Assurance vie Linxea Spirit 2", "brokerage", ACCOUNT_PALETTE[9], 12500],
+        ["CEL", "savings", ACCOUNT_PALETTE[0], 310],
+        ["Compte courant pro", "checking", ACCOUNT_PALETTE[1], 42],
+        ["Cagnotte vacances", "savings", ACCOUNT_PALETTE[2], 12],
       ];
       for (const [name, typeKey, color, cash] of more) addAccount(store, BANK, cash, { name, typeKey, color });
     },
@@ -214,7 +215,7 @@ export const holdings: MockState[] = [
     label: "Life insurance with 7 funds: long names, fractions",
     pieces: ["Investments", "Holdings"],
     apply(store) {
-      const account = addAccount(store, BROKER, 1250, { name: "Assurance vie Linxea Spirit 2", color: "#f0b952", typeKey: "life_insurance" });
+      const account = addAccount(store, BROKER, 1250, { name: "Assurance vie Linxea Spirit 2", color: ACCOUNT_PALETTE[3], typeKey: "life_insurance" });
       const funds: [string, string, number, number][] = [
         ["IWDA", "iShares Core MSCI World UCITS ETF USD (Acc)", 98.42, 42],
         ["PAEEM", "Amundi PEA MSCI Emerging Markets ESG Leaders UCITS ETF", 24.11, 120],

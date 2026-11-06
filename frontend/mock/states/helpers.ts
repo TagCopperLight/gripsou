@@ -4,6 +4,7 @@ import { cat } from "../data/base.ts";
 import { accountRow, cashRow, newestFirst, type AccountRow, type ConnectionRow, type SecurityRow, type TxnRow } from "../data/rows.ts";
 import { daysAgo, isoDay } from "../data/util.ts";
 import type { Store } from "../store.ts";
+import { explainedQty } from "../views/basis.ts";
 import { queueForReview } from "../views/budget.ts";
 import { lotsOf } from "../views/portfolio.ts";
 
@@ -20,7 +21,7 @@ export function connection(store: Store, id: string): ConnectionRow | undefined 
 
 /** Shares the recorded lots explain. */
 export function lotShares(store: Store, holdingId: string): number {
-  return lotsOf(store, holdingId).reduce((q, l) => q + (l.side === "sell" ? -1 : 1) * Number(l.qty), 0);
+  return explainedQty(lotsOf(store, holdingId));
 }
 
 /** No accounts, holdings or transactions; connections left as they are. */
