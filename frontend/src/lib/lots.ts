@@ -1,7 +1,8 @@
+import { LOT_DECIMAL_PLACES, LOT_MAX_INTEGER_DIGITS } from "../api/wire";
 import type { Lot, LotEntry, LotSide, LotSuggestion } from "../api/wire";
 import { calendarDay } from "./date";
 import {
-  DECIMAL_RE,
+  canonicalDecimal,
   compareDecimals,
   multiplyDecimals,
   negateDecimal,
@@ -21,17 +22,29 @@ export function lotCashAmount(side: LotSide, qty: string, price: string, fee?: s
   return side === "buy" ? negateDecimal(sumDecimals([gross, fee])) : subtractDecimals(gross, fee);
 }
 
-export type LotValidationError = "invalidNumber" | "nonPositiveQuantity" | "negativeUnitPrice" | "negativeFee";
+export type LotValidationError =
+  | "invalidNumber"
+  | "nonPositiveQuantity"
+  | "negativeUnitPrice"
+  | "negativeFee"
+  | "tooPrecise"
+  | "tooLarge";
+
+const LOT_MAX_MAGNITUDE = `1${"0".repeat(LOT_MAX_INTEGER_DIGITS)}`;
 
 /** The server's rules for one lot (`NewLot::parse`), checked against the same
- *  cases (`shared/lot-cases.json`), so a malformed row is caught with a
- *  specific message instead of a 400 once it round-trips to the API. Inputs
- *  are already normalised (`normaliseDecimal`). */
+ *  cases (`shared/lot-cases.json`), so a malformed row is flagged while it is
+ *  typed instead of refused on save. Inputs are already normalised
+ *  (`normaliseDecimal`). */
 export function validateLot(quantity: string, unitPrice: string, fee = "0"): LotValidationError | null {
-  if (!DECIMAL_RE.test(quantity) || !DECIMAL_RE.test(unitPrice) || !DECIMAL_RE.test(fee)) return "invalidNumber";
-  if (compareDecimals(quantity, "0") <= 0) return "nonPositiveQuantity";
-  if (compareDecimals(unitPrice, "0") < 0) return "negativeUnitPrice";
-  if (compareDecimals(fee, "0") < 0) return "negativeFee";
+  const figures = [quantity, unitPrice, fee].map(canonicalDecimal);
+  if (figures.some((f) => f === null)) return "invalidNumber";
+  const [q, p, f] = figures as string[];
+  if (compareDecimals(q, "0") <= 0) return "nonPositiveQuantity";
+  if (compareDecimals(p, "0") < 0) return "negativeUnitPrice";
+  if (compareDecimals(f, "0") < 0) return "negativeFee";
+  if ([q, p, f].some((x) => (x.split(".")[1] ?? "").length > LOT_DECIMAL_PLACES)) return "tooPrecise";
+  if ([q, p, f].some((x) => compareDecimals(x.replace("-", ""), LOT_MAX_MAGNITUDE) >= 0)) return "tooLarge";
   return null;
 }
 
@@ -71,13 +84,15 @@ export const byDate = <T extends { date: string }>(rows: T[]): T[] =>
 
 /** The server sends a decimal at a scale it chose, so a PEA lot arrives as
  *  "16.030" while the user retypes the same price as "16.03": equal, or the
- *  retyped row would be saved as a delete + re-add that changes nothing. A
- *  half-typed number ("16.") reads as changed, which is harmless: that row is
- *  invalid and already blocks Save. An empty field is zero. */
+ *  retyped row would be saved as a delete + re-add that changes nothing. An
+ *  unreadable number reads as changed, which is harmless: that row is invalid
+ *  and already blocks Save. An empty field is zero. */
 function sameAmount(a: string, b: string): boolean {
   const x = a.trim() === "" ? "0" : a.trim();
   const y = b.trim() === "" ? "0" : b.trim();
-  return x === y || (DECIMAL_RE.test(x) && DECIMAL_RE.test(y) && compareDecimals(x, y) === 0);
+  const cx = canonicalDecimal(x);
+  const cy = canonicalDecimal(y);
+  return x === y || (cx !== null && cy !== null && compareDecimals(cx, cy) === 0);
 }
 
 /** A saved row whose values no longer match what it was loaded with. */
@@ -113,9 +128,10 @@ export function badFee(raw: string, language: string): boolean {
  *  means zero. */
 export function lotEntry(r: LotRow, language: string): LotEntry | null {
   if (r.date === "") return null;
-  const quantity = normaliseDecimal(r.quantity, language);
-  const unitPrice = normaliseDecimal(r.unitPrice, language);
-  const fee = r.fee.trim() === "" ? undefined : normaliseDecimal(r.fee, language);
+  const quantity = canonicalDecimal(normaliseDecimal(r.quantity, language));
+  const unitPrice = canonicalDecimal(normaliseDecimal(r.unitPrice, language));
+  const fee = r.fee.trim() === "" ? undefined : canonicalDecimal(normaliseDecimal(r.fee, language));
+  if (quantity === null || unitPrice === null || fee === null) return null;
   if (validateLot(quantity, unitPrice, fee) !== null) return null;
   return { type: r.type, date: r.date, quantity, unitPrice, ...(fee !== undefined ? { fee } : {}) };
 }

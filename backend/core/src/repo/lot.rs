@@ -34,6 +34,9 @@ text_enum! {
 /// Decimal places a lot's quantity, unit price and fee may carry.
 pub const LOT_DECIMAL_PLACES: u32 = 8;
 
+/// A lot's quantity, unit price and fee are below 10^`LOT_MAX_INTEGER_DIGITS`.
+pub const LOT_MAX_INTEGER_DIGITS: u32 = 12;
+
 pub struct LotRow {
     pub id: Uuid,
     pub side: LotSide,
@@ -114,9 +117,10 @@ impl NewLot {
         fee: Option<&str>,
     ) -> Result<Self, InvalidLot> {
         let decimal = |value: &str, field| {
-            value
-                .parse::<Decimal>()
-                .map_err(|_| InvalidLot::NotADecimal(field))
+            is_plain_decimal(value)
+                .then(|| value.parse::<Decimal>().ok())
+                .flatten()
+                .ok_or(InvalidLot::NotADecimal(field))
         };
         let quantity = decimal(quantity, "quantity")?;
         let unit_price = decimal(unit_price, "unitPrice")?;
@@ -145,7 +149,7 @@ impl NewLot {
         if figures.iter().any(|f| f.scale() > LOT_DECIMAL_PLACES) {
             return Err(InvalidLot::TooPrecise);
         }
-        let max_magnitude = Decimal::from(1_000_000_000_000i64);
+        let max_magnitude = Decimal::from(10i64.pow(LOT_MAX_INTEGER_DIGITS));
         if figures.iter().any(|f| f.abs() >= max_magnitude) {
             return Err(InvalidLot::TooLarge);
         }
@@ -161,6 +165,15 @@ impl NewLot {
             fee,
         })
     }
+}
+
+/// Digits with an optional sign and decimal point, as the lot form takes
+/// them: `Decimal`'s parser also reads exponents and `_` separators.
+fn is_plain_decimal(value: &str) -> bool {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let (int, frac) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    !(int.is_empty() && frac.is_empty())
+        && int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit())
 }
 
 /// An edit of a holding's user-entered (`manual`) lots. Provider lots are

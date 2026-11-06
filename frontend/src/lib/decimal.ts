@@ -7,6 +7,17 @@
  *  well-formed input. */
 export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 
+/** A typed number in the API's form (`DECIMAL_RE`): `"+1"` is `"1"`, `".5"`
+ *  is `"0.5"`, `"1."` is `"1"`. Null unless it is digits with an optional
+ *  sign and decimal point. */
+export function canonicalDecimal(value: string): string | null {
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(value);
+  if (!m) return null;
+  const [, sign, int, frac = ""] = m;
+  if (int === "" && frac === "") return null;
+  return `${sign === "-" ? "-" : ""}${int || "0"}${frac ? `.${frac}` : ""}`;
+}
+
 type Scaled = { units: bigint; scale: number };
 
 function parse(value: string): Scaled {

@@ -729,6 +729,10 @@ export const PASSWORD_MIN_CHARS = 8;
 export const PASSWORD_MAX_CHARS = 128;
 /** The longest name a passkey may be given, in characters. */
 export const PASSKEY_NAME_MAX_CHARS = 64;
+/** Decimal places a lot's quantity, unit price and fee may carry. */
+export const LOT_DECIMAL_PLACES = 8;
+/** A lot's quantity, unit price and fee are below 10^`LOT_MAX_INTEGER_DIGITS`. */
+export const LOT_MAX_INTEGER_DIGITS = 12;
 /** The length of an authenticator code. */
 export const TOTP_DIGITS = 6;
 /** The review thresholds a user may pick, in percent. */

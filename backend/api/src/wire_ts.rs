@@ -119,6 +119,16 @@ fn constants() -> String {
         &auth::passkey::MAX_NAME_CHARS,
     );
     line(
+        "LOT_DECIMAL_PLACES",
+        "Decimal places a lot's quantity, unit price and fee may carry.",
+        &gripsou_core::repo::lot::LOT_DECIMAL_PLACES,
+    );
+    line(
+        "LOT_MAX_INTEGER_DIGITS",
+        "A lot's quantity, unit price and fee are below 10^`LOT_MAX_INTEGER_DIGITS`.",
+        &gripsou_core::repo::lot::LOT_MAX_INTEGER_DIGITS,
+    );
+    line(
         "TOTP_DIGITS",
         "The length of an authenticator code.",
         &auth::factors::TOTP_DIGITS,

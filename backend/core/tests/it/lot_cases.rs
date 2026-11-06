@@ -48,9 +48,9 @@ fn reason(err: InvalidLot) -> &'static str {
         InvalidLot::NonPositiveQuantity => "nonPositiveQuantity",
         InvalidLot::NegativeUnitPrice => "negativeUnitPrice",
         InvalidLot::NegativeFee => "negativeFee",
-        InvalidLot::TooPrecise | InvalidLot::TooLarge | InvalidLot::Overflow => {
-            "beyond the frontend's rules"
-        }
+        InvalidLot::TooPrecise => "tooPrecise",
+        InvalidLot::TooLarge => "tooLarge",
+        InvalidLot::Overflow => "beyond the frontend's rules",
     }
 }
 

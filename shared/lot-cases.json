@@ -28,6 +28,23 @@
     { "case": "a grouped number", "quantity": "1,234", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
     { "case": "an empty unit price", "quantity": "1", "unitPrice": "", "fee": null, "refused": "invalidNumber" },
     { "case": "an unparsable fee", "quantity": "1", "unitPrice": "10", "fee": "abc", "refused": "invalidNumber" },
-    { "case": "a number is checked before any sign", "quantity": "-1", "unitPrice": "abc", "fee": null, "refused": "invalidNumber" }
+    { "case": "a number is checked before any sign", "quantity": "-1", "unitPrice": "abc", "fee": null, "refused": "invalidNumber" },
+    { "case": "a trailing decimal point", "quantity": "1.", "unitPrice": "10", "fee": null, "refused": null },
+    { "case": "a leading decimal point", "quantity": ".5", "unitPrice": "10", "fee": null, "refused": null },
+    { "case": "an explicit plus sign", "quantity": "+1", "unitPrice": "10", "fee": null, "refused": null },
+    { "case": "a lone decimal point", "quantity": ".", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
+    { "case": "a digit separator", "quantity": "1_000", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
+    { "case": "an exponent", "quantity": "1e3", "unitPrice": "10", "fee": null, "refused": "invalidNumber" },
+    { "case": "eight decimal places on every figure", "quantity": "0.12345678", "unitPrice": "1.12345678", "fee": "0.12345678", "refused": null },
+    { "case": "a ninth decimal place on the quantity", "quantity": "0.123456789", "unitPrice": "10", "fee": null, "refused": "tooPrecise" },
+    { "case": "a ninth decimal place counts even as a zero", "quantity": "1", "unitPrice": "10.000000000", "fee": null, "refused": "tooPrecise" },
+    { "case": "a ninth decimal place on the fee", "quantity": "1", "unitPrice": "10", "fee": "0.000000001", "refused": "tooPrecise" },
+    { "case": "the largest quantity", "quantity": "999999999999.99999999", "unitPrice": "1", "fee": null, "refused": null },
+    { "case": "the largest unit price and fee", "quantity": "1", "unitPrice": "999999999999.99999999", "fee": "999999999999.99999999", "refused": null },
+    { "case": "a quantity of 10^12", "quantity": "1000000000000", "unitPrice": "10", "fee": null, "refused": "tooLarge" },
+    { "case": "a unit price of 10^12", "quantity": "1", "unitPrice": "1000000000000", "fee": null, "refused": "tooLarge" },
+    { "case": "a fee of 10^12", "quantity": "1", "unitPrice": "10", "fee": "1000000000000", "refused": "tooLarge" },
+    { "case": "leading zeros don't count toward the size", "quantity": "0000999999999999", "unitPrice": "10", "fee": null, "refused": null },
+    { "case": "the sign is checked before the size", "quantity": "1", "unitPrice": "-1000000000000", "fee": null, "refused": "negativeUnitPrice" }
   ]
 }
