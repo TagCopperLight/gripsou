@@ -17,7 +17,7 @@ pub enum ApiError {
     Forbidden(&'static str),
     NotFound(&'static str),
     Conflict(&'static str),
-    /// A login or passkey challenge that is used up or past its 5 minutes.
+    /// A login or passkey challenge that is used up or expired.
     ChallengeExpired,
     Unprocessable(&'static str),
     TooMany {

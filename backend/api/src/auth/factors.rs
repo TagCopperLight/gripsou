@@ -22,22 +22,13 @@ pub fn base32_secret(secret: &[u8]) -> String {
         .to_string()
 }
 
-fn percent_encode(input: &str) -> String {
-    let mut out = String::new();
-    for b in input.bytes() {
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
-}
-
 pub fn otpauth_uri(secret: &[u8], email: &str) -> String {
     format!(
         "otpauth://totp/gripsou:{}?secret={}&issuer=gripsou&algorithm=SHA1&digits=6&period={TOTP_STEP_SECS}",
-        percent_encode(email),
+        // The label is a path segment: authenticator apps read `+` there literally.
+        url::form_urlencoded::byte_serialize(email.as_bytes())
+            .collect::<String>()
+            .replace('+', "%20"),
         base32_secret(secret)
     )
 }
@@ -68,7 +59,7 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// The step `code` matches for this encrypted secret, at the current time.
 pub fn check_totp(
-    key: &crate::EncryptionKey,
+    key: &gripsou_core::crypto::EncryptionKey,
     secret_enc: &str,
     code: &str,
 ) -> Result<Option<u64>, gripsou_core::crypto::CryptoError> {
@@ -94,8 +85,20 @@ pub fn match_totp(secret: &[u8], code: &str, now_unix: u64) -> Option<u64> {
     found
 }
 
+/// A fresh set of backup codes: shown to the user once, stored as hashes.
+pub struct RecoveryCodes {
+    pub plain: Vec<String>,
+    pub hashes: Vec<Vec<u8>>,
+}
+
+pub fn new_recovery_codes() -> RecoveryCodes {
+    let plain = recovery_code_strings();
+    let hashes = plain.iter().map(|c| hash_recovery_code(c)).collect();
+    RecoveryCodes { plain, hashes }
+}
+
 /// Ten codes shaped `xxxxx-xxxxx`, from OS randomness.
-pub fn new_recovery_codes() -> Vec<String> {
+fn recovery_code_strings() -> Vec<String> {
     let mut codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
     while codes.len() < RECOVERY_CODE_COUNT {
         let mut raw = [0u8; 10];
@@ -121,7 +124,7 @@ pub fn new_recovery_codes() -> Vec<String> {
     codes
 }
 
-pub fn normalize_recovery_code(input: &str) -> String {
+fn normalize_recovery_code(input: &str) -> String {
     input
         .chars()
         .filter(|c| *c != ' ' && *c != '-')
@@ -191,8 +194,8 @@ mod tests {
 
     #[test]
     fn otpauth_uri_names_issuer_and_escapes_email() {
-        let uri = otpauth_uri(RFC_SECRET, "ann+x@t.local");
-        assert!(uri.starts_with("otpauth://totp/gripsou:ann%2Bx%40t.local?"));
+        let uri = otpauth_uri(RFC_SECRET, "ann+x y@t.local");
+        assert!(uri.starts_with("otpauth://totp/gripsou:ann%2Bx%20y%40t.local?"));
         assert!(uri.contains("secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"));
         assert!(uri.contains("issuer=gripsou"));
     }
@@ -205,7 +208,7 @@ mod tests {
 
     #[test]
     fn recovery_codes_are_ten_distinct_readable_codes() {
-        let codes = new_recovery_codes();
+        let codes = new_recovery_codes().plain;
         assert_eq!(codes.len(), RECOVERY_CODE_COUNT);
         let unique: std::collections::HashSet<_> = codes.iter().collect();
         assert_eq!(unique.len(), RECOVERY_CODE_COUNT);

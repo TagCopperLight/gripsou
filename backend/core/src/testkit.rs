@@ -37,6 +37,22 @@ pub async fn seed_user_as(pool: &PgPool, email: &str, role: Role, password_hash:
     seed_user_with_id(pool, Uuid::new_v4(), email, role, password_hash).await
 }
 
+/// Push the expiry of a session, challenge or invite/reset link (matched by
+/// `table`'s `where_sql`, binding `$1` to `key`) an hour into the past.
+pub async fn expire<K>(pool: &PgPool, table: &str, where_sql: &str, key: K)
+where
+    K: for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send,
+{
+    let res = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "update {table} set expires_at = now() - interval '1 hour' where {where_sql}"
+    )))
+    .bind(key)
+    .execute(pool)
+    .await
+    .unwrap();
+    assert_eq!(res.rows_affected(), 1, "expired nothing in {table}");
+}
+
 async fn seed_user_with_id(
     pool: &PgPool,
     id: Uuid,

@@ -815,14 +815,13 @@ pub struct SessionDto {
 
 impl SessionDto {
     pub fn from_row(s: gripsou_core::repo::session::Session, current_id: uuid::Uuid) -> Self {
-        use crate::auth;
         SessionDto {
             current: s.id == current_id,
             id: s.id.to_string(),
             device: s
                 .user_agent
                 .as_deref()
-                .map(auth::parse_user_agent)
+                .map(crate::auth::client::device_name)
                 .unwrap_or_else(|| "Unknown device".to_string()),
             ip: s.ip,
             created_at: s.created_at.timestamp_millis(),

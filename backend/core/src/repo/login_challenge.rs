@@ -19,6 +19,9 @@ text_enum! {
     }
 }
 
+/// How long a challenge can be used after it is issued.
+pub const TTL_MINUTES: i32 = 5;
+
 pub struct Challenge {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
@@ -26,8 +29,8 @@ pub struct Challenge {
     pub state: serde_json::Value,
 }
 
-/// Store a challenge that expires 5 minutes from now (computed in SQL, so the
-/// clock is the database's). `token_hash` is unique; a collision is an error.
+/// Store a challenge that expires [`TTL_MINUTES`] from now, by the
+/// database's clock. `token_hash` is unique; a collision is an error.
 pub async fn create(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
@@ -37,11 +40,12 @@ pub async fn create(
 ) -> Result<(), CoreError> {
     sqlx::query!(
         r#"insert into login_challenge (token_hash, user_id, kind, state, expires_at)
-           values ($1, $2, $3, $4, now() + interval '5 minutes')"#,
+           values ($1, $2, $3, $4, now() + make_interval(mins => $5))"#,
         token_hash,
         user_id,
         kind as ChallengeKind,
         state,
+        TTL_MINUTES,
     )
     .execute(pool)
     .await?;

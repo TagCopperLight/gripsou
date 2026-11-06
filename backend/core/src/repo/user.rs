@@ -110,45 +110,64 @@ pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     Ok(rows)
 }
 
-/// Number of users with the `admin` role. Used to refuse deleting the last
-/// admin, which would lock everyone out of admin-only settings.
-pub async fn count_admins(pool: &sqlx::PgPool) -> Result<i64, CoreError> {
-    let n = sqlx::query_scalar!(
-        "select count(*) from users where role = $1",
-        Role::Admin as Role,
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(n.unwrap_or(0))
+/// What a role change or a deletion did. Both refuse to leave the server
+/// without an admin: nobody could reach the admin-only settings again.
+#[derive(Debug, PartialEq, Eq)]
+pub enum AdminGuarded {
+    Done,
+    NotFound,
+    LastAdmin,
 }
 
-/// Set a user's role, unless that would leave no admin: the check and the
-/// write are one statement, so two admins demoting each other at once can't
-/// both succeed. False when refused, or when the user doesn't exist.
-pub async fn set_role(pool: &sqlx::PgPool, user_id: Uuid, role: Role) -> Result<bool, CoreError> {
-    let res = sqlx::query!(
-        r#"
-        update users set role = $2
-        where id = $1
-          and ($2 = $3 or exists (select 1 from users where role = $3 and id <> $1))
-        "#,
-        user_id,
-        role as Role,
+/// Lock every admin row until the transaction ends, so two admins removed at
+/// once wait for each other and the second sees the first gone.
+async fn lock_admins(conn: &mut sqlx::PgConnection) -> Result<Vec<Uuid>, CoreError> {
+    Ok(sqlx::query_scalar!(
+        "select id from users where role = $1 order by id for update",
         Role::Admin as Role,
     )
-    .execute(pool)
+    .fetch_all(conn)
+    .await?)
+}
+
+pub async fn set_role(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    role: Role,
+) -> Result<AdminGuarded, CoreError> {
+    let mut tx = pool.begin().await?;
+    if role != Role::Admin && lock_admins(&mut tx).await? == [user_id] {
+        return Ok(AdminGuarded::LastAdmin);
+    }
+    let res = sqlx::query!(
+        "update users set role = $2 where id = $1",
+        user_id,
+        role as Role,
+    )
+    .execute(&mut *tx)
     .await?;
-    Ok(res.rows_affected() == 1)
+    if res.rows_affected() == 0 {
+        return Ok(AdminGuarded::NotFound);
+    }
+    tx.commit().await?;
+    Ok(AdminGuarded::Done)
 }
 
 /// Permanently delete a user. FK `on delete cascade` removes their sessions,
-/// connections, accounts, holdings and snapshots. Returns true when a row was
-/// deleted (the user existed).
-pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
+/// connections, accounts, holdings and snapshots.
+pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<AdminGuarded, CoreError> {
+    let mut tx = pool.begin().await?;
+    if lock_admins(&mut tx).await? == [user_id] {
+        return Ok(AdminGuarded::LastAdmin);
+    }
     let res = sqlx::query!(r#"delete from users where id = $1"#, user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
-    Ok(res.rows_affected() == 1)
+    if res.rows_affected() == 0 {
+        return Ok(AdminGuarded::NotFound);
+    }
+    tx.commit().await?;
+    Ok(AdminGuarded::Done)
 }
 
 /// Update the user's display name and email, returning the refreshed profile

@@ -2,16 +2,19 @@
 //! and deletion.
 
 use axum::Json;
-use axum::extract::{ConnectInfo, Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use gripsou_core::repo::session;
+use gripsou_core::repo::user::AdminGuarded;
 use sqlx::PgPool;
-use std::net::SocketAddr;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::auth::{self, AuthUser};
+use crate::auth::client::Client;
+use crate::auth::throttle::Throttles;
+use crate::auth::{AuthUser, password};
 use crate::dto;
 use crate::error::ApiError;
-use gripsou_core::repo::user::Role;
 
 pub async fn me(
     State(pool): State<PgPool>,
@@ -60,7 +63,7 @@ pub async fn logout(
         session_id,
     }: AuthUser,
 ) -> Result<StatusCode, ApiError> {
-    gripsou_core::repo::session::delete(&pool, user_id, session_id).await?;
+    session::delete(&pool, user_id, session_id).await?;
     tracing::info!(user_id = %user_id, "logout");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -72,7 +75,7 @@ pub async fn list_sessions(
         session_id,
     }: AuthUser,
 ) -> Result<Json<Vec<dto::SessionDto>>, ApiError> {
-    let rows = gripsou_core::repo::session::list_for_user(&pool, user_id).await?;
+    let rows = session::list_for_user(&pool, user_id).await?;
     Ok(Json(
         rows.into_iter()
             .map(|s| dto::SessionDto::from_row(s, session_id))
@@ -85,7 +88,7 @@ pub async fn revoke_session(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = gripsou_core::repo::session::delete(&pool, user_id, id).await?;
+    let deleted = session::delete(&pool, user_id, id).await?;
     if deleted {
         tracing::info!(user_id = %user_id, session_id = %id, "session revoked");
         Ok(StatusCode::NO_CONTENT)
@@ -101,58 +104,43 @@ pub async fn revoke_other_sessions(
         session_id,
     }: AuthUser,
 ) -> Result<StatusCode, ApiError> {
-    gripsou_core::repo::session::delete_others(&pool, user_id, session_id).await?;
+    session::delete_all(&pool, user_id, Some(session_id)).await?;
     tracing::info!(user_id = %user_id, "other sessions revoked");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn change_password(
     State(pool): State<PgPool>,
-    State(throttle): State<std::sync::Arc<crate::auth::throttle::LoginThrottle>>,
-    headers: HeaderMap,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(throttles): State<Arc<Throttles>>,
+    client: Client,
     AuthUser {
         user_id,
         session_id,
     }: AuthUser,
     Json(body): Json<dto::ChangePasswordReq>,
 ) -> Result<StatusCode, ApiError> {
-    auth::validate_new_password(&body.new_password)?;
-    crate::auth::mfa::check_password(
-        &pool,
-        &throttle,
-        &headers,
-        peer,
-        user_id,
-        &body.current_password,
-    )
-    .await?;
-    let new_hash = auth::hash_password(&body.new_password)?;
+    password::validate_new(&body.new_password)?;
+    password::check(&pool, &throttles, &client, user_id, &body.current_password).await?;
+    let new_hash = password::hash(&body.new_password)?;
     gripsou_core::repo::user::update_password(&pool, user_id, &new_hash).await?;
-    gripsou_core::repo::session::delete_others(&pool, user_id, session_id).await?;
+    session::delete_all(&pool, user_id, Some(session_id)).await?;
     tracing::info!(user_id = %user_id, "password changed");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_account(
     State(pool): State<PgPool>,
-    State(throttle): State<std::sync::Arc<crate::auth::throttle::LoginThrottle>>,
-    headers: HeaderMap,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(throttles): State<Arc<Throttles>>,
+    client: Client,
     AuthUser { user_id, .. }: AuthUser,
     Json(body): Json<dto::DeleteAccountReq>,
 ) -> Result<StatusCode, ApiError> {
-    crate::auth::mfa::check_password(&pool, &throttle, &headers, peer, user_id, &body.password)
-        .await?;
-    let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
-        .await?
-        .ok_or(ApiError::Unauthorized)?;
-    // Refuse to delete the last admin: doing so would lock everyone out of the
-    // admin-only settings (user management, server config) for good.
-    if profile.role == Role::Admin && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
-        return Err(ApiError::Conflict("cannot delete the last admin"));
+    password::check(&pool, &throttles, &client, user_id, &body.password).await?;
+    match gripsou_core::repo::user::delete_user(&pool, user_id).await? {
+        AdminGuarded::Done => {}
+        AdminGuarded::NotFound => return Err(ApiError::Unauthorized),
+        AdminGuarded::LastAdmin => return Err(ApiError::Conflict("cannot delete the last admin")),
     }
-    gripsou_core::repo::user::delete_user(&pool, user_id).await?;
     tracing::info!(user_id = %user_id, "account deleted");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -161,11 +149,9 @@ pub async fn delete_account(
 mod tests {
     use super::*;
     use crate::auth;
-    use crate::auth::throttle::LoginThrottle;
     use crate::dto::ChangePasswordReq;
     use crate::testkit::*;
     use sqlx::PgPool;
-    use std::sync::Arc;
 
     #[sqlx::test(migrations = "../migrations")]
     async fn me_returns_profile_and_logout_revokes(pool: PgPool) {
@@ -292,9 +278,8 @@ mod tests {
 
         change_password(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: cur.user_id,
                 session_id: cur.id,
@@ -325,7 +310,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(auth::verify_password("new-pass", &hash));
+        assert!(auth::password::verify("new-pass", &hash));
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -346,9 +331,8 @@ mod tests {
         // A wrong password is rejected and the user/session survive.
         let bad = delete_account(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
@@ -370,9 +354,8 @@ mod tests {
         // The right password deletes the user; the session is gone via FK cascade.
         delete_account(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
@@ -414,9 +397,8 @@ mod tests {
         // Sole admin: deletion is refused even with the right password.
         let err = delete_account(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
@@ -439,9 +421,8 @@ mod tests {
         seed_user_with_password(&pool, "boss2@t.local", "pw", Role::Admin).await;
         delete_account(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: principal.user_id,
                 session_id: principal.session_id,
@@ -549,9 +530,8 @@ mod tests {
 
         let bad = change_password(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             auth::AuthUser {
                 user_id: id,
                 session_id: session.id,
@@ -570,13 +550,12 @@ mod tests {
     async fn change_password_is_throttled_like_login(pool: PgPool) {
         seed_user_with_password(&pool, "c@t.local", "old-password", Role::User).await;
         let who = principal_for(&pool, "c@t.local", "old-password").await;
-        let throttle = Arc::new(LoginThrottle::default());
+        let throttle = throttles();
         let attempt = |current: &str| {
             change_password(
                 State(pool.clone()),
                 State(throttle.clone()),
-                axum::http::HeaderMap::new(),
-                axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+                local(),
                 AuthUser {
                     user_id: who.user_id,
                     session_id: who.session_id,
@@ -646,9 +625,8 @@ mod tests {
         let who = principal_for(&pool, "c@t.local", "old-password").await;
         let err = change_password(
             State(pool.clone()),
-            no_throttle(),
-            axum::http::HeaderMap::new(),
-            axum::extract::ConnectInfo("127.0.0.1:0".parse().unwrap()),
+            State(throttles()),
+            local(),
             who,
             Json(dto::ChangePasswordReq {
                 current_password: "old-password".into(),

@@ -30,20 +30,21 @@ use tower_http::trace::TraceLayer;
 pub use auth::passkey::Passkeys;
 pub use gripsou_core::crypto::EncryptionKey;
 
-use crate::auth::throttle::{LoginThrottle, SecondFactorThrottle};
+use crate::auth::throttle::Throttles;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
-    pub login_throttle: Arc<LoginThrottle>,
-    pub second_factor_throttle: Arc<SecondFactorThrottle>,
+    pub throttles: Arc<Throttles>,
+    /// Encrypts the authenticator secrets.
+    pub key: EncryptionKey,
     pub jobs: Arc<gripsou_jobs::Deps>,
     pub passkeys: Passkeys,
 }
 
 impl FromRef<AppState> for EncryptionKey {
     fn from_ref(state: &AppState) -> EncryptionKey {
-        state.jobs.key.clone()
+        state.key.clone()
     }
 }
 
@@ -65,15 +66,9 @@ impl FromRef<AppState> for sqlx::PgPool {
     }
 }
 
-impl FromRef<AppState> for Arc<LoginThrottle> {
-    fn from_ref(state: &AppState) -> Arc<LoginThrottle> {
-        state.login_throttle.clone()
-    }
-}
-
-impl FromRef<AppState> for Arc<SecondFactorThrottle> {
-    fn from_ref(state: &AppState) -> Arc<SecondFactorThrottle> {
-        state.second_factor_throttle.clone()
+impl FromRef<AppState> for Arc<Throttles> {
+    fn from_ref(state: &AppState) -> Arc<Throttles> {
+        state.throttles.clone()
     }
 }
 
@@ -81,12 +76,13 @@ pub fn router(
     db: sqlx::PgPool,
     static_dir: &std::path::Path,
     jobs: Arc<gripsou_jobs::Deps>,
+    key: EncryptionKey,
     passkeys: Passkeys,
 ) -> Router {
     let app_state = AppState {
         db: db.clone(),
-        login_throttle: Arc::new(LoginThrottle::default()),
-        second_factor_throttle: Arc::new(SecondFactorThrottle::default()),
+        throttles: Arc::new(Throttles::default()),
+        key,
         jobs,
         passkeys,
     };

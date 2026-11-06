@@ -292,10 +292,7 @@ pub async fn reset_for_email(
         return Ok(None);
     };
     let cleared = clear_all(&mut tx, user_id).await?;
-    let sessions = sqlx::query!(r#"delete from session where user_id = $1"#, user_id)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected();
+    let sessions = crate::repo::session::delete_all(&mut *tx, user_id, None).await?;
     tx.commit().await?;
     Ok(Some((cleared, sessions)))
 }

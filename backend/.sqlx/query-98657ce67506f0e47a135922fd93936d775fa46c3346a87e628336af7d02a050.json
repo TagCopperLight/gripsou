@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "delete from session where user_id = $1 and id <> $2",
+  "query": "delete from session where user_id = $1 and id is distinct from $2",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "e2bec35e8adbeab94759d6ecd46d5c3cd1db700f13a618061a19399a34bd0cdc"
+  "hash": "98657ce67506f0e47a135922fd93936d775fa46c3346a87e628336af7d02a050"
 }

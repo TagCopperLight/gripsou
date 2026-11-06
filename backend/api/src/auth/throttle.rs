@@ -5,15 +5,16 @@
 //! as one instance, so a restart clearing the counters is acceptable (an
 //! attacker can't trigger one).
 //!
-//! Two limiters share the same counting rules ([`Policy`]):
-//! - [`LoginThrottle`] for passwords (per account, short memory) and per IP;
-//! - [`SecondFactorThrottle`] for second-step codes (per account, a day of
-//!   memory and longer waits), because someone who knows the password could
-//!   otherwise keep guessing codes at the password limiter's pace forever.
+//! [`Throttles`] holds three limiters under the same counting rules ([`Policy`]):
+//! passwords per account (short memory), attempts per IP, and second-step
+//! codes per account (a day of memory and longer waits), because someone who
+//! knows the password could otherwise keep guessing codes at the password
+//! limiter's pace forever.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 const MIN: Duration = Duration::from_secs(60);
 /// Above this many keys, stale entries are dropped on the next failure.
@@ -220,8 +221,21 @@ fn try_all(slots: &[(&Limiter, &str)], now: Instant) -> Result<(), Blocked> {
     Ok(())
 }
 
-fn account_key(email: &str) -> String {
-    email.trim().to_lowercase()
+/// Whose password is being tried: an account once the email names one, else
+/// the email as typed, so unknown addresses are slowed down like real ones.
+#[derive(Debug, Clone, Copy)]
+pub enum Account<'a> {
+    User(Uuid),
+    Email(&'a str),
+}
+
+impl Account<'_> {
+    fn key(self) -> String {
+        match self {
+            Account::User(id) => format!("user:{id}"),
+            Account::Email(email) => format!("email:{}", email.trim().to_lowercase()),
+        }
+    }
 }
 
 /// A panic while holding the lock leaves plain counters behind: still usable.
@@ -229,132 +243,174 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Password attempts, per account and per IP.
-pub struct LoginThrottle {
-    accounts: Limiter,
+/// Every sign-in limiter. Each check counts the attempt as a failure up
+/// front and hands back an [`Attempt`]: calling [`Attempt::succeeded`] is the
+/// only way to give it back, and dropping it leaves the failure counted.
+pub struct Throttles {
+    passwords: Limiter,
     ips: Limiter,
+    second_factor: Limiter,
 }
 
-impl Default for LoginThrottle {
+impl Default for Throttles {
     fn default() -> Self {
-        LoginThrottle {
-            accounts: Limiter::new(&PASSWORD),
+        Throttles {
+            passwords: Limiter::new(&PASSWORD),
             ips: Limiter::new(&IP),
+            second_factor: Limiter::new(&SECOND_FACTOR),
         }
     }
 }
 
-impl LoginThrottle {
-    /// Refuse an attempt while its account or its IP is waiting; otherwise
-    /// count it as a failure for both right away, before the password is
-    /// checked. A correct password gives it back ([`Self::record_success`]);
-    /// a wrong one needs nothing more.
-    pub fn try_attempt(&self, email: &str, ip: &str, now: Instant) -> Result<(), Blocked> {
-        let key = account_key(email);
-        try_all(&[(&self.accounts, &key), (&self.ips, ip)], now)
-    }
-
-    /// A correct login clears its account and gives back the failure its
-    /// attempt reserved on the IP. The IP keeps its other failures, and a wait
-    /// earned by thirty real failures stays; only a wait this very attempt's
-    /// reservation started is lifted.
-    pub fn record_success(&self, email: &str, ip: &str) {
-        self.accounts.clear(&account_key(email));
-        self.ips.refund(ip);
-    }
-
-    /// A sign-in with no account to count against yet (passwordless passkey):
-    /// only the IP limit applies. A success gives it back ([`Self::refund_ip`]).
-    pub fn try_ip(&self, ip: &str, now: Instant) -> Result<(), Blocked> {
-        try_all(&[(&self.ips, ip)], now)
-    }
-
-    pub fn refund_ip(&self, ip: &str) {
-        self.ips.refund(ip);
-    }
-
-    /// How many accounts and IPs have an entry.
-    #[cfg(test)]
-    pub(crate) fn tracked_keys(&self) -> (usize, usize) {
-        (lock(&self.accounts.keys).len(), lock(&self.ips.keys).len())
-    }
+/// One counted attempt; see [`Throttles`].
+#[must_use = "dropping an attempt leaves it counted as a failure"]
+pub struct Attempt<'a> {
+    clear: Vec<(&'a Limiter, String)>,
+    refund_ip: Option<(&'a Limiter, String)>,
 }
 
-/// Second-step codes (login authenticator or backup code, authenticator
-/// setup confirmation), per account. Separate from [`LoginThrottle`] so its
-/// long memory never slows down password logins.
-pub struct SecondFactorThrottle {
-    accounts: Limiter,
-}
-
-impl Default for SecondFactorThrottle {
-    fn default() -> Self {
-        SecondFactorThrottle {
-            accounts: Limiter::new(&SECOND_FACTOR),
+impl Attempt<'_> {
+    /// The secret was right: clear the account counters this attempt names,
+    /// and give back the one failure it reserved on the IP. The IP keeps its
+    /// other failures, and a wait thirty real failures earned stays.
+    pub fn succeeded(self) {
+        for (limiter, key) in &self.clear {
+            limiter.clear(key);
+        }
+        if let Some((limiter, ip)) = &self.refund_ip {
+            limiter.refund(ip);
         }
     }
 }
 
-impl SecondFactorThrottle {
-    /// A login code attempt: refused while the account's second-factor
-    /// counter or the IP of `passwords` is waiting, otherwise counted on both
-    /// up front. A right code gives it back ([`Self::record_login_success`]).
-    pub fn try_login(
+impl Throttles {
+    /// A password: refused while the account or the IP waits.
+    pub fn password(
         &self,
-        passwords: &LoginThrottle,
-        email: &str,
+        account: Account<'_>,
         ip: &str,
         now: Instant,
-    ) -> Result<(), Blocked> {
-        let key = account_key(email);
-        try_all(&[(&self.accounts, &key), (&passwords.ips, ip)], now)
+    ) -> Result<Attempt<'_>, Blocked> {
+        let key = account.key();
+        attempt(
+            &[(&self.passwords, &key), (&self.ips, ip)],
+            now,
+            account,
+            Some(ip),
+        )?;
+        Ok(Attempt {
+            clear: vec![(&self.passwords, key)],
+            refund_ip: Some((&self.ips, ip.to_string())),
+        })
     }
 
-    /// A right login code clears the account here and in `passwords` (whose
-    /// count still holds the password step) and gives back one IP failure.
-    pub fn record_login_success(&self, passwords: &LoginThrottle, email: &str, ip: &str) {
-        self.accounts.clear(&account_key(email));
-        passwords.record_success(email, ip);
+    /// A login's second-step code: refused while the account's code counter
+    /// or the IP waits. A right code also clears the account's password
+    /// counter, which still holds the password step.
+    pub fn login_code(&self, user: Uuid, ip: &str, now: Instant) -> Result<Attempt<'_>, Blocked> {
+        let account = Account::User(user);
+        let key = account.key();
+        attempt(
+            &[(&self.second_factor, &key), (&self.ips, ip)],
+            now,
+            account,
+            Some(ip),
+        )?;
+        Ok(Attempt {
+            clear: vec![(&self.second_factor, key.clone()), (&self.passwords, key)],
+            refund_ip: Some((&self.ips, ip.to_string())),
+        })
     }
 
-    /// A code attempt with no IP limit (the caller is already signed in).
-    pub fn try_attempt(&self, email: &str, now: Instant) -> Result<(), Blocked> {
-        let key = account_key(email);
-        try_all(&[(&self.accounts, &key)], now)
+    /// A code confirming an authenticator setup: the caller is signed in, so
+    /// only the account's code counter applies.
+    pub fn setup_code(&self, user: Uuid, now: Instant) -> Result<Attempt<'_>, Blocked> {
+        let account = Account::User(user);
+        let key = account.key();
+        attempt(&[(&self.second_factor, &key)], now, account, None)?;
+        Ok(Attempt {
+            clear: vec![(&self.second_factor, key)],
+            refund_ip: None,
+        })
     }
 
-    /// A right code clears the account.
-    pub fn record_success(&self, email: &str) {
-        self.accounts.clear(&account_key(email));
+    /// The start of a passwordless sign-in, which names no account yet: only
+    /// the IP counts. It finishes in another request, which gives the failure
+    /// back with [`Self::passkey_signed_in`].
+    pub fn passkey_options(&self, ip: &str, now: Instant) -> Result<(), Blocked> {
+        try_all(&[(&self.ips, ip)], now).inspect_err(|b| log_refusal(b, None, Some(ip)))
     }
+
+    pub fn passkey_signed_in(&self, ip: &str) {
+        self.ips.refund(ip);
+    }
+
+    /// How many password accounts and IPs have an entry.
+    #[cfg(test)]
+    pub(crate) fn tracked_keys(&self) -> (usize, usize) {
+        (lock(&self.passwords.keys).len(), lock(&self.ips.keys).len())
+    }
+}
+
+fn attempt(
+    slots: &[(&Limiter, &str)],
+    now: Instant,
+    account: Account<'_>,
+    ip: Option<&str>,
+) -> Result<(), Blocked> {
+    try_all(slots, now).inspect_err(|b| log_refusal(b, Some(account), ip))
+}
+
+/// One line per wait, at its first refusal: a flood of refused requests logs
+/// once.
+fn log_refusal(blocked: &Blocked, account: Option<Account<'_>>, ip: Option<&str>) {
+    if !blocked.first_refusal {
+        return;
+    }
+    let (user_id, email) = match account {
+        Some(Account::User(id)) => (Some(id), None),
+        Some(Account::Email(email)) => (None, Some(email)),
+        None => (None, None),
+    };
+    tracing::warn!(
+        user_id = user_id.map(tracing::field::display),
+        email,
+        ip,
+        reason = blocked.reason.as_str(),
+        "login throttled"
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn email(e: &str) -> Account<'_> {
+        Account::Email(e)
+    }
+
     /// `times` wrong passwords: attempts that must be let through.
-    fn fail(t: &LoginThrottle, email: &str, ip: &str, now: Instant, times: u32) {
+    fn fail(t: &Throttles, e: &str, ip: &str, now: Instant, times: u32) {
         for _ in 0..times {
-            t.try_attempt(email, ip, now).expect("attempt let through");
+            let _ = t.password(email(e), ip, now).expect("attempt let through");
         }
     }
 
     /// One correct password.
-    fn succeed(t: &LoginThrottle, email: &str, ip: &str, now: Instant) {
-        t.try_attempt(email, ip, now).expect("attempt let through");
-        t.record_success(email, ip);
+    fn succeed(t: &Throttles, e: &str, ip: &str, now: Instant) {
+        t.password(email(e), ip, now)
+            .expect("attempt let through")
+            .succeeded();
+    }
+
+    fn refused(t: &Throttles, e: &str, ip: &str, now: Instant) -> Blocked {
+        t.password(email(e), ip, now).err().expect("refused")
     }
 
     /// Whether an attempt would be refused, without making one.
-    fn peek(
-        t: &LoginThrottle,
-        email: &str,
-        ip: &str,
-        now: Instant,
-    ) -> Result<(), (Reason, Duration)> {
+    fn peek(t: &Throttles, e: &str, ip: &str, now: Instant) -> Result<(), (Reason, Duration)> {
         let waiting = |l: &Limiter, k: &str| lock(&l.keys).get(k).and_then(|e| e.blocked_for(now));
-        if let Some(d) = waiting(&t.accounts, &account_key(email)) {
+        if let Some(d) = waiting(&t.passwords, &email(e).key()) {
             return Err((Reason::Account, d));
         }
         if let Some(d) = waiting(&t.ips, ip) {
@@ -363,14 +419,18 @@ mod tests {
         Ok(())
     }
 
+    fn failures(l: &Limiter, key: &str) -> u32 {
+        lock(&l.keys).get(key).unwrap().failures
+    }
+
     #[test]
     fn four_failures_are_free_the_fifth_starts_a_one_minute_wait() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "1.1.1.1", now, 4);
         assert_eq!(peek(&t, "a@t.local", "1.1.1.1", now), Ok(()));
         fail(&t, "a@t.local", "1.1.1.1", now, 1);
-        let b = t.try_attempt("a@t.local", "1.1.1.1", now).unwrap_err();
+        let b = refused(&t, "a@t.local", "1.1.1.1", now);
         assert_eq!(b.reason, Reason::Account);
         assert_eq!(b.retry_after, MIN);
         assert_eq!(b.retry_after_secs(), 60);
@@ -379,12 +439,12 @@ mod tests {
 
     #[test]
     fn waits_double_and_cap_at_fifteen_minutes() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let mut now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 4);
         for expected in [1, 2, 4, 8, 15, 15] {
             fail(&t, "a@t.local", "ip", now, 1);
-            let b = t.try_attempt("a@t.local", "ip", now).unwrap_err();
+            let b = refused(&t, "a@t.local", "ip", now);
             assert_eq!(b.retry_after, MIN * expected);
             // Next attempt right when the wait ends, still inside the window.
             now += b.retry_after;
@@ -393,60 +453,44 @@ mod tests {
 
     #[test]
     fn a_refused_attempt_is_not_counted() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 5);
         for _ in 0..10 {
-            t.try_attempt("a@t.local", "ip", now).unwrap_err();
+            refused(&t, "a@t.local", "ip", now);
         }
         // Still the first wait's end, and the next failure starts 2 minutes.
         fail(&t, "a@t.local", "ip", now + MIN, 1);
-        let b = t.try_attempt("a@t.local", "ip", now + MIN).unwrap_err();
+        let b = refused(&t, "a@t.local", "ip", now + MIN);
         assert_eq!(b.retry_after, MIN * 2);
     }
 
     #[test]
     fn only_the_first_refusal_of_each_wait_is_flagged() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 5);
-        assert!(
-            t.try_attempt("a@t.local", "ip", now)
-                .unwrap_err()
-                .first_refusal
-        );
+        assert!(refused(&t, "a@t.local", "ip", now).first_refusal);
         for _ in 0..3 {
-            assert!(
-                !t.try_attempt("a@t.local", "ip", now)
-                    .unwrap_err()
-                    .first_refusal
-            );
+            assert!(!refused(&t, "a@t.local", "ip", now).first_refusal);
         }
         // The next wait gets its own first refusal.
         fail(&t, "a@t.local", "ip", now + MIN, 1);
-        assert!(
-            t.try_attempt("a@t.local", "ip", now + MIN)
-                .unwrap_err()
-                .first_refusal
-        );
-        assert!(
-            !t.try_attempt("a@t.local", "ip", now + MIN)
-                .unwrap_err()
-                .first_refusal
-        );
+        assert!(refused(&t, "a@t.local", "ip", now + MIN).first_refusal);
+        assert!(!refused(&t, "a@t.local", "ip", now + MIN).first_refusal);
     }
 
     #[test]
-    fn the_key_ignores_case_and_surrounding_spaces() {
-        let t = LoginThrottle::default();
+    fn an_email_key_ignores_case_and_surrounding_spaces() {
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, " A@T.local ", "ip", now, 5);
-        assert!(t.try_attempt("a@t.local", "ip", now).is_err());
+        assert!(t.password(email("a@t.local"), "ip", now).is_err());
     }
 
     #[test]
     fn success_clears_the_account() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 4);
         succeed(&t, "a@t.local", "ip", now);
@@ -456,7 +500,7 @@ mod tests {
 
     #[test]
     fn a_correct_fifth_attempt_is_not_left_waiting() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 4);
         succeed(&t, "a@t.local", "ip", now);
@@ -465,7 +509,7 @@ mod tests {
 
     #[test]
     fn failures_older_than_the_window_are_forgotten() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         fail(&t, "a@t.local", "ip", now, 4);
         let later = now + Duration::from_secs(15 * 60 + 1);
@@ -475,24 +519,24 @@ mod tests {
 
     #[test]
     fn one_ip_trying_many_accounts_is_stopped_after_thirty() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         for i in 0..29 {
             fail(&t, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
         }
         assert_eq!(peek(&t, "fresh@t.local", "6.6.6.6", now), Ok(()));
         fail(&t, "u29@t.local", "6.6.6.6", now, 1);
-        let b = t.try_attempt("fresh@t.local", "6.6.6.6", now).unwrap_err();
+        let b = refused(&t, "fresh@t.local", "6.6.6.6", now);
         assert_eq!(b.reason, Reason::Ip);
         assert_eq!(b.retry_after, MIN * 15);
         // Another IP is unaffected, and a success there doesn't clear this one.
         succeed(&t, "fresh@t.local", "7.7.7.7", now);
-        assert!(t.try_attempt("fresh@t.local", "6.6.6.6", now).is_err());
+        assert!(t.password(email("fresh@t.local"), "6.6.6.6", now).is_err());
     }
 
     #[test]
     fn a_success_gives_back_its_ip_attempt() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         for i in 0..28 {
             fail(&t, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
@@ -507,7 +551,7 @@ mod tests {
 
     #[test]
     fn a_correct_thirtieth_attempt_does_not_block_its_ip() {
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         let now = Instant::now();
         for i in 0..29 {
             fail(&t, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
@@ -517,37 +561,38 @@ mod tests {
     }
 
     #[test]
-    fn ip_only_attempts_count_on_the_ip_and_a_refund_gives_one_back() {
-        let t = LoginThrottle::default();
+    fn passkey_attempts_count_on_the_ip_and_a_sign_in_gives_one_back() {
+        let t = Throttles::default();
         let now = Instant::now();
         for _ in 0..30 {
-            t.try_ip("1.2.3.4", now).unwrap();
+            t.passkey_options("1.2.3.4", now).unwrap();
         }
-        assert!(t.try_ip("1.2.3.4", now).is_err());
+        assert!(t.passkey_options("1.2.3.4", now).is_err());
         assert!(
-            t.try_attempt("a@t.local", "1.2.3.4", now).is_err(),
+            t.password(email("a@t.local"), "1.2.3.4", now).is_err(),
             "same IP limit as passwords"
         );
-        let t = LoginThrottle::default();
+        let t = Throttles::default();
         for _ in 0..29 {
-            t.try_ip("1.2.3.4", now).unwrap();
+            t.passkey_options("1.2.3.4", now).unwrap();
         }
-        t.refund_ip("1.2.3.4");
-        t.try_ip("1.2.3.4", now).unwrap();
-        t.try_ip("1.2.3.4", now)
+        t.passkey_signed_in("1.2.3.4");
+        t.passkey_options("1.2.3.4", now).unwrap();
+        t.passkey_options("1.2.3.4", now)
             .expect("the refund made room for one more");
     }
 
     #[test]
     fn second_factor_waits_grow_to_an_hour_and_stay_there() {
-        let sf = SecondFactorThrottle::default();
+        let t = Throttles::default();
+        let u = Uuid::new_v4();
         let mut now = Instant::now();
         for _ in 0..4 {
-            sf.try_attempt("a@t.local", now).expect("free failure");
+            let _ = t.setup_code(u, now).expect("free failure");
         }
         for expected in [1, 2, 4, 8, 15, 30, 60, 60, 60] {
-            sf.try_attempt("a@t.local", now).expect("let through");
-            let b = sf.try_attempt("a@t.local", now).unwrap_err();
+            let _ = t.setup_code(u, now).expect("let through");
+            let b = t.setup_code(u, now).err().unwrap();
             assert_eq!(b.reason, Reason::SecondFactor);
             assert_eq!(b.reason.as_str(), "second_factor");
             assert_eq!(b.retry_after, MIN * expected);
@@ -557,79 +602,78 @@ mod tests {
 
     #[test]
     fn second_factor_failures_twenty_minutes_apart_are_remembered() {
-        let sf = SecondFactorThrottle::default();
+        let t = Throttles::default();
+        let u = Uuid::new_v4();
         let mut now = Instant::now();
         for _ in 0..4 {
-            sf.try_attempt("a@t.local", now).expect("free failure");
+            let _ = t.setup_code(u, now).expect("free failure");
             now += MIN * 20;
         }
-        sf.try_attempt("a@t.local", now).expect("fifth let through");
-        let b = sf.try_attempt("a@t.local", now).unwrap_err();
+        let _ = t.setup_code(u, now).expect("fifth let through");
+        let b = t.setup_code(u, now).err().unwrap();
         assert_eq!(b.retry_after, MIN);
         // A day after the last failure, the slate is clean.
         let later = now + Duration::from_secs(24 * 3600 + 1);
-        sf.try_attempt("a@t.local", later).expect("forgotten");
-        sf.try_attempt("a@t.local", later).expect("still free");
+        let _ = t.setup_code(u, later).expect("forgotten");
+        let _ = t.setup_code(u, later).expect("still free");
     }
 
     #[test]
     fn second_factor_success_clears_the_account() {
-        let sf = SecondFactorThrottle::default();
+        let t = Throttles::default();
+        let u = Uuid::new_v4();
         let now = Instant::now();
         for _ in 0..4 {
-            sf.try_attempt("A@t.local", now).unwrap();
+            let _ = t.setup_code(u, now).unwrap();
         }
-        sf.try_attempt("a@t.local", now).unwrap();
-        sf.record_success("a@t.local");
+        t.setup_code(u, now).unwrap().succeeded();
         for _ in 0..5 {
-            sf.try_attempt("a@t.local", now).expect("cleared");
+            let _ = t.setup_code(u, now).expect("cleared");
         }
     }
 
     #[test]
-    fn second_factor_login_counts_the_ip_and_not_the_password_account() {
-        let pw = LoginThrottle::default();
-        let sf = SecondFactorThrottle::default();
+    fn login_codes_count_the_ip_and_not_the_password_account() {
+        let t = Throttles::default();
+        let u = Uuid::new_v4();
         let now = Instant::now();
         for _ in 0..5 {
-            sf.try_login(&pw, "a@t.local", "ip", now).unwrap();
+            let _ = t.login_code(u, "ip", now).unwrap();
         }
-        let b = sf.try_login(&pw, "a@t.local", "ip", now).unwrap_err();
+        let b = t.login_code(u, "ip", now).err().unwrap();
         assert_eq!(b.reason, Reason::SecondFactor);
         // Password logins of that account are not slowed by wrong codes.
-        assert_eq!(peek(&pw, "a@t.local", "ip", now), Ok(()));
-        assert_eq!(pw.tracked_keys(), (0, 1));
+        let _ = t.password(Account::User(u), "ip", now).expect("not slowed");
+        assert_eq!(t.tracked_keys(), (1, 1));
         // A refused attempt counts nowhere.
-        assert_eq!(lock(&pw.ips.keys).get("ip").unwrap().failures, 5);
+        assert_eq!(failures(&t.ips, "ip"), 6);
     }
 
     #[test]
-    fn second_factor_login_is_refused_while_the_ip_waits() {
-        let pw = LoginThrottle::default();
-        let sf = SecondFactorThrottle::default();
+    fn login_codes_are_refused_while_the_ip_waits() {
+        let t = Throttles::default();
         let now = Instant::now();
         for i in 0..30 {
-            fail(&pw, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
+            fail(&t, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
         }
-        let b = sf.try_login(&pw, "a@t.local", "6.6.6.6", now).unwrap_err();
+        let b = t.login_code(Uuid::new_v4(), "6.6.6.6", now).err().unwrap();
         assert_eq!(b.reason, Reason::Ip);
         // Refused before counting: the second-factor counter is untouched.
-        assert!(lock(&sf.accounts.keys).is_empty());
+        assert!(lock(&t.second_factor.keys).is_empty());
     }
 
     #[test]
     fn a_right_login_code_clears_both_accounts_and_refunds_the_ip() {
-        let pw = LoginThrottle::default();
-        let sf = SecondFactorThrottle::default();
+        let t = Throttles::default();
+        let u = Uuid::new_v4();
         let now = Instant::now();
         // Password step, then a wrong and a right code.
-        pw.try_attempt("a@t.local", "ip", now).unwrap();
-        sf.try_login(&pw, "a@t.local", "ip", now).unwrap();
-        sf.try_login(&pw, "a@t.local", "ip", now).unwrap();
-        sf.record_login_success(&pw, "a@t.local", "ip");
-        assert!(lock(&sf.accounts.keys).is_empty());
-        assert_eq!(pw.tracked_keys(), (0, 1));
-        assert_eq!(lock(&pw.ips.keys).get("ip").unwrap().failures, 2);
+        let _ = t.password(Account::User(u), "ip", now).unwrap();
+        let _ = t.login_code(u, "ip", now).unwrap();
+        t.login_code(u, "ip", now).unwrap().succeeded();
+        assert!(lock(&t.second_factor.keys).is_empty());
+        assert_eq!(t.tracked_keys(), (0, 1));
+        assert_eq!(failures(&t.ips, "ip"), 2);
     }
 
     #[test]

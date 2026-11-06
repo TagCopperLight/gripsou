@@ -1,4 +1,4 @@
-// Mirrors the server's rule (api/src/auth.rs validate_new_password): length
+// Mirrors the server's rule (backend/api/src/auth/password.rs validate_new): length
 // only, counted in characters (code points), so both sides agree on emoji.
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;

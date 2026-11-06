@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(code);
     };
 
-    let jobs = gripsou_jobs::Deps::load(&db, key, public_url)
+    let jobs = gripsou_jobs::Deps::load(&db, key.clone(), public_url)
         .await
         .map_err(anyhow::Error::msg)?;
     let jobs = std::sync::Arc::new(jobs);
@@ -57,10 +57,11 @@ async fn main() -> anyhow::Result<()> {
         db.clone(),
         std::path::Path::new(&static_dir),
         jobs,
+        key,
         passkeys,
     );
     // Hash the dummy password now so the first login isn't slower.
-    std::sync::LazyLock::force(&gripsou_api::auth::DUMMY_HASH);
+    std::sync::LazyLock::force(&gripsou_api::auth::password::DUMMY_HASH);
 
     let addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;

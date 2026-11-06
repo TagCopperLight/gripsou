@@ -4,16 +4,15 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use chrono::{Duration, Utc};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::auth::{self, AdminUser};
+use crate::auth::{AdminUser, challenge, invite};
 use crate::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::invite_token::TokenKind;
-use gripsou_core::repo::user::Role;
+use gripsou_core::repo::user::AdminGuarded;
 use gripsou_providers::registry;
 
 pub async fn providers(
@@ -249,18 +248,7 @@ pub async fn create_invite(
     State(pool): State<PgPool>,
     AdminUser { user_id }: AdminUser,
 ) -> Result<(StatusCode, Json<dto::InviteLinkResp>), ApiError> {
-    let raw = auth::generate_token();
-    let stored = auth::hash_token_str(&raw);
-    let expires_at = Utc::now() + Duration::hours(24);
-    gripsou_core::repo::invite_token::create(
-        &pool,
-        TokenKind::Invite,
-        None,
-        user_id,
-        &stored,
-        expires_at,
-    )
-    .await?;
+    let raw = invite::mint(&pool, TokenKind::Invite, None, user_id).await?;
     tracing::info!(by = %user_id, "invite created");
     Ok((
         StatusCode::CREATED,
@@ -285,19 +273,8 @@ pub async fn create_reset_link(
     let target = gripsou_core::repo::user::profile_by_id(&pool, id)
         .await?
         .ok_or(ApiError::NotFound("user not found"))?;
-    crate::auth::mfa::require_reauth(&pool, user_id, &body.reauth).await?;
-    let raw = auth::generate_token();
-    let stored = auth::hash_token_str(&raw);
-    let expires_at = Utc::now() + Duration::hours(24);
-    gripsou_core::repo::invite_token::create(
-        &pool,
-        TokenKind::Reset,
-        Some(&target.email),
-        user_id,
-        &stored,
-        expires_at,
-    )
-    .await?;
+    challenge::spend_reauth(&pool, user_id, &body.reauth).await?;
+    let raw = invite::mint(&pool, TokenKind::Reset, Some(&target.email), user_id).await?;
     tracing::info!(by = %user_id, target_user_id = %id, "reset link created");
     Ok((
         StatusCode::CREATED,
@@ -316,11 +293,10 @@ pub async fn set_role(
     if id == user_id {
         return Err(ApiError::Conflict("cannot change your own role"));
     }
-    gripsou_core::repo::user::profile_by_id(&pool, id)
-        .await?
-        .ok_or(ApiError::NotFound("user not found"))?;
-    if !gripsou_core::repo::user::set_role(&pool, id, body.role).await? {
-        return Err(ApiError::Conflict("cannot demote the last admin"));
+    match gripsou_core::repo::user::set_role(&pool, id, body.role).await? {
+        AdminGuarded::Done => {}
+        AdminGuarded::NotFound => return Err(ApiError::NotFound("user not found")),
+        AdminGuarded::LastAdmin => return Err(ApiError::Conflict("cannot demote the last admin")),
     }
     tracing::info!(by = %user_id, target_user_id = %id, role = %body.role, "user role changed");
     Ok(StatusCode::NO_CONTENT)
@@ -339,11 +315,11 @@ pub async fn delete_user(
     if body.email.trim().to_lowercase() != target.email.to_lowercase() {
         return Err(ApiError::bad_request("email does not match user"));
     }
-    // Refuse to delete the last admin: it would lock everyone out of admin-only settings.
-    if target.role == Role::Admin && gripsou_core::repo::user::count_admins(&pool).await? <= 1 {
-        return Err(ApiError::Conflict("cannot delete the last admin"));
+    match gripsou_core::repo::user::delete_user(&pool, id).await? {
+        AdminGuarded::Done => {}
+        AdminGuarded::NotFound => return Err(ApiError::NotFound("user not found")),
+        AdminGuarded::LastAdmin => return Err(ApiError::Conflict("cannot delete the last admin")),
     }
-    gripsou_core::repo::user::delete_user(&pool, id).await?;
     tracing::info!(by = %user_id, target_user_id = %id, "user deleted");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -524,7 +500,7 @@ mod tests {
         let target = seed_user_with_password(&pool, "target@t.local", "pw", Role::User).await;
         let who = principal_for(&pool, "a@t.local", "pw").await;
 
-        let reauth = crate::auth::mfa::tests::reauth_token(&pool, &who, "pw").await;
+        let reauth = reauth_token(&pool, &who, "pw").await;
         let resp = create_reset_link(
             State(pool.clone()),
             AdminUser {
@@ -573,7 +549,7 @@ mod tests {
 
         let err = create(target, "forged").await.unwrap_err();
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
-        let reauth = crate::auth::mfa::tests::reauth_token(&pool, &who, "pw").await;
+        let reauth = reauth_token(&pool, &who, "pw").await;
         let err = create(admin, &reauth).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         // Refusing oneself did not spend the token.
@@ -663,10 +639,11 @@ mod tests {
         // Reached when two admins demote each other at once; called directly,
         // as the handler's own-role rule hides it otherwise.
         let only = seed_user_with_password(&pool, "a@t.local", "pw", Role::Admin).await;
-        assert!(
-            !gripsou_core::repo::user::set_role(&pool, only, Role::User)
+        assert_eq!(
+            gripsou_core::repo::user::set_role(&pool, only, Role::User)
                 .await
-                .unwrap()
+                .unwrap(),
+            AdminGuarded::LastAdmin
         );
         let role = gripsou_core::repo::user::profile_by_id(&pool, only)
             .await
