@@ -18,6 +18,9 @@ export default defineConfig(async ({ mode }) => ({
       '/api': 'http://localhost:8080',
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1800,
+  },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}', 'mock/**/*.test.{ts,tsx}'],

@@ -239,7 +239,9 @@ describe("CategoriesSurface", () => {
     });
 
     it("archives 'Courses' by sending the stored name 'Groceries', not the displayed label", async () => {
-      await i18n.changeLanguage("fr");
+      await act(async () => {
+        await i18n.changeLanguage("fr");
+      });
       const { client } = renderSurface();
       await screen.findByText("Courses");
       fireEvent.click(screen.getByRole("button", { name: "Archiver Courses" }));

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 
 import { Dashboard } from "./Dashboard";
 import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
@@ -22,7 +22,7 @@ describe("Dashboard", () => {
   it("leaves only the net worth card when there is no account", async () => {
     stubAccounts([]);
     renderDashboard();
-    await vi.waitFor(() => expect(screen.queryByText("distribution")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("distribution")).not.toBeInTheDocument());
     expect(screen.getByText("net worth")).toBeInTheDocument();
     expect(screen.queryByText("holdings")).not.toBeInTheDocument();
   });
