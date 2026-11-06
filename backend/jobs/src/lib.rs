@@ -40,15 +40,13 @@ pub mod testing {
     }
 
     /// Deps built from an empty provider config, with the test key.
-    pub fn deps() -> Arc<Deps> {
-        Arc::new(
-            Deps::build(
-                gripsou_core::testkit::encryption_key(),
-                "EUR".into(),
-                "http://localhost:5173".into(),
-                Default::default(),
-            )
-            .unwrap(),
+    pub fn deps() -> Deps {
+        Deps::build(
+            gripsou_core::testkit::encryption_key(),
+            "EUR".into(),
+            "http://localhost:5173".into(),
+            Default::default(),
         )
+        .unwrap()
     }
 }

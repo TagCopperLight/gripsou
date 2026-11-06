@@ -19,7 +19,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use gripsou_core::dto::SyncResult;
 use gripsou_core::provider::{
-    AccountProvider, CompleteConnect, ConnectInit, ProviderError, Refresh, RefreshMode,
+    AccountProvider, CompleteConnect, ConnectInit, EXTERNAL_CONNECTION_ID, ProviderError, Refresh,
+    RefreshMode,
 };
 use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 
@@ -330,7 +331,7 @@ impl AccountProvider for PowensProvider {
 
         let mut provider_meta = serde_json::json!({ "powens_user_id": me.id.to_string() });
         if let Some(cid) = params.get("connection_id") {
-            provider_meta["external_connection_id"] = serde_json::Value::String(cid.clone());
+            provider_meta[EXTERNAL_CONNECTION_ID] = serde_json::Value::String(cid.clone());
         }
 
         Ok(CompleteConnect {
@@ -389,7 +390,7 @@ impl AccountProvider for PowensProvider {
         .await?;
         // A connection with no stored external id resolves only when the token
         // holds exactly one connection; never choose an arbitrary bank.
-        let stored_id = provider_meta["external_connection_id"].as_str();
+        let stored_id = provider_meta[EXTERNAL_CONNECTION_ID].as_str();
         let connection = match stored_id {
             Some(id) => connections
                 .connections
@@ -430,7 +431,7 @@ impl AccountProvider for PowensProvider {
     /// Webhook-driven once a webhook secret is set, for a connection whose
     /// Powens id is known (the webhook names it).
     fn refresh_mode(&self, provider_meta: &serde_json::Value) -> RefreshMode {
-        let known = provider_meta["external_connection_id"]
+        let known = provider_meta[EXTERNAL_CONNECTION_ID]
             .as_str()
             .is_some_and(|id| !id.is_empty());
         if self.webhook_secret.is_some() && known {
@@ -446,9 +447,9 @@ impl AccountProvider for PowensProvider {
         provider_meta: &serde_json::Value,
     ) -> Result<Refresh, ProviderError> {
         let Credentials { auth_token } = Credentials::parse(credentials)?;
-        let cid = provider_meta["external_connection_id"]
+        let cid = provider_meta[EXTERNAL_CONNECTION_ID]
             .as_str()
-            .ok_or_else(|| ProviderError::Other("missing external_connection_id".into()))?;
+            .ok_or_else(|| ProviderError::Other(format!("missing {EXTERNAL_CONNECTION_ID}")))?;
         let what = "PUT /users/me/connections";
         let resp = self
             .http

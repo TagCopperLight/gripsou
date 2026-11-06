@@ -6,7 +6,12 @@ use tower::ServiceExt;
 
 fn app(db: sqlx::PgPool, static_dir: &std::path::Path) -> axum::Router {
     let passkeys = gripsou_api::Passkeys::parse(Some("https://gripsou.test")).unwrap();
-    gripsou_api::router(db, static_dir, gripsou_jobs::testing::deps(), passkeys)
+    gripsou_api::router(
+        db,
+        static_dir,
+        std::sync::Arc::new(gripsou_jobs::testing::deps()),
+        passkeys,
+    )
 }
 
 #[tokio::test]

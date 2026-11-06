@@ -116,6 +116,46 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn finish_connect_refuses_an_active_connection(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id = testkit::owner(&pool, conn).await;
+    sqlx::query(
+        "update connection set credentials = '{\"token\": \"live\"}', \
+         provider_meta = '{\"external_connection_id\": \"1\"}' where id = $1",
+    )
+    .bind(conn)
+    .execute(&pool)
+    .await?;
+    let before: (String, serde_json::Value, serde_json::Value) =
+        sqlx::query_as("select status, credentials, provider_meta from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+
+    let BeginSync::Started(_) = begin_sync(&pool, user_id, conn).await? else {
+        panic!("expected Started");
+    };
+    let updated = gripsou_core::repo::connection::finish_connect(
+        &pool,
+        conn,
+        user_id,
+        serde_json::json!({"token": "replayed"}),
+        serde_json::json!({"external_connection_id": "replayed"}),
+    )
+    .await?;
+    assert!(!updated);
+
+    let after: (String, serde_json::Value, serde_json::Value) =
+        sqlx::query_as("select status, credentials, provider_meta from connection where id=$1")
+            .bind(conn)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(after.0, "syncing");
+    assert_eq!((&after.1, &after.2), (&before.1, &before.2));
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn finish_connect_stores_provider_meta(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 

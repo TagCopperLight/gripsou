@@ -16,7 +16,10 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub(crate) use gripsou_jobs::testing::deps;
+/// The shared test [`gripsou_jobs::Deps`], ready for a handler's state.
+pub(crate) fn deps() -> Arc<gripsou_jobs::Deps> {
+    Arc::new(gripsou_jobs::testing::deps())
+}
 
 /// The password `seed_user` gives its users.
 pub(crate) const PASSWORD: &str = "hunter22";

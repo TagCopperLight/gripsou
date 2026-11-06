@@ -1,18 +1,10 @@
 //! Saving keys takes effect without a restart.
 
 use gripsou_core::provider_config::ProviderConfig;
-use gripsou_core::testkit;
-use gripsou_jobs::Deps;
 
 #[test]
 fn saved_keys_apply_without_restart() {
-    let deps = Deps::build(
-        testkit::encryption_key(),
-        "EUR".into(),
-        "https://g.example".into(),
-        ProviderConfig::default(),
-    )
-    .unwrap();
+    let deps = gripsou_jobs::testing::deps();
     assert!(deps.providers().account("powens").is_none());
 
     let mut c = ProviderConfig::default();

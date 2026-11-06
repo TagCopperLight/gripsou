@@ -69,28 +69,12 @@ fn skipped(reason: &'static str, user_id: Uuid, connection_id: Uuid, trigger: Tr
     );
 }
 
-/// Logs a claim that was not granted as `sync skipped`, so a refused or
-/// failed claim is never silent. True when granted.
-fn granted(
-    outcome: &Result<BeginSync, CoreError>,
-    user_id: Uuid,
-    connection_id: Uuid,
-    trigger: Trigger,
-) -> bool {
+/// Logs a claim that was not granted as `sync skipped`. True when granted.
+fn granted(outcome: &BeginSync, user_id: Uuid, connection_id: Uuid, trigger: Trigger) -> bool {
     match outcome {
-        Ok(BeginSync::Started(_)) => return true,
-        Ok(BeginSync::AlreadySyncing) => {
-            skipped("already_running", user_id, connection_id, trigger)
-        }
-        Ok(BeginSync::NotFound) => skipped("not_found", user_id, connection_id, trigger),
-        Err(e) => {
-            tracing::error!(
-                error = %error_chain(e),
-                connection_id = %connection_id,
-                "sync claim failed"
-            );
-            skipped("read_failed", user_id, connection_id, trigger);
-        }
+        BeginSync::Started(_) => return true,
+        BeginSync::AlreadySyncing => skipped("already_running", user_id, connection_id, trigger),
+        BeginSync::NotFound => skipped("not_found", user_id, connection_id, trigger),
     }
     false
 }
@@ -110,7 +94,18 @@ pub(crate) async fn claim(
     connection_id: Uuid,
     trigger: Trigger,
 ) -> Option<Claimed> {
-    let outcome = connection::begin_sync(db, user_id, connection_id).await;
+    let outcome = match connection::begin_sync(db, user_id, connection_id).await {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::error!(
+                error = %error_chain(&e),
+                connection_id = %connection_id,
+                "sync claim failed"
+            );
+            skipped("read_failed", user_id, connection_id, trigger);
+            return None;
+        }
+    };
     granted(&outcome, user_id, connection_id, trigger).then_some(Claimed {
         user_id,
         connection_id,
@@ -359,7 +354,7 @@ pub async fn request_sync(
         connection::begin_await(&db, user_id, id).await
     } else {
         connection::begin_sync(&db, user_id, id).await
-    };
+    }?;
     if granted(&outcome, user_id, id, trigger) {
         if webhook {
             tracing::info!(
@@ -380,7 +375,7 @@ pub async fn request_sync(
             claimed.start(db.clone(), deps.clone());
         }
     }
-    outcome
+    Ok(outcome)
 }
 
 /// A refresh request that failed before any fetch: mark the connection's

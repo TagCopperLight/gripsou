@@ -17,13 +17,7 @@ const WEBHOOK_SECRET: &str = "test-webhook-secret";
 /// Deps whose only account adapter is Powens with [`WEBHOOK_SECRET`], its
 /// server unreachable.
 fn deps() -> Arc<Deps> {
-    let deps = Deps::build(
-        testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-        Default::default(),
-    )
-    .unwrap();
+    let deps = gripsou_jobs::testing::deps();
     let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
     deps.set_accounts(
         [(

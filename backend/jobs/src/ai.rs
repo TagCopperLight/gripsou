@@ -317,20 +317,11 @@ mod categorize_gate_tests {
 #[cfg(test)]
 mod categorize_run_tests {
     use super::*;
-    use gripsou_core::provider_config::ProviderConfig;
     use sqlx::PgPool;
     use std::time::Duration;
 
     fn deps() -> Arc<Deps> {
-        Arc::new(
-            Deps::build(
-                gripsou_core::testkit::encryption_key(),
-                "EUR".into(),
-                "http://localhost:5173".into(),
-                ProviderConfig::default(),
-            )
-            .unwrap(),
-        )
+        Arc::new(crate::testing::deps())
     }
 
     #[test]

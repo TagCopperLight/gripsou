@@ -15,13 +15,7 @@ use uuid::Uuid;
 
 /// Deps with the given account adapters only.
 fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
-    let deps = Deps::build(
-        testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-        Default::default(),
-    )
-    .unwrap();
+    let deps = gripsou_jobs::testing::deps();
     deps.set_accounts(
         accounts
             .into_iter()

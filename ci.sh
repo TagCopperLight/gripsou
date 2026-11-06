@@ -42,6 +42,9 @@ test_db() {
 backend() {
   step "fmt"    bash -c 'cd backend && cargo fmt --all --check'
   step "clippy" bash -c 'cd backend && cargo clippy --all-targets -- -D warnings'
+  # Without the tests, so the test-util features stay off: production code
+  # calling a test-only helper fails here.
+  step "clippy (no tests)" bash -c 'cd backend && cargo clippy --workspace -- -D warnings'
   # The frontend's copy of the API types and routes is generated: it must match the code.
   step "wire types" bash -c 'cd backend && cargo run -q -p gripsou-api --example wire-types \
     && git diff --exit-code -- ../frontend/src/api/wire.ts ../frontend/src/api/routes.ts'

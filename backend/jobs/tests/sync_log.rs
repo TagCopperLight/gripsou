@@ -68,13 +68,7 @@ impl CompositionProvider for NoComposition {
 fn deps(mode: Mode) -> Arc<Deps> {
     let mut accounts: HashMap<String, Arc<dyn AccountProvider>> = HashMap::new();
     accounts.insert("fake".into(), Arc::new(FakeBank { mode }));
-    let mut deps = Deps::build(
-        gripsou_core::testkit::encryption_key(),
-        "EUR".into(),
-        "http://localhost:5173".into(),
-        Default::default(),
-    )
-    .unwrap();
+    let mut deps = gripsou_jobs::testing::deps();
     deps.set_accounts(accounts);
     deps.prices = Vec::new();
     deps.composition = Box::new(NoComposition);

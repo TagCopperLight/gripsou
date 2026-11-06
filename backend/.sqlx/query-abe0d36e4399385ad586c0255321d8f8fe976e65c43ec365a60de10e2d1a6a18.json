@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id as \"id!\", user_id as \"user_id!\"\n           from connection\n           where provider_key=$1 and provider_meta->>'external_connection_id' = $2",
+  "query": "select id as \"id!\", user_id as \"user_id!\"\n           from connection\n           where provider_key=$1 and provider_meta->>$3 = $2",
   "describe": {
     "columns": [
       {
@@ -29,6 +29,7 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Text"
       ]
     },
@@ -37,5 +38,5 @@
       false
     ]
   },
-  "hash": "4225490c39eca41c5abc97aaef8694b914e5db6ed0d6356a8159feaeeb6e8fab"
+  "hash": "abe0d36e4399385ad586c0255321d8f8fe976e65c43ec365a60de10e2d1a6a18"
 }

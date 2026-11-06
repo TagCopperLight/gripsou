@@ -411,8 +411,9 @@ pub async fn insert_pending(
     Ok(id)
 }
 
-/// Store credentials and flip a pending connection to `ok`.
-/// Returns true if the connection was found and owned by `user_id`.
+/// Store credentials and flip a pending connection to `ok`. False when the
+/// connection isn't `user_id`'s or isn't pending: a replayed callback never
+/// touches an active connection.
 pub async fn finish_connect(
     pool: &sqlx::PgPool,
     id: Uuid,
@@ -424,13 +425,14 @@ pub async fn finish_connect(
         r#"
         update connection
            set credentials = $3, provider_meta = $4, status = $5
-         where id = $1 and user_id = $2
+         where id = $1 and user_id = $2 and status = $6
         "#,
         id,
         user_id,
         credentials,
         provider_meta,
         ConnectionStatus::Ok as ConnectionStatus,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .execute(pool)
     .await?
@@ -500,9 +502,10 @@ pub async fn find_by_external_connection_id(
     let row = sqlx::query!(
         r#"select id as "id!", user_id as "user_id!"
            from connection
-           where provider_key=$1 and provider_meta->>'external_connection_id' = $2"#,
+           where provider_key=$1 and provider_meta->>$3 = $2"#,
         provider_key,
         ext_id,
+        crate::provider::EXTERNAL_CONNECTION_ID,
     )
     .fetch_optional(pool)
     .await?;

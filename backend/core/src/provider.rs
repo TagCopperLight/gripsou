@@ -10,12 +10,16 @@ pub struct ConnectInit {
     pub redirect_url: Option<String>,
 }
 
+/// The `provider_meta` key holding the provider-native connection id, which
+/// a webhook's [`WebhookSignal`] is matched on.
+pub const EXTERNAL_CONNECTION_ID: &str = "external_connection_id";
+
 #[derive(Debug, Clone, Default)]
 pub struct CompleteConnect {
     /// Secrets to encrypt + store in connection.credentials.
     pub credentials: serde_json::Value,
     /// Provider-native ids for correlation; stored in connection.provider_meta.
-    /// A webhook's [`WebhookSignal`] is matched on its `external_connection_id`.
+    /// A webhook's [`WebhookSignal`] is matched on its [`EXTERNAL_CONNECTION_ID`].
     pub provider_meta: serde_json::Value,
 }
 
@@ -39,7 +43,7 @@ pub enum Refresh {
 }
 
 /// What a verified incoming webhook tells us: which provider-native connection
-/// finished syncing. Correlated to our row via provider_meta.external_connection_id.
+/// finished syncing. Correlated to our row via [`EXTERNAL_CONNECTION_ID`].
 #[derive(Debug, Clone)]
 pub struct WebhookSignal {
     pub provider_connection_id: String,
