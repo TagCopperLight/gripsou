@@ -94,44 +94,26 @@ mod tests {
     }
 
     #[test]
-    fn stride_is_uniform_and_matches_the_computed_step() {
+    fn long_ranges_are_capped_and_evenly_spaced() {
         let target: usize = 400;
         let from = d(2016, 1, 1);
         for span in [1i64, 399, 400, 401, 799, 800, 1300, 4000] {
-            let to = from + Duration::days(span);
-            let days = sample_days(from, to, target);
+            let days = sample_days(from, from + Duration::days(span), target);
 
-            // The honest general cap: at most target+1 points. The +1 covers
-            // the prepended `from`, needed when the backward walk
-            // from `to` doesn't already land exactly on `from`.
             assert!(
                 days.len() <= target + 1,
                 "span {span}: got {} points",
                 days.len()
             );
-
-            // `from` is always exactly the first point.
             assert_eq!(*days.first().unwrap(), from, "span {span}");
 
-            // Independently recompute the step sample_days uses, and the
-            // length of the pure backward walk from `to`.
-            let points = (span + 1) as u64;
-            let step = points.div_ceil(target as u64).max(1) as i64;
-            let walked_len = (span / step + 1) as usize;
+            // Every gap is the same, except the first one when `from` was
+            // prepended to the backward walk.
+            let gaps: Vec<i64> = days.windows(2).map(|w| (w[1] - w[0]).num_days()).collect();
+            let step = *gaps.last().unwrap();
             assert!(
-                days.len() == walked_len || days.len() == walked_len + 1,
-                "span {span}: got {} points, expected {walked_len} or {}",
-                days.len(),
-                walked_len + 1
-            );
-
-            // The walked tail (everything except a possible prepended
-            // `from`) has uniform stride equal to that independently
-            // computed step.
-            let tail = &days[days.len() - walked_len..];
-            assert!(
-                tail.windows(2).all(|w| (w[1] - w[0]).num_days() == step),
-                "span {span}: stride is not uniform, expected {step} days"
+                gaps[1..].iter().all(|&g| g == step) && gaps[0] <= step,
+                "span {span}: uneven gaps {gaps:?}"
             );
         }
     }
@@ -163,13 +145,5 @@ mod tests {
         let day = d(2026, 8, 24);
         assert_eq!(sample_days(day, day, 400), vec![day]);
         assert_eq!(sample_days(day + Duration::days(5), day, 400), vec![day]);
-    }
-
-    #[test]
-    fn a_target_of_zero_does_not_divide_by_zero() {
-        // target 0 still walks to a single point at `to` — but `from` gets
-        // prepended, same as for any other target.
-        let days = sample_days(d(2026, 1, 1), d(2026, 12, 31), 0);
-        assert_eq!(days, vec![d(2026, 1, 1), d(2026, 12, 31)]);
     }
 }

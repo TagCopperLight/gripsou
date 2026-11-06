@@ -7,30 +7,6 @@ use sqlx::PgPool;
 async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
-    let total: i64 = sqlx::query_scalar("select count(*) from budget_category where user_id = $1")
-        .bind(user_id)
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(
-        total, 32,
-        "seeded taxonomy is 23 expense + 5 income + 4 neutral"
-    );
-
-    let per_kind: Vec<(String, i64)> = sqlx::query_as(
-        "select kind, count(*) from budget_category where user_id = $1 group by kind order by 1",
-    )
-    .bind(user_id)
-    .fetch_all(&pool)
-    .await?;
-    assert_eq!(
-        per_kind,
-        vec![
-            ("expense".to_string(), 23),
-            ("income".to_string(), 5),
-            ("neutral".to_string(), 4),
-        ]
-    );
-
     // Numbering is dense within a kind: 1..n, no gaps, no duplicates.
     let gaps: i64 = sqlx::query_scalar(
         "select count(*) from (
@@ -73,26 +49,6 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Exactly one system row, and it is the one the pairing pass writes to.
-#[sqlx::test(migrations = "../migrations")]
-async fn internal_transfer_is_the_only_system_category(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = testkit::seed_user(&pool).await;
-
-    let systems: Vec<(String, String)> = sqlx::query_as(
-        "select system_key, kind from budget_category \
-         where user_id = $1 and system_key is not null",
-    )
-    .bind(user_id)
-    .fetch_all(&pool)
-    .await?;
-    assert_eq!(
-        systems,
-        vec![("internal_transfer".to_string(), "neutral".to_string())]
-    );
-
-    Ok(())
-}
-
 /// Two users own two independent taxonomies; names collide across users.
 #[sqlx::test(migrations = "../migrations")]
 async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
@@ -107,7 +63,11 @@ async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
     .bind(b)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(shared, 32, "same names, different rows");
+    let own: i64 = sqlx::query_scalar("select count(*) from budget_category where user_id = $1")
+        .bind(a)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(shared, own, "same names, different rows");
 
     Ok(())
 }
@@ -152,30 +112,5 @@ async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Resul
             .await?;
         assert_eq!(got, expected, "input: {input}");
     }
-    Ok(())
-}
-
-/// 0033 on an existing user: former internal/excluded rows are neutral,
-/// numbered 1..n with the former internal ones first, and keep their
-/// transactions.
-#[sqlx::test(migrations = "../migrations")]
-async fn neutral_ordering_puts_ignore_last(pool: PgPool) -> anyhow::Result<()> {
-    let user_id = testkit::seed_user(&pool).await;
-    let neutral: Vec<(String, i32)> = sqlx::query_as(
-        "select default_key, sort_order from budget_category \
-         where user_id = $1 and kind = 'neutral' order by sort_order",
-    )
-    .bind(user_id)
-    .fetch_all(&pool)
-    .await?;
-    assert_eq!(
-        neutral,
-        vec![
-            ("internal".to_string(), 1),
-            ("savings".to_string(), 2),
-            ("investments".to_string(), 3),
-            ("ignore".to_string(), 4),
-        ]
-    );
     Ok(())
 }

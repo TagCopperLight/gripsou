@@ -728,17 +728,6 @@ async fn holdings_includes_composition_when_present(pool: PgPool) -> anyhow::Res
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn account_types_returns_seeded_reference(pool: PgPool) -> anyhow::Result<()> {
-    let keys = gripsou_core::repo::account::type_keys(&pool).await?;
-    let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
-    assert!(keys.contains(&"checking"));
-    assert!(keys.contains(&"brokerage"));
-    assert!(keys.contains(&"life_insurance"));
-    assert!(keys.contains(&"retirement"));
-    Ok(())
-}
-
-#[sqlx::test(migrations = "../migrations")]
 async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {

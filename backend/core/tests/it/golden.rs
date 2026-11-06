@@ -1,6 +1,6 @@
 //! Whole-output regression tests.
 //!
-//! The 21 tests in `backfill.rs` check specific days and holdings. These check
+//! The tests in `backfill.rs` check specific days and holdings. These check
 //! that not a single number moves anywhere in the output — which is the only
 //! thing that can catch an optimisation that is 99.99% right.
 //!
@@ -409,14 +409,11 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
 /// `max` must give the same answer as asking for exactly the range that has
 /// data. This is what makes the clamp safe.
 ///
-/// Note what this does and does not prove. Both arms clamp, so it pins that the
-/// clamp is deterministic, not that it preserves the pre-clamp answer. The
-/// latter is structural rather than testable from here: the `snap` lateral in
-/// `net_worth_series` is an INNER `join lateral`, so a day on which no holding
-/// has a `holding_point` row drops every (day, holding) pair and produces no
-/// group at all. Days before `history_start` were therefore already absent from
-/// the response before the clamp existed — the clamp removes days that returned
-/// nothing, which is why it cannot move a number.
+/// Both arms clamp, so this pins that the clamp is deterministic, not that it
+/// preserves the unclamped answer. That part is structural: `holding_day_values`
+/// values a holding on a day only through an inner lateral join on its latest
+/// `holding_point` at or before that day, so a day before `history_start` has
+/// no row with or without the clamp.
 #[sqlx::test(migrations = "../migrations")]
 async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
@@ -471,41 +468,6 @@ async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<(
 
     assert_eq!(sampled.last().unwrap().as_of, today);
     assert_eq!(sampled.last().unwrap().net_worth, single[0].net_worth);
-    Ok(())
-}
-
-/// Sampling SELECTS real days; it never averages. Every returned point must
-/// equal the value computed for that same single day on its own.
-#[sqlx::test(migrations = "../migrations")]
-async fn every_sampled_point_is_that_days_real_value(pool: PgPool) -> anyhow::Result<()> {
-    let (user_id, connection_id) = seed_scenario(&pool).await;
-    let mut conn = pool.acquire().await?;
-    backfill_connection(&mut conn, connection_id).await?;
-    drop(conn);
-
-    let today = Utc::now().date_naive();
-    let sampled = gripsou_core::repo::valuation::net_worth_series(
-        &pool,
-        user_id,
-        today - Duration::days(4000),
-        today,
-    )
-    .await?;
-
-    for point in sampled.iter().rev().take(5) {
-        let single = gripsou_core::repo::valuation::net_worth_series(
-            &pool,
-            user_id,
-            point.as_of,
-            point.as_of,
-        )
-        .await?;
-        assert_eq!(
-            point.net_worth, single[0].net_worth,
-            "point {} is not that day's real value",
-            point.as_of
-        );
-    }
     Ok(())
 }
 

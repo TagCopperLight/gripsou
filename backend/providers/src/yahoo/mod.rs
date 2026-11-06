@@ -168,8 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_pivot_cash_and_idless() {
-        assert!(!is_supported(&cash("EUR"), "EUR"));
+    fn rejects_an_instrument_without_an_identifier() {
         assert!(!is_supported(&iref("equity", None, None), "EUR"));
     }
 

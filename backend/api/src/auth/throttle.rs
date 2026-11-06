@@ -419,10 +419,6 @@ mod tests {
         Ok(())
     }
 
-    fn failures(l: &Limiter, key: &str) -> u32 {
-        lock(&l.keys).get(key).unwrap().failures
-    }
-
     #[test]
     fn four_failures_are_free_the_fifth_starts_a_one_minute_wait() {
         let t = Throttles::default();
@@ -644,9 +640,11 @@ mod tests {
         assert_eq!(b.reason, Reason::SecondFactor);
         // Password logins of that account are not slowed by wrong codes.
         let _ = t.password(Account::User(u), "ip", now).expect("not slowed");
-        assert_eq!(t.tracked_keys(), (1, 1));
-        // A refused attempt counts nowhere.
-        assert_eq!(failures(&t.ips, "ip"), 6);
+        // Six attempts counted on the IP, the refused one not among them.
+        for i in 0..24 {
+            fail(&t, &format!("u{i}@t.local"), "ip", now, 1);
+        }
+        assert_eq!(refused(&t, "fresh@t.local", "ip", now).reason, Reason::Ip);
     }
 
     #[test]
@@ -656,10 +654,13 @@ mod tests {
         for i in 0..30 {
             fail(&t, &format!("u{i}@t.local"), "6.6.6.6", now, 1);
         }
-        let b = t.login_code(Uuid::new_v4(), "6.6.6.6", now).err().unwrap();
+        let u = Uuid::new_v4();
+        let b = t.login_code(u, "6.6.6.6", now).err().unwrap();
         assert_eq!(b.reason, Reason::Ip);
         // Refused before counting: the second-factor counter is untouched.
-        assert!(lock(&t.second_factor.keys).is_empty());
+        for _ in 0..5 {
+            let _ = t.login_code(u, "7.7.7.7", now).expect("not counted");
+        }
     }
 
     #[test]
@@ -671,9 +672,17 @@ mod tests {
         let _ = t.password(Account::User(u), "ip", now).unwrap();
         let _ = t.login_code(u, "ip", now).unwrap();
         t.login_code(u, "ip", now).unwrap().succeeded();
-        assert!(lock(&t.second_factor.keys).is_empty());
-        assert_eq!(t.tracked_keys(), (0, 1));
-        assert_eq!(failures(&t.ips, "ip"), 2);
+        for _ in 0..5 {
+            let _ = t.login_code(u, "7.7.7.7", now).expect("codes cleared");
+            let _ = t
+                .password(Account::User(u), "8.8.8.8", now)
+                .expect("password cleared");
+        }
+        // Three attempts on the IP, one given back.
+        for i in 0..28 {
+            fail(&t, &format!("u{i}@t.local"), "ip", now, 1);
+        }
+        assert_eq!(refused(&t, "fresh@t.local", "ip", now).reason, Reason::Ip);
     }
 
     #[test]

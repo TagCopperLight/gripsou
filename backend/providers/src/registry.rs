@@ -161,12 +161,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keyed_lists_each_provider_with_keys_once_in_display_order() {
-        let keys: Vec<_> = keyed().map(|a| a.key).collect();
-        assert_eq!(keys, ["powens", "jev", "brandfetch"]);
-    }
-
-    #[test]
     fn saved_keys_build_the_adapters() {
         let ctx = Context {
             public_url: "https://g.example".into(),

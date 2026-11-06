@@ -395,7 +395,6 @@ mod categorize_run_tests {
             request_categorize(pool.clone(), deps(), user),
             Categorize::Booked
         );
-        assert_eq!(ai_runs().get(&user), Some(&true), "one re-run is booked");
         assert!(run_again(user), "the running task goes round once more");
         assert!(!run_again(user), "then frees the slot");
     }

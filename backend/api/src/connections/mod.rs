@@ -400,24 +400,28 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
-        // Seed: powens is enabled via migration 0002.
         let user = seed_user(&pool, "u@t.local").await;
-        let rows = enabled_providers(
-            State(pool.clone()),
-            auth::AuthUser {
-                user_id: user,
-                session_id: Uuid::new_v4(),
-            },
-        )
-        .await
-        .expect("ok")
-        .0;
+        let listed = || async {
+            enabled_providers(
+                State(pool.clone()),
+                auth::AuthUser {
+                    user_id: user,
+                    session_id: Uuid::new_v4(),
+                },
+            )
+            .await
+            .expect("ok")
+            .0
+            .into_iter()
+            .map(|p| p.key)
+            .collect::<Vec<_>>()
+        };
 
-        // Powens is in enabled_providers per seed — it should appear.
-        assert!(
-            rows.iter().any(|p| p.key == "powens"),
-            "powens should be in enabled list"
-        );
+        assert!(listed().await.contains(&"powens".to_string()));
+        gripsou_core::repo::settings::set_provider_enabled(&pool, "powens", false)
+            .await
+            .unwrap();
+        assert!(!listed().await.contains(&"powens".to_string()));
     }
 
     #[sqlx::test(migrations = "../migrations")]
