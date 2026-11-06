@@ -5,6 +5,11 @@ import { shade } from "../../lib/color";
 import { localizeCountry, localizeSector } from "../../lib/composition-i18n";
 import { OTHER, STOCKS, type RegionSlice, type Slice } from "../../lib/exposure";
 
+// The leftover's 45° stripes: 2px light, 2px dark.
+const STRIPES = { light: "#5d5955", dark: "#2e2b28" };
+/** The striped leftover's plain colour, where a pattern can't be drawn. */
+const OTHER_COLOR = STRIPES.light;
+
 export type DonutItem = {
   key: string;
   label: string;
@@ -20,9 +25,6 @@ export type DonutItem = {
   fxMissing?: boolean;
   children?: DonutItem[];
 };
-
-/** Fallback for the striped leftover where a pattern can't be drawn. */
-const OTHER_COLOR = "#5d5955";
 
 // Past the palette's end, a darker pass keeps neighbours from sharing a colour.
 const colorAt = (i: number) => {
@@ -75,9 +77,6 @@ export function regionItems(regions: RegionSlice[], t: TFunction, lang: string):
     };
   });
 }
-
-// The leftover's 45° stripes: 2px light, 2px dark.
-const STRIPES = { light: "#5d5955", dark: "#2e2b28" };
 
 /** The stripes as CSS, for legend swatches. */
 export const STRIPE_CSS = `repeating-linear-gradient(45deg, ${STRIPES.light} 0 2px, ${STRIPES.dark} 2px 4px)`;

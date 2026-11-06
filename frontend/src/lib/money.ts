@@ -90,10 +90,15 @@ function renderParts(
   return { sign, body };
 }
 
-/** One asterisk per character of a formatted amount: a mask exactly as wide
- *  as the figure it hides (private mode). */
-export function maskAmount(text: string): string {
-  return "*".repeat(text.length);
+/** A formatted amount, or in private mode one asterisk per character of it:
+ *  a mask exactly as wide as the figure it hides. */
+export function formatMaskedMoney(
+  value: string | number,
+  masked: boolean,
+  options?: MoneyFormatOptions,
+): string {
+  const text = formatMoney(value, options);
+  return masked ? "*".repeat(text.length) : text;
 }
 
 export function formatMoney(

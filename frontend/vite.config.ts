@@ -23,6 +23,9 @@ export default defineConfig(async ({ mode }) => ({
     include: ['src/**/*.test.{ts,tsx}', 'mock/**/*.test.{ts,tsx}'],
     globals: true,
     setupFiles: './src/test/setup.ts',
+    // Vitest empties every stylesheet; `lib/theme.ts` reads its tokens from
+    // this one's source.
+    css: { include: [/index\.css\?raw$/] },
     pool: 'vmThreads',
   },
 }))

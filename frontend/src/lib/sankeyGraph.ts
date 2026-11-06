@@ -1,7 +1,8 @@
 import type { Sankey, Slice } from "../api/overview";
 import { sliceColor, sliceKey } from "./slice";
 import { sumDecimals } from "./money";
-import { FAINT } from "./chartTheme";
+import { FG_FAINT } from "./theme";
+import { MINT, ORANGE } from "./palette";
 
 /** `amount` is the exact decimal string a node's label and tooltip render —
  *  never ECharts' own float sums. Each non-hub node has exactly one link, so
@@ -21,9 +22,6 @@ export type SankeyLabels = {
 };
 
 export const HUB = "hub";
-/** Green and orange, matching the two singleton slices they sit beside. */
-export const NOT_SPENT_COLOR = "#5fcf9e";
-export const DRAWN_COLOR = "#e88a5f";
 
 /** Turn the payload into an ECharts sankey graph.
  *
@@ -57,7 +55,7 @@ export function sankeyGraph(s: Sankey, labels: SankeyLabels): SankeyGraph {
     push("in", sliceKey(x.slice), labels.slice(x.slice), sliceColor(x.slice), x.amount);
   }
   if (s.drawnFromSavings !== undefined) {
-    push("in", "drawnFromSavings", labels.drawnFromSavings, DRAWN_COLOR, s.drawnFromSavings);
+    push("in", "drawnFromSavings", labels.drawnFromSavings, ORANGE, s.drawnFromSavings);
   }
 
   const total = sumDecimals([
@@ -67,13 +65,13 @@ export function sankeyGraph(s: Sankey, labels: SankeyLabels): SankeyGraph {
 
   // The hub sits between the two sides, so it is inserted after every source
   // and before every destination.
-  nodes.push({ name: HUB, label: "", color: FAINT, amount: total });
+  nodes.push({ name: HUB, label: "", color: FG_FAINT, amount: total });
 
   for (const x of s.destinations) {
     push("out", sliceKey(x.slice), labels.slice(x.slice), sliceColor(x.slice), x.amount);
   }
   if (s.notSpent !== undefined) {
-    push("out", "notSpent", labels.notSpent, NOT_SPENT_COLOR, s.notSpent);
+    push("out", "notSpent", labels.notSpent, MINT, s.notSpent);
   }
 
   return { nodes, links, total };

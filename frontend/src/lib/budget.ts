@@ -12,28 +12,7 @@ import type { ReactNode } from "react";
 import type { BudgetCategory, BudgetKind } from "../api/budget";
 import type { Transaction, TypeBucket } from "../api/types";
 import { ApiError } from "../api/client";
-
-// Swatches offered in the category/tag colour picker: the account palette's
-// hues plus enough extras to fill one row, ordered around the colour wheel.
-export const BUDGET_PALETTE: readonly string[] = [
-  "#e0605f",
-  "#e88a5f",
-  "#f0b952",
-  "#c9a26b",
-  "#8fd05f",
-  "#9bb06b",
-  "#5fcf9e",
-  "#4dd0b1",
-  "#55c2d8",
-  "#5b9bf0",
-  "#6aa0e0",
-  "#7f8cf0",
-  "#b8a8f0",
-  "#b07ef0",
-  "#d97ec4",
-  "#f08fb0",
-  "#9aa4b2",
-];
+import { AMBER, FG_DIM } from "./theme";
 
 /** Display order of the three kinds; also the grouping order of every list. */
 export const BUDGET_KINDS: readonly BudgetKind[] = ["expense", "income", "neutral"];
@@ -146,14 +125,11 @@ export const BUDGET_ICONS: Record<string, LucideIcon> = {
 
 export const BUDGET_ICON_NAMES: readonly string[] = Object.keys(BUDGET_ICONS);
 
-/** Grey, from the seeded system row — the fallback for a missing or unsafe
- *  colour. A colour reaches an inline `style`, so it is validated, not trusted. */
-export const FALLBACK_COLOR = "#aeaaa7";
-/** A row with no category: the theme's amber (`--color-amber`), so the chip
- *  and the amber "needs review" text beside it are the same colour. A hex
- *  literal rather than the CSS variable because it is also mixed into tints
- *  and handed to the charts. */
-export const UNCATEGORISED_COLOR = "#f0b35b";
+/** The fallback for a missing or unsafe colour. A colour reaches an inline
+ *  `style`, so it is validated, not trusted. */
+export const FALLBACK_COLOR = FG_DIM;
+/** A row with no category: amber, like the "needs review" text beside it. */
+export const UNCATEGORISED_COLOR = AMBER;
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export function safeBudgetColor(color: string | null | undefined): string {

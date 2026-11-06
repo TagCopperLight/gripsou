@@ -6,7 +6,8 @@ import type { EChartsOption } from "echarts";
 import { Surface } from "../../ui/Surface";
 import { MaskedMoney, PrivacyEye } from "../../ui/PrivateMoney";
 import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
-import { GRID, SURFACE } from "../../lib/chartTheme";
+import { SURFACE, SURFACE_3 } from "../../lib/theme";
+import { CHART_BASE } from "../../lib/chartTheme";
 import { formatShare } from "../../lib/distribution";
 import { formatMoney } from "../../lib/money";
 import type { Privacy } from "../../auth/usePrivacy";
@@ -103,8 +104,7 @@ export function ExposureDonut({
     startAngle: 90,
   };
   const option: EChartsOption = {
-    backgroundColor: "transparent",
-    animation: false,
+    ...CHART_BASE,
     tooltip: { show: false },
     series: [
       {
@@ -113,7 +113,7 @@ export function ExposureDonut({
         itemStyle: { borderColor: SURFACE, borderWidth: 2, borderRadius: 4 },
         silent: blank,
         data: blank
-          ? [{ name: "", value: 1, itemStyle: { color: GRID } }]
+          ? [{ name: "", value: 1, itemStyle: { color: SURFACE_3 } }]
           : items
               .filter((i) => (i.share ?? 0) > minSlice)
               .map((i) => ({ name: i.key, value: i.share, itemStyle: { color: fill(i), opacity: isLit(i.key) ? 1 : DONUT_DIM } })),

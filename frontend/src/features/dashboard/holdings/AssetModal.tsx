@@ -27,6 +27,7 @@ import { currencySymbol } from "../../../lib/currency";
 import { getPrefs } from "../../../lib/prefs";
 import { rangeOptions, type Range } from "../../../lib/ranges";
 import { legendItems, plotSeries } from "../../../lib/valueChart";
+import { FG_FAINT, GREEN } from "../../../lib/theme";
 
 // This modal shows THREE currency domains on screen, plus a fourth behind the chart's unit
 // switch. They are distinct and must
@@ -179,8 +180,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     );
     return {
       series: [
-        { name: t("dashboard.assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: "#777471", dashed: true },
-        { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: "#34d399", area: true },
+        { name: t("dashboard.assetModal.invested"), data: pts.map((p) => [p.t, p.invested] as [number, number]), color: FG_FAINT, dashed: true },
+        { name: t("dashboard.assetModal.positionValue"), data: pts.map((p) => [p.t, p.value] as [number, number]), color: GREEN, area: true },
       ] satisfies ChartSeries[],
       // The chart's own last point, not `holding.value`: this series is
       // amount-domain, so the header must read in the same currency as the

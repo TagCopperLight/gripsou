@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { RED, legendItems, plotSeries, type ChartSeries } from "./valueChart";
+import { legendItems, plotSeries, type ChartSeries } from "./valueChart";
+import { RED } from "./theme";
 
 const GREEN = "#34d399";
 const GRAY = "#777471";

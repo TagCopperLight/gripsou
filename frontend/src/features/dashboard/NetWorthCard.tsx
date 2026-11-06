@@ -15,12 +15,9 @@ import { useHoldings, useNetWorth } from "../../api/hooks";
 import { ExcludedNote, FxAsterisk, FxFootnote } from "../../ui/FxNote";
 import { getPrefs } from "../../lib/prefs";
 import { currencySymbol } from "../../lib/currency";
-import { SURFACE } from "../../lib/chartTheme";
+import { FG_FAINT, GREEN, SURFACE } from "../../lib/theme";
 import { rangeOptions, type Range } from "../../lib/ranges";
 import { legendItems, plotSeries, type ChartSeries, type ChartUnit } from "../../lib/valueChart";
-
-const GREEN = "#34d399"; // color-green
-const GRAY = "#777471"; // fg-faint
 
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
@@ -53,7 +50,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   // off the plotted series, so it turns red with the line.
   const points = data?.points ?? [];
   const series: ChartSeries[] = [
-    { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, Number(p.invested)]), color: GRAY, dashed: true },
+    { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, Number(p.invested)]), color: FG_FAINT, dashed: true },
     { name: t("dashboard.netWorth.netWorth"), data: points.map((p) => [p.t, Number(p.netWorth)]), color: GREEN, area: true },
   ];
   const legend = legendItems(plotSeries(series, unit, t("common.return")));

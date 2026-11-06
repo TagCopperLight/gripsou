@@ -2,6 +2,7 @@
 // tooltip can't disagree with the lines: the same series, the same colours.
 
 import { windowReturn } from "./assetSeries";
+import { RED } from "./theme";
 
 export type ChartUnit = "value" | "reporting" | "percent";
 
@@ -15,8 +16,6 @@ export type ChartSeries = {
   dashed?: boolean;
   area?: boolean;
 };
-
-export const RED = "#f87171"; // color-red
 
 /**
  * The series as plotted. Percent mode with a dashed baseline series (capital

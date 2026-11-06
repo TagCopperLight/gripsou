@@ -3,11 +3,11 @@ import type { EChartsOption } from "echarts";
 import { formatMoney, formatPercent } from "../lib/money";
 import { formatDay } from "../lib/date";
 import { lineColor, plotSeries, type ChartSeries, type ChartUnit } from "../lib/valueChart";
-import { FAINT, GRID, MONO, rgba, tooltipRow } from "../lib/chartTheme";
+import { withAlpha } from "../lib/color";
+import { SURFACE_2 } from "../lib/theme";
+import { AXIS_GRID, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../lib/chartTheme";
 
 export type { ChartSeries, ChartUnit };
-
-const SURFACE_2 = "#1c1916"; // default host surface (hollow symbol center)
 
 type TooltipParam = {
   axisValue: number;
@@ -57,68 +57,28 @@ export function ValueChart({
   const plotted = plotSeries(series, unit, percentLabel);
 
   const option: EChartsOption = {
-    backgroundColor: "transparent",
-    animation: false,
-    grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
-    tooltip: {
-      trigger: "axis",
-      backgroundColor: GRID,
-      borderWidth: 0,
-      padding: [10, 12],
-      extraCssText: "border-radius:12px;box-shadow:none;",
-      textStyle: { fontFamily: MONO },
-      axisPointer: { type: "line", lineStyle: { color: FAINT, width: 1 } },
-      formatter: (params) => {
-        const items = params as unknown as TooltipParam[];
-        // The series itemStyle color is the (hollow) symbol center, i.e. the
-        // surface — use the real line color from the series for the marker.
-        const colorByName = new Map(plotted.map((s) => [s.name, lineColor(s)]));
-        // ponytail: callers pass the dashed invested line first for z-order;
-        // the tooltip reads better with the bigger value line on top.
-        const rows = [...items]
-          .reverse()
-          .map((it) =>
-            tooltipRow(
-              colorByName.get(it.seriesName) ?? it.color,
-              it.seriesName,
-              fmt(it.value[1], percent ? { signed: true } : undefined),
-            ),
-          )
-          .join("");
-        return `
-          <div style="min-width:200px;">
-            <div style="color:${FAINT};font-size:11px;">${formatDay(items[0].axisValue)}</div>
-            ${rows}
-          </div>`;
-      },
-    },
-    xAxis: {
-      type: "time",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { show: false },
-      axisLabel: {
-        color: FAINT,
-        fontFamily: MONO,
-        fontSize: 11,
-        hideOverlap: true,
-        formatter: (value: number) => formatDay(value),
-      },
-    },
-    yAxis: {
-      type: "value",
-      scale: true,
-      splitNumber: 4,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { show: true, lineStyle: { color: GRID } },
-      axisLabel: {
-        color: FAINT,
-        fontFamily: MONO,
-        fontSize: 11,
-        formatter: (v: number) => fmt(v, { fractionDigits: 0 }),
-      },
-    },
+    ...CHART_BASE,
+    grid: AXIS_GRID,
+    tooltip: chartTooltip("axis", (params) => {
+      const items = params as unknown as TooltipParam[];
+      // The series itemStyle color is the (hollow) symbol center, i.e. the
+      // surface — use the real line color from the series for the marker.
+      const colorByName = new Map(plotted.map((s) => [s.name, lineColor(s)]));
+      // Callers pass the dashed invested line first for z-order; the tooltip
+      // reads better with the bigger value line on top.
+      const rows = [...items]
+        .reverse()
+        .map((it) =>
+          tooltipRow(
+            colorByName.get(it.seriesName) ?? it.color,
+            it.seriesName,
+            fmt(it.value[1], percent ? { signed: true } : undefined),
+          ),
+        );
+      return tooltipCard(formatDay(items[0].axisValue), rows);
+    }),
+    xAxis: timeAxis((value) => formatDay(value)),
+    yAxis: valueAxis((v) => fmt(v, { fractionDigits: 0 }), { scale: true }),
     series: plotted.map((s, i) => {
       const color = lineColor(s);
       return {
@@ -142,8 +102,8 @@ export function ValueChart({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: rgba(color, 0.28) },
-                { offset: 1, color: rgba(color, 0) },
+                { offset: 0, color: withAlpha(color, 0.28) },
+                { offset: 1, color: withAlpha(color, 0) },
               ],
             },
           },

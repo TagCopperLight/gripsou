@@ -6,10 +6,11 @@ import { useTranslation } from "react-i18next";
 import { Surface } from "../../../ui/Surface";
 import { CategoryChip } from "../CategoryChip";
 import { desaturate } from "../../../lib/color";
-import { formatMoney, maskAmount, sumDecimals } from "../../../lib/money";
+import { formatMaskedMoney, sumDecimals, type MoneyFormatOptions } from "../../../lib/money";
 import { monthLabel, monthStart } from "../../../lib/period";
 import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice";
-import { FAINT, GRID, MONO, SURFACE, tooltipRow } from "../../../lib/chartTheme";
+import { SURFACE } from "../../../lib/theme";
+import { AXIS_GRID, CHART_BASE, categoryAxis, chartTooltip, tooltipCard, tooltipRow, valueAxis } from "../../../lib/chartTheme";
 import type { BudgetTrend } from "../../../api/overview";
 
 type TooltipParam = { dataIndex: number };
@@ -24,8 +25,7 @@ export function TrendSurface({
   masked?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const money = (v: string, opts?: Parameters<typeof formatMoney>[1]) =>
-    masked ? maskAmount(formatMoney(v, opts)) : formatMoney(v, opts);
+  const money = (v: string, opts?: MoneyFormatOptions) => formatMaskedMoney(v, masked, opts);
 
   const language = i18n.language;
   // Each month has its own order. Series represent stack positions rather
@@ -47,71 +47,25 @@ export function TrendSurface({
     const axisLabels = trend.months.map((m) => short.format(monthStart(m)));
 
     return {
-      backgroundColor: "transparent",
-      animation: false,
-      grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
-      tooltip: {
-        trigger: "item",
-        backgroundColor: GRID,
-        borderWidth: 0,
-        padding: [10, 12],
-        extraCssText: "border-radius:12px;box-shadow:none;",
-        textStyle: { fontFamily: MONO },
-        formatter: (params) => {
-          const { dataIndex } = params as TooltipParam;
-          // An item hover still shows the whole month's stack. Read the
-          // original decimal strings so the total never sums chart floats.
-          const entries = [...columns[dataIndex]]
-            .sort((a, b) => Number(a.amount) - Number(b.amount));
-          const originals = entries.map((s) => s.amount);
-          const total = sumDecimals(originals);
-          const rows = entries
-            .filter((s) => Number(s.amount) !== 0)
-            .map((s) =>
-              tooltipRow(
-                sliceColor(s.slice),
-                sliceLabel(t, s.slice),
-                money(s.amount),
-              ),
-            )
-            .join("");
-          const totalRow = tooltipRow(
-            "transparent",
-            t("common.total"),
-            money(total),
-            true,
-          );
-          return `
-            <div style="min-width:200px;">
-              <div style="color:${FAINT};font-size:11px;">${monthLabel(
-                trend.months[dataIndex],
-                language,
-              )}</div>
-              ${rows}
-              <div style="border-top:1px solid ${FAINT};margin-top:8px;padding-top:2px;">${totalRow}</div>
-            </div>`;
-        },
-      },
-      xAxis: {
-        type: "category",
-        data: axisLabels,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: FAINT, fontFamily: MONO, fontSize: 11 },
-      },
-      yAxis: {
-        type: "value",
-        splitNumber: 4,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: true, lineStyle: { color: GRID } },
-        axisLabel: {
-          color: FAINT,
-          fontFamily: MONO,
-          fontSize: 11,
-          formatter: (v: number) => money(String(v), { fractionDigits: 0 }),
-        },
-      },
+      ...CHART_BASE,
+      grid: AXIS_GRID,
+      tooltip: chartTooltip("item", (params) => {
+        const { dataIndex } = params as TooltipParam;
+        // An item hover still shows the whole month's stack. Read the
+        // original decimal strings so the total never sums chart floats.
+        const entries = [...columns[dataIndex]]
+          .sort((a, b) => Number(a.amount) - Number(b.amount));
+        const total = sumDecimals(entries.map((s) => s.amount));
+        const rows = entries
+          .filter((s) => Number(s.amount) !== 0)
+          .map((s) => tooltipRow(sliceColor(s.slice), sliceLabel(t, s.slice), money(s.amount)));
+        return tooltipCard(monthLabel(trend.months[dataIndex], language), rows, {
+          label: t("common.total"),
+          value: money(total),
+        });
+      }),
+      xAxis: categoryAxis(axisLabels),
+      yAxis: valueAxis((v) => money(String(v), { fractionDigits: 0 })),
       series: trend.series.map((_, rank) => ({
         name: `rank:${rank}`,
         type: "bar",

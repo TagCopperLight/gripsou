@@ -1,3 +1,5 @@
+import { SURFACE } from "./theme";
+
 type Rgb = { r: number; g: number; b: number };
 type Hsl = { h: number; s: number; l: number };
 
@@ -70,9 +72,6 @@ export function withAlpha(hex: string, alpha: number): string {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
-
-/** The app's base surface, the ground every tinted chip is designed against. */
-const SURFACE = "#13110f";
 
 /**
  * A tint of `hex` flattened into an opaque colour, as if it were painted at

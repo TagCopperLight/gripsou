@@ -5,10 +5,11 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
-import { formatMoney, maskAmount } from "../../../lib/money";
+import { formatMaskedMoney } from "../../../lib/money";
 import { sliceLabel } from "../../../lib/slice";
 import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
-import { GRID, MONO, tooltipRow } from "../../../lib/chartTheme";
+import { FONT_MONO } from "../../../lib/theme";
+import { CHART_BASE, chartTooltip, tooltipRow } from "../../../lib/chartTheme";
 import type { Sankey } from "../../../api/overview";
 
 export function SankeySurface({
@@ -33,41 +34,32 @@ export function SankeySurface({
     const byName = new Map(graph.nodes.map((n) => [n.name, n]));
 
     return {
-      backgroundColor: "transparent",
-      animation: false,
-      tooltip: {
-        trigger: "item",
-        backgroundColor: GRID,
-        borderWidth: 0,
-        padding: [10, 12],
-        extraCssText: "border-radius:12px;box-shadow:none;",
-        textStyle: { fontFamily: MONO },
-        formatter: (p) => {
-          const params = p as unknown as {
-            dataType: string;
-            name: string;
-            data: { source?: string; target?: string };
-          };
-          // A link is described by its non-hub end, which it carries whole.
-          const name =
-            params.dataType === "edge"
-              ? params.data.target === HUB
-                ? params.data.source!
-                : params.data.target!
-              : params.name;
-          const node = byName.get(name);
-          if (!node) return "";
-          // The amount is the node's own decimal string, never the float
-          // ECharts summed for it.
-          return tooltipRow(
-            node.name === HUB ? "transparent" : node.color,
-            node.name === HUB ? t("common.total") : node.label,
-            masked ? maskAmount(formatMoney(node.amount)) : formatMoney(node.amount),
-            false,
-            0,
-          );
-        },
-      },
+      ...CHART_BASE,
+      tooltip: chartTooltip("item", (p) => {
+        const params = p as unknown as {
+          dataType: string;
+          name: string;
+          data: { source?: string; target?: string };
+        };
+        // A link is described by its non-hub end, which it carries whole.
+        const name =
+          params.dataType === "edge"
+            ? params.data.target === HUB
+              ? params.data.source!
+              : params.data.target!
+            : params.name;
+        const node = byName.get(name);
+        if (!node) return "";
+        // The amount is the node's own decimal string, never the float
+        // ECharts summed for it.
+        return tooltipRow(
+          node.name === HUB ? "transparent" : node.color,
+          node.name === HUB ? t("common.total") : node.label,
+          formatMaskedMoney(node.amount, masked),
+          false,
+          0,
+        );
+      }),
       series: [
         {
           type: "sankey",
@@ -92,7 +84,7 @@ export function SankeySurface({
               // The hub has no label: its total is in its tooltip.
               show: n.name !== HUB,
               color: n.color,
-              fontFamily: MONO,
+              fontFamily: FONT_MONO,
               fontSize: 11,
               formatter: () => n.label,
             },

@@ -7,7 +7,8 @@ import { Check, Pencil, Trash2 } from "lucide-react";
 import { TagChip } from "../TagChip";
 import { ColorPicker } from "../../../ui/ColorPicker";
 import { useUpdateBudgetTag, type BudgetTag, type TagBody } from "../../../api/budget";
-import { BUDGET_PALETTE, budgetErrorKey } from "../../../lib/budget";
+import { budgetErrorKey } from "../../../lib/budget";
+import { BUDGET_PALETTE } from "../../../lib/palette";
 
 type TagRowProps = {
   tag: BudgetTag;

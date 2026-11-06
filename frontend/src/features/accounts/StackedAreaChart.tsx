@@ -3,7 +3,9 @@ import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
 import { formatMoney } from "../../lib/money";
 import { formatDay } from "../../lib/date";
-import { FAINT, GRID, MONO, rgba, tooltipRow } from "../../lib/chartTheme";
+import { withAlpha } from "../../lib/color";
+import { FG_FAINT } from "../../lib/theme";
+import { AXIS_GRID, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../../lib/chartTheme";
 
 export type StackedSeries = {
   /** What `highlight` names; defaults to the name. */
@@ -24,69 +26,25 @@ type StackedAreaChartProps = {
   className?: string;
 };
 
-// Stacked area, one band per account (account colors). Y anchored at 0 — this is
-// a composition. Tooltip lists each account plus a Total row.
+/** One band per account, anchored at zero: a composition. */
 export function StackedAreaChart({ series, highlight = null, height = 320, className = "" }: StackedAreaChartProps) {
   const { t } = useTranslation();
   const colorByName = new Map(series.map((s) => [s.name, s.color]));
 
   const option: EChartsOption = {
-    backgroundColor: "transparent",
-    animation: false,
-    grid: { top: 16, right: 0, bottom: 24, left: 0, containLabel: true },
-    tooltip: {
-      trigger: "axis",
-      backgroundColor: GRID,
-      borderWidth: 0,
-      padding: [10, 12],
-      extraCssText: "border-radius:12px;box-shadow:none;",
-      textStyle: { fontFamily: MONO },
-      axisPointer: { type: "line", lineStyle: { color: FAINT, width: 1 } },
-      formatter: (params) => {
-        const items = params as unknown as TooltipParam[];
-        let total = 0;
-        const rows = items
-          .map((it) => {
-            total += it.value[1];
-            return tooltipRow(colorByName.get(it.seriesName) ?? FAINT, it.seriesName, formatMoney(it.value[1]));
-          })
-          .join("");
-        const totalRow = tooltipRow("transparent", t("common.total"), formatMoney(total), true);
-        return `
-          <div style="min-width:200px;">
-            <div style="color:${FAINT};font-size:11px;">${formatDay(items[0].axisValue)}</div>
-            ${rows}
-            <div style="border-top:1px solid ${FAINT};margin-top:8px;padding-top:2px;">${totalRow}</div>
-          </div>`;
-      },
-    },
-    xAxis: {
-      type: "time",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { show: false },
-      axisLabel: {
-        color: FAINT,
-        fontFamily: MONO,
-        fontSize: 11,
-        hideOverlap: true,
-        formatter: (value: number) => formatDay(value),
-      },
-    },
-    yAxis: {
-      type: "value",
-      min: 0,
-      splitNumber: 4,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { show: true, lineStyle: { color: GRID } },
-      axisLabel: {
-        color: FAINT,
-        fontFamily: MONO,
-        fontSize: 11,
-        formatter: (v: number) => formatMoney(v, { fractionDigits: 0 }),
-      },
-    },
+    ...CHART_BASE,
+    grid: AXIS_GRID,
+    tooltip: chartTooltip("axis", (params) => {
+      const items = params as unknown as TooltipParam[];
+      let total = 0;
+      const rows = items.map((it) => {
+        total += it.value[1];
+        return tooltipRow(colorByName.get(it.seriesName) ?? FG_FAINT, it.seriesName, formatMoney(it.value[1]));
+      });
+      return tooltipCard(formatDay(items[0].axisValue), rows, { label: t("common.total"), value: formatMoney(total) });
+    }),
+    xAxis: timeAxis((value) => formatDay(value)),
+    yAxis: valueAxis((v) => formatMoney(v, { fractionDigits: 0 }), { min: 0 }),
     series: series.map((s) => {
       const faded = highlight !== null && (s.key ?? s.name) !== highlight;
       return {
@@ -97,7 +55,7 @@ export function StackedAreaChart({ series, highlight = null, height = 320, class
         showSymbol: false,
         lineStyle: { width: 1.5, color: s.color, opacity: faded ? 0.25 : 1 },
         itemStyle: { color: s.color },
-        areaStyle: { color: rgba(s.color, faded ? 0.1 : 0.55) },
+        areaStyle: { color: withAlpha(s.color, faded ? 0.1 : 0.55) },
         emphasis: { disabled: true },
       };
     }),

@@ -3,7 +3,8 @@ import { Check, Pencil } from "lucide-react";
 
 import { ColorPicker } from "./ColorPicker";
 
-import { BUDGET_PALETTE, safeBudgetColor } from "../lib/budget";
+import { safeBudgetColor } from "../lib/budget";
+import { BUDGET_PALETTE } from "../lib/palette";
 
 type ColorSwatchGridProps = {
   value: string;
