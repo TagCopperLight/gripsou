@@ -744,6 +744,14 @@ export const TOTP_DIGITS = 6;
 export const BUDGET_AI_THRESHOLD_MIN = 50;
 /** See `BUDGET_AI_THRESHOLD_MIN`. */
 export const BUDGET_AI_THRESHOLD_MAX = 95;
+/** The transaction list's page when the query names no `limit`. */
+export const TRANSACTIONS_LIMIT_DEFAULT = 200;
+/** The largest page the transaction list serves; a larger `limit` (and one below 1) is clamped. */
+export const TRANSACTIONS_LIMIT_MAX = 500;
+/** The budget trend's width when the query names no `months`. */
+export const TREND_MONTHS_DEFAULT = 12;
+/** The widest budget trend; `months` outside 1..=this is a 400. */
+export const TREND_MONTHS_MAX = 24;
 /** Every chart range, in the order the range selector lists them. */
 export const RANGES = ["7d", "1mo", "6mo", "1y", "ytd", "max"] as const satisfies readonly Range[];
 /** The range a chart's query means when it names none. */

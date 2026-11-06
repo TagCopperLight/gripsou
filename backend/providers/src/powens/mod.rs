@@ -124,24 +124,13 @@ async fn send(
     success(transport(req, what).await?, what)
 }
 
-/// A response body decoded as JSON, its decode error without the value.
-async fn read_json<T: serde::de::DeserializeOwned>(
-    resp: reqwest::Response,
-    what: &str,
-) -> Result<T, ProviderError> {
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
-    serde_json::from_str(&body)
-        .map_err(|e| ProviderError::Other(crate::json_decode_error(what, &e)))
-}
-
 async fn send_json<T: serde::de::DeserializeOwned>(
     req: reqwest::RequestBuilder,
     what: &str,
 ) -> Result<T, ProviderError> {
-    read_json(send(req, what).await?, what).await
+    crate::read_json(send(req, what).await?, what)
+        .await
+        .map_err(ProviderError::Other)
 }
 
 pub const KIND: AccountKind = AccountKind {

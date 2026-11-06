@@ -237,8 +237,10 @@ mod tests {
     use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
     use sqlx::PgPool;
 
-    /// An adapter that sends people to the Powens webview, with no keys.
-    struct FakeBank;
+    /// An adapter that sends people to the Powens webview, with no keys, and
+    /// counts the callbacks that reach it.
+    #[derive(Default)]
+    struct FakeBank(std::sync::atomic::AtomicUsize);
 
     #[async_trait::async_trait]
     impl AccountProvider for FakeBank {
@@ -252,6 +254,7 @@ mod tests {
             &self,
             params: &std::collections::HashMap<String, String>,
         ) -> Result<CompleteConnect, ProviderError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(CompleteConnect {
                 credentials: serde_json::json!({}),
                 provider_meta: serde_json::json!(params),
@@ -441,7 +444,7 @@ mod tests {
         deps.set_accounts(
             [(
                 "powens".to_string(),
-                std::sync::Arc::new(FakeBank) as std::sync::Arc<dyn AccountProvider>,
+                std::sync::Arc::new(FakeBank::default()) as std::sync::Arc<dyn AccountProvider>,
             )]
             .into(),
         );
@@ -581,32 +584,6 @@ mod tests {
         assert_eq!(left, vec![active]);
     }
 
-    /// Counts the callbacks that reach it.
-    struct CountingBank(std::sync::atomic::AtomicUsize);
-
-    #[async_trait::async_trait]
-    impl AccountProvider for CountingBank {
-        async fn connect(&self) -> Result<ConnectInit, ProviderError> {
-            Err(ProviderError::NotImplemented)
-        }
-        async fn complete_connect(
-            &self,
-            _: &std::collections::HashMap<String, String>,
-        ) -> Result<CompleteConnect, ProviderError> {
-            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(CompleteConnect {
-                credentials: serde_json::json!({}),
-                provider_meta: serde_json::json!({}),
-            })
-        }
-        async fn sync(
-            &self,
-            _: &serde_json::Value,
-        ) -> Result<gripsou_core::dto::SyncResult, ProviderError> {
-            Err(ProviderError::NotImplemented)
-        }
-    }
-
     /// The provider's code is single-use: a replayed callback, or one naming
     /// another user's connection, is refused before the provider sees it.
     #[sqlx::test(migrations = "../migrations")]
@@ -614,7 +591,7 @@ mod tests {
         use gripsou_core::repo::connection;
         let user = seed_user(&pool, "u@t.local").await;
         let other = seed_user(&pool, "other@t.local").await;
-        let bank = std::sync::Arc::new(CountingBank(Default::default()));
+        let bank = std::sync::Arc::new(FakeBank::default());
         let deps = crate::testkit::deps();
         deps.set_accounts(
             [(
@@ -662,7 +639,7 @@ mod tests {
         deps.set_accounts(
             [(
                 "powens".to_string(),
-                std::sync::Arc::new(FakeBank) as std::sync::Arc<dyn AccountProvider>,
+                std::sync::Arc::new(FakeBank::default()) as std::sync::Arc<dyn AccountProvider>,
             )]
             .into(),
         );

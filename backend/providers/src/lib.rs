@@ -18,6 +18,20 @@ pub(crate) fn json_decode_error(what: &str, e: &serde_json::Error) -> String {
     )
 }
 
+/// A response body decoded as JSON. The error is the read failure, or the
+/// decode error without the value (`json_decode_error`); each adapter wraps it
+/// in its own error type.
+pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+    what: &str,
+) -> Result<T, String> {
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| gripsou_core::logs::error_chain(&e))?;
+    serde_json::from_str(&body).map_err(|e| json_decode_error(what, &e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::json_decode_error;

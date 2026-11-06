@@ -675,29 +675,9 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Suggestions on another user's holding are a 404, never an empty list:
-    /// the endpoint must not confirm the existence of ids the caller can't see.
+    /// Another user's holding is a 404, as on the lot endpoints.
     #[sqlx::test(migrations = "../migrations")]
-    async fn lot_suggestions_refuse_another_users_holding(pool: PgPool) {
-        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
-        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
-
-        let own = lot_suggestions(State(pool.clone()), auth(alice.user), Path(alice.holding))
-            .await
-            .expect("owner may read")
-            .0;
-        assert!(own.is_empty(), "one snapshot, no jump, nothing to suggest");
-
-        let err = lot_suggestions(State(pool.clone()), auth(bob.user), Path(alice.holding))
-            .await
-            .err()
-            .expect("cross-user read must fail");
-        assert_eq!(err.status(), StatusCode::NOT_FOUND);
-    }
-
-    /// Another user's price history is not served through their holding id.
-    #[sqlx::test(migrations = "../migrations")]
-    async fn holding_prices_hides_another_users_holding(pool: PgPool) {
+    async fn holding_prices_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
         sqlx::query(
@@ -726,16 +706,36 @@ mod tests {
         .0;
         assert_eq!(own.len(), 1, "the seeded price is visible to its owner");
 
-        let theirs = holding_prices(
+        let err = holding_prices(
             State(pool.clone()),
             auth(bob.user),
             Path(alice.holding),
             range(),
         )
         .await
-        .expect("an unowned holding reads as empty")
-        .0;
-        assert!(theirs.is_empty());
+        .err()
+        .expect("cross-user read must fail");
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// Suggestions on another user's holding are a 404, never an empty list:
+    /// the endpoint must not confirm the existence of ids the caller can't see.
+    #[sqlx::test(migrations = "../migrations")]
+    async fn lot_suggestions_refuse_another_users_holding(pool: PgPool) {
+        let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
+        let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
+
+        let own = lot_suggestions(State(pool.clone()), auth(alice.user), Path(alice.holding))
+            .await
+            .expect("owner may read")
+            .0;
+        assert!(own.is_empty(), "one snapshot, no jump, nothing to suggest");
+
+        let err = lot_suggestions(State(pool.clone()), auth(bob.user), Path(alice.holding))
+            .await
+            .err()
+            .expect("cross-user read must fail");
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     /// Previewing lots on another user's holding is a 404 (the preview writes

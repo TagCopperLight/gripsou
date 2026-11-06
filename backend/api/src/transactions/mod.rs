@@ -38,6 +38,11 @@ pub struct TransactionParams {
     pub offset: Option<i64>,
 }
 
+/// A page of the list when the query names no `limit`.
+pub const LIMIT_DEFAULT: i64 = 200;
+/// The largest page, so a crafted `limit` cannot ask for the whole ledger at once.
+pub const LIMIT_MAX: i64 = 500;
+
 impl TransactionParams {
     /// The filters these parameters mean for `user_id`, under their own
     /// review threshold. A filter the server cannot fully honour must never be
@@ -64,8 +69,7 @@ impl TransactionParams {
             // default is *not* "everything".
             include_transfers: self.include_transfers.unwrap_or(false),
             review_threshold,
-            // Capped so a crafted `limit` cannot ask for the whole ledger at once.
-            limit: self.limit.unwrap_or(200).clamp(1, 500),
+            limit: self.limit.unwrap_or(LIMIT_DEFAULT).clamp(1, LIMIT_MAX),
             offset: self.offset.unwrap_or(0).max(0),
         })
     }

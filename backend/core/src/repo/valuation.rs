@@ -432,6 +432,7 @@ pub struct PricePointRow {
     pub reporting_invested: Option<Decimal>,
 }
 
+/// `NotFound` when the holding isn't the user's.
 pub async fn holding_prices(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -439,6 +440,7 @@ pub async fn holding_prices(
     from: DateTime<Utc>,
     to: DateTime<Utc>,
 ) -> Result<Vec<PricePointRow>, CoreError> {
+    super::holding::owned_holding(pool, user_id, holding_id).await?;
     let rows = sqlx::query_as!(
         PricePointRow,
         r#"
@@ -450,7 +452,7 @@ pub async fn holding_prices(
             join account a    on a.id = h.account_id
             join connection c on c.id = a.connection_id
             join users u      on u.id = c.user_id
-            where h.id = $1 and c.user_id = $2 and p.ts between $3 and $4
+            where h.id = $1 and p.ts between $2 and $3
         ),
         rates as materialized (
             select as_of, currency, rate
@@ -494,7 +496,6 @@ pub async fn holding_prices(
         order by pts.ts
         "#,
         holding_id,
-        user_id,
         from,
         to,
     )

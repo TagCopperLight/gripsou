@@ -10,7 +10,7 @@ use std::fmt::Write;
 
 use ts_rs::{Config, TS, TypeVisitor};
 
-use crate::{auth, wire};
+use crate::{auth, budget, transactions, wire};
 use gripsou_core::repo::prefs;
 
 /// The command that writes the file, named in its header.
@@ -138,6 +138,26 @@ fn constants() -> String {
         "BUDGET_AI_THRESHOLD_MAX",
         "See `BUDGET_AI_THRESHOLD_MIN`.",
         prefs::BUDGET_AI_THRESHOLD_RANGE.end(),
+    );
+    line(
+        "TRANSACTIONS_LIMIT_DEFAULT",
+        "The transaction list's page when the query names no `limit`.",
+        &transactions::LIMIT_DEFAULT,
+    );
+    line(
+        "TRANSACTIONS_LIMIT_MAX",
+        "The largest page the transaction list serves; a larger `limit` (and one below 1) is clamped.",
+        &transactions::LIMIT_MAX,
+    );
+    line(
+        "TREND_MONTHS_DEFAULT",
+        "The budget trend's width when the query names no `months`.",
+        &budget::TREND_DEFAULT_MONTHS,
+    );
+    line(
+        "TREND_MONTHS_MAX",
+        "The widest budget trend; `months` outside 1..=this is a 400.",
+        &budget::MAX_TREND_MONTHS,
     );
     line(
         "RANGES",

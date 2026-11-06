@@ -301,13 +301,13 @@ pub async fn summary(
 }
 
 /// More than this and the chart is unreadable and the window pointlessly wide.
-const MAX_TREND_MONTHS: u32 = 24;
+pub const MAX_TREND_MONTHS: u32 = 24;
 
 /// The trend chart's own default width, deliberately not the summary's
 /// baseline length even though both are 12: the chart's bars end with the
 /// anchor month included, while the baseline excludes the selected month. The
 /// two are free to diverge.
-const TREND_DEFAULT_MONTHS: u32 = 12;
+pub const TREND_DEFAULT_MONTHS: u32 = 12;
 
 pub async fn trend_handler(
     State(pool): State<PgPool>,

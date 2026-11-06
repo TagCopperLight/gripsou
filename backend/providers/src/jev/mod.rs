@@ -164,12 +164,9 @@ impl Categorizer for JevCategorizer {
                 .bearer_auth(&self.api_key),
         )
         .await?;
-        let text = resp
-            .text()
+        let body: serde_json::Value = crate::read_json(resp, "jev models")
             .await
-            .map_err(|e| CategorizeError::Other(gripsou_core::logs::error_chain(&e)))?;
-        let body: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| CategorizeError::Other(crate::json_decode_error("jev models", &e)))?;
+            .map_err(CategorizeError::Other)?;
         let mut models = map::parse_models(&body);
         models.sort();
         models.dedup();
@@ -207,11 +204,10 @@ async fn ask(
     body: &serde_json::Value,
 ) -> Result<Option<serde_json::Value>, CategorizeError> {
     let resp = send(http.post(url).bearer_auth(key).json(body)).await?;
-    match resp.json().await {
+    match crate::read_json(resp, "jev answer").await {
         Ok(v) => Ok(Some(v)),
-        Err(e) => {
-            // Left unanswered on purpose: a later run sends the item again.
-            tracing::warn!(error = %gripsou_core::logs::error_chain(&e), "jev answer unreadable");
+        Err(error) => {
+            tracing::warn!(%error, "jev answer unreadable");
             Ok(None)
         }
     }

@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with pts as materialized (\n            select p.ts, p.unit_price, p.currency as quote, a.currency as acct,\n                   u.currency as rep, (p.ts at time zone 'utc')::date as day\n            from price p\n            join holding h    on h.instrument_id = p.instrument_id\n            join account a    on a.id = h.account_id\n            join connection c on c.id = a.connection_id\n            join users u      on u.id = c.user_id\n            where h.id = $1 and p.ts between $2 and $3\n        ),\n        rates as materialized (\n            select as_of, currency, rate\n            from fx_grid(\n                array(select distinct day from pts),\n                array(select quote from pts\n                      union select acct from pts\n                      union select rep from pts)\n            )\n        ),\n        lots as (\n            select h.quantity as held,\n                   (select min(l.acquired_on) from lot l where l.holding_id = h.id) as first_day\n            from holding h\n            where h.id = $1\n        ),\n        basis as materialized (\n            select as_of, explained_qty, basis\n            from lot_basis(array[$1]::uuid[], array(select distinct day from pts))\n        )\n        select pts.ts as \"ts!\", pts.unit_price as \"unit_price!\",\n               fx_convert(pts.unit_price, q.rate, ac.rate) as \"account_price?\",\n               fx_convert(pts.unit_price, q.rate, rp.rate) as \"reporting_price?\",\n               pos.qty as \"qty?\",\n               pos.invested as \"invested?\",\n               fx_convert(pos.invested, ac.rate, rp.rate) as \"reporting_invested?\"\n        from pts\n        left join rates q  on q.currency = pts.quote and q.as_of = pts.day\n        left join rates ac on ac.currency = pts.acct and ac.as_of = pts.day\n        left join rates rp on rp.currency = pts.rep and rp.as_of = pts.day\n        cross join lots\n        left join basis b on b.as_of = pts.day\n        -- No position before the first lot. A holding with no lot at all (a\n        -- provider that reports balances only) is held flat at its quantity.\n        left join lateral (\n            select case when lots.first_day is null then lots.held\n                        else b.explained_qty end as qty,\n                   b.basis as invested\n            where lots.first_day is null or pts.day >= lots.first_day\n        ) pos on true\n        order by pts.ts\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ts!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "ts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "unit_price!",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "price",
+            "name": "unit_price"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "account_price?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "reporting_price?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "qty?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "invested?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "reporting_invested?",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3153a9438f3e6d2b3a0b32d330ec56fbd24c30bd35642b031edecac610976a6b"
+}
