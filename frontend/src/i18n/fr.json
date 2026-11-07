@@ -603,7 +603,8 @@
         "enableHint": "Vos transactions nouvelles et passées sont envoyées au fournisseur d'IA configuré par votre administrateur.",
         "threshold": "Seuil de vérification",
         "thresholdHint": "Les suggestions dont le niveau de confiance est inférieur à ce seuil vous sont soumises pour vérification.",
-        "notConfigured": "Demandez à votre administrateur de configurer un fournisseur d'IA."
+        "notConfigured": "Aucun fournisseur d'IA configuré",
+        "setUp": "Configurer"
       }
     }
   },
