@@ -17,54 +17,32 @@ concurrency:
 # A Rust cache is saved only under a new key: ci.sh's hash in it renews the
 # cache when a job starts building something else.
 jobs:
-  backend-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: backend
-          key: ${{ hashFiles('ci.sh') }}
-      - run: ./ci.sh backend-lint
-
-  backend-test:
+  backend:
     strategy:
       fail-fast: false
       matrix:
-        half: [core, rest]
-    name: backend-test-${{ matrix.half }}
+        part: [lint, test-core, test-rest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: ${{ matrix.part == 'lint' && 'clippy, rustfmt' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-          key: ${{ matrix.half }}-${{ hashFiles('ci.sh') }}
-      - run: ./ci.sh backend-test-${{ matrix.half }}
+          key: ${{ matrix.part }}-${{ hashFiles('ci.sh') }}
+      - run: ./ci.sh backend-${{ matrix.part }}
 
-  frontend-lint:
+  frontend:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [lint, test/1/2, test/2/2]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: frontend/package.json
-      - run: ./ci.sh frontend-lint
-
-  frontend-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1/2, 2/2]
-    name: frontend-test-${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: frontend/package.json
-      - run: ./ci.sh frontend-test/${{ matrix.shard }}
+      - run: ./ci.sh frontend-${{ matrix.part }}

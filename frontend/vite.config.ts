@@ -27,7 +27,5 @@ export default defineConfig(async ({ mode }) => ({
     // this one's source.
     css: { include: [/index\.css\?raw$/] },
     pool: 'vmThreads',
-    // Keeps transformed modules between local runs (CI starts without them).
-    experimental: { fsModuleCache: true },
   },
 }))
