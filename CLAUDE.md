@@ -20,7 +20,7 @@ Never create tags or releases: a release goes with a manual production update.
 
 - **Backend** (`cd backend`, the binary is `gripsou` in `api`): `cargo run --bin gripsou` serves the SPA and API on :8080, runs migrations, and loads the root `.env`. Also `cargo test [-p gripsou-core <name>]`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --all`.
 - **Frontend** (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `build`, `lint`, `test [pattern]`.
-- **`./ci.sh`** is CI: the workflow runs its jobs (`backend-lint`, `backend-test-core`, `backend-test-rest`, `frontend-lint`, `frontend-test`), so a new check goes in `ci.sh`. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[db_test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
+- **`./ci.sh`** is CI: the workflow runs its jobs (`backend-lint`, `backend-test-core`, `backend-test-rest`, `frontend-lint`, `frontend-test/1/2`, `frontend-test/2/2`), so a new check goes in `ci.sh`. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[db_test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
 - **Local stack:** `docker compose -f docker/docker-compose.yml up -d postgres` (or `scripts/build-image.sh` then `up -d`). Always pass `-f`: the host has an unrelated compose project `docker` whose `docker_pgdata` volume must never be touched.
 
 ### Database from the host

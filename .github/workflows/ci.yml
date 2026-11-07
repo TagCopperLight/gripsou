@@ -32,6 +32,7 @@ jobs:
 
   backend-test:
     strategy:
+      fail-fast: false
       matrix:
         half: [core, rest]
     name: backend-test-${{ matrix.half }}
@@ -56,6 +57,7 @@ jobs:
 
   frontend-test:
     strategy:
+      fail-fast: false
       matrix:
         shard: [1/2, 2/2]
     name: frontend-test-${{ matrix.shard }}

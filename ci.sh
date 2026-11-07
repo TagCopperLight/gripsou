@@ -58,7 +58,7 @@ backend-lint() {
 backend-test() { backend_test --workspace; }
 # GitHub runs backend-test as these two halves, each on a runner of its own.
 backend-test-core() { backend_test -p gripsou-core; }
-backend-test-rest() { backend_test -p gripsou-api -p gripsou-jobs -p gripsou-providers; }
+backend-test-rest() { backend_test --workspace --exclude gripsou-core; }
 
 # $@: the packages to test, as cargo selects them.
 backend_test() {
@@ -66,9 +66,12 @@ backend_test() {
   db_started=$!
   trap 'docker stop "$db" >/dev/null 2>&1' EXIT
   # Also builds the examples with the tests' features: `cargo run --example`
-  # would build them again with others.
-  step "build" bash -c 'cd backend && cargo test "$@" --no-run \
-    && cargo build -q "$@" -p gripsou-core --example migrate' _ "$@"
+  # would build them again with others. Core's `migrate` is built with the
+  # same ones, the whole workspace's when core isn't tested.
+  local with_core=("$@")
+  [[ " $* " == *" --exclude gripsou-core "* ]] && with_core=(--workspace)
+  step "build" bash -c 'cd backend && cargo test "$@" --no-run' _ "$@"
+  step "build migrate" bash -c 'cd backend && cargo build -q "$@" --example migrate' _ "${with_core[@]}"
   examples=backend/${CARGO_TARGET_DIR:-target}/debug/examples
   if [[ " $* " != " -p gripsou-core " ]]; then
     # The frontend's copy of the API types and routes is generated: it must match the code.

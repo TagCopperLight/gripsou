@@ -10,7 +10,7 @@
     "typecheck": "tsc -b",
     "bundle": "vite build",
     "build": "bun run typecheck && bun run bundle",
-    "lint": "eslint . --concurrency auto",
+    "lint": "eslint . --concurrency auto --cache --cache-location node_modules/.cache/eslint/",
     "preview": "vite preview",
     "test": "vitest run"
   },
